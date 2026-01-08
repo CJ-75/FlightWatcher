@@ -83,10 +83,11 @@ export function RouletteMode({ trips, budget, onClose, onSaveFavorite }: Roulett
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary-500"
     >
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        initial={{ scale: 0.85, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0, y: 20 }}
         transition={springConfig}
-        className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 md:p-8 relative max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 relative max-h-[95vh] overflow-y-auto"
       >
         {/* Compteur de relances */}
         <div className={`absolute top-4 right-4 bg-white text-primary-500 rounded-full px-4 py-2 text-sm font-bold shadow-lg ${
@@ -108,64 +109,70 @@ export function RouletteMode({ trips, budget, onClose, onSaveFavorite }: Roulett
         </h2>
 
         {/* Zone de roulette */}
-        <div className="relative h-64 sm:h-80 md:h-96 overflow-hidden mb-4 sm:mb-6">
-          <AnimatePresence mode="wait">
-            {isSpinning ? (
-              <motion.div
-                key="spinning"
-                initial={{ y: 100, opacity: 0, rotateY: 180 }}
-                animate={{ 
-                  y: 0, 
-                  opacity: 1, 
-                  rotateY: 0,
-                  scale: [1, 1.1, 1]
-                }}
-                exit={{ y: -100, opacity: 0, rotateY: -180 }}
-                transition={{ 
-                  duration: 0.2,
+        <div className="relative overflow-visible mb-4 sm:mb-6 flex items-center justify-center py-6">
+          {selectedTrip ? (
+            <motion.div
+              key={selectedTrip.destination_code + selectedTrip.aller.departureTime + selectedTrip.retour.departureTime}
+              initial={{ scale: 0.8, opacity: 0, rotate: -5, x: -50 }}
+              animate={{ 
+                scale: isSpinning ? [1, 1.08, 0.95, 1.05, 1] : 1, 
+                opacity: 1,
+                rotate: isSpinning ? [-3, 3, -2, 2, 0] : 0,
+                x: isSpinning ? [-20, 20, -15, 15, 0] : 0,
+                y: isSpinning ? [-10, 10, -8, 8, 0] : 0
+              }}
+              transition={isSpinning ? {
+                scale: {
+                  duration: 0.15,
                   repeat: Infinity,
-                  repeatType: "reverse"
-                }}
-                className="flex items-center justify-center h-full"
-              >
-                <motion.div 
-                  className="text-6xl"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
-                >
-                  🎲
-                </motion.div>
-              </motion.div>
-            ) : selectedTrip ? (
-              <motion.div
-                key="selected"
-                initial={{ scale: 0.8, opacity: 0, rotateY: 180 }}
-                animate={{ scale: 1, opacity: 1, rotateY: 0 }}
-                exit={{ scale: 0.8, opacity: 0, rotateY: -180 }}
-                transition={springConfig}
-                className="h-full flex items-center justify-center"
-              >
-                <div className="w-full max-w-sm">
-                  <DestinationCard
-                    trip={selectedTrip}
-                    onSaveFavorite={() => onSaveFavorite(selectedTrip)}
-                    onBook={() => {
-                      // Ouvrir Ryanair dans un nouvel onglet
-                      window.open(`https://www.ryanair.com`, '_blank');
-                    }}
-                  />
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex items-center justify-center h-full text-slate-400"
-              >
-                Aucune destination disponible
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  repeatType: "reverse",
+                  ease: "easeInOut"
+                },
+                rotate: {
+                  duration: 0.12,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                  ease: "easeInOut"
+                },
+                x: {
+                  duration: 0.1,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                  ease: "easeInOut"
+                },
+                y: {
+                  duration: 0.13,
+                  repeat: Infinity,
+                  repeatType: "reverse",
+                  ease: "easeInOut"
+                },
+                opacity: { duration: 0.05 }
+              } : springConfig}
+              className="w-full flex items-center justify-center"
+            >
+              <div className="w-full max-w-sm">
+                <DestinationCard
+                  trip={selectedTrip}
+                  onSaveFavorite={() => onSaveFavorite(selectedTrip)}
+                  onBook={() => {
+                    // Ouvrir Ryanair dans un nouvel onglet
+                    window.open(`https://www.ryanair.com`, '_blank');
+                  }}
+                />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center h-full text-slate-400"
+            >
+              {affordableTrips.length === 0 
+                ? 'Aucune destination disponible dans votre budget'
+                : 'Prêt à tirer au sort !'
+              }
+            </motion.div>
+          )}
         </div>
 
         {/* Bouton Relancer */}

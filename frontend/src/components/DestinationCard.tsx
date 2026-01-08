@@ -165,7 +165,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCar
             transition={springConfig}
             className="w-full bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 sm:py-4 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl min-h-[48px] text-sm sm:text-base"
           >
-            ✈️ Réserver {trip.prix_total.toFixed(0)}€
+            ✈️ Réserver
           </motion.button>
         </div>
       </div>

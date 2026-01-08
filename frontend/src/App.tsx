@@ -511,7 +511,9 @@ function Dashboard() {
                   </h2>
                   <motion.button
                     onClick={() => {
-                      setRouletteBudget(simpleResults[0]?.prix_total || 100)
+                      // Utiliser le budget de la recherche si disponible, sinon le budget max actuel
+                      const budgetToUse = lastSearchInfo?.budget || budgetMax || 200
+                      setRouletteBudget(budgetToUse)
                       setShowRoulette(true)
                     }}
                     whileHover={{ scale: 1.05 }}
