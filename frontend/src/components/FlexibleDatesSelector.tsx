@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { DateAvecHoraire } from '../types';
 import { TimeRangeSelector } from './TimeRangeSelector';
@@ -27,6 +27,7 @@ export function FlexibleDatesSelector({
 }: FlexibleDatesSelectorProps) {
   const [selectedDateType, setSelectedDateType] = useState<'depart' | 'retour'>('depart');
   const [tempDate, setTempDate] = useState('');
+  const lastAddedDateRef = useRef<string | null>(null);
 
   const addDate = (type: 'depart' | 'retour', dateStr: string) => {
     if (!dateStr) return;
@@ -46,7 +47,8 @@ export function FlexibleDatesSelector({
       const newDates = [...flexibleDates.dates_retour, dateObj];
       onFlexibleDatesChange({ ...flexibleDates, dates_retour: newDates });
     }
-    setTempDate('');
+    // Marquer cette date comme dernière ajoutée
+    lastAddedDateRef.current = dateStr;
   };
 
   const removeDate = (type: 'depart' | 'retour', dateStr: string) => {
@@ -83,12 +85,71 @@ export function FlexibleDatesSelector({
     }
   };
 
+  const handleDateChange = (dateStr: string) => {
+    // Mettre à jour tempDate immédiatement pour que le calendrier affiche la date
+    setTempDate(dateStr);
+  };
+
+  // Effet pour ajouter la date une fois qu'elle est bien chargée dans tempDate
+  useEffect(() => {
+    if (tempDate && tempDate !== lastAddedDateRef.current) {
+      // La date est bien chargée dans tempDate et n'a pas encore été ajoutée
+      addDate(selectedDateType, tempDate);
+      
+      // Réinitialiser après un court délai pour laisser le temps à l'ajout de se terminer
+      // et permettre au calendrier de se fermer proprement
+      const timeoutId = setTimeout(() => {
+        setTempDate('');
+        // Réinitialiser la référence après la réinitialisation de tempDate
+        setTimeout(() => {
+          lastAddedDateRef.current = null;
+        }, 50);
+      }, 150);
+      
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tempDate, selectedDateType]);
+
+  const totalDates = flexibleDates.dates_depart.length + flexibleDates.dates_retour.length;
+  const showClearButton = totalDates > 3;
+
+  const clearAllDates = () => {
+    onFlexibleDatesChange({
+      dates_depart: [],
+      dates_retour: []
+    });
+    setTempDate('');
+  };
+
   return (
     <div className="space-y-6">
+      {/* Bouton effacer si plus de 3 dates */}
+      {showClearButton && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex justify-end"
+        >
+          <motion.button
+            onClick={clearAllDates}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-sm sm:text-base font-semibold hover:bg-red-200 transition-colors flex items-center gap-2"
+          >
+            <span>🗑️</span>
+            <span>Effacer toutes les dates ({totalDates})</span>
+          </motion.button>
+        </motion.div>
+      )}
+
       {/* Sélecteur de type de date */}
       <div className="flex gap-3 mb-4">
         <motion.button
-          onClick={() => setSelectedDateType('depart')}
+          onClick={() => {
+            setSelectedDateType('depart');
+            setTempDate('');
+          }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm sm:text-base transition-all ${
@@ -100,7 +161,10 @@ export function FlexibleDatesSelector({
           ✈️ Départ
         </motion.button>
         <motion.button
-          onClick={() => setSelectedDateType('retour')}
+          onClick={() => {
+            setSelectedDateType('retour');
+            setTempDate('');
+          }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm sm:text-base transition-all ${
@@ -133,35 +197,12 @@ export function FlexibleDatesSelector({
           <div className="relative p-1 z-10">
             <Calendar
               value={tempDate}
-              onChange={(date) => setTempDate(date)}
+              onChange={handleDateChange}
               minDate={new Date().toISOString().split('T')[0]}
               className="w-full"
             />
           </div>
         </div>
-
-        <motion.button
-          onClick={handleAddDate}
-          disabled={!tempDate}
-          whileHover={tempDate ? { scale: 1.02, y: -2 } : {}}
-          whileTap={tempDate ? { scale: 0.98 } : {}}
-          className={`w-full mt-4 px-6 py-4 rounded-2xl font-black text-base sm:text-lg transition-all shadow-lg ${
-            tempDate
-              ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white hover:from-emerald-600 hover:to-emerald-700 hover:shadow-xl'
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-          }`}
-        >
-          {tempDate ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="text-xl">➕</span>
-              <span>Ajouter cette date</span>
-            </span>
-          ) : (
-            <span className="flex items-center justify-center gap-2">
-              <span>Sélectionnez une date</span>
-            </span>
-          )}
-        </motion.button>
       </div>
 
       {/* Dates de départ */}

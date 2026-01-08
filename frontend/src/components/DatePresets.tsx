@@ -46,13 +46,24 @@ export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresets
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               transition={springConfig}
-              className={`rounded-full px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[44px] flex items-center justify-center
+              className={`rounded-full px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[44px] flex items-center justify-center relative
                 ${
                   isActive
-                    ? 'bg-primary-500 text-white shadow-lg scale-105'
+                    ? preset.key === 'flexible'
+                      ? 'bg-emerald-500 text-white shadow-lg scale-105'
+                      : 'bg-primary-500 text-white shadow-lg scale-105'
                     : 'bg-slate-100 text-slate-700 hover:bg-primary-100 hover:scale-105'
                 }`}
             >
+              {isActive && preset.key !== 'flexible' && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-accent-500 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                >
+                  ✓
+                </motion.span>
+              )}
               <span className="mr-2">{preset.icon}</span>
               {preset.label}
             </motion.button>

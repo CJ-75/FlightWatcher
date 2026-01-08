@@ -39,34 +39,59 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
     return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   });
 
-  // Calculer la position du calendrier
+  // Réinitialiser isOpen quand value devient vide (pour permettre la réouverture)
+  useEffect(() => {
+    if (!value) {
+      setIsOpen(false);
+    }
+  }, [value]);
+
+  // Calculer la position du calendrier à chaque fois qu'il s'ouvre ou que le mois change
   useEffect(() => {
     if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const calendarWidth = 320; // min-w-[320px]
-      const calendarHeight = 400; // estimation
+      const updatePosition = () => {
+        if (!triggerRef.current) return;
+        
+        const rect = triggerRef.current.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const calendarWidth = 320; // min-w-[320px]
+        const calendarHeight = 400; // estimation
+        
+        // Utiliser getBoundingClientRect qui donne la position relative à la viewport
+        // puis ajouter le scroll pour obtenir la position absolue
+        let left = rect.left + window.scrollX;
+        let top = rect.bottom + window.scrollY + 8;
+        
+        // Ajuster si le calendrier dépasse à droite
+        if (left + calendarWidth > viewportWidth + window.scrollX) {
+          left = viewportWidth + window.scrollX - calendarWidth - 16;
+        }
+        
+        // Ajuster si le calendrier dépasse en bas (afficher au-dessus)
+        if (top + calendarHeight > viewportHeight + window.scrollY) {
+          top = rect.top + window.scrollY - calendarHeight - 8;
+        }
+        
+        // S'assurer que le calendrier ne dépasse pas à gauche
+        if (left < window.scrollX + 16) {
+          left = window.scrollX + 16;
+        }
+        
+        setPosition({ top, left });
+      };
       
-      let left = rect.left + window.scrollX;
-      let top = rect.bottom + window.scrollY + 8;
+      // Calculer la position immédiatement
+      updatePosition();
       
-      // Ajuster si le calendrier dépasse à droite
-      if (left + calendarWidth > viewportWidth) {
-        left = viewportWidth - calendarWidth - 16;
-      }
+      // Réécouter les événements de scroll et resize pour recalculer la position
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
       
-      // Ajuster si le calendrier dépasse en bas (afficher au-dessus)
-      if (top + calendarHeight > viewportHeight + window.scrollY) {
-        top = rect.top + window.scrollY - calendarHeight - 8;
-      }
-      
-      // S'assurer que le calendrier ne dépasse pas à gauche
-      if (left < 16) {
-        left = 16;
-      }
-      
-      setPosition({ top, left });
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
     }
   }, [isOpen, currentMonth]);
 
@@ -175,7 +200,11 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
         {/* Input trigger */}
         <motion.button
           ref={triggerRef}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(prev => !prev);
+          }}
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.99 }}
           className="w-full px-5 py-4 bg-white rounded-xl border-2 border-slate-300 text-left font-bold text-base sm:text-lg text-slate-900 hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-200 transition-all flex items-center justify-between shadow-sm"
@@ -198,7 +227,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-black/20 z-[55]"
+                className="fixed inset-0 bg-black/20 z-[9998]"
               />
               
               {/* Calendar */}
@@ -213,7 +242,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   position: 'fixed',
                   top: `${position.top}px`,
                   left: `${position.left}px`,
-                  zIndex: 60
+                  zIndex: 9999
                 }}
                 className="bg-white rounded-2xl shadow-2xl border-2 border-slate-200 p-4 w-full min-w-[320px] max-w-[400px]"
               >

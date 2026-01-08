@@ -244,11 +244,8 @@ export function AdvancedOptions({
                 </AnimatePresence>
               </div>
 
-              {/* Limite allers */}
-              <div>
-                <label className="block text-xs sm:text-sm font-bold text-slate-900 mb-2">
-                  🔢 Nombre de dates à scanner: {limiteAllers}
-                </label>
+              {/* Limite allers - caché de l'utilisateur mais toujours fonctionnel */}
+              <div className="hidden">
                 <input
                   type="range"
                   min={10}
@@ -261,10 +258,6 @@ export function AdvancedOptions({
                              [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg
                              [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:bg-primary-500 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg"
                 />
-                <div className="flex justify-between text-xs text-slate-500 mt-1">
-                  <span>10</span>
-                  <span>100</span>
-                </div>
               </div>
             </div>
           </motion.div>
