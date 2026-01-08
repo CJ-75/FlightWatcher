@@ -112,7 +112,7 @@ export function FlexibleDatesSelector({
   }, [tempDate, selectedDateType]);
 
   const totalDates = flexibleDates.dates_depart.length + flexibleDates.dates_retour.length;
-  const showClearButton = totalDates > 3;
+  const showClearButton = totalDates >= 3;
 
   const clearAllDates = () => {
     onFlexibleDatesChange({

@@ -10,7 +10,14 @@ import { LoadingSkeleton } from './LoadingSkeleton';
 import { LoadingSpinner } from './LoadingSpinner';
 
 interface SimpleSearchProps {
-  onResults: (results: EnrichedTripResponse[]) => void;
+  onResults: (results: EnrichedTripResponse[], searchInfo?: {
+    datePreset: DatePreset | null
+    airport: string
+    budget: number
+    datesDepart: DateAvecHoraire[]
+    datesRetour: DateAvecHoraire[]
+    excludedDestinations: string[]
+  }) => void;
   onLoading: (loading: boolean) => void;
   onError: (error: string | null) => void;
   airports: Airport[];
@@ -136,7 +143,14 @@ export function SimpleSearch({
       }
 
       const result: InspireResponse = await response.json();
-      onResults(result.resultats);
+      onResults(result.resultats, {
+        datePreset,
+        airport: selectedAirport,
+        budget,
+        datesDepart: datePreset === 'flexible' ? flexibleDates.dates_depart : presetDates.dates_depart,
+        datesRetour: datePreset === 'flexible' ? flexibleDates.dates_retour : presetDates.dates_retour,
+        excludedDestinations
+      });
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {

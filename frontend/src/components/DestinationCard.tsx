@@ -85,10 +85,19 @@ export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCar
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
         
-        {/* Badge drapeau (emoji) - à implémenter avec mapping pays */}
-        <div className="absolute top-4 right-4 text-4xl">
-          🌍
-        </div>
+        {/* Badge cœur pour sauvegarder */}
+        <motion.button
+          onClick={(e) => {
+            e.stopPropagation();
+            onSaveFavorite();
+          }}
+          whileHover={{ scale: 1.2 }}
+          whileTap={{ scale: 0.9 }}
+          className="absolute top-4 right-4 text-4xl cursor-pointer hover:drop-shadow-lg transition-all"
+          aria-label="Sauvegarder"
+        >
+          ❤️
+        </motion.button>
 
         {/* Contenu overlay sur image */}
         <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 md:p-6">
@@ -148,22 +157,13 @@ export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCar
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4 sm:mt-6">
-          <motion.button
-            onClick={onSaveFavorite}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={springConfig}
-            className="flex-1 bg-slate-100 text-slate-700 rounded-full px-4 py-3 sm:py-3 font-semibold hover:bg-slate-200 min-h-[44px] text-sm sm:text-base"
-          >
-            ❤️ Sauvegarder
-          </motion.button>
+        <div className="mt-4 sm:mt-6">
           <motion.button
             onClick={onBook}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             transition={springConfig}
-            className="flex-[2] bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl min-h-[44px] text-sm sm:text-base"
+            className="w-full bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 sm:py-4 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl min-h-[48px] text-sm sm:text-base"
           >
             ✈️ Réserver {trip.prix_total.toFixed(0)}€
           </motion.button>

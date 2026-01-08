@@ -30,6 +30,15 @@ function Dashboard() {
   const [showRoulette, setShowRoulette] = useState(false)
   const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
+  const [lastSearchInfo, setLastSearchInfo] = useState<{
+    datePreset: string | null
+    airport: string
+    budget: number
+    datesDepart: DateAvecHoraire[]
+    datesRetour: DateAvecHoraire[]
+    excludedDestinations: string[]
+  } | null>(null)
+  const resultsSectionRef = useRef<HTMLDivElement>(null)
   const [airports, setAirports] = useState<Airport[]>([])
   
   // États pour les paramètres de recherche
@@ -298,9 +307,23 @@ function Dashboard() {
     loadAirports()
   }, [])
 
-  const handleSimpleResults = (results: EnrichedTripResponse[]) => {
+  const handleSimpleResults = (results: EnrichedTripResponse[], searchInfo?: {
+    datePreset: string | null
+    airport: string
+    budget: number
+    datesDepart: DateAvecHoraire[]
+    datesRetour: DateAvecHoraire[]
+    excludedDestinations: string[]
+  }) => {
     setSimpleResults(results)
     setError(null)
+    if (searchInfo) {
+      setLastSearchInfo(searchInfo)
+      // Scroller vers la section des résultats après un court délai
+      setTimeout(() => {
+        resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+    }
   }
 
   const handleSimpleSaveFavorite = async (trip: EnrichedTripResponse) => {
@@ -430,11 +453,58 @@ function Dashboard() {
 
             {simpleResults.length > 0 && (
               <motion.div
+                ref={resultsSectionRef}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
                 className="max-w-7xl mx-auto mt-8 sm:mt-12"
               >
+                {/* Section résumé de la recherche */}
+                {lastSearchInfo && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 border-2 border-primary-200 shadow-lg px-4 sm:px-6"
+                  >
+                    <h3 className="text-lg sm:text-xl font-black text-primary-900 mb-3 sm:mb-4">
+                      📋 Recherche effectuée
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-sm sm:text-base">
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-primary-700">✈️ Départ:</span>
+                        <span className="text-slate-700">{lastSearchInfo.airport}</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-primary-700">💰 Budget:</span>
+                        <span className="text-slate-700">{lastSearchInfo.budget}€</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-primary-700">📅 Période:</span>
+                        <span className="text-slate-700">
+                          {lastSearchInfo.datePreset === 'weekend' ? 'Ce weekend' :
+                           lastSearchInfo.datePreset === 'next-weekend' ? 'Weekend prochain' :
+                           lastSearchInfo.datePreset === 'next-week' ? '3 jours la semaine prochaine' :
+                           lastSearchInfo.datePreset === 'flexible' ? 'Dates flexibles' : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-primary-700">📆 Dates départ:</span>
+                        <span className="text-slate-700">{lastSearchInfo.datesDepart.length} date(s)</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="font-bold text-primary-700">🔙 Dates retour:</span>
+                        <span className="text-slate-700">{lastSearchInfo.datesRetour.length} date(s)</span>
+                      </div>
+                      {lastSearchInfo.excludedDestinations.length > 0 && (
+                        <div className="flex items-start gap-2">
+                          <span className="font-bold text-primary-700">🚫 Exclusions:</span>
+                          <span className="text-slate-700">{lastSearchInfo.excludedDestinations.length} destination(s)</span>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+                
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-4 sm:px-0">
                   <h2 className="text-3xl sm:text-4xl font-black text-slate-900">
                     🎯 Destinations trouvées
