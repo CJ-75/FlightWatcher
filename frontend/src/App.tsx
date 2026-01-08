@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ScanResponse, TripResponse, ScanRequest, DateAvecHoraire, Destination, Airport } from './types'
+import { ScanResponse, TripResponse, ScanRequest, DateAvecHoraire, Destination, Airport, EnrichedTripResponse } from './types'
 import { 
   saveSearch, getSavedSearches, deleteSearch, updateSearchLastUsed,
   saveFavorite, getFavorites, deleteFavorite, updateFavoriteStatus,
@@ -13,14 +13,26 @@ import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
 import Auth from './components/Auth'
 import { getCurrentUser } from './lib/supabase'
+import { ModeToggle } from './components/ModeToggle'
+import { SimpleSearch } from './components/SimpleSearch'
+import { DestinationCard } from './components/DestinationCard'
+import { RouletteMode } from './components/RouletteMode'
+import { LoadingSpinner } from './components/LoadingSpinner'
+import { motion } from 'framer-motion'
 
 type Tab = 'search' | 'saved'
+type Mode = 'simple' | 'advanced'
 
 function Dashboard() {
+  const [mode, setMode] = useState<Mode>('simple')
   const [activeTab, setActiveTab] = useState<Tab>('search')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
+  const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
+  const [showRoulette, setShowRoulette] = useState(false)
+  const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
+  const [airports, setAirports] = useState<Airport[]>([])
   
   // États pour les paramètres de recherche
   const [aeroportDepart, setAeroportDepart] = useState('BVA')
@@ -261,19 +273,71 @@ function Dashboard() {
     }
   }
 
+  // Charger les aéroports au montage
+  useEffect(() => {
+    const loadAirports = async () => {
+      try {
+        const response = await fetch('/api/airports')
+        if (!response.ok) throw new Error('Erreur lors du chargement')
+        const data = await response.json()
+        setAirports(data.airports || [])
+      } catch (err) {
+        console.error('Erreur chargement aéroports:', err)
+      }
+    }
+    loadAirports()
+  }, [])
+
+  const handleSimpleResults = (results: EnrichedTripResponse[]) => {
+    setSimpleResults(results)
+    setError(null)
+  }
+
+  const handleSimpleSaveFavorite = async (trip: EnrichedTripResponse) => {
+    const user = await getCurrentUser()
+    if (!user) {
+      alert('Veuillez vous connecter pour sauvegarder un favori')
+      return
+    }
+    
+    // Convertir EnrichedTripResponse en TripResponse pour la sauvegarde
+    const tripResponse: TripResponse = {
+      aller: trip.aller,
+      retour: trip.retour,
+      prix_total: trip.prix_total,
+      destination_code: trip.destination_code
+    }
+    
+    // Créer un ScanRequest minimal pour la sauvegarde
+    const searchRequest: ScanRequest = {
+      aeroport_depart: aeroportDepart,
+      dates_depart: [],
+      dates_retour: [],
+      budget_max: trip.prix_total
+    }
+    
+    try {
+      await saveFavorite(tripResponse, searchRequest)
+      alert('Voyage ajouté aux favoris !')
+    } catch (error) {
+      setError('Erreur lors de la sauvegarde')
+      console.error(error)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-white">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
         {/* Header */}
         <header className="text-center mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex-1"></div>
             <div className="flex-1 text-center">
-              <h1 className="text-4xl font-bold text-gray-800 mb-2">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 mb-2">
                 ✈️ FlightWatcher
               </h1>
-              <p className="text-gray-600">
-                Scanner de vols Ryanair avec critères personnalisés et optimisation
+              <p className="text-base sm:text-lg text-slate-600 font-medium">
+                Trouve ton weekend pas cher
               </p>
             </div>
             <div className="flex-1 flex justify-end">
@@ -282,63 +346,159 @@ function Dashboard() {
           </div>
         </header>
 
+        {/* Mode Toggle */}
+        <ModeToggle mode={mode} onChange={setMode} />
+
         {/* Onglets */}
-        <div className="max-w-5xl mx-auto mb-6">
+        <div className="max-w-5xl mx-auto mb-4 sm:mb-6">
           <div className="flex border-b border-gray-200">
-            <button
+            <motion.button
               onClick={() => setActiveTab('search')}
-              className={`px-6 py-3 font-semibold transition-colors ${
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`px-4 sm:px-6 py-2 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[44px] flex items-center ${
                 activeTab === 'search'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  ? 'text-primary-500 border-b-2 border-primary-500'
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               🔍 Recherche
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               onClick={() => setActiveTab('saved')}
-              className={`px-6 py-3 font-semibold transition-colors ${
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`px-4 sm:px-6 py-2 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[44px] flex items-center ${
                 activeTab === 'saved'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600'
+                  ? 'text-primary-500 border-b-2 border-primary-500'
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               ❤️ Sauvegardés
-            </button>
+            </motion.button>
           </div>
         </div>
 
         {/* Contenu selon l'onglet */}
         {activeTab === 'search' ? (
-          <SearchTab
-            aeroportDepart={aeroportDepart}
-            setAeroportDepart={setAeroportDepart}
-            datesDepart={datesDepart}
-            setDatesDepart={setDatesDepart}
-            datesRetour={datesRetour}
-            setDatesRetour={setDatesRetour}
-            budgetMax={budgetMax}
-            setBudgetMax={setBudgetMax}
-            limiteAllers={limiteAllers}
-            setLimiteAllers={setLimiteAllers}
-            loading={loading}
-            error={error}
-            data={data}
-            onScan={handleScan}
-            onSaveSearch={handleSaveSearch}
-            onSaveFavorite={handleSaveFavorite}
-            addDate={addDate}
-            removeDate={removeDate}
-            updateHoraire={updateHoraire}
-            formatDateFr={formatDateFr}
-            hasRequest={!!currentRequest}
-            destinations={destinations}
-            destinationsExclues={destinationsExclues}
-            loadingDestinations={loadingDestinations}
-            onLoadDestinations={() => loadDestinations(aeroportDepart)}
-            onToggleDestination={toggleDestination}
-            onTogglePays={togglePays}
-          />
+          <>
+            {mode === 'simple' ? (
+              <>
+                <SimpleSearch
+                  onResults={handleSimpleResults}
+                  onLoading={setLoading}
+                  onError={setError}
+                  airports={airports}
+                  selectedAirport={aeroportDepart}
+                  onAirportChange={setAeroportDepart}
+                  AirportAutocomplete={AirportAutocomplete}
+                  flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
+                  onFlexibleDatesChange={(dates) => {
+                    setDatesDepart(dates.dates_depart);
+                    setDatesRetour(dates.dates_retour);
+                  }}
+                  excludedDestinations={destinationsExclues}
+                  onExcludedDestinationsChange={setDestinationsExclues}
+                  destinations={destinations}
+                  loadingDestinations={loadingDestinations}
+                  onLoadDestinations={() => loadDestinations(aeroportDepart)}
+                  limiteAllers={limiteAllers}
+                  onLimiteAllersChange={setLimiteAllers}
+                  formatDateFr={formatDateFr}
+                />
+                
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="max-w-2xl mx-auto mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
+                  >
+                    ❌ {error}
+                  </motion.div>
+                )}
+
+                {loading && simpleResults.length === 0 && (
+                  <div className="max-w-2xl mx-auto mb-6 flex items-center justify-center py-12">
+                    <LoadingSpinner size="lg" color="primary" />
+                  </div>
+                )}
+
+                {simpleResults.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="max-w-7xl mx-auto mt-8 sm:mt-12"
+                  >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-4 sm:px-0">
+                      <h2 className="text-3xl sm:text-4xl font-black text-slate-900">
+                        🎯 Destinations trouvées
+                      </h2>
+                      <motion.button
+                        onClick={() => {
+                          setRouletteBudget(simpleResults[0]?.prix_total || 100)
+                          setShowRoulette(true)
+                        }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="bg-accent-500 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-accent-600 transition-all min-h-[44px] text-sm sm:text-base w-full sm:w-auto"
+                      >
+                        🎰 Mode Roulette
+                      </motion.button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-4 sm:px-0">
+                      {simpleResults.map((trip, index) => (
+                        <motion.div
+                          key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                        >
+                          <DestinationCard
+                            trip={trip}
+                            onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
+                            onBook={() => {
+                              window.open('https://www.ryanair.com', '_blank')
+                            }}
+                          />
+                        </motion.div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </>
+            ) : (
+              <SearchTab
+                aeroportDepart={aeroportDepart}
+                setAeroportDepart={setAeroportDepart}
+                datesDepart={datesDepart}
+                setDatesDepart={setDatesDepart}
+                datesRetour={datesRetour}
+                setDatesRetour={setDatesRetour}
+                budgetMax={budgetMax}
+                setBudgetMax={setBudgetMax}
+                limiteAllers={limiteAllers}
+                setLimiteAllers={setLimiteAllers}
+                loading={loading}
+                error={error}
+                data={data}
+                onScan={handleScan}
+                onSaveSearch={handleSaveSearch}
+                onSaveFavorite={handleSaveFavorite}
+                addDate={addDate}
+                removeDate={removeDate}
+                updateHoraire={updateHoraire}
+                formatDateFr={formatDateFr}
+                hasRequest={!!currentRequest}
+                destinations={destinations}
+                destinationsExclues={destinationsExclues}
+                loadingDestinations={loadingDestinations}
+                onLoadDestinations={() => loadDestinations(aeroportDepart)}
+                onToggleDestination={toggleDestination}
+                onTogglePays={togglePays}
+              />
+            )}
+          </>
         ) : (
           <SavedTab
             loading={loading}
@@ -349,6 +509,16 @@ function Dashboard() {
           />
         )}
       </div>
+
+      {/* Roulette Mode Modal */}
+      {showRoulette && (
+        <RouletteMode
+          trips={simpleResults}
+          budget={rouletteBudget}
+          onClose={() => setShowRoulette(false)}
+          onSaveFavorite={handleSimpleSaveFavorite}
+        />
+      )}
     </div>
   )
 }
@@ -499,7 +669,7 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
         }}
         onKeyDown={handleKeyDown}
         placeholder="Rechercher un aéroport (code, nom, ville ou pays)..."
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300"
       />
       {showDropdown && filteredAirports.length > 0 && (
         <div
@@ -511,13 +681,13 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
               key={airport.code}
               type="button"
               onClick={() => handleSelectAirport(airport)}
-              className={`w-full text-left px-4 py-2 hover:bg-indigo-50 transition-colors ${
-                selectedAirport?.code === airport.code ? 'bg-indigo-100' : ''
+              className={`w-full text-left px-4 py-2 hover:bg-primary-50 transition-colors ${
+                selectedAirport?.code === airport.code ? 'bg-primary-100' : ''
               }`}
             >
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-indigo-600 min-w-[3rem]">{airport.code}</span>
+                  <span className="font-bold text-primary-500 min-w-[3rem]">{airport.code}</span>
                   <span className="font-semibold text-gray-800">{airport.name}</span>
                 </div>
                 <div className="flex items-center gap-2 ml-14 text-sm">

@@ -52,3 +52,28 @@ export interface Airport {
   country: string;
 }
 
+export interface EnrichedTripResponse extends TripResponse {
+  discount_percent?: number;
+  is_good_deal?: boolean;
+  image_url?: string;
+  avg_price_last_month?: number;
+}
+
+export interface InspireRequest {
+  budget: number;
+  date_preset: 'weekend' | 'next-weekend' | 'next-week' | 'flexible';
+  departure: string;
+  flexible_dates?: {
+    dates_depart: DateAvecHoraire[];
+    dates_retour: DateAvecHoraire[];
+  };
+  destinations_exclues?: string[];
+  limite_allers?: number;
+}
+
+export interface InspireResponse {
+  resultats: EnrichedTripResponse[];
+  nombre_requetes: number;
+  message: string;
+}
+

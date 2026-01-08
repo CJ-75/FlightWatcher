@@ -4,8 +4,8 @@ API Backend pour le scanner de vols Ryanair
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Tuple
-from datetime import date, datetime
+from typing import List, Optional, Tuple, Dict
+from datetime import date, datetime, timedelta
 import sys
 import os
 import hashlib
@@ -99,6 +99,25 @@ class AutoCheckResponse(BaseModel):
     search_id: str
     current_results: List[TripResponse]
     new_results: List[TripResponse]
+    nombre_requetes: int
+    message: str
+
+class InspireRequest(BaseModel):
+    budget: int
+    date_preset: str  # 'weekend', 'next-weekend', 'next-week', 'flexible'
+    departure: str  # Code aéroport
+    flexible_dates: Optional[Dict[str, List[DateAvecHoraire]]] = None  # Dates avec horaires individuels (pour tous les presets maintenant)
+    destinations_exclues: Optional[List[str]] = None
+    limite_allers: Optional[int] = None
+
+class EnrichedTripResponse(TripResponse):
+    discount_percent: Optional[float] = None
+    is_good_deal: Optional[bool] = None
+    image_url: Optional[str] = None
+    avg_price_last_month: Optional[float] = None
+
+class InspireResponse(BaseModel):
+    resultats: List[EnrichedTripResponse]
     nombre_requetes: int
     message: str
 
@@ -261,6 +280,148 @@ def scanner_vols_api(aeroport_depart: str, dates_depart: List[DateAvecHoraire],
     
     return resultats, api.num_queries
 
+def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[DateAvecHoraire]]:
+    """
+    Convertit un preset de dates en listes de DateAvecHoraire pour aller et retour
+    """
+    today = date.today()
+    dates_depart = []
+    dates_retour = []
+    
+    if preset == 'weekend':
+        # Ce weekend : vendredi-dimanche prochain
+        days_until_friday = (4 - today.weekday()) % 7
+        if days_until_friday == 0 and today.weekday() >= 4:
+            days_until_friday = 7  # Si on est déjà vendredi ou après, prendre le suivant
+        
+        friday = today + timedelta(days=days_until_friday)
+        sunday = friday + timedelta(days=2)
+        
+        dates_depart.append(DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        
+    elif preset == 'next-weekend':
+        # Weekend prochain : vendredi-dimanche suivant
+        days_until_friday = (4 - today.weekday()) % 7
+        if days_until_friday == 0:
+            days_until_friday = 7
+        else:
+            days_until_friday += 7
+        
+        friday = today + timedelta(days=days_until_friday)
+        sunday = friday + timedelta(days=2)
+        
+        dates_depart.append(DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        
+    elif preset == 'next-week':
+        # 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+        
+        monday = today + timedelta(days=days_until_monday)
+        tuesday = monday + timedelta(days=1)
+        wednesday = monday + timedelta(days=2)
+        thursday = monday + timedelta(days=3)
+        friday = monday + timedelta(days=4)
+        saturday = monday + timedelta(days=5)
+        
+        dates_depart.extend([
+            DateAvecHoraire(date=monday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=tuesday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=wednesday.isoformat(), heure_min="06:00", heure_max="23:59"),
+        ])
+        dates_retour.extend([
+            DateAvecHoraire(date=thursday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=saturday.isoformat(), heure_min="06:00", heure_max="23:59"),
+        ])
+    
+    return dates_depart, dates_retour
+
+def get_avg_price_last_month(departure_airport: str, destination_code: str) -> Optional[float]:
+    """
+    Récupère le prix moyen du mois dernier pour une route donnée depuis Supabase
+    """
+    if not SUPABASE_AVAILABLE:
+        return None
+    
+    try:
+        supabase_service = get_supabase_service_client()
+        if not supabase_service:
+            return None
+        
+        # Utiliser la fonction SQL get_avg_price_last_30_days
+        # La fonction retourne directement un DECIMAL ou NULL
+        result = supabase_service.rpc(
+            'get_avg_price_last_30_days',
+            {
+                'p_departure': departure_airport,
+                'p_destination': destination_code
+            }
+        ).execute()
+        
+        # La fonction RPC retourne directement la valeur (DECIMAL) ou None
+        if result.data is not None:
+            try:
+                avg_price = float(result.data)
+                if avg_price > 0:
+                    return avg_price
+            except (ValueError, TypeError):
+                pass
+        
+        return None
+    except Exception as e:
+        print(f"⚠️ Erreur récupération prix moyen: {e}")
+        return None
+
+def calculate_discount(current_price: float, avg_price: Optional[float]) -> float:
+    """
+    Calcule le pourcentage de réduction par rapport au prix moyen
+    """
+    if avg_price is None or avg_price == 0:
+        return 0.0
+    
+    if current_price >= avg_price:
+        return 0.0
+    
+    discount = ((avg_price - current_price) / avg_price) * 100
+    return round(discount, 1)
+
+def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> List[EnrichedTripResponse]:
+    """
+    Enrichit les résultats de trips avec discount, images et flags
+    """
+    enriched = []
+    
+    for trip in trips[:15]:  # Limiter à 15 résultats pour performance
+        # Récupérer prix moyen
+        avg_price = get_avg_price_last_month(departure_airport, trip.destination_code)
+        
+        # Calculer discount
+        discount_percent = calculate_discount(trip.prix_total, avg_price)
+        
+        # Générer URL image Unsplash
+        city_name = trip.aller.destinationFull.split(',')[0].strip()
+        image_url = f"https://source.unsplash.com/800x600/?{city_name}"
+        
+        # Créer trip enrichi
+        enriched_trip = EnrichedTripResponse(
+            aller=trip.aller,
+            retour=trip.retour,
+            prix_total=trip.prix_total,
+            destination_code=trip.destination_code,
+            discount_percent=discount_percent if discount_percent > 0 else None,
+            is_good_deal=discount_percent > 20,
+            image_url=image_url,
+            avg_price_last_month=avg_price
+        )
+        
+        enriched.append(enriched_trip)
+    
+    return enriched
+
 @app.get("/")
 def read_root():
     return {"message": "Ryanair Flight Scanner API", "status": "ok"}
@@ -372,6 +533,66 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "service": "ryanair-scanner"}
+
+@app.post("/api/inspire", response_model=InspireResponse)
+@optional_auth
+async def inspire_trip(request: InspireRequest, http_request: Request = None):
+    """
+    Endpoint simplifié pour mode découverte avec enrichissement
+    """
+    try:
+        # Récupérer les dates avec horaires individuels
+        if request.flexible_dates:
+            # Dates avec horaires individuels fournies par le frontend (pour tous les presets maintenant)
+            dates_depart_raw = request.flexible_dates.get('dates_depart', [])
+            dates_retour_raw = request.flexible_dates.get('dates_retour', [])
+            
+            # S'assurer que les dates sont au bon format
+            dates_depart = []
+            for d in dates_depart_raw:
+                if isinstance(d, dict):
+                    dates_depart.append(DateAvecHoraire(**d))
+                else:
+                    dates_depart.append(d)
+            
+            dates_retour = []
+            for d in dates_retour_raw:
+                if isinstance(d, dict):
+                    dates_retour.append(DateAvecHoraire(**d))
+                else:
+                    dates_retour.append(d)
+        else:
+            # Fallback : générer les dates depuis le preset (sans horaires personnalisés)
+            dates_depart, dates_retour = get_dates_from_preset(request.date_preset)
+        
+        if not dates_depart or not dates_retour:
+            raise HTTPException(status_code=400, detail="Impossible de générer les dates pour ce preset")
+        
+        # Appeler scanner_vols_api existant avec les paramètres avancés
+        resultats, num_requetes = scanner_vols_api(
+            aeroport_depart=request.departure,
+            dates_depart=dates_depart,
+            dates_retour=dates_retour,
+            budget_max=request.budget,
+            limite_allers=request.limite_allers or 30,  # Utiliser la limite fournie ou 30 par défaut
+            destinations_exclues=request.destinations_exclues or [],
+            destinations_incluses=None,
+            record_prices=True
+        )
+        
+        # Enrichir les résultats
+        enriched_results = enrich_trip_results(resultats, request.departure)
+        
+        # Trier par prix (meilleurs prix en premier)
+        enriched_results.sort(key=lambda t: t.prix_total)
+        
+        return InspireResponse(
+            resultats=enriched_results,
+            nombre_requetes=num_requetes,
+            message=f"{len(enriched_results)} destination(s) trouvée(s) pour {request.budget}€"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/airports")
 def get_airports(query: Optional[str] = None):

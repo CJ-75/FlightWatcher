@@ -1,0 +1,163 @@
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { EnrichedTripResponse } from '../types';
+
+interface DestinationCardProps {
+  trip: EnrichedTripResponse;
+  onSaveFavorite: () => void;
+  onBook?: () => void;
+}
+
+const springConfig = {
+  type: "spring" as const,
+  stiffness: 300,
+  damping: 20,
+  mass: 0.5
+};
+
+const cardHover = {
+  y: -8,
+  rotate: 1,
+  transition: springConfig
+};
+
+export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCardProps) {
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 
+                   'jul', 'aoû', 'sep', 'oct', 'nov', 'déc'];
+    return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`;
+  };
+
+  const formatTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleTimeString('fr-FR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // Extraire le nom de la ville depuis destinationFull
+  const cityName = trip.aller.destinationFull.split(',')[0].trim();
+  const imageUrl = trip.image_url || `https://source.unsplash.com/800x600/?${cityName}`;
+
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  return (
+    <motion.div
+      whileHover={cardHover}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={springConfig}
+      className="rounded-2xl overflow-hidden bg-white shadow-xl max-w-sm w-full"
+    >
+      {/* Image Hero */}
+      <div className="relative w-full h-48 sm:h-56 md:h-64">
+        {!imageLoaded && (
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] animate-[shimmer_2s_infinite]" />
+        )}
+        <motion.img
+          src={imageUrl}
+          alt={cityName}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: imageLoaded ? 1 : 0 }}
+          transition={{ duration: 0.3 }}
+          onLoad={() => setImageLoaded(true)}
+          onError={(e) => {
+            // Fallback si l'image ne charge pas
+            (e.target as HTMLImageElement).src = `https://via.placeholder.com/800x600/FF6B35/FFFFFF?text=${cityName}`;
+            setImageLoaded(true);
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+        
+        {/* Badge drapeau (emoji) - à implémenter avec mapping pays */}
+        <div className="absolute top-4 right-4 text-4xl">
+          🌍
+        </div>
+
+        {/* Contenu overlay sur image */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 md:p-6">
+          <h3 className="text-2xl sm:text-3xl font-black text-white mb-1 sm:mb-2">
+            {cityName}
+          </h3>
+          <p className="text-base sm:text-lg text-white/90 font-medium">
+            {trip.aller.destinationFull.split(',')[1]?.trim() || ''}
+          </p>
+        </div>
+      </div>
+
+      {/* Section prix */}
+      <div className="p-4 sm:p-5 md:p-6 bg-white">
+        <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+          <span className="text-4xl sm:text-5xl font-black text-primary-500">
+            {trip.prix_total.toFixed(0)}€
+          </span>
+          {trip.discount_percent && trip.discount_percent > 20 && (
+            <motion.span
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{
+                duration: 1.5,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+              className="inline-block bg-emerald-500 text-white rounded-full px-3 py-1 text-sm font-bold ml-3"
+            >
+              -{trip.discount_percent.toFixed(0)}%
+            </motion.span>
+          )}
+        </div>
+        <p className="text-sm text-slate-500 font-medium mb-4">total aller-retour</p>
+
+        {/* Détails vols */}
+        <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center">
+              <span className="text-primary-500 mr-2">✈️</span>
+              <span className="text-slate-600 font-medium">Aller</span>
+            </div>
+            <div className="text-right">
+              <div className="text-slate-900 font-bold">{formatTime(trip.aller.departureTime)}</div>
+              <div className="text-xs text-slate-500">{formatDate(trip.aller.departureTime)}</div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center">
+              <span className="text-primary-500 mr-2">🔙</span>
+              <span className="text-slate-600 font-medium">Retour</span>
+            </div>
+            <div className="text-right">
+              <div className="text-slate-900 font-bold">{formatTime(trip.retour.departureTime)}</div>
+              <div className="text-xs text-slate-500">{formatDate(trip.retour.departureTime)}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4 sm:mt-6">
+          <motion.button
+            onClick={onSaveFavorite}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={springConfig}
+            className="flex-1 bg-slate-100 text-slate-700 rounded-full px-4 py-3 sm:py-3 font-semibold hover:bg-slate-200 min-h-[44px] text-sm sm:text-base"
+          >
+            ❤️ Sauvegarder
+          </motion.button>
+          <motion.button
+            onClick={onBook}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={springConfig}
+            className="flex-[2] bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl min-h-[44px] text-sm sm:text-base"
+          >
+            ✈️ Réserver {trip.prix_total.toFixed(0)}€
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
