@@ -1,0 +1,161 @@
+{
+  "1762009643168": {
+    "enabled": true,
+    "interval_seconds": 60,
+    "search_request": {
+      "aeroport_depart": "BVA",
+      "dates_depart": [
+        {
+          "date": "2025-11-07",
+          "heure_min": "17:00",
+          "heure_max": "23:59"
+        },
+        {
+          "date": "2025-11-08",
+          "heure_min": "05:00",
+          "heure_max": "14:59"
+        }
+      ],
+      "dates_retour": [
+        {
+          "date": "2025-11-10",
+          "heure_min": "16:00",
+          "heure_max": "23:59"
+        },
+        {
+          "date": "2025-11-11",
+          "heure_min": "11:00",
+          "heure_max": "23:59"
+        },
+        {
+          "date": "2025-11-12",
+          "heure_min": "00:00",
+          "heure_max": "09:59"
+        }
+      ],
+      "budget_max": 300,
+      "limite_allers": 50,
+      "destinations_exclues": [
+        "VIE",
+        "SOF",
+        "ZAG",
+        "BUD",
+        "DUB",
+        "VNO",
+        "KRK",
+        "POZ",
+        "WMI",
+        "CLJ",
+        "IAS",
+        "ORK",
+        "GDN",
+        "WRO",
+        "OTP"
+      ]
+    },
+    "last_check": "2025-11-01T17:40:18.644039",
+    "last_results": [
+      {
+        "aller": {
+          "flightNumber": "FR 3500",
+          "origin": "BVA",
+          "originFull": "Paris Beauvais, France",
+          "destination": "BGY",
+          "destinationFull": "Milan Bergamo, Italy",
+          "departureTime": "2025-11-08T11:45:00",
+          "price": 96.99,
+          "currency": "EUR"
+        },
+        "retour": {
+          "flightNumber": "FR 3432",
+          "origin": "BGY",
+          "originFull": "Milan Bergamo, Italy",
+          "destination": "BVA",
+          "destinationFull": "Paris Beauvais, France",
+          "departureTime": "2025-11-12T06:20:00",
+          "price": 46.99,
+          "currency": "EUR"
+        },
+        "prix_total": 143.98,
+        "destination_code": "BGY"
+      },
+      {
+        "aller": {
+          "flightNumber": "FR 595",
+          "origin": "BVA",
+          "originFull": "Paris Beauvais, France",
+          "destination": "OPO",
+          "destinationFull": "Porto, Portugal",
+          "departureTime": "2025-11-08T06:30:00",
+          "price": 102.29,
+          "currency": "EUR"
+        },
+        "retour": {
+          "flightNumber": "FR 594",
+          "origin": "OPO",
+          "originFull": "Porto, Portugal",
+          "destination": "BVA",
+          "destinationFull": "Paris Beauvais, France",
+          "departureTime": "2025-11-12T08:15:00",
+          "price": 187.49,
+          "currency": "EUR"
+        },
+        "prix_total": 289.78000000000003,
+        "destination_code": "OPO"
+      },
+      {
+        "aller": {
+          "flightNumber": "FR 4068",
+          "origin": "BVA",
+          "originFull": "Paris Beauvais, France",
+          "destination": "BLQ",
+          "destinationFull": "Bologna, Italy",
+          "departureTime": "2025-11-07T18:40:00",
+          "price": 183.99,
+          "currency": "EUR"
+        },
+        "retour": {
+          "flightNumber": "FR 4067",
+          "origin": "BLQ",
+          "originFull": "Bologna, Italy",
+          "destination": "BVA",
+          "destinationFull": "Paris Beauvais, France",
+          "departureTime": "2025-11-10T20:50:00",
+          "price": 78.99,
+          "currency": "EUR"
+        },
+        "prix_total": 262.98,
+        "destination_code": "BLQ"
+      },
+      {
+        "aller": {
+          "flightNumber": "FR 419",
+          "origin": "BVA",
+          "originFull": "Paris Beauvais, France",
+          "destination": "PSA",
+          "destinationFull": "Pisa, Italy",
+          "departureTime": "2025-11-07T18:15:00",
+          "price": 211.99,
+          "currency": "EUR"
+        },
+        "retour": {
+          "flightNumber": "FR 418",
+          "origin": "PSA",
+          "originFull": "Pisa, Italy",
+          "destination": "BVA",
+          "destinationFull": "Paris Beauvais, France",
+          "departureTime": "2025-11-10T19:50:00",
+          "price": 79.99,
+          "currency": "EUR"
+        },
+        "prix_total": 291.98,
+        "destination_code": "PSA"
+      }
+    ],
+    "current_results_count": 4,
+    "new_results_count": 0,
+    "new_results": [],
+    "nombre_requetes": 47,
+    "new_results_notified": false
+  }
+}
