@@ -27,16 +27,16 @@ try:
     # Tester si les variables d'environnement sont définies
     import os
     if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_ANON_KEY"):
-        print("⚠️  Variables d'environnement Supabase manquantes")
-        print("   Créez un fichier backend/.env avec SUPABASE_URL et SUPABASE_ANON_KEY")
-        print("   Exécutez 'python backend/check_env.py' pour créer un fichier exemple")
+        print("[WARNING] Variables d'environnement Supabase manquantes")
+        print("   Creez un fichier backend/.env avec SUPABASE_URL et SUPABASE_ANON_KEY")
+        print("   Executez 'python backend/check_env.py' pour creer un fichier exemple")
         raise ValueError("Variables d'environnement Supabase manquantes")
     
     SUPABASE_AVAILABLE = True
-    print("✅ Supabase configuré et disponible")
+    print("[OK] Supabase configure et disponible")
 except Exception as e:
-    print(f"⚠️  Supabase non disponible: {e}")
-    print("   Les fonctionnalités Supabase seront désactivées.")
+    print(f"[WARNING] Supabase non disponible: {e}")
+    print("   Les fonctionnalites Supabase seront desactivees.")
     print("   Pour activer Supabase, configurez SUPABASE_URL et SUPABASE_ANON_KEY dans backend/.env")
     SUPABASE_AVAILABLE = False
     get_supabase_client = None
@@ -149,24 +149,46 @@ def scanner_vols_api(aeroport_depart: str, dates_depart: List[DateAvecHoraire],
     for date_config in dates_depart:
         date_obj = datetime.fromisoformat(date_config.date).date()
         try:
+            heure_min = datetime.strptime(date_config.heure_min or "00:00", "%H:%M").time()
+            heure_max = datetime.strptime(date_config.heure_max or "23:59", "%H:%M").time()
+            
+            # Si la plage traverse minuit, chercher aussi le jour suivant
+            if heure_max < heure_min:
+                # Plage qui traverse minuit : chercher sur 2 jours
+                date_to = date_obj + timedelta(days=1)
+                departure_time_from = date_config.heure_min or "00:00"
+                departure_time_to = "23:59"  # Chercher jusqu'à 23:59 le jour suivant
+            else:
+                # Plage normale : chercher seulement le jour actuel
+                date_to = date_obj
+                departure_time_from = date_config.heure_min or "00:00"
+                departure_time_to = date_config.heure_max or "23:59"
+            
             # Ne pas filtrer par prix au niveau des allers (on filtrera au niveau total)
             # Utiliser budget_max comme limite max pour éviter les prix trop élevés
             vols = api.get_cheapest_flights(
                 airport=aeroport_depart,
                 date_from=date_obj,
-                date_to=date_obj,
-                departure_time_from=date_config.heure_min or "00:00",
-                departure_time_to=date_config.heure_max or "23:59",
+                date_to=date_to,
+                departure_time_from=departure_time_from,
+                departure_time_to=departure_time_to,
                 max_price=budget_max  # Limite pour éviter les prix trop élevés, mais le vrai filtre sera sur le total
             )
             # Filtrer par date exacte et horaire
             for vol in vols:
                 vol_date = vol.departureTime.date()
                 vol_heure = vol.departureTime.time()
-                heure_min = datetime.strptime(date_config.heure_min or "00:00", "%H:%M").time()
-                heure_max = datetime.strptime(date_config.heure_max or "23:59", "%H:%M").time()
                 
-                if vol_date == date_obj and heure_min <= vol_heure <= heure_max:
+                # Gérer les plages qui traversent minuit (ex: 23:00 à 06:00)
+                if heure_max < heure_min:
+                    # Plage qui traverse minuit : accepter entre heure_min et 23:59 le jour actuel OU entre 00:00 et heure_max le jour suivant
+                    time_matches = (vol_date == date_obj and vol_heure >= heure_min) or \
+                                  (vol_date == date_obj + timedelta(days=1) and vol_heure <= heure_max)
+                else:
+                    # Plage normale : accepter entre heure_min et heure_max
+                    time_matches = vol_date == date_obj and heure_min <= vol_heure <= heure_max
+                
+                if time_matches:
                     # Ne pas filtrer par prix ici, on vérifiera le total plus tard
                     # Filtrer par destinations si spécifié
                     dest_code = vol.destination
@@ -210,15 +232,30 @@ def scanner_vols_api(aeroport_depart: str, dates_depart: List[DateAvecHoraire],
         for date_retour_config in dates_retour:
             date_retour_obj = datetime.fromisoformat(date_retour_config.date).date()
             try:
+                heure_min = datetime.strptime(date_retour_config.heure_min or "00:00", "%H:%M").time()
+                heure_max = datetime.strptime(date_retour_config.heure_max or "23:59", "%H:%M").time()
+                
+                # Si la plage traverse minuit, chercher aussi le jour suivant
+                if heure_max < heure_min:
+                    # Plage qui traverse minuit : chercher sur 2 jours
+                    date_retour_to = date_retour_obj + timedelta(days=1)
+                    departure_time_from = date_retour_config.heure_min or "00:00"
+                    departure_time_to = "23:59"  # Chercher jusqu'à 23:59 le jour suivant
+                else:
+                    # Plage normale : chercher seulement le jour actuel
+                    date_retour_to = date_retour_obj
+                    departure_time_from = date_retour_config.heure_min or "00:00"
+                    departure_time_to = date_retour_config.heure_max or "23:59"
+                
                 # Ne pas filtrer strictement par prix au niveau API pour les retours
                 # On filtrera par prix total après
                 vols_retour = api.get_cheapest_flights(
                     airport=destination_code,
                     date_from=date_retour_obj,
-                    date_to=date_retour_obj,
+                    date_to=date_retour_to,
                     destination_airport=aeroport_depart,
-                    departure_time_from=date_retour_config.heure_min or "00:00",
-                    departure_time_to=date_retour_config.heure_max or "23:59",
+                    departure_time_from=departure_time_from,
+                    departure_time_to=departure_time_to,
                     max_price=budget_max  # Limite haute pour éviter les prix déraisonnables
                 )
                 
@@ -226,11 +263,17 @@ def scanner_vols_api(aeroport_depart: str, dates_depart: List[DateAvecHoraire],
                     # Vérifier date et horaire exacts
                     vol_retour_date = vol_retour.departureTime.date()
                     vol_retour_heure = vol_retour.departureTime.time()
-                    heure_min = datetime.strptime(date_retour_config.heure_min or "00:00", "%H:%M").time()
-                    heure_max = datetime.strptime(date_retour_config.heure_max or "23:59", "%H:%M").time()
                     
-                    if (vol_retour_date == date_retour_obj and 
-                        heure_min <= vol_retour_heure <= heure_max):
+                    # Gérer les plages qui traversent minuit (ex: 23:00 à 06:00)
+                    if heure_max < heure_min:
+                        # Plage qui traverse minuit : accepter entre heure_min et 23:59 le jour actuel OU entre 00:00 et heure_max le jour suivant
+                        time_matches = (vol_retour_date == date_retour_obj and vol_retour_heure >= heure_min) or \
+                                      (vol_retour_date == date_retour_obj + timedelta(days=1) and vol_retour_heure <= heure_max)
+                    else:
+                        # Plage normale : accepter entre heure_min et heure_max
+                        time_matches = vol_retour_date == date_retour_obj and heure_min <= vol_retour_heure <= heure_max
+                    
+                    if time_matches:
                         prix_total = vol_aller.price + vol_retour.price
                         # Filtrer par prix total (pas par segment)
                         if prix_total <= budget_max and prix_total < meilleur_prix_total:
@@ -290,9 +333,10 @@ def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[Date
     
     if preset == 'weekend':
         # Ce weekend : vendredi-dimanche prochain
-        days_until_friday = (4 - today.weekday()) % 7
-        if days_until_friday == 0 and today.weekday() >= 4:
-            days_until_friday = 7  # Si on est déjà vendredi ou après, prendre le suivant
+        # weekday() : 0=lundi, 1=mardi, 2=mercredi, 3=jeudi, 4=vendredi, 5=samedi, 6=dimanche
+        days_until_friday = (4 - today.weekday() + 7) % 7
+        if days_until_friday == 0:
+            days_until_friday = 7  # Si on est déjà vendredi, prendre le suivant
         
         friday = today + timedelta(days=days_until_friday)
         sunday = friday + timedelta(days=2)
@@ -302,11 +346,10 @@ def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[Date
         
     elif preset == 'next-weekend':
         # Weekend prochain : vendredi-dimanche suivant
-        days_until_friday = (4 - today.weekday()) % 7
+        days_until_friday = (4 - today.weekday() + 7) % 7
         if days_until_friday == 0:
-            days_until_friday = 7
-        else:
-            days_until_friday += 7
+            days_until_friday = 7  # Si on est vendredi, prendre le suivant
+        days_until_friday += 7  # Toujours ajouter 7 pour le weekend prochain
         
         friday = today + timedelta(days=days_until_friday)
         sunday = friday + timedelta(days=2)
@@ -315,28 +358,18 @@ def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[Date
         dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
         
     elif preset == 'next-week':
-        # 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
-        days_until_monday = (7 - today.weekday()) % 7
-        if days_until_monday == 0:
-            days_until_monday = 7
+        # 3 jours la semaine prochaine : vendredi-dimanche
+        # Horaires : 23h00 à 6h00 (plage qui traverse minuit)
+        days_until_friday = (4 - today.weekday() + 7) % 7
+        if days_until_friday == 0:
+            days_until_friday = 7  # Si on est vendredi, prendre le suivant
+        days_until_friday += 7  # Toujours ajouter 7 pour la semaine prochaine
         
-        monday = today + timedelta(days=days_until_monday)
-        tuesday = monday + timedelta(days=1)
-        wednesday = monday + timedelta(days=2)
-        thursday = monday + timedelta(days=3)
-        friday = monday + timedelta(days=4)
-        saturday = monday + timedelta(days=5)
+        friday = today + timedelta(days=days_until_friday)
+        sunday = friday + timedelta(days=2)
         
-        dates_depart.extend([
-            DateAvecHoraire(date=monday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=tuesday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=wednesday.isoformat(), heure_min="06:00", heure_max="23:59"),
-        ])
-        dates_retour.extend([
-            DateAvecHoraire(date=thursday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=saturday.isoformat(), heure_min="06:00", heure_max="23:59"),
-        ])
+        dates_depart.append(DateAvecHoraire(date=friday.isoformat(), heure_min="23:00", heure_max="06:00"))
+        dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="23:00", heure_max="06:00"))
     
     return dates_depart, dates_retour
 

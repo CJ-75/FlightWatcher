@@ -13,7 +13,6 @@ import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
 import Auth from './components/Auth'
 import { getCurrentUser } from './lib/supabase'
-import { ModeToggle } from './components/ModeToggle'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
@@ -21,10 +20,8 @@ import { LoadingSpinner } from './components/LoadingSpinner'
 import { motion } from 'framer-motion'
 
 type Tab = 'search' | 'saved'
-type Mode = 'simple' | 'advanced'
 
 function Dashboard() {
-  const [mode, setMode] = useState<Mode>('simple')
   const [activeTab, setActiveTab] = useState<Tab>('search')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
@@ -347,8 +344,6 @@ function Dashboard() {
         </header>
 
         {/* Mode Toggle */}
-        <ModeToggle mode={mode} onChange={setMode} />
-
         {/* Onglets */}
         <div className="max-w-5xl mx-auto mb-4 sm:mb-6">
           <div className="flex border-b border-gray-200">
@@ -382,9 +377,7 @@ function Dashboard() {
         {/* Contenu selon l'onglet */}
         {activeTab === 'search' ? (
           <>
-            {mode === 'simple' ? (
-              <>
-                <SimpleSearch
+            <SimpleSearch
                   onResults={handleSimpleResults}
                   onLoading={setLoading}
                   onError={setError}
@@ -466,38 +459,6 @@ function Dashboard() {
                     </div>
                   </motion.div>
                 )}
-              </>
-            ) : (
-              <SearchTab
-                aeroportDepart={aeroportDepart}
-                setAeroportDepart={setAeroportDepart}
-                datesDepart={datesDepart}
-                setDatesDepart={setDatesDepart}
-                datesRetour={datesRetour}
-                setDatesRetour={setDatesRetour}
-                budgetMax={budgetMax}
-                setBudgetMax={setBudgetMax}
-                limiteAllers={limiteAllers}
-                setLimiteAllers={setLimiteAllers}
-                loading={loading}
-                error={error}
-                data={data}
-                onScan={handleScan}
-                onSaveSearch={handleSaveSearch}
-                onSaveFavorite={handleSaveFavorite}
-                addDate={addDate}
-                removeDate={removeDate}
-                updateHoraire={updateHoraire}
-                formatDateFr={formatDateFr}
-                hasRequest={!!currentRequest}
-                destinations={destinations}
-                destinationsExclues={destinationsExclues}
-                loadingDestinations={loadingDestinations}
-                onLoadDestinations={() => loadDestinations(aeroportDepart)}
-                onToggleDestination={toggleDestination}
-                onTogglePays={togglePays}
-              />
-            )}
           </>
         ) : (
           <SavedTab

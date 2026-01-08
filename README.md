@@ -68,6 +68,12 @@ npm install
 
 ```bash
 cd backend
+python run.py
+```
+
+Ou avec uvicorn directement :
+```bash
+cd backend
 uvicorn main:app --reload --port 8000
 ```
 

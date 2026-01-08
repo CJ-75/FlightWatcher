@@ -3,7 +3,7 @@ Tracking de l'historique des prix pour FlightWatcher
 Enregistre les prix dans price_history pour analytics futures
 """
 from typing import List, Dict, Any
-from backend.supabase_client import get_supabase_service_client
+from supabase_client import get_supabase_service_client
 import logging
 
 logger = logging.getLogger(__name__)

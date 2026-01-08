@@ -7,7 +7,7 @@ echo ""
 
 echo "[1/2] Démarrage du backend..."
 cd backend
-uvicorn main:app --reload --port 8000 &
+python run.py &
 BACKEND_PID=$!
 
 sleep 2

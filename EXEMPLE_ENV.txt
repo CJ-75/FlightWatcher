@@ -1,0 +1,107 @@
+============================================
+EXEMPLE DE FICHIER .env POUR LE BACKEND
+============================================
+
+Créez un fichier nommé ".env" dans le dossier "backend/" avec le contenu suivant :
+
+-------------------------------------------
+SUPABASE_URL=https://votre-projet.supabase.co
+SUPABASE_ANON_KEY=votre-clé-anon-ici
+-------------------------------------------
+
+============================================
+OÙ TROUVER CES VALEURS ?
+============================================
+
+1. Allez sur https://app.supabase.com
+2. Créez un projet ou sélectionnez un projet existant
+3. Allez dans Settings → API
+4. Vous verrez :
+   
+   Project URL: https://xxxxxxxxxxxxx.supabase.co
+   → C'est votre SUPABASE_URL
+   
+   anon public: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   → C'est votre SUPABASE_ANON_KEY
+
+============================================
+EXEMPLE COMPLET
+============================================
+
+Voici un exemple de fichier .env rempli (avec des valeurs fictives) :
+
+SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG1ub3AiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYzODk2NzI4MCwiZXhwIjoxOTU0NTQzMjgwfQ.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+============================================
+INSTRUCTIONS DÉTAILLÉES
+============================================
+
+ÉTAPE 1 : Créer le fichier
+---------------------------
+Windows PowerShell :
+  cd backend
+  New-Item -ItemType File -Path .env
+
+Linux/Mac :
+  cd backend
+  touch .env
+
+ÉTAPE 2 : Éditer le fichier
+---------------------------
+Ouvrez le fichier backend/.env dans un éditeur de texte
+(Notepad, VS Code, etc.)
+
+ÉTAPE 3 : Ajouter le contenu
+----------------------------
+Copiez-collez les deux lignes suivantes et remplacez les valeurs :
+
+SUPABASE_URL=https://votre-projet.supabase.co
+SUPABASE_ANON_KEY=votre-clé-anon-ici
+
+IMPORTANT :
+- Pas d'espaces avant ou après le signe =
+- Pas de guillemets autour des valeurs
+- Une ligne par variable
+
+ÉTAPE 4 : Vérifier
+------------------
+1. Démarrez le backend :
+   cd backend
+   uvicorn main:app --reload --port 8000
+
+2. Visitez dans votre navigateur :
+   http://localhost:8000/api/supabase/status
+
+3. Vous devriez voir :
+   {"available": true, "message": "Supabase est configuré et disponible"}
+
+============================================
+NOTES IMPORTANTES
+============================================
+
+✓ Le fichier .env est déjà dans .gitignore
+  → Vos clés ne seront pas commitées
+
+✓ Supabase est OPTIONNEL
+  → L'application fonctionne aussi sans Supabase
+  → Elle utilisera localStorage à la place
+
+✓ Ne partagez JAMAIS votre fichier .env
+  → Contient vos clés secrètes
+
+============================================
+DÉPANNAGE
+============================================
+
+Erreur "Supabase n'est pas configuré" ?
+→ Vérifiez que le fichier .env existe dans backend/
+→ Vérifiez que les noms des variables sont exacts
+→ Vérifiez qu'il n'y a pas d'espaces avant/après les valeurs
+→ Redémarrez le serveur backend
+
+Erreur "Invalid API key" ?
+→ Vérifiez que vous avez copié la clé complète
+→ Vérifiez qu'il n'y a pas de retours à la ligne dans la clé
+→ Utilisez la clé "anon public" et non "service_role"
+

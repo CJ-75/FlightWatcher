@@ -4,6 +4,7 @@ import { BudgetSlider } from './BudgetSlider';
 import { DatePresets, DatePreset } from './DatePresets';
 import { AdvancedOptions } from './AdvancedOptions';
 import { DateWithTimes } from './DateWithTimes';
+import { FlexibleDatesSelector } from './FlexibleDatesSelector';
 import { InspireRequest, InspireResponse, EnrichedTripResponse, DateAvecHoraire, Destination } from '../types';
 import { Airport } from '../types';
 import { LoadingSkeleton } from './LoadingSkeleton';
@@ -57,7 +58,7 @@ export function SimpleSearch({
   formatDateFr
 }: SimpleSearchProps) {
   const [budget, setBudget] = useState(100);
-  const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
+  const [selectedPresets, setSelectedPresets] = useState<DatePreset[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [presetDates, setPresetDates] = useState<{ dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }>({
     dates_depart: [],
@@ -65,8 +66,8 @@ export function SimpleSearch({
   });
 
   const handleSearch = async () => {
-    if (!datePreset) {
-      onError('Veuillez sélectionner une période');
+    if (selectedPresets.length === 0) {
+      onError('Veuillez sélectionner au moins une période');
       return;
     }
 
@@ -76,7 +77,8 @@ export function SimpleSearch({
     }
 
     // Validation pour dates
-    if (datePreset === 'flexible') {
+    const isFlexible = selectedPresets.includes('flexible');
+    if (isFlexible) {
       if (flexibleDates.dates_depart.length === 0 || flexibleDates.dates_retour.length === 0) {
         onError('Veuillez ajouter au moins une date de départ et une date de retour');
         return;
@@ -93,11 +95,14 @@ export function SimpleSearch({
     onError(null);
 
     try {
+      // Pour le backend, on utilise 'flexible' si c'est sélectionné, sinon on combine les presets
+      const datePresetForBackend: 'weekend' | 'next-weekend' | 'next-week' | 'flexible' = isFlexible ? 'flexible' : 'weekend';
+      
       const request: InspireRequest = {
         budget,
-        date_preset: datePreset,
+        date_preset: datePresetForBackend,
         departure: selectedAirport,
-        ...(datePreset === 'flexible' ? {
+        ...(isFlexible ? {
           flexible_dates: {
             dates_depart: flexibleDates.dates_depart,
             dates_retour: flexibleDates.dates_retour,
@@ -163,12 +168,12 @@ export function SimpleSearch({
       </div>
 
       <DatePresets
-        selected={datePreset}
-        onChange={setDatePreset}
+        selected={selectedPresets}
+        onChange={setSelectedPresets}
       />
 
-      {/* Section Horaires par jour - visible pour tous les presets sauf flexible */}
-      {datePreset && datePreset !== 'flexible' && (
+      {/* Section Horaires par jour - visible pour les presets rapides (pas flexible) */}
+      {selectedPresets.length > 0 && !selectedPresets.includes('flexible') && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
@@ -180,17 +185,35 @@ export function SimpleSearch({
             ⏰ Horaires pour chaque jour
           </label>
           <DateWithTimes
-            preset={datePreset}
+            presets={selectedPresets.filter(p => p !== 'flexible')}
             onDatesChange={setPresetDates}
             formatDateFr={formatDateFr}
           />
         </motion.div>
       )}
 
+      {/* Section Dates flexibles - visible uniquement pour preset flexible */}
+      {selectedPresets.includes('flexible') && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={springConfig}
+          className="mb-6 sm:mb-8"
+        >
+          <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
+            📅 Choisissez vos dates
+          </label>
+          <FlexibleDatesSelector
+            flexibleDates={flexibleDates}
+            onFlexibleDatesChange={onFlexibleDatesChange}
+            formatDateFr={formatDateFr}
+          />
+        </motion.div>
+      )}
+
       <AdvancedOptions
-        datePreset={datePreset}
-        flexibleDates={flexibleDates}
-        onFlexibleDatesChange={onFlexibleDatesChange}
+        datePreset={selectedPresets.includes('flexible') ? 'flexible' : selectedPresets.length > 0 ? selectedPresets[0] : null}
         excludedDestinations={excludedDestinations}
         onExcludedDestinationsChange={onExcludedDestinationsChange}
         destinations={destinations}
@@ -198,17 +221,16 @@ export function SimpleSearch({
         onLoadDestinations={onLoadDestinations}
         limiteAllers={limiteAllers}
         onLimiteAllersChange={onLimiteAllersChange}
-        formatDateFr={formatDateFr}
       />
 
       <motion.button
         onClick={handleSearch}
-        disabled={isSearching || !datePreset || !selectedAirport}
-        whileHover={!isSearching && datePreset && selectedAirport ? { scale: 1.05 } : {}}
-        whileTap={!isSearching && datePreset && selectedAirport ? { scale: 0.95 } : {}}
+        disabled={isSearching || selectedPresets.length === 0 || !selectedAirport}
+        whileHover={!isSearching && selectedPresets.length > 0 && selectedAirport ? { scale: 1.05 } : {}}
+        whileTap={!isSearching && selectedPresets.length > 0 && selectedAirport ? { scale: 0.95 } : {}}
         transition={springConfig}
         className={`w-full bg-primary-500 text-white rounded-full px-6 sm:px-8 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl min-h-[56px] flex items-center justify-center
-          ${isSearching || !datePreset || !selectedAirport
+          ${isSearching || selectedPresets.length === 0 || !selectedAirport
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:bg-primary-600 hover:shadow-2xl'
           }`}

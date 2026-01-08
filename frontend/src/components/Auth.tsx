@@ -238,11 +238,6 @@ export default function Auth() {
             </button>
           </div>
         </div>
-        {supabaseStatus && supabaseStatus.available && (
-          <div className={`px-3 py-1 text-xs rounded border bg-green-50 text-green-700 border-green-200`}>
-            ✅ Backend Supabase: {supabaseStatus.message}
-          </div>
-        )}
       </div>
     )
   }
@@ -272,11 +267,6 @@ export default function Auth() {
           </svg>
         )}
       </button>
-      {supabaseStatus && supabaseStatus.available && (
-        <div className={`px-3 py-1 text-xs rounded border bg-green-50 text-green-700 border-green-200`}>
-          ✅ Backend Supabase: {supabaseStatus.message}
-        </div>
-      )}
     </div>
   )
 }

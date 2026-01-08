@@ -5,7 +5,7 @@ import { TimeRangeSelector } from './TimeRangeSelector';
 import { DatePreset } from './DatePresets';
 
 interface DateWithTimesProps {
-  preset: DatePreset;
+  presets: DatePreset[];
   onDatesChange: (dates: { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }) => void;
   formatDateFr: (dateStr: string) => string;
 }
@@ -17,98 +17,150 @@ const springConfig = {
   mass: 0.5
 };
 
-function generateDatesFromPreset(preset: DatePreset): { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] } {
+// Format date en YYYY-MM-DD sans dépendre du timezone
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function generateDatesFromPresets(presets: DatePreset[]): { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
+  // Debug temporaire
+  console.log('[DateWithTimes] Date actuelle:', formatDateLocal(today), 'Jour:', today.getDay());
+  
   const dates_depart: DateAvecHoraire[] = [];
   const dates_retour: DateAvecHoraire[] = [];
+  const addedDatesDepart = new Set<string>(); // Pour éviter les doublons dans les départs
+  const addedDatesRetour = new Set<string>(); // Pour éviter les doublons dans les retours
   
-  if (preset === 'weekend') {
+  const addDateIfNotExists = (date: DateAvecHoraire, isDepart: boolean) => {
+    if (isDepart) {
+      if (!addedDatesDepart.has(date.date)) {
+        addedDatesDepart.add(date.date);
+        dates_depart.push(date);
+      }
+    } else {
+      if (!addedDatesRetour.has(date.date)) {
+        addedDatesRetour.add(date.date);
+        dates_retour.push(date);
+      }
+    }
+  };
+  
+  // Filtrer 'flexible' car il n'est pas géré ici
+  const validPresets = presets.filter(p => p !== 'flexible');
+  
+  validPresets.forEach(preset => {
+    if (preset === 'weekend') {
     // Ce weekend : vendredi-dimanche prochain
+    // getDay() : 0=dimanche, 1=lundi, 2=mardi, 3=mercredi, 4=jeudi, 5=vendredi, 6=samedi
     const dayOfWeek = today.getDay(); // 0 = dimanche, 5 = vendredi
     let daysUntilFriday = (5 - dayOfWeek + 7) % 7;
-    if (daysUntilFriday === 0 && dayOfWeek >= 5) {
-      daysUntilFriday = 7; // Si on est déjà vendredi ou après, prendre le suivant
+    if (daysUntilFriday === 0) {
+      daysUntilFriday = 7; // Si on est déjà vendredi, prendre le suivant
     }
     
     const friday = new Date(today);
     friday.setDate(today.getDate() + daysUntilFriday);
+    friday.setHours(0, 0, 0, 0);
+    
     const sunday = new Date(friday);
     sunday.setDate(friday.getDate() + 2);
+    sunday.setHours(0, 0, 0, 0);
     
-    dates_depart.push({
-      date: friday.toISOString().split('T')[0],
-      heure_min: '06:00',
-      heure_max: '23:59'
-    });
-    dates_retour.push({
-      date: sunday.toISOString().split('T')[0],
-      heure_min: '06:00',
-      heure_max: '23:59'
-    });
-  } else if (preset === 'next-weekend') {
+    // Debug temporaire
+    console.log(`[DateWithTimes] Preset weekend: dayOfWeek=${dayOfWeek}, daysUntilFriday=${daysUntilFriday}, friday=${formatDateLocal(friday)}, friday.getDay()=${friday.getDay()}, sunday=${formatDateLocal(sunday)}, sunday.getDay()=${sunday.getDay()}`);
+    
+      addDateIfNotExists({
+        date: formatDateLocal(friday),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      }, true);
+      addDateIfNotExists({
+        date: formatDateLocal(sunday),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      }, false);
+    } else if (preset === 'next-weekend') {
     // Weekend prochain : vendredi-dimanche suivant
     const dayOfWeek = today.getDay();
     let daysUntilFriday = (5 - dayOfWeek + 7) % 7;
     if (daysUntilFriday === 0) {
-      daysUntilFriday = 7;
-    } else {
-      daysUntilFriday += 7;
+      daysUntilFriday = 7; // Si on est vendredi, prendre le suivant
     }
+    daysUntilFriday += 7; // Toujours ajouter 7 pour le weekend prochain
     
     const friday = new Date(today);
     friday.setDate(today.getDate() + daysUntilFriday);
+    friday.setHours(0, 0, 0, 0);
+    
     const sunday = new Date(friday);
     sunday.setDate(friday.getDate() + 2);
+    sunday.setHours(0, 0, 0, 0);
     
-    dates_depart.push({
-      date: friday.toISOString().split('T')[0],
-      heure_min: '06:00',
-      heure_max: '23:59'
-    });
-    dates_retour.push({
-      date: sunday.toISOString().split('T')[0],
-      heure_min: '06:00',
-      heure_max: '23:59'
-    });
-  } else if (preset === 'next-week') {
-    // 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
-    const dayOfWeek = today.getDay();
-    let daysUntilMonday = (1 - dayOfWeek + 7) % 7;
-    if (daysUntilMonday === 0) {
-      daysUntilMonday = 7;
+      addDateIfNotExists({
+        date: formatDateLocal(friday),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      }, true);
+      addDateIfNotExists({
+        date: formatDateLocal(sunday),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      }, false);
+    } else if (preset === 'next-week') {
+    // 3 jours la semaine prochaine : vendredi-dimanche
+    // Horaires : 23h00 à 6h00 (plage qui traverse minuit)
+    const dayOfWeek = today.getDay(); // 0 = dimanche, 5 = vendredi
+    let daysUntilFriday = (5 - dayOfWeek + 7) % 7;
+    if (daysUntilFriday === 0) {
+      daysUntilFriday = 7; // Si on est vendredi, prendre le suivant
     }
+    daysUntilFriday += 7; // Toujours ajouter 7 pour la semaine prochaine
     
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + daysUntilMonday);
+    const friday = new Date(today);
+    friday.setDate(today.getDate() + daysUntilFriday);
+    friday.setHours(0, 0, 0, 0);
     
-    dates_depart.push(
-      { date: monday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: new Date(monday.getTime() + 24*60*60*1000).toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: new Date(monday.getTime() + 2*24*60*60*1000).toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' }
-    );
-    dates_retour.push(
-      { date: new Date(monday.getTime() + 3*24*60*60*1000).toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: new Date(monday.getTime() + 4*24*60*60*1000).toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: new Date(monday.getTime() + 5*24*60*60*1000).toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' }
-    );
-  }
+    const sunday = new Date(friday);
+    sunday.setDate(friday.getDate() + 2);
+    sunday.setHours(0, 0, 0, 0);
+    
+      addDateIfNotExists({
+        date: formatDateLocal(friday),
+        heure_min: '23:00',
+        heure_max: '06:00'
+      }, true);
+      addDateIfNotExists({
+        date: formatDateLocal(sunday),
+        heure_min: '23:00',
+        heure_max: '06:00'
+      }, false);
+    }
+  });
+  
+  // Trier les dates
+  dates_depart.sort((a, b) => a.date.localeCompare(b.date));
+  dates_retour.sort((a, b) => a.date.localeCompare(b.date));
   
   return { dates_depart, dates_retour };
 }
 
-export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithTimesProps) {
+export function DateWithTimes({ presets, onDatesChange, formatDateFr }: DateWithTimesProps) {
   const [dates, setDates] = useState<{ dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }>(() => 
-    generateDatesFromPreset(preset)
+    generateDatesFromPresets(presets)
   );
 
   useEffect(() => {
-    const newDates = generateDatesFromPreset(preset);
+    const newDates = generateDatesFromPresets(presets);
     setDates(newDates);
     onDatesChange(newDates);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preset]);
+  }, [presets.join(',')]);
 
   const updateDate = (type: 'depart' | 'retour', index: number, updated: DateAvecHoraire) => {
     const newDates = { ...dates };
