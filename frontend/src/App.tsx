@@ -221,7 +221,10 @@ function Dashboard() {
   };
 
   const formatDateFr = (dateStr: string) => {
-    const date = new Date(dateStr)
+    // Parser la date manuellement pour éviter les problèmes de fuseau horaire
+    // dateStr est au format "YYYY-MM-DD"
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month - 1 car les mois commencent à 0
     // Tableau avec lundi en premier (index 0 = lundi, index 6 = dimanche)
     const jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const mois = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 
@@ -2035,7 +2038,17 @@ function TripCard({ trip, onSaveFavorite, isFavorite: isFav }: {
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
+    // Parser la date manuellement pour éviter les problèmes de fuseau horaire
+    // dateStr est au format "YYYY-MM-DD" ou ISO datetime string
+    let date: Date;
+    if (dateStr.includes('T')) {
+      // Format ISO datetime, utiliser directement
+      date = new Date(dateStr);
+    } else {
+      // Format "YYYY-MM-DD", parser manuellement
+      const [year, month, day] = dateStr.split('-').map(Number);
+      date = new Date(year, month - 1, day); // month - 1 car les mois commencent à 0
+    }
     // Tableau avec lundi en premier (index 0 = lundi, index 6 = dimanche)
     const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 

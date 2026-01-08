@@ -36,51 +36,96 @@ function generateDatesFromPreset(preset: DatePreset): { dates_depart: DateAvecHo
   const dates_depart: DateAvecHoraire[] = [];
   const dates_retour: DateAvecHoraire[] = [];
   
+  // Formater la date en YYYY-MM-DD sans utiliser toISOString() pour éviter les problèmes de fuseau horaire
+  const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   // Obtenir le jour actuel (1=lundi, 2=mardi, ..., 7=dimanche)
   const currentDay = getDayOfWeekMondayBased(today);
   
   if (preset === 'weekend') {
     // Ce weekend : samedi et dimanche de cette semaine
-    // Samedi = jour 6, Dimanche = jour 7
-    const saturdayOffset = 6 - currentDay;
-    const sundayOffset = 7 - currentDay;
+    // Si on est vendredi (5), prendre vendredi (aujourd'hui) et dimanche
+    // Sinon, prendre samedi et dimanche
+    let departureDate: Date;
+    let returnDate: Date;
     
-    // Si on est déjà après samedi, prendre le weekend suivant
-    const saturday = new Date(today);
-    saturday.setDate(today.getDate() + (saturdayOffset < 0 ? saturdayOffset + 7 : saturdayOffset));
+    if (currentDay === 5) {
+      // Vendredi : départ aujourd'hui, retour dimanche
+      departureDate = new Date(today);
+      const sundayOffset = 7 - currentDay; // 7 - 5 = 2
+      returnDate = new Date(today);
+      returnDate.setDate(today.getDate() + sundayOffset);
+    } else {
+      // Autres jours : samedi et dimanche
+      const saturdayOffset = 6 - currentDay;
+      const sundayOffset = 7 - currentDay;
+      
+      // Si on est dimanche (currentDay === 7), prendre le weekend suivant (+7 jours)
+      // Sinon, si on est déjà après samedi (saturdayOffset < 0), prendre le weekend suivant
+      const finalSaturdayOffset = currentDay === 7 ? saturdayOffset + 7 : (saturdayOffset < 0 ? saturdayOffset + 7 : saturdayOffset);
+      const finalSundayOffset = currentDay === 7 ? sundayOffset + 7 : (sundayOffset < 0 ? sundayOffset + 7 : sundayOffset);
+      
+      departureDate = new Date(today);
+      departureDate.setDate(today.getDate() + finalSaturdayOffset);
+      
+      returnDate = new Date(today);
+      returnDate.setDate(today.getDate() + finalSundayOffset);
+    }
     
-    const sunday = new Date(today);
-    sunday.setDate(today.getDate() + (sundayOffset < 0 ? sundayOffset + 7 : sundayOffset));
+    const departureStr = formatDateLocal(departureDate);
+    const returnStr = formatDateLocal(returnDate);
     
     dates_depart.push({
-      date: saturday.toISOString().split('T')[0],
+      date: departureStr,
       heure_min: '06:00',
       heure_max: '23:59'
     });
     dates_retour.push({
-      date: sunday.toISOString().split('T')[0],
+      date: returnStr,
       heure_min: '06:00',
       heure_max: '23:59'
     });
   } else if (preset === 'next-weekend') {
     // Weekend prochain : samedi et dimanche de la semaine suivante
-    // Toujours ajouter 7 jours pour la semaine suivante
-    const daysUntilNextSaturday = 13 - currentDay; // 6 (samedi) + 7 jours
-    const daysUntilNextSunday = 14 - currentDay;   // 7 (dimanche) + 7 jours
+    // Si on est vendredi (5), prendre vendredi de la semaine prochaine et dimanche de la semaine prochaine
+    // Sinon, prendre samedi et dimanche de la semaine prochaine
+    let departureDate: Date;
+    let returnDate: Date;
     
-    const nextSaturday = new Date(today);
-    nextSaturday.setDate(today.getDate() + daysUntilNextSaturday);
+    if (currentDay === 5) {
+      // Vendredi : départ vendredi de la semaine prochaine, retour dimanche de la semaine prochaine
+      departureDate = new Date(today);
+      departureDate.setDate(today.getDate() + 7); // Vendredi de la semaine prochaine
+      const daysUntilNextSunday = 14 - currentDay; // 7 (dimanche) + 7 jours = 14
+      returnDate = new Date(today);
+      returnDate.setDate(today.getDate() + daysUntilNextSunday);
+    } else {
+      // Autres jours : samedi et dimanche de la semaine prochaine
+      const daysUntilNextSaturday = 13 - currentDay; // 6 (samedi) + 7 jours = 13
+      const daysUntilNextSunday = 14 - currentDay;   // 7 (dimanche) + 7 jours = 14
+      
+      departureDate = new Date(today);
+      departureDate.setDate(today.getDate() + daysUntilNextSaturday);
+      
+      returnDate = new Date(today);
+      returnDate.setDate(today.getDate() + daysUntilNextSunday);
+    }
     
-    const nextSunday = new Date(today);
-    nextSunday.setDate(today.getDate() + daysUntilNextSunday);
+    const departureStr = formatDateLocal(departureDate);
+    const returnStr = formatDateLocal(returnDate);
     
     dates_depart.push({
-      date: nextSaturday.toISOString().split('T')[0],
+      date: departureStr,
       heure_min: '06:00',
       heure_max: '23:59'
     });
     dates_retour.push({
-      date: nextSunday.toISOString().split('T')[0],
+      date: returnStr,
       heure_min: '06:00',
       heure_max: '23:59'
     });
@@ -108,14 +153,14 @@ function generateDatesFromPreset(preset: DatePreset): { dates_depart: DateAvecHo
     nextSaturday.setDate(nextMonday.getDate() + 5);
     
     dates_depart.push(
-      { date: nextMonday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: nextTuesday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: nextWednesday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' }
+      { date: formatDateLocal(nextMonday), heure_min: '06:00', heure_max: '23:59' },
+      { date: formatDateLocal(nextTuesday), heure_min: '06:00', heure_max: '23:59' },
+      { date: formatDateLocal(nextWednesday), heure_min: '06:00', heure_max: '23:59' }
     );
     dates_retour.push(
-      { date: nextThursday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: nextFriday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' },
-      { date: nextSaturday.toISOString().split('T')[0], heure_min: '06:00', heure_max: '23:59' }
+      { date: formatDateLocal(nextThursday), heure_min: '06:00', heure_max: '23:59' },
+      { date: formatDateLocal(nextFriday), heure_min: '06:00', heure_max: '23:59' },
+      { date: formatDateLocal(nextSaturday), heure_min: '06:00', heure_max: '23:59' }
     );
   }
   

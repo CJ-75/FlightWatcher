@@ -322,33 +322,54 @@ def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[Date
     
     if preset == 'weekend':
         # Ce weekend : samedi et dimanche de cette semaine
-        # Samedi = jour 5, Dimanche = jour 6
-        saturday_offset = 5 - current_day
-        sunday_offset = 6 - current_day
+        # Si on est vendredi (4), prendre vendredi (aujourd'hui) et dimanche
+        # Sinon, prendre samedi et dimanche
+        if current_day == 4:  # Vendredi (0=lundi, 4=vendredi)
+            # Vendredi : départ aujourd'hui, retour dimanche
+            departure_date = today
+            sunday_offset = 6 - current_day  # 6 - 4 = 2
+            return_date = today + timedelta(days=sunday_offset)
+        else:
+            # Autres jours : samedi et dimanche
+            saturday_offset = 5 - current_day
+            sunday_offset = 6 - current_day
+            
+            # Si on est dimanche (current_day == 6), prendre le weekend suivant (+7 jours)
+            # Sinon, si on est déjà après samedi, prendre le weekend suivant
+            if current_day == 6:  # Dimanche
+                saturday_offset += 7
+                sunday_offset += 7
+            else:
+                if saturday_offset < 0:
+                    saturday_offset += 7
+                if sunday_offset < 0:
+                    sunday_offset += 7
+            
+            departure_date = today + timedelta(days=saturday_offset)
+            return_date = today + timedelta(days=sunday_offset)
         
-        # Si on est déjà après samedi, prendre le weekend suivant
-        if saturday_offset < 0:
-            saturday_offset += 7
-        if sunday_offset < 0:
-            sunday_offset += 7
-        
-        saturday = today + timedelta(days=saturday_offset)
-        sunday = today + timedelta(days=sunday_offset)
-        
-        dates_depart.append(DateAvecHoraire(date=saturday.isoformat(), heure_min="06:00", heure_max="23:59"))
-        dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_depart.append(DateAvecHoraire(date=departure_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_retour.append(DateAvecHoraire(date=return_date.isoformat(), heure_min="06:00", heure_max="23:59"))
         
     elif preset == 'next-weekend':
         # Weekend prochain : samedi et dimanche de la semaine suivante
-        # Toujours ajouter 7 jours pour la semaine suivante
-        days_until_next_saturday = 13 - current_day  # 5 (samedi) + 7 jours
-        days_until_next_sunday = 14 - current_day    # 6 (dimanche) + 7 jours
+        # Si on est vendredi (4), prendre vendredi de la semaine prochaine et dimanche de la semaine prochaine
+        # Sinon, prendre samedi et dimanche de la semaine prochaine
+        if current_day == 4:  # Vendredi (0=lundi, 4=vendredi)
+            # Vendredi : départ vendredi de la semaine prochaine, retour dimanche de la semaine prochaine
+            departure_date = today + timedelta(days=7)  # Vendredi de la semaine prochaine
+            days_until_next_sunday = 14 - current_day  # 6 (dimanche) + 7 jours = 13
+            return_date = today + timedelta(days=days_until_next_sunday)
+        else:
+            # Autres jours : samedi et dimanche de la semaine prochaine
+            days_until_next_saturday = 13 - current_day  # 5 (samedi) + 7 jours = 12
+            days_until_next_sunday = 14 - current_day    # 6 (dimanche) + 7 jours = 13
+            
+            departure_date = today + timedelta(days=days_until_next_saturday)
+            return_date = today + timedelta(days=days_until_next_sunday)
         
-        next_saturday = today + timedelta(days=days_until_next_saturday)
-        next_sunday = today + timedelta(days=days_until_next_sunday)
-        
-        dates_depart.append(DateAvecHoraire(date=next_saturday.isoformat(), heure_min="06:00", heure_max="23:59"))
-        dates_retour.append(DateAvecHoraire(date=next_sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_depart.append(DateAvecHoraire(date=departure_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_retour.append(DateAvecHoraire(date=return_date.isoformat(), heure_min="06:00", heure_max="23:59"))
         
     elif preset == 'next-week':
         # 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
