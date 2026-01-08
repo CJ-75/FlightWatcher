@@ -214,7 +214,7 @@ export function SimpleSearch({
         whileHover={!isSearching && datePreset && selectedAirport ? { scale: 1.05 } : {}}
         whileTap={!isSearching && datePreset && selectedAirport ? { scale: 0.95 } : {}}
         transition={springConfig}
-        className={`w-full bg-primary-500 text-white rounded-full px-6 sm:px-8 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl min-h-[56px] flex items-center justify-center
+        className={`w-full bg-primary-500 text-white rounded-full px-6 sm:px-8 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl min-h-[56px] flex items-center justify-center mt-8 sm:mt-10
           ${isSearching || !datePreset || !selectedAirport
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:bg-primary-600 hover:shadow-2xl'
@@ -227,8 +227,8 @@ export function SimpleSearch({
           </>
         ) : (
           <>
-            <span className="mr-2">🎲</span>
-            Surprise-moi !
+            <span className="mr-2">✈️</span>
+            Lancer la recherche
           </>
         )}
       </motion.button>

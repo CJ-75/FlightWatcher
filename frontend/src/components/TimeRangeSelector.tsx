@@ -16,10 +16,10 @@ const springConfig = {
 };
 
 const timePresets = [
-  { label: '🌙 Nuit/Tôt le matin', min: '00:00', max: '06:00', color: 'from-indigo-400 to-blue-400' },
   { label: '🌅 Matin', min: '06:00', max: '12:00', color: 'from-yellow-400 to-orange-400' },
   { label: '☀️ Après-midi', min: '12:00', max: '18:00', color: 'from-orange-400 to-pink-400' },
   { label: '🌆 Soir', min: '18:00', max: '23:59', color: 'from-pink-400 to-purple-400' },
+  { label: '🌍 Toute la journée', min: '00:00', max: '23:59', color: 'from-blue-400 to-indigo-400' },
 ];
 
 export function TimeRangeSelector({ date, onUpdate, type }: TimeRangeSelectorProps) {
