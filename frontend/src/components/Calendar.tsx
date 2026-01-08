@@ -58,24 +58,52 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
         const calendarWidth = 320; // min-w-[320px]
         const calendarHeight = 400; // estimation
         
-        // Utiliser getBoundingClientRect qui donne la position relative à la viewport
-        // puis ajouter le scroll pour obtenir la position absolue
-        let left = rect.left + window.scrollX;
-        let top = rect.bottom + window.scrollY + 8;
+        // getBoundingClientRect() donne les coordonnées relatives à la viewport
+        // Comme le calendrier est en position: fixed, on utilise directement ces coordonnées
+        let left = rect.left;
+        let top: number;
         
-        // Ajuster si le calendrier dépasse à droite
-        if (left + calendarWidth > viewportWidth + window.scrollX) {
-          left = viewportWidth + window.scrollX - calendarWidth - 16;
+        // Calculer l'espace disponible en bas et en haut (relatif à la viewport)
+        const spaceBelow = viewportHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        
+        // Décider si afficher en bas ou en haut du trigger
+        if (spaceBelow >= calendarHeight + 8) {
+          // Assez d'espace en bas : afficher en dessous
+          top = rect.bottom + 8;
+        } else if (spaceAbove >= calendarHeight + 8) {
+          // Pas assez d'espace en bas mais assez en haut : afficher au-dessus
+          top = rect.top - calendarHeight - 8;
+        } else {
+          // Pas assez d'espace ni en haut ni en bas : afficher dans la viewport
+          if (spaceAbove > spaceBelow) {
+            // Plus d'espace en haut : afficher en haut de la viewport
+            top = 16;
+          } else {
+            // Plus d'espace en bas : afficher en bas de la viewport
+            top = viewportHeight - calendarHeight - 16;
+          }
         }
         
-        // Ajuster si le calendrier dépasse en bas (afficher au-dessus)
-        if (top + calendarHeight > viewportHeight + window.scrollY) {
-          top = rect.top + window.scrollY - calendarHeight - 8;
+        // S'assurer que le calendrier reste visible dans la viewport
+        // Si le calendrier dépasse en bas de la viewport, le remonter
+        if (top + calendarHeight > viewportHeight - 16) {
+          top = viewportHeight - calendarHeight - 16;
+        }
+        
+        // Si le calendrier dépasse en haut de la viewport, le descendre
+        if (top < 16) {
+          top = 16;
+        }
+        
+        // Ajuster si le calendrier dépasse à droite
+        if (left + calendarWidth > viewportWidth - 16) {
+          left = viewportWidth - calendarWidth - 16;
         }
         
         // S'assurer que le calendrier ne dépasse pas à gauche
-        if (left < window.scrollX + 16) {
-          left = window.scrollX + 16;
+        if (left < 16) {
+          left = 16;
         }
         
         setPosition({ top, left });
