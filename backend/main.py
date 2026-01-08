@@ -10,6 +10,24 @@ import sys
 import os
 import hashlib
 import json
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Charger le fichier .env AVANT les imports Supabase
+env_path = Path(__file__).parent / '.env'
+print(f"📁 Chargement du fichier .env depuis: {env_path}")
+if env_path.exists():
+    print(f"✅ Fichier .env trouvé")
+    load_dotenv(env_path, override=True)  # override=True pour forcer le rechargement
+else:
+    print(f"⚠️  Fichier .env introuvable: {env_path}")
+
+# Vérifier les variables après chargement
+supabase_url_check = os.getenv("SUPABASE_URL")
+supabase_key_check = os.getenv("SUPABASE_ANON_KEY")
+print(f"🔍 Vérification variables après chargement:")
+print(f"   SUPABASE_URL: {'✅ Définie' if supabase_url_check else '❌ Manquante'}")
+print(f"   SUPABASE_ANON_KEY: {'✅ Définie' if supabase_key_check else '❌ Manquante'}")
 
 # Ajouter le chemin parent pour importer ryanair
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'ryanair-py'))
@@ -19,23 +37,32 @@ from ryanair.types import Flight
 
 # Import conditionnel de Supabase (avant les endpoints)
 try:
+    print("🔄 Tentative d'import des modules Supabase...")
     from supabase_client import get_supabase_client, get_supabase_service_client
     from db_models import SavedSearchDB, SavedFavoriteDB
     from auth_middleware import get_user_id_from_token, optional_auth
     from price_tracker import record_price_history
+    print("✅ Modules Supabase importés avec succès")
     
-    # Tester si les variables d'environnement sont définies
-    import os
+    # Tester si les variables d'environnement sont définies (après chargement du .env)
     if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_ANON_KEY"):
         print("⚠️  Variables d'environnement Supabase manquantes")
         print("   Créez un fichier backend/.env avec SUPABASE_URL et SUPABASE_ANON_KEY")
         print("   Exécutez 'python backend/check_env.py' pour créer un fichier exemple")
         raise ValueError("Variables d'environnement Supabase manquantes")
     
+    # Tester la connexion réelle
+    print("🔌 Test de connexion Supabase...")
+    test_client = get_supabase_client()
+    print("✅ Connexion Supabase réussie")
+    
     SUPABASE_AVAILABLE = True
     print("✅ Supabase configuré et disponible")
 except Exception as e:
     print(f"⚠️  Supabase non disponible: {e}")
+    import traceback
+    print("📋 Détails de l'erreur:")
+    traceback.print_exc()
     print("   Les fonctionnalités Supabase seront désactivées.")
     print("   Pour activer Supabase, configurez SUPABASE_URL et SUPABASE_ANON_KEY dans backend/.env")
     SUPABASE_AVAILABLE = False
@@ -941,6 +968,35 @@ class SavedFavoriteResponse(BaseModel):
     created_at: str
     is_still_valid: Optional[bool] = None
 
+# Modèles pour analytics
+class SearchEventRequest(BaseModel):
+    departure_airport: str
+    date_preset: Optional[str] = None
+    budget: Optional[int] = None
+    dates_depart: List[DateAvecHoraire]
+    dates_retour: List[DateAvecHoraire]
+    destinations_exclues: Optional[List[str]] = []
+    limite_allers: Optional[int] = 50
+    results_count: Optional[int] = 0
+    results: Optional[List[Dict]] = None
+    search_duration_ms: Optional[int] = None
+    api_requests_count: Optional[int] = None
+    source: Optional[str] = "web"
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+
+class BookingSasEventRequest(BaseModel):
+    trip: EnrichedTripResponse
+    partner_id: str
+    partner_name: str
+    redirect_url: str
+    action_type: Optional[str] = "redirect"
+    countdown_seconds: Optional[int] = None
+    source: Optional[str] = "web"
+    user_agent: Optional[str] = None
+    session_id: Optional[str] = None
+    search_event_id: Optional[str] = None  # ID de l'événement de recherche associé
+
 @app.get("/api/config")
 def get_config():
     """Retourne la configuration publique nécessaire au frontend"""
@@ -1271,4 +1327,155 @@ async def update_user_profile(request: Request):
         return {"success": True, "profile": result.data[0] if result.data else None}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
+# ==================== ENDPOINTS ANALYTICS ====================
+
+@app.post("/api/analytics/search-event")
+@optional_auth
+async def track_search_event(event: SearchEventRequest, request: Request):
+    """Enregistre un événement de recherche pour analytics"""
+    if not SUPABASE_AVAILABLE:
+        # Ne pas bloquer si Supabase n'est pas disponible, juste logger
+        print("⚠️  Supabase non disponible, événement de recherche non enregistré")
+        return {"status": "skipped", "reason": "supabase_not_available"}
+    
+    try:
+        user_id = get_user_id_from_token(request)
+        supabase = get_supabase_client()
+        
+        # Récupérer l'IP et user agent depuis la requête
+        client_ip = request.client.host if request.client else None
+        user_agent = event.user_agent or request.headers.get("user-agent")
+        
+        # Récupérer session_id depuis le body ou les cookies
+        session_id = event.session_id
+        if not session_id:
+            # Essayer de récupérer depuis les cookies
+            cookie_header = request.headers.get("cookie", "")
+            if cookie_header:
+                for cookie in cookie_header.split(";"):
+                    if "flightwatcher_session_id" in cookie:
+                        session_id = cookie.split("=")[1].strip()
+                        break
+        
+        print(f"📊 Analytics search_event - user_id: {user_id}, session_id: {session_id}")
+        
+        data = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "departure_airport": event.departure_airport,
+            "date_preset": event.date_preset,
+            "budget": event.budget,
+            "dates_depart": [d.model_dump() for d in event.dates_depart],
+            "dates_retour": [d.model_dump() for d in event.dates_retour],
+            "destinations_exclues": event.destinations_exclues or [],
+            "limite_allers": event.limite_allers,
+            "results_count": event.results_count or 0,
+            "results": [r if isinstance(r, dict) else r.model_dump() if hasattr(r, 'model_dump') else r for r in (event.results or [])],
+            "search_duration_ms": event.search_duration_ms,
+            "api_requests_count": event.api_requests_count,
+            "source": event.source or "web",
+            "user_agent": user_agent,
+            "ip_address": client_ip
+        }
+        
+        result = supabase.table("search_events").insert(data).execute()
+        
+        print(f"✅ Événement search_event enregistré avec succès: {result.data[0]['id'] if result.data else 'N/A'}")
+        
+        return {"status": "success", "id": result.data[0]["id"] if result.data else None}
+    except Exception as e:
+        # Ne pas faire échouer la requête principale si l'analytics échoue
+        print(f"⚠️  Erreur enregistrement événement de recherche: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/analytics/booking-sas-event")
+@optional_auth
+async def track_booking_sas_event(event: BookingSasEventRequest, request: Request):
+    """Enregistre un événement de clic sur le SAS de réservation pour analytics"""
+    if not SUPABASE_AVAILABLE:
+        # Ne pas bloquer si Supabase n'est pas disponible, juste logger
+        print("⚠️  Supabase non disponible, événement SAS non enregistré")
+        return {"status": "skipped", "reason": "supabase_not_available"}
+    
+    try:
+        user_id = get_user_id_from_token(request)
+        supabase = get_supabase_client()
+        
+        # Récupérer l'IP et user agent depuis la requête
+        client_ip = request.client.host if request.client else None
+        user_agent = event.user_agent or request.headers.get("user-agent")
+        
+        # Générer un ID unique pour le trip
+        trip_id = f"{event.trip.destination_code}-{event.trip.aller.departureTime}-{event.trip.retour.departureTime}"
+        
+        # Récupérer session_id depuis le body ou les cookies
+        session_id = event.session_id
+        if not session_id:
+            # Essayer de récupérer depuis les cookies
+            cookie_header = request.headers.get("cookie", "")
+            if cookie_header:
+                for cookie in cookie_header.split(";"):
+                    if "flightwatcher_session_id" in cookie:
+                        session_id = cookie.split("=")[1].strip()
+                        break
+        
+        data = {
+            "user_id": user_id,
+            "session_id": session_id,
+            "search_event_id": event.search_event_id,
+            "trip_id": trip_id,
+            "destination_code": event.trip.destination_code,
+            "destination_name": event.trip.aller.destinationFull.split(',')[0].strip(),
+            "departure_airport": event.trip.aller.origin,
+            "total_price": float(event.trip.prix_total),
+            "trip_data": event.trip.model_dump(),
+            "partner_id": event.partner_id,
+            "partner_name": event.partner_name,
+            "redirect_url": event.redirect_url,
+            "action_type": event.action_type or "redirect",
+            "countdown_seconds": event.countdown_seconds,
+            "source": event.source or "web",
+            "user_agent": user_agent,
+            "ip_address": client_ip
+        }
+        
+        print(f"📊 Analytics booking_sas_event - search_event_id: {event.search_event_id}, user_id: {user_id}, session_id: {session_id}")
+        
+        # Protection contre les doublons : vérifier s'il existe déjà un événement similaire récent (dans les 10 dernières secondes)
+        # avec le même trip_id, partner_id et session_id
+        from datetime import datetime, timedelta
+        ten_seconds_ago = (datetime.now() - timedelta(seconds=10)).isoformat()
+        
+        duplicate_query = supabase.table("booking_sas_events")\
+            .select("id")\
+            .eq("trip_id", trip_id)\
+            .eq("partner_id", event.partner_id)\
+            .gte("created_at", ten_seconds_ago)\
+            .limit(1)
+        
+        # Ajouter session_id à la vérification si disponible
+        if session_id:
+            duplicate_query = duplicate_query.eq("session_id", session_id)
+        elif user_id:
+            # Si pas de session_id mais user_id, vérifier par user_id
+            duplicate_query = duplicate_query.eq("user_id", user_id)
+        
+        duplicate_check = duplicate_query.execute()
+        
+        if duplicate_check.data and len(duplicate_check.data) > 0:
+            print(f"⚠️  Événement booking_sas_event déjà enregistré récemment (doublon évité): {duplicate_check.data[0]['id']}")
+            return {"status": "skipped", "reason": "duplicate", "id": duplicate_check.data[0]['id']}
+        
+        result = supabase.table("booking_sas_events").insert(data).execute()
+        
+        print(f"✅ Événement booking_sas_event enregistré avec succès: {result.data[0]['id'] if result.data else 'N/A'}")
+        
+        return {"status": "success", "id": result.data[0]["id"] if result.data else None}
+    except Exception as e:
+        # Ne pas faire échouer la requête principale si l'analytics échoue
+        import traceback
+        print(f"⚠️  Erreur enregistrement événement SAS: {str(e)}")
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}
 

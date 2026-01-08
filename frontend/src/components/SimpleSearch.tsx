@@ -8,6 +8,7 @@ import { InspireRequest, InspireResponse, EnrichedTripResponse, DateAvecHoraire,
 import { Airport } from '../types';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { LoadingSpinner } from './LoadingSpinner';
+import { getSessionId } from '../utils/session';
 
 interface SimpleSearchProps {
   onResults: (results: EnrichedTripResponse[], searchInfo?: {
@@ -61,7 +62,8 @@ export function SimpleSearch({
   onLoadDestinations,
   limiteAllers,
   onLimiteAllersChange,
-  formatDateFr
+  formatDateFr,
+  onSearchEventId
 }: SimpleSearchProps) {
   const [budget, setBudget] = useState(100);
   const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
@@ -143,6 +145,45 @@ export function SimpleSearch({
       }
 
       const result: InspireResponse = await response.json();
+      
+      // Enregistrer l'événement de recherche pour analytics (non-bloquant)
+      const searchStartTime = performance.now();
+      const searchDuration = Math.round(performance.now() - searchStartTime);
+      
+      // Enregistrer l'événement de recherche et stocker l'ID pour le lier au booking SAS
+      fetch('/api/analytics/search-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          departure_airport: selectedAirport,
+          date_preset: datePreset,
+          budget,
+          dates_depart: datePreset === 'flexible' ? flexibleDates.dates_depart : presetDates.dates_depart,
+          dates_retour: datePreset === 'flexible' ? flexibleDates.dates_retour : presetDates.dates_retour,
+          destinations_exclues: excludedDestinations,
+          limite_allers: limiteAllers,
+          results_count: result.resultats.length,
+          results: result.resultats.slice(0, 10), // Limiter à 10 résultats pour éviter payload trop lourd
+          search_duration_ms: searchDuration,
+          api_requests_count: result.nombre_requetes,
+          source: 'web',
+          user_agent: navigator.userAgent,
+          session_id: getSessionId()
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success' && data.id) {
+          // Stocker le search_event_id pour le lier au booking SAS
+          onSearchEventId?.(data.id);
+        }
+      })
+      .catch(err => {
+        console.warn('Erreur enregistrement événement de recherche:', err);
+      });
+      
       onResults(result.resultats, {
         datePreset,
         airport: selectedAirport,

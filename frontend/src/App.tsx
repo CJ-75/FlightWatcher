@@ -16,6 +16,7 @@ import { getCurrentUser } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
+import { BookingSas } from './components/BookingSas'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Calendar } from './components/Calendar'
 import { motion } from 'framer-motion'
@@ -30,6 +31,8 @@ function Dashboard() {
   const [showRoulette, setShowRoulette] = useState(false)
   const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
+  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
+  const [currentSearchEventId, setCurrentSearchEventId] = useState<string | null>(null) // ID de l'événement de recherche actuel
   const [lastSearchInfo, setLastSearchInfo] = useState<{
     datePreset: string | null
     airport: string
@@ -433,6 +436,7 @@ function Dashboard() {
               limiteAllers={limiteAllers}
               onLimiteAllersChange={setLimiteAllers}
               formatDateFr={formatDateFr}
+              onSearchEventId={setCurrentSearchEventId}
             />
             
             {error && (
@@ -535,7 +539,7 @@ function Dashboard() {
                         trip={trip}
                         onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
                         onBook={() => {
-                          window.open('https://www.ryanair.com', '_blank')
+                          setBookingTrip(trip)
                         }}
                       />
                     </motion.div>
@@ -562,6 +566,20 @@ function Dashboard() {
           budget={rouletteBudget}
           onClose={() => setShowRoulette(false)}
           onSaveFavorite={handleSimpleSaveFavorite}
+          onBook={(trip) => setBookingTrip(trip)}
+        />
+      )}
+
+      {/* Booking SAS Modal */}
+      {bookingTrip && (
+        <BookingSas
+          trip={bookingTrip}
+          onClose={() => setBookingTrip(null)}
+          onSaveFavorite={() => {
+            handleSimpleSaveFavorite(bookingTrip)
+            setBookingTrip(null)
+          }}
+          searchEventId={currentSearchEventId}
         />
       )}
     </div>

@@ -8,6 +8,7 @@ interface RouletteModeProps {
   budget: number;
   onClose: () => void;
   onSaveFavorite: (trip: EnrichedTripResponse) => void;
+  onBook?: (trip: EnrichedTripResponse) => void;
 }
 
 const springConfig = {
@@ -17,7 +18,7 @@ const springConfig = {
   mass: 0.5
 };
 
-export function RouletteMode({ trips, budget, onClose, onSaveFavorite }: RouletteModeProps) {
+export function RouletteMode({ trips, budget, onClose, onSaveFavorite, onBook }: RouletteModeProps) {
   const [selectedTrip, setSelectedTrip] = useState<EnrichedTripResponse | null>(null);
   const [relances, setRelances] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -155,8 +156,12 @@ export function RouletteMode({ trips, budget, onClose, onSaveFavorite }: Roulett
                   trip={selectedTrip}
                   onSaveFavorite={() => onSaveFavorite(selectedTrip)}
                   onBook={() => {
-                    // Ouvrir Ryanair dans un nouvel onglet
-                    window.open(`https://www.ryanair.com`, '_blank');
+                    if (onBook) {
+                      onBook(selectedTrip);
+                    } else {
+                      // Fallback si onBook n'est pas fourni
+                      window.open(`https://www.ryanair.com`, '_blank');
+                    }
                   }}
                 />
               </div>

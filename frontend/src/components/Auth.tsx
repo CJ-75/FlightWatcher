@@ -155,33 +155,6 @@ export default function Auth() {
     check()
   }, [])
   
-  // Ne pas afficher d'erreur si le backend indique que Supabase est disponible
-  // ou si on est encore en train de charger
-  const shouldShowError = supabaseStatus && !supabaseStatus.available && 
-                          frontendSupabaseAvailable === false && 
-                          !loading
-  
-  if (shouldShowError) {
-    return (
-      <div className="flex flex-col gap-2">
-        <div className="px-4 py-2 text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded">
-          ⚠️ Supabase non configuré
-          <div className="text-xs mt-1 text-gray-500">
-            Configurez SUPABASE_URL et SUPABASE_ANON_KEY dans backend/.env
-          </div>
-        </div>
-        {supabaseStatus && (
-          <div className={`px-4 py-2 text-sm rounded border ${
-            supabaseStatus.available 
-              ? 'bg-green-50 text-green-700 border-green-200' 
-              : 'bg-red-50 text-red-700 border-red-200'
-          }`}>
-            {supabaseStatus.available ? '✅' : '❌'} Backend: {supabaseStatus.message}
-          </div>
-        )}
-      </div>
-    )
-  }
 
   if (loading && !user) {
     return (
@@ -238,11 +211,6 @@ export default function Auth() {
             </button>
           </div>
         </div>
-        {supabaseStatus && supabaseStatus.available && (
-          <div className={`px-3 py-1 text-xs rounded border bg-green-50 text-green-700 border-green-200`}>
-            ✅ Backend Supabase: {supabaseStatus.message}
-          </div>
-        )}
       </div>
     )
   }
@@ -272,11 +240,6 @@ export default function Auth() {
           </svg>
         )}
       </button>
-      {supabaseStatus && supabaseStatus.available && (
-        <div className={`px-3 py-1 text-xs rounded border bg-green-50 text-green-700 border-green-200`}>
-          ✅ Backend Supabase: {supabaseStatus.message}
-        </div>
-      )}
     </div>
   )
 }
