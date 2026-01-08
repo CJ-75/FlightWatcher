@@ -16,55 +16,6 @@ import { getCurrentUser } from './lib/supabase'
 
 type Tab = 'search' | 'saved'
 
-// Composant bannière de connexion
-function ConnectionBanner() {
-  const [showBanner, setShowBanner] = useState(true)
-  const [isUserConnected, setIsUserConnected] = useState<boolean | null>(null)
-  
-  useEffect(() => {
-    const checkUser = async () => {
-      const user = await getCurrentUser()
-      setIsUserConnected(!!user)
-    }
-    checkUser()
-    
-    // Vérifier périodiquement si l'utilisateur se connecte
-    const interval = setInterval(checkUser, 2000)
-    return () => clearInterval(interval)
-  }, [])
-  
-  if (isUserConnected !== false || !showBanner) {
-    return null
-  }
-  
-  return (
-    <div className="max-w-5xl mx-auto mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 shadow-sm transition-opacity duration-300">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-1">
-          <div className="text-2xl">💾</div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-gray-800">
-              Connectez-vous pour sauvegarder vos recherches et favoris
-            </p>
-            <p className="text-xs text-gray-600 mt-0.5">
-              Vos données seront synchronisées sur tous vos appareils
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowBanner(false)}
-          className="text-gray-400 hover:text-gray-600 transition-colors p-1"
-          title="Fermer"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('search')
   const [loading, setLoading] = useState(false)
@@ -312,34 +263,24 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header moderne avec navigation */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Logo et titre */}
-            <div className="flex items-center gap-3">
-              <div className="text-3xl">✈️</div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800 leading-tight">
-                  FlightWatcher
-                </h1>
-                <p className="text-xs text-gray-500 hidden sm:block">
-                  Scanner de vols Ryanair
-                </p>
-              </div>
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <header className="text-center mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex-1"></div>
+            <div className="flex-1 text-center">
+              <h1 className="text-4xl font-bold text-gray-800 mb-2">
+                ✈️ FlightWatcher
+              </h1>
+              <p className="text-gray-600">
+                Scanner de vols Ryanair avec critères personnalisés et optimisation
+              </p>
             </div>
-            
-            {/* Bouton de connexion intégré */}
-            <div className="flex items-center gap-4">
+            <div className="flex-1 flex justify-end">
               <Auth />
             </div>
           </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-8">
-        {/* Bannière de connexion (si non connecté) */}
-        <ConnectionBanner />
+        </header>
 
         {/* Onglets */}
         <div className="max-w-5xl mx-auto mb-6">
