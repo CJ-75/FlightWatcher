@@ -283,59 +283,67 @@ def scanner_vols_api(aeroport_depart: str, dates_depart: List[DateAvecHoraire],
 def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[DateAvecHoraire]]:
     """
     Convertit un preset de dates en listes de DateAvecHoraire pour aller et retour
+    Nouvelle méthode : calcul direct des jours jusqu'aux dates cibles
+    weekday() retourne 0=lundi, 1=mardi, ..., 6=dimanche
     """
     today = date.today()
     dates_depart = []
     dates_retour = []
     
+    # Obtenir le jour actuel (0=lundi, 1=mardi, ..., 6=dimanche)
+    current_day = today.weekday()
+    
     if preset == 'weekend':
-        # Ce weekend : vendredi-dimanche prochain
-        days_until_friday = (4 - today.weekday()) % 7
-        if days_until_friday == 0 and today.weekday() >= 4:
-            days_until_friday = 7  # Si on est déjà vendredi ou après, prendre le suivant
+        # Ce weekend : samedi et dimanche de cette semaine
+        # Samedi = jour 5, Dimanche = jour 6
+        saturday_offset = 5 - current_day
+        sunday_offset = 6 - current_day
         
-        friday = today + timedelta(days=days_until_friday)
-        sunday = friday + timedelta(days=2)
+        # Si on est déjà après samedi, prendre le weekend suivant
+        if saturday_offset < 0:
+            saturday_offset += 7
+        if sunday_offset < 0:
+            sunday_offset += 7
         
-        dates_depart.append(DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        saturday = today + timedelta(days=saturday_offset)
+        sunday = today + timedelta(days=sunday_offset)
+        
+        dates_depart.append(DateAvecHoraire(date=saturday.isoformat(), heure_min="06:00", heure_max="23:59"))
         dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
         
     elif preset == 'next-weekend':
-        # Weekend prochain : vendredi-dimanche suivant
-        days_until_friday = (4 - today.weekday()) % 7
-        if days_until_friday == 0:
-            days_until_friday = 7
-        else:
-            days_until_friday += 7
+        # Weekend prochain : samedi et dimanche de la semaine suivante
+        # Toujours ajouter 7 jours pour la semaine suivante
+        days_until_next_saturday = 13 - current_day  # 5 (samedi) + 7 jours
+        days_until_next_sunday = 14 - current_day    # 6 (dimanche) + 7 jours
         
-        friday = today + timedelta(days=days_until_friday)
-        sunday = friday + timedelta(days=2)
+        next_saturday = today + timedelta(days=days_until_next_saturday)
+        next_sunday = today + timedelta(days=days_until_next_sunday)
         
-        dates_depart.append(DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"))
-        dates_retour.append(DateAvecHoraire(date=sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_depart.append(DateAvecHoraire(date=next_saturday.isoformat(), heure_min="06:00", heure_max="23:59"))
+        dates_retour.append(DateAvecHoraire(date=next_sunday.isoformat(), heure_min="06:00", heure_max="23:59"))
         
     elif preset == 'next-week':
         # 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
-        days_until_monday = (7 - today.weekday()) % 7
-        if days_until_monday == 0:
-            days_until_monday = 7
+        # Lundi = jour 0, donc pour la semaine prochaine : 0 + 7 = 7
+        days_until_next_monday = 7 - current_day
         
-        monday = today + timedelta(days=days_until_monday)
-        tuesday = monday + timedelta(days=1)
-        wednesday = monday + timedelta(days=2)
-        thursday = monday + timedelta(days=3)
-        friday = monday + timedelta(days=4)
-        saturday = monday + timedelta(days=5)
+        next_monday = today + timedelta(days=days_until_next_monday)
+        next_tuesday = next_monday + timedelta(days=1)
+        next_wednesday = next_monday + timedelta(days=2)
+        next_thursday = next_monday + timedelta(days=3)
+        next_friday = next_monday + timedelta(days=4)
+        next_saturday = next_monday + timedelta(days=5)
         
         dates_depart.extend([
-            DateAvecHoraire(date=monday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=tuesday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=wednesday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=next_monday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=next_tuesday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=next_wednesday.isoformat(), heure_min="06:00", heure_max="23:59"),
         ])
         dates_retour.extend([
-            DateAvecHoraire(date=thursday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=friday.isoformat(), heure_min="06:00", heure_max="23:59"),
-            DateAvecHoraire(date=saturday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=next_thursday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=next_friday.isoformat(), heure_min="06:00", heure_max="23:59"),
+            DateAvecHoraire(date=next_saturday.isoformat(), heure_min="06:00", heure_max="23:59"),
         ])
     
     return dates_depart, dates_retour
@@ -622,41 +630,54 @@ def get_airports(query: Optional[str] = None):
         airports = []
         airports_file = os.path.join(os.path.dirname(__file__), '..', 'ryanair-py', 'ryanair', 'airports.csv')
         
+        # Si le fichier CSV n'existe pas, générer une liste d'aéroports depuis l'API Ryanair
         if not os.path.exists(airports_file):
-            raise HTTPException(status_code=500, detail="Fichier airports.csv introuvable")
-        
-        with open(airports_file, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                iata_code = row.get('iata_code', '').strip()
-                municipality = row.get('municipality', '').strip()
-                iso_country = row.get('iso_country', '').strip()
-                airport_name = row.get('name', '').strip()
-                
-                # Ne garder que les aéroports avec un code IATA valide
-                if not iata_code or len(iata_code) != 3:
-                    continue
-                
-                # Obtenir le nom du pays
-                country = country_names.get(iso_country, iso_country)
-                
-                airport_data = {
-                    'code': iata_code,
-                    'name': airport_name or 'N/A',
-                    'city': municipality or 'N/A',
-                    'country': country
-                }
-                
-                # Filtrer par recherche si fournie
-                if query:
-                    query_lower = query.lower()
-                    if (query_lower in iata_code.lower() or 
-                        query_lower in airport_name.lower() or
-                        query_lower in municipality.lower() or 
-                        query_lower in country.lower()):
+            print("⚠️  Fichier airports.csv introuvable, génération depuis l'API Ryanair...")
+            airports = _generate_airports_from_api(country_names)
+        else:
+            # Lire depuis le fichier CSV
+            with open(airports_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    iata_code = row.get('iata_code', '').strip()
+                    municipality = row.get('municipality', '').strip()
+                    iso_country = row.get('iso_country', '').strip()
+                    airport_name = row.get('name', '').strip()
+                    
+                    # Ne garder que les aéroports avec un code IATA valide
+                    if not iata_code or len(iata_code) != 3:
+                        continue
+                    
+                    # Obtenir le nom du pays
+                    country = country_names.get(iso_country, iso_country)
+                    
+                    airport_data = {
+                        'code': iata_code,
+                        'name': airport_name or 'N/A',
+                        'city': municipality or 'N/A',
+                        'country': country
+                    }
+                    
+                    # Filtrer par recherche si fournie
+                    if query:
+                        query_lower = query.lower()
+                        if (query_lower in iata_code.lower() or 
+                            query_lower in airport_name.lower() or
+                            query_lower in municipality.lower() or 
+                            query_lower in country.lower()):
+                            airports.append(airport_data)
+                    else:
                         airports.append(airport_data)
-                else:
-                    airports.append(airport_data)
+        
+        # Filtrer par recherche si fournie (pour les aéroports générés depuis l'API)
+        if query and airports:
+            query_lower = query.lower()
+            airports = [a for a in airports if (
+                query_lower in a['code'].lower() or 
+                query_lower in a['name'].lower() or
+                query_lower in a['city'].lower() or 
+                query_lower in a['country'].lower()
+            )]
         
         # Trier par code IATA
         airports.sort(key=lambda x: x['code'])
@@ -664,6 +685,101 @@ def get_airports(query: Optional[str] = None):
         return {"airports": airports, "count": len(airports)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def _generate_airports_from_api(country_names: dict) -> List[dict]:
+    """Génère une liste d'aéroports en interrogeant l'API Ryanair depuis plusieurs hubs majeurs"""
+    try:
+        api = Ryanair(currency="EUR")
+        airports_dict = {}  # Dict pour stocker les infos complètes
+        
+        # Liste des hubs Ryanair majeurs pour découvrir les aéroports
+        major_hubs = ['BVA', 'CDG', 'ORY', 'STN', 'LGW', 'DUB', 'BCN', 'MAD', 'FCO', 'MXP', 
+                     'AMS', 'BRU', 'BER', 'VIE', 'WAW', 'PRG', 'BUD', 'OTP', 'SOF', 
+                     'CPH', 'ARN', 'OSL', 'HEL', 'LIS', 'OPO', 'ATH', 'DUB']
+        
+        print(f"🔍 Génération de la liste d'aéroports depuis {len(major_hubs)} hubs majeurs...")
+        
+        # Date pour la recherche (dans le futur)
+        date_debut = date.today() + timedelta(days=30)
+        date_fin = date_debut + timedelta(days=30)
+        
+        # Pour chaque hub, récupérer les destinations
+        for hub in major_hubs:
+            try:
+                vols = api.get_cheapest_flights(
+                    airport=hub,
+                    date_from=date_debut,
+                    date_to=date_fin,
+                    max_price=1000
+                )
+                
+                # Ajouter le hub lui-même
+                if hub not in airports_dict:
+                    airports_dict[hub] = {
+                        'code': hub,
+                        'name': f'Aéroport {hub}',
+                        'city': hub,
+                        'country': 'Europe'
+                    }
+                
+                # Ajouter toutes les destinations trouvées
+                for vol in vols:
+                    dest_code = vol.destination
+                    if dest_code and len(dest_code) == 3 and dest_code not in airports_dict:
+                        # Essayer d'extraire le nom complet depuis destinationFull
+                        dest_full = getattr(vol, 'destinationFull', '') or ''
+                        if ', ' in dest_full:
+                            city = dest_full.split(',')[0].strip()
+                            country = dest_full.split(',')[-1].strip()
+                        else:
+                            city = dest_code
+                            country = 'Europe'
+                        
+                        airports_dict[dest_code] = {
+                            'code': dest_code,
+                            'name': f'Aéroport {dest_code}',
+                            'city': city,
+                            'country': country
+                        }
+            except Exception as e:
+                print(f"  ⚠️  Erreur pour hub {hub}: {e}")
+                continue
+        
+        airports_list = list(airports_dict.values())
+        print(f"  ✓ {len(airports_list)} aéroport(s) trouvé(s)")
+        
+        return airports_list
+    except Exception as e:
+        print(f"⚠️  Erreur lors de la génération depuis l'API: {e}")
+        # Retourner une liste minimale d'aéroports Ryanair courants
+        return [
+            {'code': 'BVA', 'name': 'Aéroport de Beauvais-Tillé', 'city': 'Beauvais', 'country': 'France'},
+            {'code': 'CDG', 'name': 'Aéroport Charles de Gaulle', 'city': 'Paris', 'country': 'France'},
+            {'code': 'ORY', 'name': 'Aéroport d\'Orly', 'city': 'Paris', 'country': 'France'},
+            {'code': 'STN', 'name': 'London Stansted', 'city': 'London', 'country': 'Royaume-Uni'},
+            {'code': 'LGW', 'name': 'London Gatwick', 'city': 'London', 'country': 'Royaume-Uni'},
+            {'code': 'DUB', 'name': 'Dublin Airport', 'city': 'Dublin', 'country': 'Irlande'},
+            {'code': 'BCN', 'name': 'Barcelone-El Prat', 'city': 'Barcelone', 'country': 'Espagne'},
+            {'code': 'MAD', 'name': 'Madrid-Barajas', 'city': 'Madrid', 'country': 'Espagne'},
+            {'code': 'FCO', 'name': 'Rome Fiumicino', 'city': 'Rome', 'country': 'Italie'},
+            {'code': 'MXP', 'name': 'Milan Malpensa', 'city': 'Milan', 'country': 'Italie'},
+            {'code': 'AMS', 'name': 'Amsterdam Schiphol', 'city': 'Amsterdam', 'country': 'Pays-Bas'},
+            {'code': 'BRU', 'name': 'Bruxelles', 'city': 'Bruxelles', 'country': 'Belgique'},
+            {'code': 'BER', 'name': 'Berlin Brandenburg', 'city': 'Berlin', 'country': 'Allemagne'},
+            {'code': 'VIE', 'name': 'Vienne', 'city': 'Vienne', 'country': 'Autriche'},
+            {'code': 'WAW', 'name': 'Varsovie Chopin', 'city': 'Varsovie', 'country': 'Pologne'},
+            {'code': 'PRG', 'name': 'Prague', 'city': 'Prague', 'country': 'République tchèque'},
+            {'code': 'BUD', 'name': 'Budapest', 'city': 'Budapest', 'country': 'Hongrie'},
+            {'code': 'OTP', 'name': 'Bucarest', 'city': 'Bucarest', 'country': 'Roumanie'},
+            {'code': 'SOF', 'name': 'Sofia', 'city': 'Sofia', 'country': 'Bulgarie'},
+            {'code': 'CPH', 'name': 'Copenhague', 'city': 'Copenhague', 'country': 'Danemark'},
+            {'code': 'ARN', 'name': 'Stockholm Arlanda', 'city': 'Stockholm', 'country': 'Suède'},
+            {'code': 'OSL', 'name': 'Oslo Gardermoen', 'city': 'Oslo', 'country': 'Norvège'},
+            {'code': 'HEL', 'name': 'Helsinki', 'city': 'Helsinki', 'country': 'Finlande'},
+            {'code': 'LIS', 'name': 'Lisbonne', 'city': 'Lisbonne', 'country': 'Portugal'},
+            {'code': 'OPO', 'name': 'Porto', 'city': 'Porto', 'country': 'Portugal'},
+            {'code': 'ATH', 'name': 'Athènes', 'city': 'Athènes', 'country': 'Grèce'},
+        ]
 
 @app.get("/api/destinations")
 def get_destinations(airport: str = "BVA"):

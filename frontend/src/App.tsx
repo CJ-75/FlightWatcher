@@ -13,18 +13,16 @@ import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
 import Auth from './components/Auth'
 import { getCurrentUser } from './lib/supabase'
-import { ModeToggle } from './components/ModeToggle'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { LoadingSpinner } from './components/LoadingSpinner'
+import { Calendar } from './components/Calendar'
 import { motion } from 'framer-motion'
 
 type Tab = 'search' | 'saved'
-type Mode = 'simple' | 'advanced'
 
 function Dashboard() {
-  const [mode, setMode] = useState<Mode>('simple')
   const [activeTab, setActiveTab] = useState<Tab>('search')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
@@ -201,12 +199,24 @@ function Dashboard() {
     setDates(dates.map(d => d.date === dateStr ? { ...d, [field]: value } : d))
   }
 
+  // Helper pour convertir getDay() en numérotation basée sur lundi (1=lundi, 7=dimanche)
+  const getDayOfWeekMondayBased = (date: Date): number => {
+    // getDay() retourne 0=dimanche, 1=lundi, ..., 6=samedi
+    // On veut 1=lundi, 2=mardi, ..., 7=dimanche
+    const jsDay = date.getDay(); // 0=dimanche, 1=lundi, ..., 6=samedi
+    // Conversion: dimanche(0) -> 7, lundi(1) -> 1, mardi(2) -> 2, ..., samedi(6) -> 6
+    return jsDay === 0 ? 7 : jsDay;
+  };
+
   const formatDateFr = (dateStr: string) => {
     const date = new Date(dateStr)
-    const jours = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+    // Tableau avec lundi en premier (index 0 = lundi, index 6 = dimanche)
+    const jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const mois = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 
                   'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
-    return `${jours[date.getDay()]} ${date.getDate()} ${mois[date.getMonth()]}`
+    // Convertir getDay() (0=dimanche, 1=lundi...) en index pour le tableau (0=lundi, 6=dimanche)
+    const dayIndex = getDayOfWeekMondayBased(date) - 1; // -1 car le tableau commence à 0
+    return `${jours[dayIndex]} ${date.getDate()} ${mois[date.getMonth()]}`
   }
 
   const loadDestinations = async (airport?: string) => {
@@ -346,9 +356,6 @@ function Dashboard() {
           </div>
         </header>
 
-        {/* Mode Toggle */}
-        <ModeToggle mode={mode} onChange={setMode} />
-
         {/* Onglets */}
         <div className="max-w-5xl mx-auto mb-4 sm:mb-6">
           <div className="flex border-b border-gray-200">
@@ -382,121 +389,87 @@ function Dashboard() {
         {/* Contenu selon l'onglet */}
         {activeTab === 'search' ? (
           <>
-            {mode === 'simple' ? (
-              <>
-                <SimpleSearch
-                  onResults={handleSimpleResults}
-                  onLoading={setLoading}
-                  onError={setError}
-                  airports={airports}
-                  selectedAirport={aeroportDepart}
-                  onAirportChange={setAeroportDepart}
-                  AirportAutocomplete={AirportAutocomplete}
-                  flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
-                  onFlexibleDatesChange={(dates) => {
-                    setDatesDepart(dates.dates_depart);
-                    setDatesRetour(dates.dates_retour);
-                  }}
-                  excludedDestinations={destinationsExclues}
-                  onExcludedDestinationsChange={setDestinationsExclues}
-                  destinations={destinations}
-                  loadingDestinations={loadingDestinations}
-                  onLoadDestinations={() => loadDestinations(aeroportDepart)}
-                  limiteAllers={limiteAllers}
-                  onLimiteAllersChange={setLimiteAllers}
-                  formatDateFr={formatDateFr}
-                />
-                
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="max-w-2xl mx-auto mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
-                  >
-                    ❌ {error}
-                  </motion.div>
-                )}
+            <SimpleSearch
+              onResults={handleSimpleResults}
+              onLoading={setLoading}
+              onError={setError}
+              airports={airports}
+              selectedAirport={aeroportDepart}
+              onAirportChange={setAeroportDepart}
+              AirportAutocomplete={AirportAutocomplete}
+              flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
+              onFlexibleDatesChange={(dates) => {
+                setDatesDepart(dates.dates_depart);
+                setDatesRetour(dates.dates_retour);
+              }}
+              excludedDestinations={destinationsExclues}
+              onExcludedDestinationsChange={setDestinationsExclues}
+              destinations={destinations}
+              loadingDestinations={loadingDestinations}
+              onLoadDestinations={() => loadDestinations(aeroportDepart)}
+              limiteAllers={limiteAllers}
+              onLimiteAllersChange={setLimiteAllers}
+              formatDateFr={formatDateFr}
+            />
+            
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-2xl mx-auto mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
+              >
+                ❌ {error}
+              </motion.div>
+            )}
 
-                {loading && simpleResults.length === 0 && (
-                  <div className="max-w-2xl mx-auto mb-6 flex items-center justify-center py-12">
-                    <LoadingSpinner size="lg" color="primary" />
-                  </div>
-                )}
+            {loading && simpleResults.length === 0 && (
+              <div className="max-w-2xl mx-auto mb-6 flex items-center justify-center py-12">
+                <LoadingSpinner size="lg" color="primary" />
+              </div>
+            )}
 
-                {simpleResults.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="max-w-7xl mx-auto mt-8 sm:mt-12"
+            {simpleResults.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="max-w-7xl mx-auto mt-8 sm:mt-12"
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-4 sm:px-0">
+                  <h2 className="text-3xl sm:text-4xl font-black text-slate-900">
+                    🎯 Destinations trouvées
+                  </h2>
+                  <motion.button
+                    onClick={() => {
+                      setRouletteBudget(simpleResults[0]?.prix_total || 100)
+                      setShowRoulette(true)
+                    }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="bg-accent-500 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-accent-600 transition-all min-h-[44px] text-sm sm:text-base w-full sm:w-auto"
                   >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-4 sm:px-0">
-                      <h2 className="text-3xl sm:text-4xl font-black text-slate-900">
-                        🎯 Destinations trouvées
-                      </h2>
-                      <motion.button
-                        onClick={() => {
-                          setRouletteBudget(simpleResults[0]?.prix_total || 100)
-                          setShowRoulette(true)
+                    🎰 Mode Roulette
+                  </motion.button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-4 sm:px-0">
+                  {simpleResults.map((trip, index) => (
+                    <motion.div
+                      key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <DestinationCard
+                        trip={trip}
+                        onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
+                        onBook={() => {
+                          window.open('https://www.ryanair.com', '_blank')
                         }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="bg-accent-500 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-accent-600 transition-all min-h-[44px] text-sm sm:text-base w-full sm:w-auto"
-                      >
-                        🎰 Mode Roulette
-                      </motion.button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-4 sm:px-0">
-                      {simpleResults.map((trip, index) => (
-                        <motion.div
-                          key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                        >
-                          <DestinationCard
-                            trip={trip}
-                            onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
-                            onBook={() => {
-                              window.open('https://www.ryanair.com', '_blank')
-                            }}
-                          />
-                        </motion.div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </>
-            ) : (
-              <SearchTab
-                aeroportDepart={aeroportDepart}
-                setAeroportDepart={setAeroportDepart}
-                datesDepart={datesDepart}
-                setDatesDepart={setDatesDepart}
-                datesRetour={datesRetour}
-                setDatesRetour={setDatesRetour}
-                budgetMax={budgetMax}
-                setBudgetMax={setBudgetMax}
-                limiteAllers={limiteAllers}
-                setLimiteAllers={setLimiteAllers}
-                loading={loading}
-                error={error}
-                data={data}
-                onScan={handleScan}
-                onSaveSearch={handleSaveSearch}
-                onSaveFavorite={handleSaveFavorite}
-                addDate={addDate}
-                removeDate={removeDate}
-                updateHoraire={updateHoraire}
-                formatDateFr={formatDateFr}
-                hasRequest={!!currentRequest}
-                destinations={destinations}
-                destinationsExclues={destinationsExclues}
-                loadingDestinations={loadingDestinations}
-                onLoadDestinations={() => loadDestinations(aeroportDepart)}
-                onToggleDestination={toggleDestination}
-                onTogglePays={togglePays}
-              />
+                      />
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
             )}
           </>
         ) : (
@@ -728,6 +701,7 @@ interface SearchTabProps {
   hasRequest: boolean
   destinations: Record<string, Destination[]>
   destinationsExclues: string[]
+  setDestinationsExclues: (codes: string[]) => void
   loadingDestinations: boolean
   onLoadDestinations: () => void
   onToggleDestination: (code: string) => void
@@ -743,7 +717,7 @@ function SearchTab({
   loading, error, data,
   onScan, onSaveSearch, onSaveFavorite,
   addDate, removeDate, updateHoraire, formatDateFr, hasRequest,
-  destinations, destinationsExclues, loadingDestinations,
+  destinations, destinationsExclues, setDestinationsExclues, loadingDestinations,
   onLoadDestinations, onToggleDestination, onTogglePays
 }: SearchTabProps) {
   const [paysOuverts, setPaysOuverts] = useState<Set<string>>(new Set())
@@ -815,41 +789,18 @@ function SearchTab({
 
         {/* Dates de départ */}
         <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
             Dates de départ (avec horaires individuels)
           </label>
-          <div className="flex gap-2 mb-2">
-            <input
-              ref={dateDepartInputRef}
-              type="date"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              onFocus={(e) => {
-                // Sauvegarder la valeur au moment du focus
-                dateDepartValueOnFocus.current = e.target.value
-              }}
-              onBlur={(e) => {
-                const value = e.target.value
-                // Ne traiter que si une date valide est sélectionnée, différente de celle au focus
-                // et qu'elle n'est pas déjà dans la liste
-                if (value && value !== dateDepartValueOnFocus.current && !datesDepart.some(d => d.date === value)) {
-                  addDate(datesDepart, setDatesDepart, value)
-                  // Réinitialiser le champ
-                  e.target.value = ''
-                  dateDepartValueOnFocus.current = ''
+          <div className="mb-3">
+            <Calendar
+              value=""
+              onChange={(dateStr) => {
+                if (!datesDepart.some(d => d.date === dateStr)) {
+                  addDate(datesDepart, setDatesDepart, dateStr)
                 }
               }}
-              onKeyDown={(e) => {
-                // Permettre l'ajout avec Enter
-                if (e.key === 'Enter' && e.currentTarget.value) {
-                  const value = e.currentTarget.value
-                  if (!datesDepart.some(d => d.date === value)) {
-                    addDate(datesDepart, setDatesDepart, value)
-                    e.currentTarget.value = ''
-                    dateDepartValueOnFocus.current = ''
-                    e.preventDefault()
-                  }
-                }
-              }}
+              minDate={new Date().toISOString().split('T')[0]}
             />
           </div>
           <div className="space-y-2 mt-2">
@@ -885,41 +836,18 @@ function SearchTab({
 
         {/* Dates de retour */}
         <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
             Dates de retour (avec horaires individuels)
           </label>
-          <div className="flex gap-2 mb-2">
-            <input
-              ref={dateRetourInputRef}
-              type="date"
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              onFocus={(e) => {
-                // Sauvegarder la valeur au moment du focus
-                dateRetourValueOnFocus.current = e.target.value
-              }}
-              onBlur={(e) => {
-                const value = e.target.value
-                // Ne traiter que si une date valide est sélectionnée, différente de celle au focus
-                // et qu'elle n'est pas déjà dans la liste
-                if (value && value !== dateRetourValueOnFocus.current && !datesRetour.some(d => d.date === value)) {
-                  addDate(datesRetour, setDatesRetour, value)
-                  // Réinitialiser le champ
-                  e.target.value = ''
-                  dateRetourValueOnFocus.current = ''
+          <div className="mb-3">
+            <Calendar
+              value=""
+              onChange={(dateStr) => {
+                if (!datesRetour.some(d => d.date === dateStr)) {
+                  addDate(datesRetour, setDatesRetour, dateStr)
                 }
               }}
-              onKeyDown={(e) => {
-                // Permettre l'ajout avec Enter
-                if (e.key === 'Enter' && e.currentTarget.value) {
-                  const value = e.currentTarget.value
-                  if (!datesRetour.some(d => d.date === value)) {
-                    addDate(datesRetour, setDatesRetour, value)
-                    e.currentTarget.value = ''
-                    dateRetourValueOnFocus.current = ''
-                    e.preventDefault()
-                  }
-                }
-              }}
+              minDate={new Date().toISOString().split('T')[0]}
             />
           </div>
           <div className="space-y-2 mt-2">
@@ -967,17 +895,28 @@ function SearchTab({
             </button>
             <div className="flex gap-2">
               {allDestinations.length > 0 && (
-                <button
-                  onClick={toggleAllDestinations}
-                  className={`px-4 py-2 rounded text-sm text-white ${
-                    toutesExclues
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-red-600 hover:bg-red-700'
-                  }`}
-                  title={toutesExclues ? 'Inclure toutes les destinations' : 'Exclure toutes les destinations'}
-                >
-                  {toutesExclues ? '✅ Inclure toutes' : '❌ Exclure toutes'}
-                </button>
+                <>
+                  <button
+                    onClick={toggleAllDestinations}
+                    className={`px-4 py-2 rounded text-sm text-white ${
+                      toutesExclues
+                        ? 'bg-green-600 hover:bg-green-700'
+                        : 'bg-red-600 hover:bg-red-700'
+                    }`}
+                    title={toutesExclues ? 'Inclure toutes les destinations' : 'Exclure toutes les destinations'}
+                  >
+                    {toutesExclues ? '✅ Inclure toutes' : '❌ Exclure toutes'}
+                  </button>
+                  {destinationsExclues.length > 0 && (
+                    <button
+                      onClick={() => setDestinationsExclues([])}
+                      className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 text-sm"
+                      title="Effacer toutes les sélections"
+                    >
+                      🗑️ Effacer
+                    </button>
+                  )}
+                </>
               )}
               <button
                 onClick={onLoadDestinations}
@@ -1996,12 +1935,24 @@ function TripCard({ trip, onSaveFavorite, isFavorite: isFav }: {
   onSaveFavorite: () => void;
   isFavorite: boolean;
 }) {
+  // Helper pour convertir getDay() en numérotation basée sur lundi (1=lundi, 7=dimanche)
+  const getDayOfWeekMondayBased = (date: Date): number => {
+    // getDay() retourne 0=dimanche, 1=lundi, ..., 6=samedi
+    // On veut 1=lundi, 2=mardi, ..., 7=dimanche
+    const jsDay = date.getDay(); // 0=dimanche, 1=lundi, ..., 6=samedi
+    // Conversion: dimanche(0) -> 7, lundi(1) -> 1, mardi(2) -> 2, ..., samedi(6) -> 6
+    return jsDay === 0 ? 7 : jsDay;
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
-    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+    // Tableau avec lundi en premier (index 0 = lundi, index 6 = dimanche)
+    const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 
                    'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
-    return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
+    // Convertir getDay() (0=dimanche, 1=lundi...) en index pour le tableau (0=lundi, 6=dimanche)
+    const dayIndex = getDayOfWeekMondayBased(date) - 1; // -1 car le tableau commence à 0
+    return `${days[dayIndex]} ${date.getDate()} ${months[date.getMonth()]}`
   }
 
   const formatTime = (dateStr: string) => {

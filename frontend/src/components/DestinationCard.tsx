@@ -22,12 +22,24 @@ const cardHover = {
 };
 
 export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCardProps) {
+  // Helper pour convertir getDay() en numérotation basée sur lundi (1=lundi, 7=dimanche)
+  const getDayOfWeekMondayBased = (date: Date): number => {
+    // getDay() retourne 0=dimanche, 1=lundi, ..., 6=samedi
+    // On veut 1=lundi, 2=mardi, ..., 7=dimanche
+    const jsDay = date.getDay(); // 0=dimanche, 1=lundi, ..., 6=samedi
+    // Conversion: dimanche(0) -> 7, lundi(1) -> 1, mardi(2) -> 2, ..., samedi(6) -> 6
+    return jsDay === 0 ? 7 : jsDay;
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    // Tableau avec lundi en premier (index 0 = lundi, index 6 = dimanche)
+    const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
     const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 
                    'jul', 'aoû', 'sep', 'oct', 'nov', 'déc'];
-    return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`;
+    // Convertir getDay() (0=dimanche, 1=lundi...) en index pour le tableau (0=lundi, 6=dimanche)
+    const dayIndex = getDayOfWeekMondayBased(date) - 1; // -1 car le tableau commence à 0
+    return `${days[dayIndex]} ${date.getDate()} ${months[date.getMonth()]}`;
   };
 
   const formatTime = (dateStr: string) => {
