@@ -570,11 +570,6 @@ function Dashboard() {
               </motion.div>
             )}
 
-            {loading && simpleResults.length === 0 && (
-              <div className="max-w-2xl mx-auto mb-6 flex items-center justify-center py-12">
-                <LoadingSpinner size="lg" color="primary" />
-              </div>
-            )}
 
             {simpleResults.length > 0 && (
               <motion.div

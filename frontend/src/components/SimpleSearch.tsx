@@ -8,6 +8,7 @@ import { InspireRequest, InspireResponse, EnrichedTripResponse, DateAvecHoraire,
 import { Airport } from '../types';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { LoadingSpinner } from './LoadingSpinner';
+import { LoadingMessages } from './LoadingMessages';
 import { getSessionId } from '../utils/session';
 
 interface SimpleSearchProps {
@@ -268,7 +269,16 @@ export function SimpleSearch({
   };
 
   if (isSearching) {
-    return <LoadingSkeleton />;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={springConfig}
+        className="max-w-2xl mx-auto"
+      >
+        <LoadingSkeleton />
+      </motion.div>
+    );
   }
 
   return (
@@ -360,10 +370,7 @@ export function SimpleSearch({
           }`}
       >
         {isSearching ? (
-          <>
-            <LoadingSpinner size="sm" color="white" />
-            <span className="ml-2">Recherche en cours...</span>
-          </>
+          <span>Recherche en cours...</span>
         ) : (
           <>
             <span className="mr-2">✈️</span>
