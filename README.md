@@ -37,8 +37,9 @@ Pour activer la persistance des données avec Supabase :
 
 2. **Configurer le schéma de base de données** :
    - Dans votre projet Supabase, allez dans l'éditeur SQL
-   - Exécutez le script `supabase_schema.sql` (à la racine du projet)
-   - Cela créera les tables `saved_searches` et `saved_favorites`
+   - Exécutez le script `supabase_schema_v2.sql` (à la racine du projet)
+   - Cela créera les tables `saved_searches` et `favorites` (avec authentification)
+   - Si vous avez un ancien schéma avec `saved_favorites`, exécutez `migrate_saved_favorites_to_favorites.sql` pour migrer les données
 
 3. **Configurer les variables d'environnement backend** :
    ```bash

@@ -5,7 +5,6 @@
 
 import { getSupabaseClient } from '../lib/supabase'
 import type { SavedSearch, SavedFavorite } from './storage'
-import { getSavedSearches, getFavorites } from './storage'
 
 /**
  * Migre les données localStorage vers Supabase
@@ -18,15 +17,6 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
   favoritesMigrated: number
   error?: string
 }> => {
-  if (!supabase) {
-    return {
-      success: false,
-      searchesMigrated: 0,
-      favoritesMigrated: 0,
-      error: 'Supabase n\'est pas configuré'
-    }
-  }
-
   const supabase = await getSupabaseClient()
   if (!supabase) {
     return {
@@ -38,6 +28,24 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
   }
 
   try {
+    // Définir les clés de stockage
+    const STORAGE_KEYS = {
+      SEARCHES: 'flightwatcher_saved_searches',
+      FAVORITES: 'flightwatcher_favorites'
+    }
+    
+    // Vérifier s'il y a des données dans localStorage
+    const localSearchesData = localStorage.getItem(STORAGE_KEYS.SEARCHES)
+    const localFavoritesData = localStorage.getItem(STORAGE_KEYS.FAVORITES)
+    const localSearches: SavedSearch[] = localSearchesData ? JSON.parse(localSearchesData) : []
+    const hasLocalData = localSearches.length > 0 || (localFavoritesData && JSON.parse(localFavoritesData).length > 0)
+    
+    console.log('📦 Données localStorage trouvées:', { 
+      searches: localSearches.length,
+      favorites: localFavoritesData ? JSON.parse(localFavoritesData).length : 0,
+      hasLocalData
+    })
+    
     // Vérifier si la migration a déjà été effectuée
     const { data: profile } = await supabase
       .from('user_profiles')
@@ -45,8 +53,29 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
       .eq('id', userId)
       .single()
 
-    if (profile?.migration_completed) {
-      console.log('✅ Migration déjà effectuée')
+    // Si migration déjà effectuée ET pas de données localStorage, on peut skip
+    if (profile?.migration_completed && !hasLocalData) {
+      console.log('✅ Migration déjà effectuée et aucune donnée localStorage')
+      return {
+        success: true,
+        searchesMigrated: 0,
+        favoritesMigrated: 0
+      }
+    }
+    
+    // Si pas de données localStorage, rien à migrer
+    if (!hasLocalData) {
+      console.log('ℹ️ Aucune donnée localStorage à migrer')
+      // Marquer quand même la migration comme terminée si ce n'est pas déjà fait
+      if (!profile?.migration_completed) {
+        await supabase
+          .from('user_profiles')
+          .upsert({
+            id: userId,
+            migration_completed: true,
+            last_active: new Date().toISOString()
+          })
+      }
       return {
         success: true,
         searchesMigrated: 0,
@@ -56,9 +85,7 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
 
     let searchesMigrated = 0
     let favoritesMigrated = 0
-
-    // Migrer les recherches sauvegardées
-    const localSearches = await getSavedSearches()
+    
     if (localSearches.length > 0) {
       const searchesToInsert = localSearches.map((search: SavedSearch) => ({
         user_id: userId,
@@ -90,8 +117,10 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
       }
     }
 
-    // Migrer les favoris
-    const localFavorites = await getFavorites()
+    // Migrer les favoris depuis localStorage directement
+    // localFavoritesData a déjà été déclaré plus haut, on réutilise la variable
+    const localFavorites: SavedFavorite[] = localFavoritesData ? JSON.parse(localFavoritesData) : []
+    
     if (localFavorites.length > 0) {
       const favoritesToInsert = localFavorites.map((favorite: SavedFavorite) => ({
         user_id: userId,
@@ -136,13 +165,18 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
       console.error('Erreur mise à jour profil:', profileError)
     }
 
-    // Optionnel : vider localStorage après migration réussie
-    // Décommenter si vous voulez supprimer les données locales après migration
-    // if (searchesMigrated > 0 || favoritesMigrated > 0) {
-    //   localStorage.removeItem('flightwatcher_saved_searches')
-    //   localStorage.removeItem('flightwatcher_favorites')
-    //   console.log('🗑️ localStorage nettoyé')
-    // }
+    // Vider localStorage après migration réussie
+    if (searchesMigrated > 0 || favoritesMigrated > 0) {
+      if (searchesMigrated > 0) {
+        localStorage.removeItem(STORAGE_KEYS.SEARCHES)
+        console.log('🗑️ Recherches supprimées de localStorage')
+      }
+      if (favoritesMigrated > 0) {
+        localStorage.removeItem(STORAGE_KEYS.FAVORITES)
+        console.log('🗑️ Favoris supprimés de localStorage')
+      }
+      console.log('✅ localStorage nettoyé après migration réussie')
+    }
 
     return {
       success: true,
@@ -164,6 +198,7 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
  * Vérifie si la migration est nécessaire
  */
 export const needsMigration = async (userId: string): Promise<boolean> => {
+  const supabase = await getSupabaseClient()
   if (!supabase) return false
 
   try {

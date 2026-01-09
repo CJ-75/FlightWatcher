@@ -85,8 +85,9 @@ export function SimpleSearch({
       return;
     }
 
-    if (!selectedAirport) {
-      onError('Veuillez sélectionner un aéroport de départ');
+    // Validation stricte de l'aéroport de départ
+    if (!selectedAirport || selectedAirport.trim() === '') {
+      onError('⚠️ Veuillez sélectionner un aéroport de départ avant de lancer la recherche');
       return;
     }
 
@@ -215,12 +216,15 @@ export function SimpleSearch({
 
       <div className="mb-6 sm:mb-8">
         <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-          ✈️ Depuis
+          ✈️ Depuis <span className="text-red-500">*</span>
         </label>
         <AirportAutocomplete
           value={selectedAirport}
           onChange={onAirportChange}
         />
+        {(!selectedAirport || selectedAirport.trim() === '') && (
+          <p className="text-sm text-red-500 mt-2">⚠️ Un aéroport de départ est requis</p>
+        )}
       </div>
 
       <DatePresets
@@ -265,12 +269,12 @@ export function SimpleSearch({
 
       <motion.button
         onClick={handleSearch}
-        disabled={isSearching || !datePreset || !selectedAirport}
-        whileHover={!isSearching && datePreset && selectedAirport ? { scale: 1.05 } : {}}
-        whileTap={!isSearching && datePreset && selectedAirport ? { scale: 0.95 } : {}}
+        disabled={isSearching || !datePreset || !selectedAirport || selectedAirport.trim() === ''}
+        whileHover={!isSearching && datePreset && selectedAirport && selectedAirport.trim() !== '' ? { scale: 1.05 } : {}}
+        whileTap={!isSearching && datePreset && selectedAirport && selectedAirport.trim() !== '' ? { scale: 0.95 } : {}}
         transition={springConfig}
         className={`w-full bg-primary-500 text-white rounded-full px-6 sm:px-8 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl min-h-[56px] flex items-center justify-center mt-8 sm:mt-10
-          ${isSearching || !datePreset || !selectedAirport
+          ${isSearching || !datePreset || !selectedAirport || selectedAirport.trim() === ''
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:bg-primary-600 hover:shadow-2xl'
           }`}

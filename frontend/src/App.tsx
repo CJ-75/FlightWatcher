@@ -6,8 +6,7 @@ import {
   saveExcludedDestinations,
   updateSearchAutoCheck, updateSearchLastCheckResults, getActiveAutoChecks,
   setDevMode, getDevMode, saveNewResults, getNewResultsForSearch, clearNewResults,
-  toggleFavoriteArchived, getArchivedFavorites, getActiveFavorites, exportAllData,
-  setAutoExportEnabled, getAutoExportEnabled
+  toggleFavoriteArchived, getArchivedFavorites, getActiveFavorites
 } from './utils/storage'
 import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
@@ -19,6 +18,7 @@ import { RouletteMode } from './components/RouletteMode'
 import { BookingSas } from './components/BookingSas'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Calendar } from './components/Calendar'
+import { SaveSearchModal } from './components/SaveSearchModal'
 import { motion } from 'framer-motion'
 
 type Tab = 'search' | 'saved'
@@ -43,6 +43,9 @@ function Dashboard() {
   } | null>(null)
   const resultsSectionRef = useRef<HTMLDivElement>(null)
   const [airports, setAirports] = useState<Airport[]>([])
+  const [showSaveSearchModal, setShowSaveSearchModal] = useState(false)
+  const [isSavingSearch, setIsSavingSearch] = useState(false)
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null)
   
   // États pour les paramètres de recherche
   const [aeroportDepart, setAeroportDepart] = useState('BVA')
@@ -100,8 +103,35 @@ function Dashboard() {
   }
 
   const handleSaveSearch = async () => {
-    if (!currentRequest) {
-      setError('Aucune recherche à sauvegarder')
+    // Construire la requête à partir de currentRequest ou des informations disponibles
+    let requestToSave: ScanRequest | null = currentRequest
+
+    // Si currentRequest n'est pas disponible, essayer de le construire depuis lastSearchInfo
+    if (!requestToSave && lastSearchInfo) {
+      requestToSave = {
+        aeroport_depart: lastSearchInfo.airport,
+        dates_depart: lastSearchInfo.datesDepart,
+        dates_retour: lastSearchInfo.datesRetour,
+        budget_max: lastSearchInfo.budget,
+        limite_allers: limiteAllers,
+        destinations_exclues: lastSearchInfo.excludedDestinations.length > 0 ? lastSearchInfo.excludedDestinations : undefined
+      }
+    }
+
+    // Si toujours pas de requête, essayer depuis les états actuels
+    if (!requestToSave && datesDepart.length > 0 && datesRetour.length > 0) {
+      requestToSave = {
+        aeroport_depart: aeroportDepart,
+        dates_depart: datesDepart,
+        dates_retour: datesRetour,
+        budget_max: budgetMax,
+        limite_allers: limiteAllers,
+        destinations_exclues: destinationsExclues.length > 0 ? destinationsExclues : undefined
+      }
+    }
+
+    if (!requestToSave) {
+      setError('Aucune recherche à sauvegarder. Veuillez d\'abord effectuer une recherche.')
       return
     }
 
@@ -111,13 +141,32 @@ function Dashboard() {
       return
     }
 
-    const name = prompt('Nom de la recherche:') || `Recherche ${new Date().toLocaleDateString()}`
+    // Sauvegarder temporairement la requête pour la modal
+    setCurrentRequest(requestToSave)
+    setShowSaveSearchModal(true)
+  }
+
+  const handleConfirmSaveSearch = async (name: string) => {
+    if (!currentRequest) {
+      setError('Aucune recherche à sauvegarder')
+      return
+    }
+
+    setIsSavingSearch(true)
     try {
       await saveSearch({ name, request: currentRequest })
-      alert('Recherche sauvegardée !')
+      // Afficher un message de succès temporaire
+      setSaveSuccessMessage(`✅ Recherche "${name}" sauvegardée avec succès !`)
+      setError(null)
+      // Masquer le message après 3 secondes
+      setTimeout(() => setSaveSuccessMessage(null), 3000)
+      // La modal se fermera automatiquement via onClose dans SaveSearchModal
     } catch (error) {
       setError('Erreur lors de la sauvegarde')
       console.error(error)
+      throw error // Pour que la modal puisse afficher l'erreur
+    } finally {
+      setIsSavingSearch(false)
     }
   }
 
@@ -220,11 +269,29 @@ function Dashboard() {
     return jsDay === 0 ? 7 : jsDay;
   };
 
-  const formatDateFr = (dateStr: string) => {
+  const formatDateFr = (dateStr: string | undefined | null) => {
+    if (!dateStr) return 'Date non disponible';
+    
     // Parser la date manuellement pour éviter les problèmes de fuseau horaire
-    // dateStr est au format "YYYY-MM-DD"
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(year, month - 1, day); // month - 1 car les mois commencent à 0
+    // dateStr peut être au format "YYYY-MM-DD" ou ISO datetime string
+    let date: Date;
+    if (dateStr.includes('T')) {
+      // Format ISO datetime, utiliser directement
+      date = new Date(dateStr);
+    } else {
+      // Format "YYYY-MM-DD", parser manuellement
+      const [year, month, day] = dateStr.split('-').map(Number);
+      if (isNaN(year) || isNaN(month) || isNaN(day)) {
+        return 'Date invalide';
+      }
+      date = new Date(year, month - 1, day); // month - 1 car les mois commencent à 0
+    }
+    
+    // Vérifier que la date est valide
+    if (isNaN(date.getTime())) {
+      return 'Date invalide';
+    }
+    
     // Tableau avec lundi en premier (index 0 = lundi, index 6 = dimanche)
     const jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     const mois = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 
@@ -325,6 +392,16 @@ function Dashboard() {
     setError(null)
     if (searchInfo) {
       setLastSearchInfo(searchInfo)
+      // Construire et sauvegarder currentRequest pour permettre la sauvegarde
+      const request: ScanRequest = {
+        aeroport_depart: searchInfo.airport,
+        dates_depart: searchInfo.datesDepart,
+        dates_retour: searchInfo.datesRetour,
+        budget_max: searchInfo.budget,
+        limite_allers: limiteAllers,
+        destinations_exclues: searchInfo.excludedDestinations.length > 0 ? searchInfo.excludedDestinations : undefined
+      }
+      setCurrentRequest(request)
       // Scroller vers la section des résultats après un court délai
       setTimeout(() => {
         resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -451,6 +528,17 @@ function Dashboard() {
                 ❌ {error}
               </motion.div>
             )}
+            
+            {saveSuccessMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="max-w-2xl mx-auto mb-4 sm:mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm sm:text-base"
+              >
+                {saveSuccessMessage}
+              </motion.div>
+            )}
 
             {loading && simpleResults.length === 0 && (
               <div className="max-w-2xl mx-auto mb-6 flex items-center justify-center py-12">
@@ -516,19 +604,29 @@ function Dashboard() {
                   <h2 className="text-3xl sm:text-4xl font-black text-slate-900">
                     🎯 Destinations trouvées
                   </h2>
-                  <motion.button
-                    onClick={() => {
-                      // Utiliser le budget de la recherche si disponible, sinon le budget max actuel
-                      const budgetToUse = lastSearchInfo?.budget || budgetMax || 200
-                      setRouletteBudget(budgetToUse)
-                      setShowRoulette(true)
-                    }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="bg-accent-500 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-accent-600 transition-all min-h-[44px] text-sm sm:text-base w-full sm:w-auto"
-                  >
-                    🎰 Mode Roulette
-                  </motion.button>
+                  <div className="flex gap-3 w-full sm:w-auto">
+                    <motion.button
+                      onClick={handleSaveSearch}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="bg-indigo-600 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-indigo-700 transition-all min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none flex items-center justify-center gap-2"
+                    >
+                      💾 Sauvegarder
+                    </motion.button>
+                    <motion.button
+                      onClick={() => {
+                        // Utiliser le budget de la recherche si disponible, sinon le budget max actuel
+                        const budgetToUse = lastSearchInfo?.budget || budgetMax || 200
+                        setRouletteBudget(budgetToUse)
+                        setShowRoulette(true)
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="bg-accent-500 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-accent-600 transition-all min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none"
+                    >
+                      🎰 Mode Roulette
+                    </motion.button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-4 sm:px-0">
                   {simpleResults.map((trip, index) => (
@@ -585,6 +683,15 @@ function Dashboard() {
           searchEventId={currentSearchEventId}
         />
       )}
+
+      {/* Save Search Modal */}
+      <SaveSearchModal
+        isOpen={showSaveSearchModal}
+        onClose={() => setShowSaveSearchModal(false)}
+        onSave={handleConfirmSaveSearch}
+        defaultName={currentRequest ? `Recherche ${aeroportDepart} - ${new Date().toLocaleDateString('fr-FR')}` : ''}
+        isLoading={isSavingSearch}
+      />
     </div>
   )
 }
@@ -742,9 +849,9 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
           ref={dropdownRef}
           className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
         >
-          {filteredAirports.map((airport) => (
+          {filteredAirports.map((airport, index) => (
             <button
-              key={airport.code}
+              key={`${airport.code}-${index}-${airport.city}`}
               type="button"
               onClick={() => handleSelectAirport(airport)}
               className={`w-full text-left px-4 py-2 hover:bg-primary-50 transition-colors ${
@@ -1243,7 +1350,6 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   const [showLightbox, setShowLightbox] = useState(false)
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [favoritesFilter, setFavoritesFilter] = useState<'all' | 'active' | 'archived'>('all')
-  const [autoExportEnabled, setAutoExportEnabledState] = useState(() => getAutoExportEnabled())
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
 
   const refreshData = async () => {
@@ -1485,45 +1591,6 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-             {/* Mode développeur et Export - Toggle en haut à droite */}
-             <div className="flex justify-end gap-2 mb-4 flex-wrap">
-               <button
-                 onClick={exportAllData}
-                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                 title="Exporter toutes les données (recherches, favoris, etc.)"
-               >
-                 💾 Exporter
-               </button>
-               <button
-                 onClick={() => {
-                   const newMode = !autoExportEnabled
-                   setAutoExportEnabledState(newMode)
-                   setAutoExportEnabled(newMode)
-                 }}
-                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                   autoExportEnabled
-                     ? 'bg-green-600 text-white hover:bg-green-700'
-                     : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
-                 }`}
-                 title={autoExportEnabled ? 'Export automatique activé - Les données sont exportées automatiquement' : 'Export automatique désactivé - Cliquez pour activer'}
-               >
-                 {autoExportEnabled ? '🔄 Auto-export ON' : '🔄 Auto-export OFF'}
-               </button>
-               <button
-                 onClick={() => {
-                   const newMode = !devMode
-                   setDevModeState(newMode)
-                   setDevMode(newMode)
-                 }}
-                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                   devMode
-                     ? 'bg-purple-600 text-white hover:bg-purple-700'
-                     : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
-                 }`}
-               >
-                 {devMode ? '👨‍💻 Mode Dev ON' : '👨‍💻 Mode Dev OFF'}
-               </button>
-             </div>
 
       {/* Outils de test en mode développeur */}
       {devMode && (

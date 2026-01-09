@@ -13,6 +13,7 @@ import type { User } from '@supabase/supabase-js'
 export default function Auth() {
   const navigate = useNavigate()
   const [user, setUser] = useState<User | null>(null)
+  const [userProfile, setUserProfile] = useState<{ avatar_url?: string; full_name?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [migrating, setMigrating] = useState(false)
   const [migrationStatus, setMigrationStatus] = useState<string | null>(null)
@@ -39,13 +40,18 @@ export default function Auth() {
       
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user)
+        // Charger le profil utilisateur pour l'avatar
+        await loadUserProfile(session.user.id)
         // Déclencher la migration automatique
         await handleMigration(session.user.id)
       } else if (event === 'SIGNED_OUT') {
         setUser(null)
+        setUserProfile(null)
         setMigrationStatus(null)
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         setUser(session.user)
+        // Recharger le profil lors du rafraîchissement du token
+        await loadUserProfile(session.user.id)
       }
     })
 
@@ -75,12 +81,33 @@ export default function Auth() {
     }
   }
 
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const supabase = await getSupabaseClient()
+      if (!supabase) return
+      
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('avatar_url, full_name, email')
+        .eq('id', userId)
+        .single()
+      
+      if (data) {
+        setUserProfile(data)
+      }
+    } catch (error) {
+      console.error('Erreur chargement profil:', error)
+    }
+  }
+
   const checkUser = async () => {
     try {
       const currentUser = await getCurrentUser()
       setUser(currentUser)
       
       if (currentUser) {
+        // Charger le profil utilisateur pour l'avatar
+        await loadUserProfile(currentUser.id)
         // Vérifier si migration nécessaire
         await handleMigration(currentUser.id)
       }
@@ -173,28 +200,30 @@ export default function Auth() {
               {migrationStatus}
             </div>
           )}
-          {migrating && (
-            <div className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded-lg border border-blue-200">
-              ⏳ Migration en cours...
-            </div>
-          )}
           <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow">
-            {/* Avatar Google */}
-            {user.user_metadata?.avatar_url ? (
+            {/* Avatar Google - utiliser user_metadata en priorité, puis user_profiles comme fallback */}
+            {(user.user_metadata?.avatar_url || userProfile?.avatar_url) ? (
               <img 
-                src={user.user_metadata.avatar_url} 
+                src={user.user_metadata?.avatar_url || userProfile?.avatar_url || ''} 
                 alt={user.email || 'User'} 
                 className="w-8 h-8 rounded-full border-2 border-gray-200"
+                onError={(e) => {
+                  // Si l'image ne charge pas, afficher l'avatar par défaut
+                  e.currentTarget.style.display = 'none'
+                  const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                  if (fallback) fallback.style.display = 'flex'
+                }}
               />
-            ) : (
+            ) : null}
+            {!(user.user_metadata?.avatar_url || userProfile?.avatar_url) && (
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-semibold text-sm border-2 border-gray-200">
                 {user.email?.charAt(0).toUpperCase() || 'U'}
               </div>
             )}
             <div className="flex flex-col min-w-0">
-              {user.user_metadata?.full_name && (
+              {(user.user_metadata?.full_name || userProfile?.full_name) && (
                 <div className="text-sm font-semibold text-gray-800 truncate">
-                  {user.user_metadata.full_name}
+                  {user.user_metadata?.full_name || userProfile?.full_name}
                 </div>
               )}
               <div className="text-xs text-gray-500 truncate">

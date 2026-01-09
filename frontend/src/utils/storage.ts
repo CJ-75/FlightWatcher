@@ -83,32 +83,42 @@ export const clearNewResults = (searchId: string): void => {
 // Recherches sauvegardées
 export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>): Promise<SavedSearch> => {
   const user = await getCurrentUser()
-  
   const supabase = await getSupabaseClient()
+  
+  console.log('💾 saveSearch appelé:', { user: user?.id, hasSupabase: !!supabase, searchName: search.name });
   if (supabase && user) {
     // Utiliser Supabase
     try {
+      const insertData = {
+        user_id: user.id,
+        name: search.name,
+        departure_airport: search.request.aeroport_depart || 'BVA',
+        dates_depart: search.request.dates_depart,
+        dates_retour: search.request.dates_retour,
+        budget_max: search.request.budget_max || 200,
+        limite_allers: search.request.limite_allers || 50,
+        destinations_exclues: search.request.destinations_exclues || [],
+        destinations_incluses: search.request.destinations_incluses || null,
+        auto_check_enabled: search.autoCheckEnabled || false,
+        check_interval_seconds: search.autoCheckIntervalSeconds || 3600,
+        last_check_results: search.lastCheckResults || null,
+        last_checked_at: search.lastCheckedAt || null
+      };
+      
+      console.log('📤 Insertion dans Supabase saved_searches:', insertData);
+      
       const { data, error } = await supabase
         .from('saved_searches')
-        .insert({
-          user_id: user.id,
-          name: search.name,
-          departure_airport: search.request.aeroport_depart || 'BVA',
-          dates_depart: search.request.dates_depart,
-          dates_retour: search.request.dates_retour,
-          budget_max: search.request.budget_max || 200,
-          limite_allers: search.request.limite_allers || 50,
-          destinations_exclues: search.request.destinations_exclues || [],
-          destinations_incluses: search.request.destinations_incluses || null,
-          auto_check_enabled: search.autoCheckEnabled || false,
-          check_interval_seconds: search.autoCheckIntervalSeconds || 3600,
-          last_check_results: search.lastCheckResults || null,
-          last_checked_at: search.lastCheckedAt || null
-        })
+        .insert(insertData)
         .select()
         .single()
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ Erreur insertion Supabase saved_searches:', error);
+        throw error;
+      }
+      
+      console.log('✅ Recherche insérée avec succès:', data);
       
       const saved: SavedSearch = {
         id: data.id,
@@ -156,38 +166,80 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
 
 export const getSavedSearches = async (): Promise<SavedSearch[]> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
+  
+  console.log('📥 getSavedSearches appelé:', { user: user?.id, hasSupabase: !!supabase });
   
   if (supabase && user) {
     try {
+      console.log('🔍 Requête Supabase saved_searches pour user_id:', user.id);
       const { data, error } = await supabase
         .from('saved_searches')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ Erreur récupération Supabase saved_searches:', error);
+        throw error;
+      }
       
-      return (data || []).map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        request: {
-          aeroport_depart: item.departure_airport,
-          dates_depart: item.dates_depart,
-          dates_retour: item.dates_retour,
-          budget_max: item.budget_max,
-          limite_allers: item.limite_allers,
-          destinations_exclues: item.destinations_exclues || [],
-          destinations_incluses: item.destinations_incluses
-        },
-        createdAt: item.created_at,
-        lastUsed: item.last_used,
-        autoCheckEnabled: item.auto_check_enabled,
-        autoCheckIntervalSeconds: item.check_interval_seconds,
-        lastCheckResults: item.last_check_results,
-        lastCheckedAt: item.last_checked_at
-      }))
+      console.log('✅ Données récupérées depuis Supabase saved_searches:', { 
+        count: data?.length || 0, 
+        isArray: Array.isArray(data),
+        dataType: typeof data,
+        data: data 
+      });
+      
+      // Si pas de données Supabase, vérifier localStorage comme fallback
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        console.warn('⚠️ Aucune donnée récupérée depuis Supabase saved_searches, vérification localStorage...', {
+          hasData: !!data,
+          isArray: Array.isArray(data),
+          length: data?.length
+        });
+        // Fallback localStorage
+        const localData = localStorage.getItem(STORAGE_KEYS.SEARCHES);
+        if (localData) {
+          const localSearches = JSON.parse(localData);
+          console.log('📦 Données trouvées dans localStorage:', localSearches.length, 'recherches');
+          return localSearches;
+        }
+        return [];
+      }
+      
+      console.log('🔄 Mapping des données récupérées...');
+      const mappedSearches = (data || []).map((item: any) => {
+        // Gérer les deux noms de colonnes possibles (ancien schéma vs nouveau)
+        const departureAirport = item.departure_airport || item.aeroport_depart;
+        // Gérer les deux noms de colonnes pour l'intervalle de vérification
+        const checkInterval = item.check_interval_seconds || item.auto_check_interval_seconds || 3600;
+        
+        return {
+          id: item.id,
+          name: item.name,
+          request: {
+            aeroport_depart: departureAirport,
+            dates_depart: item.dates_depart,
+            dates_retour: item.dates_retour,
+            budget_max: item.budget_max,
+            limite_allers: item.limite_allers,
+            destinations_exclues: item.destinations_exclues || [],
+            destinations_incluses: item.destinations_incluses
+          },
+          createdAt: item.created_at,
+          lastUsed: item.last_used,
+          autoCheckEnabled: item.auto_check_enabled,
+          autoCheckIntervalSeconds: checkInterval,
+          lastCheckResults: item.last_check_results,
+          lastCheckedAt: item.last_checked_at
+        };
+      });
+      
+      console.log('✅ Mapping terminé:', { count: mappedSearches.length });
+      return mappedSearches;
     } catch (error) {
-      console.error('Erreur récupération Supabase, fallback localStorage:', error)
+      console.error('❌ Erreur récupération Supabase, fallback localStorage:', error);
       // Fallback localStorage
     }
   }
@@ -199,6 +251,7 @@ export const getSavedSearches = async (): Promise<SavedSearch[]> => {
 
 export const deleteSearch = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -226,6 +279,7 @@ export const deleteSearch = async (id: string): Promise<void> => {
 
 export const updateSearchLastUsed = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -268,6 +322,7 @@ export const updateSearchAutoCheck = async (
   intervalSeconds?: number
 ): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -309,6 +364,7 @@ export const updateSearchLastCheckResults = async (
   results: TripResponse[]
 ): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -349,28 +405,40 @@ export const getActiveAutoChecks = async (): Promise<SavedSearch[]> => {
 // Favoris
 export const saveFavorite = async (trip: TripResponse, searchRequest: ScanRequest): Promise<SavedFavorite> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
+  
+  console.log('💾 saveFavorite appelé:', { user: user?.id, hasSupabase: !!supabase, trip: trip.destination_code });
   
   if (supabase && user) {
     try {
+      const insertData = {
+        user_id: user.id,
+        destination_code: trip.destination_code,
+        destination_name: trip.aller.destinationFull,
+        outbound_date: new Date(trip.aller.departureTime).toISOString().split('T')[0],
+        return_date: new Date(trip.retour.departureTime).toISOString().split('T')[0],
+        total_price: trip.prix_total,
+        outbound_flight: trip.aller,
+        return_flight: trip.retour,
+        search_request: searchRequest,
+        is_archived: false,
+        is_available: true
+      };
+      
+      console.log('📤 Insertion dans Supabase favorites:', insertData);
+      
       const { data, error } = await supabase
         .from('favorites')
-        .insert({
-          user_id: user.id,
-          destination_code: trip.destination_code,
-          destination_name: trip.aller.destinationFull,
-          outbound_date: new Date(trip.aller.departureTime).toISOString().split('T')[0],
-          return_date: new Date(trip.retour.departureTime).toISOString().split('T')[0],
-          total_price: trip.prix_total,
-          outbound_flight: trip.aller,
-          return_flight: trip.retour,
-          search_request: searchRequest,
-          is_archived: false,
-          is_available: true
-        })
+        .insert(insertData)
         .select()
         .single()
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ Erreur insertion Supabase:', error);
+        throw error;
+      }
+      
+      console.log('✅ Favori inséré avec succès:', data);
       
       const favorite: SavedFavorite = {
         id: data.id,
@@ -407,31 +475,72 @@ export const saveFavorite = async (trip: TripResponse, searchRequest: ScanReques
 
 export const getFavorites = async (): Promise<SavedFavorite[]> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
+  
+  console.log('📥 getFavorites appelé:', { user: user?.id, hasSupabase: !!supabase });
   
   if (supabase && user) {
     try {
+      console.log('🔍 Requête Supabase favorites pour user_id:', user.id);
       const { data, error } = await supabase
         .from('favorites')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ Erreur récupération Supabase favorites:', error);
+        throw error;
+      }
       
-      return (data || []).map((item: any) => ({
-        id: item.id,
-        trip: {
-          aller: item.outbound_flight,
-          retour: item.return_flight,
-          prix_total: item.total_price,
-          destination_code: item.destination_code
-        },
-        searchRequest: item.search_request,
-        createdAt: item.created_at,
-        lastChecked: item.last_availability_check,
-        isStillValid: item.is_available,
-        archived: item.is_archived
-      }))
+      console.log('✅ Données récupérées depuis Supabase:', { count: data?.length || 0, data });
+      
+      if (!data || data.length === 0) {
+        console.warn('⚠️ Aucune donnée récupérée depuis Supabase favorites, vérification localStorage...');
+        // Vérifier localStorage comme fallback
+        const localData = localStorage.getItem(STORAGE_KEYS.FAVORITES);
+        if (localData) {
+          console.log('📦 Données trouvées dans localStorage:', JSON.parse(localData).length, 'favoris');
+        }
+      }
+      
+      return (data || []).map((item: any) => {
+        // S'assurer que les JSONB sont correctement parsés
+        const outboundFlight = typeof item.outbound_flight === 'string' 
+          ? JSON.parse(item.outbound_flight) 
+          : item.outbound_flight;
+        const returnFlight = typeof item.return_flight === 'string' 
+          ? JSON.parse(item.return_flight) 
+          : item.return_flight;
+        const searchRequest = typeof item.search_request === 'string' 
+          ? JSON.parse(item.search_request) 
+          : item.search_request;
+        
+        // Debug: vérifier les données
+        if (!outboundFlight || !outboundFlight.departureTime) {
+          console.warn('Favori avec données incomplètes:', {
+            id: item.id,
+            outboundFlight,
+            returnFlight,
+            item
+          });
+        }
+        
+        return {
+          id: item.id,
+          trip: {
+            aller: outboundFlight || {},
+            retour: returnFlight || {},
+            prix_total: parseFloat(item.total_price) || 0,
+            destination_code: item.destination_code || outboundFlight?.destination || ''
+          },
+          searchRequest: searchRequest || {},
+          createdAt: item.created_at,
+          lastChecked: item.last_availability_check,
+          isStillValid: item.is_available !== false,
+          archived: item.is_archived === true
+        };
+      })
     } catch (error) {
       console.error('Erreur récupération Supabase, fallback localStorage:', error)
       // Fallback localStorage
@@ -445,6 +554,7 @@ export const getFavorites = async (): Promise<SavedFavorite[]> => {
 
 export const deleteFavorite = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -482,6 +592,7 @@ export const isFavorite = async (trip: TripResponse): Promise<boolean> => {
 
 export const updateFavoriteStatus = async (id: string, isStillValid: boolean): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -518,6 +629,7 @@ export const updateFavoriteStatus = async (id: string, isStillValid: boolean): P
 
 export const toggleFavoriteArchived = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
