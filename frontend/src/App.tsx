@@ -95,6 +95,12 @@ function Dashboard() {
       setData(result)
       // Toujours revenir à l'onglet recherche pour voir les résultats
       setActiveTab('search')
+      // Scroller vers la section des résultats après un court délai
+      if (result.resultats && result.resultats.length > 0) {
+        setTimeout(() => {
+          resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 300)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
@@ -402,10 +408,13 @@ function Dashboard() {
         destinations_exclues: searchInfo.excludedDestinations.length > 0 ? searchInfo.excludedDestinations : undefined
       }
       setCurrentRequest(request)
-      // Scroller vers la section des résultats après un court délai
+    }
+    
+    // Scroller vers la section des résultats après un court délai pour laisser le temps au DOM de se mettre à jour
+    if (results.length > 0) {
       setTimeout(() => {
         resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 100)
+      }, 300)
     }
   }
 

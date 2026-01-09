@@ -216,7 +216,7 @@ export function SimpleSearch({
 
       <div className="mb-6 sm:mb-8">
         <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-          ✈️ Depuis <span className="text-red-500">*</span>
+          ✈️ Au départ
         </label>
         <AirportAutocomplete
           value={selectedAirport}
