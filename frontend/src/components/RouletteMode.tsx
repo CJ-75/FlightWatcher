@@ -9,6 +9,7 @@ interface RouletteModeProps {
   onClose: () => void;
   onSaveFavorite: (trip: EnrichedTripResponse) => void;
   onBook?: (trip: EnrichedTripResponse) => void;
+  checkIsFavorite?: (trip: EnrichedTripResponse) => boolean;
 }
 
 const springConfig = {
@@ -18,7 +19,7 @@ const springConfig = {
   mass: 0.5
 };
 
-export function RouletteMode({ trips, budget, onClose, onSaveFavorite, onBook }: RouletteModeProps) {
+export function RouletteMode({ trips, budget, onClose, onSaveFavorite, onBook, checkIsFavorite }: RouletteModeProps) {
   const [selectedTrip, setSelectedTrip] = useState<EnrichedTripResponse | null>(null);
   const [relances, setRelances] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -163,6 +164,7 @@ export function RouletteMode({ trips, budget, onClose, onSaveFavorite, onBook }:
                       window.open(`https://www.ryanair.com`, '_blank');
                     }
                   }}
+                  isFavorite={checkIsFavorite ? checkIsFavorite(selectedTrip) : false}
                 />
               </div>
             </motion.div>

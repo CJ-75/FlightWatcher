@@ -6,7 +6,8 @@ import {
   saveExcludedDestinations,
   updateSearchAutoCheck, updateSearchLastCheckResults, getActiveAutoChecks,
   setDevMode, getDevMode, saveNewResults, getNewResultsForSearch, clearNewResults,
-  toggleFavoriteArchived, getArchivedFavorites, getActiveFavorites
+  toggleFavoriteArchived, getArchivedFavorites, getActiveFavorites,
+  isFavorite
 } from './utils/storage'
 import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
@@ -19,6 +20,7 @@ import { BookingSas } from './components/BookingSas'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Calendar } from './components/Calendar'
 import { SaveSearchModal } from './components/SaveSearchModal'
+import { Toast } from './components/Toast'
 import { motion } from 'framer-motion'
 
 type Tab = 'search' | 'saved'
@@ -46,6 +48,9 @@ function Dashboard() {
   const [showSaveSearchModal, setShowSaveSearchModal] = useState(false)
   const [isSavingSearch, setIsSavingSearch] = useState(false)
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
+  const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   
   // États pour les paramètres de recherche
   const [aeroportDepart, setAeroportDepart] = useState('')
@@ -210,22 +215,61 @@ function Dashboard() {
 
   const handleSaveFavorite = async (trip: TripResponse) => {
     if (!currentRequest) {
-      setError('Impossible de sauvegarder le favori')
+      setToastMessage('Impossible de sauvegarder le favori')
+      setToastType('error')
       return
     }
     
     const user = await getCurrentUser()
     if (!user) {
-      alert('Veuillez vous connecter pour sauvegarder un favori')
+      setToastMessage('Veuillez vous connecter pour sauvegarder un favori')
+      setToastType('error')
       return
     }
     
-    try {
-      await saveFavorite(trip, currentRequest)
-      alert('Voyage ajouté aux favoris !')
-    } catch (error) {
-      setError('Erreur lors de la sauvegarde')
-      console.error(error)
+    // Vérifier si c'est déjà un favori
+    const isFav = favorites.some(f => 
+      f.trip.destination_code === trip.destination_code &&
+      f.trip.aller.departureTime === trip.aller.departureTime &&
+      f.trip.retour.departureTime === trip.retour.departureTime
+    )
+    
+    if (isFav) {
+      // Retirer des favoris
+      const favoriteToDelete = favorites.find(f => 
+        f.trip.destination_code === trip.destination_code &&
+        f.trip.aller.departureTime === trip.aller.departureTime &&
+        f.trip.retour.departureTime === trip.retour.departureTime
+      )
+      
+      if (favoriteToDelete) {
+        try {
+          await deleteFavorite(favoriteToDelete.id)
+          // Recharger les favoris pour mettre à jour l'état
+          const updatedFavorites = await getFavorites()
+          setFavorites(updatedFavorites)
+          setToastMessage('Voyage retiré des favoris')
+          setToastType('success')
+        } catch (error) {
+          setToastMessage('Erreur lors de la suppression')
+          setToastType('error')
+          console.error(error)
+        }
+      }
+    } else {
+      // Ajouter aux favoris
+      try {
+        await saveFavorite(trip, currentRequest)
+        // Recharger les favoris pour mettre à jour l'état
+        const updatedFavorites = await getFavorites()
+        setFavorites(updatedFavorites)
+        setToastMessage('Voyage ajouté aux favoris !')
+        setToastType('success')
+      } catch (error) {
+        setToastMessage('Erreur lors de la sauvegarde')
+        setToastType('error')
+        console.error(error)
+      }
     }
   }
 
@@ -253,9 +297,11 @@ function Dashboard() {
       )
       
       updateFavoriteStatus(favorite.id, isStillValid)
-      alert(isStillValid ? '✅ Le voyage est toujours disponible !' : '❌ Le voyage n\'est plus disponible')
+      setToastMessage(isStillValid ? 'Le voyage est toujours disponible !' : 'Le voyage n\'est plus disponible')
+      setToastType(isStillValid ? 'success' : 'error')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de la vérification')
+      setToastMessage(err instanceof Error ? err.message : 'Erreur lors de la vérification')
+      setToastType('error')
     } finally {
       setLoading(false)
     }
@@ -407,6 +453,28 @@ function Dashboard() {
     loadAirports()
   }, [])
 
+  // Charger les favoris au montage
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        const favs = await getFavorites()
+        setFavorites(favs)
+      } catch (err) {
+        console.error('Erreur chargement favoris:', err)
+      }
+    }
+    loadFavorites()
+  }, [])
+
+  // Fonction helper pour vérifier si un trip est favori
+  const checkIsFavorite = (trip: EnrichedTripResponse | TripResponse): boolean => {
+    return favorites.some(f => 
+      f.trip.destination_code === trip.destination_code &&
+      f.trip.aller.departureTime === trip.aller.departureTime &&
+      f.trip.retour.departureTime === trip.retour.departureTime
+    )
+  }
+
   const handleSimpleResults = (results: EnrichedTripResponse[], searchInfo?: {
     datePreset: string | null
     airport: string
@@ -442,7 +510,8 @@ function Dashboard() {
   const handleSimpleSaveFavorite = async (trip: EnrichedTripResponse) => {
     const user = await getCurrentUser()
     if (!user) {
-      alert('Veuillez vous connecter pour sauvegarder un favori')
+      setToastMessage('Veuillez vous connecter pour sauvegarder un favori')
+      setToastType('error')
       return
     }
     
@@ -454,20 +523,53 @@ function Dashboard() {
       destination_code: trip.destination_code
     }
     
-    // Créer un ScanRequest minimal pour la sauvegarde
-    const searchRequest: ScanRequest = {
-      aeroport_depart: aeroportDepart,
-      dates_depart: [],
-      dates_retour: [],
-      budget_max: trip.prix_total
-    }
+    // Vérifier si c'est déjà un favori
+    const isFav = checkIsFavorite(trip)
     
-    try {
-      await saveFavorite(tripResponse, searchRequest)
-      alert('Voyage ajouté aux favoris !')
-    } catch (error) {
-      setError('Erreur lors de la sauvegarde')
-      console.error(error)
+    if (isFav) {
+      // Retirer des favoris
+      const favoriteToDelete = favorites.find(f => 
+        f.trip.destination_code === trip.destination_code &&
+        f.trip.aller.departureTime === trip.aller.departureTime &&
+        f.trip.retour.departureTime === trip.retour.departureTime
+      )
+      
+      if (favoriteToDelete) {
+        try {
+          await deleteFavorite(favoriteToDelete.id)
+          // Recharger les favoris pour mettre à jour l'état
+          const updatedFavorites = await getFavorites()
+          setFavorites(updatedFavorites)
+          setToastMessage('Voyage retiré des favoris')
+          setToastType('success')
+        } catch (error) {
+          setToastMessage('Erreur lors de la suppression')
+          setToastType('error')
+          console.error(error)
+        }
+      }
+    } else {
+      // Ajouter aux favoris
+      // Créer un ScanRequest minimal pour la sauvegarde
+      const searchRequest: ScanRequest = {
+        aeroport_depart: aeroportDepart,
+        dates_depart: [],
+        dates_retour: [],
+        budget_max: trip.prix_total
+      }
+      
+      try {
+        await saveFavorite(tripResponse, searchRequest)
+        // Recharger les favoris pour mettre à jour l'état
+        const updatedFavorites = await getFavorites()
+        setFavorites(updatedFavorites)
+        setToastMessage('Voyage ajouté aux favoris !')
+        setToastType('success')
+      } catch (error) {
+        setToastMessage('Erreur lors de la sauvegarde')
+        setToastType('error')
+        console.error(error)
+      }
     }
   }
 
@@ -667,6 +769,7 @@ function Dashboard() {
                         onBook={() => {
                           setBookingTrip(trip)
                         }}
+                        isFavorite={checkIsFavorite(trip)}
                       />
                     </motion.div>
                   ))}
@@ -693,6 +796,7 @@ function Dashboard() {
           onClose={() => setShowRoulette(false)}
           onSaveFavorite={handleSimpleSaveFavorite}
           onBook={(trip) => setBookingTrip(trip)}
+          checkIsFavorite={checkIsFavorite}
         />
       )}
 
@@ -716,6 +820,15 @@ function Dashboard() {
         onSave={handleConfirmSaveSearch}
         defaultName={currentRequest ? `Recherche ${aeroportDepart} - ${new Date().toLocaleDateString('fr-FR')}` : ''}
         isLoading={isSavingSearch}
+      />
+
+      {/* Toast Notification */}
+      <Toast
+        message={toastMessage || ''}
+        type={toastType}
+        isVisible={!!toastMessage}
+        onClose={() => setToastMessage(null)}
+        duration={3000}
       />
     </div>
   )

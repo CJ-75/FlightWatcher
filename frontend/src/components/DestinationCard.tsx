@@ -6,6 +6,7 @@ interface DestinationCardProps {
   trip: EnrichedTripResponse;
   onSaveFavorite: () => void;
   onBook?: () => void;
+  isFavorite?: boolean;
 }
 
 const springConfig = {
@@ -21,7 +22,7 @@ const cardHover = {
   transition: springConfig
 };
 
-export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCardProps) {
+export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = false }: DestinationCardProps) {
   // Helper pour convertir getDay() en numérotation basée sur lundi (1=lundi, 7=dimanche)
   const getDayOfWeekMondayBased = (date: Date): number => {
     // getDay() retourne 0=dimanche, 1=lundi, ..., 6=samedi
@@ -93,10 +94,12 @@ export function DestinationCard({ trip, onSaveFavorite, onBook }: DestinationCar
           }}
           whileHover={{ scale: 1.2 }}
           whileTap={{ scale: 0.9 }}
-          className="absolute top-4 right-4 text-4xl cursor-pointer hover:drop-shadow-lg transition-all"
-          aria-label="Sauvegarder"
+          className={`absolute top-4 right-4 text-4xl cursor-pointer hover:drop-shadow-lg transition-all ${
+            isFavorite ? 'text-red-500' : 'text-white/80 hover:text-red-400'
+          }`}
+          aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         >
-          ❤️
+          {isFavorite ? '❤️' : '🤍'}
         </motion.button>
 
         {/* Contenu overlay sur image */}

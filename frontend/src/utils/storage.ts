@@ -1,5 +1,6 @@
 import { ScanRequest, TripResponse } from '../types'
 import { getSupabaseClient, getCurrentUser } from '../lib/supabase'
+import { getFromCache, setCache, invalidateCache } from './cache'
 
 export interface SavedSearch {
   id: string
@@ -140,6 +141,11 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
         lastCheckedAt: data.last_checked_at
       }
       
+      // Write-through cache : mettre à jour le cache immédiatement
+      const currentSearches = await getSavedSearches()
+      const updatedSearches = [saved, ...currentSearches]
+      setCache(user.id, 'searches', updatedSearches, true)
+      
       autoExport()
       return saved
     } catch (error) {
@@ -160,17 +166,69 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
   const searches: SavedSearch[] = data ? JSON.parse(data) : []
   searches.push(saved)
   localStorage.setItem(STORAGE_KEYS.SEARCHES, JSON.stringify(searches))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'searches', searches, false)
+  }
+  
   autoExport()
   return saved
 }
 
-export const getSavedSearches = async (): Promise<SavedSearch[]> => {
+/**
+ * Mappe les données Supabase vers SavedSearch
+ */
+function mapSupabaseSearchToSavedSearch(item: any): SavedSearch {
+  // Gérer les deux noms de colonnes possibles (ancien schéma vs nouveau)
+  const departureAirport = item.departure_airport || item.aeroport_depart;
+  // Gérer les deux noms de colonnes pour l'intervalle de vérification
+  const checkInterval = item.check_interval_seconds || item.auto_check_interval_seconds || 3600;
+  
+  return {
+    id: item.id,
+    name: item.name,
+    request: {
+      aeroport_depart: departureAirport,
+      dates_depart: item.dates_depart,
+      dates_retour: item.dates_retour,
+      budget_max: item.budget_max,
+      limite_allers: item.limite_allers,
+      destinations_exclues: item.destinations_exclues || [],
+      destinations_incluses: item.destinations_incluses
+    },
+    createdAt: item.created_at,
+    lastUsed: item.last_used,
+    autoCheckEnabled: item.auto_check_enabled,
+    autoCheckIntervalSeconds: checkInterval,
+    lastCheckResults: item.last_check_results,
+    lastCheckedAt: item.last_checked_at
+  };
+}
+
+export const getSavedSearches = async (forceRefresh: boolean = false): Promise<SavedSearch[]> => {
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
-  console.log('📥 getSavedSearches appelé:', { user: user?.id, hasSupabase: !!supabase });
+  console.log('📥 getSavedSearches appelé:', { user: user?.id, hasSupabase: !!supabase, forceRefresh });
   
-  if (supabase && user) {
+  // Si pas d'utilisateur, fallback localStorage classique
+  if (!user) {
+    const data = localStorage.getItem(STORAGE_KEYS.SEARCHES)
+    return data ? JSON.parse(data) : []
+  }
+  
+  // 1. Vérifier le cache si pas de refresh forcé
+  if (!forceRefresh) {
+    const cachedData = getFromCache<SavedSearch[]>(user.id, 'searches')
+    if (cachedData !== null) {
+      console.log('✅ Données récupérées depuis le cache:', cachedData.length, 'recherches');
+      return cachedData
+    }
+  }
+  
+  // 2. Si Supabase disponible, faire la requête
+  if (supabase) {
     try {
       console.log('🔍 Requête Supabase saved_searches pour user_id:', user.id);
       const { data, error } = await supabase
@@ -185,95 +243,95 @@ export const getSavedSearches = async (): Promise<SavedSearch[]> => {
       }
       
       console.log('✅ Données récupérées depuis Supabase saved_searches:', { 
-        count: data?.length || 0, 
-        isArray: Array.isArray(data),
-        dataType: typeof data,
-        data: data 
+        count: data?.length || 0
       });
       
-      // Si pas de données Supabase, vérifier localStorage comme fallback
-      if (!data || !Array.isArray(data) || data.length === 0) {
-        console.warn('⚠️ Aucune donnée récupérée depuis Supabase saved_searches, vérification localStorage...', {
-          hasData: !!data,
-          isArray: Array.isArray(data),
-          length: data?.length
-        });
-        // Fallback localStorage
-        const localData = localStorage.getItem(STORAGE_KEYS.SEARCHES);
-        if (localData) {
-          const localSearches = JSON.parse(localData);
-          console.log('📦 Données trouvées dans localStorage:', localSearches.length, 'recherches');
-          return localSearches;
-        }
-        return [];
-      }
+      // Mapper les données
+      const mappedSearches = (data || []).map(mapSupabaseSearchToSavedSearch)
       
-      console.log('🔄 Mapping des données récupérées...');
-      const mappedSearches = (data || []).map((item: any) => {
-        // Gérer les deux noms de colonnes possibles (ancien schéma vs nouveau)
-        const departureAirport = item.departure_airport || item.aeroport_depart;
-        // Gérer les deux noms de colonnes pour l'intervalle de vérification
-        const checkInterval = item.check_interval_seconds || item.auto_check_interval_seconds || 3600;
-        
-        return {
-          id: item.id,
-          name: item.name,
-          request: {
-            aeroport_depart: departureAirport,
-            dates_depart: item.dates_depart,
-            dates_retour: item.dates_retour,
-            budget_max: item.budget_max,
-            limite_allers: item.limite_allers,
-            destinations_exclues: item.destinations_exclues || [],
-            destinations_incluses: item.destinations_incluses
-          },
-          createdAt: item.created_at,
-          lastUsed: item.last_used,
-          autoCheckEnabled: item.auto_check_enabled,
-          autoCheckIntervalSeconds: checkInterval,
-          lastCheckResults: item.last_check_results,
-          lastCheckedAt: item.last_checked_at
-        };
-      });
+      // Mettre à jour le cache avec les données Supabase
+      setCache(user.id, 'searches', mappedSearches, true)
       
-      console.log('✅ Mapping terminé:', { count: mappedSearches.length });
-      return mappedSearches;
+      return mappedSearches
     } catch (error) {
-      console.error('❌ Erreur récupération Supabase, fallback localStorage:', error);
-      // Fallback localStorage
+      console.error('❌ Erreur récupération Supabase, fallback cache/localStorage:', error);
+      // En cas d'erreur, essayer le cache (même expiré) ou localStorage
+      const cachedData = getFromCache<SavedSearch[]>(user.id, 'searches')
+      if (cachedData !== null) {
+        console.log('📦 Utilisation du cache en cas d\'erreur Supabase');
+        return cachedData
+      }
     }
   }
   
-  // Fallback localStorage
+  // 3. Fallback localStorage classique (pour compatibilité)
   const data = localStorage.getItem(STORAGE_KEYS.SEARCHES)
-  return data ? JSON.parse(data) : []
+  if (data) {
+    const searches = JSON.parse(data)
+    // Mettre en cache pour la prochaine fois
+    if (user) {
+      setCache(user.id, 'searches', searches, false)
+    }
+    return searches
+  }
+  
+  return []
 }
 
 export const deleteSearch = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentSearches = await getSavedSearches()
+    const filtered = currentSearches.filter(s => s.id !== id)
+    setCache(user.id, 'searches', filtered, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      const { error } = await supabase
-        .from('saved_searches')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      autoExport()
-      return
-    } catch (error) {
-      console.error('Erreur suppression Supabase, fallback localStorage:', error)
-      // Fallback localStorage
-    }
+    // Synchroniser avec Supabase en arrière-plan
+    supabase
+      .from('saved_searches')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Erreur suppression Supabase:', error)
+          // En cas d'erreur, recharger depuis Supabase pour restaurer le cache
+          getSavedSearches(true).then(searches => {
+            setCache(user.id, 'searches', searches, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentSearches = getFromCache<SavedSearch[]>(user.id, 'searches')
+          if (currentSearches) {
+            setCache(user.id, 'searches', currentSearches, true)
+          }
+          autoExport()
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur suppression Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getSavedSearches(true).then(searches => {
+          setCache(user.id, 'searches', searches, true)
+        })
+      })
+    return
   }
   
   // Fallback localStorage
   const searches = await getSavedSearches()
   const filtered = searches.filter(s => s.id !== id)
   localStorage.setItem(STORAGE_KEYS.SEARCHES, JSON.stringify(filtered))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'searches', filtered, false)
+  }
+  
   autoExport()
 }
 
@@ -281,31 +339,65 @@ export const updateSearchLastUsed = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentSearches = await getSavedSearches()
+    const updated = currentSearches.map(s => 
+      s.id === id ? { ...s, lastUsed: new Date().toISOString() } : s
+    )
+    setCache(user.id, 'searches', updated, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      // Récupérer la valeur actuelle de times_used
-      const { data: current } = await supabase
-        .from('saved_searches')
-        .select('times_used')
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single()
-      
-      const { error } = await supabase
-        .from('saved_searches')
-        .update({ 
-          last_used: new Date().toISOString(),
-          times_used: (current?.times_used || 0) + 1
+    // Synchroniser avec Supabase en arrière-plan
+    supabase
+      .from('saved_searches')
+      .select('times_used')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+      .then(({ data: current, error: selectError }) => {
+        if (selectError) {
+          console.error('Erreur récupération times_used:', selectError)
+          // Recharger depuis Supabase pour restaurer le cache
+          getSavedSearches(true).then(searches => {
+            setCache(user.id, 'searches', searches, true)
+          })
+          return
+        }
+        
+        return supabase
+          .from('saved_searches')
+          .update({ 
+            last_used: new Date().toISOString(),
+            times_used: (current?.times_used || 0) + 1
+          })
+          .eq('id', id)
+          .eq('user_id', user.id)
+      })
+      .then((result) => {
+        if (result?.error) {
+          console.error('Erreur mise à jour Supabase:', result.error)
+          // Recharger depuis Supabase pour restaurer le cache
+          getSavedSearches(true).then(searches => {
+            setCache(user.id, 'searches', searches, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentSearches = getFromCache<SavedSearch[]>(user.id, 'searches')
+          if (currentSearches) {
+            setCache(user.id, 'searches', currentSearches, true)
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur mise à jour Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getSavedSearches(true).then(searches => {
+          setCache(user.id, 'searches', searches, true)
         })
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      return
-    } catch (error) {
-      console.error('Erreur mise à jour Supabase, fallback localStorage:', error)
-      // Fallback localStorage
-    }
+      })
+    return
   }
   
   // Fallback localStorage
@@ -314,6 +406,11 @@ export const updateSearchLastUsed = async (id: string): Promise<void> => {
     s.id === id ? { ...s, lastUsed: new Date().toISOString() } : s
   )
   localStorage.setItem(STORAGE_KEYS.SEARCHES, JSON.stringify(updated))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'searches', updated, false)
+  }
 }
 
 export const updateSearchAutoCheck = async (
@@ -324,26 +421,55 @@ export const updateSearchAutoCheck = async (
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentSearches = await getSavedSearches()
+    const updated = currentSearches.map(s => 
+      s.id === id ? { 
+        ...s, 
+        autoCheckEnabled: enabled,
+        autoCheckIntervalSeconds: intervalSeconds || s.autoCheckIntervalSeconds || 300
+      } : s
+    )
+    setCache(user.id, 'searches', updated, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      const updateData: any = { auto_check_enabled: enabled }
-      if (intervalSeconds !== undefined) {
-        updateData.check_interval_seconds = intervalSeconds
-      }
-      
-      const { error } = await supabase
-        .from('saved_searches')
-        .update(updateData)
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      autoExport()
-      return
-    } catch (error) {
-      console.error('Erreur mise à jour Supabase, fallback localStorage:', error)
-      // Fallback localStorage
+    // Synchroniser avec Supabase en arrière-plan
+    const updateData: any = { auto_check_enabled: enabled }
+    if (intervalSeconds !== undefined) {
+      updateData.check_interval_seconds = intervalSeconds
     }
+    
+    supabase
+      .from('saved_searches')
+      .update(updateData)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Erreur mise à jour Supabase:', error)
+          // Recharger depuis Supabase pour restaurer le cache
+          getSavedSearches(true).then(searches => {
+            setCache(user.id, 'searches', searches, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentSearches = getFromCache<SavedSearch[]>(user.id, 'searches')
+          if (currentSearches) {
+            setCache(user.id, 'searches', currentSearches, true)
+          }
+          autoExport()
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur mise à jour Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getSavedSearches(true).then(searches => {
+          setCache(user.id, 'searches', searches, true)
+        })
+      })
+    return
   }
   
   // Fallback localStorage
@@ -356,6 +482,12 @@ export const updateSearchAutoCheck = async (
     } : s
   )
   localStorage.setItem(STORAGE_KEYS.SEARCHES, JSON.stringify(updated))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'searches', updated, false)
+  }
+  
   autoExport()
 }
 
@@ -366,23 +498,52 @@ export const updateSearchLastCheckResults = async (
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentSearches = await getSavedSearches()
+    const updated = currentSearches.map(s => 
+      s.id === id ? { 
+        ...s, 
+        lastCheckResults: results,
+        lastCheckedAt: new Date().toISOString()
+      } : s
+    )
+    setCache(user.id, 'searches', updated, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      const { error } = await supabase
-        .from('saved_searches')
-        .update({
-          last_check_results: results,
-          last_checked_at: new Date().toISOString()
+    // Synchroniser avec Supabase en arrière-plan
+    supabase
+      .from('saved_searches')
+      .update({
+        last_check_results: results,
+        last_checked_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Erreur mise à jour Supabase:', error)
+          // Recharger depuis Supabase pour restaurer le cache
+          getSavedSearches(true).then(searches => {
+            setCache(user.id, 'searches', searches, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentSearches = getFromCache<SavedSearch[]>(user.id, 'searches')
+          if (currentSearches) {
+            setCache(user.id, 'searches', currentSearches, true)
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur mise à jour Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getSavedSearches(true).then(searches => {
+          setCache(user.id, 'searches', searches, true)
         })
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      return
-    } catch (error) {
-      console.error('Erreur mise à jour Supabase, fallback localStorage:', error)
-      // Fallback localStorage
-    }
+      })
+    return
   }
   
   // Fallback localStorage
@@ -395,6 +556,11 @@ export const updateSearchLastCheckResults = async (
     } : s
   )
   localStorage.setItem(STORAGE_KEYS.SEARCHES, JSON.stringify(updated))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'searches', updated, false)
+  }
 }
 
 export const getActiveAutoChecks = async (): Promise<SavedSearch[]> => {
@@ -450,6 +616,11 @@ export const saveFavorite = async (trip: TripResponse, searchRequest: ScanReques
         archived: data.is_archived
       }
       
+      // Write-through cache : mettre à jour le cache immédiatement
+      const currentFavorites = await getFavorites()
+      const updatedFavorites = [favorite, ...currentFavorites]
+      setCache(user.id, 'favorites', updatedFavorites, true)
+      
       autoExport()
       return favorite
     } catch (error) {
@@ -469,17 +640,80 @@ export const saveFavorite = async (trip: TripResponse, searchRequest: ScanReques
   const favorites = await getFavorites()
   favorites.push(favorite)
   localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'favorites', favorites, false)
+  }
+  
   autoExport()
   return favorite
 }
 
-export const getFavorites = async (): Promise<SavedFavorite[]> => {
+/**
+ * Mappe les données Supabase vers SavedFavorite
+ */
+function mapSupabaseFavoriteToSavedFavorite(item: any): SavedFavorite {
+  // S'assurer que les JSONB sont correctement parsés
+  const outboundFlight = typeof item.outbound_flight === 'string' 
+    ? JSON.parse(item.outbound_flight) 
+    : item.outbound_flight;
+  const returnFlight = typeof item.return_flight === 'string' 
+    ? JSON.parse(item.return_flight) 
+    : item.return_flight;
+  const searchRequest = typeof item.search_request === 'string' 
+    ? JSON.parse(item.search_request) 
+    : item.search_request;
+  
+  // Debug: vérifier les données
+  if (!outboundFlight || !outboundFlight.departureTime) {
+    console.warn('Favori avec données incomplètes:', {
+      id: item.id,
+      outboundFlight,
+      returnFlight,
+      item
+    });
+  }
+  
+  return {
+    id: item.id,
+    trip: {
+      aller: outboundFlight || {},
+      retour: returnFlight || {},
+      prix_total: parseFloat(item.total_price) || 0,
+      destination_code: item.destination_code || outboundFlight?.destination || ''
+    },
+    searchRequest: searchRequest || {},
+    createdAt: item.created_at,
+    lastChecked: item.last_availability_check,
+    isStillValid: item.is_available !== false,
+    archived: item.is_archived === true
+  };
+}
+
+export const getFavorites = async (forceRefresh: boolean = false): Promise<SavedFavorite[]> => {
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
-  console.log('📥 getFavorites appelé:', { user: user?.id, hasSupabase: !!supabase });
+  console.log('📥 getFavorites appelé:', { user: user?.id, hasSupabase: !!supabase, forceRefresh });
   
-  if (supabase && user) {
+  // Si pas d'utilisateur, fallback localStorage classique
+  if (!user) {
+    const data = localStorage.getItem(STORAGE_KEYS.FAVORITES)
+    return data ? JSON.parse(data) : []
+  }
+  
+  // 1. Vérifier le cache si pas de refresh forcé
+  if (!forceRefresh) {
+    const cachedData = getFromCache<SavedFavorite[]>(user.id, 'favorites')
+    if (cachedData !== null) {
+      console.log('✅ Données récupérées depuis le cache:', cachedData.length, 'favoris');
+      return cachedData
+    }
+  }
+  
+  // 2. Si Supabase disponible, faire la requête
+  if (supabase) {
     try {
       console.log('🔍 Requête Supabase favorites pour user_id:', user.id);
       const { data, error } = await supabase
@@ -493,90 +727,94 @@ export const getFavorites = async (): Promise<SavedFavorite[]> => {
         throw error;
       }
       
-      console.log('✅ Données récupérées depuis Supabase:', { count: data?.length || 0, data });
+      console.log('✅ Données récupérées depuis Supabase:', { count: data?.length || 0 });
       
-      if (!data || data.length === 0) {
-        console.warn('⚠️ Aucune donnée récupérée depuis Supabase favorites, vérification localStorage...');
-        // Vérifier localStorage comme fallback
-        const localData = localStorage.getItem(STORAGE_KEYS.FAVORITES);
-        if (localData) {
-          console.log('📦 Données trouvées dans localStorage:', JSON.parse(localData).length, 'favoris');
-        }
-      }
+      // Mapper les données
+      const mappedFavorites = (data || []).map(mapSupabaseFavoriteToSavedFavorite)
       
-      return (data || []).map((item: any) => {
-        // S'assurer que les JSONB sont correctement parsés
-        const outboundFlight = typeof item.outbound_flight === 'string' 
-          ? JSON.parse(item.outbound_flight) 
-          : item.outbound_flight;
-        const returnFlight = typeof item.return_flight === 'string' 
-          ? JSON.parse(item.return_flight) 
-          : item.return_flight;
-        const searchRequest = typeof item.search_request === 'string' 
-          ? JSON.parse(item.search_request) 
-          : item.search_request;
-        
-        // Debug: vérifier les données
-        if (!outboundFlight || !outboundFlight.departureTime) {
-          console.warn('Favori avec données incomplètes:', {
-            id: item.id,
-            outboundFlight,
-            returnFlight,
-            item
-          });
-        }
-        
-        return {
-          id: item.id,
-          trip: {
-            aller: outboundFlight || {},
-            retour: returnFlight || {},
-            prix_total: parseFloat(item.total_price) || 0,
-            destination_code: item.destination_code || outboundFlight?.destination || ''
-          },
-          searchRequest: searchRequest || {},
-          createdAt: item.created_at,
-          lastChecked: item.last_availability_check,
-          isStillValid: item.is_available !== false,
-          archived: item.is_archived === true
-        };
-      })
+      // Mettre à jour le cache avec les données Supabase
+      setCache(user.id, 'favorites', mappedFavorites, true)
+      
+      return mappedFavorites
     } catch (error) {
-      console.error('Erreur récupération Supabase, fallback localStorage:', error)
-      // Fallback localStorage
+      console.error('Erreur récupération Supabase, fallback cache/localStorage:', error)
+      // En cas d'erreur, essayer le cache (même expiré) ou localStorage
+      const cachedData = getFromCache<SavedFavorite[]>(user.id, 'favorites')
+      if (cachedData !== null) {
+        console.log('📦 Utilisation du cache en cas d\'erreur Supabase');
+        return cachedData
+      }
     }
   }
   
-  // Fallback localStorage
+  // 3. Fallback localStorage classique (pour compatibilité)
   const data = localStorage.getItem(STORAGE_KEYS.FAVORITES)
-  return data ? JSON.parse(data) : []
+  if (data) {
+    const favorites = JSON.parse(data)
+    // Mettre en cache pour la prochaine fois
+    if (user) {
+      setCache(user.id, 'favorites', favorites, false)
+    }
+    return favorites
+  }
+  
+  return []
 }
 
 export const deleteFavorite = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentFavorites = await getFavorites()
+    const filtered = currentFavorites.filter(f => f.id !== id)
+    setCache(user.id, 'favorites', filtered, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      const { error } = await supabase
-        .from('favorites')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      autoExport()
-      return
-    } catch (error) {
-      console.error('Erreur suppression Supabase, fallback localStorage:', error)
-      // Fallback localStorage
-    }
+    // Synchroniser avec Supabase en arrière-plan
+    supabase
+      .from('favorites')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Erreur suppression Supabase:', error)
+          // En cas d'erreur, recharger depuis Supabase pour restaurer le cache
+          getFavorites(true).then(favorites => {
+            setCache(user.id, 'favorites', favorites, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentFavorites = getFromCache<SavedFavorite[]>(user.id, 'favorites')
+          if (currentFavorites) {
+            setCache(user.id, 'favorites', currentFavorites, true)
+          }
+          autoExport()
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur suppression Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getFavorites(true).then(favorites => {
+          setCache(user.id, 'favorites', favorites, true)
+        })
+      })
+    return
   }
   
   // Fallback localStorage
   const favorites = await getFavorites()
   const filtered = favorites.filter(f => f.id !== id)
   localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(filtered))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'favorites', filtered, false)
+  }
+  
   autoExport()
 }
 
@@ -594,24 +832,53 @@ export const updateFavoriteStatus = async (id: string, isStillValid: boolean): P
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentFavorites = await getFavorites()
+    const updated = currentFavorites.map(f => 
+      f.id === id ? { 
+        ...f, 
+        isStillValid,
+        lastChecked: new Date().toISOString() 
+      } : f
+    )
+    setCache(user.id, 'favorites', updated, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      const { error } = await supabase
-        .from('favorites')
-        .update({
-          is_available: isStillValid,
-          last_availability_check: new Date().toISOString()
+    // Synchroniser avec Supabase en arrière-plan
+    supabase
+      .from('favorites')
+      .update({
+        is_available: isStillValid,
+        last_availability_check: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Erreur mise à jour Supabase:', error)
+          // Recharger depuis Supabase pour restaurer le cache
+          getFavorites(true).then(favorites => {
+            setCache(user.id, 'favorites', favorites, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentFavorites = getFromCache<SavedFavorite[]>(user.id, 'favorites')
+          if (currentFavorites) {
+            setCache(user.id, 'favorites', currentFavorites, true)
+          }
+          autoExport()
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur mise à jour Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getFavorites(true).then(favorites => {
+          setCache(user.id, 'favorites', favorites, true)
         })
-        .eq('id', id)
-        .eq('user_id', user.id)
-      
-      if (error) throw error
-      autoExport()
-      return
-    } catch (error) {
-      console.error('Erreur mise à jour Supabase, fallback localStorage:', error)
-      // Fallback localStorage
-    }
+      })
+    return
   }
   
   // Fallback localStorage
@@ -624,6 +891,12 @@ export const updateFavoriteStatus = async (id: string, isStillValid: boolean): P
     } : f
   )
   localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(updated))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'favorites', updated, false)
+  }
+  
   autoExport()
 }
 
@@ -631,31 +904,66 @@ export const toggleFavoriteArchived = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
   const supabase = await getSupabaseClient()
   
+  // Write-through cache : mettre à jour le cache immédiatement
+  if (user) {
+    const currentFavorites = await getFavorites()
+    const updated = currentFavorites.map(f => 
+      f.id === id ? { 
+        ...f, 
+        archived: !f.archived
+      } : f
+    )
+    setCache(user.id, 'favorites', updated, false) // Marquer comme non synchronisé temporairement
+  }
+  
   if (supabase && user) {
-    try {
-      // Récupérer l'état actuel
-      const { data: favorite } = await supabase
-        .from('favorites')
-        .select('is_archived')
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .single()
-      
-      if (favorite) {
-        const { error } = await supabase
+    // Synchroniser avec Supabase en arrière-plan
+    supabase
+      .from('favorites')
+      .select('is_archived')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+      .then(({ data: favorite, error: selectError }) => {
+        if (selectError || !favorite) {
+          console.error('Erreur récupération état favori:', selectError)
+          // Recharger depuis Supabase pour restaurer le cache
+          getFavorites(true).then(favorites => {
+            setCache(user.id, 'favorites', favorites, true)
+          })
+          return
+        }
+        
+        return supabase
           .from('favorites')
           .update({ is_archived: !favorite.is_archived })
           .eq('id', id)
           .eq('user_id', user.id)
-        
-        if (error) throw error
-        autoExport()
-        return
-      }
-    } catch (error) {
-      console.error('Erreur mise à jour Supabase, fallback localStorage:', error)
-      // Fallback localStorage
-    }
+      })
+      .then((result) => {
+        if (result?.error) {
+          console.error('Erreur mise à jour Supabase:', result.error)
+          // Recharger depuis Supabase pour restaurer le cache
+          getFavorites(true).then(favorites => {
+            setCache(user.id, 'favorites', favorites, true)
+          })
+        } else {
+          // Marquer comme synchronisé
+          const currentFavorites = getFromCache<SavedFavorite[]>(user.id, 'favorites')
+          if (currentFavorites) {
+            setCache(user.id, 'favorites', currentFavorites, true)
+          }
+          autoExport()
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur mise à jour Supabase:', error)
+        // Recharger depuis Supabase pour restaurer le cache
+        getFavorites(true).then(favorites => {
+          setCache(user.id, 'favorites', favorites, true)
+        })
+      })
+    return
   }
   
   // Fallback localStorage
@@ -667,6 +975,12 @@ export const toggleFavoriteArchived = async (id: string): Promise<void> => {
     } : f
   )
   localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(updated))
+  
+  // Mettre à jour le cache si utilisateur connecté
+  if (user) {
+    setCache(user.id, 'favorites', updated, false)
+  }
+  
   autoExport()
 }
 
@@ -678,6 +992,24 @@ export const getArchivedFavorites = async (): Promise<SavedFavorite[]> => {
 export const getActiveFavorites = async (): Promise<SavedFavorite[]> => {
   const favorites = await getFavorites()
   return favorites.filter(f => !f.archived)
+}
+
+/**
+ * Recharge les favoris depuis Supabase en forçant l'invalidation du cache
+ * @param force Si true, force le rechargement même si le cache est valide
+ * @returns Les favoris mis à jour depuis Supabase
+ */
+export const refreshFavorites = async (force: boolean = true): Promise<SavedFavorite[]> => {
+  return getFavorites(force)
+}
+
+/**
+ * Recharge les recherches sauvegardées depuis Supabase en forçant l'invalidation du cache
+ * @param force Si true, force le rechargement même si le cache est valide
+ * @returns Les recherches sauvegardées mises à jour depuis Supabase
+ */
+export const refreshSavedSearches = async (force: boolean = true): Promise<SavedSearch[]> => {
+  return getSavedSearches(force)
 }
 
 // Destinations exclues par aéroport de départ
