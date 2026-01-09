@@ -63,6 +63,7 @@ function Dashboard() {
   const [destinations, setDestinations] = useState<Record<string, Destination[]>>({})
   const [loadingDestinations, setLoadingDestinations] = useState(false)
   const isLoadingFromStorage = useRef(false)
+  const shouldScrollToResults = useRef(false)
 
   // Fonction pour valider qu'un code d'aéroport est valide
   const isValidAirportCode = (code: string): boolean => {
@@ -186,7 +187,21 @@ function Dashboard() {
 
     setIsSavingSearch(true)
     try {
-      await saveSearch({ name, request: currentRequest })
+      // Sauvegarder la recherche avec les résultats actuels s'ils existent
+      const searchToSave = {
+        name,
+        request: currentRequest,
+        lastCheckResults: simpleResults.length > 0 ? simpleResults : undefined,
+        lastCheckedAt: simpleResults.length > 0 ? new Date().toISOString() : undefined
+      };
+      
+      console.log('💾 Sauvegarde de la recherche avec résultats:', {
+        name,
+        resultsCount: simpleResults.length,
+        hasResults: simpleResults.length > 0
+      });
+      
+      await saveSearch(searchToSave)
       // Afficher un message de succès temporaire
       setSaveSuccessMessage(`✅ Recherche "${name}" sauvegardée avec succès !`)
       setError(null)
@@ -203,15 +218,106 @@ function Dashboard() {
   }
 
   const handleLoadSearch = async (savedSearch: SavedSearch) => {
+    console.log('🔄 Chargement de la recherche sauvegardée:', savedSearch);
     const req = savedSearch.request
+    console.log('📋 Données de la requête:', {
+      aeroport_depart: req.aeroport_depart,
+      dates_depart: req.dates_depart,
+      dates_retour: req.dates_retour,
+      budget_max: req.budget_max,
+      limite_allers: req.limite_allers,
+      destinations_exclues: req.destinations_exclues
+    });
+    
     setAeroportDepart(req.aeroport_depart || 'BVA')
-    setDatesDepart(req.dates_depart)
-    setDatesRetour(req.dates_retour)
+    setDatesDepart(req.dates_depart || [])
+    setDatesRetour(req.dates_retour || [])
     setBudgetMax(req.budget_max || 200)
     setLimiteAllers(req.limite_allers || 50)
+    setDestinationsExclues(req.destinations_exclues || [])
+    setCurrentRequest(req)
+    
+    // Charger les résultats sauvegardés s'ils existent
+    console.log('🔍 Vérification des résultats sauvegardés:', {
+      hasLastCheckResults: !!savedSearch.lastCheckResults,
+      lastCheckResultsLength: savedSearch.lastCheckResults?.length || 0,
+      lastCheckResults: savedSearch.lastCheckResults,
+      lastCheckedAt: savedSearch.lastCheckedAt
+    });
+    
+    if (savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
+      console.log('📊 Chargement des résultats sauvegardés:', savedSearch.lastCheckResults.length, 'résultats');
+      console.log('📋 Premier résultat exemple:', savedSearch.lastCheckResults[0]);
+      
+      // Convertir TripResponse[] en EnrichedTripResponse[]
+      // S'assurer que les résultats sont bien formatés
+      const enrichedResults: EnrichedTripResponse[] = savedSearch.lastCheckResults.map((trip: any) => {
+        // Vérifier que le trip a la structure attendue
+        if (!trip.aller || !trip.retour) {
+          console.warn('⚠️ Résultat mal formaté:', trip);
+          return null;
+        }
+        return {
+          ...trip,
+          // Les résultats sauvegardés peuvent déjà être enrichis, sinon on les laisse tels quels
+        } as EnrichedTripResponse;
+      }).filter((trip): trip is EnrichedTripResponse => trip !== null);
+      
+      console.log('✅ Résultats enrichis:', enrichedResults.length, 'résultats valides');
+      console.log('📋 Premier résultat enrichi:', enrichedResults[0]);
+      
+      if (enrichedResults.length > 0) {
+        setSimpleResults(enrichedResults);
+        
+        // Mettre à jour lastSearchInfo pour afficher les informations de recherche
+        setLastSearchInfo({
+          datePreset: null, // On ne sait pas quel preset était utilisé
+          airport: req.aeroport_depart || 'BVA',
+          budget: req.budget_max || 200,
+          datesDepart: req.dates_depart || [],
+          datesRetour: req.dates_retour || [],
+          excludedDestinations: req.destinations_exclues || []
+        });
+      } else {
+        console.warn('⚠️ Aucun résultat valide après filtrage');
+        setSimpleResults([]);
+        setLastSearchInfo(null);
+      }
+    } else {
+      console.log('ℹ️ Aucun résultat sauvegardé pour cette recherche');
+      setSimpleResults([]);
+      setLastSearchInfo(null);
+    }
+    
     await updateSearchLastUsed(savedSearch.id)
     setActiveTab('search')
+    
+    console.log('✅ Recherche chargée, passage à l\'onglet recherche');
+    
+    // Marquer qu'on doit scroller vers les résultats après le rendu
+    if (savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
+      shouldScrollToResults.current = true;
+    }
   }
+
+  // Effet pour scroller vers les résultats quand ils sont affichés
+  useEffect(() => {
+    if (shouldScrollToResults.current && activeTab === 'search' && simpleResults.length > 0) {
+      // Attendre que le DOM soit complètement rendu et que les animations soient terminées
+      const scrollTimeout = setTimeout(() => {
+        if (resultsSectionRef.current) {
+          console.log('📍 Scroll vers les résultats');
+          // Utiliser requestAnimationFrame pour s'assurer que le scroll se fait après le rendu
+          requestAnimationFrame(() => {
+            resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            shouldScrollToResults.current = false; // Réinitialiser le flag
+          });
+        }
+      }, 600); // Délai plus long pour laisser le temps aux animations de se terminer
+      
+      return () => clearTimeout(scrollTimeout);
+    }
+  }, [activeTab, simpleResults.length]);
 
   const handleSaveFavorite = async (trip: TripResponse) => {
     if (!currentRequest) {

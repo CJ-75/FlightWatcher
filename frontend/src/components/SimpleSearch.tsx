@@ -83,17 +83,44 @@ export function SimpleSearch({
   const [showAirportError, setShowAirportError] = useState(false);
   const airportSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const previousDatesRef = useRef<string>('');
+  const hasInitializedRef = useRef(false);
 
   // Synchroniser le budget externe avec l'état interne
   useEffect(() => {
     if (externalBudget !== undefined && externalBudget !== budget) {
+      console.log('💰 Mise à jour du budget:', externalBudget);
       setBudget(externalBudget);
     }
   }, [externalBudget, budget]);
 
   // Détecter automatiquement quand des dates flexibles sont chargées depuis une recherche sauvegardée
   useEffect(() => {
+    const datesKey = JSON.stringify({ 
+      depart: flexibleDates.dates_depart, 
+      retour: flexibleDates.dates_retour 
+    });
+    
+    // Éviter les déclenchements inutiles
+    if (datesKey === previousDatesRef.current && hasInitializedRef.current) {
+      return;
+    }
+    
+    previousDatesRef.current = datesKey;
+    hasInitializedRef.current = true;
+    
     const hasLoadedDates = flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
+    console.log('🔍 Vérification chargement dates:', {
+      hasLoadedDates,
+      datesDepartLength: flexibleDates.dates_depart.length,
+      datesRetourLength: flexibleDates.dates_retour.length,
+      currentPreset: datePreset,
+      datesDepart: flexibleDates.dates_depart,
+      datesRetour: flexibleDates.dates_retour,
+      selectedAirport
+    });
+    
+    // Si des dates sont chargées et qu'on n'est pas déjà en mode flexible, activer le mode flexible
     if (hasLoadedDates && datePreset !== 'flexible') {
       console.log('📅 Dates flexibles chargées détectées, activation automatique du mode flexible');
       console.log('Dates départ:', flexibleDates.dates_depart);
@@ -101,7 +128,7 @@ export function SimpleSearch({
       setDatePreset('flexible');
       setShowAdvancedOptions(true);
     }
-  }, [flexibleDates.dates_depart.length, flexibleDates.dates_retour.length, datePreset]);
+  }, [flexibleDates.dates_depart, flexibleDates.dates_retour, datePreset, selectedAirport]);
 
   // Mettre à jour le budget dans le parent quand il change
   const handleBudgetChange = (newBudget: number) => {
