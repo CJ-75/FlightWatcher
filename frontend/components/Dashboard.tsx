@@ -34,7 +34,7 @@ function Dashboard() {
   const [airports, setAirports] = useState<Airport[]>([])
   
   // États pour les paramètres de recherche
-  const [aeroportDepart, setAeroportDepart] = useState('BVA')
+  const [aeroportDepart, setAeroportDepart] = useState('')
   const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>([])
   const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>([])
   const [budgetMax, setBudgetMax] = useState(200)

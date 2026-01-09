@@ -48,7 +48,7 @@ function Dashboard() {
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null)
   
   // États pour les paramètres de recherche
-  const [aeroportDepart, setAeroportDepart] = useState('BVA')
+  const [aeroportDepart, setAeroportDepart] = useState('')
   const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>([])
   const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>([])
   const [budgetMax, setBudgetMax] = useState(200)
@@ -59,6 +59,16 @@ function Dashboard() {
   const [loadingDestinations, setLoadingDestinations] = useState(false)
   const isLoadingFromStorage = useRef(false)
 
+  // Fonction pour valider qu'un code d'aéroport est valide
+  const isValidAirportCode = (code: string): boolean => {
+    // Si la liste d'aéroports n'est pas encore chargée, considérer comme invalide
+    if (!airports || airports.length === 0) return false;
+    if (!code || code.trim() === '') return false;
+    const codeUpper = code.trim().toUpperCase();
+    // Vérifier que c'est un code d'aéroport valide (3 lettres) et qu'il existe dans la liste
+    return /^[A-Z]{3}$/.test(codeUpper) && airports.some(a => a.code === codeUpper);
+  };
+
   const handleScan = async (request?: ScanRequest) => {
     const req = request || {
       aeroport_depart: aeroportDepart,
@@ -67,6 +77,17 @@ function Dashboard() {
       budget_max: budgetMax,
       limite_allers: limiteAllers,
       destinations_exclues: destinationsExclues.length > 0 ? destinationsExclues : undefined
+    }
+
+    // Validation de l'aéroport de départ
+    if (!req.aeroport_depart || req.aeroport_depart.trim() === '') {
+      setError('⚠️ Veuillez sélectionner un aéroport de départ avant de lancer le scan')
+      return
+    }
+
+    if (!isValidAirportCode(req.aeroport_depart)) {
+      setError('⚠️ Veuillez sélectionner un aéroport valide depuis la liste avant de lancer le scan')
+      return
     }
 
     if (!req.dates_depart || req.dates_depart.length === 0 || !req.dates_retour || req.dates_retour.length === 0) {
@@ -915,6 +936,8 @@ interface SearchTabProps {
   onLoadDestinations: () => void
   onToggleDestination: (code: string) => void
   onTogglePays: (pays: string) => void
+  airports: Airport[]
+  isValidAirportCode: (code: string) => boolean
 }
 
 function SearchTab({
@@ -927,7 +950,8 @@ function SearchTab({
   onScan, onSaveSearch, onSaveFavorite,
   addDate, removeDate, updateHoraire, formatDateFr, hasRequest,
   destinations, destinationsExclues, setDestinationsExclues, loadingDestinations,
-  onLoadDestinations, onToggleDestination, onTogglePays
+  onLoadDestinations, onToggleDestination, onTogglePays,
+  airports, isValidAirportCode
 }: SearchTabProps) {
   const [paysOuverts, setPaysOuverts] = useState<Set<string>>(new Set())
   const [sectionDestinationsOuverte, setSectionDestinationsOuverte] = useState(false)
@@ -1271,7 +1295,7 @@ function SearchTab({
         <div className="flex justify-center gap-4">
           <button
             onClick={() => onScan()}
-            disabled={loading || datesDepart.length === 0 || datesRetour.length === 0}
+            disabled={loading || !isValidAirportCode(aeroportDepart) || datesDepart.length === 0 || datesRetour.length === 0}
             className="px-8 py-3 bg-indigo-600 text-white rounded-lg font-semibold 
                      hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed
                      transition-colors shadow-lg"
@@ -1360,6 +1384,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [favoritesFilter, setFavoritesFilter] = useState<'all' | 'active' | 'archived'>('all')
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
+  const [expandedSearches, setExpandedSearches] = useState<Set<string>>(new Set())
 
   const refreshData = async () => {
     try {
@@ -1598,21 +1623,42 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     openLightbox(searchId)
   }
 
+  const toggleSearchExpanded = (searchId: string) => {
+    setExpandedSearches(prev => {
+      const next = new Set(prev)
+      if (next.has(searchId)) {
+        next.delete(searchId)
+      } else {
+        next.add(searchId)
+      }
+      return next
+    })
+  }
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-8 px-4 sm:px-6">
 
       {/* Outils de test en mode développeur */}
       {devMode && (
-        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-6">
-          <h3 className="text-lg font-bold text-yellow-800 mb-3">🛠️ Outils de test (Mode développeur)</h3>
-          <div className="flex gap-3 flex-wrap">
-            <button
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 rounded-2xl p-5 shadow-lg"
+        >
+          <h3 className="text-lg font-black text-yellow-900 mb-4 flex items-center gap-2">
+            <span>🛠️</span>
+            <span>Outils de test (Mode développeur)</span>
+          </h3>
+          <div className="flex gap-3 flex-wrap items-center">
+            <motion.button
               onClick={testNotification}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-semibold shadow-md"
             >
               🔔 Tester notification
-            </button>
-            <span className="text-sm text-gray-600 self-center">ou</span>
+            </motion.button>
+            <span className="text-sm text-gray-700 font-medium">ou</span>
             <select
               onChange={(e) => {
                 if (e.target.value) {
@@ -1620,7 +1666,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                   e.target.value = ''
                 }
               }}
-              className="px-3 py-2 border border-gray-300 rounded text-sm"
+              className="px-4 py-2.5 border-2 border-gray-300 rounded-xl text-sm font-medium bg-white hover:border-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
               defaultValue=""
             >
               <option value="">Tester nouveaux résultats pour...</option>
@@ -1629,471 +1675,713 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
               ))}
             </select>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Recherches sauvegardées */}
-      <div className="bg-white rounded-lg shadow-xl p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">
-          💾 Recherches sauvegardées ({savedSearches.length})
-        </h2>
-        {savedSearches.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">Aucune recherche sauvegardée</p>
-        ) : (
-          <div className="space-y-3">
-            {savedSearches.map((search) => (
-              <div key={search.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-800">{search.name}</h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Aéroport: {search.request.aeroport_depart || 'BVA'} | 
-                      {search.request.dates_depart.length} date(s) départ | 
-                      {search.request.dates_retour.length} date(s) retour | 
-                      Budget: {search.request.budget_max || 100}€
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Créé: {new Date(search.createdAt).toLocaleDateString()}
-                      {search.lastUsed && ` | Dernière utilisation: ${new Date(search.lastUsed).toLocaleDateString()}`}
-                      {search.autoCheckEnabled && (
-                        <span className="ml-2 text-green-600 font-semibold">
-                          🔔 Auto-vérification activée (toutes les {Math.floor((search.autoCheckIntervalSeconds || 300) / 60)} min)
-                        </span>
-                      )}
-                      {search.lastCheckedAt && (
-                        <span className="ml-2 text-blue-600">
-                          ✓ Vérifié: {new Date(search.lastCheckedAt).toLocaleString()}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={() => onLoadSearch(search)}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm"
-                    >
-                      📂 Charger
-                    </button>
-                    <button
-                      onClick={async () => {
-                        onReloadSearch(search.request)
-                        await updateSearchLastUsed(search.id)
-                        await refreshData()
-                      }}
-                      disabled={loading}
-                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-sm"
-                    >
-                      🔄 Relancer
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const isEnabled = search.autoCheckEnabled || false
-                        if (isEnabled) {
-                          // Arrêter
-                          if (intervalsRef.current[search.id]) {
-                            clearInterval(intervalsRef.current[search.id])
-                            delete intervalsRef.current[search.id]
-                          }
-                          await updateSearchAutoCheck(search.id, false)
-                        } else {
-                          // Démarrer
-                          requestNotificationPermission()
-                          const interval = search.autoCheckIntervalSeconds || 300
-                          await updateSearchAutoCheck(search.id, true, interval)
-                          
-                          // Effectuer une vérification immédiate
-                          performAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
-                          
-                          // Puis programmer les vérifications périodiques
-                          intervalsRef.current[search.id] = setInterval(async () => {
-                            const updatedSearches = await getSavedSearches()
-                            const updatedSearch = updatedSearches.find(s => s.id === search.id)
-                            if (updatedSearch && updatedSearch.autoCheckEnabled) {
-                              performAutoCheck(updatedSearch)
-                            }
-                          }, interval * 1000)
-                        }
-                        await refreshData()
-                      }}
-                      className={`px-4 py-2 rounded text-sm ${
-                        search.autoCheckEnabled 
-                          ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      {search.autoCheckEnabled ? '⏸️ Auto-vérif' : '🔔 Auto-vérif'}
-                    </button>
-                    {/* Bouton "new" avec badge rouge pour les nouveaux résultats */}
-                    {getNewResultsCount(search.id) > 0 && (
-                      <button
-                        onClick={() => openLightbox(search.id)}
-                        className="relative px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
-                      >
-                        🆕 New
-                        <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                          {getNewResultsCount(search.id)}
-                        </span>
-                      </button>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-xl overflow-hidden"
+      >
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
+          <h2 className="text-3xl font-black text-white flex items-center gap-3">
+            <span>💾</span>
+            <span>Recherches sauvegardées</span>
+            <span className="text-xl bg-white/20 px-3 py-1 rounded-full">
+              {savedSearches.length}
+            </span>
+          </h2>
+        </div>
+        
+        <div className="p-6">
+          {savedSearches.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="text-6xl mb-4">🔍</div>
+              <p className="text-xl text-gray-500 font-medium">Aucune recherche sauvegardée</p>
+              <p className="text-sm text-gray-400 mt-2">Sauvegardez vos recherches pour y accéder rapidement</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {savedSearches.map((search, index) => {
+                const isExpanded = expandedSearches.has(search.id)
+                const newResultsCount = getNewResultsCount(search.id)
+                
+                return (
+                  <motion.div
+                    key={search.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="group relative bg-gradient-to-br from-white to-slate-50 rounded-xl border-2 border-slate-200 hover:border-primary-400 transition-all duration-300 overflow-hidden shadow-md hover:shadow-xl"
+                  >
+                    {/* Badge nouveau résultats */}
+                    {newResultsCount > 0 && (
+                      <div className="absolute top-4 right-4 z-10">
+                        <motion.button
+                          onClick={() => openLightbox(search.id)}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          className="relative bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg hover:shadow-xl"
+                        >
+                          🆕 {newResultsCount} nouveau{newResultsCount > 1 ? 'x' : ''}
+                        </motion.button>
+                      </div>
                     )}
-                    <button
-                      onClick={() => {
-                        if (confirm('Supprimer cette recherche ?')) {
-                          if (intervalsRef.current[search.id]) {
-                            clearInterval(intervalsRef.current[search.id])
-                            delete intervalsRef.current[search.id]
-                          }
-                          deleteSearch(search.id)
-                          refreshData()
-                        }
-                      }}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                {/* Configuration auto-check */}
-                {showAutoCheckConfig[search.id] && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-300">
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="block text-sm font-semibold text-gray-700">
-                        Intervalle de vérification (secondes)
-                      </label>
-                      <button
-                        onClick={() => setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="number"
-                        min="60"
-                        max="3600"
-                        step="60"
-                        value={intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300}
-                        onChange={(e) => setIntervalSeconds(prev => ({ 
-                          ...prev, 
-                          [search.id]: parseInt(e.target.value) || 300 
-                        }))}
-                        className="w-32 px-3 py-2 border border-gray-300 rounded-lg"
-                      />
-                      <span className="text-sm text-gray-600">
-                        ({Math.floor((intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300) / 60)} minutes)
-                      </span>
-                      <button
-                        onClick={async () => {
-                          const newInterval = intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300
-                          await updateSearchAutoCheck(search.id, !search.autoCheckEnabled, newInterval)
+
+                    <div className="p-5">
+                      {/* En-tête */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1 pr-4">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-xl font-black text-slate-900">{search.name}</h3>
+                            {search.autoCheckEnabled && (
+                              <motion.span
+                                animate={{ scale: [1, 1.05, 1] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold"
+                              >
+                                <span>🔔</span>
+                                <span>Auto-vérif</span>
+                              </motion.span>
+                            )}
+                          </div>
                           
-                          if (search.autoCheckEnabled) {
-                            // Arrêter
-                            if (intervalsRef.current[search.id]) {
-                              clearInterval(intervalsRef.current[search.id])
-                              delete intervalsRef.current[search.id]
-                            }
-                          } else {
-                            // Démarrer
-                            requestNotificationPermission()
-                            const interval = newInterval
-                            
-                            // Effectuer une vérification immédiate
-                            performAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
-                            
-                            // Puis programmer les vérifications périodiques
-                            intervalsRef.current[search.id] = setInterval(async () => {
-                              const updatedSearches = await getSavedSearches()
-                              const updatedSearch = updatedSearches.find(s => s.id === search.id)
-                              if (updatedSearch && updatedSearch.autoCheckEnabled) {
-                                performAutoCheck(updatedSearch)
+                          {/* Infos principales */}
+                          <div className="flex flex-wrap gap-4 text-sm mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-primary-500 font-bold">✈️</span>
+                              <span className="text-slate-700 font-semibold">{search.request.aeroport_depart || 'BVA'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-indigo-500 font-bold">📅</span>
+                              <span className="text-slate-700">{search.request.dates_depart.length} départ</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-blue-500 font-bold">🔙</span>
+                              <span className="text-slate-700">{search.request.dates_retour.length} retour</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-emerald-500 font-bold">💰</span>
+                              <span className="text-slate-700 font-bold">{search.request.budget_max || 100}€</span>
+                            </div>
+                          </div>
+
+                          {/* Métadonnées */}
+                          <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                            <span>Créé le {new Date(search.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            {search.lastUsed && (
+                              <span>• Utilisé le {new Date(search.lastUsed).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                            )}
+                            {search.lastCheckedAt && (
+                              <span className="text-blue-600 font-semibold">
+                                • ✓ Vérifié: {new Date(search.lastCheckedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                            {search.autoCheckEnabled && (
+                              <span className="text-green-600 font-semibold">
+                                • Toutes les {Math.floor((search.autoCheckIntervalSeconds || 300) / 60)} min
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions principales */}
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <motion.button
+                          onClick={() => onLoadSearch(search)}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 text-sm font-semibold shadow-md flex items-center gap-2"
+                        >
+                          <span>📂</span>
+                          <span>Charger</span>
+                        </motion.button>
+                        <motion.button
+                          onClick={async () => {
+                            onReloadSearch(search.request)
+                            await updateSearchLastUsed(search.id)
+                            await refreshData()
+                          }}
+                          disabled={loading}
+                          whileHover={{ scale: loading ? 1 : 1.05 }}
+                          whileTap={{ scale: loading ? 1 : 0.95 }}
+                          className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-sm font-semibold shadow-md flex items-center gap-2"
+                        >
+                          <span>🔄</span>
+                          <span>Relancer</span>
+                        </motion.button>
+                        <motion.button
+                          onClick={async () => {
+                            const isEnabled = search.autoCheckEnabled || false
+                            if (isEnabled) {
+                              if (intervalsRef.current[search.id]) {
+                                clearInterval(intervalsRef.current[search.id])
+                                delete intervalsRef.current[search.id]
                               }
-                            }, interval * 1000)
-                          }
-                          
-                          setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
-                          await refreshData()
-                        }}
-                        className={`px-4 py-2 rounded text-sm ${
-                          search.autoCheckEnabled 
-                            ? 'bg-red-600 text-white hover:bg-red-700' 
-                            : 'bg-green-600 text-white hover:bg-green-700'
-                        }`}
-                      >
-                        {search.autoCheckEnabled ? '⏸️ Désactiver' : '▶️ Activer'}
-                      </button>
+                              await updateSearchAutoCheck(search.id, false)
+                            } else {
+                              requestNotificationPermission()
+                              const interval = search.autoCheckIntervalSeconds || 300
+                              await updateSearchAutoCheck(search.id, true, interval)
+                              performAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
+                              intervalsRef.current[search.id] = setInterval(async () => {
+                                const updatedSearches = await getSavedSearches()
+                                const updatedSearch = updatedSearches.find(s => s.id === search.id)
+                                if (updatedSearch && updatedSearch.autoCheckEnabled) {
+                                  performAutoCheck(updatedSearch)
+                                }
+                              }, interval * 1000)
+                            }
+                            await refreshData()
+                          }}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-md flex items-center gap-2 ${
+                            search.autoCheckEnabled 
+                              ? 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white' 
+                              : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white'
+                          }`}
+                        >
+                          <span>{search.autoCheckEnabled ? '⏸️' : '🔔'}</span>
+                          <span>Auto-vérif</span>
+                        </motion.button>
+                        <motion.button
+                          onClick={() => toggleSearchExpanded(search.id)}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-sm font-semibold flex items-center gap-2"
+                        >
+                          <span>{isExpanded ? '▼' : '▶'}</span>
+                          <span>Détails</span>
+                        </motion.button>
+                        <motion.button
+                          onClick={() => {
+                            if (confirm('Supprimer cette recherche ?')) {
+                              if (intervalsRef.current[search.id]) {
+                                clearInterval(intervalsRef.current[search.id])
+                                delete intervalsRef.current[search.id]
+                              }
+                              deleteSearch(search.id)
+                              refreshData()
+                            }
+                          }}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-sm font-semibold shadow-md"
+                        >
+                          🗑️
+                        </motion.button>
+                      </div>
+
+                      {/* Section détails expandable */}
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mt-4 pt-4 border-t border-slate-200"
+                        >
+                          <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="font-bold text-slate-700">Dates de départ:</span>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {search.request.dates_depart.slice(0, 3).map((d, i) => (
+                                    <span key={i} className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                                      {formatDateFr(d.date)}
+                                    </span>
+                                  ))}
+                                  {search.request.dates_depart.length > 3 && (
+                                    <span className="px-2 py-1 bg-slate-200 text-slate-600 rounded text-xs">
+                                      +{search.request.dates_depart.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-700">Dates de retour:</span>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {search.request.dates_retour.slice(0, 3).map((d, i) => (
+                                    <span key={i} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                      {formatDateFr(d.date)}
+                                    </span>
+                                  ))}
+                                  {search.request.dates_retour.length > 3 && (
+                                    <span className="px-2 py-1 bg-slate-200 text-slate-600 rounded text-xs">
+                                      +{search.request.dates_retour.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Configuration auto-check */}
+                            <div className="pt-3 border-t border-slate-300">
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="block text-sm font-bold text-slate-700">
+                                  ⚙️ Configuration auto-vérification
+                                </label>
+                                <button
+                                  onClick={() => setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: !prev[search.id] }))}
+                                  className="text-sm text-primary-600 hover:text-primary-700 font-semibold"
+                                >
+                                  {showAutoCheckConfig[search.id] ? 'Masquer' : 'Configurer'}
+                                </button>
+                              </div>
+                              {showAutoCheckConfig[search.id] && (
+                                <motion.div
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  className="bg-white rounded-lg p-4 border-2 border-slate-300"
+                                >
+                                  <div className="flex items-center gap-4 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-sm font-semibold text-slate-700">Intervalle:</label>
+                                      <input
+                                        type="number"
+                                        min="60"
+                                        max="3600"
+                                        step="60"
+                                        value={intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300}
+                                        onChange={(e) => setIntervalSeconds(prev => ({ 
+                                          ...prev, 
+                                          [search.id]: parseInt(e.target.value) || 300 
+                                        }))}
+                                        className="w-24 px-3 py-2 border-2 border-slate-300 rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
+                                      />
+                                      <span className="text-sm text-slate-600">
+                                        secondes ({Math.floor((intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300) / 60)} min)
+                                      </span>
+                                    </div>
+                                    <motion.button
+                                      onClick={async () => {
+                                        const newInterval = intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300
+                                        await updateSearchAutoCheck(search.id, !search.autoCheckEnabled, newInterval)
+                                        
+                                        if (search.autoCheckEnabled) {
+                                          if (intervalsRef.current[search.id]) {
+                                            clearInterval(intervalsRef.current[search.id])
+                                            delete intervalsRef.current[search.id]
+                                          }
+                                        } else {
+                                          requestNotificationPermission()
+                                          const interval = newInterval
+                                          performAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
+                                          intervalsRef.current[search.id] = setInterval(async () => {
+                                            const updatedSearches = await getSavedSearches()
+                                            const updatedSearch = updatedSearches.find(s => s.id === search.id)
+                                            if (updatedSearch && updatedSearch.autoCheckEnabled) {
+                                              performAutoCheck(updatedSearch)
+                                            }
+                                          }, interval * 1000)
+                                        }
+                                        setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
+                                        await refreshData()
+                                      }}
+                                      whileHover={{ scale: 1.05 }}
+                                      whileTap={{ scale: 0.95 }}
+                                      className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                                        search.autoCheckEnabled 
+                                          ? 'bg-red-500 hover:bg-red-600 text-white' 
+                                          : 'bg-green-500 hover:bg-green-600 text-white'
+                                      }`}
+                                    >
+                                      {search.autoCheckEnabled ? '⏸️ Désactiver' : '▶️ Activer'}
+                                    </motion.button>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </motion.div>
 
       {/* Favoris */}
-      <div className="bg-white rounded-lg shadow-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-800">
-            ❤️ Voyages favoris ({favorites.length})
-          </h2>
-          {/* Filtres pour les favoris */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFavoritesFilter('all')}
-              className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
-                favoritesFilter === 'all'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Tous ({favorites.length})
-            </button>
-            <button
-              onClick={async () => {
-                setFavoritesFilter('active')
-                const active = await getActiveFavorites()
-                setFavorites(active)
-              }}
-              className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
-                favoritesFilter === 'active'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Actifs ({favorites.filter(f => !f.archived).length})
-            </button>
-            <button
-              onClick={async () => {
-                setFavoritesFilter('archived')
-                const archived = await getArchivedFavorites()
-                setFavorites(archived)
-              }}
-              className={`px-3 py-1 rounded text-sm font-semibold transition-colors ${
-                favoritesFilter === 'archived'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Archivés ({favorites.filter(f => f.archived).length})
-            </button>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-xl overflow-hidden"
+      >
+        <div className="bg-gradient-to-r from-pink-500 to-rose-600 p-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <h2 className="text-3xl font-black text-white flex items-center gap-3">
+              <span>❤️</span>
+              <span>Voyages favoris</span>
+              <span className="text-xl bg-white/20 px-3 py-1 rounded-full">
+                {favorites.length}
+              </span>
+            </h2>
+            {/* Filtres pour les favoris */}
+            <div className="flex gap-2 flex-wrap">
+              <motion.button
+                onClick={async () => {
+                  setFavoritesFilter('all')
+                  const all = await getFavorites()
+                  setFavorites(all)
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md ${
+                  favoritesFilter === 'all'
+                    ? 'bg-white text-pink-600'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                Tous ({favorites.length})
+              </motion.button>
+              <motion.button
+                onClick={async () => {
+                  setFavoritesFilter('active')
+                  const active = await getActiveFavorites()
+                  setFavorites(active)
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md ${
+                  favoritesFilter === 'active'
+                    ? 'bg-white text-pink-600'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                Actifs ({favorites.filter(f => !f.archived).length})
+              </motion.button>
+              <motion.button
+                onClick={async () => {
+                  setFavoritesFilter('archived')
+                  const archived = await getArchivedFavorites()
+                  setFavorites(archived)
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md ${
+                  favoritesFilter === 'archived'
+                    ? 'bg-white text-pink-600'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                Archivés ({favorites.filter(f => f.archived).length})
+              </motion.button>
+            </div>
           </div>
         </div>
-        {favorites.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">Aucun voyage en favori</p>
-        ) : (() => {
-          // Filtrer les favoris selon le filtre sélectionné
-          const filteredFavorites = favoritesFilter === 'all' 
-            ? favorites 
-            : favoritesFilter === 'active'
-            ? favorites.filter(f => !f.archived)
-            : favorites.filter(f => f.archived)
-          
-          if (filteredFavorites.length === 0) {
+        
+        <div className="p-6">
+          {favorites.length === 0 ? (
+            <div className="text-center py-16">
+              <div className="text-6xl mb-4">❤️</div>
+              <p className="text-xl text-gray-500 font-medium">Aucun voyage en favori</p>
+              <p className="text-sm text-gray-400 mt-2">Ajoutez des voyages à vos favoris depuis les résultats de recherche</p>
+            </div>
+          ) : (() => {
+            // Filtrer les favoris selon le filtre sélectionné
+            const filteredFavorites = favoritesFilter === 'all' 
+              ? favorites 
+              : favoritesFilter === 'active'
+              ? favorites.filter(f => !f.archived)
+              : favorites.filter(f => f.archived)
+            
+            if (filteredFavorites.length === 0) {
+              return (
+                <div className="text-center py-16">
+                  <div className="text-6xl mb-4">{favoritesFilter === 'archived' ? '📦' : '✨'}</div>
+                  <p className="text-xl text-gray-500 font-medium">
+                    {favoritesFilter === 'archived' 
+                      ? 'Aucun voyage archivé' 
+                      : 'Aucun voyage actif'}
+                  </p>
+                </div>
+              )
+            }
+            
             return (
-              <p className="text-gray-500 text-center py-8">
-                {favoritesFilter === 'archived' 
-                  ? 'Aucun voyage archivé' 
-                  : 'Aucun voyage actif'}
-              </p>
-            )
-          }
-          
-          return (
-            <div className="grid gap-4">
-              {filteredFavorites.map((favorite) => (
-                <div key={favorite.id} className={`border-2 rounded-lg p-4 ${
-                favorite.archived 
-                  ? 'border-gray-300 bg-gray-100 opacity-75' 
-                  : 'border-pink-200 bg-pink-50'
-              }`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-bold text-gray-800">
-                        {favorite.trip.destination_code} - {favorite.trip.aller.destinationFull}
-                      </h3>
-                      {favorite.archived && (
-                        <span className="px-2 py-1 bg-gray-500 text-white text-xs font-semibold rounded">
+              <div className="grid gap-5">
+                {filteredFavorites.map((favorite, index) => (
+                  <motion.div
+                    key={favorite.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`group relative rounded-xl border-2 overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 ${
+                      favorite.archived 
+                        ? 'border-slate-300 bg-gradient-to-br from-slate-50 to-slate-100 opacity-80' 
+                        : 'border-pink-200 bg-gradient-to-br from-pink-50 via-rose-50 to-white'
+                    }`}
+                  >
+                    {/* Badge archivé */}
+                    {favorite.archived && (
+                      <div className="absolute top-4 right-4 z-10">
+                        <span className="px-3 py-1 bg-slate-500 text-white text-xs font-bold rounded-full shadow-md">
                           📦 Archivé
                         </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1 font-semibold">
-                      Prix total: {favorite.trip.prix_total.toFixed(2)}€
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Sauvegardé: {new Date(favorite.createdAt).toLocaleDateString()}
-                      {favorite.lastChecked && ` | Vérifié: ${new Date(favorite.lastChecked).toLocaleDateString()}`}
-                    </p>
-                    {favorite.isStillValid !== undefined && (
-                      <p className={`text-sm mt-1 font-semibold ${favorite.isStillValid ? 'text-green-600' : 'text-red-600'}`}>
-                        {favorite.isStillValid ? '✅ Toujours disponible' : '❌ Plus disponible'}
-                      </p>
+                      </div>
                     )}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        await onCheckFavorite(favorite)
-                        refreshData()
-                      }}
-                      disabled={loading}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
-                    >
-                      🔍 Vérifier
-                    </button>
-                    <button
-                      onClick={() => {
-                        toggleFavoriteArchived(favorite.id)
-                        refreshData()
-                      }}
-                      className={`px-4 py-2 rounded text-sm ${
-                        favorite.archived
-                          ? 'bg-green-600 text-white hover:bg-green-700'
-                          : 'bg-gray-600 text-white hover:bg-gray-700'
-                      }`}
-                      title={favorite.archived ? 'Désarchiver' : 'Archiver'}
-                    >
-                      {favorite.archived ? '📤 Désarchiver' : '📦 Archiver'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm('Supprimer ce favori ?')) {
-                          deleteFavorite(favorite.id)
-                          refreshData()
-                        }
-                      }}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                <div className="grid md:grid-cols-2 gap-3 mt-3">
-                  <div className="bg-white rounded p-3 border border-gray-200">
-                    <div className="text-sm font-semibold text-green-600 mb-2">✈️ ALLER</div>
-                    <div className="text-xs space-y-1">
-                      <div>
-                        <span className="font-semibold">Date:</span> {formatDateFr(favorite.trip.aller.departureTime)}
+
+                    {/* Badge statut disponibilité */}
+                    {favorite.isStillValid !== undefined && (
+                      <div className="absolute top-4 left-4 z-10">
+                        <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-md ${
+                          favorite.isStillValid 
+                            ? 'bg-green-500 text-white' 
+                            : 'bg-red-500 text-white'
+                        }`}>
+                          {favorite.isStillValid ? '✅ Disponible' : '❌ Indisponible'}
+                        </span>
                       </div>
-                      <div>
-                        <span className="font-semibold">Heure:</span> {new Date(favorite.trip.aller.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    )}
+
+                    <div className="p-5">
+                      {/* En-tête */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1 pr-4">
+                          <h3 className="text-2xl font-black text-slate-900 mb-2">
+                            {favorite.trip.destination_code} - {favorite.trip.aller.destinationFull.split(',')[0]}
+                          </h3>
+                          <p className="text-sm text-slate-600 mb-1">
+                            {favorite.trip.aller.destinationFull.split(',')[1]?.trim() || ''}
+                          </p>
+                          <div className="flex items-baseline gap-2 mt-2">
+                            <span className="text-3xl font-black text-pink-600">
+                              {favorite.trip.prix_total.toFixed(0)}€
+                            </span>
+                            <span className="text-sm text-slate-500 font-medium">total</span>
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-3">
+                            <span>Sauvegardé le {new Date(favorite.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            {favorite.lastChecked && (
+                              <span>• Vérifié le {new Date(favorite.lastChecked).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <motion.button
+                            onClick={async () => {
+                              await onCheckFavorite(favorite)
+                              refreshData()
+                            }}
+                            disabled={loading}
+                            whileHover={{ scale: loading ? 1 : 1.05 }}
+                            whileTap={{ scale: loading ? 1 : 0.95 }}
+                            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 text-sm font-semibold shadow-md flex items-center gap-2"
+                          >
+                            <span>🔍</span>
+                            <span>Vérifier</span>
+                          </motion.button>
+                          <motion.button
+                            onClick={() => {
+                              toggleFavoriteArchived(favorite.id)
+                              refreshData()
+                            }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-md flex items-center gap-2 ${
+                              favorite.archived
+                                ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
+                                : 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700 text-white'
+                            }`}
+                            title={favorite.archived ? 'Désarchiver' : 'Archiver'}
+                          >
+                            <span>{favorite.archived ? '📤' : '📦'}</span>
+                            <span>{favorite.archived ? 'Désarchiver' : 'Archiver'}</span>
+                          </motion.button>
+                          <motion.button
+                            onClick={() => {
+                              if (confirm('Supprimer ce favori ?')) {
+                                deleteFavorite(favorite.id)
+                                refreshData()
+                              }
+                            }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-sm font-semibold shadow-md"
+                          >
+                            🗑️
+                          </motion.button>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-semibold">Vol:</span> {favorite.trip.aller.flightNumber}
-                      </div>
-                      <div className="text-gray-600">
-                        {favorite.trip.aller.origin} → {favorite.trip.aller.destination}
-                      </div>
-                      <div className="font-bold text-green-600 mt-1">
-                        {favorite.trip.aller.price.toFixed(2)}€
+
+                      {/* Détails des vols */}
+                      <div className="grid md:grid-cols-2 gap-4 mt-4">
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          className="bg-white rounded-xl p-4 border-2 border-green-200 shadow-md"
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-black text-green-600 flex items-center gap-2">
+                              <span>✈️</span>
+                              <span>ALLER</span>
+                            </div>
+                            <div className="text-xl font-black text-green-600">
+                              {favorite.trip.aller.price.toFixed(0)}€
+                            </div>
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-slate-700">Date:</span>
+                              <span className="text-slate-600">{formatDateFr(favorite.trip.aller.departureTime)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-slate-700">Heure:</span>
+                              <span className="text-slate-600">{new Date(favorite.trip.aller.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-slate-700">Vol:</span>
+                              <span className="text-slate-600 font-mono">{favorite.trip.aller.flightNumber}</span>
+                            </div>
+                            <div className="flex justify-between pt-2 border-t border-green-100">
+                              <span className="text-slate-500 text-xs">Trajet:</span>
+                              <span className="text-slate-700 font-bold">{favorite.trip.aller.origin} → {favorite.trip.aller.destination}</span>
+                            </div>
+                          </div>
+                        </motion.div>
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          className="bg-white rounded-xl p-4 border-2 border-blue-200 shadow-md"
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="text-sm font-black text-blue-600 flex items-center gap-2">
+                              <span>🔙</span>
+                              <span>RETOUR</span>
+                            </div>
+                            <div className="text-xl font-black text-blue-600">
+                              {favorite.trip.retour.price.toFixed(0)}€
+                            </div>
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-slate-700">Date:</span>
+                              <span className="text-slate-600">{formatDateFr(favorite.trip.retour.departureTime)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-slate-700">Heure:</span>
+                              <span className="text-slate-600">{new Date(favorite.trip.retour.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="font-semibold text-slate-700">Vol:</span>
+                              <span className="text-slate-600 font-mono">{favorite.trip.retour.flightNumber}</span>
+                            </div>
+                            <div className="flex justify-between pt-2 border-t border-blue-100">
+                              <span className="text-slate-500 text-xs">Trajet:</span>
+                              <span className="text-slate-700 font-bold">{favorite.trip.retour.origin} → {favorite.trip.retour.destination}</span>
+                            </div>
+                          </div>
+                        </motion.div>
                       </div>
                     </div>
-                  </div>
-                  <div className="bg-white rounded p-3 border border-gray-200">
-                    <div className="text-sm font-semibold text-blue-600 mb-2">🔙 RETOUR</div>
-                    <div className="text-xs space-y-1">
-                      <div>
-                        <span className="font-semibold">Date:</span> {formatDateFr(favorite.trip.retour.departureTime)}
-                      </div>
-                      <div>
-                        <span className="font-semibold">Heure:</span> {new Date(favorite.trip.retour.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                      <div>
-                        <span className="font-semibold">Vol:</span> {favorite.trip.retour.flightNumber}
-                      </div>
-                      <div className="text-gray-600">
-                        {favorite.trip.retour.origin} → {favorite.trip.retour.destination}
-                      </div>
-                      <div className="font-bold text-blue-600 mt-1">
-                        {favorite.trip.retour.price.toFixed(2)}€
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                  </motion.div>
                 ))}
-            </div>
-          )
-        })()}
-      </div>
+              </div>
+            )
+          })()}
+        </div>
+      </motion.div>
 
       {/* Lightbox pour afficher les nouveaux résultats */}
       {showLightbox && lightboxResults && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => {
             setShowLightbox(false)
             setLightboxResults(null)
           }}
         >
-          <div 
-            className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-white border-b border-gray-300 p-4 flex items-center justify-between">
+            <div className="sticky top-0 bg-gradient-to-r from-emerald-500 to-teal-600 p-6 flex items-center justify-between z-10">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">
-                  🆕 Nouveaux résultats - {lightboxResults.searchName}
+                <h2 className="text-3xl font-black text-white flex items-center gap-3">
+                  <span>🆕</span>
+                  <span>Nouveaux résultats</span>
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  {lightboxResults.trips.length} nouveau(x) voyage(s) trouvé(s)
+                <p className="text-white/90 mt-2 font-medium">
+                  {lightboxResults.searchName}
+                </p>
+                <p className="text-sm text-white/80 mt-1">
+                  {lightboxResults.trips.length} nouveau{lightboxResults.trips.length > 1 ? 'x' : ''} voyage{lightboxResults.trips.length > 1 ? 's' : ''} trouvé{lightboxResults.trips.length > 1 ? 's' : ''}
                   {lightboxResults.timestamp && (
                     <span className="ml-2">
-                      le {new Date(lightboxResults.timestamp).toLocaleString()}
+                      le {new Date(lightboxResults.timestamp).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   )}
                 </p>
               </div>
-              <button
+              <motion.button
                 onClick={() => {
                   setShowLightbox(false)
                   setLightboxResults(null)
                 }}
-                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                whileHover={{ scale: 1.1, rotate: 90 }}
+                whileTap={{ scale: 0.9 }}
+                className="text-white hover:text-white/80 text-3xl font-bold w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
               >
                 ✕
-              </button>
+              </motion.button>
             </div>
-            <div className="p-6">
-              <div className="grid gap-4">
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="grid gap-5">
                 {lightboxResults.trips
                   .sort((a, b) => a.prix_total - b.prix_total)
-                  .map((trip) => (
-                    <TripCard
+                  .map((trip, index) => (
+                    <motion.div
                       key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
-                      trip={trip}
-                      onSaveFavorite={() => {}}
-                      isFavorite={false}
-                    />
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <TripCard
+                        trip={trip}
+                        onSaveFavorite={() => {}}
+                        isFavorite={false}
+                      />
+                    </motion.div>
                   ))}
               </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    clearNewResults(lightboxResults.searchId)
-                    setShowLightbox(false)
-                    setLightboxResults(null)
-                    refreshData()
-                  }}
-                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-                >
-                  Marquer comme lus
-                </button>
-                <button
-                  onClick={() => {
-                    setShowLightbox(false)
-                    setLightboxResults(null)
-                  }}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                >
-                  Fermer
-                </button>
-              </div>
             </div>
-          </div>
-        </div>
+            <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 p-4 flex justify-end gap-3">
+              <motion.button
+                onClick={() => {
+                  clearNewResults(lightboxResults.searchId)
+                  setShowLightbox(false)
+                  setLightboxResults(null)
+                  refreshData()
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-6 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl hover:from-slate-700 hover:to-slate-800 font-semibold shadow-md"
+              >
+                Marquer comme lus
+              </motion.button>
+              <motion.button
+                onClick={() => {
+                  setShowLightbox(false)
+                  setLightboxResults(null)
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 font-semibold shadow-md"
+              >
+                Fermer
+              </motion.button>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
     </div>
   )

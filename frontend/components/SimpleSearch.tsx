@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { BudgetSlider } from './BudgetSlider';
 import { DatePresets, DatePreset } from './DatePresets';
@@ -66,6 +66,10 @@ export function SimpleSearch({
     dates_depart: [],
     dates_retour: []
   });
+  const [hasInteractedWithAirport, setHasInteractedWithAirport] = useState(false);
+  const [showAirportError, setShowAirportError] = useState(false);
+  const airportSectionRef = useRef<HTMLDivElement>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Mettre à jour automatiquement le preset flexible si des dates sont chargées
   useEffect(() => {
@@ -78,14 +82,73 @@ export function SimpleSearch({
     }
   }, [flexibleDates.dates_depart.length, flexibleDates.dates_retour.length, selectedPresets, flexibleDates]);
 
+  // Fonction pour valider qu'un code d'aéroport est valide
+  const isValidAirportCode = (code: string): boolean => {
+    // Si la liste d'aéroports n'est pas encore chargée, considérer comme invalide
+    if (!airports || airports.length === 0) return false;
+    if (!code || code.trim() === '') return false;
+    const codeUpper = code.trim().toUpperCase();
+    // Vérifier que c'est un code d'aéroport valide (3 lettres) et qu'il existe dans la liste
+    return /^[A-Z]{3}$/.test(codeUpper) && airports.some(a => a.code === codeUpper);
+  };
+
+  // Vérifier si le bouton doit être désactivé
+  const isButtonDisabled = isSearching || selectedPresets.length === 0 || !isValidAirportCode(selectedAirport);
+
+  // Gérer l'affichage du message d'erreur avec timeout
+  useEffect(() => {
+    if (showAirportError) {
+      // Nettoyer le timeout précédent s'il existe
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+      // Masquer le message après 5 secondes
+      errorTimeoutRef.current = setTimeout(() => {
+        setShowAirportError(false);
+      }, 5000);
+    }
+    return () => {
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, [showAirportError]);
+
+  // Gérer le clic sur le bouton désactivé
+  const handleButtonClick = () => {
+    if (isButtonDisabled) {
+      // Si l'aéroport n'est pas valide, afficher le message et scroller
+      if (!isValidAirportCode(selectedAirport)) {
+        setShowAirportError(true);
+        setHasInteractedWithAirport(true);
+        // Scroller vers la section aéroport après un court délai pour laisser le message apparaître
+        setTimeout(() => {
+          airportSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+      // Si aucune période n'est sélectionnée, le message d'erreur sera géré par handleSearch
+      if (selectedPresets.length === 0) {
+        // Le message d'erreur pour la période sera géré par handleSearch
+      }
+    } else {
+      handleSearch();
+    }
+  };
+
   const handleSearch = async () => {
     if (selectedPresets.length === 0) {
       onError('Veuillez sélectionner au moins une période');
       return;
     }
 
-    if (!selectedAirport) {
-      onError('Veuillez sélectionner un aéroport de départ');
+    if (!selectedAirport || selectedAirport.trim() === '') {
+      onError('⚠️ Veuillez sélectionner un aéroport de départ avant de lancer la recherche');
+      return;
+    }
+
+    // Vérifier que le code d'aéroport est valide
+    if (!isValidAirportCode(selectedAirport)) {
+      onError('⚠️ Veuillez sélectionner un aéroport valide depuis la liste avant de lancer la recherche');
       return;
     }
 
@@ -170,15 +233,32 @@ export function SimpleSearch({
     >
       <BudgetSlider value={budget} onChange={setBudget} />
 
-      <div className="mb-6 sm:mb-8">
+      <div ref={airportSectionRef} className="mb-6 sm:mb-8">
         <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
           ✈️ Depuis
         </label>
         <AirportAutocomplete
           value={selectedAirport}
-          onChange={onAirportChange}
+          onChange={(code) => {
+            setHasInteractedWithAirport(true);
+            onAirportChange(code);
+            // Si l'aéroport devient valide, masquer le message d'erreur
+            if (isValidAirportCode(code)) {
+              setShowAirportError(false);
+            }
+          }}
           airports={airports}
         />
+        {!isValidAirportCode(selectedAirport) && (hasInteractedWithAirport || showAirportError) && (
+          <motion.p
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="text-sm text-red-500 mt-2"
+          >
+            ⚠️ Veuillez sélectionner un aéroport valide depuis la liste
+          </motion.p>
+        )}
       </div>
 
       <DatePresets
@@ -238,13 +318,13 @@ export function SimpleSearch({
       />
 
       <motion.button
-        onClick={handleSearch}
-        disabled={isSearching || selectedPresets.length === 0 || !selectedAirport}
-        whileHover={!isSearching && selectedPresets.length > 0 && selectedAirport ? { scale: 1.05 } : {}}
-        whileTap={!isSearching && selectedPresets.length > 0 && selectedAirport ? { scale: 0.95 } : {}}
+        onClick={handleButtonClick}
+        disabled={false}
+        whileHover={!isButtonDisabled ? { scale: 1.05 } : {}}
+        whileTap={!isButtonDisabled ? { scale: 0.95 } : {}}
         transition={springConfig}
         className={`w-full bg-primary-500 text-white rounded-full px-6 sm:px-8 py-4 sm:py-5 text-lg sm:text-xl font-black shadow-xl min-h-[56px] flex items-center justify-center
-          ${isSearching || selectedPresets.length === 0 || !selectedAirport
+          ${isButtonDisabled
             ? 'opacity-50 cursor-not-allowed'
             : 'hover:bg-primary-600 hover:shadow-2xl'
           }`}

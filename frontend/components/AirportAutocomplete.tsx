@@ -116,6 +116,29 @@ export function AirportAutocomplete({ value, onChange, airports: providedAirport
       previousValueRef.current = ''
       return
     }
+
+    // Si l'utilisateur saisit du texte qui n'est pas un code d'aéroport valide sélectionné,
+    // réinitialiser la valeur sélectionnée pour forcer la sélection depuis la liste
+    const trimmedValue = newValue.trim().toUpperCase()
+    const isValidCode = /^[A-Z]{3}$/.test(trimmedValue)
+    const airportExists = airports.length > 0 && airports.some(a => a.code === trimmedValue)
+    
+    // Si un aéroport était sélectionné et que le texte ne correspond plus, réinitialiser
+    if (selectedAirport) {
+      // Si le texte ne correspond plus à l'aéroport sélectionné, réinitialiser
+      if (selectedAirport.code !== trimmedValue) {
+        onChange('')
+        setSelectedAirport(null)
+        previousValueRef.current = ''
+      }
+    } else if (previousValueRef.current && previousValueRef.current !== '') {
+      // Si une valeur était définie précédemment (depuis l'extérieur) et que l'utilisateur tape autre chose,
+      // réinitialiser pour forcer une nouvelle sélection
+      if (trimmedValue !== previousValueRef.current.toUpperCase()) {
+        onChange('')
+        previousValueRef.current = ''
+      }
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
