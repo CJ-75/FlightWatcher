@@ -649,6 +649,8 @@ function Dashboard() {
               onLimiteAllersChange={setLimiteAllers}
               formatDateFr={formatDateFr}
               onSearchEventId={setCurrentSearchEventId}
+              budget={budgetMax}
+              onBudgetChange={setBudgetMax}
             />
             
             {error && (
@@ -1876,19 +1878,24 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           </div>
 
                           {/* Métadonnées */}
-                          <div className="flex flex-wrap gap-3 text-xs text-slate-500">
-                            <span>Créé le {new Date(search.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-slate-500">
+                            <span>Créé le {new Date(search.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/ \./g, '.')}</span>
                             {search.lastUsed && (
-                              <span>• Utilisé le {new Date(search.lastUsed).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                              <span className="flex items-center gap-1">
+                                <span>•</span>
+                                <span>Utilisé le {new Date(search.lastUsed).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }).replace(/ \./g, '.')}</span>
+                              </span>
                             )}
                             {search.lastCheckedAt && (
-                              <span className="text-blue-600 font-semibold">
-                                • ✓ Vérifié: {new Date(search.lastCheckedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              <span className="flex items-center gap-1 text-blue-600 font-semibold">
+                                <span>•</span>
+                                <span>✓ Vérifié: {new Date(search.lastCheckedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/ \./g, '.')}</span>
                               </span>
                             )}
                             {search.autoCheckEnabled && (
-                              <span className="text-green-600 font-semibold">
-                                • Toutes les {Math.floor((search.autoCheckIntervalSeconds || 300) / 60)} min
+                              <span className="flex items-center gap-1 text-green-600 font-semibold">
+                                <span>•</span>
+                                <span>Toutes les {Math.floor((search.autoCheckIntervalSeconds || 300) / 60)} min</span>
                               </span>
                             )}
                           </div>
@@ -2234,26 +2241,28 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                       </div>
                     )}
 
-                    {/* Badge statut disponibilité */}
-                    {favorite.isStillValid !== undefined && (
-                      <div className="absolute top-4 left-4 z-10">
-                        <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-md ${
-                          favorite.isStillValid 
-                            ? 'bg-green-500 text-white' 
-                            : 'bg-red-500 text-white'
-                        }`}>
-                          {favorite.isStillValid ? '✅ Disponible' : '❌ Indisponible'}
-                        </span>
-                      </div>
-                    )}
-
                     <div className="p-5">
                       {/* En-tête */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex-1 pr-4">
-                          <h3 className="text-2xl font-black text-slate-900 mb-2">
-                            {favorite.trip.destination_code} - {favorite.trip.aller.destinationFull.split(',')[0]}
-                          </h3>
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-2xl font-black text-slate-900">
+                              {favorite.trip.destination_code} - {favorite.trip.aller.destinationFull.split(',')[0]}
+                            </h3>
+                            {/* Badge statut disponibilité intégré */}
+                            {favorite.isStillValid !== undefined && (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                                favorite.isStillValid 
+                                  ? 'bg-green-100 text-green-700 border border-green-200' 
+                                  : 'bg-red-100 text-red-700 border border-red-200'
+                              }`}>
+                                <span className={`w-2 h-2 rounded-full ${
+                                  favorite.isStillValid ? 'bg-green-500' : 'bg-red-500'
+                                }`}></span>
+                                {favorite.isStillValid ? 'Disponible' : 'Indisponible'}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-slate-600 mb-1">
                             {favorite.trip.aller.destinationFull.split(',')[1]?.trim() || ''}
                           </p>

@@ -37,6 +37,9 @@ interface SimpleSearchProps {
   limiteAllers: number;
   onLimiteAllersChange: (value: number) => void;
   formatDateFr: (dateStr: string) => string;
+  budget?: number; // Budget initial depuis l'extérieur (pour charger une recherche sauvegardée)
+  onBudgetChange?: (budget: number) => void; // Callback pour mettre à jour le budget dans le parent
+  onSearchEventId?: (id: string) => void; // Callback pour stocker l'ID de l'événement de recherche
 }
 
 const springConfig = {
@@ -64,9 +67,11 @@ export function SimpleSearch({
   limiteAllers,
   onLimiteAllersChange,
   formatDateFr,
-  onSearchEventId
+  onSearchEventId,
+  budget: externalBudget,
+  onBudgetChange
 }: SimpleSearchProps) {
-  const [budget, setBudget] = useState(100);
+  const [budget, setBudget] = useState(externalBudget || 100);
   const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -78,6 +83,31 @@ export function SimpleSearch({
   const [showAirportError, setShowAirportError] = useState(false);
   const airportSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Synchroniser le budget externe avec l'état interne
+  useEffect(() => {
+    if (externalBudget !== undefined && externalBudget !== budget) {
+      setBudget(externalBudget);
+    }
+  }, [externalBudget, budget]);
+
+  // Détecter automatiquement quand des dates flexibles sont chargées depuis une recherche sauvegardée
+  useEffect(() => {
+    const hasLoadedDates = flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
+    if (hasLoadedDates && datePreset !== 'flexible') {
+      console.log('📅 Dates flexibles chargées détectées, activation automatique du mode flexible');
+      console.log('Dates départ:', flexibleDates.dates_depart);
+      console.log('Dates retour:', flexibleDates.dates_retour);
+      setDatePreset('flexible');
+      setShowAdvancedOptions(true);
+    }
+  }, [flexibleDates.dates_depart.length, flexibleDates.dates_retour.length, datePreset]);
+
+  // Mettre à jour le budget dans le parent quand il change
+  const handleBudgetChange = (newBudget: number) => {
+    setBudget(newBudget);
+    onBudgetChange?.(newBudget);
+  };
 
   const handleFlexibleClick = () => {
     setDatePreset('flexible');
@@ -288,7 +318,7 @@ export function SimpleSearch({
       transition={springConfig}
       className="max-w-2xl mx-auto bg-white shadow-xl rounded-2xl p-4 sm:p-6 md:p-8 lg:p-10"
     >
-      <BudgetSlider value={budget} onChange={setBudget} />
+      <BudgetSlider value={budget} onChange={handleBudgetChange} />
 
       <div ref={airportSectionRef} className="mb-6 sm:mb-8">
         <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
