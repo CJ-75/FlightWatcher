@@ -681,8 +681,8 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Menu utilisateur moderne - Fixe en haut à droite */}
-      <div className="fixed top-4 right-4 z-50">
+      {/* Menu utilisateur moderne - Aligné avec la fin de la carte max-w-7xl sur desktop */}
+      <div className="fixed top-4 right-4 sm:right-6 lg:right-[max(2rem,calc((100vw-1280px)/2+2rem))] z-50">
         <UserMenu />
       </div>
       

@@ -46,7 +46,7 @@ export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresets
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               transition={springConfig}
-              className={`rounded-full px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[44px] sm:min-h-[48px] flex items-center justify-center relative flex-1 sm:flex-none
+              className={`rounded-full px-2.5 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-[10px] sm:text-xs md:text-sm font-semibold cursor-pointer transition-all min-h-[40px] sm:min-h-[44px] md:min-h-[48px] flex items-center justify-center relative flex-1 sm:flex-none whitespace-nowrap
                 ${
                   isActive
                     ? preset.key === 'flexible'
@@ -59,13 +59,13 @@ export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresets
                 <motion.span
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-accent-500 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                  className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-accent-500 rounded-full flex items-center justify-center text-white text-[8px] sm:text-xs font-bold"
                 >
                   ✓
                 </motion.span>
               )}
-              <span className="mr-2">{preset.icon}</span>
-              {preset.label}
+              <span className="mr-1 sm:mr-2 text-xs sm:text-sm">{preset.icon}</span>
+              <span className="truncate">{preset.label}</span>
             </motion.button>
           );
         })}
