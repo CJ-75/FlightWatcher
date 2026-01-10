@@ -56,7 +56,7 @@ function Dashboard() {
   const [aeroportDepart, setAeroportDepart] = useState('')
   const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>([])
   const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>([])
-  const [budgetMax, setBudgetMax] = useState(200)
+  const [budgetMax, setBudgetMax] = useState(100)
   const [limiteAllers, setLimiteAllers] = useState(50)
   const [currentRequest, setCurrentRequest] = useState<ScanRequest | null>(null)
   const [destinationsExclues, setDestinationsExclues] = useState<string[]>([])
@@ -232,7 +232,7 @@ function Dashboard() {
     setAeroportDepart(req.aeroport_depart || 'BVA')
     setDatesDepart(req.dates_depart || [])
     setDatesRetour(req.dates_retour || [])
-    setBudgetMax(req.budget_max || 200)
+    setBudgetMax(req.budget_max || 100)
     setLimiteAllers(req.limite_allers || 50)
     setDestinationsExclues(req.destinations_exclues || [])
     setCurrentRequest(req)
@@ -273,7 +273,7 @@ function Dashboard() {
         setLastSearchInfo({
           datePreset: null, // On ne sait pas quel preset était utilisé
           airport: req.aeroport_depart || 'BVA',
-          budget: req.budget_max || 200,
+          budget: req.budget_max || 100,
           datesDepart: req.dates_depart || [],
           datesRetour: req.dates_retour || [],
           excludedDestinations: req.destinations_exclues || []
@@ -866,7 +866,7 @@ function Dashboard() {
                     <motion.button
                       onClick={() => {
                         // Utiliser le budget de la recherche si disponible, sinon le budget max actuel
-                        const budgetToUse = lastSearchInfo?.budget || budgetMax || 200
+                        const budgetToUse = lastSearchInfo?.budget || budgetMax || 100
                         setRouletteBudget(budgetToUse)
                         setShowRoulette(true)
                       }}

@@ -57,7 +57,7 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
         departure_airport: search.request.aeroport_depart || 'BVA',
         dates_depart: search.request.dates_depart,
         dates_retour: search.request.dates_retour,
-        budget_max: search.request.budget_max || 200,
+        budget_max: search.request.budget_max || 100,
         limite_allers: search.request.limite_allers || 50,
         destinations_exclues: search.request.destinations_exclues || [],
         destinations_incluses: search.request.destinations_incluses || null,
