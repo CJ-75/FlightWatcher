@@ -1935,29 +1935,29 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                   >
                     {/* Badge nouveau résultats */}
                     {newResultsCount > 0 && (
-                      <div className="absolute top-4 right-4 z-10">
+                      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10">
                         <motion.button
                           onClick={() => openLightbox(search.id)}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
-                          className="relative bg-gradient-to-r from-red-500 to-pink-500 text-white px-4 py-2 rounded-full font-bold text-sm shadow-lg hover:shadow-xl"
+                          className="relative bg-gradient-to-r from-red-500 to-pink-500 text-white px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm shadow-lg hover:shadow-xl min-h-[36px] sm:min-h-[40px] active:scale-95"
                         >
                           🆕 {newResultsCount} nouveau{newResultsCount > 1 ? 'x' : ''}
                         </motion.button>
                       </div>
                     )}
 
-                    <div className="p-5">
+                    <div className="p-3 sm:p-4 md:p-5">
                       {/* En-tête */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1 pr-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-xl font-black text-slate-900">{search.name}</h3>
+                      <div className="flex flex-col sm:flex-row items-start justify-between mb-3 sm:mb-4 gap-3 sm:gap-4">
+                        <div className="flex-1 w-full sm:w-auto sm:pr-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                            <h3 className="text-lg sm:text-xl font-black text-slate-900">{search.name}</h3>
                             {search.autoCheckEnabled && (
                               <motion.span
                                 animate={{ scale: [1, 1.05, 1] }}
                                 transition={{ duration: 2, repeat: Infinity }}
-                                className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold"
+                                className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold self-start sm:self-auto"
                               >
                                 <span>🔔</span>
                                 <span>Auto-vérif</span>
@@ -1966,20 +1966,20 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           </div>
                           
                           {/* Infos principales */}
-                          <div className="flex flex-wrap gap-4 text-sm mb-3">
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm mb-2 sm:mb-3">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
                               <span className="text-primary-500 font-bold">✈️</span>
                               <span className="text-slate-700 font-semibold">{search.request.aeroport_depart || 'BVA'}</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
                               <span className="text-indigo-500 font-bold">📅</span>
                               <span className="text-slate-700">{search.request.dates_depart.length} départ</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
                               <span className="text-blue-500 font-bold">🔙</span>
                               <span className="text-slate-700">{search.request.dates_retour.length} retour</span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
                               <span className="text-emerald-500 font-bold">💰</span>
                               <span className="text-slate-700 font-bold">{search.request.budget_max || 100}€</span>
                             </div>
@@ -2011,12 +2011,12 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                       </div>
 
                       {/* Actions principales */}
-                      <div className="flex flex-wrap gap-2 mb-3">
+                      <div className="flex flex-wrap gap-2 sm:gap-2 mb-3">
                         <motion.button
                           onClick={() => onLoadSearch(search)}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 text-sm font-semibold shadow-md flex items-center gap-2"
+                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                         >
                           <span>📂</span>
                           <span>Charger</span>
@@ -2030,7 +2030,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           disabled={loading}
                           whileHover={{ scale: loading ? 1 : 1.05 }}
                           whileTap={{ scale: loading ? 1 : 0.95 }}
-                          className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-sm font-semibold shadow-md flex items-center gap-2"
+                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                         >
                           <span>🔄</span>
                           <span>Relancer</span>
@@ -2061,20 +2061,21 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           }}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-md flex items-center gap-2 ${
+                          className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95 ${
                             search.autoCheckEnabled 
                               ? 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white' 
                               : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white'
                           }`}
                         >
                           <span>{search.autoCheckEnabled ? '⏸️' : '🔔'}</span>
-                          <span>Auto-vérif</span>
+                          <span className="hidden sm:inline">Auto-vérif</span>
+                          <span className="sm:hidden">Auto</span>
                         </motion.button>
                         <motion.button
                           onClick={() => toggleSearchExpanded(search.id)}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-sm font-semibold flex items-center gap-2"
+                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                         >
                           <span>{isExpanded ? '▼' : '▶'}</span>
                           <span>Détails</span>
@@ -2092,7 +2093,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           }}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-sm font-semibold shadow-md"
+                          className="px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-md min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-auto active:scale-95 flex items-center justify-center"
+                          title="Supprimer"
                         >
                           🗑️
                         </motion.button>
@@ -2205,7 +2207,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                                       }}
                                       whileHover={{ scale: 1.05 }}
                                       whileTap={{ scale: 0.95 }}
-                                      className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                                      className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold min-h-[44px] sm:min-h-[40px] active:scale-95 ${
                                         search.autoCheckEnabled 
                                           ? 'bg-red-500 hover:bg-red-600 text-white' 
                                           : 'bg-green-500 hover:bg-green-600 text-white'
@@ -2235,17 +2237,17 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl shadow-xl overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-pink-500 to-rose-600 p-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <h2 className="text-3xl font-black text-white flex items-center gap-3">
+        <div className="bg-gradient-to-r from-pink-500 to-rose-600 p-4 sm:p-5 md:p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2 sm:gap-3">
               <span>❤️</span>
               <span>Voyages favoris</span>
-              <span className="text-xl bg-white/20 px-3 py-1 rounded-full">
+              <span className="text-lg sm:text-xl bg-white/20 px-2 sm:px-3 py-1 rounded-full">
                 {favorites.length}
               </span>
             </h2>
             {/* Filtres pour les favoris */}
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap w-full sm:w-auto">
               <motion.button
                 onClick={async () => {
                   setFavoritesFilter('all')
@@ -2254,7 +2256,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md min-h-[44px] sm:min-h-[40px] active:scale-95 ${
                   favoritesFilter === 'all'
                     ? 'bg-white text-pink-600'
                     : 'bg-white/20 text-white hover:bg-white/30'
@@ -2270,7 +2272,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md min-h-[44px] sm:min-h-[40px] active:scale-95 ${
                   favoritesFilter === 'active'
                     ? 'bg-white text-pink-600'
                     : 'bg-white/20 text-white hover:bg-white/30'
@@ -2286,7 +2288,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md min-h-[44px] sm:min-h-[40px] active:scale-95 ${
                   favoritesFilter === 'archived'
                     ? 'bg-white text-pink-600'
                     : 'bg-white/20 text-white hover:bg-white/30'
@@ -2342,52 +2344,115 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                   >
                     {/* Badge archivé */}
                     {favorite.archived && (
-                      <div className="absolute top-4 right-4 z-10">
-                        <span className="px-3 py-1 bg-slate-500 text-white text-xs font-bold rounded-full shadow-md">
+                      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10">
+                        <span className="px-2 sm:px-3 py-1 bg-slate-500 text-white text-xs font-bold rounded-full shadow-md">
                           📦 Archivé
                         </span>
                       </div>
                     )}
 
-                    <div className="p-5">
-                      {/* En-tête */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1 pr-4">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-2xl font-black text-slate-900">
-                              {favorite.trip.destination_code} - {favorite.trip.aller.destinationFull.split(',')[0]}
-                            </h3>
-                            {/* Badge statut disponibilité intégré */}
-                            {favorite.isStillValid !== undefined && (
-                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                    <div className="p-4 sm:p-5 md:p-6">
+                      {/* En-tête avec meilleure hiérarchie */}
+                      <div className="flex flex-col sm:flex-row items-start justify-between mb-4 sm:mb-5 gap-4 sm:gap-5">
+                        <div className="flex-1 w-full sm:w-auto sm:pr-4">
+                          {/* Mobile: Layout avec statut et prix en haut à droite */}
+                          <div className="flex sm:block items-start justify-between gap-3 sm:gap-0">
+                            <div className="flex-1 sm:flex-none min-w-0">
+                              {/* Mobile: Première ligne avec statut et prix à droite */}
+                              <div className="flex sm:hidden items-start justify-between gap-2 mb-1.5">
+                                <div className="flex-1 min-w-0">
+                                  {/* Aéroport */}
+                                  <div className="text-base font-black text-slate-400 tracking-wider mb-0.5">
+                                    {favorite.trip.destination_code}
+                                  </div>
+                                  {/* Ville - Mobile: sous l'aéroport */}
+                                  <h3 className="text-lg font-black text-slate-900">
+                                    {favorite.trip.aller.destinationFull.split(',')[0]}
+                                  </h3>
+                                </div>
+                                {/* Mobile: Statut et Prix en haut à droite en colonne verticale */}
+                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                  {/* Badge statut disponibilité */}
+                                  {favorite.isStillValid !== undefined && (
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold ${
+                                      favorite.isStillValid 
+                                        ? 'bg-green-100 text-green-700 border border-green-300 shadow-sm' 
+                                        : 'bg-red-100 text-red-700 border border-red-300 shadow-sm'
+                                    }`}>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${
+                                        favorite.isStillValid ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                                      }`}></span>
+                                      {favorite.isStillValid ? 'Disponible' : 'Indisponible'}
+                                    </span>
+                                  )}
+                                  {/* Prix Total - Mobile */}
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-2xl font-black text-pink-600 leading-none">
+                                      {favorite.trip.prix_total.toFixed(0)}€
+                                    </span>
+                                    <span className="text-xs text-slate-500 font-medium">total</span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Desktop: Code aéroport - Ville sur une ligne */}
+                              <div className="hidden sm:flex items-baseline gap-2 mb-1.5">
+                                <span className="text-lg sm:text-xl font-black text-slate-400 tracking-wider">
+                                  {favorite.trip.destination_code}
+                                </span>
+                                <span className="text-slate-400">-</span>
+                                <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900">
+                                  {favorite.trip.aller.destinationFull.split(',')[0]}
+                                </h3>
+                              </div>
+                              
+                              {/* Pays */}
+                              <p className="text-sm sm:text-base text-slate-600 font-medium mb-2 sm:mb-0">
+                                {favorite.trip.aller.destinationFull.split(',')[1]?.trim() || ''}
+                              </p>
+                              
+                              {/* Desktop: Prix Total - mis en évidence (caché sur mobile) */}
+                              <div className="hidden sm:flex items-baseline gap-2 pt-3 border-t border-slate-200">
+                                <span className="text-3xl sm:text-4xl md:text-5xl font-black text-pink-600 leading-none">
+                                  {favorite.trip.prix_total.toFixed(0)}€
+                                </span>
+                                <span className="text-sm sm:text-base text-slate-500 font-medium">total</span>
+                              </div>
+
+                              {/* Métadonnées */}
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-slate-500 pt-1 sm:pt-2">
+                                <span className="flex items-center gap-1">
+                                  <span>💾</span>
+                                  <span>Sauvegardé le {new Date(favorite.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                                </span>
+                                {favorite.lastChecked && (
+                                  <span className="flex items-center gap-1">
+                                    <span>•</span>
+                                    <span>Vérifié le {new Date(favorite.lastChecked).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                          </div>
+
+                          {/* Desktop: Badge statut disponibilité */}
+                          {favorite.isStillValid !== undefined && (
+                            <div className="hidden sm:block mt-3">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${
                                 favorite.isStillValid 
-                                  ? 'bg-green-100 text-green-700 border border-green-200' 
-                                  : 'bg-red-100 text-red-700 border border-red-200'
+                                  ? 'bg-green-100 text-green-700 border-2 border-green-300 shadow-sm' 
+                                  : 'bg-red-100 text-red-700 border-2 border-red-300 shadow-sm'
                               }`}>
-                                <span className={`w-2 h-2 rounded-full ${
-                                  favorite.isStillValid ? 'bg-green-500' : 'bg-red-500'
+                                <span className={`w-2.5 h-2.5 rounded-full ${
+                                  favorite.isStillValid ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                                 }`}></span>
                                 {favorite.isStillValid ? 'Disponible' : 'Indisponible'}
                               </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-slate-600 mb-1">
-                            {favorite.trip.aller.destinationFull.split(',')[1]?.trim() || ''}
-                          </p>
-                          <div className="flex items-baseline gap-2 mt-2">
-                            <span className="text-3xl font-black text-pink-600">
-                              {favorite.trip.prix_total.toFixed(0)}€
-                            </span>
-                            <span className="text-sm text-slate-500 font-medium">total</span>
-                          </div>
-                          <div className="flex flex-wrap gap-3 text-xs text-slate-500 mt-3">
-                            <span>Sauvegardé le {new Date(favorite.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                            {favorite.lastChecked && (
-                              <span>• Vérifié le {new Date(favorite.lastChecked).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
                           <motion.button
                             onClick={async () => {
                               await onCheckFavorite(favorite)
@@ -2396,7 +2461,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             disabled={loading}
                             whileHover={{ scale: loading ? 1 : 1.05 }}
                             whileTap={{ scale: loading ? 1 : 0.95 }}
-                            className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 text-sm font-semibold shadow-md flex items-center gap-2"
+                            className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                           >
                             <span>🔍</span>
                             <span>Vérifier</span>
@@ -2408,7 +2473,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             }}
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold shadow-md flex items-center gap-2 ${
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95 ${
                               favorite.archived
                                 ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
                                 : 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700 text-white'
@@ -2416,7 +2481,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             title={favorite.archived ? 'Désarchiver' : 'Archiver'}
                           >
                             <span>{favorite.archived ? '📤' : '📦'}</span>
-                            <span>{favorite.archived ? 'Désarchiver' : 'Archiver'}</span>
+                            <span className="hidden sm:inline">{favorite.archived ? 'Désarchiver' : 'Archiver'}</span>
+                            <span className="sm:hidden">{favorite.archived ? 'Désarch.' : 'Archiver'}</span>
                           </motion.button>
                           <motion.button
                             onClick={() => {
@@ -2427,7 +2493,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             }}
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
-                            className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-sm font-semibold shadow-md"
+                            className="px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-md min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-auto active:scale-95 flex items-center justify-center"
+                            title="Supprimer"
                           >
                             🗑️
                           </motion.button>
@@ -2435,21 +2502,21 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                       </div>
 
                       {/* Détails des vols */}
-                      <div className="grid md:grid-cols-2 gap-4 mt-4">
+                      <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-5 pt-4 sm:pt-5 border-t-2 border-slate-200">
                         <motion.div
                           whileHover={{ scale: 1.02 }}
-                          className="bg-white rounded-xl p-4 border-2 border-green-200 shadow-md"
+                          className="bg-white rounded-xl p-3 sm:p-4 border-2 border-green-200 shadow-md"
                         >
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-sm font-black text-green-600 flex items-center gap-2">
+                          <div className="flex items-center justify-between mb-2 sm:mb-3">
+                            <div className="text-xs sm:text-sm font-black text-green-600 flex items-center gap-1.5 sm:gap-2">
                               <span>✈️</span>
                               <span>ALLER</span>
                             </div>
-                            <div className="text-xl font-black text-green-600">
+                            <div className="text-lg sm:text-xl font-black text-green-600">
                               {favorite.trip.aller.price.toFixed(0)}€
                             </div>
                           </div>
-                          <div className="space-y-2 text-sm">
+                          <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                             <div className="flex justify-between">
                               <span className="font-semibold text-slate-700">Date:</span>
                               <span className="text-slate-600">{formatDateFr(favorite.trip.aller.departureTime)}</span>
@@ -2470,18 +2537,18 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                         </motion.div>
                         <motion.div
                           whileHover={{ scale: 1.02 }}
-                          className="bg-white rounded-xl p-4 border-2 border-blue-200 shadow-md"
+                          className="bg-white rounded-xl p-3 sm:p-4 border-2 border-blue-200 shadow-md"
                         >
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="text-sm font-black text-blue-600 flex items-center gap-2">
+                          <div className="flex items-center justify-between mb-2 sm:mb-3">
+                            <div className="text-xs sm:text-sm font-black text-blue-600 flex items-center gap-1.5 sm:gap-2">
                               <span>🔙</span>
                               <span>RETOUR</span>
                             </div>
-                            <div className="text-xl font-black text-blue-600">
+                            <div className="text-lg sm:text-xl font-black text-blue-600">
                               {favorite.trip.retour.price.toFixed(0)}€
                             </div>
                           </div>
-                          <div className="space-y-2 text-sm">
+                          <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                             <div className="flex justify-between">
                               <span className="font-semibold text-slate-700">Date:</span>
                               <span className="text-slate-600">{formatDateFr(favorite.trip.retour.departureTime)}</span>
