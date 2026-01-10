@@ -482,17 +482,27 @@ function Dashboard() {
 
   const loadDestinations = async (airport?: string) => {
     const airportCode = airport || aeroportDepart
-    if (!airportCode) return
+    if (!airportCode) {
+      setError('Veuillez sélectionner un aéroport de départ avant de charger les destinations')
+      return
+    }
     
     setLoadingDestinations(true)
+    setError(null)
     try {
       const response = await fetch(`/api/destinations?airport=${airportCode}`)
-      if (!response.ok) throw new Error('Erreur lors du chargement')
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Erreur lors du chargement' }))
+        throw new Error(errorData.error || `Erreur ${response.status}: ${response.statusText}`)
+      }
       const data = await response.json()
       setDestinations(data.destinations || {})
+      if (!data.destinations || Object.keys(data.destinations).length === 0) {
+        setError('Aucune destination trouvée pour cet aéroport')
+      }
     } catch (err) {
       console.error('Erreur chargement destinations:', err)
-      // Ne pas afficher d'erreur bloquante, juste logger
+      setError(err instanceof Error ? err.message : 'Erreur lors du chargement des destinations')
     } finally {
       setLoadingDestinations(false)
     }
@@ -756,7 +766,7 @@ function Dashboard() {
               onExcludedDestinationsChange={setDestinationsExclues}
               destinations={destinations}
               loadingDestinations={loadingDestinations}
-              onLoadDestinations={() => loadDestinations(aeroportDepart)}
+              onLoadDestinations={() => loadDestinations()}
               limiteAllers={limiteAllers}
               onLimiteAllersChange={setLimiteAllers}
               formatDateFr={formatDateFr}

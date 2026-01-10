@@ -93,42 +93,70 @@ function generateDatesFromPreset(preset: DatePreset): { dates_depart: DateAvecHo
   } else if (preset === 'next-weekend') {
     // Weekend prochain : samedi et dimanche de la semaine suivante
     // Si on est vendredi (5), prendre vendredi de la semaine prochaine et dimanche de la semaine prochaine
+    // Si on est samedi (6) ou dimanche (7), prendre vendredi + samedi + dimanche de la semaine prochaine
     // Sinon, prendre samedi et dimanche de la semaine prochaine
-    let departureDate: Date;
-    let returnDate: Date;
     
     if (currentDay === 5) {
       // Vendredi : départ vendredi de la semaine prochaine, retour dimanche de la semaine prochaine
-      departureDate = new Date(today);
-      departureDate.setDate(today.getDate() + 7); // Vendredi de la semaine prochaine
+      const fridayDate = new Date(today);
+      fridayDate.setDate(today.getDate() + 7); // Vendredi de la semaine prochaine
       const daysUntilNextSunday = 14 - currentDay; // 7 (dimanche) + 7 jours = 14
-      returnDate = new Date(today);
-      returnDate.setDate(today.getDate() + daysUntilNextSunday);
+      const sundayDate = new Date(today);
+      sundayDate.setDate(today.getDate() + daysUntilNextSunday);
+      
+      dates_depart.push({
+        date: formatDateLocal(fridayDate),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      });
+      dates_retour.push({
+        date: formatDateLocal(sundayDate),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      });
+    } else if (currentDay === 6 || currentDay === 7) {
+      // Samedi ou dimanche : prendre vendredi de la semaine prochaine comme départ, dimanche comme retour
+      const daysUntilNextFriday = 12 - currentDay;   // 5 (vendredi) + 7 jours = 12
+      const daysUntilNextSunday = 14 - currentDay;    // 7 (dimanche) + 7 jours = 14
+      
+      const fridayDate = new Date(today);
+      fridayDate.setDate(today.getDate() + daysUntilNextFriday);
+      
+      const sundayDate = new Date(today);
+      sundayDate.setDate(today.getDate() + daysUntilNextSunday);
+      
+      dates_depart.push({
+        date: formatDateLocal(fridayDate),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      });
+      dates_retour.push({
+        date: formatDateLocal(sundayDate),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      });
     } else {
       // Autres jours : samedi et dimanche de la semaine prochaine
       const daysUntilNextSaturday = 13 - currentDay; // 6 (samedi) + 7 jours = 13
       const daysUntilNextSunday = 14 - currentDay;   // 7 (dimanche) + 7 jours = 14
       
-      departureDate = new Date(today);
-      departureDate.setDate(today.getDate() + daysUntilNextSaturday);
+      const saturdayDate = new Date(today);
+      saturdayDate.setDate(today.getDate() + daysUntilNextSaturday);
       
-      returnDate = new Date(today);
-      returnDate.setDate(today.getDate() + daysUntilNextSunday);
+      const sundayDate = new Date(today);
+      sundayDate.setDate(today.getDate() + daysUntilNextSunday);
+      
+      dates_depart.push({
+        date: formatDateLocal(saturdayDate),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      });
+      dates_retour.push({
+        date: formatDateLocal(sundayDate),
+        heure_min: '06:00',
+        heure_max: '23:59'
+      });
     }
-    
-    const departureStr = formatDateLocal(departureDate);
-    const returnStr = formatDateLocal(returnDate);
-    
-    dates_depart.push({
-      date: departureStr,
-      heure_min: '06:00',
-      heure_max: '23:59'
-    });
-    dates_retour.push({
-      date: returnStr,
-      heure_min: '06:00',
-      heure_max: '23:59'
-    });
   } else if (preset === 'next-week') {
     // 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
     // Lundi = jour 1, donc pour la semaine prochaine : 1 + 7 = 8

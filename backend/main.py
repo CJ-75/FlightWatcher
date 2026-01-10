@@ -354,22 +354,34 @@ def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[Date
     elif preset == 'next-weekend':
         # Weekend prochain : samedi et dimanche de la semaine suivante
         # Si on est vendredi (4), prendre vendredi de la semaine prochaine et dimanche de la semaine prochaine
+        # Si on est samedi (5) ou dimanche (6), prendre vendredi + samedi + dimanche de la semaine prochaine
         # Sinon, prendre samedi et dimanche de la semaine prochaine
         if current_day == 4:  # Vendredi (0=lundi, 4=vendredi)
             # Vendredi : départ vendredi de la semaine prochaine, retour dimanche de la semaine prochaine
             departure_date = today + timedelta(days=7)  # Vendredi de la semaine prochaine
-            days_until_next_sunday = 14 - current_day  # 6 (dimanche) + 7 jours = 13
+            days_until_next_sunday = 13 - current_day  # 6 (dimanche) + 7 jours = 13
             return_date = today + timedelta(days=days_until_next_sunday)
+            dates_depart.append(DateAvecHoraire(date=departure_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+            dates_retour.append(DateAvecHoraire(date=return_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+        elif current_day == 5 or current_day == 6:  # Samedi (5) ou dimanche (6)
+            # Samedi ou dimanche : prendre vendredi de la semaine prochaine comme départ, dimanche comme retour
+            days_until_next_friday = 11 - current_day   # 4 (vendredi) + 7 jours = 11
+            days_until_next_sunday = 13 - current_day    # 6 (dimanche) + 7 jours = 13
+            
+            friday_date = today + timedelta(days=days_until_next_friday)
+            sunday_date = today + timedelta(days=days_until_next_sunday)
+            
+            dates_depart.append(DateAvecHoraire(date=friday_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+            dates_retour.append(DateAvecHoraire(date=sunday_date.isoformat(), heure_min="06:00", heure_max="23:59"))
         else:
             # Autres jours : samedi et dimanche de la semaine prochaine
-            days_until_next_saturday = 13 - current_day  # 5 (samedi) + 7 jours = 12
-            days_until_next_sunday = 14 - current_day    # 6 (dimanche) + 7 jours = 13
+            days_until_next_saturday = 12 - current_day  # 5 (samedi) + 7 jours = 12
+            days_until_next_sunday = 13 - current_day    # 6 (dimanche) + 7 jours = 13
             
             departure_date = today + timedelta(days=days_until_next_saturday)
             return_date = today + timedelta(days=days_until_next_sunday)
-        
-        dates_depart.append(DateAvecHoraire(date=departure_date.isoformat(), heure_min="06:00", heure_max="23:59"))
-        dates_retour.append(DateAvecHoraire(date=return_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+            dates_depart.append(DateAvecHoraire(date=departure_date.isoformat(), heure_min="06:00", heure_max="23:59"))
+            dates_retour.append(DateAvecHoraire(date=return_date.isoformat(), heure_min="06:00", heure_max="23:59"))
         
     elif preset == 'next-week':
         # 3 jours la semaine prochaine (lundi-mercredi départ, jeudi-samedi retour)
