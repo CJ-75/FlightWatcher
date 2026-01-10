@@ -55,13 +55,35 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
         const rect = triggerRef.current.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        const calendarWidth = 320; // min-w-[320px]
+        const isMobile = viewportWidth < 640; // sm breakpoint
         const calendarHeight = 400; // estimation
         
         // getBoundingClientRect() donne les coordonnées relatives à la viewport
         // Comme le calendrier est en position: fixed, on utilise directement ces coordonnées
-        let left = rect.left;
+        let left: number;
         let top: number;
+        let calendarWidth: number;
+        
+        // LOGIQUE SÉPARÉE : Mobile vs Desktop
+        if (isMobile) {
+          // MOBILE : Centrer horizontalement (estimation initiale, sera recalculée après rendu)
+          calendarWidth = Math.min(viewportWidth * 0.95, 320);
+          left = (viewportWidth - calendarWidth) / 2;
+        } else {
+          // DESKTOP : Utiliser la largeur du trigger (le champ de date) pour le calendrier
+          calendarWidth = rect.width;
+          left = rect.left;
+          
+          // Ajuster si le calendrier dépasse à droite
+          if (left + calendarWidth > viewportWidth - 16) {
+            left = viewportWidth - calendarWidth - 16;
+          }
+          
+          // S'assurer que le calendrier ne dépasse pas à gauche
+          if (left < 16) {
+            left = 16;
+          }
+        }
         
         // Calculer l'espace disponible en bas et en haut (relatif à la viewport)
         const spaceBelow = viewportHeight - rect.bottom;
@@ -96,21 +118,52 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
           top = 16;
         }
         
-        // Ajuster si le calendrier dépasse à droite
-        if (left + calendarWidth > viewportWidth - 16) {
-          left = viewportWidth - calendarWidth - 16;
-        }
-        
-        // S'assurer que le calendrier ne dépasse pas à gauche
-        if (left < 16) {
-          left = 16;
-        }
-        
         setPosition({ top, left });
       };
       
       // Calculer la position immédiatement
       updatePosition();
+      
+      // Sur mobile, recalculer après un court délai pour obtenir la largeur réelle du calendrier
+      if (window.innerWidth < 640) {
+        const recalculateOnMobile = () => {
+          if (calendarRef.current && triggerRef.current) {
+            const actualWidth = calendarRef.current.offsetWidth;
+            const viewportWidth = window.innerWidth;
+            const rect = triggerRef.current.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const calendarHeight = 400;
+            
+            let top = position.top;
+            const spaceBelow = viewportHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            
+            if (spaceBelow >= calendarHeight + 8) {
+              top = rect.bottom + 8;
+            } else if (spaceAbove >= calendarHeight + 8) {
+              top = rect.top - calendarHeight - 8;
+            } else {
+              if (spaceAbove > spaceBelow) {
+                top = 16;
+              } else {
+                top = viewportHeight - calendarHeight - 16;
+              }
+            }
+            
+            if (top + calendarHeight > viewportHeight - 16) {
+              top = viewportHeight - calendarHeight - 16;
+            }
+            if (top < 16) {
+              top = 16;
+            }
+            
+            const left = (viewportWidth - actualWidth) / 2;
+            setPosition({ top, left });
+          }
+        };
+        
+        setTimeout(recalculateOnMobile, 50);
+      }
       
       // Réécouter les événements de scroll et resize pour recalculer la position
       window.addEventListener('scroll', updatePosition, true);
@@ -270,9 +323,10 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   position: 'fixed',
                   top: `${position.top}px`,
                   left: `${position.left}px`,
+                  width: window.innerWidth < 640 ? 'auto' : `${triggerRef.current?.offsetWidth || 320}px`,
                   zIndex: 9999
                 }}
-                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 p-3 sm:p-4 w-full min-w-[280px] sm:min-w-[320px] max-w-[95vw] sm:max-w-[400px]"
+                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 p-3 sm:p-4 min-w-[280px] sm:min-w-[320px] max-w-[95vw] sm:max-w-none"
               >
               {/* Header avec navigation */}
               <div className="flex items-center justify-between mb-4">
