@@ -74,6 +74,13 @@ npm install
 
 ### 1. Démarrer le backend
 
+**Option 1 - Script Python (recommandé, gestion propre de l'arrêt)** :
+```bash
+cd backend
+python run.py
+```
+
+**Option 2 - Commande uvicorn directe** :
 ```bash
 cd backend
 uvicorn main:app --reload --port 8000

@@ -5,7 +5,7 @@ echo ========================================
 echo.
 
 echo [1/2] Démarrage du backend...
-start cmd /k "cd backend && uvicorn main:app --reload --port 8000"
+start cmd /k "cd backend && python run.py"
 
 timeout /t 3 /nobreak >nul
 
