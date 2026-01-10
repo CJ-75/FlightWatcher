@@ -909,6 +909,8 @@ function Dashboard() {
             onReloadSearch={handleScan}
             formatDateFr={formatDateFr}
             onBook={(trip) => setBookingTrip(trip)}
+            setToastMessage={setToastMessage}
+            setToastType={setToastType}
           />
         )}
       </div>
@@ -953,7 +955,7 @@ function Dashboard() {
         type={toastType}
         isVisible={!!toastMessage}
         onClose={() => setToastMessage(null)}
-        duration={3000}
+        duration={toastType === 'info' ? 5000 : 3000}
       />
     </div>
   )
@@ -1606,9 +1608,11 @@ interface SavedTabProps {
   onReloadSearch: (request: ScanRequest) => void
   formatDateFr: (dateStr: string) => string
   onBook: (trip: TripResponse) => void
+  setToastMessage: (message: string | null) => void
+  setToastType: (type: 'success' | 'error' | 'info') => void
 }
 
-function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook }: SavedTabProps) {
+function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook, setToastMessage, setToastType }: SavedTabProps) {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
@@ -1661,30 +1665,11 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     refreshData()
   }, [])
 
-  // Fonction pour demander la permission de notification
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission()
-    }
-  }
-
-  // Fonction pour afficher une notification
-  const showNotification = (title: string, body: string, searchName: string, _newResults: TripResponse[]) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const notification = new Notification(title, {
-        body: body,
-        icon: '/favicon.ico',
-        tag: searchName,
-        requireInteraction: true
-      })
-      
-      notification.onclick = () => {
-        window.focus()
-        notification.close()
-      }
-    }
-    // Toujours afficher une alerte même si les notifications ne sont pas autorisées
-    alert(`🔔 ${title}\n\n${body}`)
+  // Fonction pour afficher une notification Toast dans le frontend
+  const showNotification = (_title: string, body: string, _searchName: string, _newResults: TripResponse[]) => {
+    // Afficher une notification Toast qui disparaît automatiquement après 5 secondes
+    setToastMessage(body)
+    setToastType('info')
   }
 
   // Fonction helper pour arrêter un auto-check
@@ -1760,9 +1745,9 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         // Sauvegarder les nouveaux résultats (résultats réels, pas de test)
         saveNewResults(search.id, search.name, data.new_results, false)
         
-        const message = `${data.new_results.length} nouveau(x) voyage(s) trouvé(s) pour "${search.name}"`
+        const message = `🆕 ${data.new_results.length} nouveau(x) voyage(s) trouvé(s) pour "${search.name}"`
         showNotification(
-          '🆕 Nouveaux vols disponibles',
+          'Nouveaux vols disponibles',
           message,
           search.name,
           data.new_results
@@ -2311,9 +2296,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                                   onClick={async () => {
                                     const newInterval = Math.max(900, intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 900)
                                     
-                                    await updateSearchAutoCheck(search.id, true, newInterval)
-                                    requestNotificationPermission()
-                                    startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: newInterval })
+                  await updateSearchAutoCheck(search.id, true, newInterval)
+                  startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: newInterval })
                                     
                                     setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
                                     await refreshData()

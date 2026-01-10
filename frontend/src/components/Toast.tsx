@@ -42,7 +42,7 @@ export function Toast({ message, type = 'success', isVisible, onClose, duration 
           className={`fixed top-4 right-4 z-50 ${bgColor} text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 min-w-[300px] max-w-[500px]`}
         >
           <span className="text-2xl">{icon}</span>
-          <span className="flex-1 font-medium">{message}</span>
+          <span className="flex-1 font-medium whitespace-pre-line">{message}</span>
           <button
             onClick={onClose}
             className="text-white hover:text-gray-200 text-xl font-bold"
