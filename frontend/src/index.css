@@ -47,5 +47,36 @@ input, textarea, select {
   input, textarea, select {
     font-size: inherit;
   }
+  
+  /* Bouton Google responsive - Desktop */
+  .google-signin-btn {
+    min-height: 48px !important;
+    padding: 12px 20px !important;
+    font-size: 16px !important;
+    gap: 12px !important;
+    width: auto !important;
+  }
+}
+
+/* Bouton Google responsive - Mobile */
+@media (max-width: 639px) {
+  .google-signin-btn {
+    width: auto !important;
+    max-width: 100% !important;
+  }
+  
+  .flex.flex-col.gap-2.w-auto {
+    width: auto !important;
+    max-width: 100% !important;
+  }
+  
+  .google-icon-wrapper {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  .google-signin-text {
+    font-size: 16px !important;
+  }
 }
 

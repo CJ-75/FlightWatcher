@@ -694,8 +694,8 @@ function Dashboard() {
                 Trouve ton weekend pas cher
               </p>
             </div>
-            <div className="flex-1 flex justify-end order-3 w-full sm:w-auto">
-              <div className="w-full sm:w-auto">
+            <div className="flex-1 flex justify-center sm:justify-end order-3 w-full sm:w-auto px-2 sm:px-0">
+              <div className="w-auto sm:w-auto">
                 <Auth />
               </div>
             </div>
