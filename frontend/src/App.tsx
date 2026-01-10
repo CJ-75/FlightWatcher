@@ -22,6 +22,7 @@ import { Calendar } from './components/Calendar'
 import { SaveSearchModal } from './components/SaveSearchModal'
 import { Toast } from './components/Toast'
 import { motion } from 'framer-motion'
+import { getSessionId } from './utils/session'
 
 type Tab = 'search' | 'saved'
 
@@ -907,6 +908,7 @@ function Dashboard() {
             onCheckFavorite={handleCheckFavorite}
             onReloadSearch={handleScan}
             formatDateFr={formatDateFr}
+            onBook={(trip) => setBookingTrip(trip)}
           />
         )}
       </div>
@@ -1603,9 +1605,10 @@ interface SavedTabProps {
   onCheckFavorite: (favorite: SavedFavorite) => void
   onReloadSearch: (request: ScanRequest) => void
   formatDateFr: (dateStr: string) => string
+  onBook: (trip: TripResponse) => void
 }
 
-function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr }: SavedTabProps) {
+function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook }: SavedTabProps) {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
@@ -1626,6 +1629,31 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     } catch (error) {
       console.error('Erreur refreshData:', error)
     }
+  }
+
+  // Fonction pour construire l'URL Ryanair à partir d'un favori
+  const buildRyanairUrl = (favorite: SavedFavorite): string => {
+    const baseUrl = 'https://www.ryanair.com'
+    const origin = favorite.trip.aller.origin
+    const destination = favorite.trip.aller.destination
+    const departureDate = favorite.trip.aller.departureTime.split('T')[0] // Format YYYY-MM-DD
+    const returnDate = favorite.trip.retour.departureTime.split('T')[0]
+    
+    return `${baseUrl}/fr/fr/trip/flights/select?adults=1&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`
+  }
+
+  // Fonction pour ouvrir BookingSas avec le favori (comme dans les résultats de recherche)
+  const handleBookFavorite = (favorite: SavedFavorite) => {
+    // Convertir TripResponse en EnrichedTripResponse pour BookingSas
+    const enrichedTrip: EnrichedTripResponse = {
+      ...favorite.trip,
+      discount_percent: undefined,
+      is_good_deal: undefined,
+      image_url: undefined,
+      avg_price_last_month: undefined
+    }
+    // Ouvrir la modal BookingSas (comme dans les résultats de recherche)
+    onBook(enrichedTrip)
   }
 
   // Charger les données au montage
@@ -2467,17 +2495,13 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                         </div>
                         <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
                           <motion.button
-                            onClick={async () => {
-                              await onCheckFavorite(favorite)
-                              refreshData()
-                            }}
-                            disabled={loading}
-                            whileHover={{ scale: loading ? 1 : 1.05 }}
-                            whileTap={{ scale: loading ? 1 : 0.95 }}
-                            className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
+                            onClick={() => handleBookFavorite(favorite)}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                           >
-                            <span>🔍</span>
-                            <span>Vérifier</span>
+                            <span>✈️</span>
+                            <span>Réserver</span>
                           </motion.button>
                           <motion.button
                             onClick={() => {
