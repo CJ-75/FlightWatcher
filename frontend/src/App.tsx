@@ -691,11 +691,6 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Menu utilisateur moderne - Aligné avec la fin de la carte max-w-7xl sur desktop */}
-      <div className="fixed top-4 right-4 sm:right-6 lg:right-[max(2rem,calc((100vw-1280px)/2+2rem))] z-50">
-        <UserMenu />
-      </div>
-      
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
         {/* Header */}
         <header className="text-center mb-4 sm:mb-6 md:mb-8">
@@ -709,9 +704,13 @@ function Dashboard() {
                 Trouve ton weekend pas cher
               </p>
             </div>
-            {/* Espace pour le menu utilisateur - Desktop */}
+            {/* Menu utilisateur - Desktop */}
             <div className="hidden sm:flex flex-1 justify-end order-3 w-auto">
-              <div className="w-12 h-12"></div>
+              <UserMenu />
+            </div>
+            {/* Menu utilisateur - Mobile */}
+            <div className="sm:hidden order-3">
+              <UserMenu />
             </div>
           </div>
         </header>
