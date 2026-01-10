@@ -11,7 +11,7 @@ import {
 } from './utils/storage'
 import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
-import Auth from './components/Auth'
+import { UserMenu } from './components/UserMenu'
 import { getCurrentUser } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DestinationCard } from './components/DestinationCard'
@@ -681,6 +681,11 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Menu utilisateur moderne - Fixe en haut à droite */}
+      <div className="fixed top-4 right-4 z-50">
+        <UserMenu />
+      </div>
+      
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
         {/* Header */}
         <header className="text-center mb-4 sm:mb-6 md:mb-8">
@@ -694,10 +699,9 @@ function Dashboard() {
                 Trouve ton weekend pas cher
               </p>
             </div>
-            <div className="flex-1 flex justify-center sm:justify-end order-3 w-full sm:w-auto px-2 sm:px-0">
-              <div className="w-auto sm:w-auto">
-                <Auth />
-              </div>
+            {/* Espace pour le menu utilisateur - Desktop */}
+            <div className="hidden sm:flex flex-1 justify-end order-3 w-auto">
+              <div className="w-12 h-12"></div>
             </div>
           </div>
         </header>
