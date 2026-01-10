@@ -1687,6 +1687,54 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     alert(`🔔 ${title}\n\n${body}`)
   }
 
+  // Fonction helper pour arrêter un auto-check
+  const stopAutoCheck = (searchId: string) => {
+    if (intervalsRef.current[searchId]) {
+      clearInterval(intervalsRef.current[searchId])
+      delete intervalsRef.current[searchId]
+      console.log(`🛑 Auto-check arrêté pour la recherche ${searchId}`)
+    }
+  }
+
+  // Fonction helper pour démarrer un auto-check (nettoie toujours avant de créer)
+  const startAutoCheck = (search: SavedSearch) => {
+    // Toujours nettoyer avant de créer un nouvel interval pour éviter les doublons
+    stopAutoCheck(search.id)
+    
+    const interval = search.autoCheckIntervalSeconds || 300
+    
+    // Effectuer une vérification immédiate
+    performAutoCheck(search)
+    
+    // Créer l'interval pour les vérifications périodiques
+    intervalsRef.current[search.id] = setInterval(async () => {
+      const updatedSearches = await getSavedSearches()
+      const updatedSearch = updatedSearches.find(s => s.id === search.id)
+      if (updatedSearch && updatedSearch.autoCheckEnabled) {
+        performAutoCheck(updatedSearch)
+      } else {
+        // Si la recherche n'est plus activée, nettoyer l'interval
+        stopAutoCheck(search.id)
+      }
+    }, interval * 1000)
+    
+    console.log(`✅ Auto-check démarré pour la recherche ${search.id} (intervalle: ${interval}s)`)
+  }
+
+  // Fonction pour nettoyer les intervalles orphelins (recherches désactivées ou supprimées)
+  const cleanupOrphanedIntervals = async () => {
+    const searches = await getSavedSearches()
+    const activeSearchIds = new Set(searches.filter(s => s.autoCheckEnabled).map(s => s.id))
+    
+    // Nettoyer les intervalles pour les recherches qui ne sont plus actives
+    Object.keys(intervalsRef.current).forEach(searchId => {
+      if (!activeSearchIds.has(searchId)) {
+        console.log(`🧹 Nettoyage interval orphelin pour la recherche ${searchId}`)
+        stopAutoCheck(searchId)
+      }
+    })
+  }
+
   // Fonction pour effectuer une vérification automatique
   const performAutoCheck = async (search: SavedSearch) => {
     try {
@@ -1732,20 +1780,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     const initAutoChecks = async () => {
       const activeSearches = await getActiveAutoChecks()
       activeSearches.forEach(search => {
-        if (!intervalsRef.current[search.id]) {
-          const interval = search.autoCheckIntervalSeconds || 300
-          // Effectuer une vérification immédiate
-          performAutoCheck(search)
-          
-          // Puis programmer les vérifications périodiques
-          intervalsRef.current[search.id] = setInterval(async () => {
-            const updatedSearches = await getSavedSearches()
-            const updatedSearch = updatedSearches.find(s => s.id === search.id)
-            if (updatedSearch && updatedSearch.autoCheckEnabled) {
-              performAutoCheck(updatedSearch)
-            }
-          }, interval * 1000)
-        }
+        // Utiliser startAutoCheck qui nettoie toujours avant de créer
+        startAutoCheck(search)
       })
     }
     
@@ -1754,9 +1790,16 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     // Cleanup au démontage
     return () => {
       Object.values(intervalsRef.current).forEach(interval => clearInterval(interval))
+      intervalsRef.current = {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Surveiller les recherches pour nettoyer les intervalles orphelins
+  useEffect(() => {
+    cleanupOrphanedIntervals()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedSearches])
 
   // Obtenir le nombre de nouveaux résultats pour chaque recherche
   const getNewResultsCount = (searchId: string): number => {
@@ -2064,7 +2107,14 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                         </motion.button>
                         <motion.button
                           onClick={async () => {
-                            onReloadSearch(search.request)
+                            // D'abord charger les paramètres dans le formulaire (comme "Charger")
+                            // Cela charge les paramètres et passe à l'onglet recherche
+                            await onLoadSearch(search)
+                            // Puis relancer la recherche avec les nouveaux résultats
+                            // Le délai permet de s'assurer que le chargement est terminé
+                            setTimeout(() => {
+                              onReloadSearch(search.request)
+                            }, 200)
                             await updateSearchLastUsed(search.id)
                             await refreshData()
                           }}
@@ -2080,23 +2130,15 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           onClick={async () => {
                             const isEnabled = search.autoCheckEnabled || false
                             if (isEnabled) {
-                              if (intervalsRef.current[search.id]) {
-                                clearInterval(intervalsRef.current[search.id])
-                                delete intervalsRef.current[search.id]
-                              }
+                              // Désactiver l'auto-check
+                              stopAutoCheck(search.id)
                               await updateSearchAutoCheck(search.id, false)
                             } else {
+                              // Activer l'auto-check
                               requestNotificationPermission()
                               const interval = search.autoCheckIntervalSeconds || 300
                               await updateSearchAutoCheck(search.id, true, interval)
-                              performAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
-                              intervalsRef.current[search.id] = setInterval(async () => {
-                                const updatedSearches = await getSavedSearches()
-                                const updatedSearch = updatedSearches.find(s => s.id === search.id)
-                                if (updatedSearch && updatedSearch.autoCheckEnabled) {
-                                  performAutoCheck(updatedSearch)
-                                }
-                              }, interval * 1000)
+                              startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
                             }
                             await refreshData()
                           }}
@@ -2124,10 +2166,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                         <motion.button
                           onClick={() => {
                             if (confirm('Supprimer cette recherche ?')) {
-                              if (intervalsRef.current[search.id]) {
-                                clearInterval(intervalsRef.current[search.id])
-                                delete intervalsRef.current[search.id]
-                              }
+                              // Nettoyer l'interval avant de supprimer
+                              stopAutoCheck(search.id)
                               deleteSearch(search.id)
                               refreshData()
                             }
@@ -2224,25 +2264,19 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                                     <motion.button
                                       onClick={async () => {
                                         const newInterval = intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300
-                                        await updateSearchAutoCheck(search.id, !search.autoCheckEnabled, newInterval)
+                                        const willBeEnabled = !search.autoCheckEnabled
                                         
-                                        if (search.autoCheckEnabled) {
-                                          if (intervalsRef.current[search.id]) {
-                                            clearInterval(intervalsRef.current[search.id])
-                                            delete intervalsRef.current[search.id]
-                                          }
-                                        } else {
+                                        await updateSearchAutoCheck(search.id, willBeEnabled, newInterval)
+                                        
+                                        if (willBeEnabled) {
+                                          // Activer l'auto-check avec le nouvel intervalle
                                           requestNotificationPermission()
-                                          const interval = newInterval
-                                          performAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
-                                          intervalsRef.current[search.id] = setInterval(async () => {
-                                            const updatedSearches = await getSavedSearches()
-                                            const updatedSearch = updatedSearches.find(s => s.id === search.id)
-                                            if (updatedSearch && updatedSearch.autoCheckEnabled) {
-                                              performAutoCheck(updatedSearch)
-                                            }
-                                          }, interval * 1000)
+                                          startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: newInterval })
+                                        } else {
+                                          // Désactiver l'auto-check
+                                          stopAutoCheck(search.id)
                                         }
+                                        
                                         setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
                                         await refreshData()
                                       }}
