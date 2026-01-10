@@ -716,7 +716,7 @@ function Dashboard() {
         </header>
 
         {/* Onglets */}
-        <div className="max-w-5xl mx-auto mb-4 sm:mb-6">
+        <div className={`${activeTab === 'search' ? 'max-w-2xl' : 'max-w-5xl'} mx-auto mb-4 sm:mb-6 transition-all duration-300`}>
           <div className="flex border-b border-gray-200">
             <motion.button
               onClick={() => setActiveTab('search')}
