@@ -204,7 +204,7 @@ export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithT
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={springConfig}
-              className="p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200 shadow-sm"
+              className="p-3 sm:p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex-1">

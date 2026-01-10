@@ -62,10 +62,10 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      className="rounded-2xl overflow-hidden bg-white shadow-xl max-w-sm w-full"
+      className="rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-lg sm:shadow-xl max-w-sm w-full mx-auto"
     >
       {/* Image Hero */}
-      <div className="relative w-full h-48 sm:h-56 md:h-64">
+      <div className="relative w-full h-40 sm:h-48 md:h-56 lg:h-64">
         {!imageLoaded && (
           <div className="absolute inset-0 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] animate-[shimmer_2s_infinite]" />
         )}
@@ -94,7 +94,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
           }}
           whileHover={{ scale: 1.2 }}
           whileTap={{ scale: 0.9 }}
-          className={`absolute top-4 right-4 text-4xl cursor-pointer hover:drop-shadow-lg transition-all ${
+          className={`absolute top-3 right-3 sm:top-4 sm:right-4 text-3xl sm:text-4xl cursor-pointer hover:drop-shadow-lg transition-all min-w-[44px] min-h-[44px] flex items-center justify-center ${
             isFavorite ? 'text-red-500' : 'text-white/80 hover:text-red-400'
           }`}
           aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
@@ -103,11 +103,11 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
         </motion.button>
 
         {/* Contenu overlay sur image */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 md:p-6">
-          <h3 className="text-2xl sm:text-3xl font-black text-white mb-1 sm:mb-2">
+        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 md:p-5 lg:p-6">
+          <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-white mb-1 sm:mb-2">
             {cityName}
           </h3>
-          <p className="text-base sm:text-lg text-white/90 font-medium">
+          <p className="text-sm sm:text-base md:text-lg text-white/90 font-medium">
             {trip.aller.destinationFull.split(',')[1]?.trim() || ''}
           </p>
         </div>
@@ -116,7 +116,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
       {/* Section prix */}
       <div className="p-4 sm:p-5 md:p-6 bg-white">
         <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-          <span className="text-4xl sm:text-5xl font-black text-primary-500">
+          <span className="text-3xl sm:text-4xl md:text-5xl font-black text-primary-500">
             {trip.prix_total.toFixed(0)}€
           </span>
           {trip.discount_percent && trip.discount_percent > 20 && (
@@ -166,7 +166,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             transition={springConfig}
-            className="w-full bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 sm:py-4 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl min-h-[48px] text-sm sm:text-base"
+            className="w-full bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 sm:py-4 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl active:scale-95 min-h-[48px] sm:min-h-[52px] text-sm sm:text-base"
           >
             ✈️ Réserver
           </motion.button>

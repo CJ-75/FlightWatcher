@@ -46,7 +46,7 @@ export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresets
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               transition={springConfig}
-              className={`rounded-full px-4 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[44px] flex items-center justify-center relative
+              className={`rounded-full px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[44px] sm:min-h-[48px] flex items-center justify-center relative flex-1 sm:flex-none
                 ${
                   isActive
                     ? preset.key === 'flexible'

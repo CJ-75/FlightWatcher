@@ -46,7 +46,7 @@ export function LoadingMessages({ isVisible, interval = 3000 }: LoadingMessagesP
           transition={{ duration: 0.3 }}
           className="text-center"
         >
-          <p className="text-base sm:text-lg font-semibold text-slate-600">
+          <p className="text-sm sm:text-base md:text-lg font-semibold text-slate-600 px-2">
             {loadingMessages[currentIndex]}
           </p>
         </motion.div>

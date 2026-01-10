@@ -683,19 +683,21 @@ function Dashboard() {
     <div className="min-h-screen bg-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
         {/* Header */}
-        <header className="text-center mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex-1"></div>
-            <div className="flex-1 text-center">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 mb-2">
+        <header className="text-center mb-4 sm:mb-6 md:mb-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 mb-4">
+            <div className="flex-1 order-2 sm:order-1 hidden sm:block"></div>
+            <div className="flex-1 text-center order-1 sm:order-2">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 mb-1 sm:mb-2">
                 ✈️ FlightWatcher
               </h1>
-              <p className="text-base sm:text-lg text-slate-600 font-medium">
+              <p className="text-sm sm:text-base md:text-lg text-slate-600 font-medium">
                 Trouve ton weekend pas cher
               </p>
             </div>
-            <div className="flex-1 flex justify-end">
-              <Auth />
+            <div className="flex-1 flex justify-end order-3 w-full sm:w-auto">
+              <div className="w-full sm:w-auto">
+                <Auth />
+              </div>
             </div>
           </div>
         </header>
@@ -707,7 +709,7 @@ function Dashboard() {
               onClick={() => setActiveTab('search')}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`px-4 sm:px-6 py-2 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[44px] flex items-center ${
+              className={`flex-1 sm:flex-none px-4 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
                 activeTab === 'search'
                   ? 'text-primary-500 border-b-2 border-primary-500'
                   : 'text-gray-600 hover:text-gray-800'
@@ -719,7 +721,7 @@ function Dashboard() {
               onClick={() => setActiveTab('saved')}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`px-4 sm:px-6 py-2 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[44px] flex items-center ${
+              className={`flex-1 sm:flex-none px-4 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
                 activeTab === 'saved'
                   ? 'text-primary-500 border-b-2 border-primary-500'
                   : 'text-gray-600 hover:text-gray-800'
@@ -835,16 +837,16 @@ function Dashboard() {
                   </motion.div>
                 )}
                 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-4 sm:px-0">
-                  <h2 className="text-3xl sm:text-4xl font-black text-slate-900">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-2 sm:px-0">
+                  <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
                     🎯 Destinations trouvées
                   </h2>
-                  <div className="flex gap-3 w-full sm:w-auto">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                     <motion.button
                       onClick={handleSaveSearch}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="bg-indigo-600 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-indigo-700 transition-all min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none flex items-center justify-center gap-2"
+                      className="bg-indigo-600 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-indigo-700 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none flex items-center justify-center gap-2 active:scale-95"
                     >
                       💾 Sauvegarder
                     </motion.button>
@@ -857,13 +859,13 @@ function Dashboard() {
                       }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="bg-accent-500 text-white rounded-full px-5 sm:px-6 py-3 font-bold hover:bg-accent-600 transition-all min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none"
+                      className="bg-accent-500 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-accent-600 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none active:scale-95"
                     >
                       🎰 Mode Roulette
                     </motion.button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-4 sm:px-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 px-2 sm:px-0">
                   {simpleResults.map((trip, index) => (
                     <motion.div
                       key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
@@ -1088,19 +1090,19 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
         }}
         onKeyDown={handleKeyDown}
         placeholder="Rechercher un aéroport (code, nom, ville ou pays)..."
-        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300"
+        className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px]"
       />
       {showDropdown && filteredAirports.length > 0 && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+          className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 sm:max-h-80 overflow-y-auto"
         >
           {filteredAirports.map((airport, index) => (
             <button
               key={`${airport.code}-${index}-${airport.city}`}
               type="button"
               onClick={() => handleSelectAirport(airport)}
-              className={`w-full text-left px-4 py-2 hover:bg-primary-50 transition-colors ${
+              className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-primary-50 transition-colors min-h-[56px] sm:min-h-[60px] active:bg-primary-100 ${
                 selectedAirport?.code === airport.code ? 'bg-primary-100' : ''
               }`}
             >
@@ -1109,7 +1111,7 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
                   <span className="font-bold text-primary-500 min-w-[3rem]">{airport.code}</span>
                   <span className="font-semibold text-gray-800">{airport.name}</span>
                 </div>
-                <div className="flex items-center gap-2 ml-14 text-sm">
+                <div className="flex items-center gap-2 ml-0 sm:ml-14 text-xs sm:text-sm mt-1 sm:mt-0">
                   <span className="text-gray-600">{airport.city}</span>
                   <span className="text-gray-500">({airport.country})</span>
                 </div>

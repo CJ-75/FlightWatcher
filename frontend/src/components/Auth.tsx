@@ -193,14 +193,14 @@ export default function Auth() {
 
   if (user) {
     return (
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           {migrationStatus && (
             <div className="px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded-lg border border-green-200 animate-pulse">
               {migrationStatus}
             </div>
           )}
-          <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2 sm:gap-3 bg-white border border-gray-200 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 shadow-sm hover:shadow-md transition-shadow">
             {/* Avatar Google - utiliser user_metadata en priorité, puis user_profiles comme fallback */}
             {(user.user_metadata?.avatar_url || userProfile?.avatar_url) ? (
               <img 
@@ -233,7 +233,7 @@ export default function Auth() {
             <button
               onClick={handleSignOut}
               disabled={loading}
-              className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap"
+              className="px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors whitespace-nowrap min-h-[36px] sm:min-h-[40px]"
               title="Se déconnecter"
             >
               {loading ? '...' : 'Déconnexion'}
@@ -245,11 +245,11 @@ export default function Auth() {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 w-full sm:w-auto">
       <button
         onClick={handleSignIn}
         disabled={loading}
-        className="group relative px-5 py-2.5 bg-white border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-3 font-medium text-gray-700 hover:text-gray-900"
+        className="group relative px-4 sm:px-5 py-2.5 sm:py-3 bg-white border-2 border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 font-medium text-gray-700 hover:text-gray-900 min-h-[44px] text-sm sm:text-base"
       >
         <div className="flex items-center justify-center w-5 h-5">
           <svg className="w-5 h-5" viewBox="0 0 24 24">

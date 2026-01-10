@@ -135,7 +135,7 @@ export function FlexibleDatesSelector({
             onClick={clearAllDates}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-sm sm:text-base font-semibold hover:bg-red-200 transition-colors flex items-center gap-2"
+            className="px-3 sm:px-4 py-2 sm:py-2.5 bg-red-100 text-red-700 rounded-xl text-xs sm:text-sm md:text-base font-semibold hover:bg-red-200 transition-colors flex items-center justify-center gap-2 min-h-[44px] active:scale-95"
           >
             <span>🗑️</span>
             <span>Effacer toutes les dates ({totalDates})</span>
@@ -152,7 +152,7 @@ export function FlexibleDatesSelector({
           }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm sm:text-base transition-all ${
+          className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm md:text-base transition-all min-h-[48px] sm:min-h-[52px] active:scale-95 ${
             selectedDateType === 'depart'
               ? 'bg-primary-500 text-white shadow-lg'
               : 'bg-slate-100 text-slate-700 hover:bg-primary-100'
@@ -217,7 +217,7 @@ export function FlexibleDatesSelector({
                 key={date.date}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200 shadow-sm"
+                className="p-3 sm:p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1">
@@ -230,7 +230,7 @@ export function FlexibleDatesSelector({
                     onClick={() => removeDate('depart', date.date)}
                     whileHover={{ scale: 1.1, rotate: 90 }}
                     whileTap={{ scale: 0.9 }}
-                    className="w-8 h-8 flex items-center justify-center bg-red-500 text-white rounded-full text-lg font-bold hover:bg-red-600 shadow-md"
+                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-red-500 text-white rounded-full text-lg sm:text-xl font-bold hover:bg-red-600 shadow-md active:scale-90 min-w-[44px] min-h-[44px]"
                   >
                     ×
                   </motion.button>
@@ -271,7 +271,7 @@ export function FlexibleDatesSelector({
                     onClick={() => removeDate('retour', date.date)}
                     whileHover={{ scale: 1.1, rotate: 90 }}
                     whileTap={{ scale: 0.9 }}
-                    className="w-8 h-8 flex items-center justify-center bg-red-500 text-white rounded-full text-lg font-bold hover:bg-red-600 shadow-md"
+                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-red-500 text-white rounded-full text-lg sm:text-xl font-bold hover:bg-red-600 shadow-md active:scale-90 min-w-[44px] min-h-[44px]"
                   >
                     ×
                   </motion.button>

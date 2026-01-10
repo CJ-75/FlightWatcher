@@ -22,5 +22,30 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Optimisations pour mobile */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Améliorer les zones tactiles sur mobile */
+button, a, input[type="button"], input[type="submit"] {
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  touch-action: manipulation;
+}
+
+/* Améliorer le scroll sur mobile */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Optimiser les inputs sur mobile */
+input, textarea, select {
+  font-size: 16px; /* Évite le zoom automatique sur iOS */
+}
+
+@media (min-width: 640px) {
+  input, textarea, select {
+    font-size: inherit;
+  }
 }
 

@@ -113,7 +113,7 @@ export function AdvancedOptions({
         onClick={() => setIsOpen(!isOpen)}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        className="w-full flex items-center justify-between text-left p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
+        className="w-full flex items-center justify-between text-left p-3 sm:p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors min-h-[48px] active:scale-95"
       >
         <span className="text-base sm:text-lg font-bold text-slate-900">
           ⚙️ Options avancées
@@ -159,7 +159,7 @@ export function AdvancedOptions({
                       disabled={loadingDestinations}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="px-3 py-1 bg-primary-500 text-white rounded-full text-xs sm:text-sm font-semibold disabled:opacity-50"
+                      className="px-3 py-1.5 sm:py-2 bg-primary-500 text-white rounded-full text-xs sm:text-sm font-semibold disabled:opacity-50 min-h-[36px] sm:min-h-[40px] active:scale-95"
                     >
                       {loadingDestinations ? 'Chargement...' : 'Charger destinations'}
                     </motion.button>
@@ -176,7 +176,7 @@ export function AdvancedOptions({
                           onClick={() => toggleDestination(code)}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs sm:text-sm font-semibold hover:bg-red-200"
+                          className="px-3 py-1.5 sm:py-2 bg-red-100 text-red-700 rounded-full text-xs sm:text-sm font-semibold hover:bg-red-200 min-h-[36px] sm:min-h-[40px] active:scale-95"
                         >
                           {dest?.nom || code} ×
                         </motion.button>
@@ -191,7 +191,7 @@ export function AdvancedOptions({
                       onClick={() => setShowDestinations(!showDestinations)}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
-                      className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-200"
+                      className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs sm:text-sm font-semibold hover:bg-slate-200 min-h-[44px] active:scale-95"
                     >
                       {showDestinations ? '▼ Masquer' : '▶ Afficher toutes les destinations'}
                     </motion.button>
@@ -200,7 +200,7 @@ export function AdvancedOptions({
                         onClick={() => onExcludedDestinationsChange([])}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs sm:text-sm font-semibold hover:bg-red-200 flex items-center gap-1"
+                        className="px-3 sm:px-4 py-2 sm:py-2.5 bg-red-100 text-red-700 rounded-xl text-xs sm:text-sm font-semibold hover:bg-red-200 flex items-center justify-center gap-1 min-h-[44px] active:scale-95"
                         title="Effacer toutes les sélections"
                       >
                         🗑️ Effacer
@@ -227,7 +227,7 @@ export function AdvancedOptions({
                                 onClick={() => toggleDestination(dest.code)}
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
-                                className={`px-2 py-1 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                                className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors min-h-[36px] sm:min-h-[40px] active:scale-95 ${
                                   excludedDestinations.includes(dest.code)
                                     ? 'bg-red-500 text-white'
                                     : 'bg-slate-200 text-slate-700 hover:bg-slate-300'

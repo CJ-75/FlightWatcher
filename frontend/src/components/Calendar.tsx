@@ -235,7 +235,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
           }}
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.99 }}
-          className="w-full px-5 py-4 bg-white rounded-xl border-2 border-slate-300 text-left font-bold text-base sm:text-lg text-slate-900 hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-200 transition-all flex items-center justify-between shadow-sm"
+          className="w-full px-3 sm:px-4 md:px-5 py-3 sm:py-4 bg-white rounded-xl border-2 border-slate-300 text-left font-bold text-sm sm:text-base md:text-lg text-slate-900 hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-200 transition-all flex items-center justify-between shadow-sm min-h-[48px] sm:min-h-[52px] active:scale-95"
         >
           <span className={value ? 'text-slate-900' : 'text-slate-400 font-normal'}>
             {value ? formatDateDisplay(value) : 'Sélectionner une date'}
@@ -272,7 +272,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   left: `${position.left}px`,
                   zIndex: 9999
                 }}
-                className="bg-white rounded-2xl shadow-2xl border-2 border-slate-200 p-4 w-full min-w-[320px] max-w-[400px]"
+                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 p-3 sm:p-4 w-full min-w-[280px] sm:min-w-[320px] max-w-[95vw] sm:max-w-[400px]"
               >
               {/* Header avec navigation */}
               <div className="flex items-center justify-between mb-4">
@@ -280,20 +280,20 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   onClick={goToPreviousMonth}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
+                  className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors min-w-[44px] min-h-[44px] active:scale-90"
                 >
                   <span className="text-xl">‹</span>
                 </motion.button>
                 
                 <div className="text-center">
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-base sm:text-lg font-bold text-slate-900">
                     {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                   </div>
                   <motion.button
                     onClick={goToToday}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="text-xs text-primary-500 hover:text-primary-600 font-semibold mt-1"
+                    className="text-xs sm:text-sm text-primary-500 hover:text-primary-600 font-semibold mt-1 px-2 py-1 rounded-lg hover:bg-primary-50 min-h-[32px] active:scale-95"
                   >
                     Aujourd'hui
                   </motion.button>
@@ -303,7 +303,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   onClick={goToNextMonth}
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
-                  className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
+                  className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors min-w-[44px] min-h-[44px] active:scale-90"
                 >
                   <span className="text-xl">›</span>
                 </motion.button>
@@ -342,14 +342,14 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                       whileHover={!disabled ? { scale: 1.1 } : {}}
                       whileTap={!disabled ? { scale: 0.9 } : {}}
                       className={`
-                        aspect-square rounded-lg text-sm font-semibold transition-all
+                        aspect-square rounded-lg text-xs sm:text-sm font-semibold transition-all min-h-[36px] sm:min-h-[40px] min-w-[36px] sm:min-w-[40px]
                         ${disabled
                           ? 'text-slate-300 cursor-not-allowed'
                           : selected
-                          ? 'bg-primary-500 text-white shadow-lg'
+                          ? 'bg-primary-500 text-white shadow-lg active:scale-90'
                           : today
-                          ? 'bg-primary-100 text-primary-700 font-bold border-2 border-primary-300'
-                          : 'text-slate-700 hover:bg-slate-100'
+                          ? 'bg-primary-100 text-primary-700 font-bold border-2 border-primary-300 active:scale-90'
+                          : 'text-slate-700 hover:bg-slate-100 active:scale-90'
                         }
                       `}
                     >
@@ -365,7 +365,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   onClick={() => setIsOpen(false)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors"
+                  className="w-full px-4 py-2.5 sm:py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors min-h-[44px] text-sm sm:text-base active:scale-95"
                 >
                   Fermer
                 </motion.button>
