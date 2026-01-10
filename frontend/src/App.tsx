@@ -1701,7 +1701,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     // Toujours nettoyer avant de créer un nouvel interval pour éviter les doublons
     stopAutoCheck(search.id)
     
-    const interval = search.autoCheckIntervalSeconds || 300
+    const interval = Math.max(900, search.autoCheckIntervalSeconds || 900)
     
     // Effectuer une vérification immédiate
     performAutoCheck(search)
@@ -1780,6 +1780,12 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     const initAutoChecks = async () => {
       const activeSearches = await getActiveAutoChecks()
       activeSearches.forEach(search => {
+        // S'assurer que l'intervalle respecte le minimum de 15 minutes
+        if (search.autoCheckIntervalSeconds && search.autoCheckIntervalSeconds < 900) {
+          // Mettre à jour l'intervalle si trop court
+          updateSearchAutoCheck(search.id, true, 900)
+          search.autoCheckIntervalSeconds = 900
+        }
         // Utiliser startAutoCheck qui nettoie toujours avant de créer
         startAutoCheck(search)
       })
@@ -2087,7 +2093,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             {search.autoCheckEnabled && (
                               <span className="flex items-center gap-1 text-green-600 font-semibold">
                                 <span>•</span>
-                                <span>Toutes les {Math.floor((search.autoCheckIntervalSeconds || 300) / 60)} min</span>
+                                <span>Toutes les {Math.floor((search.autoCheckIntervalSeconds || 900) / 60)} min</span>
                               </span>
                             )}
                           </div>
@@ -2129,18 +2135,29 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                         <motion.button
                           onClick={async () => {
                             const isEnabled = search.autoCheckEnabled || false
+                            const isConfigOpen = showAutoCheckConfig[search.id] || false
+                            
                             if (isEnabled) {
-                              // Désactiver l'auto-check
+                              // Désactiver l'auto-check directement
                               stopAutoCheck(search.id)
                               await updateSearchAutoCheck(search.id, false)
+                              await refreshData()
+                            } else if (isConfigOpen) {
+                              // Si la configuration est déjà ouverte, la fermer
+                              setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
                             } else {
-                              // Activer l'auto-check
-                              requestNotificationPermission()
-                              const interval = search.autoCheckIntervalSeconds || 300
-                              await updateSearchAutoCheck(search.id, true, interval)
-                              startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: interval })
+                              // Ouvrir la configuration pour choisir l'intervalle avant d'activer
+                              setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: true }))
+                              // Initialiser l'intervalle si pas encore défini (minimum 15 minutes)
+                              if (!intervalSeconds[search.id]) {
+                                setIntervalSeconds(prev => ({ 
+                                  ...prev, 
+                                  [search.id]: search.autoCheckIntervalSeconds && search.autoCheckIntervalSeconds >= 900 
+                                    ? search.autoCheckIntervalSeconds 
+                                    : 900 
+                                }))
+                              }
                             }
-                            await refreshData()
                           }}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
@@ -2180,6 +2197,140 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           🗑️
                         </motion.button>
                       </div>
+                      
+                      {/* Configuration auto-check affichée directement sous les boutons */}
+                      {showAutoCheckConfig[search.id] && !search.autoCheckEnabled && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10, height: 0 }}
+                          animate={{ opacity: 1, y: 0, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="w-full mt-3 overflow-hidden"
+                        >
+                            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl border-2 border-blue-200 shadow-xl p-5 sm:p-6">
+                              {/* En-tête avec icône */}
+                              <div className="flex items-center gap-3 mb-4 pb-3 border-b-2 border-blue-200">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
+                                  <span className="text-xl">🔔</span>
+                                </div>
+                                <div>
+                                  <h4 className="text-base sm:text-lg font-black text-slate-900">Configuration auto-vérification</h4>
+                                  <p className="text-xs sm:text-sm text-slate-600">Choisissez la fréquence de vérification</p>
+                                </div>
+                              </div>
+
+                              {/* Options prédéfinies */}
+                              <div className="mb-5">
+                                <label className="block text-sm font-bold text-slate-700 mb-3">
+                                  ⚡ Options rapides
+                                </label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                                  {[
+                                    { label: '15 min', seconds: 900, icon: '⏱️' },
+                                    { label: '1 heure', seconds: 3600, icon: '🕐' },
+                                    { label: '1 jour', seconds: 86400, icon: '📅' },
+                                    { label: '7 jours', seconds: 604800, icon: '📆' }
+                                  ].map((option) => {
+                                    const currentInterval = intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 900
+                                    const isSelected = currentInterval === option.seconds
+                                    return (
+                                      <motion.button
+                                        key={option.seconds}
+                                        onClick={() => setIntervalSeconds(prev => ({ 
+                                          ...prev, 
+                                          [search.id]: option.seconds 
+                                        }))}
+                                        whileHover={{ scale: 1.05, y: -2 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        className={`px-3 sm:px-4 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
+                                          isSelected
+                                            ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg ring-2 ring-blue-400 ring-offset-2'
+                                            : 'bg-white text-slate-700 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-300 shadow-md hover:shadow-lg'
+                                        }`}
+                                      >
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className="text-base sm:text-lg">{option.icon}</span>
+                                          <span>{option.label}</span>
+                                        </div>
+                                      </motion.button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Configuration personnalisée */}
+                              <div className="mb-5 p-4 bg-white/60 rounded-xl border-2 border-slate-200">
+                                <label className="block text-sm font-bold text-slate-700 mb-3">
+                                  ⚙️ Intervalle personnalisé
+                                </label>
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <input
+                                      type="number"
+                                      min="900"
+                                      step="60"
+                                      value={intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 900}
+                                      onChange={(e) => {
+                                        const value = parseInt(e.target.value) || 900
+                                        setIntervalSeconds(prev => ({ 
+                                          ...prev, 
+                                          [search.id]: Math.max(900, value)
+                                        }))
+                                      }}
+                                      className="w-28 px-4 py-2.5 border-2 border-slate-300 rounded-xl text-sm font-semibold focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+                                    />
+                                    <span className="text-sm font-medium text-slate-600">
+                                      secondes
+                                    </span>
+                                  </div>
+                                  <div className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">
+                                    Min: 15 minutes
+                                  </div>
+                                </div>
+                                {intervalSeconds[search.id] && (
+                                  <div className="mt-2 text-xs text-slate-500 font-medium">
+                                    = {Math.floor((intervalSeconds[search.id] || 900) / 60)} minute{Math.floor((intervalSeconds[search.id] || 900) / 60) > 1 ? 's' : ''} 
+                                    {Math.floor((intervalSeconds[search.id] || 900) / 3600) > 0 && ` (${Math.floor((intervalSeconds[search.id] || 900) / 3600)} heure${Math.floor((intervalSeconds[search.id] || 900) / 3600) > 1 ? 's' : ''})`}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Boutons d'action */}
+                              <div className="flex gap-3 justify-end pt-3 border-t-2 border-blue-200">
+                                <motion.button
+                                  onClick={() => {
+                                    setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
+                                  }}
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 shadow-md transition-colors min-h-[44px]"
+                                >
+                                  Annuler
+                                </motion.button>
+                                <motion.button
+                                  onClick={async () => {
+                                    const newInterval = Math.max(900, intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 900)
+                                    
+                                    await updateSearchAutoCheck(search.id, true, newInterval)
+                                    requestNotificationPermission()
+                                    startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: newInterval })
+                                    
+                                    setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
+                                    await refreshData()
+                                  }}
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  className="px-6 py-2.5 rounded-xl text-sm font-bold min-h-[44px] active:scale-95 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all"
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <span>▶️</span>
+                                    <span>Activer l'auto-vérification</span>
+                                  </span>
+                                </motion.button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
 
                       {/* Section détails expandable */}
                       {isExpanded && (
@@ -2221,78 +2372,6 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                                   )}
                                 </div>
                               </div>
-                            </div>
-                            
-                            {/* Configuration auto-check */}
-                            <div className="pt-3 border-t border-slate-300">
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="block text-sm font-bold text-slate-700">
-                                  ⚙️ Configuration auto-vérification
-                                </label>
-                                <button
-                                  onClick={() => setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: !prev[search.id] }))}
-                                  className="text-sm text-primary-600 hover:text-primary-700 font-semibold"
-                                >
-                                  {showAutoCheckConfig[search.id] ? 'Masquer' : 'Configurer'}
-                                </button>
-                              </div>
-                              {showAutoCheckConfig[search.id] && (
-                                <motion.div
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  className="bg-white rounded-lg p-4 border-2 border-slate-300"
-                                >
-                                  <div className="flex items-center gap-4 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                      <label className="text-sm font-semibold text-slate-700">Intervalle:</label>
-                                      <input
-                                        type="number"
-                                        min="60"
-                                        max="3600"
-                                        step="60"
-                                        value={intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300}
-                                        onChange={(e) => setIntervalSeconds(prev => ({ 
-                                          ...prev, 
-                                          [search.id]: parseInt(e.target.value) || 300 
-                                        }))}
-                                        className="w-24 px-3 py-2 border-2 border-slate-300 rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200"
-                                      />
-                                      <span className="text-sm text-slate-600">
-                                        secondes ({Math.floor((intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300) / 60)} min)
-                                      </span>
-                                    </div>
-                                    <motion.button
-                                      onClick={async () => {
-                                        const newInterval = intervalSeconds[search.id] || search.autoCheckIntervalSeconds || 300
-                                        const willBeEnabled = !search.autoCheckEnabled
-                                        
-                                        await updateSearchAutoCheck(search.id, willBeEnabled, newInterval)
-                                        
-                                        if (willBeEnabled) {
-                                          // Activer l'auto-check avec le nouvel intervalle
-                                          requestNotificationPermission()
-                                          startAutoCheck({ ...search, autoCheckEnabled: true, autoCheckIntervalSeconds: newInterval })
-                                        } else {
-                                          // Désactiver l'auto-check
-                                          stopAutoCheck(search.id)
-                                        }
-                                        
-                                        setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
-                                        await refreshData()
-                                      }}
-                                      whileHover={{ scale: 1.05 }}
-                                      whileTap={{ scale: 0.95 }}
-                                      className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold min-h-[44px] sm:min-h-[40px] active:scale-95 ${
-                                        search.autoCheckEnabled 
-                                          ? 'bg-red-500 hover:bg-red-600 text-white' 
-                                          : 'bg-green-500 hover:bg-green-600 text-white'
-                                      }`}
-                                    >
-                                      {search.autoCheckEnabled ? '⏸️ Désactiver' : '▶️ Activer'}
-                                    </motion.button>
-                                  </div>
-                                </motion.div>
-                              )}
                             </div>
                           </div>
                         </motion.div>
