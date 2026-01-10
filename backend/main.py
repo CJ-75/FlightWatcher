@@ -44,6 +44,16 @@ try:
     from price_tracker import record_price_history
     print("✅ Modules Supabase importés avec succès")
     
+    # Import des routes admin (conditionnel)
+    try:
+        from admin_routes import router as admin_router
+        ADMIN_ROUTES_AVAILABLE = True
+        print("✅ Routes admin disponibles")
+    except Exception as e:
+        print(f"⚠️  Routes admin non disponibles: {e}")
+        ADMIN_ROUTES_AVAILABLE = False
+        admin_router = None
+    
     # Tester si les variables d'environnement sont définies (après chargement du .env)
     if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_ANON_KEY"):
         print("⚠️  Variables d'environnement Supabase manquantes")
@@ -71,6 +81,8 @@ except Exception as e:
     get_user_id_from_token = lambda r: None
     optional_auth = lambda f: f  # Décorateur par défaut qui ne fait rien
     record_price_history = lambda trips: None
+    ADMIN_ROUTES_AVAILABLE = False
+    admin_router = None
 
 app = FastAPI(title="Ryanair Flight Scanner API")
 
@@ -82,6 +94,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Inclure les routes admin si disponibles
+if ADMIN_ROUTES_AVAILABLE and admin_router:
+    app.include_router(admin_router)
+    print("✅ Routes admin incluses dans l'application")
 
 class FlightResponse(BaseModel):
     flightNumber: str

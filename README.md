@@ -48,6 +48,13 @@ Pour activer la persistance des données avec Supabase :
    # Ajouter les variables suivantes:
    SUPABASE_URL=https://votre-projet.supabase.co
    SUPABASE_ANON_KEY=votre-clé-anon
+   
+   # Configuration admin (optionnel)
+   ADMIN_EMAILS=votre-email@gmail.com,autre-email@gmail.com
+   ADMIN_PASSWORD_HASH=$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg.
+   
+   # Pour générer un nouveau hash de mot de passe admin :
+   # python -c "import bcrypt; print(bcrypt.hashpw(b'votre_mot_de_passe', bcrypt.gensalt(rounds=12)).decode())"
    SUPABASE_SERVICE_ROLE_KEY=votre-clé-service-role  # Optionnel, pour price_history et cache
    ```
    

@@ -30,6 +30,55 @@ export default function AuthCallback() {
 
         if (session) {
           console.log('✅ Connexion réussie:', session.user.email)
+          
+          // Vérifier si l'utilisateur vient de la page admin
+          const fromAdmin = sessionStorage.getItem('admin_login_redirect')
+          if (fromAdmin) {
+            sessionStorage.removeItem('admin_login_redirect')
+            // Vérifier le statut admin avant de rediriger
+            const token = session.access_token
+            if (token) {
+              const apiUrl = window.location.origin.includes('localhost')
+                ? 'http://localhost:8000/api/admin/verify'
+                : '/api/admin/verify'
+              
+              try {
+                const response = await fetch(apiUrl, {
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  }
+                })
+                
+                if (response.ok) {
+                  const data = await response.json()
+                  console.log('[AuthCallback] Réponse verify admin:', data)
+                  // Vérifier si l'email est admin
+                  if (data.is_admin_email || data.requires_password) {
+                    // Vérifier si le mot de passe a déjà été vérifié
+                    const passwordVerified = document.cookie.includes('admin_password_verified=true')
+                    if (passwordVerified) {
+                      navigate('/admin/users')
+                    } else {
+                      // Rediriger vers la page admin login pour demander le mot de passe
+                      navigate('/admin/login?password_required=true')
+                    }
+                    return
+                  } else {
+                    console.log('[AuthCallback] Email non admin:', session.user.email)
+                  }
+                } else {
+                  const errorData = await response.json().catch(() => ({}))
+                  console.error('[AuthCallback] Erreur vérification admin:', response.status, errorData)
+                }
+              } catch (error) {
+                console.error('[AuthCallback] Erreur vérification admin:', error)
+              }
+            }
+            // Si pas admin, rediriger vers login admin avec erreur
+            navigate('/admin/login?error=not_admin')
+            return
+          }
+          
           // Rediriger vers la page principale
           navigate('/')
         } else {

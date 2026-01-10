@@ -89,12 +89,6 @@ export default function Login() {
             ← Retour à l'application
           </button>
         </div>
-
-        {/* Note */}
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-          <p className="font-semibold mb-1">💡 Note :</p>
-          <p>L'application est accessible sans connexion. La connexion Google permet de sauvegarder vos recherches et favoris sur tous vos appareils.</p>
-        </div>
       </div>
     </div>
   )
