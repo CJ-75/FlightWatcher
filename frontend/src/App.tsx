@@ -698,7 +698,7 @@ function Dashboard() {
             <div className="flex-1 order-2 sm:order-1 hidden sm:block"></div>
             <div className="flex-1 text-center order-1 sm:order-2">
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 mb-1 sm:mb-2">
-                ✈️ FlightWatcher
+                FlightWatcher
               </h1>
               <p className="text-sm sm:text-base md:text-lg text-slate-600 font-medium">
                 Trouve ton weekend pas cher
