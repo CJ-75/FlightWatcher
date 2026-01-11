@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { EnrichedTripResponse } from '../types';
+import { useI18n } from '../contexts/I18nContext';
 
 interface DestinationCardProps {
   trip: EnrichedTripResponse;
@@ -23,6 +24,8 @@ const cardHover = {
 };
 
 export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = false }: DestinationCardProps) {
+  const { t } = useI18n();
+  
   // Helper pour convertir getDay() en numérotation basée sur lundi (1=lundi, 7=dimanche)
   const getDayOfWeekMondayBased = (date: Date): number => {
     // getDay() retourne 0=dimanche, 1=lundi, ..., 6=samedi
@@ -97,7 +100,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
           className={`absolute top-3 right-3 sm:top-4 sm:right-4 text-3xl sm:text-4xl cursor-pointer hover:drop-shadow-lg transition-all min-w-[44px] min-h-[44px] flex items-center justify-center ${
             isFavorite ? 'text-red-500' : 'text-white/80 hover:text-red-400'
           }`}
-          aria-label={isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          aria-label={isFavorite ? t('card.removeFavorite') : t('card.addFavorite')}
         >
           {isFavorite ? '❤️' : '🤍'}
         </motion.button>
@@ -133,14 +136,14 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
             </motion.span>
           )}
         </div>
-        <p className="text-sm text-slate-500 font-medium mb-4">total aller-retour</p>
+        <p className="text-sm text-slate-500 font-medium mb-4">{t('card.total')}</p>
 
         {/* Détails vols */}
         <div className="mt-4 space-y-3">
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center">
               <span className="text-primary-500 mr-2">✈️</span>
-              <span className="text-slate-600 font-medium">Aller</span>
+              <span className="text-slate-600 font-medium">{t('card.departure')}</span>
             </div>
             <div className="text-right">
               <div className="text-slate-900 font-bold">{formatTime(trip.aller.departureTime)}</div>
@@ -150,7 +153,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center">
               <span className="text-primary-500 mr-2">🔙</span>
-              <span className="text-slate-600 font-medium">Retour</span>
+              <span className="text-slate-600 font-medium">{t('card.return')}</span>
             </div>
             <div className="text-right">
               <div className="text-slate-900 font-bold">{formatTime(trip.retour.departureTime)}</div>
@@ -168,7 +171,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
             transition={springConfig}
             className="w-full bg-primary-500 text-white rounded-full px-4 sm:px-6 py-3 sm:py-4 font-bold shadow-lg hover:bg-primary-600 hover:shadow-xl active:scale-95 min-h-[48px] sm:min-h-[52px] text-sm sm:text-base"
           >
-            ✈️ Réserver
+            {t('card.book')}
           </motion.button>
         </div>
       </div>

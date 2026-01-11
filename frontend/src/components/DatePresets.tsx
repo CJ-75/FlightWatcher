@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useI18n } from '../contexts/I18nContext';
 
 export type DatePreset = 'weekend' | 'next-weekend' | 'next-week' | 'flexible';
 
@@ -8,12 +9,15 @@ interface DatePresetsProps {
   onFlexibleClick?: () => void;
 }
 
-const presets: { key: DatePreset; label: string; icon: string }[] = [
-  { key: 'weekend', label: 'Ce weekend', icon: '📅' },
-  { key: 'next-weekend', label: 'Weekend prochain', icon: '📆' },
-  { key: 'next-week', label: '3 jours la semaine prochaine', icon: '🗓️' },
-  { key: 'flexible', label: 'Dates flexibles', icon: '📋' },
-];
+export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresetsProps) {
+  const { t } = useI18n();
+  
+  const presets: { key: DatePreset; label: string; icon: string }[] = [
+    { key: 'weekend', label: t('search.preset.weekend'), icon: '📅' },
+    { key: 'next-weekend', label: t('search.preset.nextWeekend'), icon: '📆' },
+    { key: 'next-week', label: t('search.preset.nextWeek'), icon: '🗓️' },
+    { key: 'flexible', label: t('search.preset.flexible'), icon: '📋' },
+  ];
 
 const springConfig = {
   type: "spring" as const,
@@ -22,7 +26,6 @@ const springConfig = {
   mass: 0.5
 };
 
-export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresetsProps) {
   const handleClick = (preset: DatePreset) => {
     if (preset === 'flexible' && onFlexibleClick) {
       onFlexibleClick();
@@ -34,7 +37,7 @@ export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresets
   return (
     <div className="mb-6 sm:mb-8">
       <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-        📅 Je pars
+        {t('search.when')}
       </label>
       <div className="flex flex-wrap gap-2 sm:gap-3">
         {presets.map((preset) => {

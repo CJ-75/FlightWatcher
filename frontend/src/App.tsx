@@ -23,10 +23,12 @@ import { SaveSearchModal } from './components/SaveSearchModal'
 import { Toast } from './components/Toast'
 import { motion } from 'framer-motion'
 import { getSessionId } from './utils/session'
+import { useI18n } from './contexts/I18nContext'
 
 type Tab = 'search' | 'saved'
 
 function Dashboard() {
+  const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<Tab>('search')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
@@ -165,13 +167,13 @@ function Dashboard() {
     }
 
     if (!requestToSave) {
-      setError('Aucune recherche à sauvegarder. Veuillez d\'abord effectuer une recherche.')
+      setError(t('saved.noSearchToSave'))
       return
     }
 
     const user = await getCurrentUser()
     if (!user) {
-      alert('Veuillez vous connecter pour sauvegarder une recherche')
+      alert(t('saved.loginRequired'))
       return
     }
 
@@ -182,7 +184,7 @@ function Dashboard() {
 
   const handleConfirmSaveSearch = async (name: string) => {
     if (!currentRequest) {
-      setError('Aucune recherche à sauvegarder')
+      setError(t('saved.noSearchToSave'))
       return
     }
 
@@ -204,13 +206,13 @@ function Dashboard() {
       
       await saveSearch(searchToSave)
       // Afficher un message de succès temporaire
-      setSaveSuccessMessage(`✅ Recherche "${name}" sauvegardée avec succès !`)
+      setSaveSuccessMessage(t('saved.saveSuccess'))
       setError(null)
       // Masquer le message après 3 secondes
       setTimeout(() => setSaveSuccessMessage(null), 3000)
       // La modal se fermera automatiquement via onClose dans SaveSearchModal
     } catch (error) {
-      setError('Erreur lors de la sauvegarde')
+      setError(t('saved.saveError'))
       console.error(error)
       throw error // Pour que la modal puisse afficher l'erreur
     } finally {
@@ -699,10 +701,10 @@ function Dashboard() {
             <div className="flex-1 order-2 sm:order-1 hidden sm:block"></div>
             <div className="flex-1 text-center order-1 sm:order-2">
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 mb-1 sm:mb-2">
-                FlightWatcher
+                {t('app.title')}
               </h1>
               <p className="text-sm sm:text-base md:text-lg text-slate-600 font-medium">
-                Trouve ton weekend pas cher
+                {t('app.subtitle')}
               </p>
             </div>
             {/* Menu utilisateur - Desktop */}
@@ -729,7 +731,7 @@ function Dashboard() {
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
-              🔍 Recherche
+              🔍 {t('nav.search')}
             </motion.button>
             <motion.button
               onClick={() => setActiveTab('saved')}
@@ -741,7 +743,7 @@ function Dashboard() {
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
-              ❤️ Sauvegardés
+              ❤️ {t('nav.saved')}
             </motion.button>
           </div>
         </div>
@@ -813,38 +815,38 @@ function Dashboard() {
                     className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 border-2 border-primary-200 shadow-lg px-4 sm:px-6"
                   >
                     <h3 className="text-lg sm:text-xl font-black text-primary-900 mb-3 sm:mb-4">
-                      📋 Recherche effectuée
+                      📋 {t('results.lastSearch')}
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 text-sm sm:text-base">
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">✈️ Départ:</span>
+                        <span className="font-bold text-primary-700">{t('results.departure')}</span>
                         <span className="text-slate-700">{lastSearchInfo.airport}</span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">💰 Budget:</span>
+                        <span className="font-bold text-primary-700">{t('results.budget')}</span>
                         <span className="text-slate-700">{lastSearchInfo.budget}€</span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">📅 Période:</span>
+                        <span className="font-bold text-primary-700">{t('results.period')}</span>
                         <span className="text-slate-700">
-                          {lastSearchInfo.datePreset === 'weekend' ? 'Ce weekend' :
-                           lastSearchInfo.datePreset === 'next-weekend' ? 'Weekend prochain' :
-                           lastSearchInfo.datePreset === 'next-week' ? '3 jours la semaine prochaine' :
-                           lastSearchInfo.datePreset === 'flexible' ? 'Dates flexibles' : 'N/A'}
+                          {lastSearchInfo.datePreset === 'weekend' ? t('search.preset.weekend') :
+                           lastSearchInfo.datePreset === 'next-weekend' ? t('search.preset.nextWeekend') :
+                           lastSearchInfo.datePreset === 'next-week' ? t('search.preset.nextWeek') :
+                           lastSearchInfo.datePreset === 'flexible' ? t('search.preset.flexible') : 'N/A'}
                         </span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">📆 Dates départ:</span>
-                        <span className="text-slate-700">{lastSearchInfo.datesDepart.length} date(s)</span>
+                        <span className="font-bold text-primary-700">{t('results.departureDates')}</span>
+                        <span className="text-slate-700">{lastSearchInfo.datesDepart.length} {t('results.date')}</span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">🔙 Dates retour:</span>
-                        <span className="text-slate-700">{lastSearchInfo.datesRetour.length} date(s)</span>
+                        <span className="font-bold text-primary-700">{t('results.returnDates')}</span>
+                        <span className="text-slate-700">{lastSearchInfo.datesRetour.length} {t('results.date')}</span>
                       </div>
                       {lastSearchInfo.excludedDestinations.length > 0 && (
                         <div className="flex items-start gap-2">
-                          <span className="font-bold text-primary-700">🚫 Exclusions:</span>
-                          <span className="text-slate-700">{lastSearchInfo.excludedDestinations.length} destination(s)</span>
+                          <span className="font-bold text-primary-700">{t('results.exclusions')}</span>
+                          <span className="text-slate-700">{lastSearchInfo.excludedDestinations.length} {t('results.destination')}</span>
                         </div>
                       )}
                     </div>
@@ -862,7 +864,7 @@ function Dashboard() {
                       whileTap={{ scale: 0.95 }}
                       className="bg-indigo-600 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-indigo-700 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none flex items-center justify-center gap-2 active:scale-95"
                     >
-                      💾 Sauvegarder
+                      {t('results.saveSearch')}
                     </motion.button>
                     <motion.button
                       onClick={() => {
@@ -875,7 +877,7 @@ function Dashboard() {
                       whileTap={{ scale: 0.95 }}
                       className="bg-accent-500 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-accent-600 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none active:scale-95"
                     >
-                      🎰 Mode Roulette
+                      {t('results.roulette')}
                     </motion.button>
                   </div>
                 </div>
@@ -1188,6 +1190,7 @@ function SearchTab({
   onLoadDestinations, onToggleDestination, onTogglePays,
   airports, isValidAirportCode
 }: SearchTabProps) {
+  const { t } = useI18n()
   const [paysOuverts, setPaysOuverts] = useState<Set<string>>(new Set())
   const [sectionDestinationsOuverte, setSectionDestinationsOuverte] = useState(false)
   const dateDepartInputRef = useRef<HTMLInputElement>(null)
@@ -1295,7 +1298,7 @@ function SearchTab({
                   onClick={() => removeDate(datesDepart, setDatesDepart, dateConfig.date)}
                   className="ml-auto px-3 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
                 >
-                  Supprimer
+                  {t('advanced.remove')}
                 </button>
               </div>
             ))}
@@ -1342,7 +1345,7 @@ function SearchTab({
                   onClick={() => removeDate(datesRetour, setDatesRetour, dateConfig.date)}
                   className="ml-auto px-3 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 text-sm"
                 >
-                  Supprimer
+                  {t('advanced.remove')}
                 </button>
               </div>
             ))}
@@ -1613,6 +1616,7 @@ interface SavedTabProps {
 }
 
 function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook, setToastMessage, setToastType }: SavedTabProps) {
+  const { t } = useI18n()
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
@@ -1980,7 +1984,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
           <h2 className="text-3xl font-black text-white flex items-center gap-3">
             <span>💾</span>
-            <span>Recherches sauvegardées</span>
+            <span>{t('saved.title')}</span>
             <span className="text-xl bg-white/20 px-3 py-1 rounded-full">
               {savedSearches.length}
             </span>
@@ -1991,8 +1995,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
           {savedSearches.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">🔍</div>
-              <p className="text-xl text-gray-500 font-medium">Aucune recherche sauvegardée</p>
-              <p className="text-sm text-gray-400 mt-2">Sauvegardez vos recherches pour y accéder rapidement</p>
+              <p className="text-xl text-gray-500 font-medium">{t('saved.empty')}</p>
+              <p className="text-sm text-gray-400 mt-2">{t('saved.save')}</p>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -2094,7 +2098,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                         >
                           <span>📂</span>
-                          <span>Charger</span>
+                          <span>{t('saved.load')}</span>
                         </motion.button>
                         <motion.button
                           onClick={async () => {
@@ -2167,7 +2171,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                         </motion.button>
                         <motion.button
                           onClick={() => {
-                            if (confirm('Supprimer cette recherche ?')) {
+                            if (confirm(t('saved.delete') + ' ?')) {
                               // Nettoyer l'interval avant de supprimer
                               stopAutoCheck(search.id)
                               deleteSearch(search.id)
@@ -2177,7 +2181,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           className="px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-md min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-auto active:scale-95 flex items-center justify-center"
-                          title="Supprimer"
+                          title={t('saved.delete')}
                         >
                           🗑️
                         </motion.button>
@@ -2620,7 +2624,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           </motion.button>
                           <motion.button
                             onClick={() => {
-                              if (confirm('Supprimer ce favori ?')) {
+                              if (confirm(t('favorites.remove') + ' ?')) {
                                 deleteFavorite(favorite.id)
                                 refreshData()
                               }
@@ -2628,7 +2632,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             className="px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-md min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-auto active:scale-95 flex items-center justify-center"
-                            title="Supprimer"
+                            title={t('saved.delete')}
                           >
                             🗑️
                           </motion.button>

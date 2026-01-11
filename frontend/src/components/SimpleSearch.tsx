@@ -10,6 +10,7 @@ import { LoadingSkeleton } from './LoadingSkeleton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { LoadingMessages } from './LoadingMessages';
 import { getSessionId } from '../utils/session';
+import { useI18n } from '../contexts/I18nContext';
 
 interface SimpleSearchProps {
   onResults: (results: EnrichedTripResponse[], searchInfo?: {
@@ -71,6 +72,7 @@ export function SimpleSearch({
   budget: externalBudget,
   onBudgetChange
 }: SimpleSearchProps) {
+  const { t } = useI18n();
   const [budget, setBudget] = useState(externalBudget || 100);
   const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -199,31 +201,31 @@ export function SimpleSearch({
 
   const handleSearch = async () => {
     if (!datePreset) {
-      onError('Veuillez sélectionner une période');
+      onError(t('search.error.noPeriod'));
       return;
     }
 
     // Validation stricte de l'aéroport de départ
     if (!selectedAirport || selectedAirport.trim() === '') {
-      onError('⚠️ Veuillez sélectionner un aéroport de départ avant de lancer la recherche');
+      onError(t('search.error.noAirport'));
       return;
     }
 
     // Vérifier que le code d'aéroport est valide
     if (!isValidAirportCode(selectedAirport)) {
-      onError('⚠️ Veuillez sélectionner un aéroport valide depuis la liste avant de lancer la recherche');
+      onError(t('search.error.invalidAirport'));
       return;
     }
 
     // Validation pour dates
     if (datePreset === 'flexible') {
       if (flexibleDates.dates_depart.length === 0 || flexibleDates.dates_retour.length === 0) {
-        onError('Veuillez ajouter au moins une date de départ et une date de retour');
+        onError(t('search.error.noDates'));
         return;
       }
     } else {
       if (presetDates.dates_depart.length === 0 || presetDates.dates_retour.length === 0) {
-        onError('Veuillez attendre que les dates soient générées');
+        onError(t('search.error.waitDates'));
         return;
       }
     }
@@ -317,8 +319,8 @@ export function SimpleSearch({
         datesRetour: datePreset === 'flexible' ? flexibleDates.dates_retour : presetDates.dates_retour,
         excludedDestinations
       });
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      } catch (err) {
+      onError(err instanceof Error ? err.message : t('app.error'));
     } finally {
       setIsSearching(false);
       onLoading(false);
@@ -349,7 +351,7 @@ export function SimpleSearch({
 
       <div ref={airportSectionRef} className="mb-6 sm:mb-8">
         <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-          ✈️ Au départ
+          {t('search.departure')}
         </label>
         <AirportAutocomplete
           value={selectedAirport}
@@ -369,7 +371,7 @@ export function SimpleSearch({
             exit={{ opacity: 0 }}
             className="text-sm text-red-500 mt-2"
           >
-            ⚠️ Veuillez sélectionner un aéroport valide depuis la liste
+            {t('search.departureError')}
           </motion.p>
         )}
       </div>
@@ -390,7 +392,7 @@ export function SimpleSearch({
           className="mb-6 sm:mb-8"
         >
           <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-            ⏰ Horaires pour chaque jour
+            {t('search.times')}
           </label>
           <DateWithTimes
             preset={datePreset}
@@ -427,11 +429,11 @@ export function SimpleSearch({
           }`}
       >
         {isSearching ? (
-          <span>Recherche en cours...</span>
+          <span>{t('search.inProgress')}</span>
         ) : (
           <>
             <span className="mr-2">✈️</span>
-            Lancer la recherche
+            {t('search.launch')}
           </>
         )}
       </motion.button>

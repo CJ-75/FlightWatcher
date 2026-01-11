@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useI18n } from '../contexts/I18nContext';
 
 interface BudgetSliderProps {
   value: number;
@@ -8,6 +9,7 @@ interface BudgetSliderProps {
 }
 
 export function BudgetSlider({ value, onChange, min = 20, max = 1000 }: BudgetSliderProps) {
+  const { t } = useI18n();
   const springConfig = {
     type: "spring" as const,
     stiffness: 300,
@@ -18,7 +20,7 @@ export function BudgetSlider({ value, onChange, min = 20, max = 1000 }: BudgetSl
   return (
     <div className="mb-8">
       <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-        💰 Mon budget
+        {t('search.budget')}
       </label>
       <motion.div
         initial={{ opacity: 0, y: 20 }}

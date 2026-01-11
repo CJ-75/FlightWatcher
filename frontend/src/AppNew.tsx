@@ -3,6 +3,7 @@
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { I18nProvider } from './contexts/I18nContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import AuthCallback from './auth/callback'
@@ -18,9 +19,10 @@ import { TestsPage } from './admin/pages/TestsPage'
 
 function App() {
   return (
-    <BrowserRouter>
-      <Toaster position="top-right" />
-      <Routes>
+    <I18nProvider>
+      <BrowserRouter>
+        <Toaster position="top-right" />
+        <Routes>
         {/* Routes publiques */}
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
@@ -47,8 +49,9 @@ function App() {
         {/* Route principale */}
         <Route path="/" element={<Dashboard />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </I18nProvider>
   )
 }
 
