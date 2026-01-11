@@ -1616,7 +1616,17 @@ interface SavedTabProps {
 }
 
 function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook, setToastMessage, setToastType }: SavedTabProps) {
-  const { t } = useI18n()
+  // Utiliser useI18n avec gestion d'erreur pour éviter de casser le chargement
+  let t: (key: string, params?: Record<string, string | number>) => string;
+  try {
+    const i18n = useI18n();
+    t = i18n.t;
+  } catch (error) {
+    console.error('Erreur initialisation i18n dans SavedTab:', error);
+    // Fallback: fonction de traduction qui retourne la clé
+    t = (key: string) => key;
+  }
+  
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
@@ -1630,12 +1640,23 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
 
   const refreshData = async () => {
     try {
+      console.log('🔄 refreshData appelé dans SavedTab');
       const searches = await getSavedSearches()
       const favs = await getFavorites()
+      console.log('✅ Données chargées:', { searches: searches.length, favorites: favs.length });
       setSavedSearches(searches)
       setFavorites(favs)
     } catch (error) {
-      console.error('Erreur refreshData:', error)
+      console.error('❌ Erreur refreshData:', error)
+      // Même en cas d'erreur, essayer de charger depuis le cache/localStorage
+      try {
+        const searches = await getSavedSearches(true) // Force refresh
+        const favs = await getFavorites(true)
+        setSavedSearches(searches)
+        setFavorites(favs)
+      } catch (fallbackError) {
+        console.error('❌ Erreur fallback refreshData:', fallbackError)
+      }
     }
   }
 
@@ -1664,9 +1685,13 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     onBook(enrichedTrip)
   }
 
-  // Charger les données au montage
+  // Charger les données au montage - s'exécute toujours même si le rendu échoue
   useEffect(() => {
-    refreshData()
+    // Utiliser un timeout pour s'assurer que le composant est monté
+    const timer = setTimeout(() => {
+      refreshData()
+    }, 0)
+    return () => clearTimeout(timer)
   }, [])
 
   // Fonction pour afficher une notification Toast dans le frontend
@@ -2119,7 +2144,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                           className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                         >
                           <span>🔄</span>
-                          <span>Relancer</span>
+                          <span>{t('saved.reload')}</span>
                         </motion.button>
                         <motion.button
                           onClick={async () => {
@@ -2383,7 +2408,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
             <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2 sm:gap-3">
               <span>❤️</span>
-              <span>Voyages favoris</span>
+              <span>{t('favorites.favoritesTitle')}</span>
               <span className="text-lg sm:text-xl bg-white/20 px-2 sm:px-3 py-1 rounded-full">
                 {favorites.length}
               </span>
@@ -2404,7 +2429,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                     : 'bg-white/20 text-white hover:bg-white/30'
                 }`}
               >
-                Tous ({favorites.length})
+                {t('favorites.all')} ({favorites.length})
               </motion.button>
               <motion.button
                 onClick={async () => {
@@ -2420,7 +2445,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                     : 'bg-white/20 text-white hover:bg-white/30'
                 }`}
               >
-                Actifs ({favorites.filter(f => !f.archived).length})
+                {t('favorites.active')} ({favorites.filter(f => !f.archived).length})
               </motion.button>
               <motion.button
                 onClick={async () => {
@@ -2436,7 +2461,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                     : 'bg-white/20 text-white hover:bg-white/30'
                 }`}
               >
-                Archivés ({favorites.filter(f => f.archived).length})
+                {t('favorites.archived')} ({favorites.filter(f => f.archived).length})
               </motion.button>
             </div>
           </div>
@@ -2601,8 +2626,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
                             whileTap={{ scale: 0.95 }}
                             className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
                           >
-                            <span>✈️</span>
-                            <span>Réserver</span>
+                            {t('card.book')}
                           </motion.button>
                           <motion.button
                             onClick={() => {

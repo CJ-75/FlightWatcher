@@ -185,7 +185,10 @@ export function UserMenu() {
     const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || user.email?.charAt(0).toUpperCase() || 'U';
 
     return (
-      <div className="relative">
+      <div className="relative flex items-center gap-2 sm:gap-3">
+        {/* Language Switcher - Visible quand connecté */}
+        <LanguageSwitcher />
+        
         {/* Bouton Avatar - Toujours visible */}
         <button
           ref={buttonRef}

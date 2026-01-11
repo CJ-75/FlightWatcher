@@ -108,9 +108,13 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Favorites
     'favorites.title': 'Mes Favoris',
+    'favorites.favoritesTitle': 'Voyages favoris',
     'favorites.empty': 'Aucun favori pour le moment',
     'favorites.added': 'Favori ajouté',
     'favorites.removed': 'Favori retiré',
+    'favorites.all': 'Tous',
+    'favorites.active': 'Actifs',
+    'favorites.archived': 'Archivés',
     
     // Saved Searches
     'saved.title': 'Recherches sauvegardées',
@@ -118,6 +122,7 @@ const translations: Record<Language, Record<string, string>> = {
     'saved.save': 'Sauvegarder',
     'saved.delete': 'Supprimer',
     'saved.load': 'Charger',
+    'saved.reload': 'Relancer',
     'saved.name': 'Nom de la recherche',
     'saved.namePlaceholder': 'Ex: Weekend Paris',
     'saved.saveSuccess': 'Recherche sauvegardée avec succès',
@@ -239,9 +244,13 @@ const translations: Record<Language, Record<string, string>> = {
     
     // Favorites
     'favorites.title': 'My Favorites',
+    'favorites.favoritesTitle': 'Favorite trips',
     'favorites.empty': 'No favorites yet',
     'favorites.added': 'Favorite added',
     'favorites.removed': 'Favorite removed',
+    'favorites.all': 'All',
+    'favorites.active': 'Active',
+    'favorites.archived': 'Archived',
     
     // Saved Searches
     'saved.title': 'Saved searches',
@@ -249,6 +258,7 @@ const translations: Record<Language, Record<string, string>> = {
     'saved.save': 'Save',
     'saved.delete': 'Delete',
     'saved.load': 'Load',
+    'saved.reload': 'Reload',
     'saved.name': 'Search name',
     'saved.namePlaceholder': 'Ex: Paris Weekend',
     'saved.saveSuccess': 'Search saved successfully',
@@ -297,24 +307,35 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   };
 
   const t = (key: string, params?: Record<string, string | number>): string => {
-    let translation = translations[language][key] || key;
-    
-    if (params) {
-      // Remplacer les paramètres {key}
-      translation = translation.replace(/\{(\w+)\}/g, (match, paramKey) => {
-        const value = params[paramKey];
-        if (value === undefined) return match;
-        return String(value);
-      });
+    try {
+      let translation = translations[language][key];
       
-      // Gestion du pluriel simple {s} basé sur un paramètre count
-      translation = translation.replace(/\{s\}/g, () => {
-        const count = params.count || params.searches || params.favorites || 0;
-        return Number(count) > 1 ? 's' : '';
-      });
+      // Si la traduction n'existe pas, essayer l'autre langue en fallback, puis retourner la clé
+      if (!translation) {
+        const fallbackLang = language === 'fr' ? 'en' : 'fr';
+        translation = translations[fallbackLang][key] || key;
+      }
+      
+      if (params) {
+        // Remplacer les paramètres {key}
+        translation = translation.replace(/\{(\w+)\}/g, (match, paramKey) => {
+          const value = params[paramKey];
+          if (value === undefined) return match;
+          return String(value);
+        });
+        
+        // Gestion du pluriel simple {s} basé sur un paramètre count
+        translation = translation.replace(/\{s\}/g, () => {
+          const count = params.count || params.searches || params.favorites || 0;
+          return Number(count) > 1 ? 's' : '';
+        });
+      }
+      
+      return translation;
+    } catch (error) {
+      console.error('Erreur traduction pour la clé:', key, error);
+      return key; // Retourner la clé en cas d'erreur pour éviter de casser le rendu
     }
-    
-    return translation;
   };
 
   return (

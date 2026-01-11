@@ -431,10 +431,7 @@ export function SimpleSearch({
         {isSearching ? (
           <span>{t('search.inProgress')}</span>
         ) : (
-          <>
-            <span className="mr-2">✈️</span>
-            {t('search.launch')}
-          </>
+          t('search.launch')
         )}
       </motion.button>
     </motion.div>
