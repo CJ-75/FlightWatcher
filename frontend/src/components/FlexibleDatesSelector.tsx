@@ -42,6 +42,8 @@ export function FlexibleDatesSelector({
       if (flexibleDates.dates_depart.some(d => d.date === dateStr)) return;
       const newDates = [...flexibleDates.dates_depart, dateObj];
       onFlexibleDatesChange({ ...flexibleDates, dates_depart: newDates });
+      // Basculer automatiquement vers l'onglet retour après avoir ajouté une date de départ
+      setSelectedDateType('retour');
     } else {
       if (flexibleDates.dates_retour.some(d => d.date === dateStr)) return;
       const newDates = [...flexibleDates.dates_retour, dateObj];
@@ -198,7 +200,22 @@ export function FlexibleDatesSelector({
             <Calendar
               value={tempDate}
               onChange={handleDateChange}
-              minDate={new Date().toISOString().split('T')[0]}
+              minDate={(() => {
+                const today = new Date().toISOString().split('T')[0];
+                if (selectedDateType === 'depart') {
+                  return today;
+                } else {
+                  // Pour les dates de retour, utiliser la date de départ la plus ancienne si elle existe
+                  if (flexibleDates.dates_depart.length > 0) {
+                    const earliestDeparture = flexibleDates.dates_depart
+                      .map(d => d.date)
+                      .sort()[0];
+                    // Retourner la date la plus récente entre aujourd'hui et la première date de départ
+                    return earliestDeparture > today ? earliestDeparture : today;
+                  }
+                  return today;
+                }
+              })()}
               className="w-full"
             />
           </div>
