@@ -1,0 +1,20 @@
+{
+  "name": "FlightWatcher",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "cd backend && ../.venv/bin/python run.py",
+      "description": "FastAPI backend (Ryanair scanner) on http://localhost:8000"
+    },
+    {
+      "name": "frontend",
+      "command": "cd frontend && npm run dev",
+      "description": "Vite + React dev server on http://localhost:5173 (proxies /api to :8000)"
+    }
+  ],
+  "ports": [
+    { "name": "backend", "port": 8000 },
+    { "name": "frontend", "port": 5173 }
+  ]
+}
