@@ -1,6 +1,9 @@
 {
   "name": "flightwatcher",
   "private": true,
+  "engines": {
+    "node": ">=20 <23"
+  },
   "workspaces": [
     "packages/*",
     "frontend",

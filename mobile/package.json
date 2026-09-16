@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "main": "index.js",
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start": "node ./scripts/check-node.js && expo start",
+    "android": "node ./scripts/check-node.js && expo start --android",
+    "ios": "node ./scripts/check-node.js && expo start --ios",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -18,8 +18,14 @@ Clients → `@flightwatcher/shared` → FastAPI → Ryanair / Supabase.
 ## Prérequis
 
 - Python 3.10+
-- Node 20+
+- **Node 20 LTS** (obligatoire pour Expo — Node 23/24 casse `expo start` avec `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`)
 - Compte Supabase (optionnel pour auth / sync)
+
+```bash
+# Si tu es en Node 24 :
+nvm install 20
+nvm use 20
+```
 
 ## Installation monorepo
 
@@ -56,12 +62,22 @@ npm run dev:web
 
 ### Mobile (Expo)
 
-```bash
-cp mobile/.env.example mobile/.env
-# Sur device physique: EXPO_PUBLIC_API_URL=http://<IP-LAN>:8000
-npm run dev:mobile
-# puis i / a pour iOS / Android
+```powershell
+# Expo nécessite Node 20 (pas Node 24)
+fnm env --shell powershell | Out-String | Invoke-Expression
+fnm use 20
+cd mobile
+npx expo start
 ```
+
+Une fois pour toutes, ajoute `fnm env --use-on-cd | Out-String | Invoke-Expression` à ton profil PowerShell, puis :
+
+```powershell
+fnm use 20
+npm run dev:mobile
+```
+
+Sur device physique : `EXPO_PUBLIC_API_URL=http://<IP-LAN>:8000`
 
 Deep link OAuth : `flightwatcher://auth/callback` (voir [backend/MOBILE_AUTH.md](backend/MOBILE_AUTH.md)).
 
