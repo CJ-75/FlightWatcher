@@ -1,159 +1,102 @@
-# FlightWatcher - Scanner de vols Ryanair
+# FlightWatcher
 
-Interface web simple pour scanner les vols aller-retour depuis Beauvais avec critères de prix.
+Scanner de vols Ryanair (aller-retour) — **web** + **mobile Expo** (iOS/Android), admin web-only.
 
-## Stack technique
+## Architecture
 
-- **Backend**: FastAPI (Python)
-- **Frontend**: React + TypeScript + Vite + Tailwind CSS
-- **API**: Bibliothèque ryanair-py
-- **Base de données**: Supabase (optionnel, pour la persistance des données)
-
-## Installation
-
-### Backend
-
-```bash
-# Créer un environnement virtuel (optionnel mais recommandé)
-python -m venv venv
-source venv/bin/activate  # Sur Windows: venv\Scripts\activate
-
-# Installer les dépendances
-cd backend
-pip install -r requirements.txt
-
-# Ajouter les dépendances de ryanair-py
-pip install -r ../ryanair-py/requirements.txt
+```
+FlightWatcher/
+  backend/              # FastAPI (API unique)
+  frontend/             # React + Vite (user + admin)
+  mobile/               # Expo React Native (user)
+  packages/shared/      # types, API client, auth factory, i18n, KVStore
+  backend-node/         # DEPRECATED — ne pas utiliser
 ```
 
-### Configuration Supabase (Optionnel)
+Clients → `@flightwatcher/shared` → FastAPI → Ryanair / Supabase.
 
-Pour activer la persistance des données avec Supabase :
+## Prérequis
 
-1. **Créer un projet Supabase** :
-   - Allez sur [https://app.supabase.com](https://app.supabase.com)
-   - Créez un nouveau projet
-   - Notez votre URL de projet et votre clé anonyme (anon key)
+- Python 3.10+
+- Node 20+
+- Compte Supabase (optionnel pour auth / sync)
 
-2. **Configurer le schéma de base de données** :
-   - Dans votre projet Supabase, allez dans l'éditeur SQL
-   - Exécutez le script `supabase_schema_v2.sql` (à la racine du projet)
-   - Cela créera les tables `saved_searches` et `favorites` (avec authentification)
-   - Si vous avez un ancien schéma avec `saved_favorites`, exécutez `migrate_saved_favorites_to_favorites.sql` pour migrer les données
-
-3. **Configurer les variables d'environnement backend** :
-   ```bash
-   cd backend
-   # Créer un fichier .env
-   # Ajouter les variables suivantes:
-   SUPABASE_URL=https://votre-projet.supabase.co
-   SUPABASE_ANON_KEY=votre-clé-anon
-   
-   # Configuration admin (optionnel)
-   ADMIN_EMAILS=votre-email@gmail.com,autre-email@gmail.com
-   ADMIN_PASSWORD_HASH=$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg.
-   
-   # Pour générer un nouveau hash de mot de passe admin :
-   # python -c "import bcrypt; print(bcrypt.hashpw(b'votre_mot_de_passe', bcrypt.gensalt(rounds=12)).decode())"
-   SUPABASE_SERVICE_ROLE_KEY=votre-clé-service-role  # Optionnel, pour price_history et cache
-   ```
-   
-   **Note** : Le frontend charge automatiquement la configuration depuis le backend via l'endpoint `/api/config`. 
-   Vous n'avez pas besoin de créer un fichier `.env` dans le dossier `frontend`.
-
-**Note** : L'application fonctionne sans Supabase en utilisant le stockage local (localStorage). Supabase est optionnel et permet de synchroniser les données entre appareils.
-
-### Frontend
+## Installation monorepo
 
 ```bash
-cd frontend
+# Racine
 npm install
+
+# Backend
+cd backend
+python -m venv venv
+# Windows: venv\Scripts\activate
+pip install -r requirements.txt
+pip install -r ../ryanair-py/requirements.txt
+cp .env.example .env   # renseigner SUPABASE_* et ALLOWED_ORIGINS
 ```
 
 ## Lancement
 
-### 1. Démarrer le backend
+### Backend (obligatoire)
 
-**Option 1 - Script Python (recommandé, gestion propre de l'arrêt)** :
 ```bash
 cd backend
 python run.py
+# http://localhost:8000
 ```
 
-**Option 2 - Commande uvicorn directe** :
-```bash
-cd backend
-uvicorn main:app --reload --port 8000
-```
-
-Le backend sera accessible sur `http://localhost:8000`
-
-### 2. Démarrer le frontend
-
-Dans un autre terminal:
+### Web
 
 ```bash
-cd frontend
-npm run dev
+npm run dev:web
+# http://localhost:5173
+# Proxy Vite /api → :8000 — ou VITE_API_URL=http://localhost:8000
 ```
 
-Le frontend sera accessible sur `http://localhost:5173`
+### Mobile (Expo)
 
-## Utilisation
-
-1. Ouvrir `http://localhost:5173` dans votre navigateur
-2. Cliquer sur "🔍 Lancer le scan"
-3. Les résultats s'affichent avec tous les voyages aller-retour trouvés
-
-## Critères de recherche
-
-- **Départ**: 7 ou 8 novembre
-- **Retour**: 10 ou 11 novembre (lundi/mardi)
-- **Prix max**: 100€ par segment (aller ET retour)
-- **Aéroport**: Beauvais (BVA)
-
-## Structure du projet
-
-```
-FlightWatcher/
-├── backend/
-│   ├── main.py              # API FastAPI
-│   ├── supabase_client.py   # Client Supabase
-│   ├── db_models.py         # Modèles de données
-│   ├── requirements.txt     # Dépendances Python
-│   └── .env.example         # Exemple de configuration
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx          # Composant principal
-│   │   ├── types.ts         # Types TypeScript
-│   │   ├── utils/
-│   │   │   ├── storage.ts   # Stockage local
-│   │   │   └── supabase.ts  # Utilitaires Supabase
-│   │   └── main.tsx         # Point d'entrée
-│   ├── package.json
-│   └── vite.config.ts
-├── ryanair-py/              # Bibliothèque Ryanair
-└── supabase_schema.sql      # Schéma SQL pour Supabase
+```bash
+cp mobile/.env.example mobile/.env
+# Sur device physique: EXPO_PUBLIC_API_URL=http://<IP-LAN>:8000
+npm run dev:mobile
+# puis i / a pour iOS / Android
 ```
 
-## API Endpoints
+Deep link OAuth : `flightwatcher://auth/callback` (voir [backend/MOBILE_AUTH.md](backend/MOBILE_AUTH.md)).
 
-### Endpoints principaux
+## Auth mobile
 
-- `GET /` - Status
-- `POST /api/scan` - Lancer le scan des vols
-- `GET /api/health` - Health check
-- `GET /api/airports` - Liste des aéroports
-- `GET /api/destinations` - Destinations depuis un aéroport
-- `POST /api/auto-check` - Vérification automatique des vols
+- Bearer JWT Supabase sur les endpoints user (`Authorization: Bearer …`)
+- Config publique : `GET /api/config`
+- CORS : variable `ALLOWED_ORIGINS` (web + Expo)
 
-### Endpoints Supabase (si configuré)
+## Endpoints principaux
 
-- `GET /api/supabase/status` - Vérifier si Supabase est configuré
-- `POST /api/supabase/searches` - Sauvegarder une recherche
-- `GET /api/supabase/searches` - Récupérer toutes les recherches
-- `DELETE /api/supabase/searches/{id}` - Supprimer une recherche
-- `POST /api/supabase/favorites` - Sauvegarder un favori
-- `GET /api/supabase/favorites` - Récupérer tous les favoris
-- `DELETE /api/supabase/favorites/{id}` - Supprimer un favori
+| Méthode | Path | Rôle |
+|---------|------|------|
+| POST | `/api/scan` | Scan paramétré |
+| POST | `/api/inspire` | Mode découverte |
+| GET | `/api/airports` | Aéroports |
+| GET | `/api/destinations` | Destinations |
+| GET/POST/DELETE | `/api/supabase/searches` | Recherches |
+| GET/POST/DELETE | `/api/supabase/favorites` | Favoris |
+| GET | `/api/config` | Clés publiques Supabase |
+| * | `/api/admin/*` | Admin (web) |
 
+## Typecheck
+
+```bash
+npm run typecheck
+# + mobile si installé :
+npm run typecheck:all
+```
+
+## Admin
+
+Panneau `/admin` (web uniquement). Config : `ADMIN_EMAILS`, `ADMIN_PASSWORD_HASH` — voir [ADMIN_PANEL.md](ADMIN_PANEL.md).
+
+## Notes
+
+- Ne pas utiliser `npx supabase db push` — migrations SQL manuelles.
+- `backend-node` est deprecated ([backend-node/DEPRECATED.md](backend-node/DEPRECATED.md)).

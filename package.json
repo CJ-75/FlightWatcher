@@ -1,0 +1,15 @@
+{
+  "name": "flightwatcher",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "frontend",
+    "mobile"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck -w @flightwatcher/shared && npm run typecheck -w flightwatcher-frontend",
+    "typecheck:all": "npm run typecheck && npm run typecheck -w flightwatcher-mobile --if-present",
+    "dev:web": "npm run dev -w flightwatcher-frontend",
+    "dev:mobile": "npm run start -w flightwatcher-mobile --if-present"
+  }
+}

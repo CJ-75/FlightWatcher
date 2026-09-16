@@ -8,6 +8,7 @@ import { StatsCard } from '../components/StatsCard'
 import { DataTable } from '../components/DataTable'
 import { PieChart } from '../components/Charts/PieChart'
 import { getAccessToken } from '../../lib/supabase'
+import { apiUrl } from '../../utils/apiBase'
 import { toast } from 'react-hot-toast'
 
 export function PlansPage() {
@@ -35,11 +36,7 @@ export function PlansPage() {
 
     try {
       const token = await getAccessToken()
-      const apiUrl = window.location.origin.includes('localhost')
-        ? `http://localhost:8000/api/admin/plans/${plan.id}`
-        : `/api/admin/plans/${plan.id}`
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl(`/api/admin/plans/${plan.id}`), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

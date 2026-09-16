@@ -9,6 +9,7 @@ import { Airport } from '../types';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { LoadingMessages } from './LoadingMessages';
+import { getApiClient } from '../utils/apiClient';
 import { getSessionId } from '../utils/session';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -258,32 +259,14 @@ export function SimpleSearch({
         })
       };
 
-      const response = await fetch('/api/inspire', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `Erreur: ${response.statusText}`);
-      }
-
-      const result: InspireResponse = await response.json();
+      const result = await getApiClient().inspire(request);
       
       // Enregistrer l'événement de recherche pour analytics (non-bloquant)
       const searchStartTime = performance.now();
       const searchDuration = Math.round(performance.now() - searchStartTime);
       
       // Enregistrer l'événement de recherche et stocker l'ID pour le lier au booking SAS
-      fetch('/api/analytics/search-event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      void getApiClient().trackSearchEvent({
           departure_airport: selectedAirport,
           date_preset: datePreset,
           budget,
@@ -299,17 +282,15 @@ export function SimpleSearch({
           user_agent: navigator.userAgent,
           session_id: getSessionId()
         })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success' && data.id) {
-          // Stocker le search_event_id pour le lier au booking SAS
-          onSearchEventId?.(data.id);
-        }
-      })
-      .catch(err => {
-        console.warn('Erreur enregistrement événement de recherche:', err);
-      });
+        .then((data: unknown) => {
+          const payload = data as { status?: string; id?: string }
+          if (payload.status === 'success' && payload.id) {
+            onSearchEventId?.(payload.id);
+          }
+        })
+        .catch(err => {
+          console.warn('Erreur enregistrement événement de recherche:', err);
+        });
       
       onResults(result.resultats, {
         datePreset,

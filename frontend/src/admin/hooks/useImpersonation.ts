@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { getAccessToken } from '../../lib/supabase'
+import { apiUrl } from '../../utils/apiBase'
 
 interface ImpersonationState {
   isImpersonating: boolean
@@ -49,11 +50,7 @@ export function useImpersonation() {
         throw new Error('Token d\'accès non disponible')
       }
 
-      const apiUrl = window.location.origin.includes('localhost')
-        ? `http://localhost:8000/api/admin/impersonate/${targetUserId}`
-        : `/api/admin/impersonate/${targetUserId}`
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl(`/api/admin/impersonate/${targetUserId}`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

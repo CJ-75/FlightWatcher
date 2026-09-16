@@ -29,3 +29,4 @@ Thumbs.db
 .env.*.local
 backend/.env
 frontend/.env
+mobile/.env

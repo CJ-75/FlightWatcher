@@ -117,14 +117,14 @@ function getLocalStorageCache<T>(userId: string, key: CacheKey): CacheEntry<T> |
  * Définit le cache localStorage pour un userId et un type
  */
 function setLocalStorageCache<T>(userId: string, key: CacheKey, data: T, synced: boolean = true): void {
+  const storageKey = getLocalStorageKey(key, userId)
+  const entry: CacheEntry<T> = {
+    data,
+    timestamp: Date.now(),
+    userId,
+    synced
+  }
   try {
-    const storageKey = getLocalStorageKey(key, userId)
-    const entry: CacheEntry<T> = {
-      data,
-      timestamp: Date.now(),
-      userId,
-      synced
-    }
     localStorage.setItem(storageKey, JSON.stringify(entry))
   } catch (error) {
     console.error('Erreur écriture cache localStorage:', error)
@@ -135,8 +135,8 @@ function setLocalStorageCache<T>(userId: string, key: CacheKey, data: T, synced:
       // Supprimer les caches les plus anciens
       cacheKeys.forEach(k => {
         try {
-          const entry = JSON.parse(localStorage.getItem(k) || '{}')
-          const age = Date.now() - (entry.timestamp || 0)
+          const parsed = JSON.parse(localStorage.getItem(k) || '{}')
+          const age = Date.now() - (parsed.timestamp || 0)
           if (age > 24 * 60 * 60 * 1000) { // Plus de 24h
             localStorage.removeItem(k)
           }

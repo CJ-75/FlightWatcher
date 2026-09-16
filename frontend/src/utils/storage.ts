@@ -1,37 +1,9 @@
-import { ScanRequest, TripResponse } from '../types'
+import { ScanRequest, TripResponse, type SavedSearch, type SavedFavorite } from '../types'
+import { STORAGE_KEYS } from '@flightwatcher/shared'
 import { getSupabaseClient, getCurrentUser } from '../lib/supabase'
 import { getFromCache, setCache, invalidateCache } from './cache'
 
-export interface SavedSearch {
-  id: string
-  name: string
-  request: ScanRequest
-  createdAt: string
-  lastUsed?: string
-  autoCheckEnabled?: boolean
-  autoCheckIntervalSeconds?: number  // Intervalle en secondes entre les vérifications
-  lastCheckResults?: TripResponse[]  // Résultats de la dernière vérification
-  lastCheckedAt?: string  // Date de la dernière vérification
-}
-
-export interface SavedFavorite {
-  id: string
-  trip: TripResponse
-  searchRequest: ScanRequest
-  createdAt: string
-  lastChecked?: string
-  isStillValid?: boolean
-  archived?: boolean  // Indique si le voyage est archivé
-}
-
-const STORAGE_KEYS = {
-  SEARCHES: 'flightwatcher_saved_searches',
-  FAVORITES: 'flightwatcher_favorites',
-  EXCLUDED_DESTINATIONS: 'flightwatcher_excluded_destinations',
-  DEV_MODE: 'flightwatcher_dev_mode',
-  NEW_RESULTS: 'flightwatcher_new_results',
-  AUTO_EXPORT_ENABLED: 'flightwatcher_auto_export_enabled'
-}
+export type { SavedSearch, SavedFavorite }
 
 export interface NewResult {
   searchId: string
@@ -312,7 +284,7 @@ export const deleteSearch = async (id: string): Promise<void> => {
           autoExport()
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur suppression Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getSavedSearches(true).then(searches => {
@@ -390,7 +362,7 @@ export const updateSearchLastUsed = async (id: string): Promise<void> => {
           }
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur mise à jour Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getSavedSearches(true).then(searches => {
@@ -462,7 +434,7 @@ export const updateSearchAutoCheck = async (
           autoExport()
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur mise à jour Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getSavedSearches(true).then(searches => {
@@ -536,7 +508,7 @@ export const updateSearchLastCheckResults = async (
           }
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur mise à jour Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getSavedSearches(true).then(searches => {
@@ -795,7 +767,7 @@ export const deleteFavorite = async (id: string): Promise<void> => {
           autoExport()
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur suppression Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getFavorites(true).then(favorites => {
@@ -871,7 +843,7 @@ export const updateFavoriteStatus = async (id: string, isStillValid: boolean): P
           autoExport()
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur mise à jour Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getFavorites(true).then(favorites => {
@@ -956,7 +928,7 @@ export const toggleFavoriteArchived = async (id: string): Promise<void> => {
           autoExport()
         }
       })
-      .catch((error) => {
+      .then(undefined, (error: any) => {
         console.error('Erreur mise à jour Supabase:', error)
         // Recharger depuis Supabase pour restaurer le cache
         getFavorites(true).then(favorites => {

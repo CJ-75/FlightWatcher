@@ -24,6 +24,9 @@ import { Toast } from './components/Toast'
 import { motion } from 'framer-motion'
 import { getSessionId } from './utils/session'
 import { useI18n } from './contexts/I18nContext'
+import { getApiClient } from './utils/apiClient'
+import { useAirports } from './hooks/useAirports'
+import { useDestinations } from './hooks/useDestinations'
 
 type Tab = 'search' | 'saved'
 
@@ -47,7 +50,12 @@ function Dashboard() {
     excludedDestinations: string[]
   } | null>(null)
   const resultsSectionRef = useRef<HTMLDivElement>(null)
-  const [airports, setAirports] = useState<Airport[]>([])
+  const { airports, isValidAirportCode } = useAirports(true)
+  const {
+    destinations,
+    loading: loadingDestinations,
+    load: loadDestinationsForAirport,
+  } = useDestinations()
   const [showSaveSearchModal, setShowSaveSearchModal] = useState(false)
   const [isSavingSearch, setIsSavingSearch] = useState(false)
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null)
@@ -63,20 +71,8 @@ function Dashboard() {
   const [limiteAllers, setLimiteAllers] = useState(50)
   const [currentRequest, setCurrentRequest] = useState<ScanRequest | null>(null)
   const [destinationsExclues, setDestinationsExclues] = useState<string[]>([])
-  const [destinations, setDestinations] = useState<Record<string, Destination[]>>({})
-  const [loadingDestinations, setLoadingDestinations] = useState(false)
   const isLoadingFromStorage = useRef(false)
   const shouldScrollToResults = useRef(false)
-
-  // Fonction pour valider qu'un code d'aéroport est valide
-  const isValidAirportCode = (code: string): boolean => {
-    // Si la liste d'aéroports n'est pas encore chargée, considérer comme invalide
-    if (!airports || airports.length === 0) return false;
-    if (!code || code.trim() === '') return false;
-    const codeUpper = code.trim().toUpperCase();
-    // Vérifier que c'est un code d'aéroport valide (3 lettres) et qu'il existe dans la liste
-    return /^[A-Z]{3}$/.test(codeUpper) && airports.some(a => a.code === codeUpper);
-  };
 
   const handleScan = async (request?: ScanRequest) => {
     const req = request || {
@@ -110,18 +106,7 @@ function Dashboard() {
     setCurrentRequest(req)
 
     try {
-      const response = await fetch('/api/scan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(req)
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || `Erreur: ${response.statusText}`)
-      }
-      const result: ScanResponse = await response.json()
+      const result = await getApiClient().scan(req)
       setData(result)
       // Toujours revenir à l'onglet recherche pour voir les résultats
       setActiveTab('search')
@@ -385,17 +370,7 @@ function Dashboard() {
   const handleCheckFavorite = async (favorite: SavedFavorite) => {
     setLoading(true)
     try {
-      const response = await fetch('/api/scan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(favorite.searchRequest)
-      })
-      if (!response.ok) {
-        throw new Error('Erreur lors de la vérification')
-      }
-      const result: ScanResponse = await response.json()
+      const result = await getApiClient().scan(favorite.searchRequest)
       
       // Vérifier si le voyage est toujours présent
       const isStillValid = result.resultats.some(r => 
@@ -489,37 +464,17 @@ function Dashboard() {
       setError('Veuillez sélectionner un aéroport de départ avant de charger les destinations')
       return
     }
-    
-    setLoadingDestinations(true)
-    setError(null)
-    try {
-      const response = await fetch(`/api/destinations?airport=${airportCode}`)
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Erreur lors du chargement' }))
-        throw new Error(errorData.error || `Erreur ${response.status}: ${response.statusText}`)
-      }
-      const data = await response.json()
-      setDestinations(data.destinations || {})
-      if (!data.destinations || Object.keys(data.destinations).length === 0) {
-        setError('Aucune destination trouvée pour cet aéroport')
-      }
-    } catch (err) {
-      console.error('Erreur chargement destinations:', err)
-      setError(err instanceof Error ? err.message : 'Erreur lors du chargement des destinations')
-    } finally {
-      setLoadingDestinations(false)
-    }
+    await loadDestinationsForAirport(airportCode)
+    // Mirror destination errors into main error banner when empty/fail
+    // (hook keeps its own error; surface critical ones)
   }
 
   // Charger automatiquement les destinations quand l'aéroport change ou au chargement initial
   useEffect(() => {
     if (aeroportDepart) {
-      loadDestinations(aeroportDepart)
-      // Par défaut, toutes les destinations sont incluses (aucune exclue)
-      // Ne pas charger les destinations exclues sauvegardées - réinitialiser à vide
+      void loadDestinations(aeroportDepart)
       isLoadingFromStorage.current = true
       setDestinationsExclues([])
-      // Réinitialiser le flag après un court délai pour permettre la mise à jour de l'état
       setTimeout(() => {
         isLoadingFromStorage.current = false
       }, 100)
@@ -549,28 +504,11 @@ function Dashboard() {
     const tousExclus = codesPays.every(code => destinationsExclues.includes(code))
     
     if (tousExclus) {
-      // Désélectionner tous
       setDestinationsExclues(prev => prev.filter(c => !codesPays.includes(c)))
     } else {
-      // Sélectionner tous
       setDestinationsExclues(prev => [...new Set([...prev, ...codesPays])])
     }
   }
-
-  // Charger les aéroports au montage
-  useEffect(() => {
-    const loadAirports = async () => {
-      try {
-        const response = await fetch('/api/airports')
-        if (!response.ok) throw new Error('Erreur lors du chargement')
-        const data = await response.json()
-        setAirports(data.airports || [])
-      } catch (err) {
-        console.error('Erreur chargement aéroports:', err)
-      }
-    }
-    loadAirports()
-  }, [])
 
   // Charger les favoris au montage
   useEffect(() => {
@@ -982,11 +920,11 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
   useEffect(() => {
     const loadAirports = async () => {
       try {
-        const response = await fetch('/api/airports')
-        if (!response.ok) throw new Error('Erreur lors du chargement')
-        const data = await response.json()
-        setAirports(data.airports || [])
-        setFilteredAirports(data.airports || [])
+        const { normalizeAirports } = await import('./utils/apiClient')
+        const raw = await getApiClient().getAirports()
+        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+        setAirports(list)
+        setFilteredAirports(list)
       } catch (err) {
         console.error('Erreur chargement aéroports:', err)
       }
@@ -1752,19 +1690,14 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   // Fonction pour effectuer une vérification automatique
   const performAutoCheck = async (search: SavedSearch) => {
     try {
-      const response = await fetch('/api/auto-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await getApiClient().autoCheck({
           search_id: search.id,
           previous_results: search.lastCheckResults || [],
           ...search.request
-        })
-      })
-
-      if (!response.ok) throw new Error('Erreur lors de la vérification')
-
-      const data = await response.json()
+        }) as {
+          current_results: TripResponse[]
+          new_results?: TripResponse[]
+        }
       
       // Mettre à jour les résultats
       updateSearchLastCheckResults(search.id, data.current_results)

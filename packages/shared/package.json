@@ -1,0 +1,25 @@
+{
+  "name": "@flightwatcher/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./api": "./src/api/client.ts",
+    "./auth": "./src/auth/createSupabaseAuth.ts",
+    "./i18n": "./src/i18n/translations.ts",
+    "./storage": "./src/storage/kv.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.90.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}

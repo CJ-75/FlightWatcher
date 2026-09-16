@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { getCurrentUser, getAccessToken } from '../../lib/supabase'
+import { apiUrl } from '../../utils/apiBase'
 
 interface AdminAuthState {
   isAdmin: boolean
@@ -31,12 +32,7 @@ export function useAdminAuth(): AdminAuthState & { checkAdmin: () => Promise<voi
         return
       }
 
-      // Vérifier le statut admin via l'API
-      const apiUrl = window.location.origin.includes('localhost') 
-        ? 'http://localhost:8000/api/admin/verify'
-        : '/api/admin/verify'
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl('/api/admin/verify'), {
         headers: {
           'Authorization': `Bearer ${token}`
         },

@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "FlightWatcher",
+    "slug": "flightwatcher",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "flightwatcher",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1F33"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.flightwatcher.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1F33"
+      },
+      "package": "com.flightwatcher.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "flightwatcher",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
+  }
+}

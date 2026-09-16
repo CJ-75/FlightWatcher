@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react'
 import { getAccessToken } from '../../lib/supabase'
+import { resolveApiUrl } from '../../utils/apiBase'
 import {
   mockUsers,
   mockSearches,
@@ -197,24 +198,9 @@ export function useAdminData<T = any>(options: UseAdminDataOptions) {
         throw new Error('Token d\'accès non disponible')
       }
 
-      // Construire l'URL avec les paramètres
-      let fullUrl: string
-      if (endpoint.startsWith('http')) {
-        fullUrl = endpoint
-      } else {
-        const baseUrl = window.location.origin.includes('localhost')
-          ? 'http://localhost:8000'
-          : window.location.origin
-        fullUrl = `${baseUrl}${endpoint}`
-      }
-      const url = new URL(fullUrl)
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, String(value))
-        }
-      })
+      const url = resolveApiUrl(endpoint, params)
 
-      const response = await fetch(url.toString(), {
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
         },

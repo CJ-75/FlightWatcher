@@ -6,6 +6,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSupabaseClient } from '../lib/supabase'
+import { apiUrl } from '../utils/apiBase'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
@@ -38,12 +39,8 @@ export default function AuthCallback() {
             // Vérifier le statut admin avant de rediriger
             const token = session.access_token
             if (token) {
-              const apiUrl = window.location.origin.includes('localhost')
-                ? 'http://localhost:8000/api/admin/verify'
-                : '/api/admin/verify'
-              
               try {
-                const response = await fetch(apiUrl, {
+                const response = await fetch(apiUrl('/api/admin/verify'), {
                   headers: {
                     'Authorization': `Bearer ${token}`
                   }

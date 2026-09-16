@@ -182,7 +182,7 @@ export function UserMenu() {
   if (user) {
     const avatarUrl = user.user_metadata?.avatar_url || userProfile?.avatar_url;
     const displayName = user.user_metadata?.full_name || userProfile?.full_name || user.email?.split('@')[0] || 'User';
-    const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || user.email?.charAt(0).toUpperCase() || 'U';
+    const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || user.email?.charAt(0).toUpperCase() || 'U';
 
     return (
       <div className="relative flex items-center gap-2 sm:gap-3">

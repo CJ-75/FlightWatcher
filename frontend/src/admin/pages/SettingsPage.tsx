@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useAdminData } from '../hooks/useAdminData'
 import { useTestMode } from '../context/TestModeContext'
 import { getAccessToken } from '../../lib/supabase'
+import { apiUrl } from '../../utils/apiBase'
 import { toast } from 'react-hot-toast'
 
 export function SettingsPage() {
@@ -51,11 +52,7 @@ export function SettingsPage() {
 
     try {
       const token = await getAccessToken()
-      const apiUrl = window.location.origin.includes('localhost')
-        ? 'http://localhost:8000/api/admin/settings'
-        : '/api/admin/settings'
-      
-      const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl('/api/admin/settings'), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

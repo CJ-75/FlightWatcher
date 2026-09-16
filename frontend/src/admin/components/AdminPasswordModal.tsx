@@ -3,6 +3,7 @@
  */
 import { useState } from 'react'
 import { getAccessToken } from '../../lib/supabase'
+import { apiUrl } from '../../utils/apiBase'
 import { toast } from 'react-hot-toast'
 
 interface AdminPasswordModalProps {
@@ -32,11 +33,7 @@ export function AdminPasswordModal({ isOpen, onSuccess, onCancel }: AdminPasswor
         return
       }
 
-      const apiUrl = window.location.origin.includes('localhost')
-        ? 'http://localhost:8000/api/admin/verify-password'
-        : '/api/admin/verify-password'
-
-      const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl('/api/admin/verify-password'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
