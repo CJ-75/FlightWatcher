@@ -16,7 +16,11 @@ export function ProfileScreen() {
     <View
       style={[
         styles.screen,
-        { paddingBottom: insets.bottom + 100, paddingHorizontal: spacing.xl },
+        {
+          paddingTop: insets.top + spacing.md,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: spacing.xl,
+        },
       ]}
     >
       <Text style={styles.title}>{translate('fr', 'profile.title')}</Text>

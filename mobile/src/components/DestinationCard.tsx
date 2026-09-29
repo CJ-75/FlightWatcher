@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import { buildRyanairBookingUrl } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
+import { HeartIcon } from './HeartIcon'
 
 interface Props {
   trip: EnrichedTripResponse
@@ -73,11 +74,15 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
         ) : null}
 
         <Pressable
-          style={({ pressed }) => [styles.heart, pressed && { transform: [{ scale: 0.9 }] }]}
+          style={({ pressed }) => [styles.heart, pressed && { transform: [{ scale: 0.92 }] }]}
           onPress={onFavorite}
           hitSlop={12}
         >
-          <Text style={styles.heartText}>{isFavorite ? '♥' : '♡'}</Text>
+          <HeartIcon
+            size={20}
+            filled={!!isFavorite}
+            color={isFavorite ? colors.primary : colors.inkSoft}
+          />
         </Pressable>
 
         <View style={styles.heroText}>
@@ -173,12 +178,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  heartText: { fontSize: 22, color: colors.accent, fontFamily: fonts.bold },
   heroText: { position: 'absolute', left: 16, right: 16, bottom: 16 },
   city: {
     color: colors.white,

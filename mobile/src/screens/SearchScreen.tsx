@@ -4,10 +4,11 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
+  ScrollView,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -31,24 +32,21 @@ import {
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../../App'
 import { AirportPicker } from '../components/AirportPicker'
+import { BudgetSlider } from '../components/BudgetSlider'
 import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { ExcludeDestinationsModal } from '../components/ExcludeDestinationsModal'
 import { HoursSheet } from '../components/HoursSheet'
 import { Button } from '../components/ui/Button'
 import { colors, fonts, shadow } from '../theme'
 
-const PRESETS: { id: DatePresetId; label: string }[] = [
-  { id: 'weekend', label: 'Ce\nweekend' },
-  { id: 'next-weekend', label: 'Weekend\nprochain' },
-  { id: 'next-week', label: '3 jours\nsem. pro' },
-  { id: 'flexible', label: 'Dates\nflexibles' },
+const PRESETS: { id: DatePresetId; label: string; hint: string }[] = [
+  { id: 'weekend', label: 'Ce weekend', hint: 'Sam → Dim' },
+  { id: 'next-weekend', label: 'Weekend prochain', hint: 'Samedi suivant' },
+  { id: 'next-week', label: 'Semaine prochaine', hint: '3 jours (lun–sam)' },
+  { id: 'flexible', label: 'Dates libres', hint: 'Je choisis' },
 ]
 
-const LOADING_MESSAGES = [
-  'On scanne Ryanair…',
-  'On croise les prix…',
-  'Presque là…',
-]
+const LOADING_MESSAGES = ['On scanne Ryanair…', 'On croise les prix…', 'Presque là…']
 
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -74,6 +72,7 @@ export function SearchScreen() {
 
   const [showFlexible, setShowFlexible] = useState(false)
   const [showExclude, setShowExclude] = useState(false)
+  const [showHoursList, setShowHoursList] = useState(false)
   const [hoursEdit, setHoursEdit] = useState<{
     type: 'depart' | 'retour'
     index: number
@@ -87,9 +86,7 @@ export function SearchScreen() {
   }, [])
 
   useEffect(() => {
-    if (preset !== 'flexible') {
-      setPresetDates(generateDatesFromPreset(preset))
-    }
+    if (preset !== 'flexible') setPresetDates(generateDatesFromPreset(preset))
   }, [preset])
 
   useEffect(() => {
@@ -127,10 +124,6 @@ export function SearchScreen() {
     [airports, airport],
   )
 
-  const bumpBudget = (delta: number) => {
-    setBudget((b) => Math.min(1000, Math.max(20, b + delta)))
-  }
-
   const updatePresetDate = (type: 'depart' | 'retour', index: number, updated: DateAvecHoraire) => {
     setPresetDates((prev) => {
       const next = { ...prev }
@@ -150,6 +143,19 @@ export function SearchScreen() {
         ? presetDates.dates_depart[hoursEdit.index]
         : presetDates.dates_retour[hoursEdit.index]
 
+  const datesSummary = useMemo(() => {
+    if (preset === 'flexible') {
+      const a = flexibleDates.dates_depart.length
+      const r = flexibleDates.dates_retour.length
+      if (a === 0 && r === 0) return 'Choisir les dates'
+      return `${a} aller · ${r} retour`
+    }
+    const first = presetDates.dates_depart[0]?.date
+    const last = presetDates.dates_retour[presetDates.dates_retour.length - 1]?.date
+    if (!first || !last) return '—'
+    return `${formatDateFr(first)} → ${formatDateFr(last)}`
+  }, [preset, presetDates, flexibleDates])
+
   const onSearch = async () => {
     setError(null)
     if (!airport || airport.length !== 3 || !isValidAirport) {
@@ -157,11 +163,7 @@ export function SearchScreen() {
       return
     }
     if (activeDates.dates_depart.length === 0 || activeDates.dates_retour.length === 0) {
-      setError(
-        preset === 'flexible'
-          ? 'Ajoute au moins une date aller et une date retour'
-          : 'Dates en cours de calcul…',
-      )
+      setError('Ajoute au moins une date aller et une date retour')
       if (preset === 'flexible') setShowFlexible(true)
       return
     }
@@ -169,7 +171,7 @@ export function SearchScreen() {
     setLoading(true)
     setLoadingMsg(LOADING_MESSAGES[0])
     try {
-      const request = {
+      const result = await getApi().inspire({
         budget,
         date_preset: preset,
         departure: airport.trim().toUpperCase(),
@@ -178,8 +180,7 @@ export function SearchScreen() {
           dates_retour: activeDates.dates_retour,
         },
         ...(excluded.length > 0 ? { destinations_exclues: excluded } : {}),
-      }
-      const result = await getApi().inspire(request)
+      })
 
       let searchEventId: string | null = null
       try {
@@ -197,7 +198,7 @@ export function SearchScreen() {
         })) as { status?: string; id?: string }
         if (data?.status === 'success' && data.id) searchEventId = data.id
       } catch {
-        /* analytics non-bloquant */
+        /* non-bloquant */
       }
 
       navigation.navigate('Results', {
@@ -220,16 +221,13 @@ export function SearchScreen() {
     }
   }
 
-  const fillPct = Math.max(8, Math.min(100, ((budget - 20) / 980) * 100))
-
   if (loading) {
     return (
-      <View style={[styles.loadingRoot, { paddingTop: insets.top + 40 }]}>
+      <View style={[styles.loadingRoot, { paddingTop: insets.top + 48 }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingTitle}>{loadingMsg}</Text>
         <Text style={styles.loadingSub}>
-          {airport} · {budget}€ · {activeDates.dates_depart.length + activeDates.dates_retour.length}{' '}
-          dates
+          {airport} · {budget}€
         </Text>
       </View>
     )
@@ -239,147 +237,149 @@ export function SearchScreen() {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={8}
     >
       <LinearGradient
-        colors={['#FFE8DC', '#FFF9F5', '#FFF9F5']}
-        locations={[0, 0.28, 1]}
+        colors={['#FFE8DC', '#FFF9F5']}
+        locations={[0, 0.35]}
         style={StyleSheet.absoluteFill}
       />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingTop: insets.top + 10,
-          paddingBottom: 28,
-          paddingHorizontal: 20,
-        }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+
+      <View
+        style={[
+          styles.screen,
+          { paddingTop: insets.top + 8, paddingBottom: 10 },
+        ]}
       >
-        <Text style={styles.kicker}>FLIGHTWATCHER</Text>
-        <Text style={styles.hero}>Weekend pas cher</Text>
-        <Text style={styles.lead}>Budget, aéroport, dates — c’est tout.</Text>
+        <View style={styles.topBlock}>
+          <Text style={styles.kicker}>FLIGHTWATCHER</Text>
+          <Text style={styles.hero}>Weekend pas cher</Text>
 
-        <View style={[styles.card, shadow.soft]}>
-          <Text style={styles.label}>Mon budget</Text>
-          <View style={styles.budgetRow}>
-            <Pressable
-              onPress={() => bumpBudget(-10)}
-              style={({ pressed }) => [styles.budgetBtn, pressed && styles.budgetBtnPressed]}
-            >
-              <Text style={styles.budgetBtnText}>−</Text>
-            </Pressable>
-            <View style={styles.budgetValueWrap}>
-              <Text style={styles.budgetValue} numberOfLines={1} adjustsFontSizeToFit>
-                {budget}€
-              </Text>
+          <View style={[styles.card, shadow.soft]}>
+            <BudgetSlider value={budget} onChange={setBudget} />
+
+            <View style={styles.divider} />
+
+            <Text style={styles.label}>Départ</Text>
+            <AirportPicker compact airports={airports} value={airport} onChange={setAirport} />
+
+            <View style={styles.divider} />
+
+            <Text style={styles.label}>Quand</Text>
+            <View style={styles.presetGrid}>
+              {PRESETS.map((p) => {
+                const active = preset === p.id
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => {
+                      setPreset(p.id)
+                      if (p.id === 'flexible') setShowFlexible(true)
+                    }}
+                    style={[styles.presetCard, active && styles.presetCardActive]}
+                  >
+                    <Text
+                      style={[styles.presetLabel, active && styles.presetLabelActive]}
+                      numberOfLines={1}
+                    >
+                      {p.label}
+                    </Text>
+                    <Text
+                      style={[styles.presetHint, active && styles.presetHintActive]}
+                      numberOfLines={1}
+                    >
+                      {p.hint}
+                    </Text>
+                  </Pressable>
+                )
+              })}
             </View>
+
             <Pressable
-              onPress={() => bumpBudget(10)}
-              style={({ pressed }) => [styles.budgetBtn, pressed && styles.budgetBtnPressed]}
+              onPress={() => {
+                if (preset === 'flexible') setShowFlexible(true)
+                else setShowHoursList(true)
+              }}
+              style={styles.datesRow}
             >
-              <Text style={styles.budgetBtnText}>+</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.datesLabel}>
+                  {preset === 'flexible' ? 'Dates choisies' : 'Dates & horaires'}
+                </Text>
+                <Text style={styles.datesValue} numberOfLines={1}>
+                  {datesSummary}
+                </Text>
+              </View>
+              <Text style={styles.datesChevron}>›</Text>
             </Pressable>
-          </View>
-          <View style={styles.budgetTrack}>
-            <LinearGradient
-              colors={[colors.primaryMuted, colors.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.budgetFill, { width: `${fillPct}%` }]}
-            />
-          </View>
 
-          <View style={styles.divider} />
-
-          <Text style={styles.label}>Départ</Text>
-          <AirportPicker airports={airports} value={airport} onChange={setAirport} />
-          {!isValidAirport && airport.length === 3 ? (
-            <Text style={styles.fieldError}>Aéroport inconnu</Text>
-          ) : null}
-
-          <View style={styles.divider} />
-
-          <Text style={styles.label}>Je pars</Text>
-          <View style={styles.chips}>
-            {PRESETS.map((p) => {
-              const active = preset === p.id
-              return (
-                <Pressable
-                  key={p.id}
-                  onPress={() => {
-                    setPreset(p.id)
-                    if (p.id === 'flexible') setShowFlexible(true)
-                  }}
-                  style={[styles.chip, active && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.label}</Text>
-                </Pressable>
-              )
-            })}
-          </View>
-
-          {preset !== 'flexible' ? (
-            <View style={styles.hoursBlock}>
-              <Text style={styles.hoursTitle}>Horaires</Text>
-              {presetDates.dates_depart.map((d, i) => (
-                <Pressable
-                  key={`d-${d.date}`}
-                  onPress={() => setHoursEdit({ type: 'depart', index: i })}
-                  style={styles.hoursRow}
-                >
-                  <Text style={styles.hoursTag}>Aller</Text>
-                  <Text style={styles.hoursDate}>{formatDateFr(d.date)}</Text>
-                  <Text style={styles.hoursTime}>
-                    {d.heure_min}–{d.heure_max}
-                  </Text>
-                </Pressable>
-              ))}
-              {presetDates.dates_retour.map((d, i) => (
-                <Pressable
-                  key={`r-${d.date}`}
-                  onPress={() => setHoursEdit({ type: 'retour', index: i })}
-                  style={styles.hoursRow}
-                >
-                  <Text style={[styles.hoursTag, styles.hoursTagRetour]}>Retour</Text>
-                  <Text style={styles.hoursDate}>{formatDateFr(d.date)}</Text>
-                  <Text style={styles.hoursTime}>
-                    {d.heure_min}–{d.heure_max}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : (
-            <Pressable onPress={() => setShowFlexible(true)} style={styles.flexSummary}>
-              <Text style={styles.flexSummaryText}>
-                {flexibleDates.dates_depart.length} aller · {flexibleDates.dates_retour.length}{' '}
-                retour — modifier
+            <Pressable onPress={() => setShowExclude(true)} style={styles.advRow}>
+              <Text style={styles.advLabel}>Exclusions</Text>
+              <Text style={[styles.advValue, excluded.length > 0 && styles.advValueActive]}>
+                {excluded.length > 0 ? `${excluded.length}` : 'Aucune'} ›
               </Text>
             </Pressable>
-          )}
-
-          <View style={styles.divider} />
-
-          <Pressable onPress={() => setShowExclude(true)} style={styles.advRow}>
-            <Text style={styles.advLabel}>Exclure des destinations</Text>
-            <Text style={[styles.advValue, excluded.length > 0 && styles.advValueActive]}>
-              {excluded.length > 0 ? `${excluded.length}` : 'Aucune'} ›
-            </Text>
-          </Pressable>
+          </View>
         </View>
 
-        {error ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.error}>{error}</Text>
-          </View>
-        ) : null}
+        <View style={styles.footer}>
+          {error ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.error} numberOfLines={2}>
+                {error}
+              </Text>
+            </View>
+          ) : null}
+          <Button label="Lancer la recherche" onPress={onSearch} style={styles.cta} />
+        </View>
+      </View>
 
-        <Button
-          label="Lancer la recherche"
-          onPress={onSearch}
-          style={{ marginTop: 18 }}
-        />
-      </ScrollView>
+      {/* Hours list sheet */}
+      <Modal
+        visible={showHoursList}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowHoursList(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setShowHoursList(false)} />
+        <View style={[styles.hoursSheet, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.handle} />
+          <Text style={styles.hoursSheetTitle}>Horaires</Text>
+          <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+            {presetDates.dates_depart.map((d, i) => (
+              <Pressable
+                key={`d-${d.date}`}
+                onPress={() => {
+                  setShowHoursList(false)
+                  setTimeout(() => setHoursEdit({ type: 'depart', index: i }), 250)
+                }}
+                style={styles.hoursRow}
+              >
+                <Text style={styles.hoursTag}>Aller</Text>
+                <Text style={styles.hoursDate}>{formatDateFr(d.date)}</Text>
+                <Text style={styles.hoursTime}>
+                  {d.heure_min}–{d.heure_max}
+                </Text>
+              </Pressable>
+            ))}
+            {presetDates.dates_retour.map((d, i) => (
+              <Pressable
+                key={`r-${d.date}`}
+                onPress={() => {
+                  setShowHoursList(false)
+                  setTimeout(() => setHoursEdit({ type: 'retour', index: i }), 250)
+                }}
+                style={styles.hoursRow}
+              >
+                <Text style={[styles.hoursTag, styles.hoursTagRetour]}>Retour</Text>
+                <Text style={styles.hoursDate}>{formatDateFr(d.date)}</Text>
+                <Text style={styles.hoursTime}>
+                  {d.heure_min}–{d.heure_max}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <HoursSheet
         visible={!!hoursEdit}
@@ -413,7 +413,17 @@ export function SearchScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  scroll: { flex: 1, backgroundColor: 'transparent' },
+  screen: {
+    flex: 1,
+    paddingHorizontal: 18,
+    justifyContent: 'space-between',
+  },
+  topBlock: {
+    gap: 10,
+  },
+  footer: {
+    marginTop: 12,
+  },
   loadingRoot: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -421,156 +431,188 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   loadingTitle: {
-    marginTop: 20,
+    marginTop: 18,
     fontFamily: fonts.bold,
-    fontSize: 18,
+    fontSize: 17,
     color: colors.ink,
-    textAlign: 'center',
     includeFontPadding: false,
   },
   loadingSub: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
     includeFontPadding: false,
   },
   kicker: {
     fontFamily: fonts.semibold,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 12,
     color: colors.primary,
-    letterSpacing: 2,
-    marginBottom: 6,
+    letterSpacing: 1.8,
+    marginBottom: 1,
     includeFontPadding: false,
   },
   hero: {
     fontFamily: fonts.extrabold,
-    fontSize: 30,
-    lineHeight: 36,
-    letterSpacing: -1,
+    fontSize: 24,
+    lineHeight: 28,
+    letterSpacing: -0.7,
     color: colors.ink,
-    includeFontPadding: false,
-  },
-  lead: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.muted,
-    marginTop: 6,
-    marginBottom: 18,
     includeFontPadding: false,
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: 26,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 18,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   label: {
     fontFamily: fonts.bold,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.inkSoft,
-    letterSpacing: 0.2,
-    marginBottom: 10,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.muted,
+    letterSpacing: 0.3,
+    marginBottom: 8,
+    textTransform: 'uppercase',
     includeFontPadding: false,
   },
-  budgetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 52,
-  },
-  budgetBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  budgetBtnPressed: { backgroundColor: colors.primaryMuted },
-  budgetBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 24,
-    lineHeight: 28,
-    color: colors.primary,
-    includeFontPadding: false,
-  },
-  budgetValueWrap: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  budgetValue: {
-    fontFamily: fonts.extrabold,
-    fontSize: 40,
-    lineHeight: 48,
-    letterSpacing: -1.2,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  budgetTrack: {
-    marginTop: 12,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primarySoft,
-    overflow: 'hidden',
-  },
-  budgetFill: { height: '100%', borderRadius: 3 },
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.line,
-    marginVertical: 16,
+    marginVertical: 12,
   },
-  fieldError: {
-    marginTop: 6,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.danger,
-    includeFontPadding: false,
+  presetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    width: '23%',
+  presetCard: {
+    width: '48%',
     flexGrow: 1,
-    minHeight: 54,
-    borderRadius: 16,
-    paddingHorizontal: 4,
-    paddingVertical: 8,
+    minHeight: 56,
+    borderRadius: 14,
     backgroundColor: colors.primarySoft,
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.primary },
-  chipText: {
-    fontFamily: fonts.semibold,
-    fontSize: 11,
-    lineHeight: 15,
-    color: colors.primaryInk,
-    textAlign: 'center',
+  presetCardActive: {
+    backgroundColor: colors.primary,
+  },
+  presetLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    lineHeight: 17,
+    color: colors.ink,
     includeFontPadding: false,
   },
-  chipTextActive: { color: colors.white },
-  hoursBlock: { marginTop: 14, gap: 6 },
-  hoursTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
+  presetLabelActive: { color: colors.white },
+  presetHint: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    lineHeight: 14,
     color: colors.muted,
-    marginBottom: 2,
+    marginTop: 2,
+    includeFontPadding: false,
+  },
+  presetHintActive: { color: 'rgba(255,255,255,0.85)' },
+  datesRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  datesLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.muted,
+    includeFontPadding: false,
+  },
+  datesValue: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.ink,
+    marginTop: 1,
+    includeFontPadding: false,
+  },
+  datesChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.primary,
+    includeFontPadding: false,
+  },
+  advRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  advLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
+    includeFontPadding: false,
+  },
+  advValue: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.muted,
+    includeFontPadding: false,
+  },
+  advValueActive: { color: colors.primary },
+  errorBox: {
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+  },
+  error: {
+    fontFamily: fonts.medium,
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 17,
+    includeFontPadding: false,
+  },
+  cta: { minHeight: 52 },
+  sheetBackdrop: { flex: 1, backgroundColor: colors.overlay },
+  hoursSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.lineStrong,
+    marginBottom: 12,
+  },
+  hoursSheetTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.ink,
+    marginBottom: 12,
     includeFontPadding: false,
   },
   hoursRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primarySoft,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     gap: 8,
+    marginBottom: 6,
   },
   hoursTag: {
     fontFamily: fonts.bold,
@@ -580,7 +622,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 7,
     includeFontPadding: false,
   },
   hoursTagRetour: { backgroundColor: colors.success },
@@ -595,49 +637,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.muted,
-    includeFontPadding: false,
-  },
-  flexSummary: {
-    marginTop: 12,
-    backgroundColor: colors.primarySoft,
-    borderRadius: 14,
-    padding: 14,
-  },
-  flexSummaryText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.primaryInk,
-    includeFontPadding: false,
-  },
-  advRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  advLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  advValue: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.muted,
-    includeFontPadding: false,
-  },
-  advValueActive: { color: colors.primary },
-  errorBox: {
-    backgroundColor: colors.dangerSoft,
-    borderRadius: 14,
-    padding: 12,
-    marginTop: 12,
-  },
-  error: {
-    fontFamily: fonts.medium,
-    color: colors.danger,
-    fontSize: 13,
-    lineHeight: 18,
     includeFontPadding: false,
   },
 })

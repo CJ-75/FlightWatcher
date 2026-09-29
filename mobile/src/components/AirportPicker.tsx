@@ -19,6 +19,8 @@ type Props = {
   airports: Airport[]
   value: string
   onChange: (code: string) => void
+  /** Hide quick chips under the trigger (saves vertical space). */
+  compact?: boolean
 }
 
 function matchAirports(list: Airport[], query: string): Airport[] {
@@ -36,7 +38,7 @@ function matchAirports(list: Airport[], query: string): Airport[] {
     .slice(0, 40)
 }
 
-export function AirportPicker({ airports, value, onChange }: Props) {
+export function AirportPicker({ airports, value, onChange, compact }: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -79,16 +81,22 @@ export function AirportPicker({ airports, value, onChange }: Props) {
           <Text style={styles.triggerTitle} numberOfLines={1}>
             {selected?.city || selected?.name || 'Choisir un aéroport'}
           </Text>
-          <Text style={styles.triggerSub} numberOfLines={1}>
-            {selected
-              ? `${selected.name} · ${selected.country}`
-              : 'Rechercher par ville ou code IATA'}
-          </Text>
+          {!compact ? (
+            <Text style={styles.triggerSub} numberOfLines={1}>
+              {selected
+                ? `${selected.name} · ${selected.country}`
+                : 'Rechercher par ville ou code IATA'}
+            </Text>
+          ) : selected ? (
+            <Text style={styles.triggerSub} numberOfLines={1}>
+              {selected.code} · {selected.country}
+            </Text>
+          ) : null}
         </View>
         <Text style={styles.chevron}>›</Text>
       </Pressable>
 
-      {popularAirports.length > 0 ? (
+      {!compact && popularAirports.length > 0 ? (
         <View style={styles.popularRow}>
           {popularAirports.map((a) => {
             const active = a.code === value
@@ -182,29 +190,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primarySoft,
-    borderRadius: 16,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    gap: 12,
+    borderRadius: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    gap: 10,
   },
   triggerPressed: {
     backgroundColor: colors.primaryMuted,
   },
   codeBadge: {
-    minWidth: 48,
-    height: 40,
-    borderRadius: 12,
+    minWidth: 44,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   codeText: {
     fontFamily: fonts.extrabold,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 18,
     color: colors.primary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
     includeFontPadding: false,
   },
   triggerBody: { flex: 1, minWidth: 0 },

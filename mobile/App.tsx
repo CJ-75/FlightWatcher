@@ -2,7 +2,7 @@ import React, { useCallback } from 'react'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { ActivityIndicator, Text, View, StyleSheet } from 'react-native'
+import { ActivityIndicator, View, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -21,6 +21,7 @@ import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
+import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
 
 export type SearchInfo = {
   airport: string
@@ -63,28 +64,14 @@ const navTheme = {
   },
 }
 
-function TabIcon({ label, focused }: { label: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    Search: '⌕',
-    Favorites: '♥',
-    Profile: '◎',
-  }
-  return (
-    <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
-      <Text style={[styles.tabIconText, focused && styles.tabIconTextActive]}>
-        {icons[label] || '•'}
-      </Text>
-    </View>
-  )
-}
-
 function MainTabs() {
   const insets = useSafeAreaInsets()
-  const bottom = Math.max(insets.bottom, 8)
+  const tabClearance = FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{
         headerStyle: {
           backgroundColor: colors.canvas,
         },
@@ -95,30 +82,31 @@ function MainTabs() {
         },
         headerShadowVisible: false,
         tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.line,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          height: 58 + bottom,
-          paddingBottom: bottom,
-          paddingTop: 8,
+          position: 'absolute',
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: {
-          fontFamily: fonts.semibold,
-          fontSize: 11,
-          marginTop: 2,
+        sceneStyle: {
+          paddingBottom: tabClearance,
         },
-        tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
-      })}
+      }}
     >
       <Tab.Screen
         name="Search"
         component={SearchScreen}
         options={{ title: 'Recherche', headerShown: false }}
       />
-      <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ title: 'Favoris' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profil' }} />
+      <Tab.Screen
+        name="Favorites"
+        component={FavoritesScreen}
+        options={{ title: 'Favoris', headerShown: false }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: 'Profil', headerShown: false }}
+      />
     </Tab.Navigator>
   )
 }
@@ -206,23 +194,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.canvas,
-  },
-  tabIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabIconActive: {
-    backgroundColor: colors.primarySoft,
-  },
-  tabIconText: {
-    fontSize: 15,
-    color: colors.faint,
-    fontFamily: fonts.semibold,
-  },
-  tabIconTextActive: {
-    color: colors.primary,
   },
 })
