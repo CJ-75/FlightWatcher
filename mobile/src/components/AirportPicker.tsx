@@ -13,20 +13,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
 
-/** Top French / nearby hubs shown first in the picker. */
+/** Top Ryanair hubs (FR + nearby) shown first in the picker. */
 const POPULAR = [
   'BVA',
-  'ORY',
-  'CDG',
-  'LYS',
   'MRS',
   'NCE',
   'TLS',
-  'BOD',
   'NTE',
   'LIL',
-  'SXB',
-  'MPL',
+  'BIQ',
+  'BZR',
+  'LRH',
+  'GNB',
+  'FSC',
+  'PGF',
+  'STN',
+  'DUB',
+  'BCN',
 ] as const
 
 type Props = {

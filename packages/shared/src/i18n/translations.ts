@@ -125,7 +125,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // User Profile
     'profile.title': '👤 Mon Profil',
     'profile.homeAirport': 'Aéroport de départ par défaut',
-    'profile.homeAirportPlaceholder': 'Ex: BVA, CDG, ORY...',
+    'profile.homeAirportPlaceholder': 'Ex: BVA, MRS, NCE...',
     'profile.homeAirportHelp': 'Code IATA de votre aéroport de départ préféré (3 lettres)',
     'profile.referralCode': 'Code de parrainage',
     'profile.save': 'Enregistrer',
@@ -261,7 +261,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // User Profile
     'profile.title': '👤 My Profile',
     'profile.homeAirport': 'Default departure airport',
-    'profile.homeAirportPlaceholder': 'Ex: BVA, CDG, ORY...',
+    'profile.homeAirportPlaceholder': 'Ex: BVA, MRS, NCE...',
     'profile.homeAirportHelp': 'IATA code of your preferred departure airport (3 letters)',
     'profile.referralCode': 'Referral code',
     'profile.save': 'Save',

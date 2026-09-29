@@ -114,6 +114,9 @@ app.get('/api/airports', async (req, res) => {
       'PL': 'Pologne', 'CZ': 'République tchèque', 'HU': 'Hongrie', 'RO': 'Roumanie',
       'BG': 'Bulgarie', 'HR': 'Croatie', 'SI': 'Slovénie', 'SK': 'Slovaquie',
       'DK': 'Danemark', 'SE': 'Suède', 'NO': 'Norvège', 'FI': 'Finlande',
+      'AL': 'Albanie', 'BA': 'Bosnie-Herzégovine', 'CY': 'Chypre', 'EE': 'Estonie',
+      'LT': 'Lituanie', 'LU': 'Luxembourg', 'LV': 'Lettonie', 'ME': 'Monténégro',
+      'MT': 'Malte', 'RS': 'Serbie', 'TR': 'Turquie', 'MA': 'Maroc', 'JO': 'Jordanie',
     };
     
     let airports = [];
@@ -171,11 +174,16 @@ app.get('/api/airports', async (req, res) => {
         }
       }
     } else {
-      // Fallback si le fichier n'existe pas
+      // Fallback Ryanair-only si le fichier n'existe pas
       airports = [
-        { code: 'BVA', name: 'Beauvais-Tillé', city: 'Beauvais', country: 'France' },
-        { code: 'CDG', name: 'Charles de Gaulle', city: 'Paris', country: 'France' },
-        { code: 'ORY', name: 'Orly', city: 'Paris', country: 'France' },
+        { code: 'BVA', name: 'Paris Beauvais', city: 'Paris', country: 'France' },
+        { code: 'MRS', name: 'Marseille Provence', city: 'Marseille', country: 'France' },
+        { code: 'NCE', name: 'Nice', city: 'Nice', country: 'France' },
+        { code: 'TLS', name: 'Toulouse', city: 'Toulouse', country: 'France' },
+        { code: 'NTE', name: 'Nantes', city: 'Nantes', country: 'France' },
+        { code: 'STN', name: 'London Stansted', city: 'London', country: 'Royaume-Uni' },
+        { code: 'DUB', name: 'Dublin', city: 'Dublin', country: 'Irlande' },
+        { code: 'BCN', name: 'Barcelone', city: 'Barcelone', country: 'Espagne' },
       ];
     }
     
