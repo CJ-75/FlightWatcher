@@ -19,13 +19,27 @@ import { SearchScreen } from './src/screens/SearchScreen'
 import { ResultsScreen } from './src/screens/ResultsScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
-import type { EnrichedTripResponse } from '@flightwatcher/shared'
+import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
+
+export type SearchInfo = {
+  airport: string
+  budget: number
+  datePreset: DatePresetId
+  datesDepart: DateAvecHoraire[]
+  datesRetour: DateAvecHoraire[]
+  excludedDestinations: string[]
+  searchEventId?: string | null
+}
 
 export type RootStackParamList = {
   Login: undefined
   Main: undefined
-  Results: { trips: EnrichedTripResponse[]; title?: string }
+  Results: {
+    trips: EnrichedTripResponse[]
+    title?: string
+    searchInfo?: SearchInfo
+  }
 }
 
 export type MainTabParamList = {

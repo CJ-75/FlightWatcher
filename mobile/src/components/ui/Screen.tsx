@@ -1,10 +1,10 @@
 import React from 'react'
 import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, spacing } from '../theme'
+import { colors, spacing } from '../../theme'
 
 type Props = {
-  children: React.ReactNode
+  children?: React.ReactNode
   style?: StyleProp<ViewStyle>
   /** Extra bottom padding beyond safe area (e.g. above tab bar) */
   bottomExtra?: number
@@ -27,7 +27,8 @@ export function Screen({
     paddingRight: edges.includes('right') ? Math.max(insets.right, spacing.xl) : spacing.xl,
   }
 
-  return <View style={[styles.root, { backgroundColor }, pad, style]}>{children}</View>
+  // Cast: monorepo has conflicting @types/react (web 18 vs mobile 19)
+  return <View style={[styles.root, { backgroundColor }, pad, style]}>{children as never}</View>
 }
 
 const styles = StyleSheet.create({

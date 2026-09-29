@@ -1,21 +1,30 @@
 # Parité web / mobile
 
-## Livré (MVP mobile)
+## Livré — recherche & résultats
 
 - Auth Google + deep link `flightwatcher://auth/callback` (+ mode invité)
-- UI alignée sur le web : primary `#FF6B35`, fond blanc, cartes arrondies, DestinationCard
-- Recherche inspire (presets weekend) + budget
-- Résultats + ouverture booking Ryanair
-- Favoris (API Supabase)
-- Profil / déconnexion
-- Package `@flightwatcher/shared` partagé web/mobile
+- UI brand `#FF6B35`, Sora, cartes DestinationCard
+- **Recherche inspire complète**
+  - Budget 20–1000€
+  - Airport picker (recherche + populaires)
+  - Presets : weekend / next-weekend / next-week / **flexible**
+  - Horaires par jour (Nuit / Matin / Après-midi / Soir / Journée)
+  - Dates flexibles (sélection multi-jours)
+  - Exclusion de destinations (par pays)
+  - Validation aéroport + loading messages
+  - Analytics `trackSearchEvent` (`source: mobile`)
+- **Résultats complets**
+  - Résumé de recherche
+  - Sauvegarder la recherche
+  - Mode roulette + partage
+  - Favoris toggle (ajout / retrait)
+  - Booking SAS (compte à rebours + deep link Ryanair + analytics)
+  - Badge discount > 20% + bon deal
 
-## À aligner ensuite (Phase 5+)
+## À aligner ensuite
 
-1. Presets dates complets + dates flexibles (comme SimpleSearch web)
-2. Mode roulette
-3. Auto-check recherches sauvegardées
-4. Push notifications (Expo Notifications) pour alertes prix — **après** parité scan/favoris
+1. Onglet recherches sauvegardées (charger / re-scan / auto-check)
+2. Push notifications (Expo Notifications)
 
 ## Config device
 

@@ -11,7 +11,8 @@ import { Platform } from 'react-native'
  * - Android emulator: 10.0.2.2 maps to host machine
  */
 function resolveApiBase(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim()
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+  const fromEnv = env?.EXPO_PUBLIC_API_URL?.trim()
   if (fromEnv) return fromEnv.replace(/\/$/, '')
 
   const hostUri =

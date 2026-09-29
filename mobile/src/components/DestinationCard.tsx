@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
+import { buildRyanairBookingUrl } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 interface Props {
@@ -46,7 +47,7 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
       onBook()
       return
     }
-    await Linking.openURL('https://www.ryanair.com/fr/fr')
+    await Linking.openURL(buildRyanairBookingUrl(trip))
   }
 
   return (
@@ -95,7 +96,7 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
             <Text style={styles.price}>{Math.round(trip.prix_total)} €</Text>
             <Text style={styles.priceHint}>total aller-retour</Text>
           </View>
-          {typeof trip.discount_percent === 'number' && trip.discount_percent > 0 ? (
+          {typeof trip.discount_percent === 'number' && trip.discount_percent > 20 ? (
             <View style={styles.discount}>
               <Text style={styles.discountText}>-{Math.round(trip.discount_percent)}%</Text>
             </View>
