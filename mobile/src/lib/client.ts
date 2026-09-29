@@ -1,7 +1,6 @@
 import { createApiClient, createSupabaseAuth, createAsyncKVStore, type ApiClient } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as WebBrowser from 'expo-web-browser'
-import { makeRedirectUri } from 'expo-auth-session'
 import Constants from 'expo-constants'
 import { Platform } from 'react-native'
 
@@ -41,11 +40,13 @@ const apiBase = resolveApiBase()
 
 export const kv = createAsyncKVStore(AsyncStorage)
 
-/** Deep link used as Supabase OAuth redirect (must be allow-listed). */
-export const redirectTo = makeRedirectUri({
-  scheme: 'flightwatcher',
-  path: 'auth/callback',
-})
+/**
+ * Always use the custom scheme — never exp://IP:port.
+ * On a physical iPhone, Safari treats exp://… as an unreachable “server”
+ * and shows “Safari ne peut pas ouvrir la page”.
+ * Must be allow-listed in Supabase Auth → Redirect URLs.
+ */
+export const redirectTo = 'flightwatcher://auth/callback'
 
 export const auth = createSupabaseAuth({
   apiBaseUrl: apiBase,
@@ -53,8 +54,13 @@ export const auth = createSupabaseAuth({
   openAuthSession: async (url, redirectUri) => {
     const result = await WebBrowser.openAuthSessionAsync(url, redirectUri, {
       showInRecents: true,
+      // Keep cookies so Google account picker works; ephemeral can break redirects on iOS
       preferEphemeralSession: false,
+      createTask: false,
     })
+    if (__DEV__) {
+      console.log('[auth] openAuthSession result', result.type, 'url' in result ? result.url : '')
+    }
     if (result.type === 'success' && result.url) return result.url
     return null
   },
@@ -62,7 +68,8 @@ export const auth = createSupabaseAuth({
     detectSessionInUrl: false,
     persistSession: true,
     autoRefreshToken: true,
-    flowType: 'pkce',
+    // Implicit avoids PKCE/WebCrypto (unsupported in RN → “plain” challenge breaks OAuth)
+    flowType: 'implicit',
     storage: AsyncStorage,
   },
 })
