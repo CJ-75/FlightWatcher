@@ -22,9 +22,10 @@ type Props = {
 }
 
 function matchAirports(list: Airport[], query: string): Airport[] {
+  const safe = Array.isArray(list) ? list : []
   const q = query.trim().toLowerCase()
-  if (!q) return list.slice(0, 40)
-  return list
+  if (!q) return safe.slice(0, 40)
+  return safe
     .filter(
       (a) =>
         a.code.toLowerCase().includes(q) ||
@@ -46,7 +47,8 @@ export function AirportPicker({ airports, value, onChange }: Props) {
   )
 
   const popularAirports = useMemo(() => {
-    const byCode = new Map(airports.map((a) => [a.code, a]))
+    const safe = Array.isArray(airports) ? airports : []
+    const byCode = new Map(safe.map((a) => [a.code, a]))
     return POPULAR.map((code) => byCode.get(code)).filter(Boolean) as Airport[]
   }, [airports])
 

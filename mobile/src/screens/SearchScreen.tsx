@@ -107,7 +107,7 @@ export function SearchScreen() {
     setLoadingDest(true)
     try {
       const raw = await getApi().getDestinations(airport)
-      setDestinations(normalizeDestinations(raw))
+      setDestinations(normalizeDestinations(raw as never))
     } catch {
       setDestinations([])
     } finally {

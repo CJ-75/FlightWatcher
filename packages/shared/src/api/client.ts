@@ -132,13 +132,50 @@ export type ApiClient = ReturnType<typeof createApiClient>
 
 /** Normalize airports response shapes from backend. */
 export function normalizeAirports(data: { airports: Airport[] } | Airport[]): Airport[] {
-  return Array.isArray(data) ? data : data.airports ?? []
+  if (Array.isArray(data)) return data
+  const list = data?.airports
+  return Array.isArray(list) ? list : []
 }
 
 export function normalizeDestinations(
-  data: { destinations: Destination[] } | Destination[]
+  data: { destinations: Destination[] | Record<string, Destination[]> } | Destination[] | Record<string, Destination[]>
 ): Destination[] {
-  return Array.isArray(data) ? data : data.destinations ?? []
+  if (Array.isArray(data)) return data
+  const dest =
+    data && typeof data === 'object' && 'destinations' in data
+      ? (data as { destinations: unknown }).destinations
+      : data
+  if (Array.isArray(dest)) return dest
+  if (dest && typeof dest === 'object') {
+    return Object.values(dest as Record<string, Destination[]>).flat()
+  }
+  return []
+}
+
+/** Backend shape: destinations grouped by country. */
+export function normalizeDestinationsByCountry(
+  data: { destinations?: unknown } | Record<string, Destination[]> | Destination[]
+): Record<string, Destination[]> {
+  if (Array.isArray(data)) {
+    const map: Record<string, Destination[]> = {}
+    for (const d of data) {
+      const key = d.pays || 'Autre'
+      if (!map[key]) map[key] = []
+      map[key].push(d)
+    }
+    return map
+  }
+  const dest =
+    data && typeof data === 'object' && 'destinations' in data
+      ? (data as { destinations: unknown }).destinations
+      : data
+  if (Array.isArray(dest)) {
+    return normalizeDestinationsByCountry(dest)
+  }
+  if (dest && typeof dest === 'object' && !Array.isArray(dest)) {
+    return dest as Record<string, Destination[]>
+  }
+  return {}
 }
 
 export type { TripResponse, ScanRequest, ScanResponse }

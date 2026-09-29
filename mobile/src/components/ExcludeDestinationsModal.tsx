@@ -36,20 +36,21 @@ export function ExcludeDestinationsModal({
   const [query, setQuery] = useState('')
 
   const sections = useMemo(() => {
+    const list = Array.isArray(destinations) ? destinations : []
     const q = query.trim().toLowerCase()
     const filtered = q
-      ? destinations.filter(
+      ? list.filter(
           (d) =>
             d.code.toLowerCase().includes(q) ||
             d.nom.toLowerCase().includes(q) ||
             d.pays.toLowerCase().includes(q),
         )
-      : destinations
+      : list
     const byCountry = new Map<string, Destination[]>()
     for (const d of filtered) {
-      const list = byCountry.get(d.pays) || []
-      list.push(d)
-      byCountry.set(d.pays, list)
+      const listForCountry = byCountry.get(d.pays) || []
+      listForCountry.push(d)
+      byCountry.set(d.pays, listForCountry)
     }
     return Array.from(byCountry.entries())
       .sort(([a], [b]) => a.localeCompare(b))
