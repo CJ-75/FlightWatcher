@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     if (__DEV__) {
-      console.log('[auth] redirectTo', redirectTo)
+      console.log('[auth] OAuth redirectTo =', redirectTo)
     }
 
     return () => {
