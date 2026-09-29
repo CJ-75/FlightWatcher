@@ -6,14 +6,28 @@ import {
   Pressable,
   StyleSheet,
   Modal,
-  FlatList,
+  SectionList,
   Keyboard,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
 
-const POPULAR = ['BVA', 'ORY', 'CDG', 'LYS', 'MRS', 'NCE'] as const
+/** Top French / nearby hubs shown first in the picker. */
+const POPULAR = [
+  'BVA',
+  'ORY',
+  'CDG',
+  'LYS',
+  'MRS',
+  'NCE',
+  'TLS',
+  'BOD',
+  'NTE',
+  'LIL',
+  'SXB',
+  'MPL',
+] as const
 
 type Props = {
   airports: Airport[]
@@ -23,19 +37,22 @@ type Props = {
   compact?: boolean
 }
 
-function matchAirports(list: Airport[], query: string): Airport[] {
+type Section = {
+  title: string
+  data: Airport[]
+}
+
+function filterAirports(list: Airport[], query: string): Airport[] {
   const safe = Array.isArray(list) ? list : []
   const q = query.trim().toLowerCase()
-  if (!q) return safe.slice(0, 40)
-  return safe
-    .filter(
-      (a) =>
-        a.code.toLowerCase().includes(q) ||
-        a.name.toLowerCase().includes(q) ||
-        a.city.toLowerCase().includes(q) ||
-        a.country.toLowerCase().includes(q),
-    )
-    .slice(0, 40)
+  if (!q) return safe
+  return safe.filter(
+    (a) =>
+      a.code.toLowerCase().includes(q) ||
+      a.name.toLowerCase().includes(q) ||
+      a.city.toLowerCase().includes(q) ||
+      a.country.toLowerCase().includes(q),
+  )
 }
 
 export function AirportPicker({ airports, value, onChange, compact }: Props) {
@@ -54,7 +71,33 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
     return POPULAR.map((code) => byCode.get(code)).filter(Boolean) as Airport[]
   }, [airports])
 
-  const results = useMemo(() => matchAirports(airports, query), [airports, query])
+  const popularCodes = useMemo(
+    () => new Set(popularAirports.map((a) => a.code)),
+    [popularAirports],
+  )
+
+  const sections = useMemo((): Section[] => {
+    const q = query.trim()
+    const filtered = filterAirports(airports, q)
+
+    if (q) {
+      return filtered.length > 0 ? [{ title: 'Résultats', data: filtered }] : []
+    }
+
+    const rest = filtered
+      .filter((a) => !popularCodes.has(a.code))
+      .slice()
+      .sort((a, b) => a.city.localeCompare(b.city, 'fr'))
+
+    const out: Section[] = []
+    if (popularAirports.length > 0) {
+      out.push({ title: 'Top aéroports', data: popularAirports })
+    }
+    if (rest.length > 0) {
+      out.push({ title: 'Tous les aéroports', data: rest })
+    }
+    return out
+  }, [airports, query, popularAirports, popularCodes])
 
   useEffect(() => {
     if (!open) {
@@ -66,6 +109,31 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
   const pick = (code: string) => {
     onChange(code)
     setOpen(false)
+  }
+
+  const renderAirport = (item: Airport) => {
+    const active = item.code === value
+    return (
+      <Pressable
+        onPress={() => pick(item.code)}
+        style={[styles.row, active && styles.rowActive]}
+      >
+        <View style={[styles.rowCode, active && styles.rowCodeActive]}>
+          <Text style={[styles.rowCodeText, active && styles.rowCodeTextActive]}>
+            {item.code}
+          </Text>
+        </View>
+        <View style={styles.rowBody}>
+          <Text style={styles.rowCity} numberOfLines={1}>
+            {item.city}
+          </Text>
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {item.name} · {item.country}
+          </Text>
+        </View>
+        {active ? <Text style={styles.check}>✓</Text> : null}
+      </Pressable>
+    )
   }
 
   return (
@@ -98,7 +166,7 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
 
       {!compact && popularAirports.length > 0 ? (
         <View style={styles.popularRow}>
-          {popularAirports.map((a) => {
+          {popularAirports.slice(0, 6).map((a) => {
             const active = a.code === value
             return (
               <Pressable
@@ -145,39 +213,20 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
             />
           </View>
 
-          <FlatList
-            data={results}
+          <SectionList
+            sections={sections}
             keyExtractor={(item, index) => `${item.code}-${index}`}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            stickySectionHeadersEnabled={false}
             contentContainerStyle={{ paddingBottom: 16 }}
             ListEmptyComponent={
               <Text style={styles.empty}>Aucun aéroport trouvé</Text>
             }
-            renderItem={({ item }) => {
-              const active = item.code === value
-              return (
-                <Pressable
-                  onPress={() => pick(item.code)}
-                  style={[styles.row, active && styles.rowActive]}
-                >
-                  <View style={[styles.rowCode, active && styles.rowCodeActive]}>
-                    <Text style={[styles.rowCodeText, active && styles.rowCodeTextActive]}>
-                      {item.code}
-                    </Text>
-                  </View>
-                  <View style={styles.rowBody}>
-                    <Text style={styles.rowCity} numberOfLines={1}>
-                      {item.city}
-                    </Text>
-                    <Text style={styles.rowMeta} numberOfLines={1}>
-                      {item.name} · {item.country}
-                    </Text>
-                  </View>
-                  {active ? <Text style={styles.check}>✓</Text> : null}
-                </Pressable>
-              )
-            }}
+            renderSectionHeader={({ section }) => (
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            )}
+            renderItem={({ item }) => renderAirport(item)}
           />
         </View>
       </Modal>
@@ -302,7 +351,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.line,
     paddingHorizontal: 12,
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 8,
     ...shadow.soft,
   },
@@ -318,6 +367,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     color: colors.ink,
+    includeFontPadding: false,
+  },
+  sectionTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    marginTop: 14,
+    marginBottom: 8,
     includeFontPadding: false,
   },
   empty: {
