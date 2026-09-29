@@ -6,9 +6,11 @@ import {
   Pressable,
   StyleSheet,
   Linking,
+  Dimensions,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
-import { colors, radius, spacing } from '../theme'
+import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 interface Props {
   trip: EnrichedTripResponse
@@ -16,6 +18,8 @@ interface Props {
   onBook?: () => void
   isFavorite?: boolean
 }
+
+const width = Dimensions.get('window').width
 
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
@@ -34,7 +38,7 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
   const cityName = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
   const imageUrl =
     trip.image_url ||
-    `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=80&auto=format&fit=crop`
+    `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80&auto=format&fit=crop`
   const [failed, setFailed] = useState(false)
 
   const openBook = async () => {
@@ -46,39 +50,57 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
   }
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, shadow.soft]}>
       <View style={styles.hero}>
         {!failed ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.image}
-            onError={() => setFailed(true)}
-          />
+          <Image source={{ uri: imageUrl }} style={styles.image} onError={() => setFailed(true)} />
         ) : (
-          <View style={[styles.image, styles.imageFallback]}>
+          <LinearGradient colors={[colors.primary, colors.primaryDeep]} style={styles.image}>
             <Text style={styles.fallbackText}>{cityName}</Text>
-          </View>
+          </LinearGradient>
         )}
-        <View style={styles.overlay} />
-        <Pressable style={styles.heart} onPress={onFavorite} hitSlop={8}>
-          <Text style={styles.heartText}>{isFavorite ? '❤️' : '🤍'}</Text>
-        </Pressable>
-        <View style={styles.heroText}>
-          <Text style={styles.city}>{cityName}</Text>
-          <Text style={styles.route}>
-            {trip.aller.origin} → {trip.destination_code}
-          </Text>
-        </View>
+        <LinearGradient
+          colors={['transparent', 'rgba(12,18,34,0.15)', 'rgba(12,18,34,0.82)']}
+          locations={[0, 0.45, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+
         {trip.is_good_deal ? (
           <View style={styles.dealBadge}>
             <Text style={styles.dealText}>Bon deal</Text>
           </View>
         ) : null}
+
+        <Pressable
+          style={({ pressed }) => [styles.heart, pressed && { transform: [{ scale: 0.9 }] }]}
+          onPress={onFavorite}
+          hitSlop={12}
+        >
+          <Text style={styles.heartText}>{isFavorite ? '♥' : '♡'}</Text>
+        </Pressable>
+
+        <View style={styles.heroText}>
+          <Text style={styles.city} numberOfLines={1}>
+            {cityName}
+          </Text>
+          <Text style={styles.route}>
+            {trip.aller.origin}  →  {trip.destination_code}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.price}>{Math.round(trip.prix_total)} €</Text>
-        <Text style={styles.priceHint}>total aller-retour</Text>
+        <View style={styles.priceRow}>
+          <View>
+            <Text style={styles.price}>{Math.round(trip.prix_total)} €</Text>
+            <Text style={styles.priceHint}>total aller-retour</Text>
+          </View>
+          {typeof trip.discount_percent === 'number' && trip.discount_percent > 0 ? (
+            <View style={styles.discount}>
+              <Text style={styles.discountText}>-{Math.round(trip.discount_percent)}%</Text>
+            </View>
+          ) : null}
+        </View>
 
         <View style={styles.legs}>
           <View style={styles.leg}>
@@ -88,6 +110,7 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
             </Text>
             <Text style={styles.legPrice}>{Math.round(trip.aller.price)} €</Text>
           </View>
+          <View style={styles.divider} />
           <View style={styles.leg}>
             <Text style={styles.legLabel}>Retour</Text>
             <Text style={styles.legValue}>
@@ -97,70 +120,117 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
           </View>
         </View>
 
-        <Pressable style={styles.bookBtn} onPress={openBook}>
-          <Text style={styles.bookText}>✈️ Réserver</Text>
+        <Pressable
+          onPress={openBook}
+          style={({ pressed }) => [styles.bookBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
+        >
+          <Text style={styles.bookText}>Réserver</Text>
         </Pressable>
       </View>
     </View>
   )
 }
 
+const heroHeight = Math.min(200, Math.round(width * 0.48))
+
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     marginBottom: spacing.lg,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
-  hero: { height: 168, position: 'relative', backgroundColor: colors.slate200 },
-  image: { width: '100%', height: '100%' },
-  imageFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
+  hero: { height: heroHeight, backgroundColor: colors.line },
+  image: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  fallbackText: {
+    color: colors.white,
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    letterSpacing: -0.8,
   },
-  fallbackText: { color: colors.white, fontSize: 22, fontWeight: '800' },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  heart: { position: 'absolute', top: 12, right: 12, zIndex: 2 },
-  heartText: { fontSize: 28 },
-  heroText: { position: 'absolute', left: 16, bottom: 14, right: 16 },
-  city: { color: colors.white, fontSize: 22, fontWeight: '900' },
-  route: { color: 'rgba(255,255,255,0.9)', marginTop: 2, fontWeight: '600' },
   dealBadge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
+    top: 14,
+    left: 14,
     backgroundColor: colors.accent,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: radius.full,
   },
-  dealText: { color: colors.white, fontWeight: '800', fontSize: 12 },
-  body: { padding: spacing.lg },
-  price: { fontSize: 28, fontWeight: '900', color: colors.primary },
-  priceHint: { color: colors.slate500, marginBottom: spacing.md },
-  legs: { gap: spacing.sm, marginBottom: spacing.lg },
-  leg: {
-    backgroundColor: colors.primary50,
-    borderRadius: radius.md,
-    padding: spacing.md,
+  dealText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
-  legLabel: { fontWeight: '800', color: colors.primary700, marginBottom: 2 },
-  legValue: { color: colors.slate700, fontWeight: '600' },
-  legPrice: { color: colors.slate900, fontWeight: '800', marginTop: 2 },
+  heart: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  heartText: { fontSize: 22, color: colors.accent, fontFamily: fonts.bold },
+  heroText: { position: 'absolute', left: 16, right: 16, bottom: 16 },
+  city: {
+    color: colors.white,
+    fontFamily: fonts.extrabold,
+    fontSize: 26,
+    letterSpacing: -0.8,
+  },
+  route: {
+    color: 'rgba(255,255,255,0.88)',
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  body: { padding: spacing.lg },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  price: { ...type.price, fontSize: 30 },
+  priceHint: { ...type.caption, marginTop: 2 },
+  discount: {
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+  },
+  discountText: { color: colors.primaryInk, fontFamily: fonts.bold, fontSize: 13 },
+  legs: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    paddingVertical: 4,
+    marginBottom: spacing.lg,
+  },
+  leg: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.primaryMuted, marginHorizontal: spacing.lg },
+  legLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.primaryInk,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  legValue: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
+  legPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.inkSoft, marginTop: 2 },
   bookBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
-    paddingVertical: 14,
+    minHeight: 52,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  bookText: { color: colors.white, fontWeight: '800', fontSize: 16 },
+  bookText: { ...type.button, color: colors.white },
 })

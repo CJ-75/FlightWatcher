@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo-google-fonts/sora": "^0.4.2",
     "@flightwatcher/shared": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.2.0",
@@ -23,6 +24,7 @@
     "expo": "^57.0.26",
     "expo-auth-session": "~57.0.13",
     "expo-constants": "~57.0.20",
+    "expo-font": "~57.0.4",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.11",
     "expo-modules-core": "~57.0.20",

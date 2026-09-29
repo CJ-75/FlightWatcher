@@ -1,9 +1,18 @@
-import React from 'react'
+import React, { useCallback } from 'react'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { ActivityIndicator, Text, View } from 'react-native'
+import { ActivityIndicator, Text, View, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
+import {
+  useFonts,
+  Sora_400Regular,
+  Sora_500Medium,
+  Sora_600SemiBold,
+  Sora_700Bold,
+  Sora_800ExtraBold,
+} from '@expo-google-fonts/sora'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
@@ -11,7 +20,7 @@ import { ResultsScreen } from './src/screens/ResultsScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
-import { colors } from './src/theme'
+import { colors, fonts } from './src/theme'
 
 export type RootStackParamList = {
   Login: undefined
@@ -32,52 +41,68 @@ const navTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: colors.bg,
-    card: colors.white,
-    text: colors.slate900,
-    border: colors.slate200,
+    background: colors.canvas,
+    card: colors.surface,
+    text: colors.ink,
+    border: colors.line,
     primary: colors.primary,
   },
 }
 
 function TabIcon({ label, focused }: { label: string; focused: boolean }) {
   const icons: Record<string, string> = {
-    Search: '🔍',
-    Favorites: '❤️',
-    Profile: '👤',
+    Search: '⌕',
+    Favorites: '♥',
+    Profile: '◎',
   }
   return (
-    <Text style={{ fontSize: focused ? 20 : 18, opacity: focused ? 1 : 0.55 }}>
-      {icons[label] || '•'}
-    </Text>
+    <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
+      <Text style={[styles.tabIconText, focused && styles.tabIconTextActive]}>
+        {icons[label] || '•'}
+      </Text>
+    </View>
   )
 }
 
 function MainTabs() {
+  const insets = useSafeAreaInsets()
+  const bottom = Math.max(insets.bottom, 8)
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerStyle: {
-          backgroundColor: colors.white,
-          shadowColor: 'transparent',
-          elevation: 0,
+          backgroundColor: colors.canvas,
         },
-        headerTitleStyle: { fontWeight: '900', color: colors.slate900, fontSize: 18 },
+        headerTitleStyle: {
+          fontFamily: fonts.bold,
+          color: colors.ink,
+          fontSize: 18,
+        },
         headerShadowVisible: false,
         tabBarStyle: {
           backgroundColor: colors.white,
-          borderTopColor: colors.slate200,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 6,
+          borderTopColor: colors.line,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: 58 + bottom,
+          paddingBottom: bottom,
+          paddingTop: 8,
         },
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.slate400,
-        tabBarLabelStyle: { fontWeight: '700', fontSize: 12 },
+        tabBarInactiveTintColor: colors.faint,
+        tabBarLabelStyle: {
+          fontFamily: fonts.semibold,
+          fontSize: 11,
+          marginTop: 2,
+        },
         tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
       })}
     >
-      <Tab.Screen name="Search" component={SearchScreen} options={{ title: 'Recherche', headerShown: false }} />
+      <Tab.Screen
+        name="Search"
+        component={SearchScreen}
+        options={{ title: 'Recherche', headerShown: false }}
+      />
       <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ title: 'Favoris' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profil' }} />
     </Tab.Navigator>
@@ -90,7 +115,7 @@ function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+      <View style={styles.boot}>
         <ActivityIndicator color={colors.primary} size="large" />
       </View>
     )
@@ -109,10 +134,15 @@ function RootNavigator() {
             options={{
               headerShown: true,
               title: 'Résultats',
-              headerStyle: { backgroundColor: colors.white },
+              headerStyle: { backgroundColor: colors.canvas },
               headerTintColor: colors.primary,
-              headerTitleStyle: { fontWeight: '900', color: colors.slate900 },
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
               headerShadowVisible: false,
+              headerBackTitle: 'Retour',
             }}
           />
         </>
@@ -126,12 +156,59 @@ function RootNavigator() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Sora_400Regular,
+    Sora_500Medium,
+    Sora_600SemiBold,
+    Sora_700Bold,
+    Sora_800ExtraBold,
+  })
+
+  const onLayoutRoot = useCallback(() => undefined, [])
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    )
+  }
+
   return (
-    <AuthProvider>
-      <NavigationContainer theme={navTheme}>
-        <StatusBar style="dark" />
-        <RootNavigator />
-      </NavigationContainer>
-    </AuthProvider>
+    <SafeAreaProvider onLayout={onLayoutRoot}>
+      <AuthProvider>
+        <NavigationContainer theme={navTheme}>
+          <StatusBar style="dark" />
+          <RootNavigator />
+        </NavigationContainer>
+      </AuthProvider>
+    </SafeAreaProvider>
   )
 }
+
+const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+  },
+  tabIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconActive: {
+    backgroundColor: colors.primarySoft,
+  },
+  tabIconText: {
+    fontSize: 15,
+    color: colors.faint,
+    fontFamily: fonts.semibold,
+  },
+  tabIconTextActive: {
+    color: colors.primary,
+  },
+})

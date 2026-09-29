@@ -1,13 +1,15 @@
 import React, { useCallback, useState } from 'react'
 import { Text, FlatList, StyleSheet, RefreshControl, Pressable, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { EnrichedTripResponse, SavedFavorite } from '@flightwatcher/shared'
 import { translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { DestinationCard } from '../components/DestinationCard'
-import { colors, spacing } from '../theme'
+import { colors, fonts, spacing, type } from '../theme'
 
 export function FavoritesScreen() {
+  const insets = useSafeAreaInsets()
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,15 +46,29 @@ export function FavoritesScreen() {
   return (
     <FlatList
       style={styles.list}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={{
+        paddingHorizontal: spacing.xl,
+        paddingTop: spacing.sm,
+        paddingBottom: insets.bottom + 100,
+        flexGrow: 1,
+      }}
       data={favorites}
       keyExtractor={(item) => item.id}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />
+      }
       ListHeaderComponent={
-        <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>{translate('fr', 'favorites.favoritesTitle')}</Text>
+          <Text style={styles.sub}>
+            {favorites.length} voyage{favorites.length > 1 ? 's' : ''}
+          </Text>
+        </View>
       }
       ListEmptyComponent={
-        <Text style={styles.empty}>{error || translate('fr', 'favorites.empty')}</Text>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.empty}>{error || translate('fr', 'favorites.empty')}</Text>
+        </View>
       }
       renderItem={({ item }) => (
         <View>
@@ -66,15 +82,18 @@ export function FavoritesScreen() {
           </Pressable>
         </View>
       )}
+      showsVerticalScrollIndicator={false}
     />
   )
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: colors.bgMuted },
-  content: { padding: spacing.lg, paddingBottom: 40, flexGrow: 1 },
-  title: { fontSize: 24, fontWeight: '900', color: colors.slate900, marginBottom: spacing.lg },
-  empty: { textAlign: 'center', marginTop: 48, color: colors.slate500, fontWeight: '600' },
-  remove: { alignItems: 'center', marginTop: -8, marginBottom: spacing.lg },
-  removeText: { color: colors.danger, fontWeight: '700' },
+  list: { flex: 1, backgroundColor: colors.canvas },
+  header: { marginBottom: spacing.xl },
+  title: { ...type.title },
+  sub: { ...type.caption, marginTop: 4, fontFamily: fonts.semibold },
+  emptyWrap: { marginTop: 64, alignItems: 'center' },
+  empty: { ...type.body, textAlign: 'center', color: colors.muted },
+  remove: { alignItems: 'center', marginTop: -4, marginBottom: spacing.lg },
+  removeText: { fontFamily: fonts.semibold, color: colors.danger, fontSize: 13 },
 })

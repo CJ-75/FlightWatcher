@@ -1,19 +1,21 @@
 import React from 'react'
 import { FlatList, StyleSheet, Text, View, Linking } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import { STORAGE_KEYS, createAsyncKVStore, kvSetJson, translate } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { RootStackParamList } from '../../App'
 import { getApi } from '../lib/client'
 import { DestinationCard } from '../components/DestinationCard'
-import { colors, spacing } from '../theme'
+import { colors, fonts, spacing, type } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>
 const kv = createAsyncKVStore(AsyncStorage)
 
 export function ResultsScreen({ route }: Props) {
   const trips = route.params.trips || []
+  const insets = useSafeAreaInsets()
 
   const openBooking = async (trip: EnrichedTripResponse) => {
     const url = 'https://www.ryanair.com/fr/fr'
@@ -51,18 +53,27 @@ export function ResultsScreen({ route }: Props) {
   return (
     <FlatList
       style={styles.list}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={{
+        paddingHorizontal: spacing.xl,
+        paddingTop: spacing.lg,
+        paddingBottom: insets.bottom + spacing.xxxl,
+      }}
       data={trips}
       keyExtractor={(item, i) => `${item.destination_code}-${item.aller.departureTime}-${i}`}
       ListHeaderComponent={
         <View style={styles.header}>
           <Text style={styles.title}>{translate('fr', 'results.title')}</Text>
           <Text style={styles.count}>
-            {trips.length} {translate('fr', 'results.destination')}
+            {trips.length} destination{trips.length > 1 ? 's' : ''}
           </Text>
         </View>
       }
-      ListEmptyComponent={<Text style={styles.empty}>{translate('fr', 'results.noResults')}</Text>}
+      ListEmptyComponent={
+        <View style={styles.emptyWrap}>
+          <Text style={styles.empty}>{translate('fr', 'results.noResults')}</Text>
+          <Text style={styles.emptyHint}>Essaie d’augmenter le budget ou de changer de dates.</Text>
+        </View>
+      }
       renderItem={({ item }) => (
         <DestinationCard
           trip={item}
@@ -70,15 +81,17 @@ export function ResultsScreen({ route }: Props) {
           onBook={() => void openBooking(item)}
         />
       )}
+      showsVerticalScrollIndicator={false}
     />
   )
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: colors.bgMuted },
-  content: { padding: spacing.lg, paddingBottom: 40 },
-  header: { marginBottom: spacing.lg },
-  title: { fontSize: 24, fontWeight: '900', color: colors.slate900 },
-  count: { color: colors.slate500, fontWeight: '600', marginTop: 4 },
-  empty: { textAlign: 'center', marginTop: 48, color: colors.slate500, fontWeight: '600' },
+  list: { flex: 1, backgroundColor: colors.canvas },
+  header: { marginBottom: spacing.xl },
+  title: { ...type.title },
+  count: { ...type.caption, marginTop: 6, fontFamily: fonts.semibold },
+  emptyWrap: { marginTop: 56, alignItems: 'center', paddingHorizontal: spacing.xl },
+  empty: { ...type.section, textAlign: 'center', color: colors.ink },
+  emptyHint: { ...type.caption, textAlign: 'center', marginTop: spacing.sm },
 })

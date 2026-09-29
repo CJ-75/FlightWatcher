@@ -5,16 +5,19 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, DateAvecHoraire, EnrichedTripResponse } from '@flightwatcher/shared'
 import { normalizeAirports, translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../../App'
-import { colors, radius, spacing } from '../theme'
+import { Button } from '../components/ui/Button'
+import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 const PRESETS = [
   { id: 'weekend', labelKey: 'search.preset.weekend' },
@@ -39,17 +42,18 @@ function nextWeekendDates(): { dates_depart: DateAvecHoraire[]; dates_retour: Da
 
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const [airport, setAirport] = useState('BVA')
   const [budget, setBudget] = useState(150)
   const [preset, setPreset] = useState<(typeof PRESETS)[number]['id']>('next-weekend')
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airportsCount, setAirportsCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     getApi()
       .getAirports()
-      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+      .then((raw) => setAirportsCount(normalizeAirports(raw as Airport[] | { airports: Airport[] }).length))
       .catch(() => undefined)
   }, [])
 
@@ -80,158 +84,195 @@ export function SearchScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text style={styles.brand}>FlightWatcher</Text>
-      <Text style={styles.tagline}>{translate('fr', 'app.subtitle')}</Text>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={{
+          paddingTop: insets.top + spacing.lg,
+          paddingBottom: insets.bottom + 100,
+          paddingHorizontal: spacing.xl,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.kicker}>FlightWatcher</Text>
+        <Text style={styles.hero}>{translate('fr', 'app.subtitle')}</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>{translate('fr', 'search.budget')}</Text>
-        <View style={styles.budgetRow}>
-          <Pressable style={styles.budgetBtn} onPress={() => bumpBudget(-10)}>
-            <Text style={styles.budgetBtnText}>−</Text>
-          </Pressable>
-          <Text style={styles.budgetValue}>{budget} €</Text>
-          <Pressable style={styles.budgetBtn} onPress={() => bumpBudget(10)}>
-            <Text style={styles.budgetBtnText}>+</Text>
-          </Pressable>
+        <View style={[styles.card, shadow.soft]}>
+          <Text style={styles.label}>{translate('fr', 'search.budget')}</Text>
+          <View style={styles.budgetRow}>
+            <Pressable
+              onPress={() => bumpBudget(-10)}
+              style={({ pressed }) => [styles.budgetBtn, pressed && styles.budgetBtnPressed]}
+            >
+              <Text style={styles.budgetBtnText}>−</Text>
+            </Pressable>
+            <View style={styles.budgetCenter}>
+              <Text style={styles.budgetValue}>{budget}</Text>
+              <Text style={styles.budgetCurrency}>€</Text>
+            </View>
+            <Pressable
+              onPress={() => bumpBudget(10)}
+              style={({ pressed }) => [styles.budgetBtn, pressed && styles.budgetBtnPressed]}
+            >
+              <Text style={styles.budgetBtnText}>+</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.budgetHint}>{translate('fr', 'search.budget.total')}</Text>
+
+          <View style={styles.separator} />
+
+          <Text style={styles.label}>{translate('fr', 'search.departure')}</Text>
+          <TextInput
+            style={styles.input}
+            value={airport}
+            onChangeText={setAirport}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            placeholder="BVA, CDG, ORY…"
+            placeholderTextColor={colors.faint}
+            maxLength={3}
+          />
+          {airportsCount > 0 ? (
+            <Text style={styles.meta}>{airportsCount} aéroports Ryanair</Text>
+          ) : null}
+
+          <Text style={[styles.label, { marginTop: spacing.xxl }]}>{translate('fr', 'search.when')}</Text>
+          <View style={styles.chips}>
+            {PRESETS.map((p) => {
+              const active = preset === p.id
+              return (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setPreset(p.id)}
+                  style={[styles.chip, active && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {translate('fr', p.labelKey)}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <Button
+            label={loading ? translate('fr', 'search.inProgress') : translate('fr', 'search.launch')}
+            onPress={onSearch}
+            loading={loading}
+            style={{ marginTop: spacing.xxl }}
+          />
         </View>
-        <Text style={styles.budgetHint}>{translate('fr', 'search.budget.total')}</Text>
-
-        <Text style={styles.label}>{translate('fr', 'search.departure')}</Text>
-        <TextInput
-          style={styles.input}
-          value={airport}
-          onChangeText={setAirport}
-          autoCapitalize="characters"
-          placeholder="BVA, CDG, ORY..."
-          placeholderTextColor={colors.slate400}
-        />
-        {airports.length > 0 ? (
-          <Text style={styles.meta}>{airports.length} aéroports disponibles</Text>
-        ) : null}
-
-        <Text style={[styles.label, { marginTop: spacing.xl }]}>{translate('fr', 'search.when')}</Text>
-        <View style={styles.chips}>
-          {PRESETS.map((p) => {
-            const active = preset === p.id
-            return (
-              <Pressable
-                key={p.id}
-                onPress={() => setPreset(p.id)}
-                style={[styles.chip, active && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {translate('fr', p.labelKey)}
-                </Text>
-              </Pressable>
-            )
-          })}
-        </View>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable style={[styles.cta, loading && styles.ctaDisabled]} onPress={onSearch} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.ctaText}>{translate('fr', 'search.launch')}</Text>
-          )}
-        </Pressable>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.xl, paddingBottom: 48 },
-  brand: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: colors.slate900,
-    textAlign: 'center',
-    marginTop: spacing.sm,
+  root: { flex: 1, backgroundColor: colors.canvas },
+  kicker: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.primary,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: spacing.sm,
   },
-  tagline: {
-    textAlign: 'center',
-    color: colors.slate600,
-    fontWeight: '600',
-    marginBottom: spacing.xl,
-    marginTop: 4,
+  hero: {
+    ...type.hero,
+    fontSize: 32,
+    lineHeight: 38,
+    marginBottom: spacing.xxl,
+    maxWidth: 320,
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.xl,
-    padding: spacing.xl,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: colors.slate100,
+    padding: spacing.xxl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
-  label: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.slate900,
-    marginBottom: spacing.md,
-  },
+  label: { ...type.section, marginBottom: spacing.md },
   budgetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.lg,
-    marginBottom: 4,
+    justifyContent: 'space-between',
   },
   budgetBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary50,
-    borderWidth: 2,
-    borderColor: colors.primary100,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  budgetBtnText: { fontSize: 24, fontWeight: '800', color: colors.primary },
-  budgetValue: { fontSize: 36, fontWeight: '900', color: colors.primary, minWidth: 110, textAlign: 'center' },
-  budgetHint: { textAlign: 'center', color: colors.slate500, marginBottom: spacing.xl },
-  input: {
-    backgroundColor: colors.bgMuted,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.slate200,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.slate900,
+  budgetBtnPressed: { backgroundColor: colors.primaryMuted },
+  budgetBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 28,
+    color: colors.primary,
+    marginTop: -2,
   },
-  meta: { color: colors.slate400, fontSize: 12, marginTop: 6 },
+  budgetCenter: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  budgetValue: {
+    fontFamily: fonts.extrabold,
+    fontSize: 48,
+    letterSpacing: -1.5,
+    color: colors.ink,
+    lineHeight: 52,
+  },
+  budgetCurrency: {
+    fontFamily: fonts.bold,
+    fontSize: 22,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  budgetHint: { ...type.caption, textAlign: 'center', marginTop: spacing.sm },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+    marginVertical: spacing.xxl,
+  },
+  input: {
+    backgroundColor: colors.canvas,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 16 : 14,
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.ink,
+    letterSpacing: 2,
+  },
+  meta: { ...type.caption, marginTop: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderRadius: radius.full,
-    borderWidth: 2,
-    borderColor: colors.slate200,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     backgroundColor: colors.white,
   },
   chipActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary50,
+    backgroundColor: colors.primarySoft,
   },
-  chipText: { color: colors.slate600, fontWeight: '700', fontSize: 13 },
-  chipTextActive: { color: colors.primary700 },
-  error: { color: colors.danger, marginTop: spacing.md },
-  cta: {
-    marginTop: spacing.xxl,
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
+  chipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
   },
-  ctaDisabled: { opacity: 0.6 },
-  ctaText: { color: colors.white, fontWeight: '900', fontSize: 17 },
+  chipTextActive: { color: colors.primaryInk },
+  error: {
+    fontFamily: fonts.medium,
+    color: colors.danger,
+    marginTop: spacing.lg,
+    fontSize: 13,
+  },
 })
