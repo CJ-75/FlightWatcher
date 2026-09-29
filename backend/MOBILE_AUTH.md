@@ -1,48 +1,51 @@
 # Mobile Authentication
 
-## Google / Supabase callback (do not change)
-
-Google is registered on the **Supabase** callback (same as web):
+## Google / Supabase callback (do not change in Google Console)
 
 ```
 https://iowibrvboqcgknfznfvt.supabase.co/auth/v1/callback
 ```
 
-Never point Google Console or mobile `redirectTo` at a custom URL instead of this.
-Flow:
+## Why you saw `localhost:5173/`
 
-1. App/web → Supabase authorize → Google
-2. Google → `https://….supabase.co/auth/v1/callback`
-3. Supabase → app `redirectTo` (web: `{origin}/auth/callback`)
+Supabase **Site URL** is `http://localhost:5173`. If your app `redirectTo` is **not** in
+**Redirect URLs**, Auth silently falls back to Site URL. The phone cannot run that
+page → no deep link.
 
-## Mobile = same web redirectTo
+## Mobile `redirectTo` (direct deep link)
 
-Mobile uses the **same** final redirect as the website:
-
-```
-{WEB_ORIGIN}/auth/callback?app_redirect=flightwatcher://auth/callback
-```
-
-The web `/auth/callback` page (already working) establishes the session, then
-opens `flightwatcher://…` with the tokens.
-
-### Setup
-
-1. Run the **Vite web app** on the LAN (or set `EXPO_PUBLIC_WEB_URL`).
-2. In Supabase → Authentication → URL Configuration → Redirect URLs, keep your
-   web URL and add the LAN variant if needed, e.g.:
+Expo Go uses:
 
 ```
-http://localhost:5173/auth/callback
-http://192.168.1.161:5173/auth/callback
+exp://192.168.1.161:8083/--/auth/callback
+```
+
+Standalone:
+
+```
 flightwatcher://auth/callback
 ```
 
-3. Mobile env (optional):
+No Vite / no localhost hop.
+
+### Supabase → Authentication → URL Configuration → Redirect URLs
+
+Add **all** of these:
 
 ```
-EXPO_PUBLIC_API_URL=http://192.168.1.161:8000
-EXPO_PUBLIC_WEB_URL=http://192.168.1.161:5173
+exp://192.168.1.161:8083/--/auth/callback
+exp://**/--/auth/callback
+flightwatcher://auth/callback
+http://192.168.1.161:8000/**
+http://localhost:5173/**
 ```
 
-4. After Google login, if Safari stays on the callback page, tap **Ouvrir FlightWatcher**.
+Optional: set Site URL to `http://192.168.1.161:5173` for LAN web — never rely on
+`localhost` for phone OAuth.
+
+### Flow
+
+1. App opens Supabase authorize → Google
+2. Google → `…supabase.co/auth/v1/callback`
+3. Supabase → `exp://…/auth/callback#access_token=…` (implicit)
+4. Expo Go opens → `createSessionFromUrl`
