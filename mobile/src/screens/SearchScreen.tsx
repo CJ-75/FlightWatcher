@@ -241,11 +241,16 @@ export function SearchScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={8}
     >
+      <LinearGradient
+        colors={['#FFE8DC', '#FFF9F5', '#FFF9F5']}
+        locations={[0, 0.28, 1]}
+        style={StyleSheet.absoluteFill}
+      />
       <ScrollView
-        style={styles.root}
+        style={styles.scroll}
         contentContainerStyle={{
-          paddingTop: insets.top + 8,
-          paddingBottom: 24,
+          paddingTop: insets.top + 10,
+          paddingBottom: 28,
           paddingHorizontal: 20,
         }}
         keyboardShouldPersistTaps="handled"
@@ -253,6 +258,7 @@ export function SearchScreen() {
       >
         <Text style={styles.kicker}>FLIGHTWATCHER</Text>
         <Text style={styles.hero}>Weekend pas cher</Text>
+        <Text style={styles.lead}>Budget, aéroport, dates — c’est tout.</Text>
 
         <View style={[styles.card, shadow.soft]}>
           <Text style={styles.label}>Mon budget</Text>
@@ -356,7 +362,7 @@ export function SearchScreen() {
 
           <Pressable onPress={() => setShowExclude(true)} style={styles.advRow}>
             <Text style={styles.advLabel}>Exclure des destinations</Text>
-            <Text style={styles.advValue}>
+            <Text style={[styles.advValue, excluded.length > 0 && styles.advValueActive]}>
               {excluded.length > 0 ? `${excluded.length}` : 'Aucune'} ›
             </Text>
           </Pressable>
@@ -371,7 +377,7 @@ export function SearchScreen() {
         <Button
           label="Lancer la recherche"
           onPress={onSearch}
-          style={{ marginTop: 14 }}
+          style={{ marginTop: 18 }}
         />
       </ScrollView>
 
@@ -407,6 +413,7 @@ export function SearchScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  scroll: { flex: 1, backgroundColor: 'transparent' },
   loadingRoot: {
     flex: 1,
     backgroundColor: colors.canvas,
@@ -430,37 +437,44 @@ const styles = StyleSheet.create({
   },
   kicker: {
     fontFamily: fonts.semibold,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
     color: colors.primary,
-    letterSpacing: 1.8,
-    marginBottom: 4,
+    letterSpacing: 2,
+    marginBottom: 6,
     includeFontPadding: false,
   },
   hero: {
     fontFamily: fonts.extrabold,
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.8,
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -1,
     color: colors.ink,
-    marginBottom: 14,
+    includeFontPadding: false,
+  },
+  lead: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+    marginTop: 6,
+    marginBottom: 18,
     includeFontPadding: false,
   },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 22,
+    backgroundColor: colors.white,
+    borderRadius: 26,
     paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    paddingTop: 18,
+    paddingBottom: 18,
   },
   label: {
     fontFamily: fonts.bold,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.ink,
-    marginBottom: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.inkSoft,
+    letterSpacing: 0.2,
+    marginBottom: 10,
     includeFontPadding: false,
   },
   budgetRow: {
@@ -470,9 +484,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   budgetBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
@@ -493,14 +507,15 @@ const styles = StyleSheet.create({
   },
   budgetValue: {
     fontFamily: fonts.extrabold,
-    fontSize: 36,
-    lineHeight: 44,
+    fontSize: 40,
+    lineHeight: 48,
+    letterSpacing: -1.2,
     color: colors.ink,
     includeFontPadding: false,
   },
   budgetTrack: {
-    marginTop: 10,
-    height: 5,
+    marginTop: 12,
+    height: 6,
     borderRadius: 3,
     backgroundColor: colors.primarySoft,
     overflow: 'hidden',
@@ -509,7 +524,7 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.line,
-    marginVertical: 14,
+    marginVertical: 16,
   },
   fieldError: {
     marginTop: 6,
@@ -522,27 +537,25 @@ const styles = StyleSheet.create({
   chip: {
     width: '23%',
     flexGrow: 1,
-    minHeight: 52,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
+    minHeight: 54,
+    borderRadius: 16,
     paddingHorizontal: 4,
     paddingVertical: 8,
-    backgroundColor: colors.white,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  chipActive: { backgroundColor: colors.primary },
   chipText: {
     fontFamily: fonts.semibold,
     fontSize: 11,
     lineHeight: 15,
-    color: colors.inkSoft,
+    color: colors.primaryInk,
     textAlign: 'center',
     includeFontPadding: false,
   },
-  chipTextActive: { color: colors.primaryInk },
-  hoursBlock: { marginTop: 12, gap: 6 },
+  chipTextActive: { color: colors.white },
+  hoursBlock: { marginTop: 14, gap: 6 },
   hoursTitle: {
     fontFamily: fonts.semibold,
     fontSize: 12,
@@ -553,24 +566,24 @@ const styles = StyleSheet.create({
   hoursRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.canvas,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     gap: 8,
   },
   hoursTag: {
     fontFamily: fonts.bold,
     fontSize: 10,
-    color: colors.primaryInk,
-    backgroundColor: colors.primarySoft,
+    color: colors.white,
+    backgroundColor: colors.primary,
     overflow: 'hidden',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 8,
     includeFontPadding: false,
   },
-  hoursTagRetour: { backgroundColor: '#D1FAE5', color: '#065F46' },
+  hoursTagRetour: { backgroundColor: colors.success },
   hoursDate: {
     flex: 1,
     fontFamily: fonts.semibold,
@@ -587,8 +600,8 @@ const styles = StyleSheet.create({
   flexSummary: {
     marginTop: 12,
     backgroundColor: colors.primarySoft,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 14,
+    padding: 14,
   },
   flexSummaryText: {
     fontFamily: fonts.semibold,
@@ -613,9 +626,10 @@ const styles = StyleSheet.create({
     color: colors.muted,
     includeFontPadding: false,
   },
+  advValueActive: { color: colors.primary },
   errorBox: {
     backgroundColor: colors.dangerSoft,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     marginTop: 12,
   },

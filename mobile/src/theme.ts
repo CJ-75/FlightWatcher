@@ -1,27 +1,35 @@
 import { TextStyle, ViewStyle } from 'react-native'
 
-/** FlightWatcher brand tokens (aligned with web primary orange). */
+/**
+ * FlightWatcher — warm, airy palette (no cool gray).
+ * White + soft peach surfaces, deep warm ink, orange brand.
+ */
 export const colors = {
   primary: '#FF6B35',
-  primarySoft: '#FFF0EA',
-  primaryMuted: '#FFE0D4',
-  primaryDeep: '#E55A2B',
-  primaryInk: '#9A3412',
-  accent: '#FF3366',
+  primarySoft: '#FFF3EC',
+  primaryMuted: '#FFDCC8',
+  primaryDeep: '#E85A28',
+  primaryInk: '#8B2E0E',
+  accent: '#FF3D6B',
   white: '#FFFFFF',
-  canvas: '#F7F5F3',
+  /** Soft peach wash — replaces gray canvas */
+  canvas: '#FFF9F5',
   surface: '#FFFFFF',
-  ink: '#0C1222',
-  inkSoft: '#3D4659',
-  muted: '#6B7285',
-  faint: '#9AA1B2',
-  line: '#E8E4DF',
-  lineStrong: '#D4CFC8',
-  danger: '#DC2626',
-  dangerSoft: '#FEF2F2',
-  success: '#059669',
-  overlay: 'rgba(12, 18, 34, 0.45)',
-  shadow: '#0C1222',
+  /** Warm near-black */
+  ink: '#1A120E',
+  inkSoft: '#4A3428',
+  /** Warm brown muted (not slate) */
+  muted: '#8A6A58',
+  faint: '#C4A794',
+  /** Soft peach hairlines */
+  line: '#F0E0D4',
+  lineStrong: '#E5CBB8',
+  danger: '#D93025',
+  dangerSoft: '#FFF0EE',
+  success: '#0F8A5F',
+  successSoft: '#E8F8F1',
+  overlay: 'rgba(26, 18, 14, 0.4)',
+  shadow: '#5C2E18',
 } as const
 
 export const spacing = {
@@ -35,9 +43,9 @@ export const spacing = {
 } as const
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 20,
+  sm: 12,
+  md: 16,
+  lg: 22,
   xl: 28,
   full: 999,
 } as const
@@ -109,22 +117,22 @@ export const type = {
 export const shadow = {
   soft: {
     shadowColor: colors.shadow,
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   } as ViewStyle,
   lift: {
     shadowColor: colors.shadow,
-    shadowOpacity: 0.14,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 7,
   } as ViewStyle,
   glow: {
     shadowColor: colors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
   } as ViewStyle,
@@ -155,7 +163,7 @@ export const colorsLegacy = {
   danger: colors.danger,
   dangerBg: colors.dangerSoft,
   success: colors.success,
-  successBg: '#ECFDF5',
+  successBg: colors.successSoft,
   black: '#000000',
   energy: '#00D4FF',
 } as const

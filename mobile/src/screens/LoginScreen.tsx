@@ -35,13 +35,9 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['#1A0F0A', '#2A1510', '#FF6B35']}
-        locations={[0, 0.5, 1]}
+        colors={['#FF8A55', '#FF6B35', '#FFF9F5']}
+        locations={[0, 0.42, 0.78]}
         style={StyleSheet.absoluteFill}
-      />
-      <LinearGradient
-        colors={['transparent', 'rgba(255,107,53,0.35)']}
-        style={styles.glow}
       />
 
       <KeyboardAvoidingView
@@ -52,8 +48,8 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
           style={[
             styles.screen,
             {
-              paddingTop: insets.top + 20,
-              paddingBottom: Math.max(insets.bottom, 16) + 12,
+              paddingTop: insets.top + 28,
+              paddingBottom: Math.max(insets.bottom, 16) + 16,
             },
           ]}
         >
@@ -100,7 +96,7 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
                 variant="ghost"
                 label="Continuer sans compte"
                 onPress={onContinueAsGuest}
-                style={{ marginTop: 2 }}
+                style={{ marginTop: 4 }}
               />
             ) : null}
 
@@ -115,63 +111,52 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#1A0F0A' },
+  root: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   screen: {
     flex: 1,
     paddingHorizontal: 22,
     justifyContent: 'space-between',
   },
-  glow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '50%',
-  },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.28)',
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    marginBottom: 16,
   },
   badgeText: {
     fontFamily: fonts.semibold,
     fontSize: 12,
     lineHeight: 16,
     color: colors.white,
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
     includeFontPadding: false,
   },
   brand: {
     fontFamily: fonts.extrabold,
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -1.2,
+    fontSize: 36,
+    lineHeight: 42,
+    letterSpacing: -1.3,
     color: colors.white,
-    marginBottom: 10,
+    marginBottom: 12,
     includeFontPadding: false,
   },
   subtitle: {
     fontFamily: fonts.regular,
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(255,255,255,0.78)',
+    color: 'rgba(255,255,255,0.92)',
     maxWidth: 300,
     includeFontPadding: false,
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 18,
   },
   cardTitle: {
     fontFamily: fonts.bold,
@@ -183,10 +168,10 @@ const styles = StyleSheet.create({
   },
   cardHint: {
     fontFamily: fonts.regular,
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 21,
     color: colors.muted,
-    marginBottom: 16,
+    marginBottom: 18,
     includeFontPadding: false,
   },
   errorBox: {
@@ -206,7 +191,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -218,11 +203,11 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   legal: {
-    marginTop: 12,
+    marginTop: 14,
     fontFamily: fonts.regular,
     fontSize: 11,
-    lineHeight: 15,
-    color: colors.faint,
+    lineHeight: 16,
+    color: colors.muted,
     textAlign: 'center',
     includeFontPadding: false,
   },
