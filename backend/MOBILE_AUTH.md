@@ -1,65 +1,48 @@
 # Mobile Authentication
 
-## Bearer token
+## Google / Supabase callback (do not change)
 
-User endpoints require a Supabase JWT in the `Authorization` header:
-
-```
-Authorization: Bearer <supabase_access_token>
-```
-
-Endpoints that use optional or required auth:
-
-- `GET /api/auth/me`
-- `POST /api/user/profile`
-- `POST /api/scan`, `POST /api/inspire`
-- `POST /api/supabase/searches`, `GET /api/supabase/searches`, `DELETE /api/supabase/searches/{id}`
-- `POST /api/supabase/favorites`, `GET /api/supabase/favorites`, `DELETE /api/supabase/favorites/{id}`
-- `POST /api/analytics/search-event`, `POST /api/analytics/booking-sas-event`
-
-## Supabase config
-
-The mobile app should fetch public Supabase keys from the backend:
+Google is registered on the **Supabase** callback (same as web):
 
 ```
-GET /api/config
+https://iowibrvboqcgknfznfvt.supabase.co/auth/v1/callback
 ```
 
-Response:
+Never point Google Console or mobile `redirectTo` at a custom URL instead of this.
+Flow:
 
-```json
-{
-  "supabase_url": "...",
-  "supabase_anon_key": "...",
-  "available": true
-}
-```
+1. App/web → Supabase authorize → Google
+2. Google → `https://….supabase.co/auth/v1/callback`
+3. Supabase → app `redirectTo` (web: `{origin}/auth/callback`)
 
-Use these values to initialize the Supabase client on the device.
+## Mobile = same web redirectTo
 
-## OAuth deep link (Expo)
-
-Configure these redirect URLs in Supabase → Authentication → URL Configuration:
+Mobile uses the **same** final redirect as the website:
 
 ```
-http://192.168.1.161:8000/auth/mobile-callback
+{WEB_ORIGIN}/auth/callback?app_redirect=flightwatcher://auth/callback
+```
+
+The web `/auth/callback` page (already working) establishes the session, then
+opens `flightwatcher://…` with the tokens.
+
+### Setup
+
+1. Run the **Vite web app** on the LAN (or set `EXPO_PUBLIC_WEB_URL`).
+2. In Supabase → Authentication → URL Configuration → Redirect URLs, keep your
+   web URL and add the LAN variant if needed, e.g.:
+
+```
+http://localhost:5173/auth/callback
+http://192.168.1.161:5173/auth/callback
 flightwatcher://auth/callback
 ```
 
-Replace the LAN IP with yours (logged at app startup as `[auth] OAuth redirectTo = …`).
-
-- **Expo Go** uses the HTTP API callback so iOS can return tokens to the app
-  (`exp://` / custom schemes usually yield `cancel`).
-- **Dev / production builds** use `flightwatcher://auth/callback`.
-
-Restart the Python (or Node) API after pulling so `/auth/mobile-callback` exists.
-
-## CORS
-
-The backend reads allowed browser origins from `ALLOWED_ORIGINS` (comma-separated). Default values include Vite and Expo web dev servers:
+3. Mobile env (optional):
 
 ```
-http://localhost:5173,http://localhost:3000,http://localhost:8081,http://127.0.0.1:5173
+EXPO_PUBLIC_API_URL=http://192.168.1.161:8000
+EXPO_PUBLIC_WEB_URL=http://192.168.1.161:5173
 ```
 
-Add your production web or Expo web URLs to `ALLOWED_ORIGINS` in `backend/.env` when deploying.
+4. After Google login, if Safari stays on the callback page, tap **Ouvrir FlightWatcher**.

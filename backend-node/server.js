@@ -474,13 +474,34 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// OAuth landing for Expo Go (HTTP redirect intercepted by openAuthSessionAsync)
 app.get('/auth/mobile-callback', (req, res) => {
   res.type('html').send(`<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>FlightWatcher</title>
-<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#FFF9F5}</style>
-</head><body><main><h1>Connexion réussie</h1><p>Tu peux revenir à l’app.</p></main></body></html>`);
+<style>
+body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#FFF9F5;padding:24px}
+main{background:#fff;border-radius:20px;padding:28px;max-width:360px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.1)}
+a{display:inline-block;background:#FF6B35;color:#fff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:14px}
+</style></head>
+<body><main>
+<h1 id="t">Connexion…</h1>
+<p id="m">Retour vers l’app.</p>
+<a id="o" href="#" style="display:none">Ouvrir FlightWatcher</a>
+</main>
+<script>
+(function(){
+  var app=(new URLSearchParams(location.search)).get('app_redirect')||'flightwatcher://auth/callback';
+  app=app.split('#')[0].split('?')[0];
+  var h=new URLSearchParams((location.hash||'').replace(/^#/,''));
+  var a=h.get('access_token'), r=h.get('refresh_token');
+  if(!a){document.getElementById('t').textContent='Tokens manquants';return;}
+  var deep=app+'#access_token='+encodeURIComponent(a)+'&refresh_token='+encodeURIComponent(r||'')+'&token_type=bearer';
+  var o=document.getElementById('o'); o.href=deep; o.style.display='inline-block';
+  document.getElementById('t').textContent='Connexion réussie';
+  location.href=deep;
+})();
+</script>
+</body></html>`);
 });
 
 app.get('/api/supabase/status', async (req, res) => {

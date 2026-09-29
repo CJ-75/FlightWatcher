@@ -2,7 +2,7 @@
 
 ## Livré — recherche & résultats
 
-- Auth Google (Expo Go → `http://LAN:8000/auth/mobile-callback`, build → `flightwatcher://`)
+- Auth Google = même flux web (`…supabase.co/auth/v1/callback` → `/auth/callback` → deep link app)
 - UI brand `#FF6B35`, Sora, cartes DestinationCard
 - **Recherche inspire complète**
   - Budget 20–1000€
