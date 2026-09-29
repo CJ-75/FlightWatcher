@@ -186,7 +186,6 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
   const { signInWithGoogle } = useAuth()
   const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const markStyle = useEntrance(80)
   const heroStyle = useEntrance(220)
@@ -217,9 +216,8 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
 
   const onLogin = async () => {
     setLoading(true)
-    setError(null)
     const { error: err } = await signInWithGoogle()
-    if (err) setError(err.message)
+    if (err && __DEV__) console.warn('[auth] signIn', err.message)
     setLoading(false)
   }
 
@@ -284,8 +282,6 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
         </View>
 
         <Animated.View style={[styles.bottom, ctaStyle]}>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
           <Animated.View style={{ transform: [{ scale: pulse }] }}>
             <Pressable
               onPress={() => void onLogin()}
@@ -409,19 +405,6 @@ const styles = StyleSheet.create({
   },
   bottom: {
     gap: 6,
-  },
-  error: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.danger,
-    textAlign: 'center',
-    marginBottom: 10,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    overflow: 'hidden',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    includeFontPadding: false,
   },
   googleBtn: {
     flexDirection: 'row',

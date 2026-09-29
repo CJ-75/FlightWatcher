@@ -39,18 +39,20 @@ Use these values to initialize the Supabase client on the device.
 
 ## OAuth deep link (Expo)
 
-Configure these redirect URLs in Supabase Auth → URL Configuration:
+Configure these redirect URLs in Supabase → Authentication → URL Configuration:
 
 ```
+http://192.168.1.161:8000/auth/mobile-callback
 flightwatcher://auth/callback
 ```
 
-Do **not** rely on `exp://…` redirects on a physical iPhone — Safari reports
-“serveur introuvable”. The app always uses `flightwatcher://auth/callback`
-(also declared as `scheme` in `mobile/app.json`).
+Replace the LAN IP with yours (logged at app startup as `[auth] OAuth redirectTo = …`).
 
-The app opens Google via `WebBrowser.openAuthSessionAsync` (implicit flow on
-native), then reads tokens from the callback URL.
+- **Expo Go** uses the HTTP API callback so iOS can return tokens to the app
+  (`exp://` / custom schemes usually yield `cancel`).
+- **Dev / production builds** use `flightwatcher://auth/callback`.
+
+Restart the Python (or Node) API after pulling so `/auth/mobile-callback` exists.
 
 ## CORS
 

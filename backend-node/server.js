@@ -474,6 +474,15 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// OAuth landing for Expo Go (HTTP redirect intercepted by openAuthSessionAsync)
+app.get('/auth/mobile-callback', (req, res) => {
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FlightWatcher</title>
+<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#FFF9F5}</style>
+</head><body><main><h1>Connexion réussie</h1><p>Tu peux revenir à l’app.</p></main></body></html>`);
+});
+
 app.get('/api/supabase/status', async (req, res) => {
   if (!supabase) {
     return res.json({

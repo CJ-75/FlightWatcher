@@ -26,7 +26,6 @@ export function FavoritesScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
-  const [loginError, setLoginError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!user) {
@@ -55,9 +54,8 @@ export function FavoritesScreen() {
 
   const onLogin = async () => {
     setLoginLoading(true)
-    setLoginError(null)
     const { error: err } = await signInWithGoogle()
-    if (err) setLoginError(err.message)
+    if (err && __DEV__) console.warn('[auth] signIn', err.message)
     setLoginLoading(false)
   }
 
@@ -88,8 +86,6 @@ export function FavoritesScreen() {
               Connecte-toi pour sauver tes weekends coup de cœur et les retrouver sur tous tes
               appareils.
             </Text>
-
-            {loginError ? <Text style={styles.loginError}>{loginError}</Text> : null}
 
             <Pressable
               onPress={() => void onLogin()}
@@ -220,14 +216,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: colors.muted,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  loginError: {
-    marginTop: 14,
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.danger,
     textAlign: 'center',
     includeFontPadding: false,
   },
