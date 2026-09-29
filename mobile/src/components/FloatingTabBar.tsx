@@ -3,21 +3,16 @@ import { View, Text, Pressable, StyleSheet, Platform } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, fonts } from '../theme'
-import { HeartIcon } from './HeartIcon'
+import { TabBarIcon } from './TabIcons'
 
 const LABELS: Record<string, string> = {
-  Search: 'Recherche',
+  Search: 'Chercher',
   Favorites: 'Favoris',
-  Profile: 'Profil',
+  Profile: 'Compte',
 }
 
-const ICONS: Record<string, string> = {
-  Search: '⌕',
-  Profile: '◎',
-}
-
-export const FLOATING_TAB_HEIGHT = 64
-export const FLOATING_TAB_MARGIN = 16
+export const FLOATING_TAB_HEIGHT = 68
+export const FLOATING_TAB_MARGIN = 18
 
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
@@ -48,25 +43,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               onPress={onPress}
               accessibilityRole="button"
               accessibilityState={focused ? { selected: true } : {}}
+              accessibilityLabel={label}
               style={({ pressed }) => [
                 styles.item,
                 focused && styles.itemActive,
                 pressed && styles.itemPressed,
               ]}
             >
-              {route.name === 'Favorites' ? (
-                <View style={styles.heartSlot}>
-                  <HeartIcon
-                    size={18}
-                    filled
-                    color={focused ? colors.primary : colors.faint}
-                  />
-                </View>
-              ) : (
-                <Text style={[styles.icon, focused && styles.iconActive]}>
-                  {ICONS[route.name] || '•'}
-                </Text>
-              )}
+              <View style={styles.iconWrap}>
+                <TabBarIcon name={route.name} focused={focused} size={22} />
+              </View>
               <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
                 {label}
               </Text>
@@ -93,20 +79,20 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     minHeight: FLOATING_TAB_HEIGHT,
-    borderRadius: 28,
-    backgroundColor: colors.white,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 4,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    gap: 2,
     ...Platform.select({
       ios: {
         shadowColor: colors.shadow,
-        shadowOpacity: 0.16,
-        shadowRadius: 24,
+        shadowOpacity: 0.14,
+        shadowRadius: 22,
         shadowOffset: { width: 0, height: 10 },
       },
       android: {
-        elevation: 12,
+        elevation: 14,
       },
       default: {},
     }),
@@ -118,39 +104,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
-    borderRadius: 20,
-    gap: 3,
+    borderRadius: 24,
+    gap: 4,
   },
   itemActive: {
     backgroundColor: colors.primarySoft,
   },
   itemPressed: {
-    opacity: 0.88,
+    opacity: 0.9,
+    transform: [{ scale: 0.97 }],
   },
-  heartSlot: {
-    height: 22,
+  iconWrap: {
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  icon: {
-    fontSize: 18,
-    lineHeight: 22,
-    color: colors.faint,
-    fontFamily: fonts.semibold,
-    includeFontPadding: false,
-  },
-  iconActive: {
-    color: colors.primary,
-  },
   label: {
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.medium,
     fontSize: 11,
-    lineHeight: 14,
+    lineHeight: 13,
+    letterSpacing: 0.15,
     color: colors.muted,
     includeFontPadding: false,
   },
   labelActive: {
     color: colors.primaryInk,
     fontFamily: fonts.bold,
+    letterSpacing: 0.1,
   },
 })
