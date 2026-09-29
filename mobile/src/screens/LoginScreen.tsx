@@ -1,7 +1,15 @@
 import React, { useState } from 'react'
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native'
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
+import { colors, radius, spacing } from '../theme'
 import * as WebBrowser from 'expo-web-browser'
 
 WebBrowser.maybeCompleteAuthSession()
@@ -20,72 +28,112 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.brand}>FlightWatcher</Text>
-      <Text style={styles.subtitle}>{translate('fr', 'app.subtitle')}</Text>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.button} onPress={onLogin} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#0B1F33" />
-        ) : (
-          <Text style={styles.buttonText}>{translate('fr', 'auth.signInWithGoogle')}</Text>
-        )}
-      </Pressable>
-      {onContinueAsGuest ? (
-        <Pressable style={styles.ghost} onPress={onContinueAsGuest}>
-          <Text style={styles.ghostText}>Continuer sans compte</Text>
+    <LinearGradient colors={[colors.loginFrom, colors.loginTo]} style={styles.gradient}>
+      <View style={styles.card}>
+        <Text style={styles.brand}>{translate('fr', 'login.title')}</Text>
+        <Text style={styles.subtitle}>{translate('fr', 'app.subtitle')}</Text>
+        <Text style={styles.hint}>{translate('fr', 'login.subtitle')}</Text>
+
+        {error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          style={[styles.googleBtn, loading && styles.disabled]}
+          onPress={onLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.slate600} />
+          ) : (
+            <>
+              <Text style={styles.googleG}>G</Text>
+              <Text style={styles.googleText}>{translate('fr', 'auth.signInWithGoogle')}</Text>
+            </>
+          )}
         </Pressable>
-      ) : null}
-      <Text style={styles.hint}>Deep link: flightwatcher://auth/callback</Text>
-    </View>
+
+        {onContinueAsGuest ? (
+          <Pressable style={styles.ghost} onPress={onContinueAsGuest}>
+            <Text style={styles.ghostText}>Continuer sans compte</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </LinearGradient>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
+  gradient: {
     flex: 1,
-    backgroundColor: '#0B1F33',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
+  },
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
+    padding: spacing.xxl,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
   },
   brand: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#F4F7FA',
-    marginBottom: 8,
+    fontSize: 34,
+    fontWeight: '900',
+    color: colors.slate900,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#8FA3B5',
-    marginBottom: 32,
-  },
-  button: {
-    backgroundColor: '#3DBDA7',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#0B1F33',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  error: {
-    color: '#FF6B6B',
-    marginBottom: 12,
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.slate600,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   hint: {
-    marginTop: 24,
-    color: '#5A7388',
-    fontSize: 12,
+    fontSize: 14,
+    color: colors.slate500,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    lineHeight: 20,
   },
-  ghost: {
-    marginTop: 16,
+  errorBox: {
+    backgroundColor: colors.dangerBg,
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: { color: colors.danger, fontSize: 13 },
+  googleBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
   },
-  ghostText: {
-    color: '#8FA3B5',
-    fontWeight: '600',
+  googleG: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#4285F4',
   },
+  googleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.slate700,
+  },
+  disabled: { opacity: 0.55 },
+  ghost: { marginTop: spacing.xl, alignItems: 'center' },
+  ghostText: { color: colors.slate600, fontWeight: '600', fontSize: 14 },
 })

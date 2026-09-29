@@ -3,7 +3,8 @@
 ## Livré (MVP mobile)
 
 - Auth Google + deep link `flightwatcher://auth/callback` (+ mode invité)
-- Recherche inspire (preset weekend prochain)
+- UI alignée sur le web : primary `#FF6B35`, fond blanc, cartes arrondies, DestinationCard
+- Recherche inspire (presets weekend) + budget
 - Résultats + ouverture booking Ryanair
 - Favoris (API Supabase)
 - Profil / déconnexion

@@ -11,9 +11,16 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
 import type { Airport, DateAvecHoraire, EnrichedTripResponse } from '@flightwatcher/shared'
-import { normalizeAirports } from '@flightwatcher/shared'
+import { normalizeAirports, translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../../App'
+import { colors, radius, spacing } from '../theme'
+
+const PRESETS = [
+  { id: 'weekend', labelKey: 'search.preset.weekend' },
+  { id: 'next-weekend', labelKey: 'search.preset.nextWeekend' },
+  { id: 'next-week', labelKey: 'search.preset.nextWeek' },
+] as const
 
 function nextWeekendDates(): { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] } {
   const now = new Date()
@@ -33,7 +40,8 @@ function nextWeekendDates(): { dates_depart: DateAvecHoraire[]; dates_retour: Da
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [airport, setAirport] = useState('BVA')
-  const [budget, setBudget] = useState('150')
+  const [budget, setBudget] = useState(150)
+  const [preset, setPreset] = useState<(typeof PRESETS)[number]['id']>('next-weekend')
   const [airports, setAirports] = useState<Airport[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,86 +53,185 @@ export function SearchScreen() {
       .catch(() => undefined)
   }, [])
 
+  const bumpBudget = (delta: number) => {
+    setBudget((b) => Math.min(500, Math.max(30, b + delta)))
+  }
+
   const onSearch = async () => {
     setLoading(true)
     setError(null)
     try {
       const dates = nextWeekendDates()
       const result = await getApi().inspire({
-        budget: Number(budget) || 150,
-        date_preset: 'next-weekend',
+        budget,
+        date_preset: preset,
         departure: airport.trim().toUpperCase(),
         flexible_dates: dates,
       })
       navigation.navigate('Results', {
         trips: result.resultats as EnrichedTripResponse[],
-        title: `${airport} · ${budget}€`,
+        title: `${airport.toUpperCase()} · ${budget}€`,
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur de recherche')
+      setError(e instanceof Error ? e.message : translate('fr', 'app.error'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.label}>Aéroport de départ</Text>
-      <TextInput
-        style={styles.input}
-        value={airport}
-        onChangeText={setAirport}
-        autoCapitalize="characters"
-        placeholder="BVA"
-        placeholderTextColor="#5A7388"
-      />
-      {airports.length > 0 ? (
-        <Text style={styles.hint}>{airports.length} aéroports disponibles</Text>
-      ) : null}
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Text style={styles.brand}>FlightWatcher</Text>
+      <Text style={styles.tagline}>{translate('fr', 'app.subtitle')}</Text>
 
-      <Text style={styles.label}>Budget max (aller-retour)</Text>
-      <TextInput
-        style={styles.input}
-        value={budget}
-        onChangeText={setBudget}
-        keyboardType="number-pad"
-        placeholder="150"
-        placeholderTextColor="#5A7388"
-      />
+      <View style={styles.card}>
+        <Text style={styles.label}>{translate('fr', 'search.budget')}</Text>
+        <View style={styles.budgetRow}>
+          <Pressable style={styles.budgetBtn} onPress={() => bumpBudget(-10)}>
+            <Text style={styles.budgetBtnText}>−</Text>
+          </Pressable>
+          <Text style={styles.budgetValue}>{budget} €</Text>
+          <Pressable style={styles.budgetBtn} onPress={() => bumpBudget(10)}>
+            <Text style={styles.budgetBtnText}>+</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.budgetHint}>{translate('fr', 'search.budget.total')}</Text>
 
-      <Text style={styles.preset}>Preset: weekend prochain</Text>
+        <Text style={styles.label}>{translate('fr', 'search.departure')}</Text>
+        <TextInput
+          style={styles.input}
+          value={airport}
+          onChangeText={setAirport}
+          autoCapitalize="characters"
+          placeholder="BVA, CDG, ORY..."
+          placeholderTextColor={colors.slate400}
+        />
+        {airports.length > 0 ? (
+          <Text style={styles.meta}>{airports.length} aéroports disponibles</Text>
+        ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Text style={[styles.label, { marginTop: spacing.xl }]}>{translate('fr', 'search.when')}</Text>
+        <View style={styles.chips}>
+          {PRESETS.map((p) => {
+            const active = preset === p.id
+            return (
+              <Pressable
+                key={p.id}
+                onPress={() => setPreset(p.id)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {translate('fr', p.labelKey)}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
 
-      <Pressable style={styles.button} onPress={onSearch} disabled={loading}>
-        {loading ? <ActivityIndicator color="#0B1F33" /> : <Text style={styles.buttonText}>Lancer la recherche</Text>}
-      </Pressable>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable style={[styles.cta, loading && styles.ctaDisabled]} onPress={onSearch} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.ctaText}>{translate('fr', 'search.launch')}</Text>
+          )}
+        </Pressable>
+      </View>
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F4F8' },
-  content: { padding: 20 },
-  label: { fontWeight: '600', color: '#0B1F33', marginBottom: 6, marginTop: 12 },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#D5DEE7',
-    color: '#0B1F33',
+  screen: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: spacing.xl, paddingBottom: 48 },
+  brand: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: colors.slate900,
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
-  hint: { color: '#5A7388', fontSize: 12, marginTop: 4 },
-  preset: { marginTop: 16, color: '#5A7388' },
-  button: {
-    marginTop: 24,
-    backgroundColor: '#3DBDA7',
+  tagline: {
+    textAlign: 'center',
+    color: colors.slate600,
+    fontWeight: '600',
+    marginBottom: spacing.xl,
+    marginTop: 4,
+  },
+  card: {
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: colors.slate100,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.slate900,
+    marginBottom: spacing.md,
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.lg,
+    marginBottom: 4,
+  },
+  budgetBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary50,
+    borderWidth: 2,
+    borderColor: colors.primary100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  budgetBtnText: { fontSize: 24, fontWeight: '800', color: colors.primary },
+  budgetValue: { fontSize: 36, fontWeight: '900', color: colors.primary, minWidth: 110, textAlign: 'center' },
+  budgetHint: { textAlign: 'center', color: colors.slate500, marginBottom: spacing.xl },
+  input: {
+    backgroundColor: colors.bgMuted,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.slate200,
+    paddingHorizontal: 14,
     paddingVertical: 14,
-    borderRadius: 10,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.slate900,
+  },
+  meta: { color: colors.slate400, fontSize: 12, marginTop: 6 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    borderRadius: radius.full,
+    borderWidth: 2,
+    borderColor: colors.slate200,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.white,
+  },
+  chipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary50,
+  },
+  chipText: { color: colors.slate600, fontWeight: '700', fontSize: 13 },
+  chipTextActive: { color: colors.primary700 },
+  error: { color: colors.danger, marginTop: spacing.md },
+  cta: {
+    marginTop: spacing.xxl,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 16,
     alignItems: 'center',
   },
-  buttonText: { color: '#0B1F33', fontWeight: '700', fontSize: 16 },
-  error: { color: '#C0392B', marginTop: 12 },
+  ctaDisabled: { opacity: 0.6 },
+  ctaText: { color: colors.white, fontWeight: '900', fontSize: 17 },
 })

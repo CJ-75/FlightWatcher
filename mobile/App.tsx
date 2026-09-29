@@ -1,8 +1,8 @@
 import React from 'react'
-import { NavigationContainer } from '@react-navigation/native'
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { ActivityIndicator, View } from 'react-native'
+import { ActivityIndicator, Text, View } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
@@ -11,6 +11,7 @@ import { ResultsScreen } from './src/screens/ResultsScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
+import { colors } from './src/theme'
 
 export type RootStackParamList = {
   Login: undefined
@@ -27,18 +28,56 @@ export type MainTabParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator<MainTabParamList>()
 
+const navTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.bg,
+    card: colors.white,
+    text: colors.slate900,
+    border: colors.slate200,
+    primary: colors.primary,
+  },
+}
+
+function TabIcon({ label, focused }: { label: string; focused: boolean }) {
+  const icons: Record<string, string> = {
+    Search: '🔍',
+    Favorites: '❤️',
+    Profile: '👤',
+  }
+  return (
+    <Text style={{ fontSize: focused ? 20 : 18, opacity: focused ? 1 : 0.55 }}>
+      {icons[label] || '•'}
+    </Text>
+  )
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: '#0B1F33' },
-        headerTintColor: '#F4F7FA',
-        tabBarStyle: { backgroundColor: '#0B1F33' },
-        tabBarActiveTintColor: '#3DBDA7',
-        tabBarInactiveTintColor: '#8FA3B5',
-      }}
+      screenOptions={({ route }) => ({
+        headerStyle: {
+          backgroundColor: colors.white,
+          shadowColor: 'transparent',
+          elevation: 0,
+        },
+        headerTitleStyle: { fontWeight: '900', color: colors.slate900, fontSize: 18 },
+        headerShadowVisible: false,
+        tabBarStyle: {
+          backgroundColor: colors.white,
+          borderTopColor: colors.slate200,
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 6,
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.slate400,
+        tabBarLabelStyle: { fontWeight: '700', fontSize: 12 },
+        tabBarIcon: ({ focused }) => <TabIcon label={route.name} focused={focused} />,
+      })}
     >
-      <Tab.Screen name="Search" component={SearchScreen} options={{ title: 'Recherche' }} />
+      <Tab.Screen name="Search" component={SearchScreen} options={{ title: 'Recherche', headerShown: false }} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ title: 'Favoris' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profil' }} />
     </Tab.Navigator>
@@ -51,8 +90,8 @@ function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B1F33' }}>
-        <ActivityIndicator color="#3DBDA7" size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+        <ActivityIndicator color={colors.primary} size="large" />
       </View>
     )
   }
@@ -67,7 +106,14 @@ function RootNavigator() {
           <Stack.Screen
             name="Results"
             component={ResultsScreen}
-            options={{ headerShown: true, title: 'Résultats', headerStyle: { backgroundColor: '#0B1F33' }, headerTintColor: '#fff' }}
+            options={{
+              headerShown: true,
+              title: 'Résultats',
+              headerStyle: { backgroundColor: colors.white },
+              headerTintColor: colors.primary,
+              headerTitleStyle: { fontWeight: '900', color: colors.slate900 },
+              headerShadowVisible: false,
+            }}
           />
         </>
       ) : (
@@ -82,8 +128,8 @@ function RootNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer>
-        <StatusBar style="light" />
+      <NavigationContainer theme={navTheme}>
+        <StatusBar style="dark" />
         <RootNavigator />
       </NavigationContainer>
     </AuthProvider>

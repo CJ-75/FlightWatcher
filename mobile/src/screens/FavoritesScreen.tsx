@@ -1,8 +1,11 @@
 import React, { useCallback, useState } from 'react'
-import { View, Text, FlatList, StyleSheet, RefreshControl, Pressable } from 'react-native'
+import { Text, FlatList, StyleSheet, RefreshControl, Pressable, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import type { SavedFavorite } from '@flightwatcher/shared'
+import type { EnrichedTripResponse, SavedFavorite } from '@flightwatcher/shared'
+import { translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { DestinationCard } from '../components/DestinationCard'
+import { colors, spacing } from '../theme'
 
 export function FavoritesScreen() {
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
@@ -16,7 +19,7 @@ export function FavoritesScreen() {
       const list = await getApi().getFavorites()
       setFavorites(Array.isArray(list) ? list : [])
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Impossible de charger les favoris')
+      setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
       setFavorites([])
     } finally {
       setRefreshing(false)
@@ -44,18 +47,22 @@ export function FavoritesScreen() {
       contentContainerStyle={styles.content}
       data={favorites}
       keyExtractor={(item) => item.id}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
+      ListHeaderComponent={
+        <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
+      }
       ListEmptyComponent={
-        <Text style={styles.empty}>{error || 'Aucun favori pour le moment'}</Text>
+        <Text style={styles.empty}>{error || translate('fr', 'favorites.empty')}</Text>
       }
       renderItem={({ item }) => (
-        <View style={styles.card}>
-          <Text style={styles.dest}>
-            {item.trip.aller.origin} → {item.trip.destination_code}
-          </Text>
-          <Text style={styles.price}>{Math.round(item.trip.prix_total)} €</Text>
-          <Pressable onPress={() => remove(item.id)}>
-            <Text style={styles.remove}>Retirer</Text>
+        <View>
+          <DestinationCard
+            trip={item.trip as EnrichedTripResponse}
+            isFavorite
+            onFavorite={() => void remove(item.id)}
+          />
+          <Pressable onPress={() => void remove(item.id)} style={styles.remove}>
+            <Text style={styles.removeText}>{translate('fr', 'card.removeFavorite')}</Text>
           </Pressable>
         </View>
       )}
@@ -64,18 +71,10 @@ export function FavoritesScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: '#F0F4F8' },
-  content: { padding: 16, flexGrow: 1 },
-  empty: { textAlign: 'center', marginTop: 40, color: '#5A7388' },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#D5DEE7',
-  },
-  dest: { fontSize: 16, fontWeight: '700', color: '#0B1F33' },
-  price: { color: '#3DBDA7', fontWeight: '700', marginTop: 4 },
-  remove: { color: '#C0392B', marginTop: 10, fontWeight: '600' },
+  list: { flex: 1, backgroundColor: colors.bgMuted },
+  content: { padding: spacing.lg, paddingBottom: 40, flexGrow: 1 },
+  title: { fontSize: 24, fontWeight: '900', color: colors.slate900, marginBottom: spacing.lg },
+  empty: { textAlign: 'center', marginTop: 48, color: colors.slate500, fontWeight: '600' },
+  remove: { alignItems: 'center', marginTop: -8, marginBottom: spacing.lg },
+  removeText: { color: colors.danger, fontWeight: '700' },
 })
