@@ -58,12 +58,14 @@ export function Button({
           <Text
             style={[
               type.button,
+              { lineHeight: 22 },
               variant === 'primary' && styles.primaryText,
               variant === 'secondary' && styles.secondaryText,
               variant === 'ghost' && styles.ghostText,
               variant === 'google' && styles.googleText,
               textStyle,
             ]}
+            numberOfLines={2}
           >
             {label}
           </Text>

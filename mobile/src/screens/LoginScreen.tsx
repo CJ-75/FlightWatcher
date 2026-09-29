@@ -1,11 +1,18 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { Button } from '../components/ui/Button'
-import { colors, fonts, radius, shadow, spacing, type } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 import * as WebBrowser from 'expo-web-browser'
 
 WebBrowser.maybeCompleteAuthSession()
@@ -35,118 +42,166 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['#FFF8F4', '#FFE6D8', '#FFD4BC']}
-        locations={[0, 0.55, 1]}
+        colors={['#1A0F0A', '#2A1510', '#FF6B35']}
+        locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
       />
-      {/* Soft brand orb */}
-      <View style={styles.orb} />
+      <LinearGradient
+        colors={['transparent', 'rgba(255,107,53,0.35)']}
+        style={styles.glow}
+      />
 
-      <View
-        style={[
-          styles.content,
-          {
-            paddingTop: insets.top + spacing.xxl,
-            paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.lg,
-            paddingHorizontal: spacing.xl,
-          },
-        ]}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.hero}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>Weekend escape</Text>
-          </View>
-          <Text style={styles.brand}>FlightWatcher</Text>
-          <Text style={styles.subtitle}>{translate('fr', 'app.subtitle')}</Text>
-        </View>
-
-        <View style={[styles.card, shadow.lift]}>
-          <Text style={styles.cardTitle}>Connexion</Text>
-          <Text style={styles.cardHint}>{translate('fr', 'login.subtitle')}</Text>
-
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
+        <ScrollView
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingTop: insets.top + 28,
+            paddingBottom: Math.max(insets.bottom, 20) + 24,
+            paddingHorizontal: 22,
+            justifyContent: 'space-between',
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>FlightWatcher</Text>
             </View>
-          ) : null}
+            <Text style={styles.brand}>Des weekends{'\n'}qui comptent.</Text>
+            <Text style={styles.subtitle}>
+              Scanne les meilleurs aller-retour Ryanair selon ton budget — en un geste.
+            </Text>
+          </View>
 
-          <Button
-            variant="google"
-            label={loading ? translate('fr', 'auth.signInProgressLong') : translate('fr', 'auth.signInWithGoogle')}
-            onPress={onLogin}
-            loading={loading}
-            left={!loading ? <GoogleMark /> : undefined}
-          />
+          <View style={[styles.card, shadow.lift]}>
+            <Text style={styles.cardTitle}>Bienvenue</Text>
+            <Text style={styles.cardHint}>
+              Connecte-toi pour sauver tes recherches et favoris sur tous tes appareils.
+            </Text>
 
-          {onContinueAsGuest ? (
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
             <Button
-              variant="ghost"
-              label="Continuer sans compte"
-              onPress={onContinueAsGuest}
-              style={{ marginTop: spacing.sm }}
+              variant="google"
+              label={
+                loading
+                  ? translate('fr', 'auth.signInProgressLong')
+                  : 'Continuer avec Google'
+              }
+              onPress={onLogin}
+              loading={loading}
+              left={!loading ? <GoogleMark /> : undefined}
             />
-          ) : null}
-        </View>
 
-        <Text style={styles.footer}>Ryanair · prix live · aller-retour</Text>
-      </View>
+            {onContinueAsGuest ? (
+              <Button
+                variant="ghost"
+                label="Continuer sans compte"
+                onPress={onContinueAsGuest}
+                style={{ marginTop: 4 }}
+              />
+            ) : null}
+
+            <Text style={styles.legal}>
+              En continuant, tu acceptes l’usage de tes recherches pour améliorer FlightWatcher.
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.canvas },
-  orb: {
+  root: { flex: 1, backgroundColor: '#1A0F0A' },
+  flex: { flex: 1 },
+  glow: {
     position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(255,107,53,0.18)',
-    top: -40,
-    right: -60,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '55%',
   },
-  content: { flex: 1, justifyContent: 'space-between' },
-  hero: { marginTop: spacing.xl },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,107,53,0.25)',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   badgeText: {
     fontFamily: fonts.semibold,
     fontSize: 12,
-    color: colors.primaryInk,
-    letterSpacing: 0.3,
+    lineHeight: 16,
+    color: colors.white,
+    letterSpacing: 0.8,
+    includeFontPadding: false,
   },
-  brand: { ...type.hero, fontSize: 40, lineHeight: 46 },
+  brand: {
+    fontFamily: fonts.extrabold,
+    fontSize: 40,
+    lineHeight: 48,
+    letterSpacing: -1.4,
+    color: colors.white,
+    marginBottom: 14,
+    includeFontPadding: false,
+  },
   subtitle: {
-    ...type.body,
-    marginTop: spacing.sm,
-    fontSize: 17,
-    color: colors.inkSoft,
-    maxWidth: 280,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: 'rgba(255,255,255,0.78)',
+    maxWidth: 320,
+    includeFontPadding: false,
   },
   card: {
     backgroundColor: colors.white,
-    borderRadius: radius.xl,
-    padding: spacing.xxl,
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 26,
+    paddingBottom: 22,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
-  cardTitle: { ...type.title, fontSize: 22, marginBottom: spacing.sm },
-  cardHint: { ...type.caption, marginBottom: spacing.xl, lineHeight: 20 },
+  cardTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 24,
+    lineHeight: 32,
+    color: colors.ink,
+    marginBottom: 8,
+    includeFontPadding: false,
+  },
+  cardHint: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.muted,
+    marginBottom: 22,
+    includeFontPadding: false,
+  },
   errorBox: {
     backgroundColor: colors.dangerSoft,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
   },
-  errorText: { fontFamily: fonts.medium, color: colors.danger, fontSize: 13 },
+  errorText: {
+    fontFamily: fonts.medium,
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 20,
+    includeFontPadding: false,
+  },
   gMark: {
     width: 28,
     height: 28,
@@ -158,13 +213,17 @@ const styles = StyleSheet.create({
   gLetter: {
     fontFamily: fonts.extrabold,
     color: '#4285F4',
-    fontSize: 16,
+    fontSize: 15,
+    lineHeight: 20,
+    includeFontPadding: false,
   },
-  footer: {
-    textAlign: 'center',
-    fontFamily: fonts.medium,
-    fontSize: 12,
+  legal: {
+    marginTop: 16,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    lineHeight: 16,
     color: colors.faint,
-    marginTop: spacing.xl,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 })

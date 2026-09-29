@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,12 +18,12 @@ import { normalizeAirports, translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../../App'
 import { Button } from '../components/ui/Button'
-import { colors, fonts, radius, shadow, spacing, type } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const PRESETS = [
-  { id: 'weekend', labelKey: 'search.preset.weekend' },
-  { id: 'next-weekend', labelKey: 'search.preset.nextWeekend' },
-  { id: 'next-week', labelKey: 'search.preset.nextWeek' },
+  { id: 'weekend', label: 'Ce weekend' },
+  { id: 'next-weekend', label: 'Weekend prochain' },
+  { id: 'next-week', label: '3 jours\nsemaine pro' },
 ] as const
 
 function nextWeekendDates(): { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] } {
@@ -87,60 +88,92 @@ export function SearchScreen() {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={8}
     >
       <ScrollView
         style={styles.root}
         contentContainerStyle={{
-          paddingTop: insets.top + spacing.lg,
-          paddingBottom: insets.bottom + 100,
-          paddingHorizontal: spacing.xl,
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + 110,
+          paddingHorizontal: 20,
         }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.kicker}>FlightWatcher</Text>
-        <Text style={styles.hero}>{translate('fr', 'app.subtitle')}</Text>
+        <Text style={styles.kicker}>FLIGHTWATCHER</Text>
+        <Text style={styles.hero}>Trouve ton{'\n'}weekend pas cher</Text>
+        <Text style={styles.lead}>Budget, aéroport, dates — on s’occupe du reste.</Text>
 
-        <View style={[styles.card, shadow.soft]}>
-          <Text style={styles.label}>{translate('fr', 'search.budget')}</Text>
-          <View style={styles.budgetRow}>
+        {/* Budget */}
+        <View style={[styles.panel, shadow.soft]}>
+          <Text style={styles.sectionLabel}>Mon budget</Text>
+          <Text style={styles.sectionHint}>Maximum aller-retour</Text>
+
+          <View style={styles.budgetBlock}>
             <Pressable
               onPress={() => bumpBudget(-10)}
+              hitSlop={8}
               style={({ pressed }) => [styles.budgetBtn, pressed && styles.budgetBtnPressed]}
             >
               <Text style={styles.budgetBtnText}>−</Text>
             </Pressable>
-            <View style={styles.budgetCenter}>
-              <Text style={styles.budgetValue}>{budget}</Text>
-              <Text style={styles.budgetCurrency}>€</Text>
+
+            <View style={styles.budgetValueWrap}>
+              <Text
+                style={styles.budgetValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {budget}€
+              </Text>
             </View>
+
             <Pressable
               onPress={() => bumpBudget(10)}
+              hitSlop={8}
               style={({ pressed }) => [styles.budgetBtn, pressed && styles.budgetBtnPressed]}
             >
               <Text style={styles.budgetBtnText}>+</Text>
             </Pressable>
           </View>
-          <Text style={styles.budgetHint}>{translate('fr', 'search.budget.total')}</Text>
 
-          <View style={styles.separator} />
+          <View style={styles.budgetTrack}>
+            <LinearGradient
+              colors={[colors.primaryMuted, colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[
+                styles.budgetFill,
+                { width: `${Math.max(8, Math.min(100, ((budget - 30) / 470) * 100))}%` },
+              ]}
+            />
+          </View>
+        </View>
 
-          <Text style={styles.label}>{translate('fr', 'search.departure')}</Text>
+        {/* Departure */}
+        <View style={[styles.panel, shadow.soft]}>
+          <Text style={styles.sectionLabel}>Départ</Text>
+          <Text style={styles.sectionHint}>Code IATA de ton aéroport</Text>
           <TextInput
             style={styles.input}
             value={airport}
-            onChangeText={setAirport}
+            onChangeText={(t) => setAirport(t.replace(/[^a-zA-Z]/g, '').toUpperCase())}
             autoCapitalize="characters"
             autoCorrect={false}
-            placeholder="BVA, CDG, ORY…"
+            placeholder="BVA"
             placeholderTextColor={colors.faint}
             maxLength={3}
           />
           {airportsCount > 0 ? (
-            <Text style={styles.meta}>{airportsCount} aéroports Ryanair</Text>
+            <Text style={styles.meta}>{airportsCount} aéroports disponibles</Text>
           ) : null}
+        </View>
 
-          <Text style={[styles.label, { marginTop: spacing.xxl }]}>{translate('fr', 'search.when')}</Text>
+        {/* When */}
+        <View style={[styles.panel, shadow.soft]}>
+          <Text style={styles.sectionLabel}>Je pars</Text>
+          <Text style={styles.sectionHint}>Choisis une période</Text>
           <View style={styles.chips}>
             {PRESETS.map((p) => {
               const active = preset === p.id
@@ -151,22 +184,26 @@ export function SearchScreen() {
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                    {translate('fr', p.labelKey)}
+                    {p.label}
                   </Text>
                 </Pressable>
               )
             })}
           </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Button
-            label={loading ? translate('fr', 'search.inProgress') : translate('fr', 'search.launch')}
-            onPress={onSearch}
-            loading={loading}
-            style={{ marginTop: spacing.xxl }}
-          />
         </View>
+
+        {error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.error}>{error}</Text>
+          </View>
+        ) : null}
+
+        <Button
+          label={loading ? 'Recherche…' : 'Lancer la recherche'}
+          onPress={onSearch}
+          loading={loading}
+          style={styles.cta}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -176,31 +213,62 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   kicker: {
     fontFamily: fonts.semibold,
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 16,
     color: colors.primary,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
+    letterSpacing: 2,
+    marginBottom: 10,
+    includeFontPadding: false,
   },
   hero: {
-    ...type.hero,
-    fontSize: 32,
-    lineHeight: 38,
-    marginBottom: spacing.xxl,
-    maxWidth: 320,
+    fontFamily: fonts.extrabold,
+    fontSize: 34,
+    lineHeight: 42,
+    letterSpacing: -1.1,
+    color: colors.ink,
+    marginBottom: 10,
+    includeFontPadding: false,
   },
-  card: {
+  lead: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.muted,
+    marginBottom: 24,
+    includeFontPadding: false,
+  },
+  panel: {
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.xxl,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 20,
+    marginBottom: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
+    overflow: 'visible',
   },
-  label: { ...type.section, marginBottom: spacing.md },
-  budgetRow: {
+  sectionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 17,
+    lineHeight: 26,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  sectionHint: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.muted,
+    marginTop: 2,
+    marginBottom: 16,
+    includeFontPadding: false,
+  },
+  budgetBlock: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 72,
   },
   budgetBtn: {
     width: 52,
@@ -214,50 +282,78 @@ const styles = StyleSheet.create({
   budgetBtnText: {
     fontFamily: fonts.bold,
     fontSize: 28,
+    lineHeight: 34,
     color: colors.primary,
-    marginTop: -2,
+    includeFontPadding: false,
+    textAlign: 'center',
   },
-  budgetCenter: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  budgetValueWrap: {
+    flex: 1,
+    minHeight: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
   budgetValue: {
     fontFamily: fonts.extrabold,
-    fontSize: 48,
-    letterSpacing: -1.5,
+    fontSize: 44,
+    lineHeight: 56,
+    letterSpacing: -1.2,
     color: colors.ink,
-    lineHeight: 52,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
-  budgetCurrency: {
-    fontFamily: fonts.bold,
-    fontSize: 22,
-    color: colors.primary,
-    marginBottom: 8,
+  budgetTrack: {
+    marginTop: 16,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primarySoft,
+    overflow: 'hidden',
   },
-  budgetHint: { ...type.caption, textAlign: 'center', marginTop: spacing.sm },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.line,
-    marginVertical: spacing.xxl,
+  budgetFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   input: {
     backgroundColor: colors.canvas,
-    borderRadius: radius.md,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.line,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === 'ios' ? 16 : 14,
-    fontSize: 18,
+    fontSize: 20,
+    lineHeight: 26,
     fontFamily: fonts.bold,
     color: colors.ink,
-    letterSpacing: 2,
+    letterSpacing: 3,
+    textAlign: 'center',
   },
-  meta: { ...type.caption, marginTop: 8 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  meta: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.faint,
+    marginTop: 10,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   chip: {
-    borderRadius: radius.full,
+    flexGrow: 1,
+    flexBasis: '30%',
+    minHeight: 56,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: colors.lineStrong,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chipActive: {
     borderColor: colors.primary,
@@ -266,13 +362,24 @@ const styles = StyleSheet.create({
   chipText: {
     fontFamily: fonts.semibold,
     fontSize: 13,
+    lineHeight: 18,
     color: colors.inkSoft,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   chipTextActive: { color: colors.primaryInk },
+  errorBox: {
+    backgroundColor: colors.dangerSoft,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 8,
+  },
   error: {
     fontFamily: fonts.medium,
     color: colors.danger,
-    marginTop: spacing.lg,
     fontSize: 13,
+    lineHeight: 20,
+    includeFontPadding: false,
   },
+  cta: { marginTop: 10 },
 })
