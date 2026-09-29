@@ -5,11 +5,18 @@ export interface SupabaseAuthOptions {
   apiBaseUrl?: string
   /** Override redirect URL for OAuth (web origin or mobile deep link). */
   redirectTo?: string
+  /**
+   * Native / Expo: open the OAuth URL in an auth session and return the
+   * redirect URL on success (null if cancelled). When set, skipBrowserRedirect
+   * is used and the session is created from the callback URL.
+   */
+  openAuthSession?: (url: string, redirectTo: string) => Promise<string | null>
   /** Auth options passed to createClient */
   authOptions?: {
     autoRefreshToken?: boolean
     persistSession?: boolean
     detectSessionInUrl?: boolean
+    flowType?: 'implicit' | 'pkce'
     storage?: {
       getItem: (key: string) => string | null | Promise<string | null>
       setItem: (key: string, value: string) => void | Promise<void>
@@ -28,6 +35,8 @@ export interface SupabaseAuth {
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<{ error: Error | null }>
+  /** Complete OAuth from a deep-link / auth-session redirect URL. */
+  createSessionFromUrl: (url: string) => Promise<{ session: Session | null; error: Error | null }>
   onAuthStateChange: (
     callback: (event: string, session: Session | null) => void
   ) => () => void
@@ -37,6 +46,55 @@ function joinUrl(base: string, path: string): string {
   const b = (base || '').replace(/\/$/, '')
   const p = path.startsWith('/') ? path : `/${path}`
   return `${b}${p}`
+}
+
+/** Parse query or hash params from OAuth redirect URLs (incl. custom schemes). */
+export function extractParamsFromUrl(url: string): Record<string, string> {
+  const params: Record<string, string> = {}
+  const hashPart = url.includes('#') ? url.split('#').slice(1).join('#') : ''
+  const queryPart = url.includes('?')
+    ? url.split('?')[1]?.split('#')[0] || ''
+    : ''
+  const raw = hashPart || queryPart
+  if (!raw) return params
+  for (const part of raw.split('&')) {
+    if (!part) continue
+    const eq = part.indexOf('=')
+    const key = decodeURIComponent(eq >= 0 ? part.slice(0, eq) : part)
+    const value = decodeURIComponent(eq >= 0 ? part.slice(eq + 1) : '')
+    if (key) params[key] = value
+  }
+  return params
+}
+
+async function applySessionFromUrl(
+  client: SupabaseClient,
+  url: string,
+): Promise<{ session: Session | null; error: Error | null }> {
+  const params = extractParamsFromUrl(url)
+  if (params.error || params.error_description) {
+    return {
+      session: null,
+      error: new Error(params.error_description || params.error || 'OAuth error'),
+    }
+  }
+
+  if (params.code) {
+    const { data, error } = await client.auth.exchangeCodeForSession(params.code)
+    if (error) return { session: null, error: new Error(error.message) }
+    return { session: data.session, error: null }
+  }
+
+  if (params.access_token) {
+    const { data, error } = await client.auth.setSession({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token || '',
+    })
+    if (error) return { session: null, error: new Error(error.message) }
+    return { session: data.session, error: null }
+  }
+
+  return { session: null, error: new Error('No auth tokens found in redirect URL') }
 }
 
 /**
@@ -93,36 +151,67 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
     return client
   }
 
+  async function createSessionFromUrl(url: string) {
+    const c = await getClient()
+    if (!c) return { session: null, error: new Error('Supabase is not configured') }
+    return applySessionFromUrl(c, url)
+  }
+
   return {
     getClient,
     isAvailable: async () => (await getClient()) !== null,
     getCurrentUser: async () => {
       const c = await getClient()
       if (!c) return null
-      const { data: { user } } = await c.auth.getUser()
+      const {
+        data: { user },
+      } = await c.auth.getUser()
       return user
     },
     getCurrentSession: async () => {
       const c = await getClient()
       if (!c) return null
-      const { data: { session } } = await c.auth.getSession()
+      const {
+        data: { session },
+      } = await c.auth.getSession()
       return session
     },
     getAccessToken: async () => {
       const c = await getClient()
       if (!c) return null
-      const { data: { session } } = await c.auth.getSession()
+      const {
+        data: { session },
+      } = await c.auth.getSession()
       return session?.access_token ?? null
     },
+    createSessionFromUrl,
     signInWithGoogle: async () => {
       const c = await getClient()
       if (!c) return { error: new Error('Supabase is not configured') }
       const redirectTo = options.redirectTo
-      const { error } = await c.auth.signInWithOAuth({
+      const useNative = typeof options.openAuthSession === 'function'
+
+      const { data, error } = await c.auth.signInWithOAuth({
         provider: 'google',
-        options: redirectTo ? { redirectTo } : undefined,
+        options: {
+          ...(redirectTo ? { redirectTo } : {}),
+          skipBrowserRedirect: useNative,
+        },
       })
-      return { error: error ? new Error(error.message) : null }
+      if (error) return { error: new Error(error.message) }
+
+      if (!useNative) return { error: null }
+
+      if (!data?.url) return { error: new Error('No OAuth URL returned') }
+
+      try {
+        const resultUrl = await options.openAuthSession!(data.url, redirectTo || '')
+        if (!resultUrl) return { error: null }
+        const { error: sessionError } = await applySessionFromUrl(c, resultUrl)
+        return { error: sessionError }
+      } catch (e) {
+        return { error: e instanceof Error ? e : new Error(String(e)) }
+      }
     },
     signInWithEmail: async (email, password) => {
       const c = await getClient()
@@ -140,7 +229,9 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
       let unsubscribe: (() => void) | null = null
       getClient().then((c) => {
         if (!c) return
-        const { data: { subscription } } = c.auth.onAuthStateChange((event, session) => {
+        const {
+          data: { subscription },
+        } = c.auth.onAuthStateChange((event, session) => {
           callback(event, session)
         })
         unsubscribe = () => subscription.unsubscribe()

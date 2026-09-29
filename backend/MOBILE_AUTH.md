@@ -39,11 +39,23 @@ Use these values to initialize the Supabase client on the device.
 
 ## OAuth deep link (Expo)
 
-Configure Supabase Auth redirect URL for the Expo app:
+Configure **all** of these redirect URLs in Supabase Auth → URL Configuration
+(Expo Go uses an `exp://` URL; a build uses the custom scheme):
 
 ```
 flightwatcher://auth/callback
 ```
+
+Also add the Expo Go redirect logged at startup (`[auth] OAuth redirectTo = …`),
+typically similar to:
+
+```
+exp://127.0.0.1:8081/--/auth/callback
+exp://<LAN-IP>:8081/--/auth/callback
+```
+
+The app opens Google via `WebBrowser.openAuthSessionAsync`, then exchanges the
+callback `code` / tokens for a Supabase session.
 
 After OAuth sign-in, Supabase redirects to this deep link with session tokens. Handle the callback in the mobile app to persist the session and send the access token on subsequent API calls.
 

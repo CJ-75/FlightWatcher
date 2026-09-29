@@ -89,7 +89,7 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
     if (exists) {
       next = list.filter((d) => d.date !== dateStr)
     } else {
-      next = [...list, { date: dateStr, heure_min: '06:00', heure_max: '23:59' }]
+      next = [...list, { date: dateStr, heure_min: '06:00', heure_max: '12:00' }]
       next.sort((a, b) => a.date.localeCompare(b.date))
     }
     if (tab === 'depart') {
@@ -345,7 +345,10 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
         date={hoursTarget}
         type={tab}
         onClose={() => setHoursTarget(null)}
-        onUpdate={updateHours}
+        onUpdate={(updated) => {
+          updateHours(updated)
+          setHoursTarget(updated)
+        }}
       />
     </Modal>
   )

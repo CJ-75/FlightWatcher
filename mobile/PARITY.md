@@ -3,6 +3,7 @@
 ## Livré — recherche & résultats
 
 - Auth Google + deep link `flightwatcher://auth/callback` (+ mode invité)
+  - Expo: `WebBrowser.openAuthSessionAsync` + PKCE; allow-list `exp://…/auth/callback` in Supabase for Expo Go
 - UI brand `#FF6B35`, Sora, cartes DestinationCard
 - **Recherche inspire complète**
   - Budget 20–1000€

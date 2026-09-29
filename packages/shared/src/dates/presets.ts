@@ -41,7 +41,7 @@ export function formatDateFr(dateStr: string): string {
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
 }
 
-const defaultHours = { heure_min: '06:00', heure_max: '23:59' }
+const defaultHours = { heure_min: '06:00', heure_max: '12:00' } // Matin
 
 /**
  * Génère les dates aller/retour selon le preset (logique alignée web DateWithTimes).
@@ -121,9 +121,9 @@ export function generateDatesFromPreset(preset: DatePresetId): FlexibleDates {
 
 export const TIME_PRESETS = [
   { id: 'nuit', label: 'Nuit', emoji: '🌙', min: '00:00', max: '06:00' },
-  { id: 'matin', label: 'Matin', emoji: '🌅', min: '06:01', max: '12:00' },
-  { id: 'apres-midi', label: 'Après-midi', emoji: '☀️', min: '12:01', max: '18:00' },
-  { id: 'soir', label: 'Soir', emoji: '🌆', min: '18:01', max: '23:59' },
+  { id: 'matin', label: 'Matin', emoji: '🌅', min: '06:00', max: '12:00' },
+  { id: 'apres-midi', label: 'Après-midi', emoji: '☀️', min: '12:00', max: '18:00' },
+  { id: 'soir', label: 'Soir', emoji: '🌆', min: '18:00', max: '23:59' },
   { id: 'journee', label: 'Journée', emoji: '🕐', min: '06:00', max: '23:59' },
 ] as const
 

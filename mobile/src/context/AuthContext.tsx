@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import * as Linking from 'expo-linking'
 import type { Session, User } from '@flightwatcher/shared'
-import { auth } from '../lib/client'
+import { auth, redirectTo } from '../lib/client'
 
 interface AuthContextValue {
   user: User | null
@@ -12,6 +13,15 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+function looksLikeAuthCallback(url: string): boolean {
+  return (
+    url.includes('auth/callback') ||
+    url.includes('access_token=') ||
+    url.includes('refresh_token=') ||
+    url.includes('code=')
+  )
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -19,22 +29,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true
-    ;(async () => {
-      const s = await auth.getCurrentSession()
+
+    const applySession = (s: Session | null) => {
       if (!mounted) return
       setSession(s)
       setUser(s?.user ?? null)
       setLoading(false)
+    }
+
+    ;(async () => {
+      const s = await auth.getCurrentSession()
+      applySession(s)
     })()
 
     const unsub = auth.onAuthStateChange((_event, s) => {
-      setSession(s)
-      setUser(s?.user ?? null)
-      setLoading(false)
+      applySession(s)
     })
+
+    const handleUrl = async (url: string | null) => {
+      if (!url || !looksLikeAuthCallback(url)) return
+      const { session: s, error } = await auth.createSessionFromUrl(url)
+      if (error) {
+        console.warn('[auth] createSessionFromUrl', error.message)
+        return
+      }
+      if (s) applySession(s)
+    }
+
+    Linking.getInitialURL().then((url) => {
+      void handleUrl(url)
+    })
+    const linkSub = Linking.addEventListener('url', ({ url }) => {
+      void handleUrl(url)
+    })
+
+    if (__DEV__) {
+      console.log('[auth] OAuth redirectTo =', redirectTo)
+    }
+
     return () => {
       mounted = false
       unsub()
+      linkSub.remove()
     }
   }, [])
 
@@ -50,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null)
       },
     }),
-    [user, session, loading]
+    [user, session, loading],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

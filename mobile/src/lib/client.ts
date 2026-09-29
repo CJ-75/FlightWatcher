@@ -1,8 +1,11 @@
 import { createApiClient, createSupabaseAuth, createAsyncKVStore, type ApiClient } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import * as Linking from 'expo-linking'
+import * as WebBrowser from 'expo-web-browser'
+import { makeRedirectUri } from 'expo-auth-session'
 import Constants from 'expo-constants'
 import { Platform } from 'react-native'
+
+WebBrowser.maybeCompleteAuthSession()
 
 /**
  * Resolve backend URL for Expo Go / device.
@@ -28,7 +31,6 @@ function resolveApiBase(): string {
   }
 
   if (Platform.OS === 'android') {
-    // Android emulator loopback to host machine
     return 'http://10.0.2.2:8000'
   }
 
@@ -39,15 +41,28 @@ const apiBase = resolveApiBase()
 
 export const kv = createAsyncKVStore(AsyncStorage)
 
-export const redirectTo = Linking.createURL('auth/callback')
+/** Deep link used as Supabase OAuth redirect (must be allow-listed). */
+export const redirectTo = makeRedirectUri({
+  scheme: 'flightwatcher',
+  path: 'auth/callback',
+})
 
 export const auth = createSupabaseAuth({
   apiBaseUrl: apiBase,
   redirectTo,
+  openAuthSession: async (url, redirectUri) => {
+    const result = await WebBrowser.openAuthSessionAsync(url, redirectUri, {
+      showInRecents: true,
+      preferEphemeralSession: false,
+    })
+    if (result.type === 'success' && result.url) return result.url
+    return null
+  },
   authOptions: {
     detectSessionInUrl: false,
     persistSession: true,
     autoRefreshToken: true,
+    flowType: 'pkce',
     storage: AsyncStorage,
   },
 })
