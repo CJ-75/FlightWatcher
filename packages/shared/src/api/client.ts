@@ -130,11 +130,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
 export type ApiClient = ReturnType<typeof createApiClient>
 
-/** Normalize airports response shapes from backend. */
+/** Normalize airports response shapes from backend. Dedupes by IATA code. */
 export function normalizeAirports(data: { airports: Airport[] } | Airport[]): Airport[] {
-  if (Array.isArray(data)) return data
-  const list = data?.airports
-  return Array.isArray(list) ? list : []
+  const list = Array.isArray(data) ? data : Array.isArray(data?.airports) ? data.airports : []
+  const seen = new Set<string>()
+  const out: Airport[] = []
+  for (const a of list) {
+    const code = (a?.code || '').toUpperCase()
+    if (!code || seen.has(code)) continue
+    seen.add(code)
+    out.push({ ...a, code })
+  }
+  return out
 }
 
 export function normalizeDestinations(

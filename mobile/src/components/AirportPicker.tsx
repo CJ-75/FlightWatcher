@@ -147,7 +147,7 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
 
           <FlatList
             data={results}
-            keyExtractor={(item) => item.code}
+            keyExtractor={(item, index) => `${item.code}-${index}`}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 16 }}

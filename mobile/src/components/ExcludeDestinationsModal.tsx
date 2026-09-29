@@ -106,7 +106,7 @@ export function ExcludeDestinationsModal({
         ) : (
           <SectionList
             sections={sections}
-            keyExtractor={(item) => item.code}
+            keyExtractor={(item, index) => `${item.code}-${index}`}
             stickySectionHeadersEnabled={false}
             renderSectionHeader={({ section }) => (
               <Text style={styles.section}>{section.title}</Text>
