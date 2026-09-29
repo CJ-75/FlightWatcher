@@ -15,6 +15,7 @@
         "backgroundColor": "#0B1F33"
       },
       "package": "com.flightwatcher.app",
+      "usesCleartextTraffic": true,
       "intentFilters": [
         {
           "action": "VIEW",

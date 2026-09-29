@@ -2,11 +2,39 @@ import { createApiClient, createSupabaseAuth, createAsyncKVStore, type ApiClient
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Linking from 'expo-linking'
 import Constants from 'expo-constants'
+import { Platform } from 'react-native'
 
-const apiBase =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ||
-  'http://localhost:8000'
+/**
+ * Resolve backend URL for Expo Go / device.
+ * - Prefer EXPO_PUBLIC_API_URL
+ * - Else use the same LAN host as the Metro bundler (phone cannot reach "localhost")
+ * - Android emulator: 10.0.2.2 maps to host machine
+ */
+function resolveApiBase(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim()
+  if (fromEnv) return fromEnv.replace(/\/$/, '')
+
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    Constants.expoGoConfig?.debuggerHost ||
+    (Constants as { manifest?: { debuggerHost?: string } }).manifest?.debuggerHost
+
+  if (hostUri) {
+    const host = String(hostUri).split(':')[0]
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `http://${host}:8000`
+    }
+  }
+
+  if (Platform.OS === 'android') {
+    // Android emulator loopback to host machine
+    return 'http://10.0.2.2:8000'
+  }
+
+  return 'http://localhost:8000'
+}
+
+const apiBase = resolveApiBase()
 
 export const kv = createAsyncKVStore(AsyncStorage)
 
