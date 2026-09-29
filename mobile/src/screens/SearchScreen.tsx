@@ -250,10 +250,23 @@ export function SearchScreen() {
           { paddingTop: insets.top + 8, paddingBottom: 10 },
         ]}
       >
-        <View style={styles.topBlock}>
-          <Text style={styles.kicker}>FLIGHTWATCHER</Text>
-          <Text style={styles.hero}>Weekend pas cher</Text>
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoLetter}>F</Text>
+            </View>
+            <View>
+              <Text style={styles.brandName}>FlightWatcher</Text>
+              <Text style={styles.brandTag}>Vols bas prix</Text>
+            </View>
+          </View>
+          <Text style={styles.hero}>
+            Weekend{'\n'}
+            <Text style={styles.heroAccent}>pas cher</Text>
+          </Text>
+        </View>
 
+        <View style={styles.cardArea}>
           <View style={[styles.card, shadow.soft]}>
             <BudgetSlider value={budget} onChange={setBudget} />
 
@@ -416,13 +429,65 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: 18,
-    justifyContent: 'space-between',
   },
-  topBlock: {
+  header: {
+    marginBottom: 2,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    marginBottom: 12,
+  },
+  logoMark: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoLetter: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    lineHeight: 22,
+    color: colors.white,
+    includeFontPadding: false,
+  },
+  brandName: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    lineHeight: 18,
+    color: colors.ink,
+    letterSpacing: -0.2,
+    includeFontPadding: false,
+  },
+  brandTag: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.muted,
+    marginTop: 1,
+    includeFontPadding: false,
+  },
+  hero: {
+    fontFamily: fonts.extrabold,
+    fontSize: 32,
+    lineHeight: 36,
+    letterSpacing: -1.2,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  heroAccent: {
+    color: colors.primary,
+  },
+  cardArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   footer: {
-    marginTop: 12,
+    marginTop: 8,
   },
   loadingRoot: {
     flex: 1,
@@ -444,24 +509,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     includeFontPadding: false,
   },
-  kicker: {
-    fontFamily: fonts.semibold,
-    fontSize: 10,
-    lineHeight: 12,
-    color: colors.primary,
-    letterSpacing: 1.8,
-    marginBottom: 1,
-    includeFontPadding: false,
-  },
-  hero: {
-    fontFamily: fonts.extrabold,
-    fontSize: 24,
-    lineHeight: 28,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
   card: {
+    width: '100%',
     backgroundColor: colors.white,
     borderRadius: 24,
     paddingHorizontal: 16,
