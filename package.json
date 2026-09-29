@@ -2,7 +2,7 @@
   "name": "flightwatcher",
   "private": true,
   "engines": {
-    "node": ">=20 <23"
+    "node": ">=20"
   },
   "workspaces": [
     "packages/*",

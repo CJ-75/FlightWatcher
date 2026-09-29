@@ -18,13 +18,14 @@ Clients → `@flightwatcher/shared` → FastAPI → Ryanair / Supabase.
 ## Prérequis
 
 - Python 3.10+
-- **Node 20 LTS** (obligatoire pour Expo — Node 23/24 casse `expo start` avec `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`)
+- **Node 22 LTS** (Expo SDK 57 — `fnm use 22`)
 - Compte Supabase (optionnel pour auth / sync)
+- **Expo Go SDK 57** sur le téléphone (aligné avec le projet)
 
-```bash
-# Si tu es en Node 24 :
-nvm install 20
-nvm use 20
+```powershell
+fnm env --shell powershell | Out-String | Invoke-Expression
+fnm install 22
+fnm use 22
 ```
 
 ## Installation monorepo
@@ -60,12 +61,11 @@ npm run dev:web
 # Proxy Vite /api → :8000 — ou VITE_API_URL=http://localhost:8000
 ```
 
-### Mobile (Expo)
+### Mobile (Expo SDK 57)
 
 ```powershell
-# Expo nécessite Node 20 (pas Node 24)
 fnm env --shell powershell | Out-String | Invoke-Expression
-fnm use 20
+fnm use 22
 cd mobile
 npx expo start
 ```
@@ -73,7 +73,7 @@ npx expo start
 Une fois pour toutes, ajoute `fnm env --use-on-cd | Out-String | Invoke-Expression` à ton profil PowerShell, puis :
 
 ```powershell
-fnm use 20
+fnm use 22
 npm run dev:mobile
 ```
 

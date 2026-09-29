@@ -12,6 +12,7 @@ ENV/
 node_modules/
 dist/
 *.log
+.expo/
 
 # IDE
 .vscode/

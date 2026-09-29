@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "scheme": "flightwatcher",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#0B1F33"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.flightwatcher.app"
@@ -34,6 +29,6 @@
           "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
-    },
+    }
   }
 }
