@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import * as Linking from 'expo-linking'
 import type { Session, User } from '@flightwatcher/shared'
-import { auth, redirectTo } from '../lib/client'
+import { auth, redirectTo, authRedirectWarning } from '../lib/client'
 
 interface AuthContextValue {
   user: User | null
@@ -47,16 +47,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     const handleUrl = async (url: string | null) => {
-      if (!url || !looksLikeAuthCallback(url)) return
-      const { session: s, error } = await auth.createSessionFromUrl(url)
-      if (error) {
-        console.warn('[auth] createSessionFromUrl', error.message)
+      if (__DEV__) console.log('[auth] AuthContext Linking url=', url?.slice(0, 200) ?? null)
+      if (!url || !looksLikeAuthCallback(url)) {
+        if (__DEV__ && url) console.log('[auth] AuthContext ignore (not callback)')
         return
       }
-      if (s) applySession(s)
+      if (__DEV__) console.log('[auth] AuthContext createSessionFromUrl…')
+      const { session: s, error } = await auth.createSessionFromUrl(url)
+      if (error) {
+        console.warn('[auth] AuthContext createSessionFromUrl FAILED', error.message)
+        return
+      }
+      if (s) {
+        if (__DEV__) console.log('[auth] AuthContext session OK user=', s.user?.email ?? s.user?.id)
+        applySession(s)
+      } else if (__DEV__) {
+        console.warn('[auth] AuthContext createSessionFromUrl returned no session')
+      }
     }
 
     Linking.getInitialURL().then((url) => {
+      if (__DEV__) console.log('[auth] AuthContext getInitialURL=', url?.slice(0, 200) ?? null)
       void handleUrl(url)
     })
     const linkSub = Linking.addEventListener('url', ({ url }) => {
@@ -64,7 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
 
     if (__DEV__) {
-      console.log('[auth] OAuth redirectTo (allow-list in Supabase) =', redirectTo)
+      console.log('[auth] AuthContext ready redirectTo=', redirectTo)
+      if (authRedirectWarning) console.warn('[auth] CONFIG', authRedirectWarning)
     }
 
     return () => {

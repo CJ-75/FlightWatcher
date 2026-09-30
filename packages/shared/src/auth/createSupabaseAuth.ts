@@ -191,6 +191,12 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
       const redirectTo = options.redirectTo
       const useNative = typeof options.openAuthSession === 'function'
 
+      console.log('[auth] signInWithGoogle start', {
+        redirectTo,
+        useNative,
+        flowType: options.authOptions?.flowType ?? '(default)',
+      })
+
       const { data, error } = await c.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -198,18 +204,41 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
           skipBrowserRedirect: useNative,
         },
       })
-      if (error) return { error: new Error(error.message) }
+      if (error) {
+        console.warn('[auth] signInWithOAuth error', error.message)
+        return { error: new Error(error.message) }
+      }
+
+      console.log('[auth] signInWithOAuth ok', {
+        hasUrl: !!data?.url,
+        urlPreview: data?.url?.slice(0, 220) ?? null,
+      })
 
       if (!useNative) return { error: null }
 
       if (!data?.url) return { error: new Error('No OAuth URL returned') }
 
       try {
+        console.log('[auth] openAuthSession…')
         const resultUrl = await options.openAuthSession!(data.url, redirectTo || '')
-        if (!resultUrl) return { error: null }
+        console.log('[auth] openAuthSession returned', {
+          hasUrl: !!resultUrl,
+          preview: resultUrl?.slice(0, 220) ?? null,
+        })
+        if (!resultUrl) {
+          console.warn('[auth] openAuthSession returned null (cancel / timeout / fallback open only)')
+          return { error: null }
+        }
+        console.log('[auth] applySessionFromUrl…')
         const { error: sessionError } = await applySessionFromUrl(c, resultUrl)
+        if (sessionError) {
+          console.warn('[auth] applySessionFromUrl FAILED', sessionError.message)
+        } else {
+          console.log('[auth] applySessionFromUrl OK')
+        }
         return { error: sessionError }
       } catch (e) {
+        console.warn('[auth] openAuthSession / applySession threw', e)
         return { error: e instanceof Error ? e : new Error(String(e)) }
       }
     },

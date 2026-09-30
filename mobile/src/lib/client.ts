@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
 import Constants from 'expo-constants'
-import { Platform } from 'react-native'
+import { AppState, Platform } from 'react-native'
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -37,21 +37,82 @@ const apiBase = resolveApiBase()
 
 export const kv = createAsyncKVStore(AsyncStorage)
 
-/**
- * Final OAuth redirect = deep link into Expo Go / the app.
- * Avoids Supabase Site URL fallback (localhost:5173) which the phone cannot use.
- *
- * Allow-list in Supabase Redirect URLs (see backend/MOBILE_AUTH.md):
- *   exp://192.168.1.161:8083/--/auth/callback
- *   flightwatcher://auth/callback
- *   and the exp:// wildcard form documented in MOBILE_AUTH.md
- */
-export const redirectTo =
-  Constants.appOwnership === 'expo'
-    ? Linking.createURL('auth/callback')
-    : 'flightwatcher://auth/callback'
+const LAN_IP_IN_URL = /exp:\/\/\d{1,3}(?:\.\d{1,3}){3}/
 
+/**
+ * Redirect strategy:
+ *
+ * - Dev client / standalone: flightwatcher:// (in Supabase — works with a native build)
+ * - Expo Go: must use exp://… BUT Supabase rejects LAN IPs in redirect URLs
+ *   (https://github.com/supabase/auth/issues/2039). So Expo Go needs:
+ *     npx expo start --tunnel
+ *   Then Linking.createURL has no 192.168.x.x and Supabase accepts exp://**.
+ *
+ * flightwatcher:// existing in Supabase is correct — Expo Go simply cannot
+ * receive custom schemes (official Expo limitation).
+ */
+function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
+  if (Constants.appOwnership !== 'expo') {
+    return { redirectTo: 'flightwatcher://auth/callback', warning: null }
+  }
+
+  const expoUrl = Linking.createURL('auth/callback')
+  if (LAN_IP_IN_URL.test(expoUrl)) {
+    return {
+      redirectTo: expoUrl,
+      warning:
+        'Expo Go + Wi‑Fi LAN: Supabase blocks exp://192.168… redirects (even if allow-listed). ' +
+        'flightwatcher:// is in Supabase but Expo Go cannot open custom schemes. ' +
+        'Fix: stop Metro and run  npm run start:tunnel  then rescan QR.',
+    }
+  }
+
+  return { redirectTo: expoUrl, warning: null }
+}
+
+const resolved = resolveRedirectTo()
+export const redirectTo = resolved.redirectTo
 export const appDeepLink = redirectTo
+export const authRedirectWarning = resolved.warning
+
+function authLog(...args: unknown[]) {
+  if (__DEV__) console.log('[auth]', ...args)
+}
+
+function authWarn(...args: unknown[]) {
+  if (__DEV__) console.warn('[auth]', ...args)
+}
+
+function describeAuthorizeUrl(authUrl: string) {
+  try {
+    const u = new URL(authUrl)
+    const redirect = u.searchParams.get('redirect_to')
+    return {
+      redirect_to: redirect,
+      has_code_challenge: u.searchParams.has('code_challenge'),
+      matches_app_redirect: redirect === redirectTo,
+      has_lan_ip: !!redirect && LAN_IP_IN_URL.test(redirect),
+      looksLikeLocalhost: !!redirect?.includes('localhost'),
+    }
+  } catch {
+    return { raw: authUrl.slice(0, 160) }
+  }
+}
+
+function describeCallbackUrl(url: string) {
+  const fragment = url.includes('#') ? url.split('#')[1] || '' : ''
+  const query = url.includes('?') ? (url.split('?')[1] || '').split('#')[0] : ''
+  const fp = new URLSearchParams(fragment)
+  const qp = new URLSearchParams(query)
+  return {
+    scheme: url.split(':')[0],
+    preview: url.slice(0, 160),
+    has_access_token: fp.has('access_token') || qp.has('access_token'),
+    has_refresh_token: fp.has('refresh_token') || qp.has('refresh_token'),
+    has_code: fp.has('code') || qp.has('code'),
+    error: fp.get('error') || qp.get('error'),
+  }
+}
 
 function isAuthCallback(url: string): boolean {
   return (
@@ -64,64 +125,77 @@ function isAuthCallback(url: string): boolean {
   )
 }
 
-/**
- * Open Google; return when the deep link comes back with tokens/code.
- * No dismissBrowser before open (locks iOS). No http://localhost hop.
- */
 async function openOAuthSession(authUrl: string): Promise<string | null> {
-  if (__DEV__) {
-    console.log('[auth] redirectTo (must be allow-listed)', redirectTo)
-    console.log('[auth] open url', authUrl.slice(0, 200))
+  authLog('—— openOAuthSession ——')
+  authLog('appOwnership=', Constants.appOwnership)
+  authLog('redirectTo=', redirectTo)
+  if (authRedirectWarning) {
+    authWarn('CONFIG', authRedirectWarning)
   }
+  authLog('authorize=', describeAuthorizeUrl(authUrl))
 
   return new Promise((resolve) => {
     let settled = false
-    const finish = (url: string | null) => {
+    const t0 = Date.now()
+
+    const cleanup = () => {
+      linkSub.remove()
+      appSub.remove()
+      clearTimeout(hardTimer)
+      clearInterval(heartbeat)
+    }
+
+    const finish = (url: string | null, reason: string) => {
       if (settled) return
       settled = true
-      linkSub.remove()
-      clearTimeout(timer)
+      cleanup()
+      authLog('finish', reason, 'ms=', Date.now() - t0, url ? describeCallbackUrl(url) : null)
       resolve(url)
     }
 
-    const linkSub = Linking.addEventListener('url', ({ url }) => {
-      if (__DEV__) console.log('[auth] deep link', url.slice(0, 200))
-      if (isAuthCallback(url)) finish(url)
+    const onUrl = (url: string | null, source: string) => {
+      if (!url || settled) return
+      authLog('url candidate', source, describeCallbackUrl(url))
+      if (isAuthCallback(url)) finish(url, source)
+    }
+
+    const linkSub = Linking.addEventListener('url', ({ url }) => onUrl(url, 'linking'))
+    const appSub = AppState.addEventListener('change', (state) => {
+      authLog('AppState', state, 'ms=', Date.now() - t0)
+      if (state === 'active' && !settled) {
+        void Linking.getInitialURL().then((u) => onUrl(u, 'resume-initial'))
+      }
     })
 
-    const timer = setTimeout(() => {
-      if (__DEV__) console.warn('[auth] timeout waiting for deep link')
-      finish(null)
-    }, 180_000)
+    const heartbeat = setInterval(() => {
+      if (settled) return
+      authWarn('waiting return…', Math.round((Date.now() - t0) / 1000) + 's')
+    }, 4000)
 
-    void (async () => {
-      try {
-        const session = await WebBrowser.openAuthSessionAsync(authUrl, redirectTo, {
-          showInRecents: true,
-          preferEphemeralSession: false,
-        })
-        if (__DEV__) console.log('[auth] auth session', session.type)
+    const hardTimer = setTimeout(() => finish(null, 'timeout-90s'), 90_000)
 
+    authLog('openAuthSessionAsync NOW')
+    void WebBrowser.openAuthSessionAsync(authUrl, redirectTo, {
+      showInRecents: true,
+      preferEphemeralSession: false,
+    })
+      .then((session) => {
+        authLog('authSession result', session.type, 'ms=', Date.now() - t0)
         if (session.type === 'success' && session.url) {
-          finish(session.url)
+          onUrl(session.url, 'auth-session')
           return
         }
-
-        if (settled) return
-
-        // cancel without URL → still try system Safari (same authorize URL)
-        if (__DEV__) console.log('[auth] auth session ended → system Safari')
-        await Linking.openURL(authUrl)
-      } catch (e) {
-        if (__DEV__) console.warn('[auth] open failed → Safari', e)
-        try {
-          await Linking.openURL(authUrl)
-        } catch (e2) {
-          if (__DEV__) console.warn('[auth] Linking.openURL failed', e2)
-          finish(null)
+        if (!settled) {
+          authWarn('authSession ended without URL:', session.type)
+          setTimeout(() => {
+            if (!settled) finish(null, `auth-session-${session.type}`)
+          }, 1500)
         }
-      }
-    })()
+      })
+      .catch((e) => {
+        authWarn('authSession error', e)
+        if (!settled) finish(null, 'auth-session-error')
+      })
   })
 }
 
@@ -133,7 +207,6 @@ export const auth = createSupabaseAuth({
     detectSessionInUrl: false,
     persistSession: true,
     autoRefreshToken: true,
-    // Tokens in deep-link hash (no PKCE/WebCrypto on device)
     flowType: 'implicit',
     storage: AsyncStorage,
   },
@@ -143,6 +216,7 @@ let api: ApiClient | null = null
 
 export function getApi(): ApiClient {
   if (!api) {
+    authLog('getApi baseUrl=', apiBase)
     api = createApiClient({
       baseUrl: apiBase,
       getToken: () => auth.getAccessToken(),

@@ -1,51 +1,51 @@
 # Mobile Authentication
 
-## Google / Supabase callback (do not change in Google Console)
+## Google Console (unchanged)
 
 ```
 https://iowibrvboqcgknfznfvt.supabase.co/auth/v1/callback
 ```
 
-## Why you saw `localhost:5173/`
+## “But flightwatcher:// already exists in Supabase”
 
-Supabase **Site URL** is `http://localhost:5173`. If your app `redirectTo` is **not** in
-**Redirect URLs**, Auth silently falls back to Site URL. The phone cannot run that
-page → no deep link.
+Correct — and that is what a **dev client / production app** needs.
 
-## Mobile `redirectTo` (direct deep link)
+**Expo Go cannot receive custom schemes** (`flightwatcher://`). Official Expo docs:
+OAuth must use a Development Build for custom schemes.
 
-Expo Go uses:
+With Expo Go the only usable redirect is `exp://…`.
 
+## Second trap: LAN IP
+
+`exp://192.168.1.161:8083/--/auth/callback` is rejected by Supabase even when
+listed (or matched by `exp://**`) because of LAN-IP filtering:
+https://github.com/supabase/auth/issues/2039  
+→ silent fallback to Site URL `localhost:5173` → no return to the app.
+
+## What to run (Expo Go)
+
+```bash
+cd mobile
+npm run start:tunnel
 ```
-exp://192.168.1.161:8083/--/auth/callback
-```
 
-Standalone:
+Rescan the QR code. `redirectTo` should look like `exp://…exp.direct…` or
+`exp://u.expo.dev/…` (**no** `192.168…`).
+
+Keep in Supabase Redirect URLs:
 
 ```
 flightwatcher://auth/callback
-```
-
-No Vite / no localhost hop.
-
-### Supabase → Authentication → URL Configuration → Redirect URLs
-
-Add **all** of these:
-
-```
-exp://192.168.1.161:8083/--/auth/callback
-exp://**/--/auth/callback
-flightwatcher://auth/callback
-http://192.168.1.161:8000/**
+flightwatcher://**
+exp://**
 http://localhost:5173/**
 ```
 
-Optional: set Site URL to `http://192.168.1.161:5173` for LAN web — never rely on
-`localhost` for phone OAuth.
+## Better long-term
 
-### Flow
+```bash
+npx expo run:ios
+# or EAS development build
+```
 
-1. App opens Supabase authorize → Google
-2. Google → `…supabase.co/auth/v1/callback`
-3. Supabase → `exp://…/auth/callback#access_token=…` (implicit)
-4. Expo Go opens → `createSessionFromUrl`
+Then `flightwatcher://auth/callback` (already in Supabase) works end-to-end.

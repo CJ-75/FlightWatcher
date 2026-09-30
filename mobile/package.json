@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node ./scripts/check-node.js && expo start",
+    "start:tunnel": "node ./scripts/check-node.js && expo start --tunnel",
     "android": "node ./scripts/check-node.js && expo start --android",
     "ios": "node ./scripts/check-node.js && expo start --ios",
     "typecheck": "tsc --noEmit"
