@@ -8,9 +8,12 @@ import { AppState, Platform } from 'react-native'
 WebBrowser.maybeCompleteAuthSession()
 
 function env(name: string): string | undefined {
-  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[
-    name
-  ]?.trim()
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+    ?.env
+  const fromProcess = proc?.[name]?.trim()
+  if (fromProcess) return fromProcess
+  const extra = Constants.expoConfig?.extra as Record<string, string | undefined> | undefined
+  return extra?.[name]?.trim() || extra?.[name.replace(/^EXPO_PUBLIC_/, '')]?.trim()
 }
 
 function metroHost(): string | null {
@@ -40,40 +43,56 @@ export const kv = createAsyncKVStore(AsyncStorage)
 const LAN_IP_IN_URL = /exp:\/\/\d{1,3}(?:\.\d{1,3}){3}/
 
 /**
- * Redirect strategy:
+ * OAuth redirectTo
  *
- * - Dev client / standalone: flightwatcher:// (in Supabase — works with a native build)
- * - Expo Go: must use exp://… BUT Supabase rejects LAN IPs in redirect URLs
- *   (https://github.com/supabase/auth/issues/2039). So Expo Go needs:
- *     npx expo start --tunnel
- *   Then Linking.createURL has no 192.168.x.x and Supabase accepts exp://**.
+ * Production / dev client (`npx expo run:ios`, EAS): flightwatcher://auth/callback
+ *   — already in Supabase Redirect URLs. This is the path that works.
  *
- * flightwatcher:// existing in Supabase is correct — Expo Go simply cannot
- * receive custom schemes (official Expo limitation).
+ * Expo Go: custom schemes are not delivered; exp:// with LAN IP is rejected by
+ *   Supabase (auth#2039). Optional EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN (HTTPS bridge)
+ *   is best-effort only — expect to validate Google login on a real build.
  */
 function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
+  const nativeDeepLink = 'flightwatcher://auth/callback'
+
+  // Standalone / dev client — production path
   if (Constants.appOwnership !== 'expo') {
-    return { redirectTo: 'flightwatcher://auth/callback', warning: null }
+    return { redirectTo: nativeDeepLink, warning: null }
   }
 
-  const expoUrl = Linking.createURL('auth/callback')
-  if (LAN_IP_IN_URL.test(expoUrl)) {
+  // Expo Go — optional HTTPS bridge (Cloudflare). Not reliable for sign-off.
+  const publicOrigin = env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN')?.replace(/\/$/, '')
+  const expoLink = Linking.createURL('auth/callback')
+  if (publicOrigin) {
     return {
-      redirectTo: expoUrl,
+      redirectTo: `${publicOrigin}/auth/mobile-callback?app_redirect=${encodeURIComponent(expoLink)}`,
       warning:
-        'Expo Go + Wi‑Fi LAN: Supabase blocks exp://192.168… redirects (even if allow-listed). ' +
-        'flightwatcher:// is in Supabase but Expo Go cannot open custom schemes. ' +
-        'Fix: stop Metro and run  npm run start:tunnel  then rescan QR.',
+        'Expo Go + OAuth is unreliable. Prefer a dev/production build with flightwatcher://',
     }
   }
 
-  return { redirectTo: expoUrl, warning: null }
+  return {
+    redirectTo: expoLink,
+    warning:
+      'Google login needs a native build (flightwatcher://). Expo Go cannot complete Supabase OAuth reliably.',
+  }
 }
 
 const resolved = resolveRedirectTo()
 export const redirectTo = resolved.redirectTo
-export const appDeepLink = redirectTo
+export const appDeepLink =
+  Constants.appOwnership === 'expo'
+    ? Linking.createURL('auth/callback')
+    : 'flightwatcher://auth/callback'
 export const authRedirectWarning = resolved.warning
+
+if (__DEV__) {
+  console.log('[auth] boot env', {
+    EXPO_PUBLIC_API_URL: env('EXPO_PUBLIC_API_URL') ?? null,
+    EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN: env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN') ?? null,
+    redirectTo,
+  })
+}
 
 function authLog(...args: unknown[]) {
   if (__DEV__) console.log('[auth]', ...args)
@@ -115,23 +134,29 @@ function describeCallbackUrl(url: string) {
 }
 
 function isAuthCallback(url: string): boolean {
+  // Do NOT match bare exp://192.168.x.x (Metro URL) — that aborted OAuth early
   return (
+    url.includes('/auth/callback') ||
     url.includes('auth/callback') ||
     url.includes('access_token=') ||
     url.includes('refresh_token=') ||
-    url.includes('code=') ||
-    url.startsWith('flightwatcher://') ||
-    url.startsWith('exp://')
+    /[?#&]code=/.test(url)
   )
+}
+
+/** Always watch for the native deep link (exp:// / flightwatcher://), even when
+ * Supabase redirectTo is the HTTPS Cloudflare bridge — the HTML page then
+ * navigates to appDeepLink and ASWebAuthenticationSession captures it. */
+function authSessionReturnUrl(): string {
+  return appDeepLink
 }
 
 async function openOAuthSession(authUrl: string): Promise<string | null> {
   authLog('—— openOAuthSession ——')
   authLog('appOwnership=', Constants.appOwnership)
-  authLog('redirectTo=', redirectTo)
-  if (authRedirectWarning) {
-    authWarn('CONFIG', authRedirectWarning)
-  }
+  authLog('redirectTo (Supabase)=', redirectTo)
+  authLog('watch deep link=', authSessionReturnUrl())
+  if (authRedirectWarning) authWarn('CONFIG', authRedirectWarning)
   authLog('authorize=', describeAuthorizeUrl(authUrl))
 
   return new Promise((resolve) => {
@@ -156,7 +181,10 @@ async function openOAuthSession(authUrl: string): Promise<string | null> {
     const onUrl = (url: string | null, source: string) => {
       if (!url || settled) return
       authLog('url candidate', source, describeCallbackUrl(url))
-      if (isAuthCallback(url)) finish(url, source)
+      if (isAuthCallback(url)) {
+        void WebBrowser.dismissBrowser().catch(() => undefined)
+        finish(url, source)
+      }
     }
 
     const linkSub = Linking.addEventListener('url', ({ url }) => onUrl(url, 'linking'))
@@ -169,13 +197,18 @@ async function openOAuthSession(authUrl: string): Promise<string | null> {
 
     const heartbeat = setInterval(() => {
       if (settled) return
-      authWarn('waiting return…', Math.round((Date.now() - t0) / 1000) + 's')
+      authWarn(
+        'waiting return…',
+        Math.round((Date.now() - t0) / 1000) + 's',
+        '| after Google you should see the orange callback page then return to Expo',
+      )
     }, 4000)
 
     const hardTimer = setTimeout(() => finish(null, 'timeout-90s'), 90_000)
 
-    authLog('openAuthSessionAsync NOW')
-    void WebBrowser.openAuthSessionAsync(authUrl, redirectTo, {
+    // Watch for exp:// deep link produced by /auth/mobile-callback
+    authLog('openAuthSessionAsync (HTTPS bridge → deep link)')
+    void WebBrowser.openAuthSessionAsync(authUrl, authSessionReturnUrl(), {
       showInRecents: true,
       preferEphemeralSession: false,
     })
@@ -185,11 +218,16 @@ async function openOAuthSession(authUrl: string): Promise<string | null> {
           onUrl(session.url, 'auth-session')
           return
         }
+        // cancel often = user closed sheet OR deep link failed — keep waiting on Linking a bit
         if (!settled) {
-          authWarn('authSession ended without URL:', session.type)
+          authWarn(
+            'authSession ended:',
+            session.type,
+            '— if you saw the orange page, tap « Ouvrir FlightWatcher »',
+          )
           setTimeout(() => {
             if (!settled) finish(null, `auth-session-${session.type}`)
-          }, 1500)
+          }, 8000)
         }
       })
       .catch((e) => {
@@ -207,7 +245,8 @@ export const auth = createSupabaseAuth({
     detectSessionInUrl: false,
     persistSession: true,
     autoRefreshToken: true,
-    flowType: 'implicit',
+    // PKCE verifier stays on device; Cloudflare callback 302s ?code= back to exp://
+    flowType: 'pkce',
     storage: AsyncStorage,
   },
 })

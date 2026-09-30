@@ -1,51 +1,47 @@
 # Mobile Authentication
 
-## Google Console (unchanged)
+## Google Console (do not change)
 
 ```
 https://iowibrvboqcgknfznfvt.supabase.co/auth/v1/callback
 ```
 
-## “But flightwatcher:// already exists in Supabase”
+## Production / native build (the path that works)
 
-Correct — and that is what a **dev client / production app** needs.
+Expo Go cannot reliably finish Supabase Google OAuth (no custom scheme delivery;
+LAN `exp://192.168…` is rejected by Supabase even when allow-listed —
+https://github.com/supabase/auth/issues/2039).
 
-**Expo Go cannot receive custom schemes** (`flightwatcher://`). Official Expo docs:
-OAuth must use a Development Build for custom schemes.
-
-With Expo Go the only usable redirect is `exp://…`.
-
-## Second trap: LAN IP
-
-`exp://192.168.1.161:8083/--/auth/callback` is rejected by Supabase even when
-listed (or matched by `exp://**`) because of LAN-IP filtering:
-https://github.com/supabase/auth/issues/2039  
-→ silent fallback to Site URL `localhost:5173` → no return to the app.
-
-## What to run (Expo Go)
+**Validate Google login with a real build:**
 
 ```bash
 cd mobile
-npm run start:tunnel
+npx expo run:ios
+# or EAS development / production build
 ```
 
-Rescan the QR code. `redirectTo` should look like `exp://…exp.direct…` or
-`exp://u.expo.dev/…` (**no** `192.168…`).
+App uses:
 
-Keep in Supabase Redirect URLs:
+```
+flightwatcher://auth/callback
+```
+
+### Supabase → Redirect URLs (keep)
 
 ```
 flightwatcher://auth/callback
 flightwatcher://**
-exp://**
 http://localhost:5173/**
 ```
 
-## Better long-term
+### Flow
 
-```bash
-npx expo run:ios
-# or EAS development build
-```
+1. App `signInWithOAuth` → Google  
+2. Google → `…supabase.co/auth/v1/callback`  
+3. Supabase → `flightwatcher://auth/callback?code=…` (or hash tokens)  
+4. `openAuthSessionAsync` / Linking → `createSessionFromUrl`
 
-Then `flightwatcher://auth/callback` (already in Supabase) works end-to-end.
+## Expo Go (unsupported for Google)
+
+Best-effort only via `EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN` (Cloudflare → `/auth/mobile-callback`).
+Do not block release on Expo Go OAuth.
