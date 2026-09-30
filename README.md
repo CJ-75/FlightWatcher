@@ -81,6 +81,10 @@ Sur device physique : `EXPO_PUBLIC_API_URL=http://<IP-LAN>:8000`
 
 Deep link OAuth : `flightwatcher://auth/callback` (voir [backend/MOBILE_AUTH.md](backend/MOBILE_AUTH.md)).
 
+## Déploiement
+
+Guide **Vercel Services** (front + API) : [DEPLOY.md](DEPLOY.md). Alternative Render API + Vercel front-only documentée dedans.
+
 ## Auth mobile
 
 - Bearer JWT Supabase sur les endpoints user (`Authorization: Bearer …`)

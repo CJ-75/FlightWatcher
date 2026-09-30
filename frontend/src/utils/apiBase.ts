@@ -1,7 +1,7 @@
 /**
  * Base URL for API calls.
- * Empty string = same origin (Vite proxy in dev).
- * Override with VITE_API_URL for absolute backend URL.
+ * Empty string = same origin (Vite proxy in dev; Vercel /api rewrite in prod).
+ * Override with VITE_API_URL for an absolute backend (e.g. Render).
  */
 export function getApiBaseUrl(): string {
   const env = import.meta.env.VITE_API_URL as string | undefined
