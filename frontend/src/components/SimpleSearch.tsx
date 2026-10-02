@@ -314,7 +314,7 @@ export function SimpleSearch({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={springConfig}
-        className="max-w-2xl mx-auto"
+        className="min-h-[60vh] flex items-center justify-center"
       >
         <LoadingSkeleton />
       </motion.div>

@@ -223,7 +223,7 @@ export function SearchScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.loadingRoot, { paddingTop: insets.top + 48 }]}>
+      <View style={styles.loadingRoot}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingTitle}>{loadingMsg}</Text>
         <Text style={styles.loadingSub}>
@@ -493,6 +493,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.canvas,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 32,
   },
   loadingTitle: {
