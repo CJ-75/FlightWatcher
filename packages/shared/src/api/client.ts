@@ -18,11 +18,16 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch
 }
 
+/** Long scans (inspire/scan) often exceed the default ~60s iOS timeout. */
+export const LONG_REQUEST_TIMEOUT_MS = 300_000
+
 function joinUrl(base: string, path: string): string {
   const b = (base || '').replace(/\/$/, '')
   const p = path.startsWith('/') ? path : `/${path}`
   return `${b}${p}`
 }
+
+type RequestOptions = RequestInit & { timeoutMs?: number }
 
 export function createApiClient(options: ApiClientOptions = {}) {
   const baseUrl = options.baseUrl ?? ''
@@ -30,10 +35,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
   async function request<T>(
     path: string,
-    init: RequestInit = {}
+    init: RequestOptions = {}
   ): Promise<T> {
-    const headers = new Headers(init.headers)
-    if (!headers.has('Content-Type') && init.body) {
+    const { timeoutMs, ...rest } = init
+    const headers = new Headers(rest.headers)
+    if (!headers.has('Content-Type') && rest.body) {
       headers.set('Content-Type', 'application/json')
     }
     if (options.getToken) {
@@ -41,20 +47,46 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (token) headers.set('Authorization', `Bearer ${token}`)
     }
 
-    const response = await fetchFn(joinUrl(baseUrl, path), {
-      ...init,
-      headers,
-    })
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => response.statusText)
-      throw new Error(`API ${response.status}: ${detail}`)
+    let signal = rest.signal
+    let timer: ReturnType<typeof setTimeout> | undefined
+    if (timeoutMs && timeoutMs > 0 && typeof AbortController !== 'undefined') {
+      const controller = new AbortController()
+      if (rest.signal) {
+        if (rest.signal.aborted) controller.abort()
+        else rest.signal.addEventListener('abort', () => controller.abort(), { once: true })
+      }
+      timer = setTimeout(() => controller.abort(), timeoutMs)
+      signal = controller.signal
     }
 
-    if (response.status === 204) {
-      return undefined as T
+    try {
+      const response = await fetchFn(joinUrl(baseUrl, path), {
+        ...rest,
+        headers,
+        signal,
+      })
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => response.statusText)
+        throw new Error(`API ${response.status}: ${detail}`)
+      }
+
+      if (response.status === 204) {
+        return undefined as T
+      }
+      return (await response.json()) as T
+    } catch (e) {
+      const name = e instanceof Error ? e.name : ''
+      const msg = e instanceof Error ? e.message : String(e)
+      if (name === 'AbortError' || /timeout|timed out|aborted/i.test(msg)) {
+        throw new Error(
+          'La recherche a pris trop de temps. Vérifie que le backend tourne, ou réduis les dates.'
+        )
+      }
+      throw e
+    } finally {
+      if (timer) clearTimeout(timer)
     }
-    return (await response.json()) as T
   }
 
   return {
@@ -65,12 +97,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<ScanResponse>('/api/scan', {
         method: 'POST',
         body: JSON.stringify(body),
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       }),
 
     inspire: (body: InspireRequest) =>
       request<InspireResponse>('/api/inspire', {
         method: 'POST',
         body: JSON.stringify(body),
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       }),
 
     getAirports: () => request<{ airports: Airport[] } | Airport[]>('/api/airports'),
@@ -84,6 +118,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<unknown>('/api/auto-check', {
         method: 'POST',
         body: JSON.stringify(body),
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       }),
 
     getSearches: () => request<SavedSearch[]>('/api/supabase/searches'),

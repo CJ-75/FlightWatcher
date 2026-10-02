@@ -215,7 +215,14 @@ export function SearchScreen() {
         },
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : translate('fr', 'app.error'))
+      const raw = e instanceof Error ? e.message : String(e)
+      if (/timeout|timed out|aborted|network request failed|trop de temps/i.test(raw)) {
+        setError(
+          'La recherche a pris trop de temps. Vérifie que le backend tourne (python run.py), ou réduis les dates.',
+        )
+      } else {
+        setError(raw || translate('fr', 'app.error'))
+      }
     } finally {
       setLoading(false)
     }

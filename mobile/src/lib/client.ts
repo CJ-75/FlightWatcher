@@ -251,6 +251,71 @@ export const auth = createSupabaseAuth({
   },
 })
 
+/** iOS/RN default fetch ~60s — XHR timeout lets inspire/scan run up to 5 min. */
+function mobileFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url =
+    typeof input === 'string' ? input : input instanceof URL ? input.href : String(input.url)
+  const method = (init?.method || 'GET').toUpperCase()
+  const timeoutMs = 300_000
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, url)
+    xhr.timeout = timeoutMs
+
+    const headers = new Headers(init?.headers)
+    headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'content-type' || key.toLowerCase() === 'authorization') {
+        xhr.setRequestHeader(key, value)
+      } else {
+        xhr.setRequestHeader(key, value)
+      }
+    })
+
+    if (init?.signal) {
+      if (init.signal.aborted) {
+        reject(new Error('Aborted'))
+        return
+      }
+      init.signal.addEventListener(
+        'abort',
+        () => {
+          xhr.abort()
+          reject(new Error('Aborted'))
+        },
+        { once: true },
+      )
+    }
+
+    xhr.onload = () => {
+      const raw = xhr.getAllResponseHeaders()
+      const map: Record<string, string> = {}
+      raw
+        .trim()
+        .split(/[\r\n]+/)
+        .forEach((line) => {
+          const i = line.indexOf(':')
+          if (i > 0) map[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+        })
+      resolve(
+        new Response(xhr.responseText, {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers: map,
+        }),
+      )
+    }
+    xhr.onerror = () => reject(new TypeError('Network request failed'))
+    xhr.ontimeout = () =>
+      reject(
+        new Error(
+          'La recherche a pris trop de temps. Vérifie que le backend tourne, ou réduis les dates.',
+        ),
+      )
+    xhr.send(typeof init?.body === 'string' ? init.body : init?.body ?? null)
+  })
+}
+
 let api: ApiClient | null = null
 
 export function getApi(): ApiClient {
@@ -259,6 +324,7 @@ export function getApi(): ApiClient {
     api = createApiClient({
       baseUrl: apiBase,
       getToken: () => auth.getAccessToken(),
+      fetchImpl: mobileFetch as typeof fetch,
     })
   }
   return api
