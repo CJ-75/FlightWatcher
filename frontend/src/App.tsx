@@ -15,6 +15,7 @@ import { UserMenu } from './components/UserMenu'
 import { getCurrentUser } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DealsTab } from './components/DealsTab'
+import { PlannerTab } from './components/PlannerTab'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { BookingSas } from './components/BookingSas'
@@ -29,7 +30,7 @@ import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 
-type Tab = 'search' | 'deals' | 'saved'
+type Tab = 'search' | 'deals' | 'planner' | 'saved'
 
 function Dashboard() {
   const { t } = useI18n()
@@ -662,7 +663,7 @@ function Dashboard() {
         </header>
 
         {/* Onglets */}
-        <div className={`${activeTab === 'search' ? 'max-w-2xl' : 'max-w-5xl'} mx-auto mb-4 sm:mb-6 transition-all duration-300`}>
+        <div className={`${activeTab === 'search' ? 'max-w-2xl' : activeTab === 'planner' ? 'max-w-3xl' : 'max-w-5xl'} mx-auto mb-4 sm:mb-6 transition-all duration-300`}>
           <div className="flex border-b border-gray-200">
             <motion.button
               onClick={() => setActiveTab('search')}
@@ -694,6 +695,23 @@ function Dashboard() {
               </span>
             </motion.button>
             <motion.button
+              onClick={() => setActiveTab('planner')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
+                activeTab === 'planner'
+                  ? 'text-primary-500 border-b-2 border-primary-500'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
+                  <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z" />
+                </svg>
+                {t('nav.planner')}
+              </span>
+            </motion.button>
+            <motion.button
               onClick={() => setActiveTab('saved')}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -711,6 +729,8 @@ function Dashboard() {
         {/* Contenu selon l'onglet */}
         {activeTab === 'deals' ? (
           <DealsTab />
+        ) : activeTab === 'planner' ? (
+          <PlannerTab />
         ) : activeTab === 'search' ? (
           <>
             <SimpleSearch

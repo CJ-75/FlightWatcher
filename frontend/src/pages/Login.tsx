@@ -2,7 +2,7 @@
  * Page de connexion avec Google uniquement
  */
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   signInWithGoogle, 
   getCurrentUser 
@@ -14,18 +14,30 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { t } = useI18n()
+  const redirectTo = searchParams.get('redirect') || '/'
+
+  useEffect(() => {
+    if (redirectTo.startsWith('/')) {
+      try {
+        sessionStorage.setItem('fw_post_login_redirect', redirectTo)
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [redirectTo])
 
   useEffect(() => {
     // Vérifier si l'utilisateur est déjà connecté
     const checkUser = async () => {
       const user = await getCurrentUser()
       if (user) {
-        navigate('/')
+        navigate(redirectTo.startsWith('/') ? redirectTo : '/')
       }
     }
     checkUser()
-  }, [navigate])
+  }, [navigate, redirectTo])
 
   const handleGoogleAuth = async () => {
     setError(null)

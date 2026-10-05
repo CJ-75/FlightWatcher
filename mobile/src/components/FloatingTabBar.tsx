@@ -8,6 +8,7 @@ import { TabBarIcon } from './TabIcons'
 const LABELS: Record<string, string> = {
   Search: 'Chercher',
   Deals: 'Deals',
+  Planner: 'Planner',
   Favorites: 'Favoris',
   Profile: 'Compte',
 }

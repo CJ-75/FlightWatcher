@@ -1,0 +1,517 @@
+import React, { useCallback, useState } from 'react'
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  RefreshControl,
+  ActivityIndicator,
+  Pressable,
+  Modal,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import type { Airport, PlannedTrip } from '@flightwatcher/shared'
+import {
+  generateDatesFromPreset,
+  formatDateFr,
+  normalizeAirports,
+  type DatePresetId,
+  type FlexibleDates,
+} from '@flightwatcher/shared'
+import { getApi } from '../lib/client'
+import { useAuth } from '../context/AuthContext'
+import { AirportPicker } from '../components/AirportPicker'
+import { BudgetSlider } from '../components/BudgetSlider'
+import { PassengerStepper } from '../components/PassengerStepper'
+import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
+import { Button } from '../components/ui/Button'
+import type { RootStackParamList } from '../../App'
+import { colors, fonts, shadow, spacing } from '../theme'
+
+const PRESETS: { id: DatePresetId; label: string }[] = [
+  { id: 'next-weekend', label: 'Weekend prochain' },
+  { id: 'flexible', label: 'Dates libres' },
+]
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Brouillon',
+  scanning: 'Scan…',
+  planning: 'Propositions',
+  locked: 'Confirmé',
+}
+
+export function PlannerScreen() {
+  const insets = useSafeAreaInsets()
+  const { user } = useAuth()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const [trips, setTrips] = useState<PlannedTrip[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+
+  const load = useCallback(
+    async (isRefresh = false) => {
+      if (!user) {
+        setTrips([])
+        setLoading(false)
+        setRefreshing(false)
+        return
+      }
+      if (isRefresh) setRefreshing(true)
+      else setLoading(true)
+      setError(null)
+      try {
+        const list = await getApi().listPlannedTrips()
+        setTrips(Array.isArray(list) ? list : [])
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Impossible de charger les voyages')
+        setTrips([])
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    },
+    [user],
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
+
+  if (!user) {
+    return (
+      <View style={styles.root}>
+        <LinearGradient
+          colors={['#FFE8DC', '#FFF9F5']}
+          locations={[0, 0.35]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.centered, { paddingTop: insets.top + 40, paddingHorizontal: 24 }]}>
+          <Text style={styles.title}>Planner</Text>
+          <Text style={styles.subtitle}>Connecte-toi pour créer et gérer des voyages.</Text>
+          <Text style={styles.loginHintText}>Ouvre l’onglet Compte pour te connecter</Text>
+        </View>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.root}>
+      <LinearGradient
+        colors={['#FFE8DC', '#FFF9F5']}
+        locations={[0, 0.35]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {loading && trips.length === 0 ? (
+        <View style={[styles.centered, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Chargement des voyages…</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={trips}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.xl,
+            paddingTop: insets.top + 12,
+            paddingBottom: insets.bottom + 120,
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void load(true)}
+              tintColor={colors.primary}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.header}>
+              <Text style={styles.title}>Planner</Text>
+              <Text style={styles.subtitle}>Voyages collaboratifs · scan · invite</Text>
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={[styles.emptyCard, shadow.soft]}>
+              {error ? (
+                <>
+                  <Text style={styles.emptyTitle}>Oups</Text>
+                  <Text style={styles.emptyBody}>{error}</Text>
+                  <Pressable onPress={() => void load()} style={styles.retryBtn}>
+                    <Text style={styles.retryText}>Réessayer</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.emptyTitle}>Aucun voyage</Text>
+                  <Text style={styles.emptyBody}>Crée ton premier voyage collaboratif.</Text>
+                </>
+              )}
+            </View>
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => navigation.navigate('TripDetail', { tripId: item.id })}
+              style={({ pressed }) => [styles.tripCard, shadow.soft, pressed && { opacity: 0.92 }]}
+            >
+              <View style={styles.tripTop}>
+                <Text style={styles.tripName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{STATUS_LABEL[item.status] || item.status}</Text>
+                </View>
+              </View>
+              <Text style={styles.tripMeta}>
+                {item.departure_airport}
+                {item.arrival_airport ? ` → ${item.arrival_airport}` : ' · inspire'}
+                {' · '}
+                {item.passengers} voy.
+                {' · '}
+                {item.budget_max}€
+              </Text>
+              {(item.proposals_count ?? 0) > 0 ? (
+                <Text style={styles.tripCount}>{item.proposals_count} proposition(s)</Text>
+              ) : null}
+            </Pressable>
+          )}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      <Pressable
+        onPress={() => setShowCreate(true)}
+        style={[styles.fab, { bottom: insets.bottom + 88 }]}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </Pressable>
+
+      <CreateTripModal
+        visible={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={(id) => {
+          setShowCreate(false)
+          void load()
+          navigation.navigate('TripDetail', { tripId: id })
+        }}
+      />
+    </View>
+  )
+}
+
+function CreateTripModal({
+  visible,
+  onClose,
+  onCreated,
+}: {
+  visible: boolean
+  onClose: () => void
+  onCreated: (id: string) => void
+}) {
+  const insets = useSafeAreaInsets()
+  const [name, setName] = useState('')
+  const [departure, setDeparture] = useState('BVA')
+  const [arrival, setArrival] = useState('')
+  const [passengers, setPassengers] = useState(2)
+  const [budget, setBudget] = useState(150)
+  const [preset, setPreset] = useState<DatePresetId>('next-weekend')
+  const [presetDates, setPresetDates] = useState<FlexibleDates>(() =>
+    generateDatesFromPreset('next-weekend'),
+  )
+  const [flexibleDates, setFlexibleDates] = useState<FlexibleDates>({
+    dates_depart: [],
+    dates_retour: [],
+  })
+  const [showFlexible, setShowFlexible] = useState(false)
+  const [airports, setAirports] = useState<Airport[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!visible) return
+    getApi()
+      .getAirports()
+      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+      .catch(() => undefined)
+  }, [visible])
+
+  React.useEffect(() => {
+    if (preset !== 'flexible') setPresetDates(generateDatesFromPreset(preset))
+  }, [preset])
+
+  const dates =
+    preset === 'flexible'
+      ? flexibleDates
+      : presetDates
+
+  const submit = async () => {
+    if (!name.trim()) {
+      setError('Donne un nom au voyage')
+      return
+    }
+    if (!dates.dates_depart.length || !dates.dates_retour.length) {
+      setError('Choisis des dates aller et retour')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const trip = await getApi().createPlannedTrip({
+        name: name.trim(),
+        departure_airport: departure,
+        arrival_airport: arrival.trim() ? arrival.trim().toUpperCase() : null,
+        passengers,
+        dates_depart: dates.dates_depart,
+        dates_retour: dates.dates_retour,
+        budget_max: budget,
+      })
+      onCreated(trip.id)
+      setName('')
+      setArrival('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Création échouée')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.canvas }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={[styles.modalHeader, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={onClose}>
+            <Text style={styles.modalCancel}>Annuler</Text>
+          </Pressable>
+          <Text style={styles.modalTitle}>Nouveau voyage</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <ScrollView
+          contentContainerStyle={{ padding: spacing.xl, paddingBottom: 40, gap: 16 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View>
+            <Text style={styles.fieldLabel}>Nom</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Weekend Lisbonne"
+              placeholderTextColor={colors.faint}
+              style={styles.input}
+            />
+          </View>
+
+          <View>
+            <Text style={styles.fieldLabel}>Départ</Text>
+            <AirportPicker airports={airports} value={departure} onChange={setDeparture} compact />
+          </View>
+
+          <View>
+            <Text style={styles.fieldLabel}>Arrivée (optionnel)</Text>
+            <AirportPicker
+              airports={airports}
+              value={arrival}
+              onChange={setArrival}
+              compact
+              allowEmpty
+              emptyLabel="Toutes destinations"
+            />
+          </View>
+
+          <PassengerStepper value={passengers} onChange={setPassengers} />
+          <BudgetSlider value={budget} onChange={setBudget} />
+
+          <View>
+            <Text style={styles.fieldLabel}>Dates</Text>
+            <View style={styles.presetRow}>
+              {PRESETS.map((p) => (
+                <Pressable
+                  key={p.id}
+                  onPress={() => {
+                    setPreset(p.id)
+                    if (p.id === 'flexible') setShowFlexible(true)
+                  }}
+                  style={[styles.presetChip, preset === p.id && styles.presetChipOn]}
+                >
+                  <Text style={[styles.presetChipText, preset === p.id && styles.presetChipTextOn]}>
+                    {p.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {dates.dates_depart[0] && dates.dates_retour[0] ? (
+              <Text style={styles.datesHint}>
+                {formatDateFr(dates.dates_depart[0].date)} →{' '}
+                {formatDateFr(dates.dates_retour[dates.dates_retour.length - 1].date)}
+              </Text>
+            ) : (
+              <Text style={styles.datesHint}>Choisis tes dates libres</Text>
+            )}
+          </View>
+
+          {error ? <Text style={styles.formError}>{error}</Text> : null}
+
+          <Button label="Créer" onPress={() => void submit()} loading={saving} />
+        </ScrollView>
+
+        <FlexibleDatesModal
+          visible={showFlexible}
+          value={flexibleDates}
+          onChange={setFlexibleDates}
+          onClose={() => setShowFlexible(false)}
+        />
+      </KeyboardAvoidingView>
+    </Modal>
+  )
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.canvas },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  header: { marginBottom: 18, gap: 4 },
+  title: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    color: colors.ink,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.muted,
+    lineHeight: 20,
+  },
+  loadingText: { fontFamily: fonts.medium, color: colors.muted, marginTop: 8 },
+  emptyCard: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
+  emptyBody: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  retryText: { fontFamily: fonts.bold, color: colors.white },
+  tripCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    gap: 6,
+  },
+  tripTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tripName: { flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
+  badge: {
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  badgeText: { fontFamily: fonts.bold, fontSize: 11, color: colors.primaryInk },
+  tripMeta: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
+  tripCount: { fontFamily: fonts.medium, fontSize: 12, color: colors.primary },
+  fab: {
+    position: 'absolute',
+    right: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.soft,
+  },
+  fabText: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    color: colors.white,
+    marginTop: -2,
+  },
+  loginHintText: {
+    marginTop: 16,
+    fontFamily: fonts.medium,
+    color: colors.primaryInk,
+    textAlign: 'center',
+    backgroundColor: colors.white,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
+  modalCancel: { fontFamily: fonts.medium, color: colors.muted, width: 60 },
+  modalTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
+  fieldLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  presetRow: { flexDirection: 'row', gap: 8 },
+  presetChip: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  presetChipOn: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  presetChipText: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted },
+  presetChipTextOn: { color: colors.primaryInk },
+  datesHint: {
+    marginTop: 8,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.inkSoft,
+  },
+  formError: { fontFamily: fonts.medium, color: colors.danger, fontSize: 13 },
+})

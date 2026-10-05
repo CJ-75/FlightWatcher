@@ -75,6 +75,57 @@ export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
   )
 }
 
+/** Simple filled calendar for Planner. */
+export function PlannerTabIcon({ size = 22, color = colors.faint }: IconProps) {
+  const w = size * 0.86
+  const h = size * 0.78
+  const r = size * 0.12
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: w,
+          height: h,
+          borderRadius: r,
+          backgroundColor: color,
+          overflow: 'hidden',
+        }}
+      >
+        <View
+          style={{
+            height: h * 0.22,
+            backgroundColor: 'rgba(255,255,255,0.35)',
+          }}
+        />
+        <View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            padding: w * 0.12,
+            gap: w * 0.08,
+            alignContent: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <View
+              key={i}
+              style={{
+                width: w * 0.18,
+                height: w * 0.18,
+                borderRadius: 2,
+                backgroundColor: colors.white,
+                opacity: 0.9,
+              }}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  )
+}
+
 export function FavoritesTabIcon({ size = 20, color = colors.faint }: IconProps) {
   return <HeartIcon size={size} filled color={color} />
 }
@@ -123,6 +174,8 @@ export function TabBarIcon({
       return <SearchTabIcon size={size} color={color} focused={focused} />
     case 'Deals':
       return <DealsTabIcon size={size} color={color} focused={focused} />
+    case 'Planner':
+      return <PlannerTabIcon size={size} color={color} focused={focused} />
     case 'Favorites':
       return <FavoritesTabIcon size={size - 2} color={color} focused={focused} />
     case 'Profile':

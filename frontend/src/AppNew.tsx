@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import { I18nProvider } from './contexts/I18nContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import PlannerInvite from './pages/PlannerInvite'
 import AuthCallback from './auth/callback'
 import { AdminLogin } from './admin/AdminLogin'
 import { AdminLayout } from './admin/AdminLayout'
@@ -26,6 +27,7 @@ function App() {
         {/* Routes publiques */}
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/planner/invite/:token" element={<PlannerInvite />} />
         
         {/* Routes admin */}
         <Route path="/admin/login" element={<AdminLogin />} />

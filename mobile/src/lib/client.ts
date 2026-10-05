@@ -90,6 +90,7 @@ if (__DEV__) {
   console.log('[auth] boot env', {
     EXPO_PUBLIC_API_URL: env('EXPO_PUBLIC_API_URL') ?? null,
     EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN: env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN') ?? null,
+    EXPO_PUBLIC_WEB_ORIGIN: env('EXPO_PUBLIC_WEB_ORIGIN') ?? null,
     redirectTo,
   })
 }
@@ -331,3 +332,14 @@ export function getApi(): ApiClient {
 }
 
 export { apiBase }
+
+/** Public web origin for invite share links. */
+export function getWebOrigin(): string {
+  const fromEnv =
+    env('EXPO_PUBLIC_WEB_ORIGIN') || env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN') || ''
+  return (fromEnv || 'http://localhost:5173').replace(/\/$/, '')
+}
+
+export function plannerInviteUrl(token: string): string {
+  return `${getWebOrigin()}/planner/invite/${token}`
+}

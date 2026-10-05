@@ -38,6 +38,9 @@ type Props = {
   onChange: (code: string) => void
   /** Hide quick chips under the trigger (saves vertical space). */
   compact?: boolean
+  /** Allow clearing selection (optional destination). */
+  allowEmpty?: boolean
+  emptyLabel?: string
 }
 
 type Section = {
@@ -58,7 +61,14 @@ function filterAirports(list: Airport[], query: string): Airport[] {
   )
 }
 
-export function AirportPicker({ airports, value, onChange, compact }: Props) {
+export function AirportPicker({
+  airports,
+  value,
+  onChange,
+  compact,
+  allowEmpty,
+  emptyLabel = 'Toutes destinations',
+}: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -150,13 +160,15 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
         </View>
         <View style={styles.triggerBody}>
           <Text style={styles.triggerTitle} numberOfLines={1}>
-            {selected?.city || selected?.name || 'Choisir un aéroport'}
+            {selected?.city || selected?.name || (allowEmpty && !value ? emptyLabel : 'Choisir un aéroport')}
           </Text>
           {!compact ? (
             <Text style={styles.triggerSub} numberOfLines={1}>
               {selected
                 ? `${selected.name} · ${selected.country}`
-                : 'Rechercher par ville ou code IATA'}
+                : allowEmpty && !value
+                  ? 'Optionnel — inspire toutes destinations'
+                  : 'Rechercher par ville ou code IATA'}
             </Text>
           ) : selected ? (
             <Text style={styles.triggerSub} numberOfLines={1}>
@@ -195,11 +207,29 @@ export function AirportPicker({ airports, value, onChange, compact }: Props) {
         <View style={[styles.sheet, { paddingTop: 12, paddingBottom: insets.bottom + 8 }]}>
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Aéroport de départ</Text>
+            <Text style={styles.sheetTitle}>
+              {allowEmpty ? 'Aéroport (optionnel)' : 'Aéroport de départ'}
+            </Text>
             <Pressable onPress={() => setOpen(false)} hitSlop={10}>
               <Text style={styles.sheetClose}>Fermer</Text>
             </Pressable>
           </View>
+
+          {allowEmpty ? (
+            <Pressable
+              onPress={() => pick('')}
+              style={[styles.row, !value && styles.rowActive, { marginHorizontal: 16 }]}
+            >
+              <View style={[styles.rowCode, !value && styles.rowCodeActive]}>
+                <Text style={[styles.rowCodeText, !value && styles.rowCodeTextActive]}>ANY</Text>
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowCity}>{emptyLabel}</Text>
+                <Text style={styles.rowMeta}>Mode inspire — toutes destinations</Text>
+              </View>
+              {!value ? <Text style={styles.check}>✓</Text> : null}
+            </Pressable>
+          ) : null}
 
           <View style={styles.searchBox}>
             <Text style={styles.searchIcon}>⌕</Text>

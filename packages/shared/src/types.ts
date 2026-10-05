@@ -118,6 +118,75 @@ export interface TravelDealDates {
   inbound: string
 }
 
+export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'
+export type TripProposalStatus = 'pending' | 'accepted' | 'rejected'
+export type TripMemberRole = 'organizer' | 'traveler'
+
+export interface PlannedTrip {
+  id: string
+  organizer_id: string
+  name: string
+  departure_airport: string
+  arrival_airport?: string | null
+  passengers: number
+  dates_depart: DateAvecHoraire[]
+  dates_retour: DateAvecHoraire[]
+  budget_max: number
+  invite_token: string
+  status: PlannedTripStatus
+  created_at: string
+  updated_at?: string
+  proposals_count?: number
+  accepted_proposal?: TripProposal | null
+}
+
+export interface TripProposal {
+  id: string
+  trip_id: string
+  trip_data: EnrichedTripResponse
+  status: TripProposalStatus
+  created_at: string
+}
+
+export interface TripMember {
+  id: string
+  trip_id: string
+  user_id?: string | null
+  display_name?: string | null
+  role: TripMemberRole
+  status: 'joined'
+  joined_at: string
+}
+
+export interface PlannedTripDetail extends PlannedTrip {
+  proposals: TripProposal[]
+  members: TripMember[]
+}
+
+export interface CreatePlannedTripRequest {
+  name: string
+  departure_airport: string
+  arrival_airport?: string | null
+  passengers: number
+  dates_depart: DateAvecHoraire[]
+  dates_retour: DateAvecHoraire[]
+  budget_max: number
+}
+
+export interface InvitePreview {
+  name: string
+  departure_airport: string
+  arrival_airport?: string | null
+  passengers: number
+  dates_depart: DateAvecHoraire[]
+  dates_retour: DateAvecHoraire[]
+  budget_max: number
+  organizer_name?: string | null
+  accepted_trip?: EnrichedTripResponse | null
+  members_count: number
+  invite_token: string
+}
+
 /** Weekend pack (flight + hotel) for Deals tab. */
 export interface TravelDeal {
   id: string

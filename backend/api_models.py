@@ -133,3 +133,23 @@ class BookingSasEventRequest(BaseModel):
     user_agent: Optional[str] = None
     session_id: Optional[str] = None
     search_event_id: Optional[str] = None  # ID de l'événement de recherche associé
+
+
+class CreatePlannedTripRequest(BaseModel):
+    name: str
+    departure_airport: str
+    dates_depart: List[DateAvecHoraire]
+    dates_retour: List[DateAvecHoraire]
+    arrival_airport: Optional[str] = None
+    passengers: int = 1
+    budget_max: int = 200
+
+
+class UpdatePlannedTripRequest(BaseModel):
+    name: Optional[str] = None
+    departure_airport: Optional[str] = None
+    arrival_airport: Optional[str] = None
+    passengers: Optional[int] = None
+    dates_depart: Optional[List[DateAvecHoraire]] = None
+    dates_retour: Optional[List[DateAvecHoraire]] = None
+    budget_max: Optional[int] = None

@@ -17,4 +17,12 @@ export type {
   ApiConfig,
   TravelDeal,
   DealProviderId,
+  PlannedTrip,
+  PlannedTripDetail,
+  TripProposal,
+  TripMember,
+  CreatePlannedTripRequest,
+  InvitePreview,
+  PlannedTripStatus,
+  TripProposalStatus,
 } from '@flightwatcher/shared'

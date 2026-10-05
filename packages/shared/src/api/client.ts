@@ -1,14 +1,19 @@
 import type {
   Airport,
   ApiConfig,
+  CreatePlannedTripRequest,
   Destination,
   InspireRequest,
   InspireResponse,
+  InvitePreview,
+  PlannedTrip,
+  PlannedTripDetail,
   ScanRequest,
   ScanResponse,
   SavedFavorite,
   SavedSearch,
   TravelDeal,
+  TripProposal,
   TripResponse,
 } from '../types'
 
@@ -165,6 +170,44 @@ export function createApiClient(options: ApiClientOptions = {}) {
     getDeals: () => request<TravelDeal[]>('/api/deals'),
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
+
+    listPlannedTrips: () => request<PlannedTrip[]>('/api/planner/trips'),
+    createPlannedTrip: (body: CreatePlannedTripRequest) =>
+      request<PlannedTrip>('/api/planner/trips', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    getPlannedTrip: (id: string) =>
+      request<PlannedTripDetail>(`/api/planner/trips/${encodeURIComponent(id)}`),
+    updatePlannedTrip: (id: string, body: Partial<CreatePlannedTripRequest>) =>
+      request<PlannedTrip>(`/api/planner/trips/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    deletePlannedTrip: (id: string) =>
+      request<void>(`/api/planner/trips/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+    scanPlannedTrip: (id: string) =>
+      request<{ proposals: TripProposal[]; nombre_requetes: number }>(
+        `/api/planner/trips/${encodeURIComponent(id)}/scan`,
+        { method: 'POST', timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+      ),
+    acceptProposal: (id: string) =>
+      request<TripProposal>(`/api/planner/proposals/${encodeURIComponent(id)}/accept`, {
+        method: 'POST',
+      }),
+    rejectProposal: (id: string) =>
+      request<TripProposal>(`/api/planner/proposals/${encodeURIComponent(id)}/reject`, {
+        method: 'POST',
+      }),
+    getInvitePreview: (token: string) =>
+      request<InvitePreview>(`/api/planner/invite/${encodeURIComponent(token)}`),
+    joinInvite: (token: string) =>
+      request<{ ok: boolean; trip_id: string }>(
+        `/api/planner/invite/${encodeURIComponent(token)}/join`,
+        { method: 'POST' },
+      ),
   }
 }
 

@@ -123,6 +123,13 @@ export default function AuthCallback() {
           return
         }
 
+        const postLogin = sessionStorage.getItem('fw_post_login_redirect')
+        if (postLogin && postLogin.startsWith('/')) {
+          sessionStorage.removeItem('fw_post_login_redirect')
+          navigate(postLogin)
+          return
+        }
+
         navigate('/')
       } catch (err) {
         console.error('Erreur callback auth:', err)

@@ -11,6 +11,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Navigation
     'nav.search': 'Recherche',
     'nav.deals': 'Deals',
+    'nav.planner': 'Planner',
     'nav.saved': 'Sauvegardées',
     'nav.favorites': 'Favoris',
 
@@ -20,6 +21,25 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.retry': 'Réessayer',
     'deals.emptyTitle': 'Aucun deal pour l’instant',
     'deals.emptyBody': 'Reviens bientôt — on prépare de nouveaux packs.',
+
+    'planner.subtitle': 'Crée un voyage, scanne les prix, invite tes potes',
+    'planner.loading': 'Chargement des voyages…',
+    'planner.emptyTitle': 'Aucun voyage',
+    'planner.emptyBody': 'Crée ton premier voyage collaboratif.',
+    'planner.loginRequired': 'Connecte-toi pour créer et gérer des voyages.',
+    'planner.create': 'Nouveau voyage',
+    'planner.scan': 'Scanner les prix',
+    'planner.scanning': 'Scan en cours…',
+    'planner.accept': 'Accepter',
+    'planner.reject': 'Refuser',
+    'planner.share': 'Partager l’invitation',
+    'planner.shareCopied': 'Lien copié !',
+    'planner.members': 'Voyageurs',
+    'planner.proposals': 'Propositions',
+    'planner.invite.title': 'Tu es invité·e',
+    'planner.invite.join': 'Rejoindre le voyage',
+    'planner.invite.login': 'Connecte-toi pour rejoindre',
+    'planner.invite.joined': 'Tu as rejoint le voyage !',
     
     // Auth
     'auth.signIn': 'Se connecter',
@@ -155,6 +175,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Navigation
     'nav.search': 'Search',
     'nav.deals': 'Deals',
+    'nav.planner': 'Planner',
     'nav.saved': 'Saved',
     'nav.favorites': 'Favorites',
 
@@ -164,6 +185,25 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.retry': 'Retry',
     'deals.emptyTitle': 'No deals yet',
     'deals.emptyBody': 'Check back soon — new packs are on the way.',
+
+    'planner.subtitle': 'Create a trip, scan prices, invite friends',
+    'planner.loading': 'Loading trips…',
+    'planner.emptyTitle': 'No trips yet',
+    'planner.emptyBody': 'Create your first collaborative trip.',
+    'planner.loginRequired': 'Sign in to create and manage trips.',
+    'planner.create': 'New trip',
+    'planner.scan': 'Scan prices',
+    'planner.scanning': 'Scanning…',
+    'planner.accept': 'Accept',
+    'planner.reject': 'Reject',
+    'planner.share': 'Share invite',
+    'planner.shareCopied': 'Link copied!',
+    'planner.members': 'Travelers',
+    'planner.proposals': 'Proposals',
+    'planner.invite.title': 'You’re invited',
+    'planner.invite.join': 'Join the trip',
+    'planner.invite.login': 'Sign in to join',
+    'planner.invite.joined': 'You joined the trip!',
     
     // Auth
     'auth.signIn': 'Sign in',
