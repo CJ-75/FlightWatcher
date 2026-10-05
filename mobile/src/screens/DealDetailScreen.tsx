@@ -17,6 +17,7 @@ import type { TravelDeal } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { HeartIcon } from '../components/HeartIcon'
 import { useLikedDeals } from '../hooks/useLikedDeals'
+import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
@@ -79,6 +80,7 @@ export function DealDetailScreen({ route }: Props) {
   if (loading) {
     return (
       <View style={styles.centered}>
+        <ScreenBackground />
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
@@ -87,6 +89,7 @@ export function DealDetailScreen({ route }: Props) {
   if (!deal || error) {
     return (
       <View style={styles.centered}>
+        <ScreenBackground />
         <Text style={styles.errorText}>{error || 'Deal introuvable'}</Text>
       </View>
     )
@@ -96,6 +99,7 @@ export function DealDetailScreen({ route }: Props) {
 
   return (
     <View style={styles.root}>
+      <ScreenBackground />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}

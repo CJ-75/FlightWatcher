@@ -26,6 +26,7 @@ import {
 import { DestinationCard } from '../components/DestinationCard'
 import { DealCard } from '../components/DealCard'
 import { HeartIcon } from '../components/HeartIcon'
+import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
@@ -38,6 +39,7 @@ export function FavoritesScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
+  const [tab, setTab] = useState<'flights' | 'deals'>('flights')
 
   const load = useCallback(async () => {
     if (!viewUser) {
@@ -102,8 +104,6 @@ export function FavoritesScreen() {
     }
   }
 
-  const isEmpty = favorites.length === 0 && likedDeals.length === 0
-
   if (!viewUser) {
     return (
       <FavoritesGuestLanding
@@ -117,11 +117,7 @@ export function FavoritesScreen() {
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#FFE8DC', '#FFF9F5']}
-        locations={[0, 0.35]}
-        style={StyleSheet.absoluteFill}
-      />
+      <ScreenBackground />
       <FlatList
         style={styles.list}
         contentContainerStyle={{
@@ -130,74 +126,79 @@ export function FavoritesScreen() {
           paddingBottom: insets.bottom + 100,
           flexGrow: 1,
         }}
-        data={favorites}
+        data={tab === 'flights' ? favorites : likedDeals}
         keyExtractor={(item) => item.id}
+        extraData={tab}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />
         }
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
-            <Text style={styles.sub}>
-              {favorites.length + likedDeals.length} coup
-              {favorites.length + likedDeals.length > 1 ? 's' : ''} de cœur
-            </Text>
-
-            {likedDeals.length > 0 ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  {translate('fr', 'favorites.dealsTitle')}
+            <View style={styles.switchTrack}>
+              <Pressable
+                onPress={() => setTab('flights')}
+                style={[styles.switchBtn, tab === 'flights' && styles.switchBtnOn]}
+              >
+                <Text style={[styles.switchLabel, tab === 'flights' && styles.switchLabelOn]}>
+                  {translate('fr', 'favorites.switch.flights')}
                 </Text>
-                {likedDeals.map((item) => (
-                  <DealCard
-                    key={item.id}
-                    deal={item.deal}
-                    liked
-                    onToggleLike={() => void unlikeDeal(item.deal_id)}
-                    onPress={() =>
-                      navigation.navigate('DealDetail', { dealId: item.deal_id })
-                    }
-                  />
-                ))}
-              </View>
-            ) : null}
-
-            {favorites.length > 0 ? (
-              <Text style={[styles.sectionTitle, { marginBottom: spacing.md }]}>
-                {translate('fr', 'favorites.favoritesTitle')}
-              </Text>
-            ) : null}
+              </Pressable>
+              <Pressable
+                onPress={() => setTab('deals')}
+                style={[styles.switchBtn, tab === 'deals' && styles.switchBtnOn]}
+              >
+                <Text style={[styles.switchLabel, tab === 'deals' && styles.switchLabelOn]}>
+                  {translate('fr', 'favorites.switch.deals')}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         }
         ListEmptyComponent={
-          isEmpty ? (
-            <View style={[styles.emptyCard, shadow.soft]}>
-              <View style={styles.emptyIcon}>
-                <HeartIcon size={28} filled={false} color={colors.primary} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                {error || translate('fr', 'favorites.empty')}
-              </Text>
-              <Text style={styles.emptyBody}>
-                {error
-                  ? 'Tire pour réessayer.'
-                  : translate('fr', 'favorites.emptyBody')}
-              </Text>
+          <View style={[styles.emptyCard, shadow.soft]}>
+            <View style={styles.emptyIcon}>
+              <HeartIcon size={28} filled={false} color={colors.primary} />
             </View>
-          ) : null
-        }
-        renderItem={({ item }) => (
-          <View>
-            <DestinationCard
-              trip={item.trip as EnrichedTripResponse}
-              isFavorite
-              onFavorite={() => void remove(item.id)}
-            />
-            <Pressable onPress={() => void remove(item.id)} style={styles.remove}>
-              <Text style={styles.removeText}>{translate('fr', 'card.removeFavorite')}</Text>
-            </Pressable>
+            <Text style={styles.emptyTitle}>
+              {error
+                ? error
+                : tab === 'deals'
+                  ? translate('fr', 'favorites.dealsEmptyTitle')
+                  : translate('fr', 'favorites.flightsEmpty')}
+            </Text>
+            <Text style={styles.emptyBody}>
+              {error
+                ? 'Tire pour réessayer.'
+                : tab === 'deals'
+                  ? translate('fr', 'favorites.dealsEmpty')
+                  : translate('fr', 'favorites.flightsEmptyBody')}
+            </Text>
           </View>
-        )}
+        }
+        renderItem={({ item }) =>
+          tab === 'deals' ? (
+            <DealCard
+              deal={(item as LikedDeal).deal}
+              liked
+              onToggleLike={() => void unlikeDeal((item as LikedDeal).deal_id)}
+              onPress={() =>
+                navigation.navigate('DealDetail', { dealId: (item as LikedDeal).deal_id })
+              }
+            />
+          ) : (
+            <View>
+              <DestinationCard
+                trip={(item as SavedFavorite).trip as EnrichedTripResponse}
+                isFavorite
+                onFavorite={() => void remove(item.id)}
+              />
+              <Pressable onPress={() => void remove(item.id)} style={styles.remove}>
+                <Text style={styles.removeText}>{translate('fr', 'card.removeFavorite')}</Text>
+              </Pressable>
+            </View>
+          )
+        }
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -223,11 +224,7 @@ function FavoritesGuestLanding({
 
   return (
     <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
-      <LinearGradient
-        colors={['#FFD4C8', '#FFE8DC', '#FFF9F5']}
-        locations={[0, 0.4, 1]}
-        style={StyleSheet.absoluteFill}
-      />
+      <ScreenBackground />
       <View style={styles.guestOrbA} />
       <View style={styles.guestOrbB} />
       <ScrollView
@@ -312,6 +309,35 @@ const styles = StyleSheet.create({
   header: { marginBottom: spacing.xl },
   title: { ...type.title },
   sub: { ...type.caption, marginTop: 4, fontFamily: fonts.semibold },
+  switchTrack: {
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 16,
+    padding: 5,
+    gap: 4,
+  },
+  switchBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  switchBtnOn: {
+    backgroundColor: colors.white,
+    ...shadow.soft,
+  },
+  switchLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    letterSpacing: -0.2,
+    color: colors.muted,
+  },
+  switchLabelOn: {
+    fontFamily: fonts.bold,
+    color: colors.ink,
+  },
   section: { marginTop: spacing.xl },
   sectionTitle: {
     fontFamily: fonts.bold,

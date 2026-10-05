@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from api_models import (
+    AddTripMemberRequest,
     CreatePlannedTripRequest,
     DateAvecHoraire,
     UpdatePlannedTripRequest,
@@ -277,6 +278,88 @@ async def delete_trip(trip_id: str, request: Request):
     return {"ok": True}
 
 
+@router.post("/api/planner/trips/{trip_id}/members")
+@optional_auth
+async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Request):
+    """Add a named traveler (guest / not yet on the app). Organizer only."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    trip = _require_organizer(supabase, trip_id, user_id)
+
+    name = (body.display_name or "").strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Nom trop court")
+    if len(name) > 60:
+        raise HTTPException(status_code=400, detail="Nom trop long")
+
+    members = (
+        supabase.table("trip_members")
+        .select("id")
+        .eq("trip_id", trip_id)
+        .execute()
+    )
+    count = len(members.data or [])
+    if count >= 6:
+        raise HTTPException(status_code=400, detail="Maximum 6 voyageurs")
+
+    result = (
+        supabase.table("trip_members")
+        .insert(
+            {
+                "trip_id": trip_id,
+                "user_id": None,
+                "display_name": name,
+                "role": "traveler",
+                "status": "guest",
+            }
+        )
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Ajout échoué")
+
+    # Keep seats >= named travelers for pricing
+    new_count = count + 1
+    seats = int(trip.get("passengers") or 1)
+    if new_count > seats:
+        supabase.table("planned_trips").update(
+            {
+                "passengers": min(6, new_count),
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        ).eq("id", trip_id).execute()
+
+    return result.data[0]
+
+
+@router.delete("/api/planner/trips/{trip_id}/members/{member_id}")
+@optional_auth
+async def remove_trip_member(trip_id: str, member_id: str, request: Request):
+    """Remove a traveler. Organizer only; cannot remove the organizer."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    _require_organizer(supabase, trip_id, user_id)
+
+    existing = (
+        supabase.table("trip_members")
+        .select("*")
+        .eq("id", member_id)
+        .eq("trip_id", trip_id)
+        .limit(1)
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Voyageur introuvable")
+    row = existing.data[0]
+    if row.get("role") == "organizer":
+        raise HTTPException(status_code=400, detail="Impossible de retirer l'organisateur")
+
+    supabase.table("trip_members").delete().eq("id", member_id).eq(
+        "trip_id", trip_id
+    ).execute()
+    return {"ok": True}
+
+
 @router.post("/api/planner/trips/{trip_id}/scan")
 @optional_auth
 async def scan_trip(trip_id: str, request: Request):
@@ -298,7 +381,11 @@ async def scan_trip(trip_id: str, request: Request):
             for d in (trip.get("dates_retour") or [])
         ]
         arrival = (trip.get("arrival_airport") or "").strip().upper() or None
-        incluses = [arrival] if arrival else None
+        if arrival:
+            codes = [c.strip() for c in arrival.replace(";", ",").split(",") if c.strip()]
+            incluses = codes if codes else None
+        else:
+            incluses = None
 
         resultats, num_requetes = scanner_vols_api(
             aeroport_depart=trip["departure_airport"],
@@ -462,21 +549,68 @@ async def join_invite(token: str, request: Request):
     if not trip.data:
         raise HTTPException(status_code=404, detail="Invitation introuvable")
     row = trip.data[0]
+    trip_id = row["id"]
+
     existing = (
         supabase.table("trip_members")
         .select("id")
-        .eq("trip_id", row["id"])
+        .eq("trip_id", trip_id)
         .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
-    if not existing.data:
-        supabase.table("trip_members").insert(
+    if existing.data:
+        return {"ok": True, "trip_id": trip_id}
+
+    # Prefer claiming a guest placeholder so "hors app" → "sur l'app"
+    guests = (
+        supabase.table("trip_members")
+        .select("*")
+        .eq("trip_id", trip_id)
+        .eq("status", "guest")
+        .is_("user_id", "null")
+        .order("joined_at")
+        .limit(1)
+        .execute()
+    )
+    if guests.data:
+        guest = guests.data[0]
+        supabase.table("trip_members").update(
             {
-                "trip_id": row["id"],
                 "user_id": user_id,
-                "role": "traveler" if row["organizer_id"] != user_id else "organizer",
                 "status": "joined",
+                "role": "traveler" if row["organizer_id"] != user_id else "organizer",
             }
-        ).execute()
-    return {"ok": True, "trip_id": row["id"]}
+        ).eq("id", guest["id"]).execute()
+        return {"ok": True, "trip_id": trip_id, "claimed_guest": True}
+
+    members = (
+        supabase.table("trip_members")
+        .select("id")
+        .eq("trip_id", trip_id)
+        .execute()
+    )
+    count = len(members.data or [])
+    if count >= 6:
+        raise HTTPException(status_code=400, detail="Voyage complet (6 voyageurs max)")
+
+    supabase.table("trip_members").insert(
+        {
+            "trip_id": trip_id,
+            "user_id": user_id,
+            "role": "traveler" if row["organizer_id"] != user_id else "organizer",
+            "status": "joined",
+        }
+    ).execute()
+
+    new_count = count + 1
+    seats = int(row.get("passengers") or 1)
+    if new_count > seats:
+        supabase.table("planned_trips").update(
+            {
+                "passengers": min(6, new_count),
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        ).eq("id", trip_id).execute()
+
+    return {"ok": True, "trip_id": trip_id}

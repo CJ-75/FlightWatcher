@@ -26,6 +26,7 @@ import { DestinationCard } from '../components/DestinationCard'
 import { BookingSheet } from '../components/BookingSheet'
 import { SaveSearchModal } from '../components/SaveSearchModal'
 import { RouletteModal } from '../components/RouletteModal'
+import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>
@@ -171,6 +172,7 @@ export function ResultsScreen({ route }: Props) {
 
   return (
     <View style={styles.root}>
+      <ScreenBackground />
       <FlatList
         style={styles.list}
         contentContainerStyle={{
@@ -319,7 +321,7 @@ export function ResultsScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  list: { flex: 1 },
+  list: { flex: 1, backgroundColor: 'transparent' },
   header: { marginBottom: spacing.lg },
   title: { ...type.title },
   count: { ...type.caption, marginTop: 6, fontFamily: fonts.semibold },

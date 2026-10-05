@@ -1,6 +1,7 @@
 import type {
   Airport,
   ApiConfig,
+  AddTripMemberRequest,
   CreatePlannedTripRequest,
   Destination,
   InspireRequest,
@@ -15,6 +16,7 @@ import type {
   SavedSearch,
   TravelDeal,
   TripProposal,
+  TripMember,
   TripResponse,
 } from '../types'
 
@@ -202,6 +204,16 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<void>(`/api/planner/trips/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       }),
+    addTripMember: (tripId: string, body: AddTripMemberRequest) =>
+      request<TripMember>(
+        `/api/planner/trips/${encodeURIComponent(tripId)}/members`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+    removeTripMember: (tripId: string, memberId: string) =>
+      request<{ ok: boolean }>(
+        `/api/planner/trips/${encodeURIComponent(tripId)}/members/${encodeURIComponent(memberId)}`,
+        { method: 'DELETE' },
+      ),
     scanPlannedTrip: (id: string) =>
       request<{ proposals: TripProposal[]; nombre_requetes: number }>(
         `/api/planner/trips/${encodeURIComponent(id)}/scan`,

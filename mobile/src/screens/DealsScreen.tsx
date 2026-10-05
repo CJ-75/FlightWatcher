@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -16,6 +15,7 @@ import type { TravelDeal } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { useLikedDeals } from '../hooks/useLikedDeals'
+import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
 
@@ -53,11 +53,7 @@ export function DealsScreen() {
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#FFE8DC', '#FFF9F5']}
-        locations={[0, 0.35]}
-        style={StyleSheet.absoluteFill}
-      />
+      <ScreenBackground />
 
       {loading && deals.length === 0 ? (
         <View style={[styles.centered, { paddingTop: insets.top }]}>

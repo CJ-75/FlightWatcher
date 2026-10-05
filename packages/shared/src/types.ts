@@ -121,6 +121,7 @@ export interface TravelDealDates {
 export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'
 export type TripProposalStatus = 'pending' | 'accepted' | 'rejected'
 export type TripMemberRole = 'organizer' | 'traveler'
+export type TripMemberStatus = 'joined' | 'guest'
 
 export interface PlannedTrip {
   id: string
@@ -154,8 +155,12 @@ export interface TripMember {
   user_id?: string | null
   display_name?: string | null
   role: TripMemberRole
-  status: 'joined'
+  status: TripMemberStatus
   joined_at: string
+}
+
+export interface AddTripMemberRequest {
+  display_name: string
 }
 
 export interface PlannedTripDetail extends PlannedTrip {

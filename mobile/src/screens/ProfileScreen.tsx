@@ -13,6 +13,7 @@ import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { apiBase } from '../lib/client'
 import { Button } from '../components/ui/Button'
+import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function ProfileScreen() {
@@ -31,11 +32,7 @@ export function ProfileScreen() {
   if (!viewUser) {
     return (
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
-        <LinearGradient
-          colors={['#FFE8DC', '#FFF9F5']}
-          locations={[0, 0.45]}
-          style={StyleSheet.absoluteFill}
-        />
+        <ScreenBackground />
         <View style={styles.guestWrap}>
           <View style={styles.guestIcon}>
             <View style={styles.guestHead} />
@@ -103,11 +100,7 @@ export function ProfileScreen() {
 
   return (
     <View style={styles.root}>
-      <LinearGradient
-        colors={['#FFE8DC', '#FFF9F5']}
-        locations={[0, 0.4]}
-        style={StyleSheet.absoluteFill}
-      />
+      <ScreenBackground />
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + spacing.md,

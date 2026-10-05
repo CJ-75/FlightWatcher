@@ -1642,6 +1642,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   const [showLightbox, setShowLightbox] = useState(false)
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [favoritesFilter, setFavoritesFilter] = useState<'all' | 'active' | 'archived'>('all')
+  const [favoritesKind, setFavoritesKind] = useState<'flights' | 'deals'>('flights')
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
   const [expandedSearches, setExpandedSearches] = useState<Set<string>>(new Set())
 
@@ -2446,43 +2447,6 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         </div>
       </motion.div>
 
-      {/* Deals likés */}
-      {likedDeals.length > 0 ? (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl shadow-xl overflow-hidden"
-        >
-          <div className="bg-gradient-to-r from-primary-500 to-primary-700 p-4 sm:p-5 md:p-6">
-            <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2 sm:gap-3">
-              <span>{t('favorites.dealsTitle')}</span>
-              <span className="text-lg sm:text-xl bg-white/20 px-2 sm:px-3 py-1 rounded-full">
-                {likedDeals.length}
-              </span>
-            </h2>
-          </div>
-          <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-            {likedDeals.map((item) => (
-              <DealCard
-                key={item.id}
-                deal={item.deal}
-                liked
-                onToggleLike={() => void unlikeDeal(item.deal_id)}
-                onClick={() => setSelectedLikedDeal(item.deal)}
-              />
-            ))}
-          </div>
-          {selectedLikedDeal ? (
-            <DealDetailModal
-              deal={selectedLikedDeal}
-              liked
-              onToggleLike={() => void unlikeDeal(selectedLikedDeal.id)}
-              onClose={() => setSelectedLikedDeal(null)}
-            />
-          ) : null}
-        </motion.div>
-      ) : null}
-
       {/* Favoris */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -2490,70 +2454,109 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         className="bg-white rounded-2xl shadow-xl overflow-hidden"
       >
         <div className="bg-gradient-to-r from-pink-500 to-rose-600 p-4 sm:p-5 md:p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-            <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2 sm:gap-3">
-              <span>❤️</span>
-              <span>{t('favorites.favoritesTitle')}</span>
-              <span className="text-lg sm:text-xl bg-white/20 px-2 sm:px-3 py-1 rounded-full">
-                {favorites.length}
-              </span>
-            </h2>
-            {/* Filtres pour les favoris */}
-            <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-              <motion.button
+          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            {t('favorites.title')}
+          </h2>
+        </div>
+
+        <div className="px-4 sm:px-6 pt-5 pb-2">
+          <div className="flex p-1.5 rounded-2xl bg-[#FFF3EC] gap-1">
+            <button
+              type="button"
+              onClick={() => setFavoritesKind('flights')}
+              className={`flex-1 py-2.5 rounded-xl text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
+                favoritesKind === 'flights'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t('favorites.switch.flights')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFavoritesKind('deals')}
+              className={`flex-1 py-2.5 rounded-xl text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
+                favoritesKind === 'deals'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t('favorites.switch.deals')}
+            </button>
+          </div>
+          {favoritesKind === 'flights' ? (
+            <div className="flex gap-2 flex-wrap mt-4">
+              <button
+                type="button"
                 onClick={async () => {
                   setFavoritesFilter('all')
                   const all = await getFavorites()
                   setFavorites(all)
                 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md min-h-[44px] sm:min-h-[40px] active:scale-95 ${
+                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
                   favoritesFilter === 'all'
-                    ? 'bg-white text-pink-600'
-                    : 'bg-white/20 text-white hover:bg-white/30'
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {t('favorites.all')} ({favorites.length})
-              </motion.button>
-              <motion.button
+                {t('favorites.all')}
+              </button>
+              <button
+                type="button"
                 onClick={async () => {
                   setFavoritesFilter('active')
                   const active = await getActiveFavorites()
                   setFavorites(active)
                 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md min-h-[44px] sm:min-h-[40px] active:scale-95 ${
+                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
                   favoritesFilter === 'active'
-                    ? 'bg-white text-pink-600'
-                    : 'bg-white/20 text-white hover:bg-white/30'
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {t('favorites.active')} ({favorites.filter(f => !f.archived).length})
-              </motion.button>
-              <motion.button
+                {t('favorites.active')}
+              </button>
+              <button
+                type="button"
                 onClick={async () => {
                   setFavoritesFilter('archived')
                   const archived = await getArchivedFavorites()
                   setFavorites(archived)
                 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md min-h-[44px] sm:min-h-[40px] active:scale-95 ${
+                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
                   favoritesFilter === 'archived'
-                    ? 'bg-white text-pink-600'
-                    : 'bg-white/20 text-white hover:bg-white/30'
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {t('favorites.archived')} ({favorites.filter(f => f.archived).length})
-              </motion.button>
+                {t('favorites.archived')}
+              </button>
             </div>
-          </div>
+          ) : null}
         </div>
         
-        <div className="p-6">
-          {favorites.length === 0 ? (
+        <div className="p-6 pt-4">
+          {favoritesKind === 'deals' ? (
+            likedDeals.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="text-6xl mb-4">❤️</div>
+                <p className="text-xl text-gray-500 font-medium">{t('favorites.dealsEmptyTitle')}</p>
+                <p className="text-sm text-gray-400 mt-2">{t('favorites.dealsEmpty')}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {likedDeals.map((item) => (
+                  <DealCard
+                    key={item.id}
+                    deal={item.deal}
+                    liked
+                    onToggleLike={() => void unlikeDeal(item.deal_id)}
+                    onClick={() => setSelectedLikedDeal(item.deal)}
+                  />
+                ))}
+              </div>
+            )
+          ) : favorites.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">❤️</div>
               <p className="text-xl text-gray-500 font-medium">Aucun voyage en favori</p>
@@ -2822,6 +2825,14 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
             )
           })()}
         </div>
+        {selectedLikedDeal ? (
+          <DealDetailModal
+            deal={selectedLikedDeal}
+            liked
+            onToggleLike={() => void unlikeDeal(selectedLikedDeal.id)}
+            onClose={() => setSelectedLikedDeal(null)}
+          />
+        ) : null}
       </motion.div>
 
       {/* Lightbox pour afficher les nouveaux résultats */}

@@ -21,9 +21,11 @@ export type {
   PlannedTrip,
   PlannedTripDetail,
   TripProposal,
-  TripMember,
+    TripMember,
   CreatePlannedTripRequest,
   InvitePreview,
   PlannedTripStatus,
   TripProposalStatus,
+  TripMemberStatus,
+  TripMemberRole,
 } from '@flightwatcher/shared'

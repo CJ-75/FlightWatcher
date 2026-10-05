@@ -14,18 +14,22 @@ import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/nativ
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { PlannedTripDetail, TripProposal } from '@flightwatcher/shared'
+import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
 import { formatDateFr } from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
   acceptGuestProposal,
+  addGuestTripMember,
   getGuestTrip,
   rejectGuestProposal,
+  removeGuestTripMember,
   scanGuestTrip,
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
+import { TravelersSection } from '../components/TravelersSection'
 import { Button } from '../components/ui/Button'
+import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
 
@@ -40,6 +44,7 @@ export function TripDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
+  const [membersBusy, setMembersBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -52,6 +57,7 @@ export function TripDetailScreen() {
       navigation.setOptions({ title: detail.name || 'Voyage' })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Chargement impossible')
+      setTrip(null)
     } finally {
       setLoading(false)
     }
@@ -70,11 +76,18 @@ export function TripDetailScreen() {
     setScanning(true)
     setError(null)
     try {
-      if (__DEV__ && isGuest) scanGuestTrip(tripId)
-      else await getApi().scanPlannedTrip(tripId)
-      await load()
+      if (__DEV__ && isGuest) {
+        const updated = await scanGuestTrip(tripId)
+        if (!updated) throw new Error('Voyage introuvable')
+        setTrip(updated)
+        navigation.setOptions({ title: updated.name || 'Voyage' })
+      } else {
+        await getApi().scanPlannedTrip(tripId)
+        await load()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan échoué')
+      Alert.alert('Scan', e instanceof Error ? e.message : 'Scan échoué')
     } finally {
       setScanning(false)
     }
@@ -83,9 +96,14 @@ export function TripDetailScreen() {
   const accept = async (id: string) => {
     setActing(id)
     try {
-      if (__DEV__ && isGuest) acceptGuestProposal(id)
-      else await getApi().acceptProposal(id)
-      await load()
+      if (__DEV__ && isGuest) {
+        const updated = acceptGuestProposal(id)
+        if (updated) setTrip(updated)
+        else await load()
+      } else {
+        await getApi().acceptProposal(id)
+        await load()
+      }
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Acceptation échouée')
     } finally {
@@ -96,9 +114,14 @@ export function TripDetailScreen() {
   const reject = async (id: string) => {
     setActing(id)
     try {
-      if (__DEV__ && isGuest) rejectGuestProposal(id)
-      else await getApi().rejectProposal(id)
-      await load()
+      if (__DEV__ && isGuest) {
+        const updated = rejectGuestProposal(id)
+        if (updated) setTrip(updated)
+        else await load()
+      } else {
+        await getApi().rejectProposal(id)
+        await load()
+      }
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Refus échoué')
     } finally {
@@ -119,9 +142,42 @@ export function TripDetailScreen() {
     }
   }
 
+  const addMember = async (displayName: string) => {
+    setMembersBusy(true)
+    try {
+      if (__DEV__ && isGuest) {
+        const updated = addGuestTripMember(tripId, displayName)
+        if (!updated) throw new Error('Voyage introuvable')
+        setTrip(updated)
+      } else {
+        await getApi().addTripMember(tripId, { display_name: displayName })
+        await load()
+      }
+    } finally {
+      setMembersBusy(false)
+    }
+  }
+
+  const removeMember = async (member: TripMember) => {
+    setMembersBusy(true)
+    try {
+      if (__DEV__ && isGuest) {
+        const updated = removeGuestTripMember(tripId, member.id)
+        if (!updated) throw new Error('Voyage introuvable')
+        setTrip(updated)
+      } else {
+        await getApi().removeTripMember(tripId, member.id)
+        await load()
+      }
+    } finally {
+      setMembersBusy(false)
+    }
+  }
+
   if (loading && !trip) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
+        <ScreenBackground />
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
@@ -130,6 +186,7 @@ export function TripDetailScreen() {
   if (!trip) {
     return (
       <View style={[styles.centered, { padding: 24 }]}>
+        <ScreenBackground />
         <Text style={styles.errorText}>{error || 'Voyage introuvable'}</Text>
       </View>
     )
@@ -142,25 +199,29 @@ export function TripDetailScreen() {
   )
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={{
-        padding: spacing.xl,
-        paddingBottom: insets.bottom + 40,
-        gap: 16,
-      }}
-      refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={colors.primary} />
-      }
-    >
+    <View style={styles.root}>
+      <ScreenBackground />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{
+          padding: spacing.xl,
+          paddingBottom: insets.bottom + 40,
+          gap: 16,
+        }}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={colors.primary} />
+        }
+      >
       <View style={[styles.summary, shadow.soft]}>
         <Text style={styles.name}>{trip.name}</Text>
         <Text style={styles.meta}>
           {trip.departure_airport}
-          {trip.arrival_airport ? ` → ${trip.arrival_airport}` : ' · inspire'}
+          {trip.arrival_airport
+            ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+            : ' · inspire'}
         </Text>
         <Text style={styles.meta}>
-          {trip.passengers} voyageur{trip.passengers > 1 ? 's' : ''} · max {trip.budget_max}€/pers
+          max {trip.budget_max}€/pers
         </Text>
         {trip.dates_depart[0] && trip.dates_retour[0] ? (
           <Text style={styles.meta}>
@@ -169,10 +230,17 @@ export function TripDetailScreen() {
           </Text>
         ) : null}
         <Text style={styles.status}>Statut : {trip.status}</Text>
-        <Text style={styles.meta}>
-          {(trip.members || []).length} membre{(trip.members || []).length > 1 ? 's' : ''}
-        </Text>
       </View>
+
+      <TravelersSection
+        members={trip.members || []}
+        seats={trip.passengers}
+        currentUserId={viewUser?.id}
+        isOrganizer={!!isOrganizer}
+        busy={membersBusy}
+        onAdd={addMember}
+        onRemove={removeMember}
+      />
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -233,6 +301,7 @@ export function TripDetailScreen() {
         <Button label="Partager l’invitation" onPress={() => void shareInvite()} variant="secondary" />
       ) : null}
     </ScrollView>
+    </View>
   )
 }
 
@@ -282,6 +351,7 @@ function ProposalBlock({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  scroll: { flex: 1, backgroundColor: 'transparent' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.canvas },
   summary: {
     backgroundColor: colors.white,

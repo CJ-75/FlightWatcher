@@ -6,6 +6,7 @@ import type {
   PlannedTripDetail,
   SavedFavorite,
   TravelDeal,
+  TripMember,
   TripProposal,
   User,
 } from '@flightwatcher/shared'
@@ -33,30 +34,126 @@ function nextWeekend(): { out: string; back: string } {
 
 const { out, back } = nextWeekend()
 
-const sampleFlightTrip: EnrichedTripResponse = {
-  aller: {
-    flightNumber: 'FR1234',
-    origin: 'BVA',
-    originFull: 'Beauvais',
-    destination: 'LIS',
-    destinationFull: 'Lisbonne',
-    departureTime: `${out}T07:40:00`,
-    price: 24,
-    currency: 'EUR',
-  },
-  retour: {
-    flightNumber: 'FR1235',
-    origin: 'LIS',
-    originFull: 'Lisbonne',
-    destination: 'BVA',
-    destinationFull: 'Beauvais',
-    departureTime: `${back}T21:15:00`,
-    price: 24,
-    currency: 'EUR',
-  },
-  prix_total: 48,
-  destination_code: 'LIS',
-  is_good_deal: true,
+function mockTrip(
+  dest: string,
+  destFull: string,
+  price: number,
+  goodDeal = false,
+): EnrichedTripResponse {
+  return {
+    aller: {
+      flightNumber: `FR${1000 + Math.floor(Math.random() * 8000)}`,
+      origin: 'BVA',
+      originFull: 'Beauvais',
+      destination: dest,
+      destinationFull: destFull,
+      departureTime: `${out}T07:40:00`,
+      price: Math.round(price * 0.5),
+      currency: 'EUR',
+    },
+    retour: {
+      flightNumber: `FR${1000 + Math.floor(Math.random() * 8000)}`,
+      origin: dest,
+      originFull: destFull,
+      destination: 'BVA',
+      destinationFull: 'Beauvais',
+      departureTime: `${back}T21:15:00`,
+      price: Math.round(price * 0.5),
+      currency: 'EUR',
+    },
+    prix_total: price,
+    destination_code: dest,
+    is_good_deal: goodDeal,
+  }
+}
+
+const INSPIRE_POOL: { code: string; name: string; price: number }[] = [
+  { code: 'LIS', name: 'Lisbonne', price: 48 },
+  { code: 'BCN', name: 'Barcelone', price: 62 },
+  { code: 'FCO', name: 'Rome', price: 71 },
+  { code: 'OPO', name: 'Porto', price: 55 },
+  { code: 'BUD', name: 'Budapest', price: 59 },
+  { code: 'PRG', name: 'Prague', price: 64 },
+  { code: 'MAD', name: 'Madrid', price: 68 },
+  { code: 'MLA', name: 'Malte', price: 74 },
+]
+
+function buildScanProposals(trip: PlannedTripDetail): TripProposal[] {
+  const codes = (trip.arrival_airport || '')
+    .split(/[,;|]/)
+    .map((c) => c.trim().toUpperCase())
+    .filter((c) => /^[A-Z]{3}$/.test(c))
+
+  const targets =
+    codes.length > 0
+      ? codes.slice(0, 4).map((code, i) => {
+          const known = INSPIRE_POOL.find((p) => p.code === code)
+          return {
+            code,
+            name: known?.name || code,
+            price: known?.price ?? 55 + i * 8,
+          }
+        })
+      : INSPIRE_POOL.slice(0, 4)
+
+  const now = Date.now()
+  return targets.map((t, i) => ({
+    id: `dev-proposal-${trip.id}-${now}-${i}`,
+    trip_id: trip.id,
+    trip_data: mockTrip(t.code, t.name, t.price + i * 5, i === 0),
+    status: 'pending' as const,
+    created_at: new Date().toISOString(),
+  }))
+}
+
+function cloneTrip(t: PlannedTripDetail): PlannedTripDetail {
+  return {
+    ...t,
+    dates_depart: [...(t.dates_depart || [])],
+    dates_retour: [...(t.dates_retour || [])],
+    proposals: (t.proposals || []).map((p) => ({ ...p, trip_data: { ...p.trip_data } })),
+    members: (t.members || []).map((m) => ({ ...m })),
+  }
+}
+
+function seedTrip(): PlannedTripDetail {
+  const id = 'dev-trip-lisbonne'
+  return {
+    id,
+    organizer_id: DEV_GUEST_USER.id,
+    name: 'Weekend Lisbonne',
+    departure_airport: 'BVA',
+    arrival_airport: 'LIS',
+    passengers: 2,
+    dates_depart: [{ date: out, heure_min: '00:00', heure_max: '23:59' }],
+    dates_retour: [{ date: back, heure_min: '00:00', heure_max: '23:59' }],
+    budget_max: 150,
+    invite_token: 'dev-invite-preview',
+    status: 'draft',
+    created_at: new Date().toISOString(),
+    proposals_count: 0,
+    proposals: [],
+    members: [
+      {
+        id: 'dev-member-1',
+        trip_id: id,
+        user_id: DEV_GUEST_USER.id,
+        display_name: 'Aperçu Expo',
+        role: 'organizer',
+        status: 'joined',
+        joined_at: new Date().toISOString(),
+      },
+      {
+        id: 'dev-member-2',
+        trip_id: id,
+        user_id: null,
+        display_name: 'Camille',
+        role: 'traveler',
+        status: 'guest',
+        joined_at: new Date().toISOString(),
+      },
+    ],
+  }
 }
 
 const sampleDeal: TravelDeal = {
@@ -81,46 +178,7 @@ const sampleDeal: TravelDeal = {
   badge: 'Week-end',
 }
 
-function seedProposal(tripId: string): TripProposal {
-  return {
-    id: 'dev-proposal-lis',
-    trip_id: tripId,
-    trip_data: sampleFlightTrip,
-    status: 'pending',
-    created_at: new Date().toISOString(),
-  }
-}
-
-function seedTrip(): PlannedTripDetail {
-  const id = 'dev-trip-lisbonne'
-  return {
-    id,
-    organizer_id: DEV_GUEST_USER.id,
-    name: 'Weekend Lisbonne',
-    departure_airport: 'BVA',
-    arrival_airport: 'LIS',
-    passengers: 2,
-    dates_depart: [{ date: out, heure_min: '00:00', heure_max: '23:59' }],
-    dates_retour: [{ date: back, heure_min: '00:00', heure_max: '23:59' }],
-    budget_max: 150,
-    invite_token: 'dev-invite-preview',
-    status: 'planning',
-    created_at: new Date().toISOString(),
-    proposals_count: 1,
-    proposals: [seedProposal(id)],
-    members: [
-      {
-        id: 'dev-member-1',
-        trip_id: id,
-        user_id: DEV_GUEST_USER.id,
-        display_name: 'Aperçu Expo',
-        role: 'organizer',
-        status: 'joined',
-        joined_at: new Date().toISOString(),
-      },
-    ],
-  }
-}
+const sampleFlightTrip = mockTrip('LIS', 'Lisbonne', 48, true)
 
 let trips: PlannedTripDetail[] = [seedTrip()]
 let likedDealIds = new Set<string>([sampleDeal.id])
@@ -154,11 +212,12 @@ function toListItem(t: PlannedTripDetail): PlannedTrip {
 }
 
 export function listGuestTrips(): PlannedTrip[] {
-  return trips.map(toListItem)
+  return trips.map((t) => toListItem(cloneTrip(t)))
 }
 
 export function getGuestTrip(id: string): PlannedTripDetail | null {
-  return trips.find((t) => t.id === id) ?? null
+  const trip = trips.find((t) => t.id === id)
+  return trip ? cloneTrip(trip) : null
 }
 
 export function addGuestTrip(body: CreatePlannedTripRequest): PlannedTrip {
@@ -191,37 +250,103 @@ export function addGuestTrip(body: CreatePlannedTripRequest): PlannedTrip {
     ],
   }
   trips = [row, ...trips]
-  return toListItem(row)
+  return toListItem(cloneTrip(row))
 }
 
-export function scanGuestTrip(id: string): PlannedTripDetail | null {
-  const trip = trips.find((t) => t.id === id)
-  if (!trip) return null
-  if (trip.proposals.length === 0) {
-    trip.proposals = [seedProposal(id)]
+/** Simulate a price scan — always refreshes pending proposals. */
+export async function scanGuestTrip(id: string): Promise<PlannedTripDetail | null> {
+  const idx = trips.findIndex((t) => t.id === id)
+  if (idx < 0) return null
+
+  trips[idx] = {
+    ...trips[idx],
+    status: 'scanning',
   }
-  trip.status = 'planning'
-  trip.proposals_count = trip.proposals.length
-  return trip
+
+  await new Promise((r) => setTimeout(r, 900))
+
+  const proposals = buildScanProposals(trips[idx])
+  trips[idx] = {
+    ...trips[idx],
+    status: 'planning',
+    proposals,
+    proposals_count: proposals.length,
+  }
+  return cloneTrip(trips[idx])
 }
 
 export function acceptGuestProposal(proposalId: string): PlannedTripDetail | null {
-  const trip = trips.find((t) => t.proposals.some((p) => p.id === proposalId))
-  if (!trip) return null
-  trip.proposals = trip.proposals.map((p) =>
-    p.id === proposalId ? { ...p, status: 'accepted' } : { ...p, status: 'rejected' },
-  )
-  trip.status = 'locked'
-  return trip
+  const idx = trips.findIndex((t) => t.proposals.some((p) => p.id === proposalId))
+  if (idx < 0) return null
+  const trip = trips[idx]
+  trips[idx] = {
+    ...trip,
+    status: 'locked',
+    proposals: trip.proposals.map((p) =>
+      p.id === proposalId
+        ? { ...p, status: 'accepted' as const }
+        : p.status === 'pending'
+          ? { ...p, status: 'rejected' as const }
+          : p,
+    ),
+  }
+  return cloneTrip(trips[idx])
 }
 
 export function rejectGuestProposal(proposalId: string): PlannedTripDetail | null {
-  const trip = trips.find((t) => t.proposals.some((p) => p.id === proposalId))
-  if (!trip) return null
-  trip.proposals = trip.proposals.map((p) =>
-    p.id === proposalId ? { ...p, status: 'rejected' } : p,
-  )
-  return trip
+  const idx = trips.findIndex((t) => t.proposals.some((p) => p.id === proposalId))
+  if (idx < 0) return null
+  const trip = trips[idx]
+  trips[idx] = {
+    ...trip,
+    proposals: trip.proposals.map((p) =>
+      p.id === proposalId ? { ...p, status: 'rejected' as const } : p,
+    ),
+  }
+  return cloneTrip(trips[idx])
+}
+
+export function addGuestTripMember(
+  tripId: string,
+  displayName: string,
+): PlannedTripDetail | null {
+  const idx = trips.findIndex((t) => t.id === tripId)
+  if (idx < 0) return null
+  const trip = trips[idx]
+  const name = displayName.trim()
+  if (name.length < 2) throw new Error('Nom trop court')
+  if ((trip.members || []).length >= 6) throw new Error('Maximum 6 voyageurs')
+
+  const member: TripMember = {
+    id: `dev-member-${Date.now()}`,
+    trip_id: tripId,
+    user_id: null,
+    display_name: name,
+    role: 'traveler',
+    status: 'guest',
+    joined_at: new Date().toISOString(),
+  }
+  const members = [...(trip.members || []), member]
+  const seats = Math.max(trip.passengers, Math.min(6, members.length))
+  trips[idx] = { ...trip, members, passengers: seats }
+  return cloneTrip(trips[idx])
+}
+
+export function removeGuestTripMember(
+  tripId: string,
+  memberId: string,
+): PlannedTripDetail | null {
+  const idx = trips.findIndex((t) => t.id === tripId)
+  if (idx < 0) return null
+  const trip = trips[idx]
+  const target = (trip.members || []).find((m) => m.id === memberId)
+  if (!target) throw new Error('Voyageur introuvable')
+  if (target.role === 'organizer') throw new Error("Impossible de retirer l'organisateur")
+  trips[idx] = {
+    ...trip,
+    members: (trip.members || []).filter((m) => m.id !== memberId),
+  }
+  return cloneTrip(trips[idx])
 }
 
 export function listGuestLikedDeals(): LikedDeal[] {

@@ -11,9 +11,8 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type {
   Airport,
@@ -39,6 +38,7 @@ import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { ExcludeDestinationsModal } from '../components/ExcludeDestinationsModal'
 import { HoursSheet } from '../components/HoursSheet'
 import { Button } from '../components/ui/Button'
+import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow } from '../theme'
 
 const PRESETS: { id: DatePresetId; label: string; hint: string }[] = [
@@ -250,11 +250,7 @@ export function SearchScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <LinearGradient
-        colors={['#FFE8DC', '#FFF9F5']}
-        locations={[0, 0.35]}
-        style={StyleSheet.absoluteFill}
-      />
+      <ScreenBackground />
 
       <View
         style={[
