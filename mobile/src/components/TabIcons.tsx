@@ -41,34 +41,36 @@ export function SearchTabIcon({ size = 22, color = colors.faint }: IconProps) {
   )
 }
 
-/** Tag / spark for Deals. */
+/** Full price-tag icon for Deals. */
 export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
-  const stroke = Math.max(2, size * 0.1)
-  const tagW = size * 0.72
-  const tagH = size * 0.52
+  const w = size * 0.9
+  const h = size * 0.62
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <View
         style={{
-          width: tagW,
-          height: tagH,
-          borderRadius: tagH / 2.4,
-          borderWidth: stroke,
-          borderColor: color,
-          transform: [{ rotate: '-18deg' }],
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          width: size * 0.14,
-          height: size * 0.14,
-          borderRadius: size,
+          width: w,
+          height: h,
           backgroundColor: color,
-          right: size * 0.18,
-          top: size * 0.22,
+          borderTopRightRadius: h * 0.35,
+          borderBottomRightRadius: h * 0.35,
+          borderTopLeftRadius: h * 0.18,
+          borderBottomLeftRadius: h * 0.18,
+          transform: [{ rotate: '-20deg' }],
+          alignItems: 'flex-start',
+          justifyContent: 'center',
+          paddingLeft: w * 0.14,
         }}
-      />
+      >
+        <View
+          style={{
+            width: h * 0.28,
+            height: h * 0.28,
+            borderRadius: h,
+            backgroundColor: colors.white,
+          }}
+        />
+      </View>
     </View>
   )
 }

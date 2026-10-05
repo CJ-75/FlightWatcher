@@ -686,7 +686,12 @@ function Dashboard() {
                   : 'text-gray-600 hover:text-gray-800'
               }`}
             >
-              ✦ {t('nav.deals')}
+              <span className="inline-flex items-center gap-1.5">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
+                  <path d="M21.41 11.58l-9-9A1.99 1.99 0 0010.99 2H4c-1.1 0-2 .9-2 2v7c0 .53.21 1.04.59 1.41l9 9a1.996 1.996 0 002.83 0l7.99-7.99c.78-.78.78-2.05 0-2.84zM6.5 8C5.67 8 5 7.33 5 6.5S5.67 5 6.5 5 8 5.67 8 6.5 7.33 8 6.5 8z" />
+                </svg>
+                {t('nav.deals')}
+              </span>
             </motion.button>
             <motion.button
               onClick={() => setActiveTab('saved')}
