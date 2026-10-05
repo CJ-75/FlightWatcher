@@ -17,7 +17,6 @@ import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function ProfileScreen() {
   const {
-    user,
     viewUser,
     signOut,
     signInWithGoogle,
@@ -99,8 +98,8 @@ export function ProfileScreen() {
   }
 
   const displayName =
-    user!.user_metadata?.full_name || user!.email?.split('@')[0] || 'Compte'
-  const initial = (displayName[0] || user!.email?.[0] || 'U').toUpperCase()
+    viewUser!.user_metadata?.full_name || viewUser!.email?.split('@')[0] || 'Compte'
+  const initial = (displayName[0] || viewUser!.email?.[0] || 'U').toUpperCase()
 
   return (
     <View style={styles.root}>
@@ -129,7 +128,7 @@ export function ProfileScreen() {
             <Text style={styles.avatarText}>{initial}</Text>
           </LinearGradient>
           <Text style={styles.name}>{displayName}</Text>
-          <Text style={styles.email}>{user!.email}</Text>
+          <Text style={styles.email}>{viewUser!.email}</Text>
         </View>
 
         <View style={[styles.infoCard, shadow.soft]}>
@@ -138,6 +137,13 @@ export function ProfileScreen() {
             {apiBase.replace(/^https?:\/\//, '')}
           </Text>
         </View>
+
+        {__DEV__ && isGuest ? (
+          <View style={[styles.infoCard, shadow.soft, { marginTop: spacing.md }]}>
+            <Text style={styles.infoLabel}>Aperçu Expo</Text>
+            <Text style={styles.infoValue}>Planner et Favoris en local, sans login Google</Text>
+          </View>
+        ) : null}
 
         {__DEV__ ? (
           <Pressable

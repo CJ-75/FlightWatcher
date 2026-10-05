@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import * as Linking from 'expo-linking'
 import type { Session, User } from '@flightwatcher/shared'
 import { auth, redirectTo, authRedirectWarning } from '../lib/client'
+import { DEV_GUEST_USER } from '../dev/guestPreview'
 
 interface AuthContextValue {
   user: User | null
@@ -116,7 +117,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!__DEV__) return
         setAppearLoggedOutState(value)
       },
-      viewUser: __DEV__ && appearLoggedOut ? null : user,
+      viewUser:
+        __DEV__ && appearLoggedOut
+          ? null
+          : user ?? (__DEV__ && isGuest ? DEV_GUEST_USER : null),
       signInWithGoogle: () => auth.signInWithGoogle(),
       signOut: async () => {
         await auth.signOut()

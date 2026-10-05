@@ -27,6 +27,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
+import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { AirportPicker } from '../components/AirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
@@ -49,7 +50,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function PlannerScreen() {
   const insets = useSafeAreaInsets()
-  const { viewUser } = useAuth()
+  const { viewUser, isGuest } = useAuth()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [trips, setTrips] = useState<PlannedTrip[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,8 +70,12 @@ export function PlannerScreen() {
       else setLoading(true)
       setError(null)
       try {
-        const list = await getApi().listPlannedTrips()
-        setTrips(Array.isArray(list) ? list : [])
+        if (__DEV__ && isGuest) {
+          setTrips(listGuestTrips())
+        } else {
+          const list = await getApi().listPlannedTrips()
+          setTrips(Array.isArray(list) ? list : [])
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les voyages')
         setTrips([])
@@ -79,7 +84,7 @@ export function PlannerScreen() {
         setRefreshing(false)
       }
     },
-    [viewUser],
+    [viewUser, isGuest],
   )
 
   useFocusEffect(
@@ -330,6 +335,7 @@ function CreateTripModal({
   onClose: () => void
   onCreated: (id: string) => void
 }) {
+  const { isGuest } = useAuth()
   const insets = useSafeAreaInsets()
   const [name, setName] = useState('')
   const [departure, setDeparture] = useState('BVA')
@@ -378,7 +384,7 @@ function CreateTripModal({
     setSaving(true)
     setError(null)
     try {
-      const trip = await getApi().createPlannedTrip({
+      const payload = {
         name: name.trim(),
         departure_airport: departure,
         arrival_airport: arrival.trim() ? arrival.trim().toUpperCase() : null,
@@ -386,7 +392,11 @@ function CreateTripModal({
         dates_depart: dates.dates_depart,
         dates_retour: dates.dates_retour,
         budget_max: budget,
-      })
+      }
+      const trip =
+        __DEV__ && isGuest
+          ? addGuestTrip(payload)
+          : await getApi().createPlannedTrip(payload)
       onCreated(trip.id)
       setName('')
       setArrival('')

@@ -17,6 +17,12 @@ import type { EnrichedTripResponse, LikedDeal, SavedFavorite } from '@flightwatc
 import { translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
+import {
+  listGuestFlightFavorites,
+  listGuestLikedDeals,
+  removeGuestFlightFavorite,
+  unlikeGuestDeal,
+} from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
 import { DealCard } from '../components/DealCard'
 import { HeartIcon } from '../components/HeartIcon'
@@ -26,7 +32,7 @@ import { colors, fonts, shadow, spacing, type } from '../theme'
 export function FavoritesScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { viewUser, signInWithGoogle } = useAuth()
+  const { viewUser, signInWithGoogle, isGuest } = useAuth()
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
   const [refreshing, setRefreshing] = useState(false)
@@ -43,12 +49,17 @@ export function FavoritesScreen() {
     setRefreshing(true)
     setError(null)
     try {
-      const [list, deals] = await Promise.all([
-        getApi().getFavorites(),
-        getApi().getLikedDeals(),
-      ])
-      setFavorites(Array.isArray(list) ? list : [])
-      setLikedDeals(Array.isArray(deals) ? deals : [])
+      if (__DEV__ && isGuest) {
+        setFavorites(listGuestFlightFavorites())
+        setLikedDeals(listGuestLikedDeals())
+      } else {
+        const [list, deals] = await Promise.all([
+          getApi().getFavorites(),
+          getApi().getLikedDeals(),
+        ])
+        setFavorites(Array.isArray(list) ? list : [])
+        setLikedDeals(Array.isArray(deals) ? deals : [])
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
       setFavorites([])
@@ -56,7 +67,7 @@ export function FavoritesScreen() {
     } finally {
       setRefreshing(false)
     }
-  }, [viewUser])
+  }, [viewUser, isGuest])
 
   useFocusEffect(
     useCallback(() => {
@@ -73,7 +84,8 @@ export function FavoritesScreen() {
 
   const remove = async (id: string) => {
     try {
-      await getApi().deleteFavorite(id)
+      if (__DEV__ && isGuest) removeGuestFlightFavorite(id)
+      else await getApi().deleteFavorite(id)
       await load()
     } catch {
       /* ignore */
@@ -82,7 +94,8 @@ export function FavoritesScreen() {
 
   const unlikeDeal = async (dealId: string) => {
     try {
-      await getApi().unlikeDeal(dealId)
+      if (__DEV__ && isGuest) unlikeGuestDeal(dealId)
+      else await getApi().unlikeDeal(dealId)
       setLikedDeals((prev) => prev.filter((d) => d.deal_id !== dealId))
     } catch {
       /* ignore */

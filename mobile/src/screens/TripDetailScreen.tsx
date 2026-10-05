@@ -18,6 +18,12 @@ import type { PlannedTripDetail, TripProposal } from '@flightwatcher/shared'
 import { formatDateFr } from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
+import {
+  acceptGuestProposal,
+  getGuestTrip,
+  rejectGuestProposal,
+  scanGuestTrip,
+} from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
 import { Button } from '../components/ui/Button'
 import type { RootStackParamList } from '../../App'
@@ -27,7 +33,7 @@ export function TripDetailScreen() {
   const insets = useSafeAreaInsets()
   const route = useRoute<RouteProp<RootStackParamList, 'TripDetail'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { user } = useAuth()
+  const { viewUser, isGuest } = useAuth()
   const tripId = route.params.tripId
 
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
@@ -39,7 +45,9 @@ export function TripDetailScreen() {
   const load = useCallback(async () => {
     setError(null)
     try {
-      const detail = await getApi().getPlannedTrip(tripId)
+      const detail =
+        __DEV__ && isGuest ? getGuestTrip(tripId) : await getApi().getPlannedTrip(tripId)
+      if (!detail) throw new Error('Voyage introuvable')
       setTrip(detail)
       navigation.setOptions({ title: detail.name || 'Voyage' })
     } catch (e) {
@@ -47,7 +55,7 @@ export function TripDetailScreen() {
     } finally {
       setLoading(false)
     }
-  }, [tripId, navigation])
+  }, [tripId, navigation, isGuest])
 
   useFocusEffect(
     useCallback(() => {
@@ -56,13 +64,14 @@ export function TripDetailScreen() {
     }, [load]),
   )
 
-  const isOrganizer = !!user && trip?.organizer_id === user.id
+  const isOrganizer = !!viewUser && trip?.organizer_id === viewUser.id
 
   const scan = async () => {
     setScanning(true)
     setError(null)
     try {
-      await getApi().scanPlannedTrip(tripId)
+      if (__DEV__ && isGuest) scanGuestTrip(tripId)
+      else await getApi().scanPlannedTrip(tripId)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan échoué')
@@ -74,7 +83,8 @@ export function TripDetailScreen() {
   const accept = async (id: string) => {
     setActing(id)
     try {
-      await getApi().acceptProposal(id)
+      if (__DEV__ && isGuest) acceptGuestProposal(id)
+      else await getApi().acceptProposal(id)
       await load()
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Acceptation échouée')
@@ -86,7 +96,8 @@ export function TripDetailScreen() {
   const reject = async (id: string) => {
     setActing(id)
     try {
-      await getApi().rejectProposal(id)
+      if (__DEV__ && isGuest) rejectGuestProposal(id)
+      else await getApi().rejectProposal(id)
       await load()
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Refus échoué')
