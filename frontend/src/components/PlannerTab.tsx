@@ -331,6 +331,10 @@ export function PlannerTab() {
           setSelectedTripId(null)
           void load()
         }}
+        onDeleted={() => {
+          setSelectedTripId(null)
+          void load()
+        }}
         onToast={setToast}
       />
     )
@@ -787,11 +791,13 @@ function TripDetailView({
   tripId,
   userId,
   onBack,
+  onDeleted,
   onToast,
 }: {
   tripId: string
   userId: string
   onBack: () => void
+  onDeleted: () => void
   onToast: (msg: string) => void
 }) {
   const { t } = useI18n()
@@ -800,6 +806,7 @@ function TripDetailView({
   const [scanning, setScanning] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -827,7 +834,17 @@ function TripDetailView({
   const scan = async () => {
     setScanning(true)
     try {
-      await getApiClient().scanPlannedTrip(tripId)
+      const scanRes = await getApiClient().scanPlannedTrip(tripId)
+      setTrip((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'planning',
+              proposals: scanRes.proposals || [],
+              proposals_count: (scanRes.proposals || []).length,
+            }
+          : prev,
+      )
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -895,6 +912,21 @@ function TripDetailView({
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
       setMembersBusy(false)
+    }
+  }
+
+  const doDelete = async () => {
+    if (!trip) return
+    if (!window.confirm(t('planner.deleteConfirm', { name: trip.name }))) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await getApiClient().deletePlannedTrip(tripId)
+      onDeleted()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -986,7 +1018,6 @@ function TripDetailView({
             trip={accepted.trip_data}
             onSaveFavorite={() => undefined}
           />
-          {isOrganizer ? <ShareBar onShare={() => void doShare()} encoded={encoded} url={url} t={t} /> : null}
         </section>
       ) : null}
 
@@ -1017,8 +1048,19 @@ function TripDetailView({
         </div>
       ) : null}
 
-      {trip.status === 'locked' && isOrganizer ? (
+      {isOrganizer && (trip.status === 'locked' || !!accepted) ? (
         <ShareBar onShare={() => void doShare()} encoded={encoded} url={url} t={t} />
+      ) : null}
+
+      {isOrganizer ? (
+        <button
+          type="button"
+          disabled={deleting}
+          onClick={() => void doDelete()}
+          className="w-full sm:w-auto text-red-600 font-bold px-5 py-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+        >
+          {deleting ? '…' : t('planner.delete')}
+        </button>
       ) : null}
     </div>
   )

@@ -215,7 +215,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'DELETE' },
       ),
     scanPlannedTrip: (id: string) =>
-      request<{ proposals: TripProposal[]; nombre_requetes: number }>(
+      request<{ proposals: TripProposal[]; nombre_requetes: number; saved?: number }>(
         `/api/planner/trips/${encodeURIComponent(id)}/scan`,
         { method: 'POST', timeoutMs: LONG_REQUEST_TIMEOUT_MS },
       ),

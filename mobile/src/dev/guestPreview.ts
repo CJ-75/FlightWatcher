@@ -349,6 +349,12 @@ export function removeGuestTripMember(
   return cloneTrip(trips[idx])
 }
 
+export function deleteGuestTrip(tripId: string): boolean {
+  const before = trips.length
+  trips = trips.filter((t) => t.id !== tripId)
+  return trips.length < before
+}
+
 export function listGuestLikedDeals(): LikedDeal[] {
   return likedDeals
 }

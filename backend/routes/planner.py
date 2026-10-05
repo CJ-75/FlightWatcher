@@ -49,6 +49,30 @@ def _clamp_passengers(n: Optional[int]) -> int:
     return max(1, min(6, v))
 
 
+def _normalize_arrival(raw: Optional[str]) -> Optional[str]:
+    """One IATA or comma-separated city airports (e.g. LIS,OPO)."""
+    if not raw:
+        return None
+    codes = [
+        c.strip().upper()
+        for c in str(raw).replace(";", ",").split(",")
+        if c.strip()
+    ]
+    bad = [c for c in codes if len(c) != 3 or not c.isalpha()]
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Aéroport(s) d'arrivée invalide(s): {', '.join(bad)}",
+        )
+    return ",".join(codes) if codes else None
+
+
+def _trip_data_json(trip) -> dict:
+    if hasattr(trip, "model_dump"):
+        return trip.model_dump(mode="json")
+    return dict(trip)
+
+
 def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
     return {
         "id": row["id"],
@@ -168,11 +192,9 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
         raise HTTPException(status_code=400, detail="Dates aller et retour requises")
 
     dep = (body.departure_airport or "").strip().upper()
-    arr = (body.arrival_airport or "").strip().upper() or None
-    if len(dep) != 3:
+    arr = _normalize_arrival(body.arrival_airport)
+    if len(dep) != 3 or not dep.isalpha():
         raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
-    if arr and len(arr) != 3:
-        raise HTTPException(status_code=400, detail="Aéroport d'arrivée invalide")
 
     token = secrets.token_hex(16)
     data = {
@@ -232,7 +254,21 @@ async def get_trip(trip_id: str, request: Request):
         None,
     )
     trip["accepted_proposal"] = accepted
-    trip["proposals"] = proposals.data or []
+    props = list(proposals.data or [])
+
+    def _prop_sort_key(p: dict):
+        status_rank = {"accepted": 0, "pending": 1, "rejected": 2}.get(
+            p.get("status"), 9
+        )
+        price = (p.get("trip_data") or {}).get("prix_total")
+        try:
+            price_key = float(price) if price is not None else 1e12
+        except (TypeError, ValueError):
+            price_key = 1e12
+        return (status_rank, price_key, p.get("created_at") or "")
+
+    props.sort(key=_prop_sort_key)
+    trip["proposals"] = props
     trip["members"] = members.data or []
     return trip
 
@@ -248,9 +284,12 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
     if body.name is not None:
         patch["name"] = body.name.strip()
     if body.departure_airport is not None:
-        patch["departure_airport"] = body.departure_airport.strip().upper()
+        dep = body.departure_airport.strip().upper()
+        if len(dep) != 3 or not dep.isalpha():
+            raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
+        patch["departure_airport"] = dep
     if body.arrival_airport is not None:
-        patch["arrival_airport"] = body.arrival_airport.strip().upper() or None
+        patch["arrival_airport"] = _normalize_arrival(body.arrival_airport)
     if body.passengers is not None:
         patch["passengers"] = _clamp_passengers(body.passengers)
     if body.dates_depart is not None:
@@ -402,31 +441,67 @@ async def scan_trip(trip_id: str, request: Request):
         enriched.sort(key=lambda t: t.prix_total)
         top = enriched[:10]
 
-        # Clear previous pending proposals before inserting new batch
+        # Replace previous pending proposals with this scan batch
         supabase.table("trip_proposals").delete().eq("trip_id", trip_id).eq(
             "status", "pending"
         ).execute()
 
-        inserted = []
-        for t in top:
-            row = {
+        rows = [
+            {
                 "trip_id": trip_id,
-                "trip_data": t.model_dump(),
+                "trip_data": _trip_data_json(t),
                 "status": "pending",
             }
-            res = supabase.table("trip_proposals").insert(row).execute()
-            if res.data:
-                inserted.append(res.data[0])
+            for t in top
+        ]
+
+        inserted: list = []
+        if rows:
+            res = supabase.table("trip_proposals").insert(rows).execute()
+            inserted = list(res.data or [])
+            if len(inserted) != len(rows):
+                # Fallback one-by-one if batch partial/empty
+                print(
+                    f"⚠️ Batch insert proposals: {len(inserted)}/{len(rows)} — retry unitaire"
+                )
+                inserted = []
+                for row in rows:
+                    one = supabase.table("trip_proposals").insert(row).execute()
+                    if one.data:
+                        inserted.append(one.data[0])
+                    else:
+                        print(f"❌ Échec insert proposition: {row.get('trip_data', {}).get('destination_code')}")
+
+            if top and not inserted:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Scan OK mais enregistrement des propositions échoué",
+                )
+
+        print(
+            f"✅ Planner scan {trip_id}: {len(inserted)} proposition(s) enregistrée(s) "
+            f"({num_requetes} req Ryanair)"
+        )
 
         supabase.table("planned_trips").update(
             {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
         ).eq("id", trip_id).execute()
 
-        return {"proposals": inserted, "nombre_requetes": num_requetes}
+        return {
+            "proposals": inserted,
+            "nombre_requetes": num_requetes,
+            "saved": len(inserted),
+        }
+    except HTTPException:
+        supabase.table("planned_trips").update(
+            {"status": "draft", "updated_at": datetime.utcnow().isoformat()}
+        ).eq("id", trip_id).execute()
+        raise
     except Exception as e:
         supabase.table("planned_trips").update(
             {"status": "draft", "updated_at": datetime.utcnow().isoformat()}
         ).eq("id", trip_id).execute()
+        print(f"❌ Planner scan échoué {trip_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

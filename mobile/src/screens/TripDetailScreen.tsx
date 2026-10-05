@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext'
 import {
   acceptGuestProposal,
   addGuestTripMember,
+  deleteGuestTrip,
   getGuestTrip,
   rejectGuestProposal,
   removeGuestTripMember,
@@ -45,6 +46,7 @@ export function TripDetailScreen() {
   const [scanning, setScanning] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -82,7 +84,18 @@ export function TripDetailScreen() {
         setTrip(updated)
         navigation.setOptions({ title: updated.name || 'Voyage' })
       } else {
-        await getApi().scanPlannedTrip(tripId)
+        const scanRes = await getApi().scanPlannedTrip(tripId)
+        // Affiche immédiatement les propositions persistées, puis resync
+        setTrip((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'planning',
+                proposals: scanRes.proposals || [],
+                proposals_count: (scanRes.proposals || []).length,
+              }
+            : prev,
+        )
         await load()
       }
     } catch (e) {
@@ -174,6 +187,38 @@ export function TripDetailScreen() {
     }
   }
 
+  const confirmDelete = () => {
+    if (!trip) return
+    Alert.alert(
+      'Supprimer le voyage',
+      `Supprimer « ${trip.name} » ? Cette action est définitive.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => void doDelete(),
+        },
+      ],
+    )
+  }
+
+  const doDelete = async () => {
+    setDeleting(true)
+    try {
+      if (__DEV__ && isGuest) {
+        if (!deleteGuestTrip(tripId)) throw new Error('Voyage introuvable')
+      } else {
+        await getApi().deletePlannedTrip(tripId)
+      }
+      navigation.goBack()
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Suppression échouée')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading && !trip) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
@@ -257,9 +302,6 @@ export function TripDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Proposition acceptée</Text>
           <DestinationCard trip={accepted.trip_data} passengers={trip.passengers} />
-          {isOrganizer ? (
-            <Button label="Partager l’invitation" onPress={() => void shareInvite()} />
-          ) : null}
         </View>
       ) : null}
 
@@ -297,8 +339,22 @@ export function TripDetailScreen() {
         </View>
       ) : null}
 
-      {trip.status === 'locked' && isOrganizer ? (
-        <Button label="Partager l’invitation" onPress={() => void shareInvite()} variant="secondary" />
+      {isOrganizer && (trip.status === 'locked' || !!accepted) ? (
+        <Button label="Partager l’invitation" onPress={() => void shareInvite()} />
+      ) : null}
+
+      {isOrganizer ? (
+        <Pressable
+          onPress={confirmDelete}
+          disabled={deleting}
+          style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
+        >
+          {deleting ? (
+            <ActivityIndicator color={colors.danger} />
+          ) : (
+            <Text style={styles.deleteText}>Supprimer le voyage</Text>
+          )}
+        </Pressable>
       ) : null}
     </ScrollView>
     </View>
@@ -400,4 +456,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorText: { fontFamily: fonts.medium, color: colors.danger, fontSize: 14 },
+  deleteBtn: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.dangerSoft || '#FECACA',
+    backgroundColor: colors.dangerSoft || '#FFF0EE',
+  },
+  deleteText: { fontFamily: fonts.bold, fontSize: 15, color: colors.danger },
 })
