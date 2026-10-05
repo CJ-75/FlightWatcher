@@ -78,9 +78,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   btn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
@@ -90,8 +90,8 @@ const styles = StyleSheet.create({
   },
   btnText: {
     fontFamily: fonts.bold,
-    fontSize: 22,
-    lineHeight: 24,
+    fontSize: 20,
+    lineHeight: 22,
     color: colors.primary,
     includeFontPadding: false,
     marginTop: -1,

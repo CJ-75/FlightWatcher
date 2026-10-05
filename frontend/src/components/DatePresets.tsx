@@ -13,9 +13,7 @@ export function DatePresets({ selected, onChange, onFlexibleClick }: DatePresets
   const { t } = useI18n();
   
   const presets: { key: DatePreset; label: string; icon: string }[] = [
-    { key: 'weekend', label: t('search.preset.weekend'), icon: '📅' },
     { key: 'next-weekend', label: t('search.preset.nextWeekend'), icon: '📆' },
-    { key: 'next-week', label: t('search.preset.nextWeek'), icon: '🗓️' },
     { key: 'flexible', label: t('search.preset.flexible'), icon: '📋' },
   ];
 

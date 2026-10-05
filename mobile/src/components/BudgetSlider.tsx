@@ -111,7 +111,7 @@ export function BudgetSlider({ value, onChange, min = 20, max = 1000, step = 10 
           <View
             style={[
               styles.thumb,
-              { left: Math.max(0, Math.min(width - 28, (pct / 100) * width - 14)) },
+              { left: Math.max(0, Math.min(width - 24, (pct / 100) * width - 12)) },
             ]}
             pointerEvents="none"
           />
@@ -134,17 +134,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepText: {
     fontFamily: fonts.bold,
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 20,
+    lineHeight: 22,
     color: colors.primary,
     includeFontPadding: false,
   },
@@ -157,25 +157,25 @@ const styles = StyleSheet.create({
   },
   value: {
     fontFamily: fonts.extrabold,
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 28,
+    lineHeight: 32,
     letterSpacing: -1,
     color: colors.ink,
     includeFontPadding: false,
   },
   subHint: {
     fontFamily: fonts.medium,
-    fontSize: 11,
+    fontSize: 10,
     color: colors.faint,
     includeFontPadding: false,
     marginTop: -2,
   },
   trackWrap: {
-    height: 40,
+    height: 32,
     justifyContent: 'center',
   },
   track: {
-    height: 8,
+    height: 7,
     borderRadius: 4,
     backgroundColor: colors.primarySoft,
     overflow: 'hidden',
@@ -183,10 +183,10 @@ const styles = StyleSheet.create({
   fill: { height: '100%', borderRadius: 4 },
   thumb: {
     position: 'absolute',
-    top: 6,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    top: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: colors.white,
     borderWidth: 3,
     borderColor: colors.primary,

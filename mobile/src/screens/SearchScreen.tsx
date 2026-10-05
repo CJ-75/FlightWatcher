@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -41,9 +42,7 @@ import { Button } from '../components/ui/Button'
 import { colors, fonts, shadow } from '../theme'
 
 const PRESETS: { id: DatePresetId; label: string; hint: string }[] = [
-  { id: 'weekend', label: 'Ce weekend', hint: 'Sam → Dim' },
-  { id: 'next-weekend', label: 'Weekend prochain', hint: 'Samedi suivant' },
-  { id: 'next-week', label: 'Semaine prochaine', hint: '3 jours (lun–sam)' },
+  { id: 'next-weekend', label: 'Weekend prochain', hint: 'Sam → Dim' },
   { id: 'flexible', label: 'Dates libres', hint: 'Je choisis' },
 ]
 
@@ -52,6 +51,8 @@ const LOADING_MESSAGES = ['On scanne Ryanair…', 'On croise les prix…', 'Pres
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
+  const { height: windowH } = useWindowDimensions()
+  const compact = windowH < 780
 
   const [airport, setAirport] = useState('BVA')
   const [budget, setBudget] = useState(150)
@@ -258,42 +259,47 @@ export function SearchScreen() {
       <View
         style={[
           styles.screen,
-          { paddingTop: insets.top + 8, paddingBottom: 10 },
+          { paddingTop: insets.top + (compact ? 4 : 8), paddingBottom: 8 },
         ]}
       >
-        <View style={styles.header}>
-          <View style={styles.brandRow}>
-            <View style={styles.logoMark}>
-              <Text style={styles.logoLetter}>F</Text>
+        <View style={[styles.header, compact && styles.headerCompact]}>
+          <View style={[styles.brandRow, compact && { marginBottom: 4 }]}>
+            <View style={[styles.logoMark, compact && { width: 30, height: 30, borderRadius: 9 }]}>
+              <Text style={[styles.logoLetter, compact && { fontSize: 15 }]}>F</Text>
             </View>
             <View>
               <Text style={styles.brandName}>FlightWatcher</Text>
-              <Text style={styles.brandTag}>Vols bas prix</Text>
+              {!compact ? <Text style={styles.brandTag}>Vols bas prix</Text> : null}
             </View>
           </View>
-          <Text style={styles.hero}>
-            Weekend{'\n'}
-            <Text style={styles.heroAccent}>pas cher</Text>
+          <Text style={[styles.hero, compact && styles.heroCompact]} numberOfLines={1}>
+            Weekend <Text style={styles.heroAccent}>pas cher</Text>
           </Text>
         </View>
 
-        <View style={styles.cardArea}>
-          <View style={[styles.card, shadow.soft]}>
+        <ScrollView
+          style={styles.cardArea}
+          contentContainerStyle={styles.cardScroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={[styles.card, shadow.soft, compact && styles.cardCompact]}>
             <BudgetSlider value={budget} onChange={setBudget} />
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, compact && styles.dividerCompact]} />
 
             <PassengerStepper value={passengers} onChange={setPassengers} />
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, compact && styles.dividerCompact]} />
 
-            <Text style={styles.label}>Départ</Text>
+            <Text style={[styles.label, compact && styles.labelCompact]}>Départ</Text>
             <AirportPicker compact airports={airports} value={airport} onChange={setAirport} />
 
-            <View style={styles.divider} />
+            <View style={[styles.divider, compact && styles.dividerCompact]} />
 
-            <Text style={styles.label}>Quand</Text>
-            <View style={styles.presetGrid}>
+            <Text style={[styles.label, compact && styles.labelCompact]}>Quand</Text>
+            <View style={styles.presetRow}>
               {PRESETS.map((p) => {
                 const active = preset === p.id
                 return (
@@ -327,7 +333,7 @@ export function SearchScreen() {
                 if (preset === 'flexible') setShowFlexible(true)
                 else setShowHoursList(true)
               }}
-              style={styles.datesRow}
+              style={[styles.datesRow, compact && styles.datesRowCompact]}
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.datesLabel}>
@@ -347,7 +353,7 @@ export function SearchScreen() {
               </Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
 
         <View style={styles.footer}>
           {error ? (
@@ -485,24 +491,34 @@ const styles = StyleSheet.create({
     marginTop: 1,
     includeFontPadding: false,
   },
+  headerCompact: {
+    marginBottom: 4,
+  },
   hero: {
     fontFamily: fonts.extrabold,
-    fontSize: 32,
-    lineHeight: 36,
-    letterSpacing: -1.2,
+    fontSize: 28,
+    lineHeight: 32,
+    letterSpacing: -1,
     color: colors.ink,
     includeFontPadding: false,
+  },
+  heroCompact: {
+    fontSize: 22,
+    lineHeight: 26,
   },
   heroAccent: {
     color: colors.primary,
   },
   cardArea: {
     flex: 1,
+  },
+  cardScroll: {
+    flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingBottom: 4,
   },
   footer: {
-    marginTop: 8,
+    marginTop: 6,
   },
   loadingRoot: {
     flex: 1,
@@ -528,10 +544,15 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: colors.white,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  cardCompact: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderRadius: 18,
   },
   label: {
     fontFamily: fonts.bold,
@@ -539,28 +560,32 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: colors.muted,
     letterSpacing: 0.3,
-    marginBottom: 8,
+    marginBottom: 6,
     textTransform: 'uppercase',
     includeFontPadding: false,
+  },
+  labelCompact: {
+    marginBottom: 4,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.line,
-    marginVertical: 12,
+    marginVertical: 8,
   },
-  presetGrid: {
+  dividerCompact: {
+    marginVertical: 6,
+  },
+  presetRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
   },
   presetCard: {
-    width: '48%',
-    flexGrow: 1,
-    minHeight: 56,
-    borderRadius: 14,
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
     backgroundColor: colors.primarySoft,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     justifyContent: 'center',
   },
   presetCardActive: {
@@ -584,14 +609,18 @@ const styles = StyleSheet.create({
   },
   presetHintActive: { color: 'rgba(255,255,255,0.85)' },
   datesRow: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primarySoft,
-    borderRadius: 14,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     gap: 8,
+  },
+  datesRowCompact: {
+    marginTop: 6,
+    paddingVertical: 7,
   },
   datesLabel: {
     fontFamily: fonts.medium,
