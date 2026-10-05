@@ -181,7 +181,8 @@ export function BookingSas({
             ✈️ Réserver votre vol
           </h2>
           <p className="text-slate-600 font-medium">
-            {cityName} - {trip.prix_total.toFixed(0)}€
+            {cityName} - {trip.prix_total.toFixed(0)}€ / pers.
+            {passengers > 1 ? ` (${Math.round(trip.prix_total * passengers)}€ pour ${passengers})` : ''}
           </p>
         </div>
 

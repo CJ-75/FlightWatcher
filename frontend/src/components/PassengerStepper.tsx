@@ -19,7 +19,7 @@ export function PassengerStepper({
         <label className="text-base sm:text-lg font-bold text-slate-900 block">
           Passagers
         </label>
-        <p className="text-sm text-slate-500 mt-0.5">Adultes · budget = prix total</p>
+        <p className="text-sm text-slate-500 mt-0.5">Adultes · le budget est par personne</p>
       </div>
       <div className="flex items-center gap-3 rounded-full bg-orange-50 px-2 py-1.5">
         <button

@@ -19,9 +19,10 @@ export function BudgetSlider({ value, onChange, min = 20, max = 1000 }: BudgetSl
 
   return (
     <div className="mb-8">
-      <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
+      <label className="text-base sm:text-lg font-bold text-slate-900 mb-1 block">
         {t('search.budget')}
       </label>
+      <p className="text-sm text-slate-500 mb-3 sm:mb-4">{t('search.budget.total')}</p>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

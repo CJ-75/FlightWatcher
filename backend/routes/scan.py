@@ -171,7 +171,11 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
         return InspireResponse(
             resultats=enriched_results,
             nombre_requetes=num_requetes,
-            message=f"{len(enriched_results)} destination(s) trouvée(s) pour {request.budget}€",
+            message=(
+                f"{len(enriched_results)} destination(s) trouvée(s) "
+                f"pour {request.budget}€/pers"
+                f"{f' × {request.passengers or 1}' if (request.passengers or 1) > 1 else ''}"
+            ),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

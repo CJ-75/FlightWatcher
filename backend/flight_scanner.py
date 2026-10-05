@@ -48,11 +48,9 @@ def scanner_vols_api(
     api = Ryanair(currency="EUR")
     resultats = []
     pax = _clamp_passengers(passengers)
-    # Ryanair oneWayFares: adultPaxCount scales fare totals for N adults
+    # budget_max = max per person; Ryanair adultPaxCount returns totals for N adults
     pax_params = {"adultPaxCount": pax} if pax > 1 else None
-    # Multi-pax fares would skew per-seat price history
-    if pax > 1:
-        record_prices = False
+    budget_total = int(budget_max) * pax
 
     if not dates_depart or not dates_retour:
         return [], 0
@@ -60,7 +58,10 @@ def scanner_vols_api(
     destinations_exclues = destinations_exclues or []
     destinations_incluses = destinations_incluses if destinations_incluses is not None else None
 
-    print(f"📥 Étape 1: Récupération de tous les vols aller depuis {aeroport_depart} ({pax} pax)...")
+    print(
+        f"📥 Étape 1: vols aller depuis {aeroport_depart} "
+        f"({pax} pax, budget {budget_max}€/pers → max {budget_total}€)..."
+    )
     tous_vols_aller = []
 
     for date_config in dates_depart:
@@ -72,7 +73,7 @@ def scanner_vols_api(
                 date_to=date_obj,
                 departure_time_from=date_config.heure_min or "00:00",
                 departure_time_to=date_config.heure_max or "23:59",
-                max_price=budget_max,
+                max_price=budget_total,
                 custom_params=pax_params,
             )
             for vol in vols:
@@ -124,7 +125,7 @@ def scanner_vols_api(
                     destination_airport=aeroport_depart,
                     departure_time_from=date_retour_config.heure_min or "00:00",
                     departure_time_to=date_retour_config.heure_max or "23:59",
-                    max_price=budget_max,
+                    max_price=budget_total,
                     custom_params=pax_params,
                 )
 
@@ -138,14 +139,17 @@ def scanner_vols_api(
                         vol_retour_date == date_retour_obj
                         and heure_min <= vol_retour_heure <= heure_max
                     ):
-                        prix_total = vol_aller.price + vol_retour.price
-                        if prix_total <= budget_max and prix_total < meilleur_prix_total:
+                        prix_groupe = vol_aller.price + vol_retour.price
+                        if prix_groupe <= budget_total and prix_groupe < meilleur_prix_total:
                             meilleur_retour = vol_retour
-                            meilleur_prix_total = prix_total
+                            meilleur_prix_total = prix_groupe
             except Exception:
                 continue
 
         if meilleur_retour:
+            # Normalize to per-person so budget / UI stay "par personne"
+            aller_pp = round(vol_aller.price / pax, 2)
+            retour_pp = round(meilleur_retour.price / pax, 2)
             resultats.append(
                 TripResponse(
                     aller=FlightResponse(
@@ -155,7 +159,7 @@ def scanner_vols_api(
                         destination=vol_aller.destination,
                         destinationFull=vol_aller.destinationFull,
                         departureTime=vol_aller.departureTime.isoformat(),
-                        price=vol_aller.price,
+                        price=aller_pp,
                         currency=vol_aller.currency,
                     ),
                     retour=FlightResponse(
@@ -165,10 +169,10 @@ def scanner_vols_api(
                         destination=meilleur_retour.destination,
                         destinationFull=meilleur_retour.destinationFull,
                         departureTime=meilleur_retour.departureTime.isoformat(),
-                        price=meilleur_retour.price,
+                        price=retour_pp,
                         currency=meilleur_retour.currency,
                     ),
-                    prix_total=meilleur_prix_total,
+                    prix_total=round(aller_pp + retour_pp, 2),
                     destination_code=destination_code,
                 )
             )

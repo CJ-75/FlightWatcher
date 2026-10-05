@@ -106,7 +106,11 @@ export function DestinationCard({
         <View style={styles.priceRow}>
           <View>
             <Text style={styles.price}>{Math.round(trip.prix_total)} €</Text>
-            <Text style={styles.priceHint}>total aller-retour</Text>
+            <Text style={styles.priceHint}>
+              {passengers > 1
+                ? `par pers. · ${Math.round(trip.prix_total * passengers)}€ pour ${passengers}`
+                : 'par personne · A/R'}
+            </Text>
           </View>
           {typeof trip.discount_percent === 'number' && trip.discount_percent > 20 ? (
             <View style={styles.discount}>

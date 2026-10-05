@@ -194,7 +194,7 @@ export function ResultsScreen({ route }: Props) {
                   <Text style={styles.summaryValue}>{summary.airport}</Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Budget</Text>
+                  <Text style={styles.summaryLabel}>Budget / pers.</Text>
                   <Text style={styles.summaryValue}>{summary.budget}€</Text>
                 </View>
                 <View style={styles.summaryRow}>
@@ -260,6 +260,7 @@ export function ResultsScreen({ route }: Props) {
         renderItem={({ item }) => (
           <DestinationCard
             trip={item}
+            passengers={passengers}
             isFavorite={isFavorite(item)}
             onFavorite={() => void toggleFavorite(item)}
             onBook={() => setBookingTrip(item)}

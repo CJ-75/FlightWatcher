@@ -17,7 +17,7 @@ export function PassengerStepper({ value, onChange }: Props) {
     <View style={styles.row}>
       <View style={styles.copy}>
         <Text style={styles.label}>Passagers</Text>
-        <Text style={styles.hint}>Adultes · prix total</Text>
+        <Text style={styles.hint}>Adultes · budget = par personne</Text>
       </View>
       <View style={styles.stepper}>
         <Pressable

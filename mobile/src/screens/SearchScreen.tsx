@@ -206,7 +206,7 @@ export function SearchScreen() {
 
       navigation.navigate('Results', {
         trips: result.resultats as EnrichedTripResponse[],
-        title: `${airport} · ${budget}€ · ${passengers}p`,
+        title: `${airport} · ${budget}€/pers · ${passengers}p`,
         searchInfo: {
           airport,
           budget,
@@ -238,7 +238,7 @@ export function SearchScreen() {
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingTitle}>{loadingMsg}</Text>
         <Text style={styles.loadingSub}>
-          {airport} · {budget}€
+          {airport} · {budget}€/pers · {passengers}p
         </Text>
       </View>
     )

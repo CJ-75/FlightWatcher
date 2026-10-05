@@ -97,7 +97,7 @@ export function RouletteModal({
 
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           {affordable.length === 0 ? (
-            <Text style={styles.empty}>Aucune destination sous {budget}€</Text>
+            <Text style={styles.empty}>Aucune destination sous {budget}€ / pers.</Text>
           ) : selected ? (
             <View style={spinning ? styles.spinning : undefined}>
               <DestinationCard

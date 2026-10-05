@@ -30,7 +30,7 @@ class ScanRequest(BaseModel):
     aeroport_depart: str = "BVA"  # Code IATA de l'aéroport de départ
     dates_depart: List[DateAvecHoraire]  # Dates avec horaires individuels
     dates_retour: List[DateAvecHoraire]  # Dates avec horaires individuels
-    budget_max: Optional[int] = 200  # Prix max pour le total (aller + retour)
+    budget_max: Optional[int] = 200  # Prix max aller-retour PAR PERSONNE
     limite_allers: Optional[int] = 50  # Nombre max d'allers à traiter pour les retours
     destinations_exclues: Optional[List[str]] = []  # Codes IATA des destinations à exclure
     destinations_incluses: Optional[List[str]] = None  # Codes IATA des destinations à inclure (si None, toutes sauf exclues)
@@ -57,7 +57,7 @@ class AutoCheckResponse(BaseModel):
 
 
 class InspireRequest(BaseModel):
-    budget: int
+    budget: int  # Max aller-retour PAR PERSONNE
     date_preset: str  # 'weekend', 'next-weekend', 'next-week', 'flexible'
     departure: str  # Code aéroport
     flexible_dates: Optional[Dict[str, List[DateAvecHoraire]]] = None  # Dates avec horaires individuels (pour tous les presets maintenant)

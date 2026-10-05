@@ -84,7 +84,10 @@ export function BookingSheet({
         <View style={styles.handle} />
         <Text style={styles.title}>Réserver {city}</Text>
         <Text style={styles.sub}>
-          {Math.round(trip.prix_total)}€ · {trip.aller.origin} → {trip.destination_code}
+          {Math.round(trip.prix_total)}€ / pers.
+          {passengers > 1 ? ` · ${Math.round(trip.prix_total * passengers)}€ pour ${passengers}` : ''}
+          {' · '}
+          {trip.aller.origin} → {trip.destination_code}
         </Text>
 
         <View style={styles.partner}>

@@ -39,6 +39,7 @@ export interface ScanRequest {
   aeroport_depart?: string
   dates_depart: DateAvecHoraire[]
   dates_retour: DateAvecHoraire[]
+  /** Max round-trip price PER PERSON */
   budget_max?: number
   limite_allers?: number
   destinations_exclues?: string[]
@@ -62,6 +63,7 @@ export interface EnrichedTripResponse extends TripResponse {
 }
 
 export interface InspireRequest {
+  /** Max round-trip price PER PERSON */
   budget: number
   date_preset: 'weekend' | 'next-weekend' | 'next-week' | 'flexible'
   departure: string

@@ -766,7 +766,7 @@ function Dashboard() {
                       </div>
                       <div className="flex items-start gap-2">
                         <span className="font-bold text-primary-700">{t('results.budget')}</span>
-                        <span className="text-slate-700">{lastSearchInfo.budget}€</span>
+                        <span className="text-slate-700">{lastSearchInfo.budget}€ / pers.</span>
                       </div>
                       <div className="flex items-start gap-2">
                         <span className="font-bold text-primary-700">Passagers:</span>
