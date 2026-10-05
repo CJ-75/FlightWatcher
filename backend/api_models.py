@@ -34,6 +34,7 @@ class ScanRequest(BaseModel):
     limite_allers: Optional[int] = 50  # Nombre max d'allers à traiter pour les retours
     destinations_exclues: Optional[List[str]] = []  # Codes IATA des destinations à exclure
     destinations_incluses: Optional[List[str]] = None  # Codes IATA des destinations à inclure (si None, toutes sauf exclues)
+    passengers: Optional[int] = 1  # Adultes (Ryanair adultPaxCount), 1–6
 
 
 class ScanResponse(BaseModel):
@@ -62,6 +63,7 @@ class InspireRequest(BaseModel):
     flexible_dates: Optional[Dict[str, List[DateAvecHoraire]]] = None  # Dates avec horaires individuels (pour tous les presets maintenant)
     destinations_exclues: Optional[List[str]] = None
     limite_allers: Optional[int] = None
+    passengers: Optional[int] = 1  # Adultes (Ryanair adultPaxCount), 1–6
 
 
 class EnrichedTripResponse(TripResponse):

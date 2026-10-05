@@ -20,6 +20,14 @@ from api_models import (
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, record_price_history
 
 
+def _clamp_passengers(passengers: Optional[int]) -> int:
+    try:
+        n = int(passengers or 1)
+    except (TypeError, ValueError):
+        n = 1
+    return max(1, min(6, n))
+
+
 def scanner_vols_api(
     aeroport_depart: str,
     dates_depart: List[DateAvecHoraire],
@@ -29,6 +37,7 @@ def scanner_vols_api(
     destinations_exclues: List[str] = None,
     destinations_incluses: List[str] = None,
     record_prices: bool = True,
+    passengers: int = 1,
 ) -> Tuple[List[TripResponse], int]:
     """
     Fonction de scan optimisée :
@@ -38,6 +47,12 @@ def scanner_vols_api(
     """
     api = Ryanair(currency="EUR")
     resultats = []
+    pax = _clamp_passengers(passengers)
+    # Ryanair oneWayFares: adultPaxCount scales fare totals for N adults
+    pax_params = {"adultPaxCount": pax} if pax > 1 else None
+    # Multi-pax fares would skew per-seat price history
+    if pax > 1:
+        record_prices = False
 
     if not dates_depart or not dates_retour:
         return [], 0
@@ -45,7 +60,7 @@ def scanner_vols_api(
     destinations_exclues = destinations_exclues or []
     destinations_incluses = destinations_incluses if destinations_incluses is not None else None
 
-    print(f"📥 Étape 1: Récupération de tous les vols aller depuis {aeroport_depart}...")
+    print(f"📥 Étape 1: Récupération de tous les vols aller depuis {aeroport_depart} ({pax} pax)...")
     tous_vols_aller = []
 
     for date_config in dates_depart:
@@ -58,6 +73,7 @@ def scanner_vols_api(
                 departure_time_from=date_config.heure_min or "00:00",
                 departure_time_to=date_config.heure_max or "23:59",
                 max_price=budget_max,
+                custom_params=pax_params,
             )
             for vol in vols:
                 vol_date = vol.departureTime.date()
@@ -109,6 +125,7 @@ def scanner_vols_api(
                     departure_time_from=date_retour_config.heure_min or "00:00",
                     departure_time_to=date_retour_config.heure_max or "23:59",
                     max_price=budget_max,
+                    custom_params=pax_params,
                 )
 
                 for vol_retour in vols_retour:

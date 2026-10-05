@@ -28,6 +28,7 @@ def generate_cache_key(request: ScanRequest) -> str:
     cache_data = {
         "departure_airport": request.aeroport_depart or "BVA",
         "budget_max": request.budget_max or 200,
+        "passengers": max(1, min(6, int(request.passengers or 1))),
         "dates_depart": [d.model_dump() for d in request.dates_depart],
         "dates_retour": [d.model_dump() for d in request.dates_retour],
         "destinations_exclues": sorted(request.destinations_exclues or []),
@@ -86,6 +87,7 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
             destinations_exclues=request.destinations_exclues or [],
             destinations_incluses=request.destinations_incluses,
             record_prices=True,
+            passengers=request.passengers or 1,
         )
 
         if SUPABASE_AVAILABLE and resultats:
@@ -160,6 +162,7 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
             destinations_exclues=request.destinations_exclues or [],
             destinations_incluses=None,
             record_prices=True,
+            passengers=request.passengers or 1,
         )
 
         enriched_results = enrich_trip_results(resultats, request.departure)
@@ -190,6 +193,7 @@ async def auto_check_flights(request: Request):
             limite_allers=body.get("limite_allers", 50),
             destinations_exclues=body.get("destinations_exclues", []),
             destinations_incluses=body.get("destinations_incluses"),
+            passengers=body.get("passengers", 1),
         )
 
         resultats, num_requetes = scanner_vols_api(
@@ -200,6 +204,7 @@ async def auto_check_flights(request: Request):
             limite_allers=scan_request.limite_allers or 50,
             destinations_exclues=scan_request.destinations_exclues or [],
             destinations_incluses=scan_request.destinations_incluses,
+            passengers=scan_request.passengers or 1,
         )
 
         previous_results = []

@@ -26,6 +26,7 @@ import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/
 export type SearchInfo = {
   airport: string
   budget: number
+  passengers?: number
   datePreset: DatePresetId
   datesDepart: DateAvecHoraire[]
   datesRetour: DateAvecHoraire[]

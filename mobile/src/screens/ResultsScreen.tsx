@@ -74,6 +74,8 @@ export function ResultsScreen({ route }: Props) {
 
   const isFavorite = (trip: EnrichedTripResponse) => favoriteKeys.has(tripFavoriteKey(trip))
 
+  const passengers = searchInfo?.passengers || 1
+
   const buildScanRequest = (): ScanRequest | null => {
     if (!searchInfo) return null
     return {
@@ -81,6 +83,7 @@ export function ResultsScreen({ route }: Props) {
       dates_depart: searchInfo.datesDepart,
       dates_retour: searchInfo.datesRetour,
       budget_max: searchInfo.budget,
+      passengers,
       destinations_exclues:
         searchInfo.excludedDestinations.length > 0
           ? searchInfo.excludedDestinations
@@ -157,6 +160,7 @@ export function ResultsScreen({ route }: Props) {
     return {
       airport: searchInfo.airport,
       budget: searchInfo.budget,
+      passengers: searchInfo.passengers || 1,
       preset: PRESET_LABELS[searchInfo.datePreset] || searchInfo.datePreset,
       datesCount: searchInfo.datesDepart.length + searchInfo.datesRetour.length,
       excluded: searchInfo.excludedDestinations.length,
@@ -192,6 +196,10 @@ export function ResultsScreen({ route }: Props) {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Budget</Text>
                   <Text style={styles.summaryValue}>{summary.budget}€</Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Passagers</Text>
+                  <Text style={styles.summaryValue}>{summary.passengers}</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Période</Text>
@@ -268,6 +276,7 @@ export function ResultsScreen({ route }: Props) {
 
       <BookingSheet
         trip={bookingTrip}
+        passengers={passengers}
         searchEventId={searchInfo?.searchEventId}
         onClose={() => setBookingTrip(null)}
         onSaveFavorite={

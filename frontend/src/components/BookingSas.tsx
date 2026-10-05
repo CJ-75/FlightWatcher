@@ -5,6 +5,7 @@ import { getSessionId } from '../utils/session';
 
 interface BookingSasProps {
   trip: EnrichedTripResponse;
+  passengers?: number;
   onClose: () => void;
   onSaveFavorite: () => void;
   searchEventId?: string | null; // ID de l'événement de recherche associé
@@ -23,48 +24,44 @@ interface Partner {
   name: string;
   logo: string;
   description: string;
-  redirectUrl: (trip: EnrichedTripResponse) => string;
+  redirectUrl: (trip: EnrichedTripResponse, passengers?: number) => string;
   priority: number; // Plus bas = affiché en premier
   enabled: boolean;
 }
 
-const partners: Partner[] = [
-  {
-    id: 'ryanair',
-    name: 'Ryanair',
-    logo: '✈️',
-    description: 'Réservez directement sur le site officiel',
-    redirectUrl: (trip) => {
-      // Construire l'URL Ryanair avec les paramètres du vol
-      const baseUrl = 'https://www.ryanair.com';
-      const origin = trip.aller.origin;
-      const destination = trip.aller.destination;
-      const departureDate = trip.aller.departureTime.split('T')[0]; // Format YYYY-MM-DD
-      const returnDate = trip.retour.departureTime.split('T')[0];
-      
-      // URL de recherche Ryanair (format approximatif, peut nécessiter ajustement selon l'API réelle)
-      // Format: /fr/fr/trip/flights/select?adults=1&teens=0&children=0&infants=0&dateOut=YYYY-MM-DD&dateIn=YYYY-MM-DD&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=XXX&destinationIata=YYY
-      return `${baseUrl}/fr/fr/trip/flights/select?adults=1&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`;
+function buildPartners(passengers: number): Partner[] {
+  const adults = Math.min(6, Math.max(1, passengers || 1));
+  return [
+    {
+      id: 'ryanair',
+      name: 'Ryanair',
+      logo: '✈️',
+      description: 'Réservez directement sur le site officiel',
+      redirectUrl: (trip) => {
+        const baseUrl = 'https://www.ryanair.com';
+        const origin = trip.aller.origin;
+        const destination = trip.aller.destination;
+        const departureDate = trip.aller.departureTime.split('T')[0];
+        const returnDate = trip.retour.departureTime.split('T')[0];
+        return `${baseUrl}/fr/fr/trip/flights/select?adults=${adults}&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`;
+      },
+      priority: 1,
+      enabled: true,
     },
-    priority: 1,
-    enabled: true
-  },
-  // Ajouter d'autres partenaires ici à l'avenir
-  // {
-  //   id: 'skyscanner',
-  //   name: 'Skyscanner',
-  //   logo: '🔍',
-  //   description: 'Comparez les prix sur Skyscanner',
-  //   redirectUrl: (trip) => `https://www.skyscanner.fr/transport/vols/${trip.aller.departureCode}/${trip.aller.destinationCode}/...`,
-  //   priority: 2,
-  //   enabled: false
-  // },
-];
+  ];
+}
 
 // Temps d'affichage avant redirection automatique (en millisecondes)
 const AUTO_REDIRECT_DELAY = 3000; // 3 secondes
 
-export function BookingSas({ trip, onClose, onSaveFavorite, searchEventId }: BookingSasProps) {
+export function BookingSas({
+  trip,
+  passengers = 1,
+  onClose,
+  onSaveFavorite,
+  searchEventId,
+}: BookingSasProps) {
+  const partners = buildPartners(passengers);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [countdown, setCountdown] = useState(AUTO_REDIRECT_DELAY / 1000);
   const [isRedirecting, setIsRedirecting] = useState(false);

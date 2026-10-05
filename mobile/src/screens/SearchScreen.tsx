@@ -33,6 +33,7 @@ import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../../App'
 import { AirportPicker } from '../components/AirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
+import { PassengerStepper } from '../components/PassengerStepper'
 import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { ExcludeDestinationsModal } from '../components/ExcludeDestinationsModal'
 import { HoursSheet } from '../components/HoursSheet'
@@ -54,6 +55,7 @@ export function SearchScreen() {
 
   const [airport, setAirport] = useState('BVA')
   const [budget, setBudget] = useState(150)
+  const [passengers, setPassengers] = useState(1)
   const [preset, setPreset] = useState<DatePresetId>('next-weekend')
   const [presetDates, setPresetDates] = useState<FlexibleDates>(() =>
     generateDatesFromPreset('next-weekend'),
@@ -175,6 +177,7 @@ export function SearchScreen() {
         budget,
         date_preset: preset,
         departure: airport.trim().toUpperCase(),
+        passengers,
         flexible_dates: {
           dates_depart: activeDates.dates_depart,
           dates_retour: activeDates.dates_retour,
@@ -203,10 +206,11 @@ export function SearchScreen() {
 
       navigation.navigate('Results', {
         trips: result.resultats as EnrichedTripResponse[],
-        title: `${airport} · ${budget}€`,
+        title: `${airport} · ${budget}€ · ${passengers}p`,
         searchInfo: {
           airport,
           budget,
+          passengers,
           datePreset: preset,
           datesDepart: activeDates.dates_depart,
           datesRetour: activeDates.dates_retour,
@@ -276,6 +280,10 @@ export function SearchScreen() {
         <View style={styles.cardArea}>
           <View style={[styles.card, shadow.soft]}>
             <BudgetSlider value={budget} onChange={setBudget} />
+
+            <View style={styles.divider} />
+
+            <PassengerStepper value={passengers} onChange={setPassengers} />
 
             <View style={styles.divider} />
 

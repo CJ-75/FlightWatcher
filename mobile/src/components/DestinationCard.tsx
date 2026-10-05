@@ -16,6 +16,7 @@ import { HeartIcon } from './HeartIcon'
 
 interface Props {
   trip: EnrichedTripResponse
+  passengers?: number
   onFavorite?: () => void
   onBook?: () => void
   isFavorite?: boolean
@@ -36,7 +37,13 @@ function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props) {
+export function DestinationCard({
+  trip,
+  passengers = 1,
+  onFavorite,
+  onBook,
+  isFavorite,
+}: Props) {
   const cityName = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
   const imageUrl =
     trip.image_url ||
@@ -48,7 +55,7 @@ export function DestinationCard({ trip, onFavorite, onBook, isFavorite }: Props)
       onBook()
       return
     }
-    await Linking.openURL(buildRyanairBookingUrl(trip))
+    await Linking.openURL(buildRyanairBookingUrl(trip, passengers))
   }
 
   return (

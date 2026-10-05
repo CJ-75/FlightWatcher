@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BudgetSlider } from './BudgetSlider';
+import { PassengerStepper } from './PassengerStepper';
 import { DatePresets, DatePreset } from './DatePresets';
 import { AdvancedOptions } from './AdvancedOptions';
 import { DateWithTimes } from './DateWithTimes';
@@ -18,6 +19,7 @@ interface SimpleSearchProps {
     datePreset: DatePreset | null
     airport: string
     budget: number
+    passengers: number
     datesDepart: DateAvecHoraire[]
     datesRetour: DateAvecHoraire[]
     excludedDestinations: string[]
@@ -75,6 +77,7 @@ export function SimpleSearch({
 }: SimpleSearchProps) {
   const { t } = useI18n();
   const [budget, setBudget] = useState(externalBudget || 100);
+  const [passengers, setPassengers] = useState(1);
   const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -240,6 +243,7 @@ export function SimpleSearch({
         budget,
         date_preset: datePreset,
         departure: selectedAirport,
+        passengers,
         ...(datePreset === 'flexible' ? {
           flexible_dates: {
             dates_depart: flexibleDates.dates_depart,
@@ -296,6 +300,7 @@ export function SimpleSearch({
         datePreset,
         airport: selectedAirport,
         budget,
+        passengers,
         datesDepart: datePreset === 'flexible' ? flexibleDates.dates_depart : presetDates.dates_depart,
         datesRetour: datePreset === 'flexible' ? flexibleDates.dates_retour : presetDates.dates_retour,
         excludedDestinations
@@ -329,6 +334,8 @@ export function SimpleSearch({
       className="max-w-2xl mx-auto bg-white shadow-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 lg:p-10"
     >
       <BudgetSlider value={budget} onChange={handleBudgetChange} />
+
+      <PassengerStepper value={passengers} onChange={setPassengers} />
 
       <div ref={airportSectionRef} className="mb-6 sm:mb-8">
         <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">

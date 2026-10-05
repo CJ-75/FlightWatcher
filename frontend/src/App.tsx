@@ -45,6 +45,7 @@ function Dashboard() {
     datePreset: string | null
     airport: string
     budget: number
+    passengers: number
     datesDepart: DateAvecHoraire[]
     datesRetour: DateAvecHoraire[]
     excludedDestinations: string[]
@@ -134,6 +135,7 @@ function Dashboard() {
         dates_depart: lastSearchInfo.datesDepart,
         dates_retour: lastSearchInfo.datesRetour,
         budget_max: lastSearchInfo.budget,
+        passengers: lastSearchInfo.passengers || 1,
         limite_allers: limiteAllers,
         destinations_exclues: lastSearchInfo.excludedDestinations.length > 0 ? lastSearchInfo.excludedDestinations : undefined
       }
@@ -536,6 +538,7 @@ function Dashboard() {
     datePreset: string | null
     airport: string
     budget: number
+    passengers: number
     datesDepart: DateAvecHoraire[]
     datesRetour: DateAvecHoraire[]
     excludedDestinations: string[]
@@ -550,6 +553,7 @@ function Dashboard() {
         dates_depart: searchInfo.datesDepart,
         dates_retour: searchInfo.datesRetour,
         budget_max: searchInfo.budget,
+        passengers: searchInfo.passengers || 1,
         limite_allers: limiteAllers,
         destinations_exclues: searchInfo.excludedDestinations.length > 0 ? searchInfo.excludedDestinations : undefined
       }
@@ -765,6 +769,10 @@ function Dashboard() {
                         <span className="text-slate-700">{lastSearchInfo.budget}€</span>
                       </div>
                       <div className="flex items-start gap-2">
+                        <span className="font-bold text-primary-700">Passagers:</span>
+                        <span className="text-slate-700">{lastSearchInfo.passengers || 1}</span>
+                      </div>
+                      <div className="flex items-start gap-2">
                         <span className="font-bold text-primary-700">{t('results.period')}</span>
                         <span className="text-slate-700">
                           {lastSearchInfo.datePreset === 'weekend' ? t('search.preset.weekend') :
@@ -871,6 +879,7 @@ function Dashboard() {
       {bookingTrip && (
         <BookingSas
           trip={bookingTrip}
+          passengers={lastSearchInfo?.passengers || currentRequest?.passengers || 1}
           onClose={() => setBookingTrip(null)}
           onSaveFavorite={() => {
             handleSimpleSaveFavorite(bookingTrip)
@@ -1606,7 +1615,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     const departureDate = favorite.trip.aller.departureTime.split('T')[0] // Format YYYY-MM-DD
     const returnDate = favorite.trip.retour.departureTime.split('T')[0]
     
-    return `${baseUrl}/fr/fr/trip/flights/select?adults=1&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`
+    const adults = Math.min(6, Math.max(1, favorite.searchRequest?.passengers || 1))
+    return `${baseUrl}/fr/fr/trip/flights/select?adults=${adults}&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`
   }
 
   // Fonction pour ouvrir BookingSas avec le favori (comme dans les résultats de recherche)

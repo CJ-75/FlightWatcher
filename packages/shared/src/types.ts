@@ -43,6 +43,8 @@ export interface ScanRequest {
   limite_allers?: number
   destinations_exclues?: string[]
   destinations_incluses?: string[] | null
+  /** Adult passengers (Ryanair adultPaxCount). Default 1. */
+  passengers?: number
 }
 
 export interface Airport {
@@ -69,6 +71,8 @@ export interface InspireRequest {
   }
   destinations_exclues?: string[]
   limite_allers?: number
+  /** Adult passengers (Ryanair adultPaxCount). Default 1. */
+  passengers?: number
 }
 
 export interface InspireResponse {

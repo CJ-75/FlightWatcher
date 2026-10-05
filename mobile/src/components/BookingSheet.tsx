@@ -8,6 +8,7 @@ import { colors, fonts, shadow } from '../theme'
 
 type Props = {
   trip: EnrichedTripResponse | null
+  passengers?: number
   searchEventId?: string | null
   onClose: () => void
   onSaveFavorite?: () => void
@@ -15,7 +16,13 @@ type Props = {
 
 const DELAY = 3
 
-export function BookingSheet({ trip, searchEventId, onClose, onSaveFavorite }: Props) {
+export function BookingSheet({
+  trip,
+  passengers = 1,
+  searchEventId,
+  onClose,
+  onSaveFavorite,
+}: Props) {
   const insets = useSafeAreaInsets()
   const [countdown, setCountdown] = useState(DELAY)
   const [redirecting, setRedirecting] = useState(false)
@@ -48,7 +55,7 @@ export function BookingSheet({ trip, searchEventId, onClose, onSaveFavorite }: P
     if (!trip || tracked.current) return
     tracked.current = true
     setRedirecting(true)
-    const url = buildRyanairBookingUrl(trip)
+    const url = buildRyanairBookingUrl(trip, passengers)
     void getApi()
       .trackBookingSasEvent({
         trip,
