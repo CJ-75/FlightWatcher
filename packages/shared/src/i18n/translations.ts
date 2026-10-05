@@ -178,8 +178,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'saved.noSearchToSave': 'Aucune recherche à sauvegarder. Veuillez d\'abord effectuer une recherche.',
     'saved.loginRequired': 'Veuillez vous connecter pour sauvegarder une recherche',
     
-    // User Profile
-    'profile.title': '👤 Mon Profil',
+    // User Profile / Account
+    'nav.account': 'Compte',
+    'profile.title': 'Mon compte',
+    'profile.guestMode': 'Mode invité',
     'profile.homeAirport': 'Aéroport de départ par défaut',
     'profile.homeAirportPlaceholder': 'Ex: BVA, MRS, NCE...',
     'profile.homeAirportHelp': 'Code IATA de votre aéroport de départ préféré (3 lettres)',
@@ -187,6 +189,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.save': 'Enregistrer',
     'profile.saved': 'Profil enregistré avec succès',
     'profile.error': 'Erreur lors de l\'enregistrement',
+    'profile.guest.title': 'Connecte-toi',
+    'profile.guest.lead': 'Pour synchroniser favoris, voyages et recherches sur tous tes appareils.',
+    'profile.guest.cta': 'Continuer avec Google',
+    'profile.guest.hint': 'Gratuit · connexion sécurisée',
     
     // Language
     'language.switch': 'Changer la langue',
@@ -370,8 +376,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'saved.noSearchToSave': 'No search to save. Please perform a search first.',
     'saved.loginRequired': 'Please sign in to save a search',
     
-    // User Profile
-    'profile.title': '👤 My Profile',
+    // User Profile / Account
+    'nav.account': 'Account',
+    'profile.title': 'My account',
+    'profile.guestMode': 'Guest mode',
     'profile.homeAirport': 'Default departure airport',
     'profile.homeAirportPlaceholder': 'Ex: BVA, MRS, NCE...',
     'profile.homeAirportHelp': 'IATA code of your preferred departure airport (3 letters)',
@@ -379,6 +387,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.save': 'Save',
     'profile.saved': 'Profile saved successfully',
     'profile.error': 'Error saving profile',
+    'profile.guest.title': 'Sign in',
+    'profile.guest.lead': 'To sync favorites, trips and searches across your devices.',
+    'profile.guest.cta': 'Continue with Google',
+    'profile.guest.hint': 'Free · secure sign-in',
     
     // Language
     'language.switch': 'Switch language',
