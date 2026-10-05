@@ -8,7 +8,7 @@ import type {
   TripProposal,
 } from '../types'
 import { getApiClient } from '../utils/apiClient'
-import { getCurrentUser } from '../lib/supabase'
+import { getCurrentUser, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
 import { BudgetSlider } from './BudgetSlider'
@@ -36,6 +36,89 @@ async function shareInvite(name: string, token: string) {
   return 'copied'
 }
 
+function PlannerGuestLanding() {
+  const { t } = useI18n()
+  const [signingIn, setSigningIn] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const steps = [
+    t('planner.guest.step1'),
+    t('planner.guest.step2'),
+    t('planner.guest.step3'),
+  ]
+
+  const onCta = async () => {
+    setError(null)
+    setSigningIn(true)
+    try {
+      sessionStorage.setItem('fw_active_tab', 'planner')
+    } catch {
+      /* ignore */
+    }
+    const { error: err } = await signInWithGoogle()
+    if (err) {
+      setError(err.message)
+      setSigningIn(false)
+    }
+  }
+
+  return (
+    <div className="max-w-xl mx-auto px-1">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-3xl shadow-xl overflow-hidden"
+      >
+        <div className="bg-gradient-to-br from-orange-50 to-white px-6 sm:px-8 pt-8 pb-6 text-center">
+          <div className="mx-auto mb-5 w-16 h-16 rounded-2xl bg-primary-500 text-white flex items-center justify-center shadow-lg">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z" />
+            </svg>
+          </div>
+          <p className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-2">
+            {t('nav.planner')}
+          </p>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            {t('planner.guest.title')}
+          </h2>
+          <p className="mt-3 text-slate-500 text-sm sm:text-base leading-relaxed">
+            {t('planner.guest.lead')}
+          </p>
+        </div>
+
+        <ol className="px-6 sm:px-8 py-6 space-y-3">
+          {steps.map((label, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="shrink-0 w-8 h-8 rounded-full bg-orange-50 text-primary-600 font-black text-sm flex items-center justify-center">
+                {i + 1}
+              </span>
+              <span className="pt-1.5 font-semibold text-slate-800 text-sm sm:text-base">
+                {label}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="px-6 sm:px-8 pb-8">
+          <button
+            type="button"
+            disabled={signingIn}
+            onClick={() => void onCta()}
+            className="w-full bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl disabled:opacity-60 shadow-md"
+          >
+            {signingIn ? t('auth.signInProgressLong') : t('planner.guest.cta')}
+          </button>
+          {error ? (
+            <p className="mt-3 text-sm text-red-600 font-medium text-center">{error}</p>
+          ) : (
+            <p className="mt-3 text-xs text-slate-400 text-center">{t('planner.guest.hint')}</p>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Brouillon',
   scanning: 'Scan…',
@@ -46,6 +129,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function PlannerTab() {
   const { t } = useI18n()
   const [userId, setUserId] = useState<string | null>(null)
+  const [authReady, setAuthReady] = useState(false)
   const [trips, setTrips] = useState<PlannedTrip[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +138,17 @@ export function PlannerTab() {
   const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
-    void getCurrentUser().then((u) => setUserId(u?.id ?? null))
+    void getCurrentUser().then((u) => {
+      setUserId(u?.id ?? null)
+      setAuthReady(true)
+    })
+    const unsub = onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null)
+      setAuthReady(true)
+    })
+    return () => {
+      unsub?.()
+    }
   }, [])
 
   const load = useCallback(async () => {
@@ -86,19 +180,17 @@ export function PlannerTab() {
     return () => clearTimeout(id)
   }, [toast])
 
-  if (!userId) {
+  if (!authReady) {
     return (
-      <div className="max-w-lg mx-auto text-center py-16 px-4">
-        <h2 className="text-2xl font-black text-slate-900 mb-2">{t('nav.planner')}</h2>
-        <p className="text-slate-500 mb-6">{t('planner.loginRequired')}</p>
-        <a
-          href="/login"
-          className="inline-block bg-primary-500 text-white font-bold px-6 py-3 rounded-xl"
-        >
-          {t('auth.signIn')}
-        </a>
+      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4" />
+        <p className="font-medium">{t('app.loading')}</p>
       </div>
     )
+  }
+
+  if (!userId) {
+    return <PlannerGuestLanding />
   }
 
   if (selectedTripId) {

@@ -34,7 +34,18 @@ type Tab = 'search' | 'deals' | 'planner' | 'saved'
 
 function Dashboard() {
   const { t } = useI18n()
-  const [activeTab, setActiveTab] = useState<Tab>('search')
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    try {
+      const saved = sessionStorage.getItem('fw_active_tab')
+      if (saved === 'planner' || saved === 'deals' || saved === 'saved' || saved === 'search') {
+        sessionStorage.removeItem('fw_active_tab')
+        return saved
+      }
+    } catch {
+      /* ignore */
+    }
+    return 'search'
+  })
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])

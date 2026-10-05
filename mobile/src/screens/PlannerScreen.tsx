@@ -89,20 +89,7 @@ export function PlannerScreen() {
   )
 
   if (!user) {
-    return (
-      <View style={styles.root}>
-        <LinearGradient
-          colors={['#FFE8DC', '#FFF9F5']}
-          locations={[0, 0.35]}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.centered, { paddingTop: insets.top + 40, paddingHorizontal: 24 }]}>
-          <Text style={styles.title}>Planner</Text>
-          <Text style={styles.subtitle}>Connecte-toi pour créer et gérer des voyages.</Text>
-          <Text style={styles.loginHintText}>Ouvre l’onglet Compte pour te connecter</Text>
-        </View>
-      </View>
-    )
+    return <PlannerGuestLanding insetsTop={insets.top} insetsBottom={insets.bottom} />
   }
 
   return (
@@ -204,6 +191,87 @@ export function PlannerScreen() {
           navigation.navigate('TripDetail', { tripId: id })
         }}
       />
+    </View>
+  )
+}
+
+function PlannerGuestLanding({
+  insetsTop,
+  insetsBottom,
+}: {
+  insetsTop: number
+  insetsBottom: number
+}) {
+  const { signInWithGoogle } = useAuth()
+  const [loginLoading, setLoginLoading] = useState(false)
+
+  const onLogin = async () => {
+    setLoginLoading(true)
+    const { error: err } = await signInWithGoogle()
+    if (err && __DEV__) console.warn('[auth] signIn', err.message)
+    setLoginLoading(false)
+  }
+
+  const steps = [
+    'Crée le voyage — dates, budget, voyageurs',
+    'Scanne Ryanair et accepte la meilleure offre',
+    'Partage le lien d’invitation',
+  ]
+
+  return (
+    <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
+      <LinearGradient
+        colors={['#FFE8DC', '#FFF9F5']}
+        locations={[0, 0.5]}
+        style={StyleSheet.absoluteFill}
+      />
+      <ScrollView
+        contentContainerStyle={styles.guestContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.guestCard, shadow.soft]}>
+          <View style={styles.guestIcon}>
+            <Text style={styles.guestIconText}>📅</Text>
+          </View>
+          <Text style={styles.guestKicker}>PLANNER</Text>
+          <Text style={styles.guestTitle}>Organise un voyage à plusieurs</Text>
+          <Text style={styles.guestBody}>
+            Crée un projet, scanne les prix, choisis la proposition, puis envoie un lien à tes potes.
+          </Text>
+
+          <View style={styles.steps}>
+            {steps.map((label, i) => (
+              <View key={i} style={styles.stepRow}>
+                <View style={styles.stepNum}>
+                  <Text style={styles.stepNumText}>{i + 1}</Text>
+                </View>
+                <Text style={styles.stepLabel}>{label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Pressable
+            onPress={() => void onLogin()}
+            disabled={loginLoading}
+            style={({ pressed }) => [
+              styles.googleBtn,
+              pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+            ]}
+          >
+            {loginLoading ? (
+              <ActivityIndicator color={colors.ink} />
+            ) : (
+              <>
+                <View style={styles.gMark}>
+                  <Text style={styles.gLetter}>G</Text>
+                </View>
+                <Text style={styles.googleLabel}>Continuer avec Google</Text>
+              </>
+            )}
+          </Pressable>
+          <Text style={styles.guestHint}>Gratuit · tes voyages restent privés</Text>
+        </View>
+      </ScrollView>
     </View>
   )
 }
@@ -455,11 +523,115 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     color: colors.primaryInk,
     textAlign: 'center',
+  },
+  guestContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  guestCard: {
     backgroundColor: colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 26,
+    alignItems: 'center',
+  },
+  guestIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  guestIconText: { fontSize: 28 },
+  guestKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  guestTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.6,
+    color: colors.ink,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  guestBody: {
+    marginTop: 10,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.muted,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  steps: { alignSelf: 'stretch', marginTop: 20, gap: 10 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepNum: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
-    overflow: 'hidden',
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumText: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.primaryInk },
+  stepLabel: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+    lineHeight: 19,
+  },
+  googleBtn: {
+    marginTop: 22,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 18,
+  },
+  gMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gLetter: {
+    fontFamily: fonts.extrabold,
+    color: '#4285F4',
+    fontSize: 14,
+    lineHeight: 18,
+    includeFontPadding: false,
+  },
+  googleLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  guestHint: {
+    marginTop: 16,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.faint,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   modalHeader: {
     flexDirection: 'row',
