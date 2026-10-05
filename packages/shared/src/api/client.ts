@@ -8,6 +8,7 @@ import type {
   ScanResponse,
   SavedFavorite,
   SavedSearch,
+  TravelDeal,
   TripResponse,
 } from '../types'
 
@@ -160,6 +161,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
     supabaseStatus: () =>
       request<{ available: boolean }>('/api/supabase/status'),
+
+    getDeals: () => request<TravelDeal[]>('/api/deals'),
+    getDeal: (id: string) =>
+      request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
   }
 }
 

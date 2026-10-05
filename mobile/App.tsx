@@ -17,6 +17,8 @@ import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
 import { ResultsScreen } from './src/screens/ResultsScreen'
+import { DealsScreen } from './src/screens/DealsScreen'
+import { DealDetailScreen } from './src/screens/DealDetailScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
@@ -42,10 +44,14 @@ export type RootStackParamList = {
     title?: string
     searchInfo?: SearchInfo
   }
+  DealDetail: {
+    dealId: string
+  }
 }
 
 export type MainTabParamList = {
   Search: undefined
+  Deals: undefined
   Favorites: undefined
   Profile: undefined
 }
@@ -99,6 +105,11 @@ function MainTabs() {
         options={{ title: 'Recherche', headerShown: false }}
       />
       <Tab.Screen
+        name="Deals"
+        component={DealsScreen}
+        options={{ title: 'Deals', headerShown: false }}
+      />
+      <Tab.Screen
         name="Favorites"
         component={FavoritesScreen}
         options={{ title: 'Favoris', headerShown: false }}
@@ -137,6 +148,23 @@ function RootNavigator() {
             options={{
               headerShown: true,
               title: 'Résultats',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
+          />
+          <Stack.Screen
+            name="DealDetail"
+            component={DealDetailScreen}
+            options={{
+              headerShown: true,
+              title: 'Deal',
               headerStyle: { backgroundColor: colors.canvas },
               headerTintColor: colors.primary,
               headerTitleStyle: {

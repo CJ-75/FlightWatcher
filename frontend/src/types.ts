@@ -15,4 +15,6 @@ export type {
   SavedSearch,
   SavedFavorite,
   ApiConfig,
+  TravelDeal,
+  DealProviderId,
 } from '@flightwatcher/shared'

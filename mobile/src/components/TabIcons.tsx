@@ -41,6 +41,38 @@ export function SearchTabIcon({ size = 22, color = colors.faint }: IconProps) {
   )
 }
 
+/** Tag / spark for Deals. */
+export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
+  const stroke = Math.max(2, size * 0.1)
+  const tagW = size * 0.72
+  const tagH = size * 0.52
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: tagW,
+          height: tagH,
+          borderRadius: tagH / 2.4,
+          borderWidth: stroke,
+          borderColor: color,
+          transform: [{ rotate: '-18deg' }],
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: size * 0.14,
+          height: size * 0.14,
+          borderRadius: size,
+          backgroundColor: color,
+          right: size * 0.18,
+          top: size * 0.22,
+        }}
+      />
+    </View>
+  )
+}
+
 export function FavoritesTabIcon({ size = 20, color = colors.faint }: IconProps) {
   return <HeartIcon size={size} filled color={color} />
 }
@@ -87,6 +119,8 @@ export function TabBarIcon({
   switch (name) {
     case 'Search':
       return <SearchTabIcon size={size} color={color} focused={focused} />
+    case 'Deals':
+      return <DealsTabIcon size={size} color={color} focused={focused} />
     case 'Favorites':
       return <FavoritesTabIcon size={size - 2} color={color} focused={focused} />
     case 'Profile':

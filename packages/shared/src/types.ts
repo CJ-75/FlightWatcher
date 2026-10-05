@@ -110,3 +110,32 @@ export interface ApiConfig {
   supabase_url?: string
   supabase_anon_key?: string
 }
+
+export type DealProviderId = 'mock' | 'expedia' | 'lastminute'
+
+export interface TravelDealDates {
+  outbound: string
+  inbound: string
+}
+
+/** Weekend pack (flight + hotel) for Deals tab. */
+export interface TravelDeal {
+  id: string
+  title: string
+  city: string
+  country: string
+  image_url: string
+  price_per_person: number
+  currency: string
+  nights: number
+  departure_airport: string
+  dates: TravelDealDates
+  hotel_name?: string
+  hotel_stars?: number
+  board?: string
+  highlights: string[]
+  description: string
+  provider: DealProviderId
+  booking_url: string
+  badge?: string
+}
