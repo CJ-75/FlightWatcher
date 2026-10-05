@@ -4,6 +4,8 @@ import type { TravelDeal } from '../types'
 interface DealDetailModalProps {
   deal: TravelDeal | null
   onClose: () => void
+  liked?: boolean
+  onToggleLike?: () => void
 }
 
 function formatDate(dateStr: string) {
@@ -20,7 +22,25 @@ const PROVIDER_LABEL: Record<string, string> = {
   lastminute: 'lastminute.com',
 }
 
-export function DealDetailModal({ deal, onClose }: DealDetailModalProps) {
+function HeartSvg({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  )
+}
+
+export function DealDetailModal({ deal, onClose, liked, onToggleLike }: DealDetailModalProps) {
   if (!deal) return null
 
   const partner = PROVIDER_LABEL[deal.provider] || 'Partenaire'
@@ -52,13 +72,27 @@ export function DealDetailModal({ deal, onClose }: DealDetailModalProps) {
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/95 text-slate-800 font-bold shadow"
-            >
-              ×
-            </button>
+            <div className="absolute top-3 right-3 flex gap-2">
+              {onToggleLike ? (
+                <button
+                  type="button"
+                  onClick={onToggleLike}
+                  aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                  className={`w-9 h-9 rounded-full shadow flex items-center justify-center ${
+                    liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-600'
+                  }`}
+                >
+                  <HeartSvg filled={!!liked} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-9 h-9 rounded-full bg-white/95 text-slate-800 font-bold shadow"
+              >
+                ×
+              </button>
+            </div>
             <div className="absolute bottom-3 left-4 right-4">
               {deal.badge ? (
                 <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">

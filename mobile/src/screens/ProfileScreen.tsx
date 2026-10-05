@@ -16,42 +16,42 @@ import { Button } from '../components/ui/Button'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function ProfileScreen() {
-  const { user, signOut, signInWithGoogle } = useAuth()
+  const {
+    user,
+    viewUser,
+    signOut,
+    signInWithGoogle,
+    isGuest,
+    appearLoggedOut,
+    setAppearLoggedOut,
+  } = useAuth()
   const insets = useSafeAreaInsets()
   const [loginLoading, setLoginLoading] = useState(false)
 
-  if (!user) {
-    // Only reachable as isGuest (Main requires user || isGuest)
+  // Logged-out landing (real guest landings) for preview / no user
+  if (!viewUser) {
     return (
-      <View style={styles.root}>
+      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
         <LinearGradient
           colors={['#FFE8DC', '#FFF9F5']}
-          locations={[0, 0.4]}
+          locations={[0, 0.45]}
           style={StyleSheet.absoluteFill}
         />
-        <ScrollView
-          contentContainerStyle={{
-            paddingTop: insets.top + spacing.md,
-            paddingBottom: insets.bottom + 100,
-            paddingHorizontal: spacing.xl,
-          }}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.title}>{translate('fr', 'profile.title')}</Text>
-
-          <View style={[styles.card, shadow.soft]}>
-            <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>?</Text>
-            </View>
-            <Text style={styles.name}>Mode invité</Text>
-            <Text style={styles.email}>
-              {__DEV__ ? 'Expo dev — sans compte' : translate('fr', 'profile.guestMode')}
-            </Text>
+        <View style={styles.guestWrap}>
+          <View style={styles.guestIcon}>
+            <View style={styles.guestHead} />
+            <View style={styles.guestShoulders} />
           </View>
+          <Text style={styles.guestKicker}>COMPTE</Text>
+          <Text style={styles.guestTitle}>Connecte-toi</Text>
+          <Text style={styles.guestBody}>
+            Pour synchroniser favoris, voyages et recherches sur tous tes appareils.
+          </Text>
 
           <Pressable
             onPress={async () => {
               setLoginLoading(true)
+              setAppearLoggedOut(false)
               const { error } = await signInWithGoogle()
               if (error && __DEV__) console.warn('[auth] signIn', error.message)
               setLoginLoading(false)
@@ -59,7 +59,6 @@ export function ProfileScreen() {
             disabled={loginLoading}
             style={({ pressed }) => [
               styles.googleBtn,
-              { marginTop: spacing.xl },
               pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
             ]}
           >
@@ -75,20 +74,33 @@ export function ProfileScreen() {
             )}
           </Pressable>
 
-          <Button
-            variant="secondary"
-            label="Quitter le mode invité"
-            onPress={() => void signOut()}
-            style={{ marginTop: spacing.md }}
-          />
-        </ScrollView>
+          {__DEV__ && appearLoggedOut ? (
+            <Pressable
+              onPress={() => setAppearLoggedOut(false)}
+              style={({ pressed }) => [styles.devBtn, pressed && { opacity: 0.75 }]}
+              hitSlop={8}
+            >
+              <Text style={styles.devBtnLabel}>Quitter l’aperçu non connecté</Text>
+            </Pressable>
+          ) : __DEV__ && isGuest ? (
+            <Pressable
+              onPress={() => void signOut()}
+              style={({ pressed }) => [styles.devBtn, pressed && { opacity: 0.75 }]}
+              hitSlop={8}
+            >
+              <Text style={styles.devBtnLabel}>Quitter le mode invité</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.guestHint}>Gratuit · connexion sécurisée</Text>
+          )}
+        </View>
       </View>
     )
   }
 
   const displayName =
-    user.user_metadata?.full_name || user.email?.split('@')[0] || 'Compte'
-  const initial = (displayName[0] || user.email?.[0] || 'U').toUpperCase()
+    user!.user_metadata?.full_name || user!.email?.split('@')[0] || 'Compte'
+  const initial = (displayName[0] || user!.email?.[0] || 'U').toUpperCase()
 
   return (
     <View style={styles.root}>
@@ -117,7 +129,7 @@ export function ProfileScreen() {
             <Text style={styles.avatarText}>{initial}</Text>
           </LinearGradient>
           <Text style={styles.name}>{displayName}</Text>
-          <Text style={styles.email}>{user.email}</Text>
+          <Text style={styles.email}>{user!.email}</Text>
         </View>
 
         <View style={[styles.infoCard, shadow.soft]}>
@@ -127,11 +139,26 @@ export function ProfileScreen() {
           </Text>
         </View>
 
+        {__DEV__ ? (
+          <Pressable
+            onPress={() => setAppearLoggedOut(true)}
+            style={({ pressed }) => [
+              styles.devPreviewBtn,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.devPreviewTitle}>Voir comme non connecté</Text>
+            <Text style={styles.devPreviewSub}>
+              Affiche les landings Compte / Favoris / Planner (dev)
+            </Text>
+          </Pressable>
+        ) : null}
+
         <Button
           variant="secondary"
           label={translate('fr', 'auth.signOut')}
           onPress={() => void signOut()}
-          style={{ marginTop: spacing.xl }}
+          style={{ marginTop: spacing.lg }}
         />
       </ScrollView>
     </View>
@@ -196,7 +223,64 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
   },
+  guestWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    alignItems: 'center',
+  },
+  guestIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 8,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  guestHead: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.white,
+    marginBottom: 4,
+  },
+  guestShoulders: {
+    width: 32,
+    height: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    backgroundColor: colors.white,
+  },
+  guestKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  guestTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.7,
+    color: colors.ink,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  guestBody: {
+    marginTop: 10,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.muted,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
   googleBtn: {
+    marginTop: 28,
     alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
@@ -231,5 +315,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
     includeFontPadding: false,
+  },
+  guestHint: {
+    marginTop: 14,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.faint,
+    textAlign: 'center',
+  },
+  devBtn: {
+    marginTop: 16,
+    paddingVertical: 10,
+  },
+  devBtnLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
+  devPreviewBtn: {
+    marginTop: spacing.xl,
+    backgroundColor: colors.ink,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  devPreviewTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.white,
+    textAlign: 'center',
+  },
+  devPreviewSub: {
+    marginTop: 4,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    textAlign: 'center',
   },
 })

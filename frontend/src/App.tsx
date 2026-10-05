@@ -15,8 +15,11 @@ import { UserMenu } from './components/UserMenu'
 import { getCurrentUser, onAuthStateChange } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DealsTab } from './components/DealsTab'
+import { DealCard } from './components/DealCard'
+import { DealDetailModal } from './components/DealDetailModal'
 import { PlannerTab } from './components/PlannerTab'
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
+import type { LikedDeal, TravelDeal } from './types'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { BookingSas } from './components/BookingSas'
@@ -1631,6 +1634,8 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
+  const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
+  const [selectedLikedDeal, setSelectedLikedDeal] = useState<TravelDeal | null>(null)
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
   const [intervalSeconds, setIntervalSeconds] = useState<Record<string, number>>({})
   const [devMode, setDevModeState] = useState(() => getDevMode())
@@ -1645,9 +1650,16 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
       console.log('🔄 refreshData appelé dans SavedTab');
       const searches = await getSavedSearches()
       const favs = await getFavorites()
-      console.log('✅ Données chargées:', { searches: searches.length, favorites: favs.length });
+      let deals: LikedDeal[] = []
+      try {
+        deals = await getApiClient().getLikedDeals()
+      } catch {
+        deals = []
+      }
+      console.log('✅ Données chargées:', { searches: searches.length, favorites: favs.length, likedDeals: deals.length });
       setSavedSearches(searches)
       setFavorites(favs)
+      setLikedDeals(Array.isArray(deals) ? deals : [])
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
       // Même en cas d'erreur, essayer de charger depuis le cache/localStorage
@@ -1659,6 +1671,16 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
       } catch (fallbackError) {
         console.error('❌ Erreur fallback refreshData:', fallbackError)
       }
+    }
+  }
+
+  const unlikeDeal = async (dealId: string) => {
+    try {
+      await getApiClient().unlikeDeal(dealId)
+      setLikedDeals((prev) => prev.filter((d) => d.deal_id !== dealId))
+      if (selectedLikedDeal?.id === dealId) setSelectedLikedDeal(null)
+    } catch {
+      /* ignore */
     }
   }
 
@@ -2423,6 +2445,43 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
           )}
         </div>
       </motion.div>
+
+      {/* Deals likés */}
+      {likedDeals.length > 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-xl overflow-hidden"
+        >
+          <div className="bg-gradient-to-r from-primary-500 to-primary-700 p-4 sm:p-5 md:p-6">
+            <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2 sm:gap-3">
+              <span>{t('favorites.dealsTitle')}</span>
+              <span className="text-lg sm:text-xl bg-white/20 px-2 sm:px-3 py-1 rounded-full">
+                {likedDeals.length}
+              </span>
+            </h2>
+          </div>
+          <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {likedDeals.map((item) => (
+              <DealCard
+                key={item.id}
+                deal={item.deal}
+                liked
+                onToggleLike={() => void unlikeDeal(item.deal_id)}
+                onClick={() => setSelectedLikedDeal(item.deal)}
+              />
+            ))}
+          </div>
+          {selectedLikedDeal ? (
+            <DealDetailModal
+              deal={selectedLikedDeal}
+              liked
+              onToggleLike={() => void unlikeDeal(selectedLikedDeal.id)}
+              onClose={() => setSelectedLikedDeal(null)}
+            />
+          ) : null}
+        </motion.div>
+      ) : null}
 
       {/* Favoris */}
       <motion.div

@@ -10,42 +10,53 @@ import {
   ScrollView,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useFocusEffect } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { EnrichedTripResponse, SavedFavorite } from '@flightwatcher/shared'
+import type { EnrichedTripResponse, LikedDeal, SavedFavorite } from '@flightwatcher/shared'
 import { translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { DestinationCard } from '../components/DestinationCard'
+import { DealCard } from '../components/DealCard'
 import { HeartIcon } from '../components/HeartIcon'
+import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function FavoritesScreen() {
   const insets = useSafeAreaInsets()
-  const { user, signInWithGoogle, isGuest } = useAuth()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { viewUser, signInWithGoogle } = useAuth()
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
+  const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
 
   const load = useCallback(async () => {
-    if (!user) {
+    if (!viewUser) {
       setFavorites([])
+      setLikedDeals([])
       setRefreshing(false)
       return
     }
     setRefreshing(true)
     setError(null)
     try {
-      const list = await getApi().getFavorites()
+      const [list, deals] = await Promise.all([
+        getApi().getFavorites(),
+        getApi().getLikedDeals(),
+      ])
       setFavorites(Array.isArray(list) ? list : [])
+      setLikedDeals(Array.isArray(deals) ? deals : [])
     } catch (e) {
       setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
       setFavorites([])
+      setLikedDeals([])
     } finally {
       setRefreshing(false)
     }
-  }, [user])
+  }, [viewUser])
 
   useFocusEffect(
     useCallback(() => {
@@ -69,27 +80,18 @@ export function FavoritesScreen() {
     }
   }
 
-  if (!user) {
-    if (isGuest) {
-      return (
-        <View style={styles.root}>
-          <LinearGradient
-            colors={['#FFE8DC', '#FFF9F5']}
-            locations={[0, 0.35]}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[styles.emptyCard, shadow.soft, { margin: spacing.xl, marginTop: insets.top + 48 }]}>
-            <View style={styles.emptyIcon}>
-              <HeartIcon size={28} filled={false} color={colors.primary} />
-            </View>
-            <Text style={styles.emptyTitle}>Aucun favori</Text>
-            <Text style={styles.emptyBody}>
-              Mode invité (dev) — connecte-toi pour synchroniser tes coups de cœur.
-            </Text>
-          </View>
-        </View>
-      )
+  const unlikeDeal = async (dealId: string) => {
+    try {
+      await getApi().unlikeDeal(dealId)
+      setLikedDeals((prev) => prev.filter((d) => d.deal_id !== dealId))
+    } catch {
+      /* ignore */
     }
+  }
+
+  const isEmpty = favorites.length === 0 && likedDeals.length === 0
+
+  if (!viewUser) {
     return (
       <FavoritesGuestLanding
         insetsTop={insets.top}
@@ -122,26 +124,54 @@ export function FavoritesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>{translate('fr', 'favorites.favoritesTitle')}</Text>
+            <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
             <Text style={styles.sub}>
-              {favorites.length} voyage{favorites.length > 1 ? 's' : ''}
+              {favorites.length + likedDeals.length} coup
+              {favorites.length + likedDeals.length > 1 ? 's' : ''} de cœur
             </Text>
+
+            {likedDeals.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  {translate('fr', 'favorites.dealsTitle')}
+                </Text>
+                {likedDeals.map((item) => (
+                  <DealCard
+                    key={item.id}
+                    deal={item.deal}
+                    liked
+                    onToggleLike={() => void unlikeDeal(item.deal_id)}
+                    onPress={() =>
+                      navigation.navigate('DealDetail', { dealId: item.deal_id })
+                    }
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {favorites.length > 0 ? (
+              <Text style={[styles.sectionTitle, { marginBottom: spacing.md }]}>
+                {translate('fr', 'favorites.favoritesTitle')}
+              </Text>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
-          <View style={[styles.emptyCard, shadow.soft]}>
-            <View style={styles.emptyIcon}>
-              <HeartIcon size={28} filled={false} color={colors.primary} />
+          isEmpty ? (
+            <View style={[styles.emptyCard, shadow.soft]}>
+              <View style={styles.emptyIcon}>
+                <HeartIcon size={28} filled={false} color={colors.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {error || translate('fr', 'favorites.empty')}
+              </Text>
+              <Text style={styles.emptyBody}>
+                {error
+                  ? 'Tire pour réessayer.'
+                  : translate('fr', 'favorites.emptyBody')}
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>
-              {error || translate('fr', 'favorites.empty')}
-            </Text>
-            <Text style={styles.emptyBody}>
-              {error
-                ? 'Tire pour réessayer.'
-                : 'Ajoute un voyage depuis les résultats de recherche.'}
-            </Text>
-          </View>
+          ) : null
         }
         renderItem={({ item }) => (
           <View>
@@ -269,6 +299,15 @@ const styles = StyleSheet.create({
   header: { marginBottom: spacing.xl },
   title: { ...type.title },
   sub: { ...type.caption, marginTop: 4, fontFamily: fonts.semibold },
+  section: { marginTop: spacing.xl },
+  sectionTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.ink,
+    letterSpacing: -0.3,
+    marginBottom: spacing.md,
+    marginTop: spacing.lg,
+  },
   emptyCard: {
     marginTop: 40,
     backgroundColor: colors.white,

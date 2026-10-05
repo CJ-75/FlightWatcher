@@ -5,6 +5,8 @@ import type { TravelDeal } from '../types'
 interface DealCardProps {
   deal: TravelDeal
   onClick: () => void
+  liked?: boolean
+  onToggleLike?: () => void
 }
 
 const springConfig = {
@@ -21,7 +23,25 @@ function formatDate(dateStr: string) {
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
 }
 
-export function DealCard({ deal, onClick }: DealCardProps) {
+function HeartSvg({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  )
+}
+
+export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const imageUrl =
     deal.image_url ||
@@ -35,7 +55,7 @@ export function DealCard({ deal, onClick }: DealCardProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      className="rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-lg sm:shadow-xl max-w-sm w-full mx-auto text-left cursor-pointer"
+      className="rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-lg sm:shadow-xl max-w-sm w-full mx-auto text-left cursor-pointer relative"
     >
       <div className="relative w-full h-40 sm:h-48 md:h-56">
         {!imageLoaded && (
@@ -52,6 +72,30 @@ export function DealCard({ deal, onClick }: DealCardProps) {
         {deal.badge ? (
           <span className="absolute top-3 left-3 bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full">
             {deal.badge}
+          </span>
+        ) : null}
+        {onToggleLike ? (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              onToggleLike()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation()
+                e.preventDefault()
+                onToggleLike()
+              }
+            }}
+            aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            className={`absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow ${
+              liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-500'
+            }`}
+          >
+            <HeartSvg filled={!!liked} />
           </span>
         ) : null}
         <div className="absolute bottom-3 left-3 right-3">

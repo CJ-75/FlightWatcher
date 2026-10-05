@@ -15,12 +15,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
+import { useLikedDeals } from '../hooks/useLikedDeals'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
 
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -33,6 +35,7 @@ export function DealsScreen() {
     try {
       const list = await getApi().getDeals()
       setDeals(Array.isArray(list) ? list : [])
+      await refreshLikes()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible de charger les deals')
       setDeals([])
@@ -40,7 +43,7 @@ export function DealsScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [refreshLikes])
 
   useFocusEffect(
     useCallback(() => {
@@ -106,6 +109,8 @@ export function DealsScreen() {
           renderItem={({ item }) => (
             <DealCard
               deal={item}
+              liked={isLiked(item.id)}
+              onToggleLike={() => void toggleLike(item)}
               onPress={() => navigation.navigate('DealDetail', { dealId: item.id })}
             />
           )}

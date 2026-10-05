@@ -7,9 +7,17 @@ interface AuthContextValue {
   user: User | null
   session: Session | null
   loading: boolean
-  /** Dev-only bypass — no real session. */
+  /** Dev-only bypass — no real session, stay in Main tabs. */
   isGuest: boolean
   continueAsGuest: () => void
+  /**
+   * Dev-only: UI pretends the user is logged out (guest landings),
+   * without leaving Main / signing out.
+   */
+  appearLoggedOut: boolean
+  setAppearLoggedOut: (value: boolean) => void
+  /** user unless appearLoggedOut (dev preview). Use for UI gates. */
+  viewUser: User | null
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
@@ -30,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [isGuest, setIsGuest] = useState(false)
+  const [appearLoggedOut, setAppearLoggedOutState] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -100,16 +109,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       continueAsGuest: () => {
         if (!__DEV__) return
         setIsGuest(true)
+        setAppearLoggedOutState(false)
       },
+      appearLoggedOut: __DEV__ ? appearLoggedOut : false,
+      setAppearLoggedOut: (value: boolean) => {
+        if (!__DEV__) return
+        setAppearLoggedOutState(value)
+      },
+      viewUser: __DEV__ && appearLoggedOut ? null : user,
       signInWithGoogle: () => auth.signInWithGoogle(),
       signOut: async () => {
         await auth.signOut()
         setUser(null)
         setSession(null)
         setIsGuest(false)
+        setAppearLoggedOutState(false)
       },
     }),
-    [user, session, loading, isGuest],
+    [user, session, loading, isGuest, appearLoggedOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -9,11 +9,14 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
+import { HeartIcon } from './HeartIcon'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 type Props = {
   deal: TravelDeal
   onPress: () => void
+  liked?: boolean
+  onToggleLike?: () => void
 }
 
 const width = Dimensions.get('window').width
@@ -25,7 +28,7 @@ function formatDate(dateStr: string) {
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
 }
 
-export function DealCard({ deal, onPress }: Props) {
+export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const [failed, setFailed] = useState(false)
   const imageUrl =
     deal.image_url ||
@@ -54,6 +57,22 @@ export function DealCard({ deal, onPress }: Props) {
           <View style={styles.dealBadge}>
             <Text style={styles.dealText}>{deal.badge}</Text>
           </View>
+        ) : null}
+
+        {onToggleLike ? (
+          <Pressable
+            onPress={onToggleLike}
+            hitSlop={10}
+            style={styles.likeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          >
+            <HeartIcon
+              size={20}
+              filled={!!liked}
+              color={liked ? colors.primary : colors.inkSoft}
+            />
+          </Pressable>
         ) : null}
 
         <View style={styles.heroText}>
@@ -130,6 +149,17 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     letterSpacing: 0.2,
+  },
+  likeBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroText: { position: 'absolute', left: 16, right: 16, bottom: 16 },
   city: {

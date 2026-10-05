@@ -2,16 +2,34 @@ import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
+import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { useI18n } from '../contexts/I18nContext'
+import { Toast } from './Toast'
 
 export function DealsTab() {
   const { t } = useI18n()
   const [deals, setDeals] = useState<TravelDeal[]>([])
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<TravelDeal | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  const loadLikes = useCallback(async () => {
+    try {
+      const user = await getCurrentUser()
+      if (!user) {
+        setLikedIds(new Set())
+        return
+      }
+      const ids = await getApiClient().getLikedDealIds()
+      setLikedIds(new Set(Array.isArray(ids) ? ids : []))
+    } catch {
+      setLikedIds(new Set())
+    }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -19,17 +37,52 @@ export function DealsTab() {
     try {
       const list = await getApiClient().getDeals()
       setDeals(Array.isArray(list) ? list : [])
+      await loadLikes()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
       setDeals([])
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [t, loadLikes])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  const toggleLike = async (deal: TravelDeal) => {
+    const user = await getCurrentUser()
+    if (!user) {
+      setToast(t('deals.loginRequired'))
+      return
+    }
+
+    const wasLiked = likedIds.has(deal.id)
+    setLikedIds((prev) => {
+      const next = new Set(prev)
+      if (wasLiked) next.delete(deal.id)
+      else next.add(deal.id)
+      return next
+    })
+
+    try {
+      if (wasLiked) {
+        await getApiClient().unlikeDeal(deal.id)
+        setToast(t('deals.unliked'))
+      } else {
+        await getApiClient().likeDeal(deal)
+        setToast(t('deals.liked'))
+      }
+    } catch {
+      setLikedIds((prev) => {
+        const next = new Set(prev)
+        if (wasLiked) next.add(deal.id)
+        else next.delete(deal.id)
+        return next
+      })
+      setToast(t('app.error'))
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -70,14 +123,32 @@ export function DealsTab() {
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6"
         >
           {deals.map((deal) => (
-            <DealCard key={deal.id} deal={deal} onClick={() => setSelected(deal)} />
+            <DealCard
+              key={deal.id}
+              deal={deal}
+              liked={likedIds.has(deal.id)}
+              onToggleLike={() => void toggleLike(deal)}
+              onClick={() => setSelected(deal)}
+            />
           ))}
         </motion.div>
       )}
 
       {selected ? (
-        <DealDetailModal deal={selected} onClose={() => setSelected(null)} />
+        <DealDetailModal
+          deal={selected}
+          liked={likedIds.has(selected.id)}
+          onToggleLike={() => void toggleLike(selected)}
+          onClose={() => setSelected(null)}
+        />
       ) : null}
+
+      <Toast
+        message={toast || ''}
+        type="info"
+        isVisible={!!toast}
+        onClose={() => setToast(null)}
+      />
     </div>
   )
 }

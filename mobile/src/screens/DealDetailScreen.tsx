@@ -15,6 +15,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { HeartIcon } from '../components/HeartIcon'
+import { useLikedDeals } from '../hooks/useLikedDeals'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
@@ -40,6 +42,7 @@ const PROVIDER_LABEL: Record<string, string> = {
 export function DealDetailScreen({ route }: Props) {
   const { dealId } = route.params
   const insets = useSafeAreaInsets()
+  const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
   const [deal, setDeal] = useState<TravelDeal | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +56,7 @@ export function DealDetailScreen({ route }: Props) {
       try {
         const d = await getApi().getDeal(dealId)
         if (!cancelled) setDeal(d)
+        await refreshLikes()
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Deal introuvable')
@@ -65,7 +69,7 @@ export function DealDetailScreen({ route }: Props) {
     return () => {
       cancelled = true
     }
-  }, [dealId])
+  }, [dealId, refreshLikes])
 
   const openOffer = async () => {
     if (!deal?.booking_url) return
@@ -112,6 +116,19 @@ export function DealDetailScreen({ route }: Props) {
             colors={['transparent', 'rgba(12,18,34,0.75)']}
             style={styles.heroFade}
           />
+          <Pressable
+            onPress={() => void toggleLike(deal)}
+            hitSlop={10}
+            style={[styles.likeBtn, { top: Math.max(insets.top, 12) + 8 }]}
+            accessibilityRole="button"
+            accessibilityLabel={isLiked(deal.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          >
+            <HeartIcon
+              size={22}
+              filled={isLiked(deal.id)}
+              color={isLiked(deal.id) ? colors.primary : colors.ink}
+            />
+          </Pressable>
           <View style={styles.heroCaption}>
             {deal.badge ? (
               <View style={styles.badge}>
@@ -216,6 +233,17 @@ const styles = StyleSheet.create({
   heroFade: {
     ...StyleSheet.absoluteFillObject,
     top: '40%',
+  },
+  likeBtn: {
+    position: 'absolute',
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   fallbackCity: {
     color: colors.white,

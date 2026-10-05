@@ -208,3 +208,11 @@ export interface TravelDeal {
   booking_url: string
   badge?: string
 }
+
+/** Persisted like of a TravelDeal for a user. */
+export interface LikedDeal {
+  id: string
+  deal_id: string
+  deal: TravelDeal
+  created_at: string
+}

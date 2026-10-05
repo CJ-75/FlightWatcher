@@ -6,6 +6,7 @@ import type {
   InspireRequest,
   InspireResponse,
   InvitePreview,
+  LikedDeal,
   PlannedTrip,
   PlannedTripDetail,
   ScanRequest,
@@ -170,6 +171,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
     getDeals: () => request<TravelDeal[]>('/api/deals'),
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
+
+    getLikedDeals: () => request<LikedDeal[]>('/api/liked-deals'),
+    getLikedDealIds: () => request<string[]>('/api/liked-deals/ids'),
+    likeDeal: (deal: TravelDeal) =>
+      request<LikedDeal>('/api/liked-deals', {
+        method: 'POST',
+        body: JSON.stringify(deal),
+      }),
+    unlikeDeal: (dealId: string) =>
+      request<{ success: boolean }>(
+        `/api/liked-deals/${encodeURIComponent(dealId)}`,
+        { method: 'DELETE' },
+      ),
 
     listPlannedTrips: () => request<PlannedTrip[]>('/api/planner/trips'),
     createPlannedTrip: (body: CreatePlannedTripRequest) =>
