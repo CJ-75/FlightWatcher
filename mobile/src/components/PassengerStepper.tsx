@@ -15,10 +15,7 @@ export function PassengerStepper({ value, onChange }: Props) {
 
   return (
     <View style={styles.row}>
-      <View style={styles.copy}>
-        <Text style={styles.label}>Passagers</Text>
-        <Text style={styles.hint}>Adultes · budget = par personne</Text>
-      </View>
+      <Text style={styles.label}>Voyageurs</Text>
       <View style={styles.stepper}>
         <Pressable
           onPress={() => onChange(Math.max(MIN, n - 1))}
@@ -49,23 +46,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  copy: {
-    flex: 1,
-  },
   label: {
+    flex: 1,
     fontFamily: fonts.bold,
     fontSize: 12,
     lineHeight: 16,
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-    includeFontPadding: false,
-  },
-  hint: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.faint,
     includeFontPadding: false,
   },
   stepper: {

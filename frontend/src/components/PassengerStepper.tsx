@@ -15,16 +15,13 @@ export function PassengerStepper({
 
   return (
     <div className="mb-6 sm:mb-8 flex items-center justify-between gap-4">
-      <div>
-        <label className="text-base sm:text-lg font-bold text-slate-900 block">
-          Passagers
-        </label>
-        <p className="text-sm text-slate-500 mt-0.5">Adultes · le budget est par personne</p>
-      </div>
+      <label className="text-base sm:text-lg font-bold text-slate-900 block">
+        Voyageurs
+      </label>
       <div className="flex items-center gap-3 rounded-full bg-orange-50 px-2 py-1.5">
         <button
           type="button"
-          aria-label="Moins de passagers"
+          aria-label="Moins de voyageurs"
           disabled={n <= min}
           onClick={() => onChange(Math.max(min, n - 1))}
           className="w-10 h-10 rounded-full bg-white text-primary-500 text-2xl font-bold leading-none shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition-transform"
@@ -34,7 +31,7 @@ export function PassengerStepper({
         <span className="min-w-[1.5rem] text-center text-xl font-black text-slate-900">{n}</span>
         <button
           type="button"
-          aria-label="Plus de passagers"
+          aria-label="Plus de voyageurs"
           disabled={n >= max}
           onClick={() => onChange(Math.min(max, n + 1))}
           className="w-10 h-10 rounded-full bg-white text-primary-500 text-2xl font-bold leading-none shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition-transform"

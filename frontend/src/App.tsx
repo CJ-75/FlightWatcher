@@ -769,7 +769,7 @@ function Dashboard() {
                         <span className="text-slate-700">{lastSearchInfo.budget}€ / pers.</span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">Passagers:</span>
+                        <span className="font-bold text-primary-700">Voyageurs:</span>
                         <span className="text-slate-700">{lastSearchInfo.passengers || 1}</span>
                       </div>
                       <div className="flex items-start gap-2">
