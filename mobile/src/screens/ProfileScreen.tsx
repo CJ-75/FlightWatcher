@@ -21,23 +21,33 @@ export function ProfileScreen() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   if (!user) {
+    // Only reachable as isGuest (Main requires user || isGuest)
     return (
-      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.root}>
         <LinearGradient
           colors={['#FFE8DC', '#FFF9F5']}
-          locations={[0, 0.45]}
+          locations={[0, 0.4]}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.guestWrap}>
-          <View style={styles.guestIcon}>
-            <View style={styles.guestHead} />
-            <View style={styles.guestShoulders} />
+        <ScrollView
+          contentContainerStyle={{
+            paddingTop: insets.top + spacing.md,
+            paddingBottom: insets.bottom + 100,
+            paddingHorizontal: spacing.xl,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.title}>{translate('fr', 'profile.title')}</Text>
+
+          <View style={[styles.card, shadow.soft]}>
+            <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+              <Text style={[styles.avatarText, { color: colors.primary }]}>?</Text>
+            </View>
+            <Text style={styles.name}>Mode invité</Text>
+            <Text style={styles.email}>
+              {__DEV__ ? 'Expo dev — sans compte' : translate('fr', 'profile.guestMode')}
+            </Text>
           </View>
-          <Text style={styles.guestKicker}>COMPTE</Text>
-          <Text style={styles.guestTitle}>Connecte-toi</Text>
-          <Text style={styles.guestBody}>
-            Pour synchroniser favoris, voyages et recherches sur tous tes appareils.
-          </Text>
 
           <Pressable
             onPress={async () => {
@@ -49,6 +59,7 @@ export function ProfileScreen() {
             disabled={loginLoading}
             style={({ pressed }) => [
               styles.googleBtn,
+              { marginTop: spacing.xl },
               pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
             ]}
           >
@@ -63,8 +74,14 @@ export function ProfileScreen() {
               </>
             )}
           </Pressable>
-          <Text style={styles.guestHint}>Gratuit · connexion sécurisée</Text>
-        </View>
+
+          <Button
+            variant="secondary"
+            label="Quitter le mode invité"
+            onPress={() => void signOut()}
+            style={{ marginTop: spacing.md }}
+          />
+        </ScrollView>
       </View>
     )
   }
@@ -179,65 +196,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
   },
-
-  guestWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-    alignItems: 'center',
-  },
-  guestIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  guestHead: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.white,
-    marginBottom: 4,
-  },
-  guestShoulders: {
-    width: 32,
-    height: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    backgroundColor: colors.white,
-  },
-  guestKicker: {
-    fontFamily: fonts.extrabold,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: colors.primary,
-    marginBottom: 8,
-  },
-  guestTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  guestBody: {
-    marginTop: 10,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.muted,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
   googleBtn: {
-    marginTop: 28,
     alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
@@ -272,12 +231,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
     includeFontPadding: false,
-  },
-  guestHint: {
-    marginTop: 14,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.faint,
-    textAlign: 'center',
   },
 })

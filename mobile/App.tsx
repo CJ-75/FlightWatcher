@@ -135,8 +135,7 @@ function MainTabs() {
 }
 
 function RootNavigator() {
-  const { user, loading } = useAuth()
-  const [guest, setGuest] = React.useState(false)
+  const { user, loading, isGuest } = useAuth()
 
   if (loading) {
     return (
@@ -146,7 +145,7 @@ function RootNavigator() {
     )
   }
 
-  const signedIn = !!user || guest
+  const signedIn = !!user || isGuest
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -206,9 +205,7 @@ function RootNavigator() {
           />
         </>
       ) : (
-        <Stack.Screen name="Login">
-          {() => <LoginScreen onContinueAsGuest={() => setGuest(true)} />}
-        </Stack.Screen>
+        <Stack.Screen name="Login" component={LoginScreen} />
       )}
     </Stack.Navigator>
   )

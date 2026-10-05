@@ -7,6 +7,9 @@ interface AuthContextValue {
   user: User | null
   session: Session | null
   loading: boolean
+  /** Dev-only bypass — no real session. */
+  isGuest: boolean
+  continueAsGuest: () => void
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
@@ -26,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isGuest, setIsGuest] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -34,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return
       setSession(s)
       setUser(s?.user ?? null)
+      if (s?.user) setIsGuest(false)
       setLoading(false)
     }
 
@@ -91,14 +96,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       session,
       loading,
+      isGuest,
+      continueAsGuest: () => {
+        if (!__DEV__) return
+        setIsGuest(true)
+      },
       signInWithGoogle: () => auth.signInWithGoogle(),
       signOut: async () => {
         await auth.signOut()
         setUser(null)
         setSession(null)
+        setIsGuest(false)
       },
     }),
-    [user, session, loading],
+    [user, session, loading, isGuest],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

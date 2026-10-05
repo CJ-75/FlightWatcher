@@ -49,7 +49,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function PlannerScreen() {
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { user, isGuest } = useAuth()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [trips, setTrips] = useState<PlannedTrip[]>([])
   const [loading, setLoading] = useState(true)
@@ -89,6 +89,28 @@ export function PlannerScreen() {
   )
 
   if (!user) {
+    if (isGuest) {
+      return (
+        <View style={styles.root}>
+          <LinearGradient
+            colors={['#FFE8DC', '#FFF9F5']}
+            locations={[0, 0.35]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              styles.centered,
+              { paddingTop: insets.top + 40, paddingHorizontal: 24 },
+            ]}
+          >
+            <Text style={styles.title}>Planner</Text>
+            <Text style={styles.subtitle}>
+              Mode invité (dev) — connecte-toi pour créer et synchroniser des voyages.
+            </Text>
+          </View>
+        </View>
+      )
+    }
     return <PlannerGuestLanding insetsTop={insets.top} insetsBottom={insets.bottom} />
   }
 

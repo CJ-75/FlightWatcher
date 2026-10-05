@@ -182,8 +182,8 @@ function RouteTicker() {
   )
 }
 
-export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => void }) {
-  const { signInWithGoogle } = useAuth()
+export function LoginScreen() {
+  const { signInWithGoogle, continueAsGuest } = useAuth()
   const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
 
@@ -305,13 +305,13 @@ export function LoginScreen({ onContinueAsGuest }: { onContinueAsGuest?: () => v
             </Pressable>
           </Animated.View>
 
-          {onContinueAsGuest ? (
+          {__DEV__ ? (
             <Pressable
-              onPress={onContinueAsGuest}
+              onPress={continueAsGuest}
               style={({ pressed }) => [styles.guestBtn, pressed && { opacity: 0.75 }]}
               hitSlop={8}
             >
-              <Text style={styles.guestLabel}>Continuer sans compte</Text>
+              <Text style={styles.guestLabel}>Continuer sans compte (dev)</Text>
             </Pressable>
           ) : null}
         </Animated.View>

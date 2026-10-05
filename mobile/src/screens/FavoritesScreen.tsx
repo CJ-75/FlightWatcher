@@ -22,7 +22,7 @@ import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function FavoritesScreen() {
   const insets = useSafeAreaInsets()
-  const { user, signInWithGoogle } = useAuth()
+  const { user, signInWithGoogle, isGuest } = useAuth()
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +70,26 @@ export function FavoritesScreen() {
   }
 
   if (!user) {
+    if (isGuest) {
+      return (
+        <View style={styles.root}>
+          <LinearGradient
+            colors={['#FFE8DC', '#FFF9F5']}
+            locations={[0, 0.35]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[styles.emptyCard, shadow.soft, { margin: spacing.xl, marginTop: insets.top + 48 }]}>
+            <View style={styles.emptyIcon}>
+              <HeartIcon size={28} filled={false} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>Aucun favori</Text>
+            <Text style={styles.emptyBody}>
+              Mode invité (dev) — connecte-toi pour synchroniser tes coups de cœur.
+            </Text>
+          </View>
+        </View>
+      )
+    }
     return (
       <FavoritesGuestLanding
         insetsTop={insets.top}
