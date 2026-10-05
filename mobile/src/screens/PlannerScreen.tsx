@@ -230,7 +230,7 @@ function PlannerGuestLanding({
   const steps = [
     { title: 'Crée le voyage', detail: 'Dates, budget et voyageurs' },
     { title: 'Scanne les prix', detail: 'Accepte la meilleure offre' },
-    { title: 'Invite tes potes', detail: 'Un lien, tout le monde rejoint' },
+    { title: 'Invite tes proches', detail: 'Un lien pour amis et famille' },
   ]
 
   return (
@@ -249,7 +249,7 @@ function PlannerGuestLanding({
         <Text style={styles.guestKicker}>PLANNER</Text>
         <Text style={styles.guestTitle}>Organise un voyage à plusieurs</Text>
         <Text style={styles.guestBody}>
-          Crée un projet, scanne les prix, choisis la proposition, puis envoie un lien à tes potes.
+          Crée un projet, scanne les prix, choisis la proposition, puis envoie un lien à tes proches.
         </Text>
 
         <View style={[styles.mockTicket, shadow.soft]}>

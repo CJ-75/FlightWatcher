@@ -12,10 +12,11 @@ import {
 import type { NewResult } from './utils/storage'
 import type { SavedSearch, SavedFavorite } from './utils/storage'
 import { UserMenu } from './components/UserMenu'
-import { getCurrentUser } from './lib/supabase'
+import { getCurrentUser, onAuthStateChange } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DealsTab } from './components/DealsTab'
 import { PlannerTab } from './components/PlannerTab'
+import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { BookingSas } from './components/BookingSas'
@@ -1624,6 +1625,9 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     // Fallback: fonction de traduction qui retourne la clé
     t = (key: string) => key;
   }
+
+  const [userId, setUserId] = useState<string | null>(null)
+  const [authReady, setAuthReady] = useState(false)
   
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
@@ -1684,14 +1688,29 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     onBook(enrichedTrip)
   }
 
+  useEffect(() => {
+    void getCurrentUser().then((u) => {
+      setUserId(u?.id ?? null)
+      setAuthReady(true)
+    })
+    const unsub = onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null)
+      setAuthReady(true)
+    })
+    return () => {
+      unsub?.()
+    }
+  }, [])
+
   // Charger les données au montage - s'exécute toujours même si le rendu échoue
   useEffect(() => {
+    if (!userId) return
     // Utiliser un timeout pour s'assurer que le composant est monté
     const timer = setTimeout(() => {
       refreshData()
     }, 0)
     return () => clearTimeout(timer)
-  }, [])
+  }, [userId])
 
   // Fonction pour afficher une notification Toast dans le frontend
   const showNotification = (_title: string, body: string, _searchName: string, _newResults: TripResponse[]) => {
@@ -1949,6 +1968,19 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
       }
       return next
     })
+  }
+
+  if (!authReady) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4" />
+        <p className="font-medium">{t('app.loading')}</p>
+      </div>
+    )
+  }
+
+  if (!userId) {
+    return <FavoritesGuestLanding />
   }
 
   return (
