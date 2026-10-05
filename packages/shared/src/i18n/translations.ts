@@ -10,8 +10,16 @@ export const translations: Record<Language, Record<string, string>> = {
     
     // Navigation
     'nav.search': 'Recherche',
+    'nav.deals': 'Deals',
     'nav.saved': 'Sauvegardées',
     'nav.favorites': 'Favoris',
+
+    'deals.subtitle': 'Packs weekend vol + hôtel, prêts à partir',
+    'deals.loading': 'Chargement des deals…',
+    'deals.errorTitle': 'Oups',
+    'deals.retry': 'Réessayer',
+    'deals.emptyTitle': 'Aucun deal pour l’instant',
+    'deals.emptyBody': 'Reviens bientôt — on prépare de nouveaux packs.',
     
     // Auth
     'auth.signIn': 'Se connecter',
@@ -146,8 +154,16 @@ export const translations: Record<Language, Record<string, string>> = {
     
     // Navigation
     'nav.search': 'Search',
+    'nav.deals': 'Deals',
     'nav.saved': 'Saved',
     'nav.favorites': 'Favorites',
+
+    'deals.subtitle': 'Weekend flight + hotel packs, ready to go',
+    'deals.loading': 'Loading deals…',
+    'deals.errorTitle': 'Oops',
+    'deals.retry': 'Retry',
+    'deals.emptyTitle': 'No deals yet',
+    'deals.emptyBody': 'Check back soon — new packs are on the way.',
     
     // Auth
     'auth.signIn': 'Sign in',

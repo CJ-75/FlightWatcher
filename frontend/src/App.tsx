@@ -14,6 +14,7 @@ import type { SavedSearch, SavedFavorite } from './utils/storage'
 import { UserMenu } from './components/UserMenu'
 import { getCurrentUser } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
+import { DealsTab } from './components/DealsTab'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { BookingSas } from './components/BookingSas'
@@ -28,7 +29,7 @@ import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 
-type Tab = 'search' | 'saved'
+type Tab = 'search' | 'deals' | 'saved'
 
 function Dashboard() {
   const { t } = useI18n()
@@ -667,7 +668,7 @@ function Dashboard() {
               onClick={() => setActiveTab('search')}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex-1 sm:flex-none px-4 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
+              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
                 activeTab === 'search'
                   ? 'text-primary-500 border-b-2 border-primary-500'
                   : 'text-gray-600 hover:text-gray-800'
@@ -676,10 +677,22 @@ function Dashboard() {
               🔍 {t('nav.search')}
             </motion.button>
             <motion.button
+              onClick={() => setActiveTab('deals')}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
+                activeTab === 'deals'
+                  ? 'text-primary-500 border-b-2 border-primary-500'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              ✦ {t('nav.deals')}
+            </motion.button>
+            <motion.button
               onClick={() => setActiveTab('saved')}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className={`flex-1 sm:flex-none px-4 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
+              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
                 activeTab === 'saved'
                   ? 'text-primary-500 border-b-2 border-primary-500'
                   : 'text-gray-600 hover:text-gray-800'
@@ -691,7 +704,9 @@ function Dashboard() {
         </div>
 
         {/* Contenu selon l'onglet */}
-        {activeTab === 'search' ? (
+        {activeTab === 'deals' ? (
+          <DealsTab />
+        ) : activeTab === 'search' ? (
           <>
             <SimpleSearch
               onResults={handleSimpleResults}
