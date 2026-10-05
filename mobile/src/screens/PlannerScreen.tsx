@@ -150,25 +150,40 @@ export function PlannerScreen() {
               onPress={() => navigation.navigate('TripDetail', { tripId: item.id })}
               style={({ pressed }) => [styles.tripCard, shadow.soft, pressed && { opacity: 0.92 }]}
             >
-              <View style={styles.tripTop}>
-                <Text style={styles.tripName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{STATUS_LABEL[item.status] || item.status}</Text>
-                </View>
+              <View style={styles.routeBadge}>
+                <Text style={styles.routeFrom}>{item.departure_airport}</Text>
+                <Text style={styles.routeArrow}>↓</Text>
+                <Text style={styles.routeTo}>{item.arrival_airport || 'ANY'}</Text>
               </View>
-              <Text style={styles.tripMeta}>
-                {item.departure_airport}
-                {item.arrival_airport ? ` → ${item.arrival_airport}` : ' · inspire'}
-                {' · '}
-                {item.passengers} voy.
-                {' · '}
-                {item.budget_max}€
-              </Text>
-              {(item.proposals_count ?? 0) > 0 ? (
-                <Text style={styles.tripCount}>{item.proposals_count} proposition(s)</Text>
-              ) : null}
+              <View style={styles.tripBody}>
+                <View style={styles.tripTop}>
+                  <Text style={styles.tripName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <View
+                    style={[
+                      styles.badge,
+                      item.status === 'locked' && styles.badgeLocked,
+                      item.status === 'planning' && styles.badgePlanning,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.badgeText,
+                        item.status === 'locked' && styles.badgeTextLocked,
+                      ]}
+                    >
+                      {STATUS_LABEL[item.status] || item.status}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.tripMeta}>
+                  {item.passengers} voy. · max {item.budget_max}€
+                  {(item.proposals_count ?? 0) > 0
+                    ? ` · ${item.proposals_count} prop.`
+                    : ''}
+                </Text>
+              </View>
             </Pressable>
           )}
           showsVerticalScrollIndicator={false}
@@ -213,64 +228,94 @@ function PlannerGuestLanding({
   }
 
   const steps = [
-    'Crée le voyage — dates, budget, voyageurs',
-    'Scanne Ryanair et accepte la meilleure offre',
-    'Partage le lien d’invitation',
+    { title: 'Crée le voyage', detail: 'Dates, budget et voyageurs' },
+    { title: 'Scanne les prix', detail: 'Accepte la meilleure offre' },
+    { title: 'Invite tes potes', detail: 'Un lien, tout le monde rejoint' },
   ]
 
   return (
     <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
       <LinearGradient
-        colors={['#FFE8DC', '#FFF9F5']}
-        locations={[0, 0.5]}
+        colors={['#FFD8C4', '#FFE8DC', '#FFF9F5']}
+        locations={[0, 0.35, 1]}
         style={StyleSheet.absoluteFill}
       />
+      <View style={styles.guestOrbA} />
+      <View style={styles.guestOrbB} />
       <ScrollView
         contentContainerStyle={styles.guestContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.guestCard, shadow.soft]}>
-          <View style={styles.guestIcon}>
-            <Text style={styles.guestIconText}>📅</Text>
-          </View>
-          <Text style={styles.guestKicker}>PLANNER</Text>
-          <Text style={styles.guestTitle}>Organise un voyage à plusieurs</Text>
-          <Text style={styles.guestBody}>
-            Crée un projet, scanne les prix, choisis la proposition, puis envoie un lien à tes potes.
-          </Text>
+        <Text style={styles.guestKicker}>PLANNER</Text>
+        <Text style={styles.guestTitle}>Organise un voyage à plusieurs</Text>
+        <Text style={styles.guestBody}>
+          Crée un projet, scanne les prix, choisis la proposition, puis envoie un lien à tes potes.
+        </Text>
 
-          <View style={styles.steps}>
-            {steps.map((label, i) => (
-              <View key={i} style={styles.stepRow}>
-                <View style={styles.stepNum}>
-                  <Text style={styles.stepNumText}>{i + 1}</Text>
-                </View>
-                <Text style={styles.stepLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
-
-          <Pressable
-            onPress={() => void onLogin()}
-            disabled={loginLoading}
-            style={({ pressed }) => [
-              styles.googleBtn,
-              pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
-            ]}
+        <View style={[styles.mockTicket, shadow.soft]}>
+          <LinearGradient
+            colors={['#1A120E', '#2A1A12', '#3D2418']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.mockTicketInner}
           >
-            {loginLoading ? (
-              <ActivityIndicator color={colors.ink} />
-            ) : (
-              <>
-                <View style={styles.gMark}>
-                  <Text style={styles.gLetter}>G</Text>
-                </View>
-                <Text style={styles.googleLabel}>Continuer avec Google</Text>
-              </>
-            )}
-          </Pressable>
-          <Text style={styles.guestHint}>Gratuit · tes voyages restent privés</Text>
+            <View style={styles.mockRow}>
+              <View>
+                <Text style={styles.mockLabel}>Départ</Text>
+                <Text style={styles.mockCode}>BVA</Text>
+              </View>
+              <View style={styles.mockLineWrap}>
+                <View style={styles.mockLine} />
+                <Text style={styles.mockPlane}>✈</Text>
+                <Text style={styles.mockPrice}>à partir de 48€</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.mockLabel}>Arrivée</Text>
+                <Text style={styles.mockCode}>LIS</Text>
+              </View>
+            </View>
+            <View style={styles.mockChips}>
+              <Text style={styles.mockChip}>Weekend</Text>
+              <Text style={styles.mockChip}>2 voy.</Text>
+              <Text style={[styles.mockChip, styles.mockChipAccent]}>Lien prêt</Text>
+            </View>
+          </LinearGradient>
         </View>
+
+        <View style={styles.steps}>
+          {steps.map((step, i) => (
+            <View key={step.title} style={[styles.stepCard, shadow.soft]}>
+              <View style={styles.stepNum}>
+                <Text style={styles.stepNumText}>{i + 1}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.stepTitle}>{step.title}</Text>
+                <Text style={styles.stepDetail}>{step.detail}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <Pressable
+          onPress={() => void onLogin()}
+          disabled={loginLoading}
+          style={({ pressed }) => [
+            styles.googleBtn,
+            pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+          ]}
+        >
+          {loginLoading ? (
+            <ActivityIndicator color={colors.ink} />
+          ) : (
+            <>
+              <View style={styles.gMark}>
+                <Text style={styles.gLetter}>G</Text>
+              </View>
+              <Text style={styles.googleLabel}>Continuer avec Google</Text>
+            </>
+          )}
+        </Pressable>
+        <Text style={styles.guestHint}>Gratuit · tes voyages restent privés</Text>
       </ScrollView>
     </View>
   )
@@ -485,22 +530,51 @@ const styles = StyleSheet.create({
   retryText: { fontFamily: fonts.bold, color: colors.white },
   tripCard: {
     backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 20,
+    padding: 14,
     marginBottom: 12,
-    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
+  routeBadge: {
+    width: 52,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  routeFrom: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    color: colors.primary,
+    includeFontPadding: false,
+  },
+  routeArrow: { fontSize: 9, color: colors.faint, lineHeight: 12 },
+  routeTo: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  tripBody: { flex: 1, gap: 4, minWidth: 0 },
   tripTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  tripName: { flex: 1, fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
+  tripName: { flex: 1, fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
   badge: {
     backgroundColor: colors.primarySoft,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
   },
+  badgePlanning: { backgroundColor: '#FFF3EC' },
+  badgeLocked: { backgroundColor: colors.successSoft },
   badgeText: { fontFamily: fonts.bold, fontSize: 11, color: colors.primaryInk },
+  badgeTextLocked: { color: colors.success },
   tripMeta: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
-  tripCount: { fontFamily: fonts.medium, fontSize: 12, color: colors.primary },
   fab: {
     position: 'absolute',
     right: 22,
@@ -518,48 +592,43 @@ const styles = StyleSheet.create({
     color: colors.white,
     marginTop: -2,
   },
-  loginHintText: {
-    marginTop: 16,
-    fontFamily: fonts.medium,
-    color: colors.primaryInk,
-    textAlign: 'center',
+  guestOrbA: {
+    position: 'absolute',
+    top: -40,
+    right: -30,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,107,53,0.14)',
+  },
+  guestOrbB: {
+    position: 'absolute',
+    bottom: 80,
+    left: -50,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,176,136,0.22)',
   },
   guestContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingHorizontal: 22,
+    paddingVertical: 28,
   },
-  guestCard: {
-    backgroundColor: colors.white,
-    borderRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 26,
-    alignItems: 'center',
-  },
-  guestIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  guestIconText: { fontSize: 28 },
   guestKicker: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.extrabold,
     fontSize: 11,
-    letterSpacing: 1.4,
+    letterSpacing: 2,
     color: colors.primary,
-    marginBottom: 8,
+    textAlign: 'center',
+    marginBottom: 10,
   },
   guestTitle: {
     fontFamily: fonts.extrabold,
-    fontSize: 24,
-    lineHeight: 30,
-    letterSpacing: -0.6,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: -0.7,
     color: colors.ink,
     textAlign: 'center',
     includeFontPadding: false,
@@ -572,27 +641,115 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
     includeFontPadding: false,
+    paddingHorizontal: 4,
   },
-  steps: { alignSelf: 'stretch', marginTop: 20, gap: 10 },
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  mockTicket: {
+    marginTop: 22,
+    borderRadius: 22,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  },
+  mockTicketInner: {
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  mockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mockLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: 'rgba(255,220,190,0.65)',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  mockCode: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    color: colors.white,
+    letterSpacing: -0.5,
+    includeFontPadding: false,
+  },
+  mockLineWrap: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+  },
+  mockLine: {
+    height: 1,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(255,180,120,0.45)',
+  },
+  mockPlane: {
+    marginTop: -10,
+    fontSize: 14,
+    color: '#FFB088',
+  },
+  mockPrice: {
+    marginTop: 8,
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: 'rgba(255,230,210,0.85)',
+  },
+  mockChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 14,
+  },
+  mockChip: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: 'rgba(255,230,210,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  mockChipAccent: {
+    backgroundColor: 'rgba(255,107,53,0.35)',
+    color: '#FFE8DC',
+  },
+  steps: { alignSelf: 'stretch', marginTop: 18, gap: 8 },
+  stepCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
   stepNum: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.primarySoft,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepNumText: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.primaryInk },
-  stepLabel: {
-    flex: 1,
-    fontFamily: fonts.semibold,
+  stepNumText: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.white },
+  stepTitle: {
+    fontFamily: fonts.bold,
     fontSize: 14,
     color: colors.ink,
-    lineHeight: 19,
+    includeFontPadding: false,
+  },
+  stepDetail: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    includeFontPadding: false,
   },
   googleBtn: {
-    marginTop: 22,
+    marginTop: 20,
     alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
@@ -600,7 +757,9 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 54,
     borderRadius: 16,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
     paddingHorizontal: 18,
   },
   gMark: {
@@ -608,6 +767,8 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -625,7 +786,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   guestHint: {
-    marginTop: 16,
+    marginTop: 14,
     fontFamily: fonts.medium,
     fontSize: 12,
     lineHeight: 17,

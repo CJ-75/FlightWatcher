@@ -42,9 +42,9 @@ function PlannerGuestLanding() {
   const [error, setError] = useState<string | null>(null)
 
   const steps = [
-    t('planner.guest.step1'),
-    t('planner.guest.step2'),
-    t('planner.guest.step3'),
+    { title: t('planner.guest.step1'), detail: t('planner.guest.step1.detail') },
+    { title: t('planner.guest.step2'), detail: t('planner.guest.step2.detail') },
+    { title: t('planner.guest.step3'), detail: t('planner.guest.step3.detail') },
   ]
 
   const onCta = async () => {
@@ -63,57 +63,165 @@ function PlannerGuestLanding() {
   }
 
   return (
-    <div className="max-w-xl mx-auto px-1">
+    <div className="relative max-w-2xl mx-auto px-1 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#FF6B35]/15 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-[#FFB088]/25 blur-3xl"
+      />
+
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-3xl shadow-xl overflow-hidden"
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="relative"
       >
-        <div className="bg-gradient-to-br from-orange-50 to-white px-6 sm:px-8 pt-8 pb-6 text-center">
-          <div className="mx-auto mb-5 w-16 h-16 rounded-2xl bg-primary-500 text-white flex items-center justify-center shadow-lg">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z" />
-            </svg>
-          </div>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary-600 mb-2">
+        <div className="text-center mb-7 sm:mb-9">
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="inline-flex items-center gap-2 text-[11px] sm:text-xs font-black uppercase tracking-[0.22em] text-[#E85A28] mb-3"
+          >
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#FF6B35] animate-pulse" />
             {t('nav.planner')}
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+          </motion.p>
+          <motion.h2
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-[1.75rem] sm:text-4xl font-black text-slate-900 tracking-tight leading-[1.1]"
+          >
             {t('planner.guest.title')}
-          </h2>
-          <p className="mt-3 text-slate-500 text-sm sm:text-base leading-relaxed">
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.16 }}
+            className="mt-3 text-slate-500 text-sm sm:text-base leading-relaxed max-w-md mx-auto"
+          >
             {t('planner.guest.lead')}
-          </p>
+          </motion.p>
         </div>
 
-        <ol className="px-6 sm:px-8 py-6 space-y-3">
-          {steps.map((label, i) => (
-            <li key={i} className="flex items-start gap-3">
-              <span className="shrink-0 w-8 h-8 rounded-full bg-orange-50 text-primary-600 font-black text-sm flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+          className="relative mb-7 rounded-[1.75rem] bg-gradient-to-br from-[#1A120E] via-[#2A1A12] to-[#3D2418] p-5 sm:p-6 text-white shadow-2xl shadow-orange-900/20 overflow-hidden"
+        >
+          <div
+            aria-hidden
+            className="absolute inset-0 opacity-30"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle at 20% 20%, rgba(255,107,53,0.45), transparent 45%), radial-gradient(circle at 80% 70%, rgba(255,176,136,0.25), transparent 40%)',
+            }}
+          />
+          <div className="relative flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-orange-200/70">
+                Départ
+              </p>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight">
+                {t('planner.guest.mock.from')}
+              </p>
+            </div>
+            <div className="flex-1 flex flex-col items-center px-2">
+              <div className="w-full h-px bg-gradient-to-r from-transparent via-orange-300/60 to-transparent relative">
+                <motion.span
+                  aria-hidden
+                  className="absolute -top-2 left-0 text-orange-300"
+                  animate={{ left: ['0%', '92%'] }}
+                  transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut', repeatDelay: 0.6 }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+                  </svg>
+                </motion.span>
+              </div>
+              <p className="mt-3 text-[11px] font-semibold text-orange-100/80">
+                {t('planner.guest.mock.price')}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-orange-200/70">
+                Arrivée
+              </p>
+              <p className="text-2xl sm:text-3xl font-black tracking-tight">
+                {t('planner.guest.mock.to')}
+              </p>
+            </div>
+          </div>
+          <div className="relative mt-4 flex items-center gap-2 text-[11px] text-orange-100/55 font-medium">
+            <span className="px-2 py-0.5 rounded-md bg-white/10">Weekend</span>
+            <span className="px-2 py-0.5 rounded-md bg-white/10">2 voyageurs</span>
+            <span className="px-2 py-0.5 rounded-md bg-[#FF6B35]/30 text-orange-50">Lien prêt</span>
+          </div>
+        </motion.div>
+
+        <ol className="space-y-2.5 mb-8">
+          {steps.map((step, i) => (
+            <motion.li
+              key={step.title}
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.28 + i * 0.08 }}
+              className="flex items-center gap-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-orange-100/80 px-4 py-3.5 shadow-sm"
+            >
+              <span className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-black text-sm flex items-center justify-center shadow-md shadow-orange-500/25">
                 {i + 1}
               </span>
-              <span className="pt-1.5 font-semibold text-slate-800 text-sm sm:text-base">
-                {label}
+              <span className="min-w-0">
+                <span className="block font-bold text-slate-900 text-sm sm:text-[15px]">
+                  {step.title}
+                </span>
+                <span className="block text-slate-500 text-xs sm:text-sm mt-0.5">
+                  {step.detail}
+                </span>
               </span>
-            </li>
+            </motion.li>
           ))}
         </ol>
 
-        <div className="px-6 sm:px-8 pb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.52 }}
+        >
           <button
             type="button"
             disabled={signingIn}
             onClick={() => void onCta()}
-            className="w-full bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl disabled:opacity-60 shadow-md"
+            className="group w-full flex items-center justify-center gap-3 bg-white hover:bg-orange-50 border-2 border-slate-200 hover:border-[#FF6B35]/40 text-slate-900 font-bold py-3.5 rounded-2xl disabled:opacity-60 shadow-lg shadow-slate-900/5 transition-all"
           >
-            {signingIn ? t('auth.signInProgressLong') : t('planner.guest.cta')}
+            {signingIn ? (
+              t('auth.signInProgressLong')
+            ) : (
+              <>
+                <span className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden>
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </svg>
+                </span>
+                {t('planner.guest.cta')}
+              </>
+            )}
           </button>
           {error ? (
             <p className="mt-3 text-sm text-red-600 font-medium text-center">{error}</p>
           ) : (
-            <p className="mt-3 text-xs text-slate-400 text-center">{t('planner.guest.hint')}</p>
+            <p className="mt-3 text-xs text-slate-400 text-center font-medium">
+              {t('planner.guest.hint')}
+            </p>
           )}
-        </div>
+        </motion.div>
       </motion.div>
     </div>
   )
@@ -208,8 +316,13 @@ export function PlannerTab() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-6 sm:mb-8 px-1 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div className="relative max-w-3xl mx-auto">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 right-0 w-56 h-56 rounded-full bg-[#FF6B35]/10 blur-3xl"
+      />
+
+      <div className="relative mb-6 sm:mb-8 px-1 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             {t('nav.planner')}
@@ -219,8 +332,9 @@ export function PlannerTab() {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="bg-primary-500 text-white font-bold px-5 py-2.5 rounded-xl shrink-0"
+          className="inline-flex items-center justify-center gap-2 bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-bold px-5 py-2.5 rounded-xl shrink-0 shadow-lg shadow-orange-500/25 hover:scale-[1.02] active:scale-[0.98] transition-transform"
         >
+          <span className="text-lg leading-none">+</span>
           {t('planner.create')}
         </button>
       </div>
@@ -231,7 +345,7 @@ export function PlannerTab() {
           <p className="font-medium">{t('planner.loading')}</p>
         </div>
       ) : error ? (
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+        <div className="bg-white/90 backdrop-blur rounded-3xl border border-orange-100 shadow-lg p-8 text-center">
           <p className="font-bold text-slate-900 mb-2">{error}</p>
           <button
             type="button"
@@ -242,42 +356,79 @@ export function PlannerTab() {
           </button>
         </div>
       ) : trips.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-          <p className="font-bold text-slate-900 mb-2">{t('planner.emptyTitle')}</p>
-          <p className="text-sm text-slate-500 mb-4">{t('planner.emptyBody')}</p>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="bg-primary-500 text-white font-bold px-5 py-2.5 rounded-xl"
-          >
-            {t('planner.create')}
-          </button>
+        <div className="relative overflow-hidden bg-white rounded-3xl border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent"
+          />
+          <div className="relative">
+            <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z" />
+              </svg>
+            </div>
+            <p className="font-black text-xl text-slate-900 mb-2">{t('planner.emptyTitle')}</p>
+            <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">{t('planner.emptyBody')}</p>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-bold px-6 py-3 rounded-xl shadow-md shadow-orange-500/25"
+            >
+              {t('planner.create')}
+            </button>
+          </div>
         </div>
       ) : (
         <motion.div layout className="space-y-3">
-          {trips.map((trip) => (
-            <button
+          {trips.map((trip, index) => (
+            <motion.button
               key={trip.id}
               type="button"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.04 }}
               onClick={() => setSelectedTripId(trip.id)}
-              className="w-full text-left bg-white rounded-2xl shadow-md hover:shadow-lg transition-shadow p-5"
+              className="group w-full text-left bg-white/95 backdrop-blur rounded-2xl border border-orange-100/80 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all p-4 sm:p-5"
             >
-              <div className="flex items-center gap-3">
-                <h3 className="flex-1 font-bold text-lg text-slate-900 truncate">{trip.name}</h3>
-                <span className="text-xs font-bold text-primary-700 bg-orange-50 px-2.5 py-1 rounded-full">
-                  {STATUS_LABEL[trip.status] || trip.status}
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#FFF3EC] to-[#FFE0CC] flex flex-col items-center justify-center border border-orange-100">
+                  <span className="text-[10px] font-bold text-[#E85A28] leading-none">
+                    {trip.departure_airport}
+                  </span>
+                  <span className="text-[9px] text-orange-300 my-0.5">↓</span>
+                  <span className="text-[10px] font-bold text-slate-700 leading-none">
+                    {trip.arrival_airport || 'ANY'}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="flex-1 font-bold text-base sm:text-lg text-slate-900 truncate group-hover:text-[#E85A28] transition-colors">
+                      {trip.name}
+                    </h3>
+                    <span
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${
+                        trip.status === 'locked'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : trip.status === 'planning'
+                            ? 'bg-orange-50 text-[#E85A28]'
+                            : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {STATUS_LABEL[trip.status] || trip.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {trip.passengers} voy. · max {trip.budget_max}€
+                    {(trip.proposals_count ?? 0) > 0
+                      ? ` · ${trip.proposals_count} prop.`
+                      : ''}
+                  </p>
+                </div>
+                <span className="hidden sm:flex self-center text-slate-300 group-hover:text-[#FF6B35] transition-colors text-xl">
+                  ›
                 </span>
               </div>
-              <p className="text-sm text-slate-500 mt-1">
-                {trip.departure_airport}
-                {trip.arrival_airport ? ` → ${trip.arrival_airport}` : ' · inspire'}
-                {' · '}
-                {trip.passengers} voy. · {trip.budget_max}€
-                {(trip.proposals_count ?? 0) > 0
-                  ? ` · ${trip.proposals_count} prop.`
-                  : ''}
-              </p>
-            </button>
+            </motion.button>
           ))}
         </motion.div>
       )}
