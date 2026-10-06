@@ -14,7 +14,7 @@ import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/nativ
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
+import type { EnrichedTripResponse, PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
 import { formatDateFr } from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
@@ -29,6 +29,7 @@ import {
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
 import { TravelersSection } from '../components/TravelersSection'
+import { BookingSheet } from '../components/BookingSheet'
 import { Button } from '../components/ui/Button'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
@@ -47,6 +48,7 @@ export function TripDetailScreen() {
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -301,7 +303,11 @@ export function TripDetailScreen() {
       {accepted ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Proposition acceptée</Text>
-          <DestinationCard trip={accepted.trip_data} passengers={trip.passengers} />
+          <DestinationCard
+            trip={accepted.trip_data}
+            passengers={trip.passengers}
+            onBook={() => setBookingTrip(accepted.trip_data)}
+          />
         </View>
       ) : null}
 
@@ -317,6 +323,7 @@ export function TripDetailScreen() {
               busy={acting === p.id}
               onAccept={() => void accept(p.id)}
               onReject={() => void reject(p.id)}
+              onBook={() => setBookingTrip(p.trip_data)}
             />
           ))}
         </View>
@@ -357,6 +364,12 @@ export function TripDetailScreen() {
         </Pressable>
       ) : null}
     </ScrollView>
+
+      <BookingSheet
+        trip={bookingTrip}
+        passengers={trip.passengers}
+        onClose={() => setBookingTrip(null)}
+      />
     </View>
   )
 }
@@ -368,6 +381,7 @@ function ProposalBlock({
   busy,
   onAccept,
   onReject,
+  onBook,
 }: {
   proposal: TripProposal
   passengers: number
@@ -375,10 +389,15 @@ function ProposalBlock({
   busy: boolean
   onAccept: () => void
   onReject: () => void
+  onBook: () => void
 }) {
   return (
     <View style={styles.proposalWrap}>
-      <DestinationCard trip={proposal.trip_data} passengers={passengers} />
+      <DestinationCard
+        trip={proposal.trip_data}
+        passengers={passengers}
+        onBook={onBook}
+      />
       {isOrganizer ? (
         <View style={styles.actions}>
           <Pressable

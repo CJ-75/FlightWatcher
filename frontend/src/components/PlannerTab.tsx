@@ -4,6 +4,7 @@ import type {
   Airport,
   CreatePlannedTripRequest,
   DateAvecHoraire,
+  EnrichedTripResponse,
   PlannedTrip,
   PlannedTripDetail,
   TripMember,
@@ -13,6 +14,7 @@ import { getApiClient, normalizeAirports } from '../utils/apiClient'
 import { getCurrentUser, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
+import { BookingSas } from './BookingSas'
 import { BudgetSlider } from './BudgetSlider'
 import { PassengerStepper } from './PassengerStepper'
 import { DatePresets, type DatePreset } from './DatePresets'
@@ -532,7 +534,21 @@ function CreateTripModal({
   onCreated: (id: string) => void
 }) {
   const { t } = useI18n()
-  const initial = useMemo(() => generateDatesFromPreset('next-weekend'), [])
+  const initial = useMemo(() => {
+    const d = generateDatesFromPreset('next-weekend')
+    return {
+      dates_depart: d.dates_depart.map((x) => ({
+        ...x,
+        heure_min: '00:00',
+        heure_max: '23:59',
+      })),
+      dates_retour: d.dates_retour.map((x) => ({
+        ...x,
+        heure_min: '00:00',
+        heure_max: '23:59',
+      })),
+    }
+  }, [])
   const [name, setName] = useState('')
   const [departure, setDeparture] = useState('BVA')
   const [arrivalCityKey, setArrivalCityKey] = useState('')
@@ -591,8 +607,13 @@ function CreateTripModal({
       return
     }
     const d = generateDatesFromPreset(p)
-    setDatesDepart(d.dates_depart)
-    setDatesRetour(d.dates_retour)
+    // Planner: whole-day window so price scan matches trip calendar days
+    setDatesDepart(
+      d.dates_depart.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
+    )
+    setDatesRetour(
+      d.dates_retour.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
+    )
   }
 
   const submit = async () => {
@@ -809,6 +830,7 @@ function TripDetailView({
   const [deleting, setDeleting] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -1017,6 +1039,7 @@ function TripDetailView({
           <DestinationCard
             trip={accepted.trip_data}
             onSaveFavorite={() => undefined}
+            onBook={() => setBookingTrip(accepted.trip_data)}
           />
         </section>
       ) : null}
@@ -1034,6 +1057,7 @@ function TripDetailView({
               busy={acting === p.id}
               onAccept={() => void accept(p.id)}
               onReject={() => void reject(p.id)}
+              onBook={() => setBookingTrip(p.trip_data)}
               t={t}
             />
           ))}
@@ -1062,6 +1086,15 @@ function TripDetailView({
           {deleting ? '…' : t('planner.delete')}
         </button>
       ) : null}
+
+      {bookingTrip ? (
+        <BookingSas
+          trip={bookingTrip}
+          passengers={trip.passengers}
+          onClose={() => setBookingTrip(null)}
+          onSaveFavorite={() => undefined}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1072,6 +1105,7 @@ function ProposalCard({
   busy,
   onAccept,
   onReject,
+  onBook,
   t,
 }: {
   proposal: TripProposal
@@ -1079,11 +1113,16 @@ function ProposalCard({
   busy: boolean
   onAccept: () => void
   onReject: () => void
+  onBook: () => void
   t: (k: string) => string
 }) {
   return (
     <div className="space-y-3">
-      <DestinationCard trip={proposal.trip_data} onSaveFavorite={() => undefined} />
+      <DestinationCard
+        trip={proposal.trip_data}
+        onSaveFavorite={() => undefined}
+        onBook={onBook}
+      />
       {isOrganizer ? (
         <div className="flex gap-3">
           <button

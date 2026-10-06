@@ -73,6 +73,53 @@ def _trip_data_json(trip) -> dict:
     return dict(trip)
 
 
+def _parse_date_list(raw) -> list:
+    """Normalize JSONB / API date payloads into DateAvecHoraire list."""
+    import json
+
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+
+    out: list = []
+    for item in raw:
+        d = item
+        if isinstance(d, str):
+            try:
+                if d.strip().startswith("{"):
+                    d = json.loads(d)
+                else:
+                    d = {
+                        "date": d[:10],
+                        "heure_min": "00:00",
+                        "heure_max": "23:59",
+                    }
+            except Exception:
+                continue
+        if not isinstance(d, dict):
+            continue
+        date_val = d.get("date") or d.get("Date")
+        if not date_val:
+            continue
+        date_str = str(date_val).strip()[:10]
+        if len(date_str) < 10:
+            continue
+        out.append(
+            DateAvecHoraire(
+                date=date_str,
+                heure_min=(d.get("heure_min") or "00:00"),
+                heure_max=(d.get("heure_max") or "23:59"),
+            )
+        )
+    return out
+
+
 def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
     return {
         "id": row["id"],
@@ -411,14 +458,30 @@ async def scan_trip(trip_id: str, request: Request):
     ).eq("id", trip_id).execute()
 
     try:
+        dates_depart = _parse_date_list(trip.get("dates_depart"))
+        dates_retour = _parse_date_list(trip.get("dates_retour"))
+        if not dates_depart or not dates_retour:
+            raise HTTPException(
+                status_code=400,
+                detail="Dates aller/retour manquantes sur le voyage — impossible de scanner",
+            )
+
+        # Always search the whole calendar day of the trip dates
         dates_depart = [
-            DateAvecHoraire(**d) if isinstance(d, dict) else d
-            for d in (trip.get("dates_depart") or [])
+            DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
+            for d in dates_depart
         ]
         dates_retour = [
-            DateAvecHoraire(**d) if isinstance(d, dict) else d
-            for d in (trip.get("dates_retour") or [])
+            DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
+            for d in dates_retour
         ]
+
+        print(
+            f"🔎 Planner scan {trip_id} dates aller="
+            f"{[d.date for d in dates_depart]} retour={[d.date for d in dates_retour]} "
+            f"dep={trip.get('departure_airport')} arr={trip.get('arrival_airport')}"
+        )
+
         arrival = (trip.get("arrival_airport") or "").strip().upper() or None
         if arrival:
             codes = [c.strip() for c in arrival.replace(";", ",").split(",") if c.strip()]

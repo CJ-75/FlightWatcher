@@ -33,6 +33,7 @@ import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
+import { buildRyanairBookingUrl } from '@flightwatcher/shared'
 
 type Tab = 'search' | 'deals' | 'planner' | 'saved'
 
@@ -1687,14 +1688,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
 
   // Fonction pour construire l'URL Ryanair à partir d'un favori
   const buildRyanairUrl = (favorite: SavedFavorite): string => {
-    const baseUrl = 'https://www.ryanair.com'
-    const origin = favorite.trip.aller.origin
-    const destination = favorite.trip.aller.destination
-    const departureDate = favorite.trip.aller.departureTime.split('T')[0] // Format YYYY-MM-DD
-    const returnDate = favorite.trip.retour.departureTime.split('T')[0]
-    
-    const adults = Math.min(6, Math.max(1, favorite.searchRequest?.passengers || 1))
-    return `${baseUrl}/fr/fr/trip/flights/select?adults=${adults}&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`
+    return buildRyanairBookingUrl(favorite.trip, favorite.searchRequest?.passengers || 1)
   }
 
   // Fonction pour ouvrir BookingSas avec le favori (comme dans les résultats de recherche)

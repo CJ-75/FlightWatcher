@@ -127,6 +127,18 @@ export const TIME_PRESETS = [
   { id: 'journee', label: 'Journée', emoji: '🕐', min: '06:00', max: '23:59' },
 ] as const
 
+export function toRyanairDate(value: string | undefined | null): string {
+  if (!value) return ''
+  const s = String(value).trim()
+  const matched = s.match(/(\d{4}-\d{2}-\d{2})/)
+  if (matched) return matched[1]!
+  return s.split('T')[0]?.split(' ')[0] || ''
+}
+
+/**
+ * Deep-link Ryanair round-trip search (same format as working search / BookingSas).
+ * Includes both classic + `tp*` params Ryanair expects on current booking flow.
+ */
 export function buildRyanairBookingUrl(
   trip: {
     aller: { origin: string; destination: string; departureTime: string }
@@ -135,11 +147,41 @@ export function buildRyanairBookingUrl(
   passengers = 1,
 ): string {
   const adults = Math.min(6, Math.max(1, Math.round(passengers) || 1))
-  const origin = trip.aller.origin
-  const destination = trip.aller.destination
-  const departureDate = trip.aller.departureTime.split('T')[0]
-  const returnDate = trip.retour.departureTime.split('T')[0]
-  return `https://www.ryanair.com/fr/fr/trip/flights/select?adults=${adults}&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`
+  const origin = String(trip.aller?.origin || '')
+    .trim()
+    .toUpperCase()
+  const destination = String(trip.aller?.destination || '')
+    .trim()
+    .toUpperCase()
+  const departureDate = toRyanairDate(trip.aller?.departureTime)
+  const returnDate = toRyanairDate(trip.retour?.departureTime)
+
+  const params = new URLSearchParams({
+    adults: String(adults),
+    teens: '0',
+    children: '0',
+    infants: '0',
+    dateOut: departureDate,
+    dateIn: returnDate,
+    isConnectedFlight: 'false',
+    isReturn: 'true',
+    discount: '0',
+    promoCode: '',
+    originIata: origin,
+    destinationIata: destination,
+    tpAdults: String(adults),
+    tpTeens: '0',
+    tpChildren: '0',
+    tpInfants: '0',
+    tpStartDate: departureDate,
+    tpEndDate: returnDate,
+    tpDiscount: '0',
+    tpPromoCode: '',
+    tpOriginIata: origin,
+    tpDestinationIata: destination,
+  })
+
+  return `https://www.ryanair.com/fr/fr/trip/flights/select?${params.toString()}`
 }
 
 export function tripFavoriteKey(trip: {

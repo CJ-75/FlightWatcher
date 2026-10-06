@@ -39,15 +39,21 @@ function mockTrip(
   destFull: string,
   price: number,
   goodDeal = false,
+  dateOut?: string,
+  dateBack?: string,
+  origin = 'BVA',
+  originFull = 'Beauvais',
 ): EnrichedTripResponse {
+  const outDate = dateOut || out
+  const backDate = dateBack || back
   return {
     aller: {
       flightNumber: `FR${1000 + Math.floor(Math.random() * 8000)}`,
-      origin: 'BVA',
-      originFull: 'Beauvais',
+      origin,
+      originFull,
       destination: dest,
       destinationFull: destFull,
-      departureTime: `${out}T07:40:00`,
+      departureTime: `${outDate}T07:40:00`,
       price: Math.round(price * 0.5),
       currency: 'EUR',
     },
@@ -55,9 +61,9 @@ function mockTrip(
       flightNumber: `FR${1000 + Math.floor(Math.random() * 8000)}`,
       origin: dest,
       originFull: destFull,
-      destination: 'BVA',
-      destinationFull: 'Beauvais',
-      departureTime: `${back}T21:15:00`,
+      destination: origin,
+      destinationFull: originFull,
+      departureTime: `${backDate}T21:15:00`,
       price: Math.round(price * 0.5),
       currency: 'EUR',
     },
@@ -78,6 +84,17 @@ const INSPIRE_POOL: { code: string; name: string; price: number }[] = [
   { code: 'MLA', name: 'Malte', price: 74 },
 ]
 
+function tripScanDates(trip: PlannedTripDetail): { out: string; back: string } {
+  const outDate = trip.dates_depart?.[0]?.date?.slice(0, 10)
+  const backDate =
+    trip.dates_retour?.[trip.dates_retour.length - 1]?.date?.slice(0, 10) ||
+    trip.dates_retour?.[0]?.date?.slice(0, 10)
+  return {
+    out: outDate || out,
+    back: backDate || back,
+  }
+}
+
 function buildScanProposals(trip: PlannedTripDetail): TripProposal[] {
   const codes = (trip.arrival_airport || '')
     .split(/[,;|]/)
@@ -96,11 +113,22 @@ function buildScanProposals(trip: PlannedTripDetail): TripProposal[] {
         })
       : INSPIRE_POOL.slice(0, 4)
 
+  const { out: dateOut, back: dateBack } = tripScanDates(trip)
+  const origin = (trip.departure_airport || 'BVA').trim().toUpperCase() || 'BVA'
   const now = Date.now()
   return targets.map((t, i) => ({
     id: `dev-proposal-${trip.id}-${now}-${i}`,
     trip_id: trip.id,
-    trip_data: mockTrip(t.code, t.name, t.price + i * 5, i === 0),
+    trip_data: mockTrip(
+      t.code,
+      t.name,
+      t.price + i * 5,
+      i === 0,
+      dateOut,
+      dateBack,
+      origin,
+      origin,
+    ),
     status: 'pending' as const,
     created_at: new Date().toISOString(),
   }))

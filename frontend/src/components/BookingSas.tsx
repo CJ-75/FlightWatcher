@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EnrichedTripResponse } from '../types';
 import { getSessionId } from '../utils/session';
+import { buildRyanairBookingUrl } from '@flightwatcher/shared';
 
 interface BookingSasProps {
   trip: EnrichedTripResponse;
@@ -37,14 +38,7 @@ function buildPartners(passengers: number): Partner[] {
       name: 'Ryanair',
       logo: '✈️',
       description: 'Réservez directement sur le site officiel',
-      redirectUrl: (trip) => {
-        const baseUrl = 'https://www.ryanair.com';
-        const origin = trip.aller.origin;
-        const destination = trip.aller.destination;
-        const departureDate = trip.aller.departureTime.split('T')[0];
-        const returnDate = trip.retour.departureTime.split('T')[0];
-        return `${baseUrl}/fr/fr/trip/flights/select?adults=${adults}&teens=0&children=0&infants=0&dateOut=${departureDate}&dateIn=${returnDate}&isConnectedFlight=false&isReturn=true&discount=0&promoCode=&originIata=${origin}&destinationIata=${destination}`;
-      },
+      redirectUrl: (trip) => buildRyanairBookingUrl(trip, adults),
       priority: 1,
       enabled: true,
     },

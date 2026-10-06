@@ -440,9 +440,21 @@ function CreateTripModal({
   const [passengers, setPassengers] = useState(2)
   const [budget, setBudget] = useState(150)
   const [preset, setPreset] = useState<DatePresetId>('next-weekend')
-  const [presetDates, setPresetDates] = useState<FlexibleDates>(() =>
-    generateDatesFromPreset('next-weekend'),
-  )
+  const [presetDates, setPresetDates] = useState<FlexibleDates>(() => {
+    const d = generateDatesFromPreset('next-weekend')
+    return {
+      dates_depart: d.dates_depart.map((x) => ({
+        ...x,
+        heure_min: '00:00',
+        heure_max: '23:59',
+      })),
+      dates_retour: d.dates_retour.map((x) => ({
+        ...x,
+        heure_min: '00:00',
+        heure_max: '23:59',
+      })),
+    }
+  })
   const [flexibleDates, setFlexibleDates] = useState<FlexibleDates>({
     dates_depart: [],
     dates_retour: [],
@@ -461,7 +473,21 @@ function CreateTripModal({
   }, [visible])
 
   React.useEffect(() => {
-    if (preset !== 'flexible') setPresetDates(generateDatesFromPreset(preset))
+    if (preset !== 'flexible') {
+      const d = generateDatesFromPreset(preset)
+      setPresetDates({
+        dates_depart: d.dates_depart.map((x) => ({
+          ...x,
+          heure_min: '00:00',
+          heure_max: '23:59',
+        })),
+        dates_retour: d.dates_retour.map((x) => ({
+          ...x,
+          heure_min: '00:00',
+          heure_max: '23:59',
+        })),
+      })
+    }
   }, [preset])
 
   const dates =
