@@ -10,7 +10,7 @@ import type {
   TripMember,
   TripProposal,
 } from '../types'
-import { getApiClient, normalizeAirports } from '../utils/apiClient'
+import { getApiClient, normalizeAirports, destinationsToAirports, normalizeDestinations } from '../utils/apiClient'
 import { getCurrentUser, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
@@ -554,6 +554,7 @@ function CreateTripModal({
   const [arrivalCityKey, setArrivalCityKey] = useState('')
   const [arrivalCodes, setArrivalCodes] = useState<string[]>([])
   const [airports, setAirports] = useState<Airport[]>([])
+  const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
   const [cityQuery, setCityQuery] = useState('')
   const [passengers, setPassengers] = useState(2)
   const [budget, setBudget] = useState(150)
@@ -564,7 +565,7 @@ function CreateTripModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
+  const cityGroups = useMemo(() => groupAirportsByCity(arrivalAirports), [arrivalAirports])
   const selectedCity = useMemo(
     () => findCityGroupByKey(cityGroups, arrivalCityKey),
     [cityGroups, arrivalCityKey],
@@ -588,6 +589,32 @@ function CreateTripModal({
       .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void getApiClient()
+      .getDestinations(departure)
+      .then((raw) => {
+        if (cancelled) return
+        const next = destinationsToAirports(normalizeDestinations(raw as any))
+        setArrivalAirports(next)
+        setArrivalCodes((codes) => {
+          const allowed = new Set(next.map((a) => a.code))
+          const kept = codes.filter((c) => allowed.has(c))
+          if (kept.length !== codes.length) {
+            setArrivalCityKey('')
+            return []
+          }
+          return codes
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalAirports([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [departure])
 
   const selectCity = (group: CityAirportGroup | null) => {
     if (!group) {

@@ -22,11 +22,13 @@ import type { Airport, PlannedTrip } from '@flightwatcher/shared'
 import {
   arrivalDisplayLabel,
   cityImageUrl,
+  destinationsToAirports,
   encodeArrivalCodes,
   formatDateFr,
   generateDatesFromPreset,
   groupAirportsByCity,
   normalizeAirports,
+  normalizeDestinations,
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
@@ -461,6 +463,7 @@ function CreateTripModal({
   })
   const [showFlexible, setShowFlexible] = useState(false)
   const [airports, setAirports] = useState<Airport[]>([])
+  const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -471,6 +474,35 @@ function CreateTripModal({
       .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
       .catch(() => undefined)
   }, [visible])
+
+  React.useEffect(() => {
+    if (!visible || !departure) return
+    let cancelled = false
+    getApi()
+      .getDestinations(departure)
+      .then((raw) => {
+        if (cancelled) return
+        const dests = normalizeDestinations(raw as any)
+        const next = destinationsToAirports(dests)
+        setArrivalAirports(next)
+        // Clear arrival if no longer served from this departure
+        setArrivalCodes((codes) => {
+          const allowed = new Set(next.map((a) => a.code))
+          const kept = codes.filter((c) => allowed.has(c))
+          if (kept.length !== codes.length) {
+            setArrivalCityKey('')
+            return []
+          }
+          return codes
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalAirports([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [visible, departure])
 
   React.useEffect(() => {
     if (preset !== 'flexible') {
@@ -567,7 +599,7 @@ function CreateTripModal({
           <View>
             <Text style={styles.fieldLabel}>Arrivée (optionnel)</Text>
             <CityPicker
-              airports={airports}
+              airports={arrivalAirports}
               valueKey={arrivalCityKey}
               onChange={(group) => {
                 if (!group) {

@@ -35,10 +35,10 @@ const POPULAR_CITIES = [
   'Porto',
   'Madrid',
   'Milan',
-  'Londres',
   'Budapest',
   'Prague',
   'Vienne',
+  'Dublin',
 ]
 
 export function CityPicker({

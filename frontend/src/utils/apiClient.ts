@@ -1,8 +1,8 @@
-import { createApiClient, normalizeAirports, normalizeDestinations, type ApiClient } from '@flightwatcher/shared'
+import { createApiClient, normalizeAirports, normalizeDestinations, destinationsToAirports, type ApiClient } from '@flightwatcher/shared'
 import { getApiBaseUrl } from './apiBase'
 import { getAccessToken } from '../lib/supabase'
 
-export { normalizeAirports, normalizeDestinations }
+export { normalizeAirports, normalizeDestinations, destinationsToAirports }
 
 let client: ApiClient | null = null
 

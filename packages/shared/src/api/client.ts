@@ -268,6 +268,18 @@ export function normalizeDestinations(
   return []
 }
 
+/** Convert destination list into Airport[] for CityPicker grouping. */
+export function destinationsToAirports(destinations: Destination[]): Airport[] {
+  return destinations
+    .filter((d) => d?.code && String(d.code).length === 3)
+    .map((d) => ({
+      code: String(d.code).toUpperCase(),
+      name: d.destinationFull || d.nom || d.code,
+      city: d.nom || d.code,
+      country: d.pays || 'Europe',
+    }))
+}
+
 /** Backend shape: destinations grouped by country. */
 export function normalizeDestinationsByCountry(
   data: { destinations?: unknown } | Record<string, Destination[]> | Destination[]
