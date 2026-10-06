@@ -83,6 +83,61 @@ export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
   return [...map.values()].sort((a, b) => a.city.localeCompare(b.city, 'fr'))
 }
 
+/**
+ * Popular cities for a departure's served destinations.
+ * Preference list is filtered by what Ryanair actually flies — e.g. Londres
+ * appears for MRS (STN) but not for BVA.
+ */
+export const PREFERRED_CITY_NAMES = [
+  'Lisbonne',
+  'Barcelone',
+  'Rome',
+  'Porto',
+  'Madrid',
+  'Milan',
+  'Londres',
+  'Dublin',
+  'Budapest',
+  'Prague',
+  'Vienne',
+  'Malte',
+  'Palerme',
+  'Séville',
+  'Valence',
+  'Naples',
+  'Édimbourg',
+  'Manchester',
+  'Birmingham',
+]
+
+export function pickPopularCityGroups(
+  groups: CityAirportGroup[],
+  limit = 10,
+  preferred: string[] = PREFERRED_CITY_NAMES,
+): CityAirportGroup[] {
+  if (!groups.length) return []
+  const byCity = new Map(groups.map((g) => [g.city.toLowerCase(), g]))
+  const out: CityAirportGroup[] = []
+  const seen = new Set<string>()
+
+  for (const name of preferred) {
+    const g = byCity.get(name.toLowerCase())
+    if (g && !seen.has(g.key)) {
+      out.push(g)
+      seen.add(g.key)
+    }
+    if (out.length >= limit) return out
+  }
+
+  for (const g of groups) {
+    if (seen.has(g.key)) continue
+    out.push(g)
+    seen.add(g.key)
+    if (out.length >= limit) break
+  }
+  return out
+}
+
 /** Parse stored arrival_airport ("FCO" or "FCO,CIA"). */
 export function parseArrivalCodes(value: string | null | undefined): string[] {
   if (!value) return []

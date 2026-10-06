@@ -274,6 +274,13 @@ export function PlannerScreen() {
                         </Text>
                       </View>
                     ) : null}
+                    {item.route_ok === false ? (
+                      <View style={[styles.chip, { backgroundColor: '#FFFBEB' }]}>
+                        <Text style={[styles.chipText, { color: '#92400E' }]}>
+                          Route à maj
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                   {dateLabel ? (
                     <Text style={styles.tripDates}>{dateLabel}</Text>

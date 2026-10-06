@@ -139,6 +139,9 @@ export interface PlannedTrip {
   updated_at?: string
   proposals_count?: number
   accepted_proposal?: TripProposal | null
+  /** False when arrival is no longer served from departure (Ryanair routes). */
+  route_ok?: boolean
+  invalid_arrival_codes?: string[]
 }
 
 export interface TripProposal {

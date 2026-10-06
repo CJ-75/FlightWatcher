@@ -14,6 +14,7 @@ from api_models import (
     UpdatePlannedTripRequest,
 )
 from flight_scanner import enrich_trip_results, scanner_vols_api
+from ryanair_routes import invalid_arrival_codes
 from supabase_deps import (
     SUPABASE_AVAILABLE,
     get_supabase_client,
@@ -121,12 +122,15 @@ def _parse_date_list(raw) -> list:
 
 
 def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
+    dep = row.get("departure_airport")
+    arr = row.get("arrival_airport")
+    bad = invalid_arrival_codes(dep, arr) if dep and arr else []
     return {
         "id": row["id"],
         "organizer_id": row["organizer_id"],
         "name": row["name"],
-        "departure_airport": row["departure_airport"],
-        "arrival_airport": row.get("arrival_airport"),
+        "departure_airport": dep,
+        "arrival_airport": arr,
         "passengers": row.get("passengers") or 1,
         "dates_depart": row.get("dates_depart") or [],
         "dates_retour": row.get("dates_retour") or [],
@@ -136,6 +140,8 @@ def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "proposals_count": proposals_count,
+        "route_ok": len(bad) == 0,
+        "invalid_arrival_codes": bad,
     }
 
 
@@ -243,6 +249,16 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
     if len(dep) != 3 or not dep.isalpha():
         raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
 
+    bad = invalid_arrival_codes(dep, arr)
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Route indisponible depuis {dep} : {', '.join(bad)}. "
+                "Choisis une destination encore desservie par Ryanair."
+            ),
+        )
+
     token = secrets.token_hex(16)
     data = {
         "organizer_id": user_id,
@@ -325,7 +341,7 @@ async def get_trip(trip_id: str, request: Request):
 async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Request):
     user_id = _require_user(request)
     supabase = _svc()
-    _require_organizer(supabase, trip_id, user_id)
+    current = _require_organizer(supabase, trip_id, user_id)
 
     patch: Dict[str, Any] = {"updated_at": datetime.utcnow().isoformat()}
     if body.name is not None:
@@ -335,7 +351,11 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
         if len(dep) != 3 or not dep.isalpha():
             raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
         patch["departure_airport"] = dep
-    if body.arrival_airport is not None:
+    # Allow explicit null to clear arrival (inspire mode)
+    fields_set = getattr(body, "model_fields_set", None) or getattr(
+        body, "__fields_set__", set()
+    )
+    if "arrival_airport" in fields_set:
         patch["arrival_airport"] = _normalize_arrival(body.arrival_airport)
     if body.passengers is not None:
         patch["passengers"] = _clamp_passengers(body.passengers)
@@ -345,6 +365,22 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
         patch["dates_retour"] = [d.model_dump() for d in body.dates_retour]
     if body.budget_max is not None:
         patch["budget_max"] = int(body.budget_max)
+
+    dep = patch.get("departure_airport") or current.get("departure_airport")
+    arr = (
+        patch["arrival_airport"]
+        if "arrival_airport" in patch
+        else current.get("arrival_airport")
+    )
+    bad = invalid_arrival_codes(dep, arr)
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Route indisponible depuis {dep} : {', '.join(bad)}. "
+                "Choisis une destination encore desservie, ou retire l’arrivée."
+            ),
+        )
 
     result = (
         supabase.table("planned_trips").update(patch).eq("id", trip_id).execute()
@@ -485,6 +521,29 @@ async def scan_trip(trip_id: str, request: Request):
         arrival = (trip.get("arrival_airport") or "").strip().upper() or None
         if arrival:
             codes = [c.strip() for c in arrival.replace(";", ",").split(",") if c.strip()]
+            bad = invalid_arrival_codes(trip["departure_airport"], arrival)
+            if bad:
+                codes = [c for c in codes if c not in bad]
+                print(
+                    f"⚠️ Scan {trip_id}: routes mortes ignorées {bad} "
+                    f"(reste {codes or 'inspire'})"
+                )
+                if not codes:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Plus de vols Ryanair {trip['departure_airport']} → "
+                            f"{', '.join(bad)}. Change la destination du voyage "
+                            "ou passe en mode inspire (sans arrivée)."
+                        ),
+                    )
+                # Persist cleaned arrival so next scans stay valid
+                supabase.table("planned_trips").update(
+                    {
+                        "arrival_airport": ",".join(codes),
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                ).eq("id", trip_id).execute()
             incluses = codes if codes else None
         else:
             incluses = None

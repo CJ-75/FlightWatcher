@@ -383,6 +383,21 @@ export function deleteGuestTrip(tripId: string): boolean {
   return trips.length < before
 }
 
+export function updateGuestTripArrival(
+  tripId: string,
+  arrival: string | null,
+): PlannedTripDetail | null {
+  const idx = trips.findIndex((t) => t.id === tripId)
+  if (idx < 0) return null
+  trips[idx] = {
+    ...trips[idx],
+    arrival_airport: arrival,
+    route_ok: true,
+    invalid_arrival_codes: [],
+  }
+  return cloneTrip(trips[idx])
+}
+
 export function listGuestLikedDeals(): LikedDeal[] {
   return likedDeals
 }

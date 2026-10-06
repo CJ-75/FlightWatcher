@@ -27,6 +27,7 @@ import {
   formatDateFr,
   generateDatesFromPreset,
   groupAirportsByCity,
+  pickPopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 
@@ -476,6 +477,11 @@ export function PlannerTab() {
                     <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
                       {trip.passengers} voy.
                     </span>
+                    {trip.route_ok === false ? (
+                      <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-amber-50 text-amber-800">
+                        Route à mettre à jour
+                      </span>
+                    ) : null}
                     <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
                       max {trip.budget_max}€
                     </span>
@@ -582,6 +588,8 @@ function CreateTripModal({
       )
       .slice(0, 40)
   }, [cityGroups, cityQuery])
+
+  const popularCities = useMemo(() => pickPopularCityGroups(cityGroups, 8), [cityGroups])
 
   useEffect(() => {
     void getApiClient()
@@ -740,6 +748,27 @@ function CreateTripModal({
                 <p className="text-xs text-slate-500">Mode inspire — sans filtre ville</p>
               </button>
             )}
+            {popularCities.length > 0 ? (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {popularCities.map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    onClick={() => selectCity(g)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                      g.key === arrivalCityKey
+                        ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-orange-300'
+                    }`}
+                  >
+                    {g.city}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <p className="text-[11px] text-slate-400 mb-2">
+              Routes Ryanair depuis {departure} · mises à jour en direct
+            </p>
             <input
               value={cityQuery}
               onChange={(e) => setCityQuery(e.target.value)}
@@ -979,6 +1008,17 @@ function TripDetailView({
     }
   }
 
+  const clearStaleArrival = async () => {
+    setError(null)
+    try {
+      await getApiClient().updatePlannedTrip(tripId, { arrival_airport: null })
+      await load()
+      onToast('Destination retirée — mode inspire')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    }
+  }
+
   if (loading && !trip) {
     return (
       <div className="flex justify-center py-20">
@@ -1027,6 +1067,27 @@ function TripDetailView({
           </p>
         ) : null}
       </div>
+
+      {trip.route_ok === false ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+          <p className="font-bold text-amber-900">{t('planner.routeStale')}</p>
+          <p className="text-sm text-amber-800">
+            {t('planner.routeStaleBody', {
+              codes: (trip.invalid_arrival_codes || []).join(', '),
+              dep: trip.departure_airport,
+            })}
+          </p>
+          {isOrganizer ? (
+            <button
+              type="button"
+              onClick={() => void clearStaleArrival()}
+              className="text-sm font-bold bg-amber-500 text-white px-4 py-2 rounded-xl"
+            >
+              {t('planner.routeClear')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <TravelersPanel
         members={trip.members || []}

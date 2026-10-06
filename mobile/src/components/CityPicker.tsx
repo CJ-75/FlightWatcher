@@ -16,6 +16,7 @@ import {
   cityImageUrl,
   findCityGroupByKey,
   groupAirportsByCity,
+  pickPopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow } from '../theme'
@@ -27,19 +28,6 @@ type Props = {
   onChange: (group: CityAirportGroup | null) => void
   emptyLabel?: string
 }
-
-const POPULAR_CITIES = [
-  'Lisbonne',
-  'Barcelone',
-  'Rome',
-  'Porto',
-  'Madrid',
-  'Milan',
-  'Budapest',
-  'Prague',
-  'Vienne',
-  'Dublin',
-]
 
 export function CityPicker({
   airports,
@@ -57,12 +45,8 @@ export function CityPicker({
     [groups, valueKey],
   )
 
-  const popular = useMemo(() => {
-    const byCity = new Map(groups.map((g) => [g.city.toLowerCase(), g]))
-    return POPULAR_CITIES.map((c) => byCity.get(c.toLowerCase())).filter(
-      Boolean,
-    ) as CityAirportGroup[]
-  }, [groups])
+  // Dynamically filtered by served routes passed as `airports`
+  const popular = useMemo(() => pickPopularCityGroups(groups, 10), [groups])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()

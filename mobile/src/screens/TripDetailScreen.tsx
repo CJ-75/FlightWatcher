@@ -26,6 +26,7 @@ import {
   rejectGuestProposal,
   removeGuestTripMember,
   scanGuestTrip,
+  updateGuestTripArrival,
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
 import { TravelersSection } from '../components/TravelersSection'
@@ -189,6 +190,21 @@ export function TripDetailScreen() {
     }
   }
 
+  const clearStaleArrival = async () => {
+    try {
+      if (__DEV__ && isGuest) {
+        const updated = updateGuestTripArrival(tripId, null)
+        if (!updated) throw new Error('Voyage introuvable')
+        setTrip(updated)
+      } else {
+        await getApi().updatePlannedTrip(tripId, { arrival_airport: null })
+        await load()
+      }
+    } catch (e) {
+      Alert.alert('Route', e instanceof Error ? e.message : 'Mise à jour échouée')
+    }
+  }
+
   const confirmDelete = () => {
     if (!trip) return
     Alert.alert(
@@ -278,6 +294,24 @@ export function TripDetailScreen() {
         ) : null}
         <Text style={styles.status}>Statut : {trip.status}</Text>
       </View>
+
+      {trip.route_ok === false ? (
+        <View style={[styles.routeWarn, shadow.soft]}>
+          <Text style={styles.routeWarnTitle}>Route plus desservie</Text>
+          <Text style={styles.routeWarnBody}>
+            Ryanair ne dessert plus {(trip.invalid_arrival_codes || []).join(', ')} depuis{' '}
+            {trip.departure_airport}.
+          </Text>
+          {isOrganizer ? (
+            <Pressable
+              onPress={() => void clearStaleArrival()}
+              style={styles.routeWarnBtn}
+            >
+              <Text style={styles.routeWarnBtnText}>Passer en inspire</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <TravelersSection
         members={trip.members || []}
@@ -475,6 +509,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorText: { fontFamily: fonts.medium, color: colors.danger, fontSize: 14 },
+  routeWarn: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 18,
+    padding: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  routeWarnTitle: { fontFamily: fonts.bold, fontSize: 15, color: '#92400E' },
+  routeWarnBody: { fontFamily: fonts.regular, fontSize: 13, color: '#78350F', lineHeight: 18 },
+  routeWarnBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  routeWarnBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
   deleteBtn: {
     marginTop: 8,
     paddingVertical: 14,

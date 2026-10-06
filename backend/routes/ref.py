@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import List, Optional
 
+from ryanair_routes import fetch_destinations_by_country
 from fastapi import APIRouter, HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'ryanair-py'))
@@ -154,42 +155,10 @@ def get_destinations(airport: str = "BVA"):
 
 def _destinations_from_routes(airport_code: str) -> dict:
     """Source de vérité: widget routes Ryanair (pas de destinations fantômes)."""
-    import urllib.request
-
-    url = (
-        "https://www.ryanair.com/api/views/locate/searchWidget/routes/fr/airport/"
-        + airport_code
-    )
-    try:
-        print(f"🔍 Routes Ryanair depuis {airport_code}...")
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "FlightWatcher/1.0", "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-
-        by_country = defaultdict(dict)
-        for item in data if isinstance(data, list) else []:
-            arr = item.get("arrivalAirport") or {}
-            dest_code = (arr.get("code") or "").strip().upper()
-            if len(dest_code) != 3:
-                continue
-            city = ((arr.get("city") or {}).get("name") or arr.get("name") or dest_code).strip()
-            country = ((arr.get("country") or {}).get("name") or "Autre").strip()
-            name = (arr.get("name") or city).strip()
-            dest_full = f"{name}, {country}" if country else name
-            by_country[country][dest_code] = {
-                "code": dest_code,
-                "nom": city,
-                "pays": country,
-                "destinationFull": dest_full,
-            }
-        print(f"  ✓ {sum(len(v) for v in by_country.values())} route(s) widget")
-        return by_country
-    except Exception as e:
-        print(f"⚠️  Routes widget échoué pour {airport_code}: {e}")
-        return {}
+    print(f"🔍 Routes Ryanair depuis {airport_code}...")
+    by_country = fetch_destinations_by_country(airport_code)
+    print(f"  ✓ {sum(len(v) for v in by_country.values())} route(s) widget")
+    return by_country
 
 
 def _destinations_from_flights(airport_code: str) -> dict:
