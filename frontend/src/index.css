@@ -15,40 +15,126 @@
   animation: shimmer 2s infinite;
 }
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* Optimisations pour mobile */
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+@layer base {
+  html {
+    @apply bg-canvas;
+  }
+
+  body {
+    margin: 0;
+    font-family: Sora, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: #1a120e;
+    background-color: #fff9f5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  /* Shared warm peach canvas + soft orbs (parity with mobile ScreenBackground) */
+  .app-shell {
+    @apply relative min-h-screen overflow-x-hidden;
+    background: linear-gradient(180deg, #ffdcc8 0%, #ffe8dc 28%, #fff9f5 100%);
+  }
+
+  .app-shell::before,
+  .app-shell::after {
+    content: '';
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app-shell::before {
+    top: -60px;
+    right: -40px;
+    width: 200px;
+    height: 200px;
+    background: rgba(255, 107, 53, 0.12);
+  }
+
+  .app-shell::after {
+    top: 180px;
+    left: -70px;
+    width: 180px;
+    height: 180px;
+    background: rgba(255, 61, 107, 0.08);
+  }
+
+  .app-shell > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .app-kicker {
+    @apply text-[11px] font-bold tracking-[0.14em] text-primary-500 uppercase;
+  }
+
+  .app-title {
+    @apply text-3xl sm:text-4xl font-extrabold text-ink tracking-tightest;
+  }
+
+  .app-subtitle {
+    @apply text-sm sm:text-base font-medium text-muted;
+  }
+
+  .app-card {
+    @apply bg-white rounded-3xl border border-line shadow-soft;
+  }
+
+  .app-tabbar {
+    @apply flex items-center gap-1 p-1.5 rounded-[22px] bg-white/95 border border-line shadow-lift backdrop-blur-md;
+  }
+
+  .app-tab {
+    @apply flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-2xl
+      text-[13px] sm:text-sm font-semibold text-muted transition-all min-h-[44px];
+  }
+
+  .app-tab-active {
+    @apply bg-primary-50 text-primary-700 shadow-soft;
+  }
+
+  .app-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-gradient-to-br from-primary-500 to-primary-600
+      text-white font-bold px-5 py-3 rounded-2xl shadow-glow-orange
+      hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60;
+  }
 }
 
 /* Améliorer les zones tactiles sur mobile */
-button, a, input[type="button"], input[type="submit"] {
+button,
+a,
+input[type='button'],
+input[type='submit'] {
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
   touch-action: manipulation;
 }
 
-/* Améliorer le scroll sur mobile */
 * {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Optimiser les inputs sur mobile */
-input, textarea, select {
-  font-size: 16px; /* Évite le zoom automatique sur iOS */
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 @media (min-width: 640px) {
-  input, textarea, select {
+  input,
+  textarea,
+  select {
     font-size: inherit;
   }
-  
-  /* Bouton Google responsive - Desktop */
+
   .google-signin-btn {
     min-height: 48px !important;
     padding: 12px 20px !important;
@@ -58,25 +144,23 @@ input, textarea, select {
   }
 }
 
-/* Bouton Google responsive - Mobile */
 @media (max-width: 639px) {
   .google-signin-btn {
     width: auto !important;
     max-width: 100% !important;
   }
-  
+
   .flex.flex-col.gap-2.w-auto {
     width: auto !important;
     max-width: 100% !important;
   }
-  
+
   .google-icon-wrapper {
     width: 20px !important;
     height: 20px !important;
   }
-  
+
   .google-signin-text {
     font-size: 16px !important;
   }
 }
-

@@ -653,91 +653,68 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
+    <div className="app-shell">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-28 sm:pb-8">
         {/* Header */}
-        <header className="text-center mb-4 sm:mb-6 md:mb-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 mb-4">
-            <div className="flex-1 order-2 sm:order-1 hidden sm:block"></div>
+        <header className="text-center mb-5 sm:mb-7">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 mb-2">
+            <div className="flex-1 order-2 sm:order-1 hidden sm:block" />
             <div className="flex-1 text-center order-1 sm:order-2">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-slate-900 mb-1 sm:mb-2">
+              <p className="app-kicker mb-1.5">FlightWatcher</p>
+              <h1 className="app-title mb-1">
                 {t('app.title')}
               </h1>
-              <p className="text-sm sm:text-base md:text-lg text-slate-600 font-medium">
+              <p className="app-subtitle">
                 {t('app.subtitle')}
               </p>
             </div>
-            {/* Menu utilisateur - Desktop */}
             <div className="hidden sm:flex flex-1 justify-end order-3 w-auto">
               <UserMenu />
             </div>
-            {/* Menu utilisateur - Mobile */}
             <div className="sm:hidden order-3">
               <UserMenu />
             </div>
           </div>
         </header>
 
-        {/* Onglets */}
-        <div className={`${activeTab === 'search' ? 'max-w-2xl' : activeTab === 'planner' ? 'max-w-3xl' : 'max-w-5xl'} mx-auto mb-4 sm:mb-6 transition-all duration-300`}>
-          <div className="flex border-b border-gray-200">
+        {/* Onglets — pill bar (esprit FloatingTabBar mobile) */}
+        <div
+          className={`${
+            activeTab === 'search'
+              ? 'max-w-2xl'
+              : activeTab === 'planner'
+                ? 'max-w-3xl'
+                : 'max-w-5xl'
+          } mx-auto mb-5 sm:mb-7 transition-all duration-300`}
+        >
+          <div className="app-tabbar">
             <motion.button
               onClick={() => setActiveTab('search')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
-                activeTab === 'search'
-                  ? 'text-primary-500 border-b-2 border-primary-500'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              whileTap={{ scale: 0.97 }}
+              className={`app-tab ${activeTab === 'search' ? 'app-tab-active' : ''}`}
             >
-              🔍 {t('nav.search')}
+              {t('nav.search')}
             </motion.button>
             <motion.button
               onClick={() => setActiveTab('deals')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
-                activeTab === 'deals'
-                  ? 'text-primary-500 border-b-2 border-primary-500'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              whileTap={{ scale: 0.97 }}
+              className={`app-tab ${activeTab === 'deals' ? 'app-tab-active' : ''}`}
             >
-              <span className="inline-flex items-center gap-1.5">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
-                  <path d="M21.41 11.58l-9-9A1.99 1.99 0 0010.99 2H4c-1.1 0-2 .9-2 2v7c0 .53.21 1.04.59 1.41l9 9a1.996 1.996 0 002.83 0l7.99-7.99c.78-.78.78-2.05 0-2.84zM6.5 8C5.67 8 5 7.33 5 6.5S5.67 5 6.5 5 8 5.67 8 6.5 7.33 8 6.5 8z" />
-                </svg>
-                {t('nav.deals')}
-              </span>
+              {t('nav.deals')}
             </motion.button>
             <motion.button
               onClick={() => setActiveTab('planner')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
-                activeTab === 'planner'
-                  ? 'text-primary-500 border-b-2 border-primary-500'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              whileTap={{ scale: 0.97 }}
+              className={`app-tab ${activeTab === 'planner' ? 'app-tab-active' : ''}`}
             >
-              <span className="inline-flex items-center gap-1.5">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="shrink-0">
-                  <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z" />
-                </svg>
-                {t('nav.planner')}
-              </span>
+              {t('nav.planner')}
             </motion.button>
             <motion.button
               onClick={() => setActiveTab('saved')}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`flex-1 sm:flex-none px-3 sm:px-6 py-3 sm:py-3 font-semibold transition-colors text-sm sm:text-base min-h-[48px] sm:min-h-[44px] flex items-center justify-center ${
-                activeTab === 'saved'
-                  ? 'text-primary-500 border-b-2 border-primary-500'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
+              whileTap={{ scale: 0.97 }}
+              className={`app-tab ${activeTab === 'saved' ? 'app-tab-active' : ''}`}
             >
-              ❤️ {t('nav.saved')}
+              {t('nav.saved')}
             </motion.button>
           </div>
         </div>

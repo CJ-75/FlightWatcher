@@ -87,10 +87,11 @@ export function DealsTab() {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="mb-6 sm:mb-8 px-1">
-        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+        <p className="app-kicker mb-1.5">Deals</p>
+        <h2 className="app-title text-2xl sm:text-3xl">
           {t('nav.deals')}
         </h2>
-        <p className="text-slate-500 mt-1 text-sm sm:text-base">
+        <p className="app-subtitle mt-1">
           {t('deals.subtitle')}
         </p>
       </div>

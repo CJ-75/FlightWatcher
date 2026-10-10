@@ -356,20 +356,16 @@ export function PlannerTab() {
 
       <div className="relative mb-7 sm:mb-9 px-1 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p className="text-[11px] font-bold tracking-[0.14em] text-[#FF6B35] mb-1.5">
-            PLANNER
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-            Tes voyages
-          </h2>
-          <p className="text-slate-500 mt-1.5 text-sm sm:text-base">
+          <p className="app-kicker mb-1.5">Planner</p>
+          <h2 className="app-title">Tes voyages</h2>
+          <p className="app-subtitle mt-1.5">
             Crée, scanne les prix, invite tes proches.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="inline-flex items-center justify-center gap-2 bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-bold px-5 py-3 rounded-2xl shrink-0 shadow-lg shadow-orange-500/25 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+          className="app-btn-primary shrink-0"
         >
           <span className="text-lg leading-none">+</span>
           Nouveau

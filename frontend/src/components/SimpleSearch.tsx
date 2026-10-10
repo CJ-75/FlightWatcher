@@ -331,7 +331,7 @@ export function SimpleSearch({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      className="max-w-2xl mx-auto bg-white shadow-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 lg:p-10"
+      className="max-w-2xl mx-auto app-card p-4 sm:p-6 md:p-8 lg:p-10"
     >
       <BudgetSlider value={budget} onChange={handleBudgetChange} />
 
@@ -410,10 +410,10 @@ export function SimpleSearch({
         whileHover={!isButtonDisabled ? { scale: 1.05 } : {}}
         whileTap={!isButtonDisabled ? { scale: 0.95 } : {}}
         transition={springConfig}
-        className={`w-full bg-primary-500 text-white rounded-full px-4 sm:px-6 md:px-8 py-4 sm:py-5 text-base sm:text-lg md:text-xl font-black shadow-xl min-h-[56px] sm:min-h-[60px] flex items-center justify-center mt-6 sm:mt-8 md:mt-10
+        className={`w-full app-btn-primary rounded-full px-4 sm:px-6 md:px-8 py-4 sm:py-5 text-base sm:text-lg md:text-xl font-extrabold min-h-[56px] sm:min-h-[60px] mt-6 sm:mt-8 md:mt-10
           ${isButtonDisabled
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:bg-primary-600 hover:shadow-2xl active:scale-95'
+            ? 'opacity-50 cursor-not-allowed hover:scale-100'
+            : ''
           }`}
       >
         {isSearching ? (
