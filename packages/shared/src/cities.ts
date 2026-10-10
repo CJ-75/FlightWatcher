@@ -48,6 +48,14 @@ const CITY_IMAGES: Record<string, string> = {
   dublin: 'https://images.unsplash.com/photo-1549918864-48ac979795d9?w=900&q=80&auto=format&fit=crop',
   edinbourg: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=900&q=80&auto=format&fit=crop',
   edinburgh: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=900&q=80&auto=format&fit=crop',
+  catania: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
+  birmingham: 'https://images.unsplash.com/photo-1520986606214-8b456906c813?w=900&q=80&auto=format&fit=crop',
+  palerme: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
+  palermo: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
+  malaga: 'https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=900&q=80&auto=format&fit=crop',
+  faro: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80&auto=format&fit=crop',
+  naples: 'https://images.unsplash.com/photo-1534308143481-c55f00be8bd7?w=900&q=80&auto=format&fit=crop',
+  napoli: 'https://images.unsplash.com/photo-1534308143481-c55f00be8bd7?w=900&q=80&auto=format&fit=crop',
 }
 
 function normalizeCityKey(city: string): string {
@@ -62,6 +70,21 @@ export function cityImageUrl(city: string | null | undefined): string {
   if (!city) return FALLBACK_CITY_IMAGE
   const key = normalizeCityKey(city)
   return CITY_IMAGES[key] || FALLBACK_CITY_IMAGE
+}
+
+/**
+ * Resolve a card hero image. Ignores deprecated source.unsplash.com URLs
+ * from the API and falls back to curated city photos.
+ */
+export function resolveTripImageUrl(opts: {
+  city?: string | null
+  imageUrl?: string | null
+}): string {
+  const raw = (opts.imageUrl || '').trim()
+  if (raw && !/source\.unsplash\.com/i.test(raw)) {
+    return raw
+  }
+  return cityImageUrl(opts.city)
 }
 
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {

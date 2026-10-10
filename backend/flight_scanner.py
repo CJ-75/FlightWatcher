@@ -323,9 +323,7 @@ def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> Li
     for trip in trips[:15]:
         avg_price = get_avg_price_last_month(departure_airport, trip.destination_code)
         discount_percent = calculate_discount(trip.prix_total, avg_price)
-        city_name = trip.aller.destinationFull.split(',')[0].strip()
-        image_url = f"https://source.unsplash.com/800x600/?{city_name}"
-
+        # Client résout l'image via cityImageUrl (source.unsplash.com est mort)
         enriched_trip = EnrichedTripResponse(
             aller=trip.aller,
             retour=trip.retour,
@@ -333,7 +331,7 @@ def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> Li
             destination_code=trip.destination_code,
             discount_percent=discount_percent if discount_percent > 0 else None,
             is_good_deal=discount_percent > 20,
-            image_url=image_url,
+            image_url=None,
             avg_price_last_month=avg_price,
         )
         enriched.append(enriched_trip)

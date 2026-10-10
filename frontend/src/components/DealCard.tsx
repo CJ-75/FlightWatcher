@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { resolveTripImageUrl } from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 
 interface DealCardProps {
@@ -43,34 +44,49 @@ function HeartSvg({ filled }: { filled: boolean }) {
 
 export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false)
-  const imageUrl =
-    deal.image_url ||
-    'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80&auto=format&fit=crop'
+  const [imageFailed, setImageFailed] = useState(false)
+  const imageUrl = resolveTripImageUrl({
+    city: deal.city,
+    imageUrl: deal.image_url,
+  })
 
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      whileHover={{ y: -8, rotate: 1, transition: springConfig }}
+      whileHover={{ y: -6, transition: springConfig }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      className="rounded-xl sm:rounded-2xl overflow-hidden bg-white shadow-lg sm:shadow-xl max-w-sm w-full mx-auto text-left cursor-pointer relative"
+      className="rounded-3xl overflow-hidden bg-white border border-line shadow-soft w-full h-full text-left cursor-pointer relative flex flex-col"
     >
-      <div className="relative w-full h-40 sm:h-48 md:h-56">
-        {!imageLoaded && (
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] animate-[shimmer_2s_infinite]" />
+      <div className="relative w-full aspect-[5/3] sm:aspect-[16/10] bg-line shrink-0">
+        {!imageFailed ? (
+          <>
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-gradient-to-r from-primary-100 via-primary-50 to-primary-100 bg-[length:200%_100%] animate-[shimmer_2s_infinite]" />
+            )}
+            <img
+              src={imageUrl}
+              alt={deal.city}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${
+                imageLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+              loading="lazy"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageFailed(true)}
+            />
+          </>
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+            <span className="text-white text-2xl font-extrabold tracking-tight px-4 text-center">
+              {deal.city}
+            </span>
+          </div>
         )}
-        <img
-          src={imageUrl}
-          alt={deal.city}
-          className="w-full h-full object-cover"
-          loading="lazy"
-          onLoad={() => setImageLoaded(true)}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent" />
         {deal.badge ? (
-          <span className="absolute top-3 left-3 bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+          <span className="absolute top-3 left-3 bg-accent-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">
             {deal.badge}
           </span>
         ) : null}
@@ -91,16 +107,18 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
               }
             }}
             aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-            className={`absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow ${
-              liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-500'
+            className={`absolute top-3 right-3 w-11 h-11 rounded-full flex items-center justify-center shadow-soft ${
+              liked ? 'bg-white text-primary-500' : 'bg-white/95 text-ink-soft'
             }`}
           >
             <HeartSvg filled={!!liked} />
           </span>
         ) : null}
-        <div className="absolute bottom-3 left-3 right-3">
-          <h3 className="text-white text-xl sm:text-2xl font-black tracking-tight">{deal.city}</h3>
-          <p className="text-white/85 text-sm font-medium mt-0.5">
+        <div className="absolute bottom-3.5 left-3.5 right-3.5">
+          <h3 className="text-white text-xl sm:text-2xl font-extrabold tracking-tight truncate">
+            {deal.city}
+          </h3>
+          <p className="text-white/90 text-sm font-medium mt-0.5">
             {deal.departure_airport} → {deal.city} · {deal.nights} nuit{deal.nights > 1 ? 's' : ''}
           </p>
         </div>

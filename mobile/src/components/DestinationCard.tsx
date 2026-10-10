@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
-import { buildRyanairBookingUrl } from '@flightwatcher/shared'
+import { buildRyanairBookingUrl, resolveTripImageUrl } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { HeartIcon } from './HeartIcon'
 
@@ -45,9 +45,7 @@ export function DestinationCard({
   isFavorite,
 }: Props) {
   const cityName = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
-  const imageUrl =
-    trip.image_url ||
-    `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80&auto=format&fit=crop`
+  const imageUrl = resolveTripImageUrl({ city: cityName, imageUrl: trip.image_url })
   const [failed, setFailed] = useState(false)
 
   const openBook = async () => {

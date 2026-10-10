@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
+import { resolveTripImageUrl } from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
@@ -30,9 +31,7 @@ function formatDate(dateStr: string) {
 
 export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const [failed, setFailed] = useState(false)
-  const imageUrl =
-    deal.image_url ||
-    `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80&auto=format&fit=crop`
+  const imageUrl = resolveTripImageUrl({ city: deal.city, imageUrl: deal.image_url })
 
   return (
     <Pressable
