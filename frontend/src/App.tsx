@@ -654,69 +654,43 @@ function Dashboard() {
 
   return (
     <div className="app-shell">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-28 sm:pb-8">
-        {/* Header */}
-        <header className="text-center mb-5 sm:mb-7">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 mb-2">
-            <div className="flex-1 order-2 sm:order-1 hidden sm:block" />
-            <div className="flex-1 text-center order-1 sm:order-2">
-              <p className="app-kicker mb-1.5">FlightWatcher</p>
-              <h1 className="app-title mb-1">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-8">
+        {/* Shell aligné sur le contenu principal (max-w-2xl) */}
+        <div className="max-w-2xl mx-auto mb-5 sm:mb-7 space-y-4">
+          <header className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="app-kicker mb-0.5">FlightWatcher</p>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>
-              <p className="app-subtitle">
-                {t('app.subtitle')}
-              </p>
             </div>
-            <div className="hidden sm:flex flex-1 justify-end order-3 w-auto">
+            <div className="shrink-0 flex items-center">
               <UserMenu />
             </div>
-            <div className="sm:hidden order-3">
-              <UserMenu />
-            </div>
-          </div>
-        </header>
+          </header>
 
-        {/* Onglets — pill bar (esprit FloatingTabBar mobile) */}
-        <div
-          className={`${
-            activeTab === 'search'
-              ? 'max-w-2xl'
-              : activeTab === 'planner'
-                ? 'max-w-3xl'
-                : 'max-w-5xl'
-          } mx-auto mb-5 sm:mb-7 transition-all duration-300`}
-        >
-          <div className="app-tabbar">
-            <motion.button
-              onClick={() => setActiveTab('search')}
-              whileTap={{ scale: 0.97 }}
-              className={`app-tab ${activeTab === 'search' ? 'app-tab-active' : ''}`}
-            >
-              {t('nav.search')}
-            </motion.button>
-            <motion.button
-              onClick={() => setActiveTab('deals')}
-              whileTap={{ scale: 0.97 }}
-              className={`app-tab ${activeTab === 'deals' ? 'app-tab-active' : ''}`}
-            >
-              {t('nav.deals')}
-            </motion.button>
-            <motion.button
-              onClick={() => setActiveTab('planner')}
-              whileTap={{ scale: 0.97 }}
-              className={`app-tab ${activeTab === 'planner' ? 'app-tab-active' : ''}`}
-            >
-              {t('nav.planner')}
-            </motion.button>
-            <motion.button
-              onClick={() => setActiveTab('saved')}
-              whileTap={{ scale: 0.97 }}
-              className={`app-tab ${activeTab === 'saved' ? 'app-tab-active' : ''}`}
-            >
-              {t('nav.saved')}
-            </motion.button>
-          </div>
+          <nav aria-label="Navigation principale">
+            <div className="app-tabbar">
+              {(
+                [
+                  { id: 'search' as const, label: t('nav.search') },
+                  { id: 'deals' as const, label: t('nav.deals') },
+                  { id: 'planner' as const, label: t('nav.planner') },
+                  { id: 'saved' as const, label: t('nav.saved') },
+                ] as const
+              ).map((tab) => (
+                <motion.button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  whileTap={{ scale: 0.97 }}
+                  className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
+                >
+                  <span className="truncate">{tab.label}</span>
+                </motion.button>
+              ))}
+            </div>
+          </nav>
         </div>
 
         {/* Contenu selon l'onglet */}
@@ -1978,7 +1952,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 px-4 sm:px-6">
+    <div className="max-w-2xl mx-auto space-y-8">
 
       {/* Outils de test en mode développeur */}
       {devMode && (

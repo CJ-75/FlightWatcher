@@ -1038,7 +1038,7 @@ function TripDetailView({
   const encoded = encodeURIComponent(`Rejoins mon voyage « ${trip.name} » : ${url}`)
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
       <button type="button" onClick={onBack} className="text-sm font-bold text-primary-600">
         ← {t('nav.planner')}
       </button>

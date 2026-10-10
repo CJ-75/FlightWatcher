@@ -90,12 +90,12 @@
   }
 
   .app-tabbar {
-    @apply flex items-center gap-1 p-1.5 rounded-[22px] bg-white/95 border border-line shadow-lift backdrop-blur-md;
+    @apply grid grid-cols-4 items-stretch gap-1 p-1 rounded-[26px] bg-white/95 border border-line shadow-lift backdrop-blur-md w-full;
   }
 
   .app-tab {
-    @apply flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-2xl
-      text-[13px] sm:text-sm font-semibold text-muted transition-all min-h-[44px];
+    @apply inline-flex items-center justify-center px-1.5 sm:px-3 py-2.5 rounded-[20px]
+      text-[11px] sm:text-sm font-semibold text-muted transition-all min-h-[44px] w-full leading-tight;
   }
 
   .app-tab-active {
