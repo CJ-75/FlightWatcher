@@ -19,6 +19,7 @@ import { DealCard } from './components/DealCard'
 import { DealDetailModal } from './components/DealDetailModal'
 import { PlannerTab } from './components/PlannerTab'
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
+import { AlertsGuestLanding } from './components/AlertsGuestLanding'
 import type { LikedDeal, TravelDeal } from './types'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
@@ -35,14 +36,14 @@ import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import { buildRyanairBookingUrl } from '@flightwatcher/shared'
 
-type Tab = 'search' | 'deals' | 'planner' | 'saved'
+type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
 
 function Dashboard() {
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     try {
       const saved = sessionStorage.getItem('fw_active_tab')
-      if (saved === 'planner' || saved === 'deals' || saved === 'saved' || saved === 'search') {
+      if (saved === 'planner' || saved === 'deals' || saved === 'saved' || saved === 'search' || saved === 'alerts') {
         sessionStorage.removeItem('fw_active_tab')
         return saved
       }
@@ -669,14 +670,15 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* Pill 4 onglets : largeur compacte centrée (pas étirée) */}
+          {/* Pill 5 onglets : largeur compacte centrée (pas étirée) */}
           <nav className="flex justify-center" aria-label="Navigation principale">
-            <div className="app-tabbar w-full max-w-md sm:max-w-xl">
+            <div className="app-tabbar w-full max-w-lg sm:max-w-2xl">
               {(
                 [
                   { id: 'search' as const, label: t('nav.search') },
                   { id: 'deals' as const, label: t('nav.deals') },
                   { id: 'planner' as const, label: t('nav.planner') },
+                  { id: 'alerts' as const, label: t('nav.alerts') },
                   { id: 'saved' as const, label: t('nav.saved') },
                 ] as const
               ).map((tab) => (
@@ -861,8 +863,21 @@ function Dashboard() {
               </motion.div>
             )}
           </>
+        ) : activeTab === 'alerts' ? (
+          <SavedTab
+            variant="alerts"
+            loading={loading}
+            onLoadSearch={handleLoadSearch}
+            onCheckFavorite={handleCheckFavorite}
+            onReloadSearch={handleScan}
+            formatDateFr={formatDateFr}
+            onBook={(trip) => setBookingTrip(trip)}
+            setToastMessage={setToastMessage}
+            setToastType={setToastType}
+          />
         ) : (
           <SavedTab
+            variant="favorites"
             loading={loading}
             onLoadSearch={handleLoadSearch}
             onCheckFavorite={handleCheckFavorite}
@@ -1562,8 +1577,9 @@ function SearchTab({
   )
 }
 
-// Composant pour l'onglet Sauvegardés
+// Composant partagé Favoris / Alertes (variant)
 interface SavedTabProps {
+  variant: 'alerts' | 'favorites'
   loading: boolean
   onLoadSearch: (search: SavedSearch) => void
   onCheckFavorite: (favorite: SavedFavorite) => void
@@ -1574,7 +1590,7 @@ interface SavedTabProps {
   setToastType: (type: 'success' | 'error' | 'info') => void
 }
 
-function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook, setToastMessage, setToastType }: SavedTabProps) {
+function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook, setToastMessage, setToastType }: SavedTabProps) {
   // Utiliser useI18n avec gestion d'erreur pour éviter de casser le chargement
   let t: (key: string, params?: Record<string, string | number>) => string;
   try {
@@ -1605,8 +1621,11 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
 
   const refreshData = async () => {
     try {
-      console.log('🔄 refreshData appelé dans SavedTab');
-      const searches = await getSavedSearches()
+      if (variant === 'alerts') {
+        const searches = await getSavedSearches()
+        setSavedSearches(searches)
+        return
+      }
       const favs = await getFavorites()
       let deals: LikedDeal[] = []
       try {
@@ -1614,18 +1633,16 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
       } catch {
         deals = []
       }
-      console.log('✅ Données chargées:', { searches: searches.length, favorites: favs.length, likedDeals: deals.length });
-      setSavedSearches(searches)
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
-      // Même en cas d'erreur, essayer de charger depuis le cache/localStorage
       try {
-        const searches = await getSavedSearches(true) // Force refresh
-        const favs = await getFavorites(true)
-        setSavedSearches(searches)
-        setFavorites(favs)
+        if (variant === 'alerts') {
+          setSavedSearches(await getSavedSearches(true))
+        } else {
+          setFavorites(await getFavorites(true))
+        }
       } catch (fallbackError) {
         console.error('❌ Erreur fallback refreshData:', fallbackError)
       }
@@ -1775,8 +1792,10 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
     }
   }
 
-  // Initialiser les auto-checks au chargement
+  // Initialiser les auto-checks au chargement (onglet Alertes uniquement)
   useEffect(() => {
+    if (variant !== 'alerts') return
+
     const initAutoChecks = async () => {
       const activeSearches = await getActiveAutoChecks()
       activeSearches.forEach(search => {
@@ -1799,13 +1818,14 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
       intervalsRef.current = {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [variant])
 
   // Surveiller les recherches pour nettoyer les intervalles orphelins
   useEffect(() => {
+    if (variant !== 'alerts') return
     cleanupOrphanedIntervals()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedSearches])
+  }, [savedSearches, variant])
 
   // Obtenir le nombre de nouveaux résultats pour chaque recherche
   const getNewResultsCount = (searchId: string): number => {
@@ -1953,12 +1973,14 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   }
 
   if (!userId) {
-    return <FavoritesGuestLanding />
+    return variant === 'alerts' ? <AlertsGuestLanding /> : <FavoritesGuestLanding />
   }
 
   return (
     <div className="w-full space-y-8">
 
+      {variant === 'alerts' && (
+      <>
       {/* Outils de test en mode développeur */}
       {devMode && (
         <motion.div
@@ -1999,16 +2021,16 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         </motion.div>
       )}
 
-      {/* Recherches sauvegardées */}
+      {/* Alertes / recherches automatisées */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-2xl shadow-xl overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
+        <div className="bg-gradient-to-r from-[#FF6B35] to-[#E85A28] p-6">
           <h2 className="text-3xl font-black text-white flex items-center gap-3">
-            <span>💾</span>
-            <span>{t('saved.title')}</span>
+            <span>🔔</span>
+            <span>{t('alerts.title')}</span>
             <span className="text-xl bg-white/20 px-3 py-1 rounded-full">
               {savedSearches.length}
             </span>
@@ -2018,9 +2040,9 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
         <div className="p-6">
           {savedSearches.length === 0 ? (
             <div className="text-center py-16">
-              <div className="text-6xl mb-4">🔍</div>
-              <p className="text-xl text-gray-500 font-medium">{t('saved.empty')}</p>
-              <p className="text-sm text-gray-400 mt-2">{t('saved.save')}</p>
+              <div className="text-6xl mb-4">🔔</div>
+              <p className="text-xl text-gray-500 font-medium">{t('alerts.empty')}</p>
+              <p className="text-sm text-gray-400 mt-2">{t('alerts.emptyHint')}</p>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -2396,7 +2418,11 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
           )}
         </div>
       </motion.div>
+      </>
+      )}
 
+      {variant === 'favorites' && (
+      <>
       {/* Favoris */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -2784,9 +2810,11 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
           />
         ) : null}
       </motion.div>
+      </>
+      )}
 
-      {/* Lightbox pour afficher les nouveaux résultats */}
-      {showLightbox && lightboxResults && (
+      {/* Lightbox pour afficher les nouveaux résultats (Alertes) */}
+      {variant === 'alerts' && showLightbox && lightboxResults && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

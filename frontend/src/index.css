@@ -125,7 +125,7 @@
   }
 
   .app-tabbar {
-    @apply grid grid-cols-4 items-stretch gap-1 p-1.5 rounded-[26px]
+    @apply grid grid-cols-5 items-stretch gap-1 p-1.5 rounded-[26px]
       bg-white/95 border border-line shadow-lift backdrop-blur-md;
   }
 
