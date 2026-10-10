@@ -696,9 +696,7 @@ function Dashboard() {
 
         {/* Contenu selon l'onglet */}
         {activeTab === 'deals' ? (
-          <div className="max-w-3xl mx-auto">
-            <DealsTab />
-          </div>
+          <DealsTab />
         ) : activeTab === 'planner' ? (
           <div className="max-w-3xl mx-auto">
             <PlannerTab />
