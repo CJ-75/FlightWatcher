@@ -655,11 +655,12 @@ function Dashboard() {
   return (
     <div className="app-shell">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-8">
-        <div className="app-col">
-          <header className="flex items-center justify-between gap-3 mb-4">
+        <div className="w-full mb-5 sm:mb-7 space-y-4">
+          {/* Brand + compte : pleine largeur */}
+          <header className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="app-kicker mb-0.5">FlightWatcher</p>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight truncate">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>
             </div>
@@ -668,8 +669,9 @@ function Dashboard() {
             </div>
           </header>
 
-          <nav className="mb-5 sm:mb-7" aria-label="Navigation principale">
-            <div className="app-tabbar">
+          {/* Pill 4 onglets : largeur compacte centrée (pas étirée) */}
+          <nav className="flex justify-center" aria-label="Navigation principale">
+            <div className="app-tabbar w-full max-w-md sm:max-w-xl">
               {(
                 [
                   { id: 'search' as const, label: t('nav.search') },

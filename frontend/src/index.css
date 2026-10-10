@@ -125,12 +125,13 @@
   }
 
   .app-tabbar {
-    @apply grid grid-cols-4 items-stretch gap-1 p-1.5 rounded-[26px] bg-white/95 border border-line shadow-lift backdrop-blur-md w-full;
+    @apply grid grid-cols-4 items-stretch gap-1 p-1.5 rounded-[26px]
+      bg-white/95 border border-line shadow-lift backdrop-blur-md;
   }
 
   .app-tab {
-    @apply relative inline-flex items-center justify-center px-1.5 sm:px-3 py-2.5 rounded-[20px]
-      text-[11px] sm:text-sm font-semibold text-muted min-h-[44px] w-full leading-tight;
+    @apply relative inline-flex items-center justify-center px-2 sm:px-3 py-2.5 rounded-[20px]
+      text-xs sm:text-sm font-semibold text-muted min-h-[44px] w-full leading-tight;
     transition:
       color 160ms ease,
       background-color 160ms ease,

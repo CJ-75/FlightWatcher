@@ -238,7 +238,7 @@ export function UserMenu() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.96 }}
                 transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-                className="absolute right-0 top-full mt-2 w-64 sm:w-72 z-50 overflow-hidden rounded-2xl border border-line bg-white/95 shadow-lift backdrop-blur-xl"
+                className="absolute right-0 top-full mt-2 w-72 sm:w-80 z-50 overflow-hidden rounded-3xl border border-line bg-white/95 shadow-lift backdrop-blur-xl"
               >
                 <div className="bg-primary-50 p-4 border-b border-line">
                   <div className="flex items-center gap-3">
@@ -318,7 +318,7 @@ export function UserMenu() {
         onClick={handleSignIn}
         disabled={loading}
         type="button"
-        className="app-icon-btn h-10 sm:h-11 px-3.5 sm:px-4 bg-white border-2 border-line rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold text-ink-soft text-sm shadow-soft hover:text-primary-700 hover:bg-primary-50"
+        className="app-icon-btn h-10 sm:h-11 px-3.5 sm:px-5 bg-white border-2 border-line rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold text-ink-soft text-sm shadow-soft hover:text-primary-700 hover:bg-primary-50"
       >
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
