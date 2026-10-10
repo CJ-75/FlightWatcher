@@ -654,48 +654,45 @@ function Dashboard() {
 
   return (
     <div className="app-shell">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-8">
-        {/* Shell aligné sur le contenu principal (max-w-2xl) */}
-        <div className="max-w-2xl mx-auto mb-5 sm:mb-7 space-y-4">
-          <header className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="app-kicker mb-0.5">FlightWatcher</p>
-              <h1 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight truncate">
-                {t('app.title')}
-              </h1>
-            </div>
-            <div className="shrink-0 flex items-center">
-              <UserMenu />
-            </div>
-          </header>
+      <div className="mx-auto w-full max-w-2xl px-4 sm:px-6 py-4 sm:py-6 md:py-8 pb-8">
+        <header className="flex items-center justify-between gap-3 mb-4">
+          <div className="min-w-0">
+            <p className="app-kicker mb-0.5">FlightWatcher</p>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight truncate">
+              {t('app.title')}
+            </h1>
+          </div>
+          <div className="shrink-0 flex items-center">
+            <UserMenu />
+          </div>
+        </header>
 
-          <nav aria-label="Navigation principale">
-            <div className="app-tabbar">
-              {(
-                [
-                  { id: 'search' as const, label: t('nav.search') },
-                  { id: 'deals' as const, label: t('nav.deals') },
-                  { id: 'planner' as const, label: t('nav.planner') },
-                  { id: 'saved' as const, label: t('nav.saved') },
-                ] as const
-              ).map((tab) => (
-                <motion.button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                  className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
-                >
-                  <span className="relative z-[1] truncate">{tab.label}</span>
-                </motion.button>
-              ))}
-            </div>
-          </nav>
-        </div>
+        <nav className="mb-5 sm:mb-7" aria-label="Navigation principale">
+          <div className="app-tabbar">
+            {(
+              [
+                { id: 'search' as const, label: t('nav.search') },
+                { id: 'deals' as const, label: t('nav.deals') },
+                { id: 'planner' as const, label: t('nav.planner') },
+                { id: 'saved' as const, label: t('nav.saved') },
+              ] as const
+            ).map((tab) => (
+              <motion.button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+                className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
+              >
+                <span className="relative z-[1] truncate">{tab.label}</span>
+              </motion.button>
+            ))}
+          </div>
+        </nav>
 
-        {/* Contenu selon l'onglet */}
+        {/* Contenu selon l'onglet — même colonne que le menu */}
         {activeTab === 'deals' ? (
           <DealsTab />
         ) : activeTab === 'planner' ? (
@@ -732,7 +729,7 @@ function Dashboard() {
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="max-w-2xl mx-auto mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
+                className="w-full mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
               >
                 ❌ {error}
               </motion.div>
@@ -743,7 +740,7 @@ function Dashboard() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="max-w-2xl mx-auto mb-4 sm:mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm sm:text-base"
+                className="w-full mb-4 sm:mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm sm:text-base"
               >
                 {saveSuccessMessage}
               </motion.div>
@@ -756,14 +753,14 @@ function Dashboard() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="max-w-7xl mx-auto mt-8 sm:mt-12"
+                className="w-full mt-8 sm:mt-12"
               >
                 {/* Section résumé de la recherche */}
                 {lastSearchInfo && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 border-2 border-primary-200 shadow-lg px-4 sm:px-6"
+                    className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 border-2 border-primary-200 shadow-lg"
                   >
                     <h3 className="text-lg sm:text-xl font-black text-primary-900 mb-3 sm:mb-4">
                       📋 {t('results.lastSearch')}
@@ -808,7 +805,7 @@ function Dashboard() {
                   </motion.div>
                 )}
                 
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4 px-2 sm:px-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4">
                   <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
                     🎯 Destinations trouvées
                   </h2>
@@ -836,7 +833,7 @@ function Dashboard() {
                     </motion.button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 px-2 sm:px-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {simpleResults.map((trip, index) => (
                     <motion.div
                       key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
@@ -1954,7 +1951,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="w-full space-y-8">
 
       {/* Outils de test en mode développeur */}
       {devMode && (

@@ -77,7 +77,7 @@ function PlannerGuestLanding() {
   }
 
   return (
-    <div className="relative max-w-2xl mx-auto px-1 overflow-hidden">
+    <div className="relative w-full overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#FF6B35]/15 blur-3xl"
@@ -344,7 +344,7 @@ export function PlannerTab() {
   }
 
   return (
-    <div className="relative max-w-2xl mx-auto">
+    <div className="relative w-full">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-20 -right-10 w-72 h-72 rounded-full bg-[#FF6B35]/15 blur-3xl"
@@ -354,7 +354,7 @@ export function PlannerTab() {
         className="pointer-events-none absolute top-40 -left-16 w-56 h-56 rounded-full bg-[#FFB088]/20 blur-3xl"
       />
 
-      <div className="relative mb-7 sm:mb-9 px-1 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="relative mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <p className="app-kicker mb-1.5">Planner</p>
           <h2 className="app-title">Tes voyages</h2>
@@ -1038,7 +1038,7 @@ function TripDetailView({
   const encoded = encodeURIComponent(`Rejoins mon voyage « ${trip.name} » : ${url}`)
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <button type="button" onClick={onBack} className="text-sm font-bold text-primary-600">
         ← {t('nav.planner')}
       </button>

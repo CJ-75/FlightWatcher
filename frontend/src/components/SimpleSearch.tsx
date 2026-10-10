@@ -331,7 +331,7 @@ export function SimpleSearch({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      className="max-w-2xl mx-auto app-card p-4 sm:p-6 md:p-8 lg:p-10"
+      className="w-full app-card p-4 sm:p-6 md:p-8"
     >
       <BudgetSlider value={budget} onChange={handleBudgetChange} />
 

@@ -85,8 +85,8 @@ export function DealsTab() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6 sm:mb-8 px-1">
+    <div className="w-full">
+      <div className="mb-6 sm:mb-8">
         <p className="app-kicker mb-1.5">Deals</p>
         <h2 className="app-title text-2xl sm:text-3xl">
           {t('nav.deals')}

@@ -30,7 +30,7 @@ export function FavoritesGuestLanding() {
   }
 
   return (
-    <div className="relative max-w-2xl mx-auto px-1 overflow-hidden">
+    <div className="relative w-full overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#FF6B35]/15 blur-3xl"
