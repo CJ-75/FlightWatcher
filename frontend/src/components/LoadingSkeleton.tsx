@@ -4,7 +4,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 
 export function LoadingSkeleton() {
   return (
-    <div className="max-w-2xl mx-auto bg-white shadow-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 lg:p-10">
+    <div className="w-full max-w-3xl mx-auto bg-white shadow-xl rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 lg:p-10">
       {/* Spinner et messages rotatifs */}
       <div className="mb-8">
         <div className="flex justify-center mb-4">

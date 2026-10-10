@@ -70,7 +70,7 @@ export function DestinationCard({ trip, onSaveFavorite, onBook, isFavorite = fal
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      className="rounded-3xl overflow-hidden bg-white border border-line shadow-soft max-w-sm w-full mx-auto"
+      className="rounded-3xl overflow-hidden bg-white border border-line shadow-soft w-full h-full"
     >
       <div className="relative w-full h-40 sm:h-48 md:h-56 lg:h-64">
         {!imageLoaded && (

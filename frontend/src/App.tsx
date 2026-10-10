@@ -654,98 +654,105 @@ function Dashboard() {
 
   return (
     <div className="app-shell">
-      <div className="mx-auto w-full max-w-2xl px-4 sm:px-6 py-4 sm:py-6 md:py-8 pb-8">
-        <header className="flex items-center justify-between gap-3 mb-4">
-          <div className="min-w-0">
-            <p className="app-kicker mb-0.5">FlightWatcher</p>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight truncate">
-              {t('app.title')}
-            </h1>
-          </div>
-          <div className="shrink-0 flex items-center">
-            <UserMenu />
-          </div>
-        </header>
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-8">
+        <div className="max-w-3xl mx-auto">
+          <header className="flex items-center justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <p className="app-kicker mb-0.5">FlightWatcher</p>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight truncate">
+                {t('app.title')}
+              </h1>
+            </div>
+            <div className="shrink-0 flex items-center">
+              <UserMenu />
+            </div>
+          </header>
 
-        <nav className="mb-5 sm:mb-7" aria-label="Navigation principale">
-          <div className="app-tabbar">
-            {(
-              [
-                { id: 'search' as const, label: t('nav.search') },
-                { id: 'deals' as const, label: t('nav.deals') },
-                { id: 'planner' as const, label: t('nav.planner') },
-                { id: 'saved' as const, label: t('nav.saved') },
-              ] as const
-            ).map((tab) => (
-              <motion.button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                whileHover={{ scale: 1.04 }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 24 }}
-                className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
-              >
-                <span className="relative z-[1] truncate">{tab.label}</span>
-              </motion.button>
-            ))}
-          </div>
-        </nav>
+          <nav className="mb-5 sm:mb-7" aria-label="Navigation principale">
+            <div className="app-tabbar">
+              {(
+                [
+                  { id: 'search' as const, label: t('nav.search') },
+                  { id: 'deals' as const, label: t('nav.deals') },
+                  { id: 'planner' as const, label: t('nav.planner') },
+                  { id: 'saved' as const, label: t('nav.saved') },
+                ] as const
+              ).map((tab) => (
+                <motion.button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+                  className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
+                >
+                  <span className="relative z-[1] truncate">{tab.label}</span>
+                </motion.button>
+              ))}
+            </div>
+          </nav>
+        </div>
 
-        {/* Contenu selon l'onglet — même colonne que le menu */}
+        {/* Contenu selon l'onglet */}
         {activeTab === 'deals' ? (
-          <DealsTab />
+          <div className="max-w-3xl mx-auto">
+            <DealsTab />
+          </div>
         ) : activeTab === 'planner' ? (
-          <PlannerTab />
+          <div className="max-w-3xl mx-auto">
+            <PlannerTab />
+          </div>
         ) : activeTab === 'search' ? (
           <>
-            <SimpleSearch
-              onResults={handleSimpleResults}
-              onLoading={setLoading}
-              onError={setError}
-              airports={airports}
-              selectedAirport={aeroportDepart}
-              onAirportChange={setAeroportDepart}
-              AirportAutocomplete={AirportAutocomplete}
-              flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
-              onFlexibleDatesChange={(dates) => {
-                setDatesDepart(dates.dates_depart);
-                setDatesRetour(dates.dates_retour);
-              }}
-              excludedDestinations={destinationsExclues}
-              onExcludedDestinationsChange={setDestinationsExclues}
-              destinations={destinations}
-              loadingDestinations={loadingDestinations}
-              onLoadDestinations={() => loadDestinations()}
-              limiteAllers={limiteAllers}
-              onLimiteAllersChange={setLimiteAllers}
-              formatDateFr={formatDateFr}
-              onSearchEventId={setCurrentSearchEventId}
-              budget={budgetMax}
-              onBudgetChange={setBudgetMax}
-            />
-            
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
-              >
-                ❌ {error}
-              </motion.div>
-            )}
-            
-            {saveSuccessMessage && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="w-full mb-4 sm:mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm sm:text-base"
-              >
-                {saveSuccessMessage}
-              </motion.div>
-            )}
+            <div className="max-w-3xl mx-auto">
+              <SimpleSearch
+                onResults={handleSimpleResults}
+                onLoading={setLoading}
+                onError={setError}
+                airports={airports}
+                selectedAirport={aeroportDepart}
+                onAirportChange={setAeroportDepart}
+                AirportAutocomplete={AirportAutocomplete}
+                flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
+                onFlexibleDatesChange={(dates) => {
+                  setDatesDepart(dates.dates_depart);
+                  setDatesRetour(dates.dates_retour);
+                }}
+                excludedDestinations={destinationsExclues}
+                onExcludedDestinationsChange={setDestinationsExclues}
+                destinations={destinations}
+                loadingDestinations={loadingDestinations}
+                onLoadDestinations={() => loadDestinations()}
+                limiteAllers={limiteAllers}
+                onLimiteAllersChange={setLimiteAllers}
+                formatDateFr={formatDateFr}
+                onSearchEventId={setCurrentSearchEventId}
+                budget={budgetMax}
+                onBudgetChange={setBudgetMax}
+              />
 
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="w-full mb-4 sm:mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base"
+                >
+                  ❌ {error}
+                </motion.div>
+              )}
+
+              {saveSuccessMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="w-full mb-4 sm:mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm sm:text-base"
+                >
+                  {saveSuccessMessage}
+                </motion.div>
+              )}
+            </div>
 
             {simpleResults.length > 0 && (
               <motion.div
@@ -833,13 +840,14 @@ function Dashboard() {
                     </motion.button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
                   {simpleResults.map((trip, index) => (
                     <motion.div
                       key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
+                      transition={{ delay: Math.min(index * 0.05, 0.4) }}
+                      className="min-w-0"
                     >
                       <DestinationCard
                         trip={trip}
@@ -856,16 +864,18 @@ function Dashboard() {
             )}
           </>
         ) : (
-          <SavedTab
-            loading={loading}
-            onLoadSearch={handleLoadSearch}
-            onCheckFavorite={handleCheckFavorite}
-            onReloadSearch={handleScan}
-            formatDateFr={formatDateFr}
-            onBook={(trip) => setBookingTrip(trip)}
-            setToastMessage={setToastMessage}
-            setToastType={setToastType}
-          />
+          <div className="max-w-3xl mx-auto">
+            <SavedTab
+              loading={loading}
+              onLoadSearch={handleLoadSearch}
+              onCheckFavorite={handleCheckFavorite}
+              onReloadSearch={handleScan}
+              formatDateFr={formatDateFr}
+              onBook={(trip) => setBookingTrip(trip)}
+              setToastMessage={setToastMessage}
+              setToastType={setToastType}
+            />
+          </div>
         )}
       </div>
 

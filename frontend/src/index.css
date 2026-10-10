@@ -43,6 +43,15 @@
     background: linear-gradient(180deg, #ffdcc8 0%, #ffe8dc 28%, #fff9f5 100%);
   }
 
+  /* Colonnes web : contenu form/tabs + résultats larges */
+  .app-col {
+    @apply w-full max-w-3xl mx-auto;
+  }
+
+  .app-col-wide {
+    @apply w-full max-w-7xl mx-auto;
+  }
+
   .app-shell::before,
   .app-shell::after {
     content: '';
