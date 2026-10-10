@@ -1,18 +1,35 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { generateDatesFromPreset } from '@flightwatcher/shared';
 import { BudgetSlider } from './BudgetSlider';
 import { PassengerStepper } from './PassengerStepper';
 import { DatePresets, DatePreset } from './DatePresets';
 import { AdvancedOptions } from './AdvancedOptions';
 import { DateWithTimes } from './DateWithTimes';
-import { InspireRequest, InspireResponse, EnrichedTripResponse, DateAvecHoraire, Destination } from '../types';
+import { InspireRequest, EnrichedTripResponse, DateAvecHoraire, Destination } from '../types';
 import { Airport } from '../types';
 import { LoadingSkeleton } from './LoadingSkeleton';
-import { LoadingSpinner } from './LoadingSpinner';
-import { LoadingMessages } from './LoadingMessages';
 import { getApiClient } from '../utils/apiClient';
 import { getSessionId } from '../utils/session';
 import { useI18n } from '../contexts/I18nContext';
+
+function withFullDayHours(dates: {
+  dates_depart: DateAvecHoraire[];
+  dates_retour: DateAvecHoraire[];
+}) {
+  return {
+    dates_depart: dates.dates_depart.map((d) => ({
+      ...d,
+      heure_min: d.heure_min || '06:00',
+      heure_max: d.heure_max || '23:59',
+    })),
+    dates_retour: dates.dates_retour.map((d) => ({
+      ...d,
+      heure_min: d.heure_min || '06:00',
+      heure_max: d.heure_max || '23:59',
+    })),
+  };
+}
 
 interface SimpleSearchProps {
   onResults: (results: EnrichedTripResponse[], searchInfo?: {
@@ -87,6 +104,8 @@ export function SimpleSearch({
   });
   const [hasInteractedWithAirport, setHasInteractedWithAirport] = useState(false);
   const [showAirportError, setShowAirportError] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [showEmpty, setShowEmpty] = useState(false);
   const airportSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousDatesRef = useRef<string>('');
@@ -149,14 +168,22 @@ export function SimpleSearch({
 
   // Fonction pour valider qu'un code d'aéroport est valide
   const isValidAirportCode = (code: string): boolean => {
-    // Si la liste d'aéroports n'est pas encore chargée, considérer comme invalide
-    if (!airports || airports.length === 0) return false;
-    // Si le code est vide ou seulement des espaces, invalide
     if (!code || code.trim() === '') return false;
     const codeUpper = code.trim().toUpperCase();
-    // Vérifier que c'est un code d'aéroport valide (3 lettres) et qu'il existe dans la liste
-    const isValid = /^[A-Z]{3}$/.test(codeUpper) && airports.some(a => a.code === codeUpper);
-    return isValid;
+    if (!/^[A-Z]{3}$/.test(codeUpper)) return false;
+    // Liste pas encore chargée : accepter le code IATA (évite bouton bloqué)
+    if (!airports || airports.length === 0) return true;
+    return airports.some((a) => a.code === codeUpper);
+  };
+
+  const resolvePresetDates = (preset: DatePreset) => {
+    if (preset === 'flexible') {
+      return flexibleDates;
+    }
+    if (presetDates.dates_depart.length > 0 && presetDates.dates_retour.length > 0) {
+      return withFullDayHours(presetDates);
+    }
+    return withFullDayHours(generateDatesFromPreset(preset));
   };
 
   // Vérifier si le bouton doit être désactivé
@@ -185,76 +212,77 @@ export function SimpleSearch({
   // Gérer le clic sur le bouton désactivé
   const handleButtonClick = () => {
     if (isButtonDisabled) {
-      // Si l'aéroport n'est pas valide, afficher le message et scroller
+      if (!datePreset) {
+        const msg = t('search.error.noPeriod');
+        setLocalError(msg);
+        onError(msg);
+        return;
+      }
       if (!isValidAirportCode(selectedAirport)) {
         setShowAirportError(true);
         setHasInteractedWithAirport(true);
-        // Scroller vers la section aéroport après un court délai pour laisser le message apparaître
+        const msg = t('search.error.invalidAirport');
+        setLocalError(msg);
+        onError(msg);
         setTimeout(() => {
           airportSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
       }
-      // Si la période n'est pas sélectionnée, on pourrait aussi scroller vers les presets
-      if (!datePreset) {
-        // Le message d'erreur pour la période sera géré par handleSearch
-      }
-    } else {
-      handleSearch();
+      return;
     }
+    void handleSearch();
   };
 
   const handleSearch = async () => {
     if (!datePreset) {
-      onError(t('search.error.noPeriod'));
+      const msg = t('search.error.noPeriod');
+      setLocalError(msg);
+      onError(msg);
       return;
     }
 
-    // Validation stricte de l'aéroport de départ
     if (!selectedAirport || selectedAirport.trim() === '') {
-      onError(t('search.error.noAirport'));
+      const msg = t('search.error.noAirport');
+      setLocalError(msg);
+      onError(msg);
       return;
     }
 
-    // Vérifier que le code d'aéroport est valide
     if (!isValidAirportCode(selectedAirport)) {
-      onError(t('search.error.invalidAirport'));
+      const msg = t('search.error.invalidAirport');
+      setLocalError(msg);
+      onError(msg);
       return;
     }
 
-    // Validation pour dates
-    if (datePreset === 'flexible') {
-      if (flexibleDates.dates_depart.length === 0 || flexibleDates.dates_retour.length === 0) {
-        onError(t('search.error.noDates'));
-        return;
-      }
-    } else {
-      if (presetDates.dates_depart.length === 0 || presetDates.dates_retour.length === 0) {
-        onError(t('search.error.waitDates'));
-        return;
-      }
+    const resolvedDates = resolvePresetDates(datePreset);
+    if (resolvedDates.dates_depart.length === 0 || resolvedDates.dates_retour.length === 0) {
+      const msg = datePreset === 'flexible' ? t('search.error.noDates') : t('search.error.waitDates');
+      setLocalError(msg);
+      onError(msg);
+      return;
+    }
+
+    if (datePreset !== 'flexible') {
+      setPresetDates(resolvedDates);
     }
 
     setIsSearching(true);
     onLoading(true);
     onError(null);
+    setLocalError(null);
+    setShowEmpty(false);
 
     try {
       const request: InspireRequest = {
         budget,
         date_preset: datePreset,
-        departure: selectedAirport,
+        departure: selectedAirport.trim().toUpperCase(),
         passengers,
-        ...(datePreset === 'flexible' ? {
-          flexible_dates: {
-            dates_depart: flexibleDates.dates_depart,
-            dates_retour: flexibleDates.dates_retour,
-          }
-        } : {
-          flexible_dates: {
-            dates_depart: presetDates.dates_depart,
-            dates_retour: presetDates.dates_retour,
-          }
-        }),
+        flexible_dates: {
+          dates_depart: resolvedDates.dates_depart,
+          dates_retour: resolvedDates.dates_retour,
+        },
         ...(excludedDestinations.length > 0 && {
           destinations_exclues: excludedDestinations
         }),
@@ -264,23 +292,19 @@ export function SimpleSearch({
       };
 
       const result = await getApiClient().inspire(request);
-      
-      // Enregistrer l'événement de recherche pour analytics (non-bloquant)
-      const searchStartTime = performance.now();
-      const searchDuration = Math.round(performance.now() - searchStartTime);
-      
-      // Enregistrer l'événement de recherche et stocker l'ID pour le lier au booking SAS
+      const trips = Array.isArray(result?.resultats) ? result.resultats : [];
+
       void getApiClient().trackSearchEvent({
-          departure_airport: selectedAirport,
+          departure_airport: selectedAirport.trim().toUpperCase(),
           date_preset: datePreset,
           budget,
-          dates_depart: datePreset === 'flexible' ? flexibleDates.dates_depart : presetDates.dates_depart,
-          dates_retour: datePreset === 'flexible' ? flexibleDates.dates_retour : presetDates.dates_retour,
+          dates_depart: resolvedDates.dates_depart,
+          dates_retour: resolvedDates.dates_retour,
           destinations_exclues: excludedDestinations,
           limite_allers: limiteAllers,
-          results_count: result.resultats.length,
-          results: result.resultats.slice(0, 10), // Limiter à 10 résultats pour éviter payload trop lourd
-          search_duration_ms: searchDuration,
+          results_count: trips.length,
+          results: trips.slice(0, 10),
+          search_duration_ms: 0,
           api_requests_count: result.nombre_requetes,
           source: 'web',
           user_agent: navigator.userAgent,
@@ -295,18 +319,23 @@ export function SimpleSearch({
         .catch(err => {
           console.warn('Erreur enregistrement événement de recherche:', err);
         });
-      
-      onResults(result.resultats, {
+
+      onResults(trips, {
         datePreset,
-        airport: selectedAirport,
+        airport: selectedAirport.trim().toUpperCase(),
         budget,
         passengers,
-        datesDepart: datePreset === 'flexible' ? flexibleDates.dates_depart : presetDates.dates_depart,
-        datesRetour: datePreset === 'flexible' ? flexibleDates.dates_retour : presetDates.dates_retour,
+        datesDepart: resolvedDates.dates_depart,
+        datesRetour: resolvedDates.dates_retour,
         excludedDestinations
       });
+
+      setShowEmpty(trips.length === 0);
       } catch (err) {
-      onError(err instanceof Error ? err.message : t('app.error'));
+      const msg = err instanceof Error ? err.message : t('app.error');
+      setLocalError(msg);
+      onError(msg);
+      setShowEmpty(false);
     } finally {
       setIsSearching(false);
       onLoading(false);
@@ -366,7 +395,14 @@ export function SimpleSearch({
 
       <DatePresets
         selected={datePreset}
-        onChange={setDatePreset}
+        onChange={(preset) => {
+          setDatePreset(preset);
+          setLocalError(null);
+          setShowEmpty(false);
+          if (preset !== 'flexible') {
+            setPresetDates(withFullDayHours(generateDatesFromPreset(preset)));
+          }
+        }}
         onFlexibleClick={handleFlexibleClick}
       />
 
@@ -404,13 +440,31 @@ export function SimpleSearch({
         formatDateFr={formatDateFr}
       />
 
+      {localError && (
+        <div className="mt-4 mb-2 p-3 sm:p-4 rounded-2xl border bg-red-50 border-red-200 text-red-700 text-sm sm:text-base">
+          {localError}
+        </div>
+      )}
+
+      {showEmpty && !localError && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 mb-2 p-5 sm:p-6 rounded-2xl border border-line bg-primary-50 text-center"
+        >
+          <p className="text-base sm:text-lg font-extrabold text-ink">{t('results.noResults')}</p>
+          <p className="mt-1.5 text-sm text-muted">{t('results.noResultsHint')}</p>
+        </motion.div>
+      )}
+
       <motion.button
+        type="button"
         onClick={handleButtonClick}
-        disabled={false}
+        disabled={isSearching}
         whileHover={!isButtonDisabled ? { scale: 1.05 } : {}}
         whileTap={!isButtonDisabled ? { scale: 0.95 } : {}}
         transition={springConfig}
-        className={`w-full app-btn-primary rounded-full px-4 sm:px-6 md:px-8 py-4 sm:py-5 text-base sm:text-lg md:text-xl font-extrabold min-h-[56px] sm:min-h-[60px] mt-6 sm:mt-8 md:mt-10
+        className={`w-full app-btn-primary rounded-full px-4 sm:px-6 md:px-8 py-4 sm:py-5 text-base sm:text-lg md:text-xl font-extrabold min-h-[56px] sm:min-h-[60px] mt-4 sm:mt-6
           ${isButtonDisabled
             ? 'opacity-50 cursor-not-allowed hover:scale-100'
             : ''

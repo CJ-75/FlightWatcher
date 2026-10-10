@@ -41,7 +41,7 @@ export function formatDateFr(dateStr: string): string {
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
 }
 
-const defaultHours = { heure_min: '06:00', heure_max: '12:00' } // Matin
+const defaultHours = { heure_min: '06:00', heure_max: '23:59' }
 
 /**
  * Génère les dates aller/retour selon le preset (logique alignée web DateWithTimes).
