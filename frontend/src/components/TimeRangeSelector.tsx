@@ -102,7 +102,7 @@ export function TimeRangeSelector({ date, onUpdate, type }: TimeRangeSelectorPro
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsExpanded(false)}
-              className="hidden md:block fixed inset-0 bg-black/10 z-[99]"
+              className="hidden md:block fixed inset-0 bg-transparent z-[99]"
             />
             
             <motion.div
@@ -111,8 +111,7 @@ export function TimeRangeSelector({ date, onUpdate, type }: TimeRangeSelectorPro
               exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={springConfig}
               onClick={(e) => e.stopPropagation()}
-              className="absolute z-[100] bottom-full mb-2 left-0 right-0 sm:left-auto sm:right-auto w-full sm:w-auto bg-white rounded-xl shadow-2xl border-2 border-slate-300 p-3 sm:p-4 space-y-3 sm:space-y-4"
-              style={{ minWidth: 'min(100%, 320px)' }}
+              className="absolute z-[100] bottom-full mb-2 left-0 right-0 md:left-auto md:right-0 w-full md:w-[360px] bg-white rounded-2xl shadow-lift border border-line p-3 sm:p-4 space-y-3 sm:space-y-4"
             >
               {/* Header avec bouton fermer */}
               <div className="text-sm font-black text-slate-900 mb-3 flex items-center justify-between gap-2">
@@ -138,7 +137,7 @@ export function TimeRangeSelector({ date, onUpdate, type }: TimeRangeSelectorPro
                   onClick={() => handlePresetSelect(preset)}
                   whileHover={{ scale: 1.05, y: -2 }}
                   whileTap={{ scale: 0.95 }}
-                  className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-br ${preset.color} shadow-lg hover:shadow-xl transition-all min-h-[60px] sm:min-h-[70px]`}
+                  className={`px-2 sm:px-3 py-2.5 sm:py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-br ${preset.color} shadow-lg hover:shadow-xl transition-all min-h-[52px] md:min-h-[56px]`}
                 >
                   <div className="text-base mb-1">{preset.label.split(' ')[0]}</div>
                   <div className="text-xs opacity-90 font-mono">

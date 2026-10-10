@@ -24,7 +24,7 @@ export function AccountGuestLanding({ onStartSignIn }: Props) {
   }
 
   return (
-    <div className="relative max-w-md mx-auto px-1 overflow-hidden">
+    <div className="relative w-full max-w-lg mx-auto overflow-hidden">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-20 -right-12 w-56 h-56 rounded-full bg-[#FF6B35]/12 blur-3xl"
@@ -56,7 +56,7 @@ export function AccountGuestLanding({ onStartSignIn }: Props) {
           type="button"
           disabled={signingIn}
           onClick={() => void onCta()}
-          className="mt-8 w-full flex items-center justify-center gap-3 bg-white hover:bg-orange-50 border-2 border-slate-200 hover:border-[#FF6B35]/40 text-slate-900 font-bold py-3.5 rounded-2xl disabled:opacity-60 shadow-md transition-all"
+          className="mt-8 w-full sm:max-w-sm sm:mx-auto flex items-center justify-center gap-3 bg-white hover:bg-orange-50 border-2 border-line hover:border-primary-500 text-ink font-bold py-3.5 rounded-2xl disabled:opacity-60 shadow-soft transition-all"
         >
           {signingIn ? (
             t('auth.signInProgressLong')

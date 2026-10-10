@@ -47,13 +47,13 @@ const springConfig = {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               transition={springConfig}
-              className={`rounded-full px-2.5 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-[10px] sm:text-xs md:text-sm font-semibold cursor-pointer transition-all min-h-[40px] sm:min-h-[44px] md:min-h-[48px] flex items-center justify-center relative flex-1 sm:flex-none whitespace-nowrap
+              className={`rounded-full px-3 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[40px] sm:min-h-[44px] flex items-center justify-center relative whitespace-nowrap
                 ${
                   isActive
                     ? preset.key === 'flexible'
-                      ? 'bg-emerald-500 text-white shadow-lg scale-105'
-                      : 'bg-primary-500 text-white shadow-lg scale-105'
-                    : 'bg-slate-100 text-slate-700 hover:bg-primary-100 hover:scale-105'
+                      ? 'bg-emerald-500 text-white shadow-soft'
+                      : 'bg-primary-500 text-white shadow-soft'
+                    : 'bg-canvas text-ink-soft hover:bg-primary-50 hover:text-primary-700 border border-line'
                 }`}
             >
               {isActive && preset.key !== 'flexible' && (

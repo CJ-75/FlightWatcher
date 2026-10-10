@@ -46,7 +46,7 @@ export function FavoritesGuestLanding() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         className="relative"
       >
-        <div className="text-center mb-7 sm:mb-9">
+        <div className="text-center lg:text-left mb-7 sm:mb-9">
           <motion.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -68,17 +68,18 @@ export function FavoritesGuestLanding() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.16 }}
-            className="mt-3 text-slate-500 text-sm sm:text-base leading-relaxed max-w-md mx-auto"
+            className="mt-3 text-muted text-sm sm:text-base leading-relaxed max-w-lg mx-auto lg:mx-0"
           >
             {t('favorites.guest.lead')}
           </motion.p>
         </div>
 
+        <div className="lg:grid lg:grid-cols-2 lg:gap-10 lg:items-start">
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.4 }}
-          className="relative mb-7 rounded-[1.75rem] bg-gradient-to-br from-[#1A120E] via-[#2A1418] to-[#3D1820] p-5 sm:p-6 text-white shadow-2xl shadow-rose-900/20 overflow-hidden"
+          className="relative mb-7 lg:mb-0 rounded-[1.75rem] bg-gradient-to-br from-[#1A120E] via-[#2A1418] to-[#3D1820] p-5 sm:p-6 text-white shadow-2xl shadow-rose-900/20 overflow-hidden"
         >
           <div
             aria-hidden
@@ -122,6 +123,7 @@ export function FavoritesGuestLanding() {
           </div>
         </motion.div>
 
+        <div>
         <ol className="space-y-2.5 mb-8">
           {steps.map((step, i) => (
             <motion.li
@@ -155,7 +157,7 @@ export function FavoritesGuestLanding() {
             type="button"
             disabled={signingIn}
             onClick={() => void onCta()}
-            className="group w-full flex items-center justify-center gap-3 bg-white hover:bg-rose-50 border-2 border-slate-200 hover:border-[#FF3D6B]/35 text-slate-900 font-bold py-3.5 rounded-2xl disabled:opacity-60 shadow-lg shadow-slate-900/5 transition-all"
+            className="group w-full lg:w-auto lg:min-w-[280px] flex items-center justify-center gap-3 bg-white hover:bg-rose-50 border-2 border-slate-200 hover:border-[#FF3D6B]/35 text-slate-900 font-bold py-3.5 px-6 rounded-2xl disabled:opacity-60 shadow-lg shadow-slate-900/5 transition-all"
           >
             {signingIn ? (
               t('auth.signInProgressLong')
@@ -174,13 +176,15 @@ export function FavoritesGuestLanding() {
             )}
           </button>
           {error ? (
-            <p className="mt-3 text-sm text-red-600 font-medium text-center">{error}</p>
+            <p className="mt-3 text-sm text-red-600 font-medium text-center lg:text-left">{error}</p>
           ) : (
-            <p className="mt-3 text-xs text-slate-400 text-center font-medium">
+            <p className="mt-3 text-xs text-slate-400 text-center lg:text-left font-medium">
               {t('favorites.guest.hint')}
             </p>
           )}
         </motion.div>
+        </div>
+        </div>
       </motion.div>
     </div>
   )

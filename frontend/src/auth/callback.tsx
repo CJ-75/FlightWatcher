@@ -142,7 +142,7 @@ export default function AuthCallback() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100 p-6">
-      <div className="text-center max-w-sm">
+      <div className="text-center max-w-md app-card p-8">
         <div className="text-2xl font-bold text-gray-800 mb-4">{status}</div>
         {mobileLink ? (
           <a

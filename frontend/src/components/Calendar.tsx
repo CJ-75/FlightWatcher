@@ -308,7 +308,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-black/20 z-[9998]"
+                className="fixed inset-0 bg-black/20 md:bg-transparent z-[9998]"
               />
               
               {/* Calendar */}

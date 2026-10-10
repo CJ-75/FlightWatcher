@@ -655,7 +655,7 @@ function Dashboard() {
   return (
     <div className="app-shell">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-8">
-        <div className="max-w-3xl mx-auto">
+        <div className="app-col">
           <header className="flex items-center justify-between gap-3 mb-4">
             <div className="min-w-0">
               <p className="app-kicker mb-0.5">FlightWatcher</p>
@@ -698,12 +698,10 @@ function Dashboard() {
         {activeTab === 'deals' ? (
           <DealsTab />
         ) : activeTab === 'planner' ? (
-          <div className="max-w-3xl mx-auto">
-            <PlannerTab />
-          </div>
+          <PlannerTab />
         ) : activeTab === 'search' ? (
           <>
-            <div className="max-w-3xl mx-auto">
+            <div className="app-col">
               <SimpleSearch
                 onResults={handleSimpleResults}
                 onLoading={setLoading}
@@ -862,18 +860,16 @@ function Dashboard() {
             )}
           </>
         ) : (
-          <div className="max-w-3xl mx-auto">
-            <SavedTab
-              loading={loading}
-              onLoadSearch={handleLoadSearch}
-              onCheckFavorite={handleCheckFavorite}
-              onReloadSearch={handleScan}
-              formatDateFr={formatDateFr}
-              onBook={(trip) => setBookingTrip(trip)}
-              setToastMessage={setToastMessage}
-              setToastType={setToastType}
-            />
-          </div>
+          <SavedTab
+            loading={loading}
+            onLoadSearch={handleLoadSearch}
+            onCheckFavorite={handleCheckFavorite}
+            onReloadSearch={handleScan}
+            formatDateFr={formatDateFr}
+            onBook={(trip) => setBookingTrip(trip)}
+            setToastMessage={setToastMessage}
+            setToastType={setToastType}
+          />
         )}
       </div>
 
@@ -2793,7 +2789,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-ink/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6"
           onClick={() => {
             setShowLightbox(false)
             setLightboxResults(null)
@@ -2803,7 +2799,7 @@ function SavedTab({ loading, onLoadSearch, onCheckFavorite, onReloadSearch, form
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-3xl border border-line shadow-lift max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 bg-gradient-to-r from-emerald-500 to-teal-600 p-6 flex items-center justify-between z-10">

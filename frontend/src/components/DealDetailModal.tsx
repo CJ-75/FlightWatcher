@@ -49,7 +49,7 @@ export function DealDetailModal({ deal, onClose, liked, onToggleLike }: DealDeta
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
+        className="app-dialog-root"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -57,14 +57,14 @@ export function DealDetailModal({ deal, onClose, liked, onToggleLike }: DealDeta
         <button
           type="button"
           aria-label="Fermer"
-          className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]"
+          className="app-dialog-backdrop"
           onClick={onClose}
         />
         <motion.div
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 40, opacity: 0 }}
-          className="relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-lift border border-line"
+          className="app-dialog-panel app-dialog-xl"
         >
           <div className="relative h-52 sm:h-64">
             <img

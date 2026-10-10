@@ -68,7 +68,7 @@ export default function PlannerInvite() {
         className="pointer-events-none absolute bottom-0 -left-20 w-72 h-72 rounded-full bg-[#FFB088]/25 blur-3xl"
       />
 
-      <div className="relative max-w-lg mx-auto px-4 py-10 sm:py-16">
+      <div className="relative max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
         <Link
           to="/"
           className="inline-flex items-center gap-1 text-sm font-bold text-[#E85A28] hover:text-[#FF6B35]"

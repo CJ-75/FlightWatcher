@@ -150,7 +150,7 @@ export function BookingSas({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-ink/45 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <motion.div
@@ -159,7 +159,7 @@ export function BookingSas({
         exit={{ scale: 0.85, opacity: 0, y: 20 }}
         transition={springConfig}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-3xl border border-line shadow-lift max-w-2xl w-full p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto"
       >
         {/* Bouton fermer */}
         <button

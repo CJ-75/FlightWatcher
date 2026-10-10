@@ -50,7 +50,7 @@ export function LoadingSkeleton() {
 
 export function CardSkeleton() {
   return (
-    <div className="rounded-2xl overflow-hidden bg-white shadow-xl max-w-sm w-full animate-pulse">
+    <div className="rounded-3xl overflow-hidden bg-white border border-line shadow-soft w-full animate-pulse">
       {/* Image skeleton avec shimmer */}
       <div className="relative w-full h-64 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%] animate-[shimmer_2s_infinite]" />
       

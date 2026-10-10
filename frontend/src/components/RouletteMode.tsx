@@ -82,14 +82,14 @@ export function RouletteMode({ trips, budget, onClose, onSaveFavorite, onBook, c
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary-500"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-ink/50 backdrop-blur-sm"
     >
       <motion.div
         initial={{ scale: 0.85, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.85, opacity: 0, y: 20 }}
         transition={springConfig}
-        className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-8 relative max-h-[95vh] overflow-y-auto"
+        className="bg-white rounded-3xl border border-line shadow-lift max-w-2xl w-full p-6 sm:p-8 relative max-h-[95vh] overflow-y-auto"
       >
         {/* Compteur de relances */}
         <div className={`absolute top-4 right-4 bg-white text-primary-500 rounded-full px-4 py-2 text-sm font-bold shadow-lg ${
@@ -152,7 +152,7 @@ export function RouletteMode({ trips, budget, onClose, onSaveFavorite, onBook, c
               } : springConfig}
               className="w-full flex items-center justify-center"
             >
-              <div className="w-full max-w-sm">
+              <div className="w-full max-w-md mx-auto">
                 <DestinationCard
                   trip={selectedTrip}
                   onSaveFavorite={() => onSaveFavorite(selectedTrip)}

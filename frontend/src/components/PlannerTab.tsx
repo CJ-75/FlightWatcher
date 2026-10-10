@@ -93,7 +93,7 @@ function PlannerGuestLanding() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         className="relative"
       >
-        <div className="text-center mb-7 sm:mb-9">
+        <div className="text-center lg:text-left mb-7 sm:mb-9 max-w-3xl mx-auto lg:mx-0 lg:max-w-none">
           <motion.p
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -115,17 +115,18 @@ function PlannerGuestLanding() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.16 }}
-            className="mt-3 text-slate-500 text-sm sm:text-base leading-relaxed max-w-md mx-auto"
+            className="mt-3 text-muted text-sm sm:text-base leading-relaxed max-w-lg mx-auto lg:mx-0 lg:text-left"
           >
             {t('planner.guest.lead')}
           </motion.p>
         </div>
 
+        <div className="lg:grid lg:grid-cols-2 lg:gap-10 lg:items-start">
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.4 }}
-          className="relative mb-7 rounded-[1.75rem] bg-gradient-to-br from-[#1A120E] via-[#2A1A12] to-[#3D2418] p-5 sm:p-6 text-white shadow-2xl shadow-orange-900/20 overflow-hidden"
+          className="relative mb-7 lg:mb-0 rounded-[1.75rem] bg-gradient-to-br from-[#1A120E] via-[#2A1A12] to-[#3D2418] p-5 sm:p-6 text-white shadow-2xl shadow-orange-900/20 overflow-hidden"
         >
           <div
             aria-hidden
@@ -177,65 +178,68 @@ function PlannerGuestLanding() {
           </div>
         </motion.div>
 
-        <ol className="space-y-2.5 mb-8">
-          {steps.map((step, i) => (
-            <motion.li
-              key={step.title}
-              initial={{ opacity: 0, x: -12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.28 + i * 0.08 }}
-              className="flex items-center gap-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-orange-100/80 px-4 py-3.5 shadow-sm"
-            >
-              <span className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-black text-sm flex items-center justify-center shadow-md shadow-orange-500/25">
-                {i + 1}
-              </span>
-              <span className="min-w-0">
-                <span className="block font-bold text-slate-900 text-sm sm:text-[15px]">
-                  {step.title}
+        <div>
+          <ol className="space-y-2.5 mb-8">
+            {steps.map((step, i) => (
+              <motion.li
+                key={step.title}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.28 + i * 0.08 }}
+                className="flex items-center gap-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-orange-100/80 px-4 py-3.5 shadow-sm"
+              >
+                <span className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-black text-sm flex items-center justify-center shadow-md shadow-orange-500/25">
+                  {i + 1}
                 </span>
-                <span className="block text-slate-500 text-xs sm:text-sm mt-0.5">
-                  {step.detail}
+                <span className="min-w-0">
+                  <span className="block font-bold text-slate-900 text-sm sm:text-[15px]">
+                    {step.title}
+                  </span>
+                  <span className="block text-slate-500 text-xs sm:text-sm mt-0.5">
+                    {step.detail}
+                  </span>
                 </span>
-              </span>
-            </motion.li>
-          ))}
-        </ol>
+              </motion.li>
+            ))}
+          </ol>
 
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.52 }}
-        >
-          <button
-            type="button"
-            disabled={signingIn}
-            onClick={() => void onCta()}
-            className="group w-full flex items-center justify-center gap-3 bg-white hover:bg-orange-50 border-2 border-slate-200 hover:border-[#FF6B35]/40 text-slate-900 font-bold py-3.5 rounded-2xl disabled:opacity-60 shadow-lg shadow-slate-900/5 transition-all"
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.52 }}
           >
-            {signingIn ? (
-              t('auth.signInProgressLong')
+            <button
+              type="button"
+              disabled={signingIn}
+              onClick={() => void onCta()}
+              className="group w-full lg:w-auto lg:min-w-[280px] flex items-center justify-center gap-3 bg-white hover:bg-orange-50 border-2 border-slate-200 hover:border-[#FF6B35]/40 text-slate-900 font-bold py-3.5 px-6 rounded-2xl disabled:opacity-60 shadow-lg shadow-slate-900/5 transition-all"
+            >
+              {signingIn ? (
+                t('auth.signInProgressLong')
+              ) : (
+                <>
+                  <span className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden>
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    </svg>
+                  </span>
+                  {t('planner.guest.cta')}
+                </>
+              )}
+            </button>
+            {error ? (
+              <p className="mt-3 text-sm text-red-600 font-medium text-center lg:text-left">{error}</p>
             ) : (
-              <>
-                <span className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden>
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                </span>
-                {t('planner.guest.cta')}
-              </>
+              <p className="mt-3 text-xs text-slate-400 text-center lg:text-left font-medium">
+                {t('planner.guest.hint')}
+              </p>
             )}
-          </button>
-          {error ? (
-            <p className="mt-3 text-sm text-red-600 font-medium text-center">{error}</p>
-          ) : (
-            <p className="mt-3 text-xs text-slate-400 text-center font-medium">
-              {t('planner.guest.hint')}
-            </p>
-          )}
-        </motion.div>
+          </motion.div>
+        </div>
+        </div>
       </motion.div>
     </div>
   )
@@ -414,7 +418,7 @@ export function PlannerTab() {
           </div>
         </div>
       ) : (
-        <motion.div layout className="space-y-6">
+        <motion.div layout className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
           {trips.map((trip, index) => {
             const arrival = arrivalDisplayLabel(trip.arrival_airport, cityGroups)
             const imageUri = arrival.isAny
@@ -678,11 +682,12 @@ function CreateTripModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
-        <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-center justify-between z-10">
-          <h3 className="font-black text-lg text-slate-900">{t('planner.create')}</h3>
-          <button type="button" onClick={onClose} className="text-slate-500 font-semibold">
+    <div className="app-dialog-root">
+      <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
+      <div className="app-dialog-panel app-dialog-lg">
+        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-5 sm:px-6 py-4 flex items-center justify-between z-10">
+          <h3 className="font-extrabold text-lg text-ink">{t('planner.create')}</h3>
+          <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-canvas text-ink-soft font-bold hover:bg-primary-50">
             ✕
           </button>
         </div>
@@ -825,21 +830,22 @@ function CreateTripModal({
             type="button"
             onClick={() => void submit()}
             disabled={saving}
-            className="w-full bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl disabled:opacity-60"
+            className="w-full app-btn-primary rounded-2xl disabled:opacity-60"
           >
             {saving ? '…' : t('planner.create')}
           </button>
         </div>
 
         {showFlexible ? (
-          <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto p-5 shadow-2xl">
+          <div className="app-dialog-root z-[60]">
+            <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={() => setShowFlexible(false)} />
+            <div className="app-dialog-panel app-dialog-md p-5 sm:p-6">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="font-black text-slate-900">Dates libres</h4>
+                <h4 className="font-extrabold text-ink">Dates libres</h4>
                 <button
                   type="button"
                   onClick={() => setShowFlexible(false)}
-                  className="font-bold text-primary-600"
+                  className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50"
                 >
                   OK
                 </button>
@@ -1111,7 +1117,7 @@ function TripDetailView({
           type="button"
           disabled={scanning}
           onClick={() => void scan()}
-          className="w-full sm:w-auto bg-primary-500 text-white font-bold px-6 py-3 rounded-xl disabled:opacity-60"
+          className="w-full sm:w-auto app-btn-primary rounded-2xl px-6 disabled:opacity-60"
         >
           {scanning ? t('planner.scanning') : t('planner.scan')}
         </button>
@@ -1119,32 +1125,36 @@ function TripDetailView({
 
       {accepted ? (
         <section className="space-y-4">
-          <h3 className="font-bold text-lg text-slate-900">Proposition acceptée</h3>
-          <DestinationCard
-            trip={accepted.trip_data}
-            onSaveFavorite={() => undefined}
-            onBook={() => setBookingTrip(accepted.trip_data)}
-          />
+          <h3 className="font-bold text-lg text-ink">Proposition acceptée</h3>
+          <div className="max-w-md">
+            <DestinationCard
+              trip={accepted.trip_data}
+              onSaveFavorite={() => undefined}
+              onBook={() => setBookingTrip(accepted.trip_data)}
+            />
+          </div>
         </section>
       ) : null}
 
       {pending.length > 0 ? (
         <section className="space-y-4">
-          <h3 className="font-bold text-lg text-slate-900">
+          <h3 className="font-bold text-lg text-ink">
             {t('planner.proposals')} ({pending.length})
           </h3>
-          {pending.map((p) => (
-            <ProposalCard
-              key={p.id}
-              proposal={p}
-              isOrganizer={!!isOrganizer}
-              busy={acting === p.id}
-              onAccept={() => void accept(p.id)}
-              onReject={() => void reject(p.id)}
-              onBook={() => setBookingTrip(p.trip_data)}
-              t={t}
-            />
-          ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {pending.map((p) => (
+              <ProposalCard
+                key={p.id}
+                proposal={p}
+                isOrganizer={!!isOrganizer}
+                busy={acting === p.id}
+                onAccept={() => void accept(p.id)}
+                onReject={() => void reject(p.id)}
+                onBook={() => setBookingTrip(p.trip_data)}
+                t={t}
+              />
+            ))}
+          </div>
         </section>
       ) : null}
 
@@ -1208,12 +1218,12 @@ function ProposalCard({
         onBook={onBook}
       />
       {isOrganizer ? (
-        <div className="flex gap-3">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
           <button
             type="button"
             disabled={busy}
             onClick={onReject}
-            className="flex-1 border border-slate-200 rounded-xl py-2.5 font-bold text-slate-600 disabled:opacity-50"
+            className="w-full sm:w-auto sm:min-w-[120px] border border-line rounded-2xl py-2.5 px-4 font-bold text-ink-soft hover:bg-canvas disabled:opacity-50"
           >
             {t('planner.reject')}
           </button>
@@ -1221,7 +1231,7 @@ function ProposalCard({
             type="button"
             disabled={busy}
             onClick={onAccept}
-            className="flex-1 bg-primary-500 text-white rounded-xl py-2.5 font-bold disabled:opacity-50"
+            className="w-full sm:w-auto sm:min-w-[120px] app-btn-primary rounded-2xl py-2.5 px-4 disabled:opacity-50"
           >
             {t('planner.accept')}
           </button>
