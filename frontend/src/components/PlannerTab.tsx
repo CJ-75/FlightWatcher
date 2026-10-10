@@ -681,167 +681,231 @@ function CreateTripModal({
     }
   }
 
+  const departureAirport = useMemo(
+    () => airports.find((a) => a.code === departure),
+    [airports, departure],
+  )
+
   return (
     <div className="app-dialog-root">
       <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
-      <div className="app-dialog-panel app-dialog-lg">
-        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-5 sm:px-6 py-4 flex items-center justify-between z-10">
-          <h3 className="font-extrabold text-lg text-ink">{t('planner.create')}</h3>
-          <button type="button" onClick={onClose} className="w-9 h-9 rounded-full bg-canvas text-ink-soft font-bold hover:bg-primary-50">
+      <div className="app-dialog-panel app-dialog-2xl">
+        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between z-10">
+          <div>
+            <h3 className="font-extrabold text-xl sm:text-2xl text-ink tracking-tight">{t('planner.create')}</h3>
+            <p className="text-sm text-muted mt-0.5 hidden sm:block">
+              Définis le cadre — la destination peut rester ouverte
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="w-10 h-10 rounded-full bg-canvas text-ink-soft font-bold hover:bg-primary-50">
             ✕
           </button>
         </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="text-sm font-bold text-slate-700 block mb-1">Nom</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Weekend Lisbonne"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 font-medium"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-bold text-slate-700 block mb-1">Départ</label>
-            <input
-              value={departure}
-              onChange={(e) => setDeparture(e.target.value.toUpperCase())}
-              maxLength={3}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 font-bold tracking-wider"
-            />
-          </div>
 
-          <div>
-            <label className="text-sm font-bold text-slate-700 block mb-1">
-              Ville d’arrivée (optionnel)
-            </label>
-            {selectedCity ? (
-              <div className="relative rounded-2xl overflow-hidden h-36 mb-3 shadow-sm">
-                <img
-                  src={cityImageUrl(selectedCity.city)}
-                  alt={selectedCity.city}
-                  className="w-full h-full object-cover"
+        <div className="p-5 sm:p-8">
+          <div className="grid lg:grid-cols-2 gap-6 lg:gap-10">
+            {/* Colonne critères */}
+            <div className="space-y-5 min-w-0">
+              <div>
+                <label className="text-sm font-bold text-slate-700 block mb-1.5">Nom du voyage</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Weekend Lisbonne"
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-3 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
-                  <div>
-                    <p className="text-white font-black text-xl">{selectedCity.city}</p>
-                    <p className="text-white/85 text-xs font-medium">
-                      {selectedCity.airports.map((a) => a.code).join(' · ')}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => selectCity(null)}
-                    className="text-xs font-bold bg-white/95 text-slate-800 px-3 py-1.5 rounded-full"
-                  >
-                    Effacer
-                  </button>
-                </div>
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => selectCity(null)}
-                className="w-full mb-3 text-left rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3"
-              >
-                <p className="font-bold text-slate-800">Toutes destinations</p>
-                <p className="text-xs text-slate-500">Mode inspire — sans filtre ville</p>
-              </button>
-            )}
-            {popularCities.length > 0 ? (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {popularCities.map((g) => (
-                  <button
-                    key={g.key}
-                    type="button"
-                    onClick={() => selectCity(g)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
-                      g.key === arrivalCityKey
-                        ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
-                        : 'bg-white text-slate-700 border-slate-200 hover:border-orange-300'
-                    }`}
-                  >
-                    {g.city}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <p className="text-[11px] text-slate-400 mb-2">
-              Routes Ryanair depuis {departure} · mises à jour en direct
-            </p>
-            <input
-              value={cityQuery}
-              onChange={(e) => setCityQuery(e.target.value)}
-              placeholder="Chercher une ville…"
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 font-medium mb-2"
-            />
-            <div className="max-h-44 overflow-y-auto space-y-1.5 rounded-xl border border-slate-100 p-1.5">
-              {filteredCities.map((g) => (
-                <button
-                  key={g.key}
-                  type="button"
-                  onClick={() => selectCity(g)}
-                  className={`w-full flex items-center gap-3 text-left px-2 py-2 rounded-xl transition-colors ${
-                    g.key === arrivalCityKey
-                      ? 'bg-[#FFF3EC] ring-1 ring-orange-200'
-                      : 'hover:bg-slate-50'
-                  }`}
-                >
-                  <img
-                    src={cityImageUrl(g.city)}
-                    alt=""
-                    className="w-11 h-11 rounded-xl object-cover shrink-0"
+
+              <div>
+                <label className="text-sm font-bold text-slate-700 block mb-1.5">Aéroport de départ</label>
+                <div className="flex gap-2">
+                  <input
+                    value={departure}
+                    onChange={(e) => setDeparture(e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))}
+                    maxLength={3}
+                    className="w-24 shrink-0 border border-slate-200 rounded-xl px-3 py-3 font-black tracking-wider text-center text-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-900 truncate">{g.city}</p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {g.country} · {g.airports.map((a) => a.code).join(' · ')}
+                  <div className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 flex items-center">
+                    <p className="text-sm font-medium text-slate-600 truncate">
+                      {departureAirport
+                        ? `${departureAirport.city}${departureAirport.country ? `, ${departureAirport.country}` : ''}`
+                        : 'Code IATA (ex. BVA)'}
                     </p>
                   </div>
+                </div>
+                {airports.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {['BVA', 'CRL', 'ORY', 'CDG', 'LTN', 'STN']
+                      .filter((code) => airports.some((a) => a.code === code))
+                      .map((code) => (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => setDeparture(code)}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                            departure === code
+                              ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'
+                          }`}
+                        >
+                          {code}
+                        </button>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <PassengerStepper value={passengers} onChange={setPassengers} />
+              <BudgetSlider value={budget} onChange={setBudget} />
+
+              <div>
+                <label className="text-sm font-bold text-slate-700 block mb-2">Dates</label>
+                <DatePresets
+                  selected={preset}
+                  onChange={onPreset}
+                  onFlexibleClick={() => {
+                    setPreset('flexible')
+                    setShowFlexible(true)
+                  }}
+                />
+                {datesDepart[0] && datesRetour[0] ? (
+                  <p className="text-sm text-slate-500 mt-2.5 font-medium">
+                    {formatDateFr(datesDepart[0].date)} →{' '}
+                    {formatDateFr(datesRetour[datesRetour.length - 1].date)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Colonne destination */}
+            <div className="min-w-0 flex flex-col">
+              <label className="text-sm font-bold text-slate-700 block mb-1.5">
+                Ville d’arrivée <span className="font-medium text-slate-400">(optionnel)</span>
+              </label>
+
+              {selectedCity ? (
+                <div className="relative rounded-2xl overflow-hidden h-40 sm:h-44 mb-3 shadow-sm">
+                  <img
+                    src={cityImageUrl(selectedCity.city)}
+                    alt={selectedCity.city}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                    <div>
+                      <p className="text-white font-black text-xl sm:text-2xl tracking-tight">{selectedCity.city}</p>
+                      <p className="text-white/85 text-xs font-medium">
+                        {selectedCity.airports.map((a) => a.code).join(' · ')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => selectCity(null)}
+                      className="text-xs font-bold bg-white/95 text-slate-800 px-3 py-1.5 rounded-full"
+                    >
+                      Effacer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => selectCity(null)}
+                  className="w-full mb-3 text-left rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 hover:border-orange-300 hover:bg-[#FFF8F3] transition-colors"
+                >
+                  <p className="font-bold text-slate-800">Toutes destinations</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Mode inspire — sans filtre ville</p>
                 </button>
-              ))}
+              )}
+
+              {popularCities.length > 0 ? (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {popularCities.map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => selectCity(g)}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
+                        g.key === arrivalCityKey
+                          ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-orange-300'
+                      }`}
+                    >
+                      {g.city}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <p className="text-[11px] text-slate-400 mb-2">
+                Routes Ryanair depuis {departure} · mises à jour en direct
+              </p>
+              <input
+                value={cityQuery}
+                onChange={(e) => setCityQuery(e.target.value)}
+                placeholder="Chercher une ville…"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium mb-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
+              />
+              <div className="flex-1 min-h-[220px] max-h-[320px] lg:max-h-[380px] overflow-y-auto space-y-1.5 rounded-2xl border border-slate-100 p-1.5 bg-white">
+                {filteredCities.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-10">Aucune ville trouvée</p>
+                ) : (
+                  filteredCities.map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => selectCity(g)}
+                      className={`w-full flex items-center gap-3 text-left px-2.5 py-2.5 rounded-xl transition-colors ${
+                        g.key === arrivalCityKey
+                          ? 'bg-[#FFF3EC] ring-1 ring-orange-200'
+                          : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <img
+                        src={cityImageUrl(g.city)}
+                        alt=""
+                        className="w-12 h-12 rounded-xl object-cover shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-900 truncate">{g.city}</p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {g.country} · {g.airports.map((a) => a.code).join(' · ')}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
-          <PassengerStepper value={passengers} onChange={setPassengers} />
-          <BudgetSlider value={budget} onChange={setBudget} />
+          {error ? <p className="text-sm text-red-600 font-medium mt-5">{error}</p> : null}
 
-          <div>
-            <DatePresets
-              selected={preset}
-              onChange={onPreset}
-              onFlexibleClick={() => {
-                setPreset('flexible')
-                setShowFlexible(true)
-              }}
-            />
-            {datesDepart[0] && datesRetour[0] ? (
-              <p className="text-sm text-slate-500 mt-2">
-                {formatDateFr(datesDepart[0].date)} →{' '}
-                {formatDateFr(datesRetour[datesRetour.length - 1].date)}
-              </p>
-            ) : null}
+          <div className="mt-6 pt-5 border-t border-line flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="sm:px-5 py-3 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={saving}
+              className="app-btn-primary rounded-2xl disabled:opacity-60 sm:min-w-[220px] py-3.5"
+            >
+              {saving ? '…' : t('planner.create')}
+            </button>
           </div>
-
-          {error ? <p className="text-sm text-red-600 font-medium">{error}</p> : null}
-
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={saving}
-            className="w-full app-btn-primary rounded-2xl disabled:opacity-60"
-          >
-            {saving ? '…' : t('planner.create')}
-          </button>
         </div>
 
         {showFlexible ? (
           <div className="app-dialog-root z-[60]">
             <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={() => setShowFlexible(false)} />
-            <div className="app-dialog-panel app-dialog-md p-5 sm:p-6">
+            <div className="app-dialog-panel app-dialog-xl p-5 sm:p-8">
               <div className="flex items-center justify-between mb-4">
-                <h4 className="font-extrabold text-ink">Dates libres</h4>
+                <h4 className="font-extrabold text-lg text-ink">Dates libres</h4>
                 <button
                   type="button"
                   onClick={() => setShowFlexible(false)}
