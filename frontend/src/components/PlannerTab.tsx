@@ -532,6 +532,14 @@ export function PlannerTab() {
   )
 }
 
+const CREATE_STEPS = [
+  { id: 1 as const, label: 'Départ', title: 'D’où pars-tu ?', hint: 'Choisis ton aéroport de départ' },
+  { id: 2 as const, label: 'Destination', title: 'Où vas-tu ?', hint: 'Optionnel — laisse ouvert pour t’inspirer' },
+  { id: 3 as const, label: 'Détails', title: 'Cadre du voyage', hint: 'Dates, budget, voyageurs' },
+]
+
+const POPULAR_DEPARTURE_CODES = ['BVA', 'CRL', 'ORY', 'CDG', 'LTN', 'STN', 'MAD', 'BCN', 'FCO', 'BGY']
+
 function CreateTripModal({
   onClose,
   onCreated,
@@ -555,12 +563,14 @@ function CreateTripModal({
       })),
     }
   }, [])
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [name, setName] = useState('')
-  const [departure, setDeparture] = useState('BVA')
+  const [departure, setDeparture] = useState('')
   const [arrivalCityKey, setArrivalCityKey] = useState('')
   const [arrivalCodes, setArrivalCodes] = useState<string[]>([])
   const [airports, setAirports] = useState<Airport[]>([])
   const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
+  const [airportQuery, setAirportQuery] = useState('')
   const [cityQuery, setCityQuery] = useState('')
   const [passengers, setPassengers] = useState(2)
   const [budget, setBudget] = useState(150)
@@ -591,6 +601,42 @@ function CreateTripModal({
 
   const popularCities = useMemo(() => pickPopularCityGroups(cityGroups, 8), [cityGroups])
 
+  const departureAirport = useMemo(
+    () => airports.find((a) => a.code === departure) ?? null,
+    [airports, departure],
+  )
+
+  const popularDepartures = useMemo(() => {
+    const byCode = new Map(airports.map((a) => [a.code, a]))
+    return POPULAR_DEPARTURE_CODES.map((code) => byCode.get(code)).filter(
+      (a): a is Airport => Boolean(a),
+    )
+  }, [airports])
+
+  const filteredDepartures = useMemo(() => {
+    const q = airportQuery.trim().toLowerCase()
+    if (q.length < 2) return []
+    const scored = airports
+      .map((a) => {
+        const code = a.code.toLowerCase()
+        const city = a.city.toLowerCase()
+        const name = a.name.toLowerCase()
+        const country = a.country.toLowerCase()
+        let score = 0
+        if (code === q) score = 100
+        else if (code.startsWith(q)) score = 90
+        else if (city.startsWith(q)) score = 80
+        else if (city.includes(q)) score = 60
+        else if (name.includes(q) || country.includes(q)) score = 40
+        else if (code.includes(q)) score = 30
+        else return null
+        return { a, score }
+      })
+      .filter((x): x is { a: Airport; score: number } => Boolean(x))
+      .sort((x, y) => y.score - x.score || x.a.city.localeCompare(y.a.city))
+    return scored.slice(0, 8).map((x) => x.a)
+  }, [airports, airportQuery])
+
   useEffect(() => {
     void getApiClient()
       .getAirports()
@@ -599,6 +645,10 @@ function CreateTripModal({
   }, [])
 
   useEffect(() => {
+    if (!departure) {
+      setArrivalAirports([])
+      return
+    }
     let cancelled = false
     void getApiClient()
       .getDestinations(departure)
@@ -624,15 +674,25 @@ function CreateTripModal({
     }
   }, [departure])
 
-  const selectCity = (group: CityAirportGroup | null) => {
+  const selectDeparture = (airport: Airport) => {
+    setDeparture(airport.code)
+    setAirportQuery('')
+    setError(null)
+    setStep(2)
+  }
+
+  const selectCity = (group: CityAirportGroup | null, advance = false) => {
     if (!group) {
       setArrivalCityKey('')
       setArrivalCodes([])
+      if (!name.trim() || name.startsWith('Weekend ')) setName('')
+      if (advance) setStep(3)
       return
     }
     setArrivalCityKey(group.key)
     setArrivalCodes(group.airports.map((a) => a.code))
-    if (!name.trim()) setName(`Weekend ${group.city}`)
+    if (!name.trim() || name.startsWith('Weekend ')) setName(`Weekend ${group.city}`)
+    if (advance) setStep(3)
   }
 
   const onPreset = (p: DatePreset) => {
@@ -642,7 +702,6 @@ function CreateTripModal({
       return
     }
     const d = generateDatesFromPreset(p)
-    // Planner: whole-day window so price scan matches trip calendar days
     setDatesDepart(
       d.dates_depart.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
     )
@@ -651,11 +710,40 @@ function CreateTripModal({
     )
   }
 
-  const submit = async () => {
-    if (!name.trim()) {
-      setError('Nom requis')
+  const goNext = () => {
+    setError(null)
+    if (step === 1) {
+      if (!departure) {
+        setError('Choisis un aéroport de départ')
+        return
+      }
+      setStep(2)
       return
     }
+    if (step === 2) {
+      setStep(3)
+      return
+    }
+  }
+
+  const goBack = () => {
+    setError(null)
+    if (step === 1) {
+      onClose()
+      return
+    }
+    setStep((s) => (s === 3 ? 2 : 1))
+  }
+
+  const submit = async () => {
+    if (!departure) {
+      setError('Choisis un aéroport de départ')
+      setStep(1)
+      return
+    }
+    const tripName =
+      name.trim() ||
+      (selectedCity ? `Weekend ${selectedCity.city}` : `Weekend depuis ${departure}`)
     if (!datesDepart.length || !datesRetour.length) {
       setError('Dates requises')
       return
@@ -663,7 +751,7 @@ function CreateTripModal({
     setSaving(true)
     setError(null)
     const body: CreatePlannedTripRequest = {
-      name: name.trim(),
+      name: tripName,
       departure_airport: departure.trim().toUpperCase(),
       arrival_airport: encodeArrivalCodes(arrivalCodes),
       passengers,
@@ -681,110 +769,252 @@ function CreateTripModal({
     }
   }
 
-  const departureAirport = useMemo(
-    () => airports.find((a) => a.code === departure),
-    [airports, departure],
-  )
+  const stepMeta = CREATE_STEPS[step - 1]
 
   return (
     <div className="app-dialog-root">
       <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
-      <div className="app-dialog-panel app-dialog-2xl">
-        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-5 sm:px-8 py-4 sm:py-5 flex items-center justify-between z-10">
-          <div>
-            <h3 className="font-extrabold text-xl sm:text-2xl text-ink tracking-tight">{t('planner.create')}</h3>
-            <p className="text-sm text-muted mt-0.5 hidden sm:block">
-              Définis le cadre — la destination peut rester ouverte
-            </p>
+      <div className="app-dialog-panel app-dialog-xl">
+        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-5 sm:px-8 py-4 sm:py-5 z-10">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28] mb-1">
+                Étape {step} / 3
+              </p>
+              <h3 className="font-extrabold text-xl sm:text-2xl text-ink tracking-tight">
+                {stepMeta.title}
+              </h3>
+              <p className="text-sm text-muted mt-0.5">{stepMeta.hint}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-10 h-10 shrink-0 rounded-full bg-canvas text-ink-soft font-bold hover:bg-primary-50"
+            >
+              ✕
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="w-10 h-10 rounded-full bg-canvas text-ink-soft font-bold hover:bg-primary-50">
-            ✕
-          </button>
+
+          <div className="flex items-center gap-2">
+            {CREATE_STEPS.map((s, i) => {
+              const done = step > s.id
+              const active = step === s.id
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  disabled={s.id > step && (s.id === 2 ? !departure : s.id === 3 ? !departure : false)}
+                  onClick={() => {
+                    if (s.id === 1 || (s.id === 2 && departure) || (s.id === 3 && departure)) {
+                      setError(null)
+                      setStep(s.id)
+                    }
+                  }}
+                  className="flex-1 min-w-0 group"
+                >
+                  <div
+                    className={`h-1.5 rounded-full transition-colors ${
+                      done || active ? 'bg-[#FF6B35]' : 'bg-slate-200'
+                    }`}
+                  />
+                  <p
+                    className={`mt-1.5 text-[11px] sm:text-xs font-bold truncate text-left ${
+                      active ? 'text-[#E85A28]' : done ? 'text-slate-700' : 'text-slate-400'
+                    }`}
+                  >
+                    {i + 1}. {s.label}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        <div className="p-5 sm:p-8">
-          <div className="grid lg:grid-cols-2 gap-6 lg:gap-10">
-            {/* Colonne critères */}
-            <div className="space-y-5 min-w-0">
-              <div>
-                <label className="text-sm font-bold text-slate-700 block mb-1.5">Nom du voyage</label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Weekend Lisbonne"
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-3 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-slate-700 block mb-1.5">Aéroport de départ</label>
-                <div className="flex gap-2">
-                  <input
-                    value={departure}
-                    onChange={(e) => setDeparture(e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))}
-                    maxLength={3}
-                    className="w-24 shrink-0 border border-slate-200 rounded-xl px-3 py-3 font-black tracking-wider text-center text-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
-                  />
-                  <div className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 flex items-center">
-                    <p className="text-sm font-medium text-slate-600 truncate">
-                      {departureAirport
-                        ? `${departureAirport.city}${departureAirport.country ? `, ${departureAirport.country}` : ''}`
-                        : 'Code IATA (ex. BVA)'}
-                    </p>
-                  </div>
-                </div>
-                {airports.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {['BVA', 'CRL', 'ORY', 'CDG', 'LTN', 'STN']
-                      .filter((code) => airports.some((a) => a.code === code))
-                      .map((code) => (
-                        <button
-                          key={code}
+        <div className="p-5 sm:p-8 min-h-[420px]">
+          {step === 1 ? (
+            <motion.div
+              key="step-1"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-6"
+            >
+              {popularDepartures.length > 0 ? (
+                <div>
+                  <p className="text-sm font-bold text-slate-700 mb-3">Départs fréquents</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+                    {popularDepartures.map((a, i) => {
+                      const active = departure === a.code
+                      return (
+                        <motion.button
+                          key={a.code}
                           type="button"
-                          onClick={() => setDeparture(code)}
-                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
-                            departure === code
-                              ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
-                              : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.03 }}
+                          whileHover={{ y: -2 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => selectDeparture(a)}
+                          className={`relative overflow-hidden rounded-2xl text-left h-[104px] sm:h-[112px] group border-2 transition-shadow ${
+                            active
+                              ? 'border-[#FF6B35] shadow-md shadow-orange-500/20'
+                              : 'border-transparent hover:border-orange-200 shadow-sm'
                           }`}
                         >
-                          {code}
-                        </button>
-                      ))}
+                          <img
+                            src={cityImageUrl(a.city)}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/10" />
+                          {active ? (
+                            <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#FF6B35] text-white text-[10px] font-black flex items-center justify-center">
+                              ✓
+                            </span>
+                          ) : null}
+                          <div className="relative h-full flex flex-col justify-end p-2.5 sm:p-3">
+                            <span className="inline-flex self-start px-1.5 py-0.5 rounded-md bg-white/95 text-[11px] font-black tracking-wider text-slate-900 mb-1">
+                              {a.code}
+                            </span>
+                            <p className="text-white font-bold text-sm sm:text-[15px] leading-tight truncate drop-shadow-sm">
+                              {a.city}
+                            </p>
+                          </div>
+                        </motion.button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : airports.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6">Chargement des aéroports…</p>
+              ) : null}
+
+              <div className="relative">
+                <p className="text-sm font-bold text-slate-700 mb-2">Autre aéroport</p>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <input
+                    value={airportQuery}
+                    onChange={(e) => setAirportQuery(e.target.value)}
+                    placeholder="Tape une ville ou un code…"
+                    autoComplete="off"
+                    className="w-full border border-slate-200 rounded-2xl pl-11 pr-4 py-3.5 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
+                  />
+                  {airportQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setAirportQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-500 text-xs font-bold hover:bg-slate-200"
+                      aria-label="Effacer"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+                </div>
+
+                {airportQuery.trim().length > 0 && airportQuery.trim().length < 2 ? (
+                  <p className="mt-2 text-xs text-slate-400 font-medium px-1">
+                    Continue à taper pour afficher des suggestions…
+                  </p>
+                ) : null}
+
+                {airportQuery.trim().length >= 2 ? (
+                  <div className="absolute left-0 right-0 z-20 mt-1.5 max-h-[260px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lift">
+                    {filteredDepartures.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-8 px-4">
+                        Aucun aéroport pour « {airportQuery.trim()} »
+                      </p>
+                    ) : (
+                      <ul className="py-1.5" role="listbox">
+                        {filteredDepartures.map((a) => {
+                          const active = departure === a.code
+                          return (
+                            <li key={a.code}>
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={active}
+                                onClick={() => selectDeparture(a)}
+                                className={`w-full flex items-center gap-3 text-left px-3.5 py-2.5 transition-colors ${
+                                  active ? 'bg-[#FFF3EC]' : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <span
+                                  className={`shrink-0 w-12 h-10 rounded-xl font-black tracking-wider text-xs flex items-center justify-center ${
+                                    active ? 'bg-[#FF6B35] text-white' : 'bg-slate-100 text-slate-800'
+                                  }`}
+                                >
+                                  {a.code}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block font-bold text-slate-900 truncate text-sm">{a.city}</span>
+                                  <span className="block text-xs text-slate-500 truncate">
+                                    {a.name} · {a.country}
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
                   </div>
                 ) : null}
               </div>
 
-              <PassengerStepper value={passengers} onChange={setPassengers} />
-              <BudgetSlider value={budget} onChange={setBudget} />
+              {departureAirport && !airportQuery.trim() ? (
+                <div className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-[#FFF3EC] px-4 py-3">
+                  <div className="w-11 h-11 rounded-xl bg-[#FF6B35] text-white font-black flex items-center justify-center tracking-wider shrink-0 text-sm">
+                    {departureAirport.code}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-900 truncate">{departureAirport.city}</p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {departureAirport.name} · {departureAirport.country}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-[#E85A28]">Sélectionné</span>
+                </div>
+              ) : null}
+            </motion.div>
+          ) : null}
 
-              <div>
-                <label className="text-sm font-bold text-slate-700 block mb-2">Dates</label>
-                <DatePresets
-                  selected={preset}
-                  onChange={onPreset}
-                  onFlexibleClick={() => {
-                    setPreset('flexible')
-                    setShowFlexible(true)
-                  }}
-                />
-                {datesDepart[0] && datesRetour[0] ? (
-                  <p className="text-sm text-slate-500 mt-2.5 font-medium">
-                    {formatDateFr(datesDepart[0].date)} →{' '}
-                    {formatDateFr(datesRetour[datesRetour.length - 1].date)}
-                  </p>
-                ) : null}
+          {step === 2 ? (
+            <motion.div
+              key="step-2"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
+                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-100 font-black text-slate-800 tracking-wider">
+                  {departure}
+                </span>
+                <span>→</span>
+                <span>{selectedCity ? selectedCity.city : 'Toutes destinations'}</span>
               </div>
-            </div>
 
-            {/* Colonne destination */}
-            <div className="min-w-0 flex flex-col">
-              <label className="text-sm font-bold text-slate-700 block mb-1.5">
-                Ville d’arrivée <span className="font-medium text-slate-400">(optionnel)</span>
-              </label>
+              <button
+                type="button"
+                onClick={() => selectCity(null, true)}
+                className={`w-full text-left rounded-2xl border px-4 py-4 transition-colors ${
+                  !arrivalCityKey
+                    ? 'border-[#FF6B35] bg-[#FFF3EC]'
+                    : 'border-dashed border-slate-200 bg-slate-50 hover:border-orange-300 hover:bg-[#FFF8F3]'
+                }`}
+              >
+                <p className="font-bold text-slate-800">Toutes destinations</p>
+                <p className="text-xs text-slate-500 mt-0.5">Mode inspire — sans filtre ville</p>
+              </button>
 
               {selectedCity ? (
-                <div className="relative rounded-2xl overflow-hidden h-40 sm:h-44 mb-3 shadow-sm">
+                <div className="relative rounded-2xl overflow-hidden h-36 sm:h-40 shadow-sm">
                   <img
                     src={cityImageUrl(selectedCity.city)}
                     alt={selectedCity.city}
@@ -793,7 +1023,7 @@ function CreateTripModal({
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
                     <div>
-                      <p className="text-white font-black text-xl sm:text-2xl tracking-tight">{selectedCity.city}</p>
+                      <p className="text-white font-black text-xl tracking-tight">{selectedCity.city}</p>
                       <p className="text-white/85 text-xs font-medium">
                         {selectedCity.airports.map((a) => a.code).join(' · ')}
                       </p>
@@ -807,24 +1037,15 @@ function CreateTripModal({
                     </button>
                   </div>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => selectCity(null)}
-                  className="w-full mb-3 text-left rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 hover:border-orange-300 hover:bg-[#FFF8F3] transition-colors"
-                >
-                  <p className="font-bold text-slate-800">Toutes destinations</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Mode inspire — sans filtre ville</p>
-                </button>
-              )}
+              ) : null}
 
               {popularCities.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mb-3">
+                <div className="flex flex-wrap gap-2">
                   {popularCities.map((g) => (
                     <button
                       key={g.key}
                       type="button"
-                      onClick={() => selectCity(g)}
+                      onClick={() => selectCity(g, true)}
                       className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
                         g.key === arrivalCityKey
                           ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
@@ -837,24 +1058,26 @@ function CreateTripModal({
                 </div>
               ) : null}
 
-              <p className="text-[11px] text-slate-400 mb-2">
+              <p className="text-[11px] text-slate-400">
                 Routes Ryanair depuis {departure} · mises à jour en direct
               </p>
               <input
                 value={cityQuery}
                 onChange={(e) => setCityQuery(e.target.value)}
                 placeholder="Chercher une ville…"
-                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium mb-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
+                className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
-              <div className="flex-1 min-h-[220px] max-h-[320px] lg:max-h-[380px] overflow-y-auto space-y-1.5 rounded-2xl border border-slate-100 p-1.5 bg-white">
+              <div className="max-h-[260px] sm:max-h-[300px] overflow-y-auto space-y-1.5 rounded-2xl border border-slate-100 p-1.5 bg-white">
                 {filteredCities.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-10">Aucune ville trouvée</p>
+                  <p className="text-sm text-slate-400 text-center py-10">
+                    {arrivalAirports.length === 0 ? 'Chargement des destinations…' : 'Aucune ville trouvée'}
+                  </p>
                 ) : (
                   filteredCities.map((g) => (
                     <button
                       key={g.key}
                       type="button"
-                      onClick={() => selectCity(g)}
+                      onClick={() => selectCity(g, true)}
                       className={`w-full flex items-center gap-3 text-left px-2.5 py-2.5 rounded-xl transition-colors ${
                         g.key === arrivalCityKey
                           ? 'bg-[#FFF3EC] ring-1 ring-orange-200'
@@ -876,19 +1099,89 @@ function CreateTripModal({
                   ))
                 )}
               </div>
-            </div>
-          </div>
+            </motion.div>
+          ) : null}
+
+          {step === 3 ? (
+            <motion.div
+              key="step-3"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-5 max-w-xl mx-auto"
+            >
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="font-black tracking-wider text-slate-900">{departure}</span>
+                <span className="text-slate-400">→</span>
+                <span className="font-semibold text-slate-800">
+                  {selectedCity ? selectedCity.city : 'Toutes destinations'}
+                </span>
+                {datesDepart[0] && datesRetour[0] ? (
+                  <>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-slate-600 font-medium">
+                      {formatDateFr(datesDepart[0].date)} →{' '}
+                      {formatDateFr(datesRetour[datesRetour.length - 1].date)}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-slate-700 block mb-1.5">Nom du voyage</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={
+                    selectedCity
+                      ? `Weekend ${selectedCity.city}`
+                      : `Weekend depuis ${departure || '…'}`
+                  }
+                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300"
+                />
+              </div>
+
+              <div className="[&>div]:mb-4">
+                <DatePresets
+                  selected={preset}
+                  onChange={onPreset}
+                  onFlexibleClick={() => {
+                    setPreset('flexible')
+                    setShowFlexible(true)
+                  }}
+                />
+              </div>
+
+              <div className="[&>div]:mb-4">
+                <PassengerStepper value={passengers} onChange={setPassengers} />
+              </div>
+              <div className="[&>div]:mb-2">
+                <BudgetSlider value={budget} onChange={setBudget} />
+              </div>
+            </motion.div>
+          ) : null}
 
           {error ? <p className="text-sm text-red-600 font-medium mt-5">{error}</p> : null}
+        </div>
 
-          <div className="mt-6 pt-5 border-t border-line flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+        <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-line px-5 sm:px-8 py-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+          <button
+            type="button"
+            onClick={goBack}
+            className="sm:px-5 py-3 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            {step === 1 ? 'Annuler' : 'Retour'}
+          </button>
+          {step < 3 ? (
             <button
               type="button"
-              onClick={onClose}
-              className="sm:px-5 py-3 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+              onClick={goNext}
+              disabled={step === 1 && !departure}
+              className="app-btn-primary rounded-2xl disabled:opacity-50 sm:min-w-[200px] py-3.5"
             >
-              Annuler
+              Continuer
             </button>
+          ) : (
             <button
               type="button"
               onClick={() => void submit()}
@@ -897,7 +1190,7 @@ function CreateTripModal({
             >
               {saving ? '…' : t('planner.create')}
             </button>
-          </div>
+          )}
         </div>
 
         {showFlexible ? (
