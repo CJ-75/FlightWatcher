@@ -94,12 +94,69 @@
   }
 
   .app-tab {
-    @apply inline-flex items-center justify-center px-1.5 sm:px-3 py-2.5 rounded-[20px]
-      text-[11px] sm:text-sm font-semibold text-muted transition-all min-h-[44px] w-full leading-tight;
+    @apply relative inline-flex items-center justify-center px-1.5 sm:px-3 py-2.5 rounded-[20px]
+      text-[11px] sm:text-sm font-semibold text-muted min-h-[44px] w-full leading-tight;
+    transition:
+      color 180ms ease,
+      background-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .app-tab::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(120% 80% at 50% 0%, rgba(255, 107, 53, 0.14), transparent 65%);
+    opacity: 0;
+    transition: opacity 180ms ease;
+    pointer-events: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .app-tab:hover:not(.app-tab-active) {
+      @apply text-primary-700 bg-primary-50/70;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(92, 46, 24, 0.08);
+    }
+
+    .app-tab:hover:not(.app-tab-active)::after {
+      opacity: 1;
+    }
+
+    .app-tab-active:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 16px rgba(255, 107, 53, 0.16);
+    }
+  }
+
+  .app-tab:active {
+    transform: translateY(0) scale(0.98);
   }
 
   .app-tab-active {
     @apply bg-primary-50 text-primary-700 shadow-soft;
+  }
+
+  .app-icon-btn {
+    @apply relative overflow-hidden;
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      background-color 180ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .app-icon-btn:hover {
+      @apply border-primary-500 shadow-lift;
+      transform: translateY(-1px) scale(1.04);
+    }
+  }
+
+  .app-icon-btn:active {
+    transform: scale(0.95);
   }
 
   .app-btn-primary {

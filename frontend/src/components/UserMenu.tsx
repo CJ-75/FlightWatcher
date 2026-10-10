@@ -190,7 +190,7 @@ export function UserMenu() {
           ref={buttonRef}
           onClick={() => setIsOpen(!isOpen)}
           type="button"
-          className="relative h-10 w-10 sm:h-11 sm:w-11 rounded-full border-2 border-line hover:border-primary-500 transition-all shadow-soft hover:shadow-lift active:scale-95 overflow-hidden bg-white flex items-center justify-center shrink-0"
+          className="app-icon-btn h-10 w-10 sm:h-11 sm:w-11 rounded-full border-2 border-line shadow-soft bg-white flex items-center justify-center shrink-0"
           aria-label={t('auth.userMenu')}
           aria-expanded={isOpen}
         >
@@ -318,7 +318,7 @@ export function UserMenu() {
         onClick={handleSignIn}
         disabled={loading}
         type="button"
-        className="h-10 sm:h-11 px-3.5 sm:px-4 bg-white border-2 border-line rounded-full hover:border-primary-500 hover:shadow-lift disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 font-semibold text-ink-soft text-sm active:scale-95 shadow-soft"
+        className="app-icon-btn h-10 sm:h-11 px-3.5 sm:px-4 bg-white border-2 border-line rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold text-ink-soft text-sm shadow-soft hover:text-primary-700 hover:bg-primary-50"
       >
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

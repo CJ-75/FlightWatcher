@@ -11,7 +11,7 @@ export function LanguageSwitcher() {
     <button
       onClick={toggleLanguage}
       type="button"
-      className="h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-full bg-white border-2 border-line hover:border-primary-500 text-[11px] sm:text-xs font-bold text-ink-soft uppercase tracking-wide shadow-soft hover:shadow-lift active:scale-95 transition-all flex items-center justify-center"
+      className="app-icon-btn h-10 w-10 sm:h-11 sm:w-11 shrink-0 rounded-full bg-white border-2 border-line text-[11px] sm:text-xs font-bold text-ink-soft uppercase tracking-wide shadow-soft flex items-center justify-center hover:text-primary-700 hover:bg-primary-50"
       title={language === 'fr' ? 'Switch to English' : 'Passer en français'}
       aria-label={language === 'fr' ? 'Switch to English' : 'Passer en français'}
     >

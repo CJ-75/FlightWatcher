@@ -683,10 +683,12 @@ function Dashboard() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
+                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
                   className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
                 >
-                  <span className="truncate">{tab.label}</span>
+                  <span className="relative z-[1] truncate">{tab.label}</span>
                 </motion.button>
               ))}
             </div>
