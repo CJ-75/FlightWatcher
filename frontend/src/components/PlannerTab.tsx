@@ -1254,7 +1254,8 @@ function TripDetailView({
   const [membersBusy, setMembersBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
-  const [newName, setNewName] = useState('')
+  const [newFirstName, setNewFirstName] = useState('')
+  const [newLastName, setNewLastName] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1445,9 +1446,17 @@ function TripDetailView({
   }
 
   const addMember = async () => {
-    const display_name = newName.trim()
+    const first_name = newFirstName.trim()
+    const last_name = newLastName.trim()
     const email = newEmail.trim().toLowerCase()
-    if (display_name.length < 2) return
+    if (!first_name) {
+      setError(t('planner.members.firstNameRequired'))
+      return
+    }
+    if (!last_name) {
+      setError(t('planner.members.lastNameRequired'))
+      return
+    }
     if (!email) {
       setError(t('planner.members.emailRequired'))
       return
@@ -1459,8 +1468,9 @@ function TripDetailView({
     setMembersBusy(true)
     setError(null)
     try {
-      await getApiClient().addTripMember(tripId, { display_name, email })
-      setNewName('')
+      await getApiClient().addTripMember(tripId, { first_name, last_name, email })
+      setNewFirstName('')
+      setNewLastName('')
       setNewEmail('')
       setAddOpen(false)
       await load()
@@ -1589,15 +1599,18 @@ function TripDetailView({
         isOrganizer={!!isOrganizer}
         busy={membersBusy}
         addOpen={addOpen}
-        newName={newName}
+        newFirstName={newFirstName}
+        newLastName={newLastName}
         newEmail={newEmail}
         onOpenAdd={() => setAddOpen(true)}
         onCloseAdd={() => {
           setAddOpen(false)
-          setNewName('')
+          setNewFirstName('')
+          setNewLastName('')
           setNewEmail('')
         }}
-        onNameChange={setNewName}
+        onFirstNameChange={setNewFirstName}
+        onLastNameChange={setNewLastName}
         onEmailChange={setNewEmail}
         onAdd={() => void addMember()}
         onRemove={(m) => void removeMember(m)}
@@ -2007,11 +2020,13 @@ function TravelersPanel({
   isOrganizer,
   busy,
   addOpen,
-  newName,
+  newFirstName,
+  newLastName,
   newEmail,
   onOpenAdd,
   onCloseAdd,
-  onNameChange,
+  onFirstNameChange,
+  onLastNameChange,
   onEmailChange,
   onAdd,
   onRemove,
@@ -2023,11 +2038,13 @@ function TravelersPanel({
   isOrganizer: boolean
   busy: boolean
   addOpen: boolean
-  newName: string
+  newFirstName: string
+  newLastName: string
   newEmail: string
   onOpenAdd: () => void
   onCloseAdd: () => void
-  onNameChange: (v: string) => void
+  onFirstNameChange: (v: string) => void
+  onLastNameChange: (v: string) => void
   onEmailChange: (v: string) => void
   onAdd: () => void
   onRemove: (m: TripMember) => void
@@ -2258,19 +2275,36 @@ function TravelersPanel({
               <p className="font-extrabold text-slate-900">{t('planner.members.addTitle')}</p>
               <p className="text-sm text-slate-500 mt-0.5">{t('planner.members.addHint')}</p>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-600 block mb-1.5">
-                {t('planner.members.namePlaceholder')}
-              </label>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => onNameChange(e.target.value)}
-                placeholder={t('planner.members.namePlaceholder')}
-                maxLength={60}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-                autoFocus
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1.5">
+                  {t('planner.members.firstNameLabel')}
+                </label>
+                <input
+                  type="text"
+                  autoComplete="given-name"
+                  value={newFirstName}
+                  onChange={(e) => onFirstNameChange(e.target.value)}
+                  placeholder={t('planner.members.firstNamePlaceholder')}
+                  maxLength={40}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1.5">
+                  {t('planner.members.lastNameLabel')}
+                </label>
+                <input
+                  type="text"
+                  autoComplete="family-name"
+                  value={newLastName}
+                  onChange={(e) => onLastNameChange(e.target.value)}
+                  placeholder={t('planner.members.lastNamePlaceholder')}
+                  maxLength={40}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                />
+              </div>
             </div>
             <div>
               <label className="text-xs font-bold text-slate-600 block mb-1.5">
@@ -2303,7 +2337,12 @@ function TravelersPanel({
               </button>
               <button
                 type="button"
-                disabled={busy || newName.trim().length < 2 || !newEmail.trim()}
+                disabled={
+                  busy ||
+                  !newFirstName.trim() ||
+                  !newLastName.trim() ||
+                  !newEmail.trim()
+                }
                 onClick={onAdd}
                 className="sm:flex-1 rounded-2xl bg-[#FF6B35] text-white py-3 font-bold disabled:opacity-50 hover:bg-[#E85A28] shadow-sm shadow-orange-500/20"
               >

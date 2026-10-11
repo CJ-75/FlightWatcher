@@ -205,7 +205,7 @@ export function TravelersSection({
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder="Prénom ou surnom"
+              placeholder="Prénom"
               placeholderTextColor={colors.faint}
               autoFocus
               maxLength={60}

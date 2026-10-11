@@ -157,7 +157,7 @@ export interface TripMember {
   trip_id: string
   user_id?: string | null
   display_name?: string | null
-  /** Guest invite email — stored now, Resend send later */
+  /** Guest invite email */
   email?: string | null
   role: TripMemberRole
   status: TripMemberStatus
@@ -165,7 +165,10 @@ export interface TripMember {
 }
 
 export interface AddTripMemberRequest {
-  display_name: string
+  /** @deprecated prefer first_name + last_name */
+  display_name?: string
+  first_name?: string
+  last_name?: string
   email?: string | null
 }
 

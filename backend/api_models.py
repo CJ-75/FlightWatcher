@@ -156,5 +156,7 @@ class UpdatePlannedTripRequest(BaseModel):
 
 
 class AddTripMemberRequest(BaseModel):
-    display_name: str
+    display_name: Optional[str] = None  # legacy; prefer first_name + last_name
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None

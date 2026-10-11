@@ -408,10 +408,17 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
     supabase = _svc()
     trip = _require_organizer(supabase, trip_id, user_id)
 
-    name = (body.display_name or "").strip()
+    first = (body.first_name or "").strip()
+    last = (body.last_name or "").strip()
+    if first or last:
+        name = f"{first} {last}".strip()
+    else:
+        name = (body.display_name or "").strip()
+    if len(first) < 1 and not name:
+        raise HTTPException(status_code=400, detail="Prénom requis")
     if len(name) < 2:
         raise HTTPException(status_code=400, detail="Nom trop court")
-    if len(name) > 60:
+    if len(name) > 80:
         raise HTTPException(status_code=400, detail="Nom trop long")
 
     email = (body.email or "").strip().lower()
