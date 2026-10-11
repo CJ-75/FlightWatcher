@@ -454,7 +454,6 @@ export function TripDetailScreen() {
               busy={acting === p.id}
               onAccept={() => void accept(p.id)}
               onReject={() => void reject(p.id)}
-              onBook={() => setBookingTrip(p.trip_data)}
             />
           ))}
         </View>
@@ -512,7 +511,6 @@ function ProposalBlock({
   busy,
   onAccept,
   onReject,
-  onBook,
 }: {
   proposal: TripProposal
   passengers: number
@@ -520,38 +518,23 @@ function ProposalBlock({
   busy: boolean
   onAccept: () => void
   onReject: () => void
-  onBook: () => void
 }) {
   return (
-    <View style={styles.proposalWrap}>
-      <DestinationCard
-        trip={proposal.trip_data}
-        passengers={passengers}
-        onBook={onBook}
-      />
-      {isOrganizer ? (
-        <View style={styles.actions}>
-          <Pressable
-            onPress={onReject}
-            disabled={busy}
-            style={[styles.btnReject, busy && { opacity: 0.5 }]}
-          >
-            <Text style={styles.btnRejectText}>Refuser</Text>
-          </Pressable>
-          <Pressable
-            onPress={onAccept}
-            disabled={busy}
-            style={[styles.btnAccept, busy && { opacity: 0.5 }]}
-          >
-            {busy ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Text style={styles.btnAcceptText}>Accepter</Text>
-            )}
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+    <DestinationCard
+      trip={proposal.trip_data}
+      passengers={passengers}
+      showBook={false}
+      primaryAction={
+        isOrganizer
+          ? { label: busy ? '…' : 'Accepter', onPress: onAccept, disabled: busy }
+          : undefined
+      }
+      secondaryAction={
+        isOrganizer
+          ? { label: 'Refuser', onPress: onReject, disabled: busy }
+          : undefined
+      }
+    />
   )
 }
 
@@ -571,26 +554,6 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   sectionMuted: { fontFamily: fonts.medium, fontSize: 13, color: colors.faint },
-  proposalWrap: { gap: 10, marginBottom: 8 },
-  actions: { flexDirection: 'row', gap: 10 },
-  btnReject: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.lineStrong,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: colors.white,
-  },
-  btnRejectText: { fontFamily: fonts.bold, color: colors.muted },
-  btnAccept: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-  },
-  btnAcceptText: { fontFamily: fonts.bold, color: colors.white },
   empty: {
     backgroundColor: colors.white,
     borderRadius: 18,
@@ -626,8 +589,9 @@ const styles = StyleSheet.create({
   },
   routeWarnBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
   deleteBtn: {
-    marginTop: 8,
-    paddingVertical: 14,
+    marginTop: 48,
+    marginBottom: 16,
+    paddingVertical: 16,
     alignItems: 'center',
     borderRadius: 14,
     borderWidth: 1,

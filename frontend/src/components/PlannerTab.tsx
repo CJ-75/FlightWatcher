@@ -2058,7 +2058,6 @@ function TripDetailView({
                 busy={acting === p.id}
                 onAccept={() => void accept(p.id)}
                 onReject={() => void reject(p.id)}
-                onBook={() => setBookingTrip(p.trip_data)}
                 t={t}
               />
             ))}
@@ -2165,14 +2164,16 @@ function TripDetailView({
       ) : null}
 
       {isOrganizer ? (
-        <button
-          type="button"
-          disabled={deleting}
-          onClick={() => void doDelete()}
-          className="w-full sm:w-auto text-red-600 font-bold px-5 py-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50"
-        >
-          {deleting ? '…' : t('planner.delete')}
-        </button>
+        <div className="pt-14 pb-6 mt-6 border-t border-slate-100">
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() => void doDelete()}
+            className="w-full sm:w-auto text-red-600 font-bold px-5 py-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+          >
+            {deleting ? '…' : t('planner.delete')}
+          </button>
+        </div>
       ) : null}
 
       {showEditFlexible ? (
@@ -2225,7 +2226,6 @@ function ProposalCard({
   busy,
   onAccept,
   onReject,
-  onBook,
   t,
 }: {
   proposal: TripProposal
@@ -2233,37 +2233,23 @@ function ProposalCard({
   busy: boolean
   onAccept: () => void
   onReject: () => void
-  onBook: () => void
   t: (k: string) => string
 }) {
   return (
-    <div className="space-y-3">
-      <DestinationCard
-        trip={proposal.trip_data}
-        onSaveFavorite={() => undefined}
-        onBook={onBook}
-      />
-      {isOrganizer ? (
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onReject}
-            className="w-full sm:w-auto sm:min-w-[120px] border border-line rounded-2xl py-2.5 px-4 font-bold text-ink-soft hover:bg-canvas disabled:opacity-50"
-          >
-            {t('planner.reject')}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onAccept}
-            className="w-full sm:w-auto sm:min-w-[120px] app-btn-primary rounded-2xl py-2.5 px-4 disabled:opacity-50"
-          >
-            {t('planner.accept')}
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <DestinationCard
+      trip={proposal.trip_data}
+      onSaveFavorite={() => undefined}
+      primaryAction={
+        isOrganizer
+          ? { label: t('planner.accept'), onClick: onAccept, disabled: busy }
+          : undefined
+      }
+      secondaryAction={
+        isOrganizer
+          ? { label: t('planner.reject'), onClick: onReject, disabled: busy }
+          : undefined
+      }
+    />
   )
 }
 

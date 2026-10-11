@@ -14,11 +14,22 @@ import { buildRyanairBookingUrl, resolveTripImageUrl } from '@flightwatcher/shar
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { HeartIcon } from './HeartIcon'
 
+type CardAction = {
+  label: string
+  onPress: () => void
+  disabled?: boolean
+}
+
 interface Props {
   trip: EnrichedTripResponse
   passengers?: number
   onFavorite?: () => void
   onBook?: () => void
+  /** Hide default book CTA */
+  showBook?: boolean
+  /** Replaces book CTA (e.g. Accept on a planner proposal) */
+  primaryAction?: CardAction
+  secondaryAction?: CardAction
   isFavorite?: boolean
 }
 
@@ -42,6 +53,9 @@ export function DestinationCard({
   passengers = 1,
   onFavorite,
   onBook,
+  showBook = true,
+  primaryAction,
+  secondaryAction,
   isFavorite,
 }: Props) {
   const cityName = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
@@ -135,12 +149,41 @@ export function DestinationCard({
           </View>
         </View>
 
-        <Pressable
-          onPress={openBook}
-          style={({ pressed }) => [styles.bookBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
-        >
-          <Text style={styles.bookText}>Réserver</Text>
-        </Pressable>
+        {primaryAction ? (
+          <View style={styles.actionsCol}>
+            <Pressable
+              onPress={primaryAction.onPress}
+              disabled={primaryAction.disabled}
+              style={({ pressed }) => [
+                styles.bookBtn,
+                primaryAction.disabled && { opacity: 0.5 },
+                pressed && !primaryAction.disabled && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <Text style={styles.bookText}>{primaryAction.label}</Text>
+            </Pressable>
+            {secondaryAction ? (
+              <Pressable
+                onPress={secondaryAction.onPress}
+                disabled={secondaryAction.disabled}
+                style={({ pressed }) => [
+                  styles.secondaryBtn,
+                  secondaryAction.disabled && { opacity: 0.5 },
+                  pressed && !secondaryAction.disabled && { opacity: 0.85 },
+                ]}
+              >
+                <Text style={styles.secondaryBtnText}>{secondaryAction.label}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : showBook ? (
+          <Pressable
+            onPress={openBook}
+            style={({ pressed }) => [styles.bookBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
+          >
+            <Text style={styles.bookText}>Réserver</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   )
@@ -244,6 +287,7 @@ const styles = StyleSheet.create({
   },
   legValue: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
   legPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.inkSoft, marginTop: 2 },
+  actionsCol: { gap: 10 },
   bookBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
@@ -252,4 +296,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bookText: { ...type.button, color: colors.white },
+  secondaryBtn: {
+    borderRadius: radius.md,
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+  },
+  secondaryBtnText: { fontFamily: fonts.bold, fontSize: 15, color: colors.muted },
 })

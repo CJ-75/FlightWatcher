@@ -4,10 +4,19 @@ import { resolveTripImageUrl } from '@flightwatcher/shared';
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
 
+type CardAction = {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+};
+
 interface DestinationCardProps {
   trip: EnrichedTripResponse;
   onSaveFavorite: () => void;
   onBook?: () => void;
+  /** Replaces book CTA (e.g. Accept on a planner proposal) */
+  primaryAction?: CardAction;
+  secondaryAction?: CardAction;
   isFavorite?: boolean;
 }
 
@@ -40,6 +49,8 @@ export function DestinationCard({
   trip,
   onSaveFavorite,
   onBook,
+  primaryAction,
+  secondaryAction,
   isFavorite = false,
 }: DestinationCardProps) {
   const { t } = useI18n();
@@ -195,16 +206,44 @@ export function DestinationCard({
           </div>
         </div>
 
-        <motion.button
-          type="button"
-          onClick={onBook}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          transition={springConfig}
-          className="mt-auto w-full app-btn-primary min-h-[48px] sm:min-h-[52px] text-sm sm:text-base rounded-2xl"
-        >
-          {t('card.book')}
-        </motion.button>
+        {primaryAction || secondaryAction || onBook ? (
+          <div className="mt-auto flex flex-col gap-2">
+            {primaryAction ? (
+              <motion.button
+                type="button"
+                disabled={primaryAction.disabled}
+                onClick={primaryAction.onClick}
+                whileHover={{ scale: primaryAction.disabled ? 1 : 1.02 }}
+                whileTap={{ scale: primaryAction.disabled ? 1 : 0.98 }}
+                transition={springConfig}
+                className="w-full app-btn-primary min-h-[48px] sm:min-h-[52px] text-sm sm:text-base rounded-2xl disabled:opacity-50"
+              >
+                {primaryAction.label}
+              </motion.button>
+            ) : onBook ? (
+              <motion.button
+                type="button"
+                onClick={onBook}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                transition={springConfig}
+                className="w-full app-btn-primary min-h-[48px] sm:min-h-[52px] text-sm sm:text-base rounded-2xl"
+              >
+                {t('card.book')}
+              </motion.button>
+            ) : null}
+            {secondaryAction ? (
+              <button
+                type="button"
+                disabled={secondaryAction.disabled}
+                onClick={secondaryAction.onClick}
+                className="w-full border border-line rounded-2xl min-h-[44px] font-bold text-ink-soft hover:bg-canvas disabled:opacity-50"
+              >
+                {secondaryAction.label}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </motion.div>
   );
