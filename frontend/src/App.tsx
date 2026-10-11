@@ -2143,14 +2143,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
 
                       <div className="flex flex-wrap gap-2 mb-3">
                         <motion.button
-                          onClick={() => onLoadSearch(search)}
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          className="flex-1 sm:flex-none px-4 py-2.5 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] text-xs sm:text-sm font-bold shadow-sm shadow-orange-500/20 flex items-center justify-center gap-1.5 min-h-[44px]"
-                        >
-                          <span>{t('saved.load')}</span>
-                        </motion.button>
-                        <motion.button
                           onClick={async () => {
                             await onLoadSearch(search)
                             setTimeout(() => {
@@ -2162,7 +2154,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           disabled={loading}
                           whileHover={{ scale: loading ? 1 : 1.03 }}
                           whileTap={{ scale: loading ? 1 : 0.97 }}
-                          className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-orange-200 text-[#E85A28] rounded-2xl hover:bg-[#FFF8F3] disabled:opacity-50 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
+                          className="flex-1 sm:flex-none px-4 py-2.5 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] disabled:opacity-50 text-xs sm:text-sm font-bold shadow-sm shadow-orange-500/20 flex items-center justify-center gap-1.5 min-h-[44px]"
                         >
                           <span>{t('saved.reload')}</span>
                         </motion.button>
@@ -2208,9 +2200,16 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           <span>{isExpanded ? 'Masquer' : 'Détails'}</span>
                         </motion.button>
                         <motion.button
+                          onClick={() => onLoadSearch(search)}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-orange-200 text-[#E85A28] rounded-2xl hover:bg-[#FFF8F3] text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
+                        >
+                          <span>{t('saved.load')}</span>
+                        </motion.button>
+                        <motion.button
                           onClick={() => {
                             if (confirm(t('saved.delete') + ' ?')) {
-                              // Nettoyer l'interval avant de supprimer
                               stopAutoCheck(search.id)
                               deleteSearch(search.id)
                               refreshData()
