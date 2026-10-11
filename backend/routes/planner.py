@@ -136,7 +136,7 @@ def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
         "dates_retour": row.get("dates_retour") or [],
         "budget_max": row.get("budget_max") or 200,
         "invite_token": row["invite_token"],
-        "status": row.get("status") or "draft",
+        "status": row.get("status") or "planning",
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "proposals_count": proposals_count,
@@ -270,7 +270,7 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
         "dates_retour": [d.model_dump() for d in body.dates_retour],
         "budget_max": int(body.budget_max or 200),
         "invite_token": token,
-        "status": "draft",
+        "status": "planning",
         "updated_at": datetime.utcnow().isoformat(),
     }
     result = supabase.table("planned_trips").insert(data).execute()
@@ -605,6 +605,34 @@ async def scan_trip(trip_id: str, request: Request):
             f"({num_requetes} req Ryanair)"
         )
 
+        budget_max = int(trip.get("budget_max") or 200)
+        empty_reason = None
+        cheapest_found = None
+        if not inserted:
+            # Diagnostic: vols existent-ils au-dessus du budget ?
+            try:
+                diag, n_diag = scanner_vols_api(
+                    aeroport_depart=trip["departure_airport"],
+                    dates_depart=dates_depart,
+                    dates_retour=dates_retour,
+                    budget_max=max(budget_max * 4, 800),
+                    limite_allers=8,
+                    destinations_exclues=[],
+                    destinations_incluses=incluses,
+                    record_prices=False,
+                    passengers=int(trip.get("passengers") or 1),
+                )
+                num_requetes += n_diag
+                if diag:
+                    diag_sorted = sorted(diag, key=lambda t: t.prix_total)
+                    cheapest_found = float(diag_sorted[0].prix_total)
+                    empty_reason = "budget"
+                else:
+                    empty_reason = "no_flights"
+            except Exception as diag_err:
+                print(f"⚠️ Diagnostic scan vide {trip_id}: {diag_err}")
+                empty_reason = "no_flights"
+
         supabase.table("planned_trips").update(
             {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
         ).eq("id", trip_id).execute()
@@ -613,15 +641,18 @@ async def scan_trip(trip_id: str, request: Request):
             "proposals": inserted,
             "nombre_requetes": num_requetes,
             "saved": len(inserted),
+            "budget_max": budget_max,
+            "empty_reason": empty_reason,
+            "cheapest_found": cheapest_found,
         }
     except HTTPException:
         supabase.table("planned_trips").update(
-            {"status": "draft", "updated_at": datetime.utcnow().isoformat()}
+            {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
         ).eq("id", trip_id).execute()
         raise
     except Exception as e:
         supabase.table("planned_trips").update(
-            {"status": "draft", "updated_at": datetime.utcnow().isoformat()}
+            {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
         ).eq("id", trip_id).execute()
         print(f"❌ Planner scan échoué {trip_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

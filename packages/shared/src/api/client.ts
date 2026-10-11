@@ -215,10 +215,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'DELETE' },
       ),
     scanPlannedTrip: (id: string) =>
-      request<{ proposals: TripProposal[]; nombre_requetes: number; saved?: number }>(
-        `/api/planner/trips/${encodeURIComponent(id)}/scan`,
-        { method: 'POST', timeoutMs: LONG_REQUEST_TIMEOUT_MS },
-      ),
+      request<{
+        proposals: TripProposal[]
+        nombre_requetes: number
+        saved?: number
+        budget_max?: number
+        empty_reason?: 'budget' | 'no_flights' | null
+        cheapest_found?: number | null
+      }>(`/api/planner/trips/${encodeURIComponent(id)}/scan`, {
+        method: 'POST',
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+      }),
     acceptProposal: (id: string) =>
       request<TripProposal>(`/api/planner/proposals/${encodeURIComponent(id)}/accept`, {
         method: 'POST',

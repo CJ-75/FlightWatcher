@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import type {
   Airport,
@@ -246,9 +246,9 @@ function PlannerGuestLanding() {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  draft: 'Brouillon',
+  draft: 'Créé',
   scanning: 'Scan…',
-  planning: 'Propositions',
+  planning: 'Créé',
   locked: 'Confirmé',
 }
 
@@ -262,6 +262,7 @@ export function PlannerTab() {
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [autoScanTripId, setAutoScanTripId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
@@ -334,12 +335,16 @@ export function PlannerTab() {
       <TripDetailView
         tripId={selectedTripId}
         userId={userId}
+        autoScan={autoScanTripId === selectedTripId}
+        onAutoScanDone={() => setAutoScanTripId(null)}
         onBack={() => {
           setSelectedTripId(null)
+          setAutoScanTripId(null)
           void load()
         }}
         onDeleted={() => {
           setSelectedTripId(null)
+          setAutoScanTripId(null)
           void load()
         }}
         onToast={setToast}
@@ -518,6 +523,7 @@ export function PlannerTab() {
           onCreated={(id) => {
             setShowCreate(false)
             void load()
+            setAutoScanTripId(id)
             setSelectedTripId(id)
           }}
         />
@@ -1226,12 +1232,16 @@ function CreateTripModal({
 function TripDetailView({
   tripId,
   userId,
+  autoScan = false,
+  onAutoScanDone,
   onBack,
   onDeleted,
   onToast,
 }: {
   tripId: string
   userId: string
+  autoScan?: boolean
+  onAutoScanDone?: () => void
   onBack: () => void
   onDeleted: () => void
   onToast: (msg: string) => void
@@ -1247,18 +1257,38 @@ function TripDetailView({
   const [newName, setNewName] = useState('')
   const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [scanEmpty, setScanEmpty] = useState<{
+    reason: 'budget' | 'no_flights'
+    budget: number
+    cheapest?: number | null
+  } | null>(null)
+  const [editBudget, setEditBudget] = useState(150)
+  const [editDatesDepart, setEditDatesDepart] = useState<DateAvecHoraire[]>([])
+  const [editDatesRetour, setEditDatesRetour] = useState<DateAvecHoraire[]>([])
+  const [editPreset, setEditPreset] = useState<DatePreset>('next-weekend')
+  const [showEditFlexible, setShowEditFlexible] = useState(false)
+  const [savingCriteria, setSavingCriteria] = useState(false)
+  const autoScanStarted = useRef(false)
+
+  const syncEditFromTrip = useCallback((detail: PlannedTripDetail) => {
+    setEditBudget(detail.budget_max || 150)
+    setEditDatesDepart(detail.dates_depart || [])
+    setEditDatesRetour(detail.dates_retour || [])
+    setEditPreset('flexible')
+  }, [])
 
   const load = useCallback(async () => {
     setError(null)
     try {
       const detail = await getApiClient().getPlannedTrip(tripId)
       setTrip(detail)
+      syncEditFromTrip(detail)
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
       setLoading(false)
     }
-  }, [tripId, t])
+  }, [tripId, t, syncEditFromTrip])
 
   useEffect(() => {
     void load()
@@ -1268,27 +1298,120 @@ function TripDetailView({
   const pending = (trip?.proposals || []).filter((p) => p.status === 'pending')
   const accepted = (trip?.proposals || []).find((p) => p.status === 'accepted')
 
-  const scan = async () => {
+  const suggestedBudget = useMemo(() => {
+    if (!scanEmpty?.cheapest) return null
+    return Math.min(1000, Math.max(20, Math.ceil(scanEmpty.cheapest / 10) * 10))
+  }, [scanEmpty?.cheapest])
+
+  const onEditPreset = (p: DatePreset) => {
+    setEditPreset(p)
+    if (p === 'flexible') {
+      setShowEditFlexible(true)
+      return
+    }
+    const d = generateDatesFromPreset(p)
+    setEditDatesDepart(
+      d.dates_depart.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
+    )
+    setEditDatesRetour(
+      d.dates_retour.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
+    )
+  }
+
+  const datesChanged = (a: DateAvecHoraire[], b: DateAvecHoraire[]) => {
+    if (a.length !== b.length) return true
+    return a.some(
+      (d, i) =>
+        d.date !== b[i]?.date ||
+        d.heure_min !== b[i]?.heure_min ||
+        d.heure_max !== b[i]?.heure_max,
+    )
+  }
+
+  const scan = useCallback(async () => {
     setScanning(true)
+    setScanEmpty(null)
+    setError(null)
     try {
       const scanRes = await getApiClient().scanPlannedTrip(tripId)
+      const proposals = scanRes.proposals || []
       setTrip((prev) =>
         prev
           ? {
               ...prev,
               status: 'planning',
-              proposals: scanRes.proposals || [],
-              proposals_count: (scanRes.proposals || []).length,
+              proposals,
+              proposals_count: proposals.length,
             }
           : prev,
       )
       await load()
+      if (proposals.length === 0) {
+        const budget = scanRes.budget_max ?? trip?.budget_max ?? 150
+        const cheapest = scanRes.cheapest_found
+        setScanEmpty({
+          reason: scanRes.empty_reason === 'budget' ? 'budget' : 'no_flights',
+          budget,
+          cheapest,
+        })
+        if (cheapest != null) {
+          setEditBudget(Math.min(1000, Math.max(budget, Math.ceil(cheapest / 10) * 10)))
+        }
+      } else {
+        setScanEmpty(null)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
       setScanning(false)
     }
+  }, [tripId, trip?.budget_max, load, t])
+
+  const updateCriteriaAndScan = async () => {
+    if (!trip) return
+    if (!editDatesDepart.length || !editDatesRetour.length) {
+      setError('Dates requises')
+      return
+    }
+    const nextBudget = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
+    const patch: Partial<CreatePlannedTripRequest> = {}
+    if (nextBudget !== trip.budget_max) patch.budget_max = nextBudget
+    if (datesChanged(editDatesDepart, trip.dates_depart || [])) {
+      patch.dates_depart = editDatesDepart
+    }
+    if (datesChanged(editDatesRetour, trip.dates_retour || [])) {
+      patch.dates_retour = editDatesRetour
+    }
+    setSavingCriteria(true)
+    setError(null)
+    try {
+      if (Object.keys(patch).length > 0) {
+        await getApiClient().updatePlannedTrip(tripId, patch)
+        setTrip((prev) =>
+          prev
+            ? {
+                ...prev,
+                budget_max: nextBudget,
+                dates_depart: editDatesDepart,
+                dates_retour: editDatesRetour,
+              }
+            : prev,
+        )
+        setEditBudget(nextBudget)
+      }
+      await scan()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setSavingCriteria(false)
+    }
   }
+
+  useEffect(() => {
+    if (!autoScan || !trip || !isOrganizer || loading || autoScanStarted.current) return
+    autoScanStarted.current = true
+    void scan().finally(() => onAutoScanDone?.())
+  }, [autoScan, trip, isOrganizer, loading, scan, onAutoScanDone])
 
   const accept = async (id: string) => {
     setActing(id)
@@ -1480,6 +1603,19 @@ function TripDetailView({
         </button>
       ) : null}
 
+      {scanning ? (
+        <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-5 py-8 text-center">
+          <div className="mx-auto mb-3 w-9 h-9 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+          <p className="font-bold text-slate-900">{t('planner.scan.auto')}</p>
+          <p className="text-sm text-slate-500 mt-1">
+            {trip.departure_airport}
+            {trip.arrival_airport ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}` : ' → inspire'}
+            {' · '}
+            {trip.budget_max}€/pers
+          </p>
+        </div>
+      ) : null}
+
       {accepted ? (
         <section className="space-y-4">
           <h3 className="font-bold text-lg text-ink">Proposition acceptée</h3>
@@ -1516,11 +1652,97 @@ function TripDetailView({
       ) : null}
 
       {!accepted && pending.length === 0 && !scanning ? (
-        <div className="bg-white rounded-2xl shadow p-8 text-center text-slate-500">
-          {isOrganizer
-            ? 'Lance un scan pour trouver des vols.'
-            : 'Pas encore de propositions.'}
-        </div>
+        scanEmpty ? (
+          <div
+            className={`rounded-2xl border px-5 py-6 sm:px-7 sm:py-7 ${
+              scanEmpty.reason === 'budget'
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-slate-200 bg-white shadow-sm'
+            }`}
+          >
+            <div className="text-center">
+              <p
+                className={`font-extrabold text-lg ${
+                  scanEmpty.reason === 'budget' ? 'text-amber-950' : 'text-slate-900'
+                }`}
+              >
+                {scanEmpty.reason === 'budget'
+                  ? t('planner.scan.emptyBudget', { budget: scanEmpty.budget })
+                  : t('planner.scan.emptyNone')}
+              </p>
+              {scanEmpty.reason === 'budget' ? (
+                <p className="text-sm text-amber-900/80 mt-2 max-w-md mx-auto leading-relaxed">
+                  {scanEmpty.cheapest
+                    ? t('planner.scan.emptyBudgetHint', {
+                        price: Math.ceil(scanEmpty.cheapest),
+                      })
+                    : t('planner.scan.emptyBudgetNoPrice')}
+                </p>
+              ) : null}
+            </div>
+
+            {isOrganizer ? (
+              <div className="mt-6 max-w-lg mx-auto text-left space-y-5">
+                <p className="text-sm font-bold text-slate-800 text-center sm:text-left">
+                  {t('planner.scan.editCriteria')}
+                </p>
+
+                <div className="rounded-2xl bg-white border border-slate-100 px-4 pt-4 pb-2 shadow-sm">
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
+                    {t('planner.scan.editDates')}
+                  </p>
+                  <div className="[&>div]:mb-2">
+                    <DatePresets
+                      selected={editPreset}
+                      onChange={onEditPreset}
+                      onFlexibleClick={() => {
+                        setEditPreset('flexible')
+                        setShowEditFlexible(true)
+                      }}
+                    />
+                  </div>
+                  {editDatesDepart[0] && editDatesRetour[0] ? (
+                    <p className="text-sm text-slate-600 font-medium pb-2">
+                      {formatDateFr(editDatesDepart[0].date)} →{' '}
+                      {formatDateFr(editDatesRetour[editDatesRetour.length - 1].date)}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-2xl bg-white border border-slate-100 px-4 pt-4 pb-2 shadow-sm [&>div]:mb-3">
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
+                    {t('planner.scan.editBudget')}
+                  </p>
+                  {suggestedBudget && suggestedBudget > scanEmpty.budget ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditBudget(suggestedBudget)}
+                      className="mb-3 text-xs font-bold px-3 py-1.5 rounded-full border border-orange-300 bg-white text-[#E85A28] hover:bg-[#FFF3EC]"
+                    >
+                      {t('planner.scan.useCheapest', { price: suggestedBudget })}
+                    </button>
+                  ) : null}
+                  <BudgetSlider value={editBudget} onChange={setEditBudget} />
+                </div>
+
+                <button
+                  type="button"
+                  disabled={scanning || savingCriteria}
+                  onClick={() => void updateCriteriaAndScan()}
+                  className="w-full app-btn-primary rounded-2xl py-3.5 disabled:opacity-60"
+                >
+                  {savingCriteria || scanning
+                    ? t('planner.scanning')
+                    : t('planner.scan.updateAndScan')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow p-8 text-center text-slate-500">
+            {isOrganizer ? t('planner.scan.emptyPrompt') : 'Pas encore de propositions.'}
+          </div>
+        )
       ) : null}
 
       {isOrganizer && (trip.status === 'locked' || !!accepted) ? (
@@ -1536,6 +1758,38 @@ function TripDetailView({
         >
           {deleting ? '…' : t('planner.delete')}
         </button>
+      ) : null}
+
+      {showEditFlexible ? (
+        <div className="app-dialog-root z-[60]">
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="app-dialog-backdrop"
+            onClick={() => setShowEditFlexible(false)}
+          />
+          <div className="app-dialog-panel app-dialog-xl p-5 sm:p-8">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-extrabold text-lg text-ink">{t('planner.scan.editDates')}</h4>
+              <button
+                type="button"
+                onClick={() => setShowEditFlexible(false)}
+                className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50"
+              >
+                OK
+              </button>
+            </div>
+            <FlexibleDatesSelector
+              flexibleDates={{ dates_depart: editDatesDepart, dates_retour: editDatesRetour }}
+              onFlexibleDatesChange={(d) => {
+                setEditDatesDepart(d.dates_depart)
+                setEditDatesRetour(d.dates_retour)
+                setEditPreset('flexible')
+              }}
+              formatDateFr={formatDateFr}
+            />
+          </div>
+        </div>
       ) : null}
 
       {bookingTrip ? (
@@ -1667,6 +1921,15 @@ function sortMembers(list: TripMember[]): TripMember[] {
   })
 }
 
+const MEMBER_AVATAR_STYLES = [
+  'from-[#FF6B35] to-[#E85A28]',
+  'from-[#FF8A5B] to-[#FF6B35]',
+  'from-[#1A120E] to-[#3D2818]',
+  'from-[#0F766E] to-[#115E59]',
+  'from-[#B45309] to-[#92400E]',
+  'from-[#475569] to-[#334155]',
+]
+
 function TravelersPanel({
   members,
   seats,
@@ -1698,121 +1961,212 @@ function TravelersPanel({
 }) {
   const sorted = sortMembers(members)
   const count = sorted.length
+  const seatTotal = Math.min(6, Math.max(seats, count, 1))
   const full = count >= 6
+  const freeSlots = Math.max(0, seatTotal - count)
+  const progress = Math.min(100, Math.round((count / Math.max(seatTotal, 1)) * 100))
 
   return (
-    <section className="bg-white rounded-2xl shadow-md p-5 space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-lg text-slate-900">{t('planner.members')}</h3>
-          <p className="text-sm text-slate-500">
-            {t('planner.members.seats', { count, seats: Math.max(seats, count) })}
-          </p>
+    <section className="relative overflow-hidden rounded-3xl border border-orange-100/80 bg-white shadow-md">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 -right-10 w-44 h-44 rounded-full bg-[#FF6B35]/10 blur-2xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-20 -left-12 w-40 h-40 rounded-full bg-[#FFB088]/15 blur-2xl"
+      />
+
+      <div className="relative p-5 sm:p-6 space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28] mb-1">
+              {t('planner.members.kicker')}
+            </p>
+            <h3 className="font-extrabold text-xl text-slate-900 tracking-tight">
+              {t('planner.members')}
+            </h3>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {t('planner.members.seats', { count, seats: seatTotal })}
+            </p>
+          </div>
+          {isOrganizer && !full ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onOpenAdd}
+              className="shrink-0 inline-flex items-center gap-1.5 text-sm font-bold text-white bg-[#FF6B35] hover:bg-[#E85A28] px-3.5 py-2.5 rounded-2xl shadow-sm shadow-orange-500/25 disabled:opacity-50 transition-colors"
+            >
+              <span className="text-lg leading-none">+</span>
+              {t('planner.members.addShort')}
+            </button>
+          ) : null}
+          {isOrganizer && full ? (
+            <span className="shrink-0 text-xs font-bold text-slate-500 bg-slate-100 px-3 py-2 rounded-2xl">
+              {t('planner.members.full')}
+            </span>
+          ) : null}
         </div>
-        {isOrganizer && !full ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onOpenAdd}
-            className="text-sm font-bold text-primary-700 bg-orange-50 px-3 py-2 rounded-xl disabled:opacity-50"
-          >
-            + {t('planner.members.addShort')}
-          </button>
-        ) : null}
-        {isOrganizer && full ? (
-          <span className="text-xs font-semibold text-slate-400">{t('planner.members.full')}</span>
-        ) : null}
-      </div>
 
-      {sorted.length === 0 ? (
-        <p className="text-sm text-slate-500">{t('planner.members.empty')}</p>
-      ) : (
-        <ul className="space-y-3">
-          {sorted.map((m) => {
-            const label = memberLabel(m, currentUserId, t)
-            const onApp = m.status === 'joined' && !!m.user_id
-            const isOrg = m.role === 'organizer'
-            const initial = label.trim().charAt(0).toUpperCase() || '?'
-            return (
-              <li key={m.id} className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${
-                    isOrg ? 'bg-primary-500' : onApp ? 'bg-teal-600' : 'bg-slate-400'
-                  }`}
-                >
-                  {initial}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-slate-900 truncate">{label}</span>
-                    {isOrg ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-primary-700 bg-orange-50 px-2 py-0.5 rounded-md">
-                        {t('planner.members.organizer')}
-                      </span>
-                    ) : null}
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 mt-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-                      onApp ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${onApp ? 'bg-teal-500' : 'bg-slate-400'}`}
-                    />
-                    {onApp ? t('planner.members.onApp') : t('planner.members.offApp')}
-                  </span>
-                </div>
-                {isOrganizer && !isOrg ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onRemove(m)}
-                    className="text-sm font-semibold text-red-600 disabled:opacity-50"
-                  >
-                    {t('planner.members.remove')}
-                  </button>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {addOpen ? (
-        <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50/80">
-          <p className="font-bold text-slate-900">{t('planner.members.addTitle')}</p>
-          <p className="text-sm text-slate-500">{t('planner.members.addHint')}</p>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => onNameChange(e.target.value)}
-            placeholder={t('planner.members.namePlaceholder')}
-            maxLength={60}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium outline-none focus:border-primary-400"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onAdd()
-            }}
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCloseAdd}
-              className="flex-1 rounded-xl bg-white border border-slate-200 py-2.5 font-semibold text-slate-600"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              disabled={busy || newName.trim().length < 2}
-              onClick={onAdd}
-              className="flex-1 rounded-xl bg-primary-500 text-white py-2.5 font-bold disabled:opacity-50"
-            >
-              {t('planner.members.add')}
-            </button>
+        <div>
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-1.5">
+            <span>{t('planner.members.places')}</span>
+            <span className="text-slate-600">
+              {count}/{seatTotal}
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+            <motion.div
+              initial={false}
+              animate={{ width: `${progress}%` }}
+              transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+              className="h-full rounded-full bg-gradient-to-r from-[#FF6B35] to-[#FF8A5B]"
+            />
           </div>
         </div>
-      ) : null}
+
+        {sorted.length === 0 && !addOpen ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-slate-500">{t('planner.members.empty')}</p>
+            {isOrganizer ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onOpenAdd}
+                className="mt-3 text-sm font-bold text-[#E85A28] hover:underline disabled:opacity-50"
+              >
+                + {t('planner.members.add')}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {sorted.map((m, i) => {
+              const label = memberLabel(m, currentUserId, t)
+              const onApp = m.status === 'joined' && !!m.user_id
+              const isOrg = m.role === 'organizer'
+              const isYou = !!m.user_id && m.user_id === currentUserId
+              const initial = label.trim().charAt(0).toUpperCase() || '?'
+              const avatar = isOrg
+                ? MEMBER_AVATAR_STYLES[0]
+                : MEMBER_AVATAR_STYLES[i % MEMBER_AVATAR_STYLES.length]
+              return (
+                <motion.li
+                  key={m.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                  className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm hover:border-orange-200 hover:shadow-md transition-all"
+                >
+                  <div
+                    className={`relative w-11 h-11 rounded-2xl bg-gradient-to-br ${avatar} flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm`}
+                  >
+                    {initial}
+                    {onApp ? (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white" />
+                    ) : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-bold text-slate-900 truncate text-[15px]">{label}</span>
+                      {isYou ? (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#E85A28] bg-[#FFF3EC] px-1.5 py-0.5 rounded-md">
+                          {t('planner.members.you')}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {isOrg ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-primary-700 bg-orange-50 px-2 py-0.5 rounded-md">
+                          {t('planner.members.organizer')}
+                        </span>
+                      ) : null}
+                      <span
+                        className={`text-[11px] font-semibold ${
+                          onApp ? 'text-emerald-700' : 'text-slate-400'
+                        }`}
+                      >
+                        {onApp ? t('planner.members.onApp') : t('planner.members.offApp')}
+                      </span>
+                    </div>
+                  </div>
+                  {isOrganizer && !isOrg ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onRemove(m)}
+                      title={t('planner.members.remove')}
+                      className="shrink-0 w-9 h-9 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 font-bold text-lg leading-none disabled:opacity-50 transition-colors opacity-70 sm:opacity-0 sm:group-hover:opacity-100"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </motion.li>
+              )
+            })}
+
+            {isOrganizer && !full
+              ? Array.from({ length: Math.min(freeSlots, 2) }).map((_, i) => (
+                  <li key={`empty-${i}`}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onOpenAdd}
+                      className="w-full h-full min-h-[68px] flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 text-slate-400 hover:border-orange-300 hover:bg-[#FFF8F3] hover:text-[#E85A28] transition-colors disabled:opacity-50 px-3 py-3"
+                    >
+                      <span className="w-9 h-9 rounded-2xl border border-dashed border-current flex items-center justify-center text-xl font-light">
+                        +
+                      </span>
+                      <span className="text-sm font-bold">{t('planner.members.addShort')}</span>
+                    </button>
+                  </li>
+                ))
+              : null}
+          </ul>
+        )}
+
+        {addOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-orange-200 bg-[#FFF8F3] p-4 sm:p-5 space-y-3"
+          >
+            <div>
+              <p className="font-extrabold text-slate-900">{t('planner.members.addTitle')}</p>
+              <p className="text-sm text-slate-500 mt-0.5">{t('planner.members.addHint')}</p>
+            </div>
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder={t('planner.members.namePlaceholder')}
+              maxLength={60}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onAdd()
+              }}
+              autoFocus
+            />
+            <div className="flex flex-col-reverse sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={onCloseAdd}
+                className="sm:flex-1 rounded-2xl bg-white border border-slate-200 py-3 font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={busy || newName.trim().length < 2}
+                onClick={onAdd}
+                className="sm:flex-1 rounded-2xl bg-[#FF6B35] text-white py-3 font-bold disabled:opacity-50 hover:bg-[#E85A28] shadow-sm shadow-orange-500/20"
+              >
+                {t('planner.members.add')}
+              </button>
+            </div>
+          </motion.div>
+        ) : null}
+      </div>
     </section>
   )
 }
