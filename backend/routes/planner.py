@@ -121,10 +121,37 @@ def _parse_date_list(raw) -> list:
     return out
 
 
-def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
+def _member_display_name(m: dict, organizer_name: Optional[str] = None) -> str:
+    if m.get("role") == "organizer" and organizer_name:
+        return organizer_name
+    name = (m.get("display_name") or "").strip()
+    if name and name.lower() not in ("organisateur", "organizer"):
+        return name
+    if m.get("role") == "organizer":
+        return organizer_name or "Organisateur"
+    return name or "Voyageur"
+
+
+def _row_to_trip(
+    row: dict,
+    proposals_count: Optional[int] = None,
+    members: Optional[list] = None,
+    organizer_profile: Optional[dict] = None,
+) -> dict:
     dep = row.get("departure_airport")
     arr = row.get("arrival_airport")
     bad = invalid_arrival_codes(dep, arr) if dep and arr else []
+    org = organizer_profile or {}
+    org_name = (org.get("full_name") or "").strip() or None
+    org_avatar = (org.get("avatar_url") or "").strip() or None
+    mems = list(members or [])
+    mems.sort(
+        key=lambda m: (
+            0 if m.get("role") == "organizer" else 1,
+            (m.get("joined_at") or ""),
+        )
+    )
+    member_names = [_member_display_name(m, org_name) for m in mems]
     return {
         "id": row["id"],
         "organizer_id": row["organizer_id"],
@@ -142,6 +169,13 @@ def _row_to_trip(row: dict, proposals_count: Optional[int] = None) -> dict:
         "proposals_count": proposals_count,
         "route_ok": len(bad) == 0,
         "invalid_arrival_codes": bad,
+        "member_names": member_names,
+        "members_count": len(member_names),
+        "organizer": {
+            "id": row["organizer_id"],
+            "full_name": org_name,
+            "avatar_url": org_avatar,
+        },
     }
 
 
@@ -220,6 +254,36 @@ async def list_trips(request: Request):
     for row in (owned.data or []) + member_trips:
         by_id[row["id"]] = row
 
+    trip_ids = list(by_id.keys())
+    members_by_trip: Dict[str, list] = {tid: [] for tid in trip_ids}
+    if trip_ids:
+        mem_res = (
+            supabase.table("trip_members")
+            .select("trip_id, display_name, role, status, joined_at, user_id")
+            .in_("trip_id", trip_ids)
+            .execute()
+        )
+        for m in mem_res.data or []:
+            tid = m.get("trip_id")
+            if tid in members_by_trip:
+                members_by_trip[tid].append(m)
+
+    organizer_ids = list({row["organizer_id"] for row in by_id.values() if row.get("organizer_id")})
+    profiles_by_id: Dict[str, dict] = {}
+    if organizer_ids:
+        try:
+            prof_res = (
+                supabase.table("user_profiles")
+                .select("id, full_name, avatar_url")
+                .in_("id", organizer_ids)
+                .execute()
+            )
+            for p in prof_res.data or []:
+                if p.get("id"):
+                    profiles_by_id[p["id"]] = p
+        except Exception as e:
+            print(f"⚠️ Profiles organisateurs: {e}")
+
     out = []
     for row in by_id.values():
         count_res = (
@@ -228,7 +292,14 @@ async def list_trips(request: Request):
             .eq("trip_id", row["id"])
             .execute()
         )
-        out.append(_row_to_trip(row, proposals_count=count_res.count or 0))
+        out.append(
+            _row_to_trip(
+                row,
+                proposals_count=count_res.count or 0,
+                members=members_by_trip.get(row["id"], []),
+                organizer_profile=profiles_by_id.get(row["organizer_id"]),
+            )
+        )
     out.sort(key=lambda t: t.get("created_at") or "", reverse=True)
     return out
 

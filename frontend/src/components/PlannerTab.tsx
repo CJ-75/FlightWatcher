@@ -257,20 +257,66 @@ const STATUS_LABEL: Record<string, string> = {
 function TripsGallery({
   trips,
   cityGroups,
+  currentUserId,
   onOpen,
 }: {
   trips: PlannedTrip[]
   cityGroups: CityAirportGroup[]
+  currentUserId: string | null
   onOpen: (id: string) => void
 }) {
   const density: TripGalleryDensity =
     trips.length === 1 ? 'solo' : trips.length === 2 ? 'duo' : 'multi'
+  const [selfProfile, setSelfProfile] = useState<{
+    name: string
+    avatarUrl?: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setSelfProfile(null)
+      return
+    }
+    let cancelled = false
+    void loadAccountHolderInfo(currentUserId).then((info) => {
+      if (!cancelled) setSelfProfile(info)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId])
+
+  const enrichTrip = (trip: PlannedTrip): PlannedTrip => {
+    if (!currentUserId || trip.organizer_id !== currentUserId || !selfProfile) return trip
+    const apiName = trip.organizer?.full_name?.trim()
+    const apiAvatar = trip.organizer?.avatar_url?.trim()
+    const fullName = apiName || selfProfile.name
+    const avatarUrl = apiAvatar || selfProfile.avatarUrl || null
+    const names = [...(trip.member_names || [])]
+    if (names.length > 0) {
+      const first = names[0]
+      if (!first || first === 'Organisateur' || first === 'Organizer') {
+        names[0] = fullName
+      }
+    }
+    return {
+      ...trip,
+      member_names: names.length ? names : [fullName],
+      organizer: {
+        id: currentUserId,
+        full_name: fullName,
+        avatar_url: avatarUrl,
+      },
+    }
+  }
+
+  const cards = trips.map(enrichTrip)
 
   if (density === 'solo') {
     return (
       <motion.div layout className="w-full">
         <TripListCard
-          trip={trips[0]}
+          trip={cards[0]}
           cityGroups={cityGroups}
           density="solo"
           index={0}
@@ -286,7 +332,7 @@ function TripsGallery({
         layout
         className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 min-h-[min(70vh,640px)] md:items-stretch"
       >
-        {trips.map((trip, index) => (
+        {cards.map((trip, index) => (
           <TripListCard
             key={trip.id}
             trip={trip}
@@ -305,7 +351,7 @@ function TripsGallery({
       layout
       className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
     >
-      {trips.map((trip, index) => (
+      {cards.map((trip, index) => (
         <TripListCard
           key={trip.id}
           trip={trip}
@@ -317,6 +363,21 @@ function TripsGallery({
       ))}
     </motion.div>
   )
+}
+
+const MEMBER_CHIP_COLORS = [
+  'bg-[#FF6B35]',
+  'bg-[#E85A28]',
+  'bg-[#1A120E]',
+  'bg-teal-700',
+  'bg-amber-700',
+  'bg-slate-600',
+]
+
+function firstNameOf(full: string): string {
+  const t = full.trim()
+  if (!t) return ''
+  return t.split(/\s+/)[0]
 }
 
 function TripListCard({
@@ -332,6 +393,7 @@ function TripListCard({
   index: number
   onOpen: (id: string) => void
 }) {
+  const { t } = useI18n()
   const arrival = arrivalDisplayLabel(trip.arrival_airport, cityGroups)
   const imageUri = arrival.isAny ? cityImageUrl(null) : cityImageUrl(arrival.city)
   const codes = arrival.isAny ? [] : arrival.codes.split(' · ').filter(Boolean)
@@ -343,6 +405,84 @@ function TripListCard({
       : trip.status === 'planning'
         ? 'bg-orange-50/95 text-[#E85A28]'
         : 'bg-white/95 text-slate-600'
+
+  const [orgAvatarBroken, setOrgAvatarBroken] = useState(false)
+  const organizerName =
+    trip.organizer?.full_name?.trim() ||
+    (trip.member_names?.[0] &&
+    trip.member_names[0] !== 'Organisateur' &&
+    trip.member_names[0] !== 'Organizer'
+      ? trip.member_names[0]
+      : null)
+  const organizerAvatar = trip.organizer?.avatar_url?.trim() || null
+
+  const memberNames = useMemo(() => {
+    const names = [...(trip.member_names || [])]
+    if (organizerName && names.length > 0) {
+      const first = names[0]
+      if (!first || first === 'Organisateur' || first === 'Organizer') {
+        names[0] = organizerName
+      }
+    } else if (organizerName && names.length === 0) {
+      names.push(organizerName)
+    }
+    return names
+  }, [trip.member_names, organizerName])
+
+  const maxShown = density === 'multi' ? 3 : density === 'duo' ? 4 : 5
+  const shownMembers = memberNames.slice(0, maxShown)
+  const extraMembers = Math.max(0, memberNames.length - shownMembers.length)
+  const withLabel = shownMembers.map(firstNameOf).filter(Boolean).join(', ')
+
+  useEffect(() => {
+    setOrgAvatarBroken(false)
+  }, [organizerAvatar])
+
+  const travelersBlock =
+    shownMembers.length > 0 ? (
+      <div className={`flex items-center gap-2.5 min-w-0 ${density === 'solo' ? 'mt-5' : 'mt-3'}`}>
+        <div className="flex -space-x-2 shrink-0">
+          {shownMembers.map((name, i) => {
+            const isOrganizerChip = i === 0 && !!organizerAvatar && !orgAvatarBroken
+            return (
+              <span
+                key={`${name}-${i}`}
+                className={`relative w-7 h-7 rounded-full border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-sm overflow-hidden ${
+                  isOrganizerChip ? 'bg-slate-100' : MEMBER_CHIP_COLORS[i % MEMBER_CHIP_COLORS.length]
+                }`}
+                title={name}
+              >
+                {isOrganizerChip ? (
+                  <img
+                    src={organizerAvatar!}
+                    alt={name}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={() => setOrgAvatarBroken(true)}
+                  />
+                ) : (
+                  (firstNameOf(name) || '?').charAt(0).toUpperCase()
+                )}
+              </span>
+            )
+          })}
+          {extraMembers > 0 ? (
+            <span className="w-7 h-7 rounded-full border-2 border-white bg-slate-200 text-slate-600 text-[10px] font-black flex items-center justify-center">
+              +{extraMembers}
+            </span>
+          ) : null}
+        </div>
+        <p
+          className={`min-w-0 truncate font-semibold text-slate-600 ${
+            density === 'solo' ? 'text-[15px]' : 'text-sm'
+          }`}
+        >
+          {t('planner.card.with', {
+            names: withLabel + (extraMembers > 0 ? ` +${extraMembers}` : ''),
+          })}
+        </p>
+      </div>
+    ) : null
 
   const meta = (
     <>
@@ -370,6 +510,7 @@ function TripListCard({
           {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
         </p>
       ) : null}
+      {travelersBlock}
     </>
   )
 
@@ -675,6 +816,7 @@ export function PlannerTab() {
         <TripsGallery
           trips={trips}
           cityGroups={cityGroups}
+          currentUserId={userId}
           onOpen={(id) => setSelectedTripId(id)}
         />
       )}

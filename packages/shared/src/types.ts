@@ -142,6 +142,14 @@ export interface PlannedTrip {
   /** False when arrival is no longer served from departure (Ryanair routes). */
   route_ok?: boolean
   invalid_arrival_codes?: string[]
+  /** Participant display names (organizer first) for list cards */
+  member_names?: string[]
+  members_count?: number
+  organizer?: {
+    id: string
+    full_name?: string | null
+    avatar_url?: string | null
+  } | null
 }
 
 export interface TripProposal {
