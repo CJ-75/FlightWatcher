@@ -352,8 +352,6 @@ function Dashboard() {
 
     window.setTimeout(() => {
       setDestinationsExclues(excluded)
-      setDatesDepart(datesDepartLoaded)
-      setDatesRetour(datesRetourLoaded)
       loadingSavedSearchRef.current = false
       isLoadingFromStorage.current = false
     }, 200)
@@ -770,19 +768,12 @@ function Dashboard() {
                 selectedAirport={aeroportDepart}
                 onAirportChange={setAeroportDepart}
                 AirportAutocomplete={AirportAutocomplete}
-                flexibleDates={{
-                  dates_depart:
-                    searchSeed && searchSeed.token === searchLoadToken
-                      ? searchSeed.dates_depart
-                      : datesDepart,
-                  dates_retour:
-                    searchSeed && searchSeed.token === searchLoadToken
-                      ? searchSeed.dates_retour
-                      : datesRetour,
-                }}
+                flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
                 onFlexibleDatesChange={(dates) => {
-                  setDatesDepart(dates.dates_depart);
-                  setDatesRetour(dates.dates_retour);
+                  // Dès que l’utilisateur édite, lâcher le seed figé de Modifier
+                  setSearchSeed(null)
+                  setDatesDepart(dates.dates_depart)
+                  setDatesRetour(dates.dates_retour)
                 }}
                 excludedDestinations={destinationsExclues}
                 onExcludedDestinationsChange={setDestinationsExclues}
@@ -793,25 +784,22 @@ function Dashboard() {
                 onLimiteAllersChange={setLimiteAllers}
                 formatDateFr={formatDateFr}
                 onSearchEventId={setCurrentSearchEventId}
-                budget={
-                  searchSeed && searchSeed.token === searchLoadToken
-                    ? searchSeed.budget
-                    : budgetMax
-                }
+                budget={budgetMax}
                 onBudgetChange={setBudgetMax}
-                initialPassengers={
-                  searchSeed && searchSeed.token === searchLoadToken
-                    ? searchSeed.passengers
-                    : searchPassengers
-                }
+                initialPassengers={searchPassengers}
                 searchLoadToken={searchLoadToken}
                 forceFlexible={
                   !!(
                     searchSeed &&
                     searchSeed.token === searchLoadToken &&
-                    (searchSeed.dates_depart.length > 0 || searchSeed.dates_retour.length > 0)
+                    (searchSeed.dates_depart.length > 0 ||
+                      searchSeed.dates_retour.length > 0)
                   )
                 }
+                onHydrated={() => {
+                  // Garder les dates chargées, mais ne plus figer le formulaire
+                  setSearchSeed(null)
+                }}
               />
 
               {error && (

@@ -66,6 +66,8 @@ interface SimpleSearchProps {
   searchLoadToken?: number;
   /** Forcer le preset Flexible (Modifier une alerte avec dates explicites) */
   forceFlexible?: boolean;
+  /** Appelé une fois l’hydratation Modifier terminée */
+  onHydrated?: () => void;
 }
 
 const springConfig = {
@@ -99,6 +101,7 @@ export function SimpleSearch({
   initialPassengers = 1,
   searchLoadToken = 0,
   forceFlexible = false,
+  onHydrated,
 }: SimpleSearchProps) {
   const { t } = useI18n();
   const hasParentDates =
@@ -126,33 +129,31 @@ export function SimpleSearch({
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const syncedSeedRef = useRef(false);
 
-  // Au mount après Modifier: resynchroniser les dates vers le parent + scroll
+  // Au mount après Modifier: scroller vers les dates puis débloquer l’édition
   useEffect(() => {
     if (syncedSeedRef.current) return
-    if (!startFlexible || !hasParentDates) return
+    if (!startFlexible || !hasParentDates) {
+      if (searchLoadToken > 0) onHydrated?.()
+      return
+    }
     syncedSeedRef.current = true
     setDatePreset('flexible')
     setPresetDates({
       dates_depart: flexibleDates.dates_depart,
       dates_retour: flexibleDates.dates_retour,
     })
-    onFlexibleDatesChange({
-      dates_depart: flexibleDates.dates_depart,
-      dates_retour: flexibleDates.dates_retour,
-    })
     const tId = window.setTimeout(() => {
       datesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      onHydrated?.()
     }, 120)
     return () => clearTimeout(tId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchLoadToken])
 
-  const effectivePreset: DatePreset | null =
-    datePreset ?? (startFlexible ? 'flexible' : null);
-  const showFlexibleDates =
-    effectivePreset === 'flexible' || startFlexible || hasParentDates;
+  const effectivePreset: DatePreset | null = datePreset;
+  const showFlexibleDates = effectivePreset === 'flexible';
   const showPresetTimes =
-    !!effectivePreset && effectivePreset !== 'flexible' && !hasParentDates && !forceFlexible;
+    !!effectivePreset && effectivePreset !== 'flexible';
 
   useEffect(() => {
     if (externalBudget !== undefined && externalBudget !== budget) {
@@ -185,7 +186,7 @@ export function SimpleSearch({
   };
 
   const resolvePresetDates = (preset: DatePreset) => {
-    if (preset === 'flexible' || hasParentDates) {
+    if (preset === 'flexible') {
       return flexibleDates;
     }
     if (presetDates.dates_depart.length > 0 && presetDates.dates_retour.length > 0) {
@@ -277,7 +278,7 @@ export function SimpleSearch({
     try {
       const request: InspireRequest = {
         budget,
-        date_preset: hasParentDates || presetForSearch === 'flexible' ? 'flexible' : presetForSearch,
+        date_preset: presetForSearch === 'flexible' ? 'flexible' : presetForSearch,
         departure: selectedAirport.trim().toUpperCase(),
         passengers,
         flexible_dates: {
@@ -395,11 +396,7 @@ export function SimpleSearch({
       </div>
 
       <DatePresets
-        selected={
-          effectivePreset === 'flexible' || startFlexible || hasParentDates
-            ? 'flexible'
-            : effectivePreset
-        }
+        selected={effectivePreset}
         onChange={(preset) => {
           setDatePreset(preset);
           setLocalError(null);
