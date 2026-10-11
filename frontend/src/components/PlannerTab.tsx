@@ -1960,7 +1960,7 @@ function TripDetailView({
       {error ? <p className="text-red-600 text-sm font-medium">{error}</p> : null}
 
       {isOrganizer && trip.status !== 'locked' ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <button
             type="button"
             disabled={scanning}
@@ -1970,51 +1970,16 @@ function TripDetailView({
             {scanning ? t('planner.scanning') : t('planner.scan')}
           </button>
 
-          <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-4 py-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-bold text-slate-900">{t('planner.watch')}</p>
-                <p className="text-sm text-slate-500 mt-0.5">{t('planner.watch.hint')}</p>
-              </div>
-              <button
-                type="button"
-                disabled={watchBusy}
-                onClick={() => void setPriceWatch(!trip.auto_scan_enabled)}
-                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-colors disabled:opacity-60 ${
-                  trip.auto_scan_enabled
-                    ? 'bg-slate-200 text-slate-700'
-                    : 'bg-primary-500 text-white'
-                }`}
-              >
-                {trip.auto_scan_enabled ? t('planner.watch.off') : t('planner.watch')}
-              </button>
-            </div>
-            {trip.auto_scan_enabled ? (
-              <p className="text-xs font-semibold text-primary-700">
-                {t('planner.watch.every', {
-                  minutes: Math.floor(
-                    (trip.auto_scan_interval_seconds || watchInterval || 3600) / 60,
-                  ),
-                })}
-              </p>
-            ) : (
-              <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                <span className="font-semibold">{t('planner.watch.interval')}</span>
-                <select
-                  value={watchInterval}
-                  onChange={(e) => setWatchInterval(Number(e.target.value))}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-semibold"
-                >
-                  <option value={900}>15 min</option>
-                  <option value={1800}>30 min</option>
-                  <option value={3600}>1 h</option>
-                  <option value={7200}>2 h</option>
-                  <option value={21600}>6 h</option>
-                  <option value={86400}>24 h</option>
-                </select>
-              </label>
-            )}
-          </div>
+          <PriceWatchBanner
+            enabled={!!trip.auto_scan_enabled}
+            budget={trip.budget_max}
+            intervalSeconds={trip.auto_scan_interval_seconds || watchInterval}
+            watchInterval={watchInterval}
+            busy={watchBusy}
+            onIntervalChange={setWatchInterval}
+            onToggle={() => void setPriceWatch(!trip.auto_scan_enabled)}
+            t={t}
+          />
         </div>
       ) : null}
 
@@ -2217,6 +2182,147 @@ function TripDetailView({
         />
       ) : null}
     </div>
+  )
+}
+
+function PriceWatchBanner({
+  enabled,
+  budget,
+  intervalSeconds,
+  watchInterval,
+  busy,
+  onIntervalChange,
+  onToggle,
+  t,
+}: {
+  enabled: boolean
+  budget: number
+  intervalSeconds: number
+  watchInterval: number
+  busy: boolean
+  onIntervalChange: (n: number) => void
+  onToggle: () => void
+  t: (k: string, vars?: Record<string, string | number>) => string
+}) {
+  if (enabled) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-[#FFF8F3] p-5 sm:p-6 shadow-sm"
+      >
+        <div
+          className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-emerald-400/15 blur-2xl"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1.5 min-w-0">
+            <div className="inline-flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              </span>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700">
+                {t('planner.watch.banner.activeTitle')}
+              </p>
+            </div>
+            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">
+              {t('planner.watch.banner.activeBody', { budget })}
+            </p>
+            <p className="text-xs font-semibold text-emerald-800/80">
+              {t('planner.watch.every', {
+                minutes: Math.floor((intervalSeconds || 3600) / 60),
+              })}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onToggle}
+            className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {t('planner.watch.off')}
+          </button>
+        </div>
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative overflow-hidden rounded-3xl border border-orange-200/70 bg-gradient-to-br from-[#FFF1E8] via-white to-[#FFE8DC] p-5 sm:p-7 shadow-md shadow-orange-500/10"
+    >
+      <div
+        className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-[#FF6B35]/20 blur-3xl"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-[#E85A28]/10 blur-2xl"
+        aria-hidden
+      />
+
+      <div className="relative space-y-5">
+        <div className="space-y-2 max-w-2xl">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-600">
+            {t('planner.watch.banner.kicker')}
+          </p>
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
+            {t('planner.watch.banner.title')}
+          </h3>
+          <p className="text-sm sm:text-[15px] text-slate-600 leading-relaxed">
+            {t('planner.watch.banner.body', { budget })}
+          </p>
+        </div>
+
+        <ul className="space-y-2.5 text-sm text-slate-700">
+          {(
+            [
+              'planner.watch.banner.b1',
+              'planner.watch.banner.b2',
+              'planner.watch.banner.b3',
+            ] as const
+          ).map((key) => (
+            <li key={key} className="flex items-start gap-2.5">
+              <span
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-500 text-[11px] font-black text-white"
+                aria-hidden
+              >
+                ✓
+              </span>
+              <span className="font-medium leading-snug">{t(key)}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4 pt-1">
+          <label className="flex flex-col gap-1.5 text-sm text-slate-600">
+            <span className="font-bold text-slate-800">{t('planner.watch.interval')}</span>
+            <select
+              value={watchInterval}
+              onChange={(e) => onIntervalChange(Number(e.target.value))}
+              className="rounded-xl border border-orange-200/80 bg-white/90 px-3 py-2.5 font-semibold text-slate-800 shadow-sm"
+            >
+              <option value={900}>15 min</option>
+              <option value={1800}>30 min</option>
+              <option value={3600}>1 h</option>
+              <option value={7200}>2 h</option>
+              <option value={21600}>6 h</option>
+              <option value={86400}>24 h</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onToggle}
+            className="app-btn-primary rounded-2xl px-6 py-3.5 text-sm sm:text-base font-extrabold shadow-lg shadow-orange-500/25 disabled:opacity-60 sm:flex-1 sm:max-w-xs"
+          >
+            {t('planner.watch.banner.cta')}
+          </button>
+        </div>
+      </div>
+    </motion.div>
   )
 }
 

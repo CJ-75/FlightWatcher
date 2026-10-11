@@ -10,6 +10,7 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -373,61 +374,15 @@ export function TripDetailScreen() {
             loading={scanning}
             disabled={scanning}
           />
-          <View style={[styles.watchBox, shadow.soft]}>
-            <Text style={styles.watchTitle}>Surveiller les prix</Text>
-            <Text style={styles.watchHint}>
-              Email aux voyageurs dès qu’un vol est sous le budget/pers.
-            </Text>
-            <Button
-              label={
-                trip.auto_scan_enabled
-                  ? 'Arrêter la surveillance'
-                  : 'Activer la surveillance'
-              }
-              onPress={() => void setPriceWatch(!trip.auto_scan_enabled)}
-              loading={watchBusy}
-              disabled={watchBusy}
-              variant={trip.auto_scan_enabled ? 'secondary' : 'primary'}
-            />
-            {trip.auto_scan_enabled ? (
-              <Text style={styles.watchMeta}>
-                Toutes les{' '}
-                {Math.floor(
-                  (trip.auto_scan_interval_seconds || watchInterval || 3600) / 60,
-                )}{' '}
-                min
-              </Text>
-            ) : (
-              <View style={styles.intervalRow}>
-                {(
-                  [
-                    [900, '15 min'],
-                    [3600, '1 h'],
-                    [21600, '6 h'],
-                    [86400, '24 h'],
-                  ] as const
-                ).map(([sec, label]) => (
-                  <Pressable
-                    key={sec}
-                    onPress={() => setWatchInterval(sec)}
-                    style={[
-                      styles.intervalChip,
-                      watchInterval === sec && styles.intervalChipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.intervalChipText,
-                        watchInterval === sec && styles.intervalChipTextOn,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-          </View>
+          <PriceWatchBanner
+            enabled={!!trip.auto_scan_enabled}
+            budget={trip.budget_max}
+            intervalSeconds={trip.auto_scan_interval_seconds || watchInterval}
+            watchInterval={watchInterval}
+            busy={watchBusy}
+            onIntervalChange={setWatchInterval}
+            onToggle={() => void setPriceWatch(!trip.auto_scan_enabled)}
+          />
         </>
       ) : null}
 
@@ -501,6 +456,114 @@ export function TripDetailScreen() {
         onClose={() => setBookingTrip(null)}
       />
     </View>
+  )
+}
+
+function PriceWatchBanner({
+  enabled,
+  budget,
+  intervalSeconds,
+  watchInterval,
+  busy,
+  onIntervalChange,
+  onToggle,
+}: {
+  enabled: boolean
+  budget: number
+  intervalSeconds: number
+  watchInterval: number
+  busy: boolean
+  onIntervalChange: (n: number) => void
+  onToggle: () => void
+}) {
+  if (enabled) {
+    return (
+      <View style={[styles.watchActive, shadow.soft]}>
+        <View style={styles.watchLiveRow}>
+          <View style={styles.watchLiveDot} />
+          <Text style={styles.watchActiveKicker}>Surveillance en cours</Text>
+        </View>
+        <Text style={styles.watchActiveBody}>
+          On guette les vols sous {budget}€/pers et on prévient le groupe à la moindre
+          bonne affaire.
+        </Text>
+        <Text style={styles.watchMeta}>
+          Vérification toutes les {Math.floor((intervalSeconds || 3600) / 60)} min
+        </Text>
+        <Button
+          label="Arrêter la surveillance"
+          onPress={onToggle}
+          loading={busy}
+          disabled={busy}
+          variant="secondary"
+        />
+      </View>
+    )
+  }
+
+  return (
+    <LinearGradient
+      colors={['#FFF1E8', '#FFFFFF', '#FFE8DC']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.watchSell, shadow.soft]}
+    >
+      <Text style={styles.watchKicker}>Astuce voyage</Text>
+      <Text style={styles.watchTitle}>Les prix baissent — on vous prévient</Text>
+      <Text style={styles.watchHint}>
+        Activez la surveillance : on scanne vos dates en continu et on email tout le
+        groupe dès qu’un vol passe sous {budget}€/pers.
+      </Text>
+      {(
+        [
+          'Scan automatique, même quand l’app est fermée',
+          'Alerte email à tous les voyageurs',
+          'Uniquement si le prix bat votre budget',
+        ] as const
+      ).map((line) => (
+        <View key={line} style={styles.watchBenefit}>
+          <View style={styles.watchCheck}>
+            <Text style={styles.watchCheckText}>✓</Text>
+          </View>
+          <Text style={styles.watchBenefitText}>{line}</Text>
+        </View>
+      ))}
+      <Text style={styles.watchIntervalLabel}>Fréquence</Text>
+      <View style={styles.intervalRow}>
+        {(
+          [
+            [900, '15 min'],
+            [3600, '1 h'],
+            [21600, '6 h'],
+            [86400, '24 h'],
+          ] as const
+        ).map(([sec, label]) => (
+          <Pressable
+            key={sec}
+            onPress={() => onIntervalChange(sec)}
+            style={[
+              styles.intervalChip,
+              watchInterval === sec && styles.intervalChipOn,
+            ]}
+          >
+            <Text
+              style={[
+                styles.intervalChipText,
+                watchInterval === sec && styles.intervalChipTextOn,
+              ]}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Button
+        label="Activer la surveillance"
+        onPress={onToggle}
+        loading={busy}
+        disabled={busy}
+      />
+    </LinearGradient>
   )
 }
 
@@ -599,18 +662,89 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSoft || '#FFF0EE',
   },
   deleteText: { fontFamily: fonts.bold, fontSize: 15, color: colors.danger },
-  watchBox: {
-    backgroundColor: '#FFF8F3',
-    borderRadius: 18,
-    padding: 16,
+  watchSell: {
+    borderRadius: 22,
+    padding: 18,
     gap: 10,
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: '#FDBA74',
+    overflow: 'hidden',
   },
-  watchTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
-  watchHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, lineHeight: 18 },
-  watchMeta: { fontFamily: fonts.semibold, fontSize: 12, color: colors.primaryInk },
-  intervalRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  watchActive: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 22,
+    padding: 18,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  watchLiveRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  watchLiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  watchActiveKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: '#047857',
+  },
+  watchActiveBody: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.inkSoft,
+    lineHeight: 20,
+  },
+  watchKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: colors.primary,
+  },
+  watchTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.ink,
+    letterSpacing: -0.4,
+    lineHeight: 26,
+  },
+  watchHint: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.muted,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  watchBenefit: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  watchCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  watchCheckText: { color: colors.white, fontFamily: fonts.bold, fontSize: 11 },
+  watchBenefitText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.ink,
+    lineHeight: 18,
+  },
+  watchIntervalLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+    marginTop: 4,
+  },
+  watchMeta: { fontFamily: fonts.semibold, fontSize: 12, color: '#047857' },
+  intervalRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   intervalChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
