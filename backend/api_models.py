@@ -157,3 +157,4 @@ class UpdatePlannedTripRequest(BaseModel):
 
 class AddTripMemberRequest(BaseModel):
     display_name: str
+    email: Optional[str] = None

@@ -157,6 +157,8 @@ export interface TripMember {
   trip_id: string
   user_id?: string | null
   display_name?: string | null
+  /** Guest invite email — stored now, Resend send later */
+  email?: string | null
   role: TripMemberRole
   status: TripMemberStatus
   joined_at: string
@@ -164,6 +166,7 @@ export interface TripMember {
 
 export interface AddTripMemberRequest {
   display_name: string
+  email?: string | null
 }
 
 export interface PlannedTripDetail extends PlannedTrip {

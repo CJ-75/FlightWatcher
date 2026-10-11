@@ -414,6 +414,12 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
     if len(name) > 60:
         raise HTTPException(status_code=400, detail="Nom trop long")
 
+    email = (body.email or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email requis")
+    if len(email) > 120 or "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Email invalide")
+
     members = (
         supabase.table("trip_members")
         .select("id")
@@ -431,6 +437,7 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
                 "trip_id": trip_id,
                 "user_id": None,
                 "display_name": name,
+                "email": email,
                 "role": "traveler",
                 "status": "guest",
             }
@@ -451,6 +458,7 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
             }
         ).eq("id", trip_id).execute()
 
+    # TODO: send invite email via Resend (name + email + invite_token)
     return result.data[0]
 
 

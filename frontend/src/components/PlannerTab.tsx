@@ -1255,6 +1255,7 @@ function TripDetailView({
   const [deleting, setDeleting] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
   const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [scanEmpty, setScanEmpty] = useState<{
@@ -1445,12 +1446,22 @@ function TripDetailView({
 
   const addMember = async () => {
     const display_name = newName.trim()
+    const email = newEmail.trim().toLowerCase()
     if (display_name.length < 2) return
+    if (!email) {
+      setError(t('planner.members.emailRequired'))
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError(t('planner.members.emailInvalid'))
+      return
+    }
     setMembersBusy(true)
     setError(null)
     try {
-      await getApiClient().addTripMember(tripId, { display_name })
+      await getApiClient().addTripMember(tripId, { display_name, email })
       setNewName('')
+      setNewEmail('')
       setAddOpen(false)
       await load()
     } catch (e) {
@@ -1579,12 +1590,15 @@ function TripDetailView({
         busy={membersBusy}
         addOpen={addOpen}
         newName={newName}
+        newEmail={newEmail}
         onOpenAdd={() => setAddOpen(true)}
         onCloseAdd={() => {
           setAddOpen(false)
           setNewName('')
+          setNewEmail('')
         }}
         onNameChange={setNewName}
+        onEmailChange={setNewEmail}
         onAdd={() => void addMember()}
         onRemove={(m) => void removeMember(m)}
         t={t}
@@ -1994,9 +2008,11 @@ function TravelersPanel({
   busy,
   addOpen,
   newName,
+  newEmail,
   onOpenAdd,
   onCloseAdd,
   onNameChange,
+  onEmailChange,
   onAdd,
   onRemove,
   t,
@@ -2008,9 +2024,11 @@ function TravelersPanel({
   busy: boolean
   addOpen: boolean
   newName: string
+  newEmail: string
   onOpenAdd: () => void
   onCloseAdd: () => void
   onNameChange: (v: string) => void
+  onEmailChange: (v: string) => void
   onAdd: () => void
   onRemove: (m: TripMember) => void
   t: (k: string, params?: Record<string, string | number>) => string
@@ -2180,13 +2198,19 @@ function TravelersPanel({
                           {t('planner.members.organizer')}
                         </span>
                       ) : null}
-                      <span
-                        className={`text-[11px] font-semibold ${
-                          onApp ? 'text-emerald-700' : 'text-slate-400'
-                        }`}
-                      >
-                        {onApp ? t('planner.members.onApp') : t('planner.members.offApp')}
-                      </span>
+                      {!isOrg && m.email ? (
+                        <span className="text-[11px] font-medium text-slate-500 truncate max-w-full">
+                          {m.email}
+                        </span>
+                      ) : (
+                        <span
+                          className={`text-[11px] font-semibold ${
+                            onApp ? 'text-emerald-700' : 'text-slate-400'
+                          }`}
+                        >
+                          {onApp ? t('planner.members.onApp') : t('planner.members.offApp')}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {isOrganizer && !isOrg ? (
@@ -2234,18 +2258,41 @@ function TravelersPanel({
               <p className="font-extrabold text-slate-900">{t('planner.members.addTitle')}</p>
               <p className="text-sm text-slate-500 mt-0.5">{t('planner.members.addHint')}</p>
             </div>
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => onNameChange(e.target.value)}
-              placeholder={t('planner.members.namePlaceholder')}
-              maxLength={60}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') onAdd()
-              }}
-              autoFocus
-            />
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1.5">
+                {t('planner.members.namePlaceholder')}
+              </label>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder={t('planner.members.namePlaceholder')}
+                maxLength={60}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-600 block mb-1.5">
+                {t('planner.members.emailLabel')}
+              </label>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                value={newEmail}
+                onChange={(e) => onEmailChange(e.target.value)}
+                placeholder={t('planner.members.emailPlaceholder')}
+                maxLength={120}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[15px] font-medium outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onAdd()
+                }}
+              />
+              <p className="text-[11px] text-slate-400 mt-1.5 font-medium">
+                {t('planner.members.emailHint')}
+              </p>
+            </div>
             <div className="flex flex-col-reverse sm:flex-row gap-2">
               <button
                 type="button"
@@ -2256,7 +2303,7 @@ function TravelersPanel({
               </button>
               <button
                 type="button"
-                disabled={busy || newName.trim().length < 2}
+                disabled={busy || newName.trim().length < 2 || !newEmail.trim()}
                 onClick={onAdd}
                 className="sm:flex-1 rounded-2xl bg-[#FF6B35] text-white py-3 font-bold disabled:opacity-50 hover:bg-[#E85A28] shadow-sm shadow-orange-500/20"
               >
