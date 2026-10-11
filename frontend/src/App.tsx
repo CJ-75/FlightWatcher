@@ -91,7 +91,10 @@ function Dashboard() {
   const [limiteAllers, setLimiteAllers] = useState(50)
   const [currentRequest, setCurrentRequest] = useState<ScanRequest | null>(null)
   const [destinationsExclues, setDestinationsExclues] = useState<string[]>([])
+  const [searchPassengers, setSearchPassengers] = useState(1)
+  const [searchFormKey, setSearchFormKey] = useState(0)
   const isLoadingFromStorage = useRef(false)
+  const loadingSavedSearchRef = useRef(false)
   const shouldScrollToResults = useRef(false)
 
   const handleScan = async (request?: ScanRequest) => {
@@ -226,87 +229,71 @@ function Dashboard() {
     }
   }
 
-  const handleLoadSearch = async (savedSearch: SavedSearch) => {
-    console.log('🔄 Chargement de la recherche sauvegardée:', savedSearch);
+  const handleLoadSearch = async (
+    savedSearch: SavedSearch,
+    options?: { editOnly?: boolean },
+  ) => {
     const req = savedSearch.request
-    console.log('📋 Données de la requête:', {
-      aeroport_depart: req.aeroport_depart,
-      dates_depart: req.dates_depart,
-      dates_retour: req.dates_retour,
-      budget_max: req.budget_max,
-      limite_allers: req.limite_allers,
-      destinations_exclues: req.destinations_exclues
-    });
-    
-    setAeroportDepart(req.aeroport_depart || 'BVA')
+    const excluded = req.destinations_exclues || []
+    const airport = (req.aeroport_depart || 'BVA').trim().toUpperCase()
+
+    loadingSavedSearchRef.current = true
+    isLoadingFromStorage.current = true
+
+    setAeroportDepart(airport)
     setDatesDepart(req.dates_depart || [])
     setDatesRetour(req.dates_retour || [])
     setBudgetMax(req.budget_max || 100)
     setLimiteAllers(req.limite_allers || 50)
-    setDestinationsExclues(req.destinations_exclues || [])
+    setSearchPassengers(req.passengers && req.passengers > 0 ? req.passengers : 1)
+    setDestinationsExclues(excluded)
     setCurrentRequest(req)
-    
-    // Charger les résultats sauvegardés s'ils existent
-    console.log('🔍 Vérification des résultats sauvegardés:', {
-      hasLastCheckResults: !!savedSearch.lastCheckResults,
-      lastCheckResultsLength: savedSearch.lastCheckResults?.length || 0,
-      lastCheckResults: savedSearch.lastCheckResults,
-      lastCheckedAt: savedSearch.lastCheckedAt
-    });
-    
-    if (savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
-      console.log('📊 Chargement des résultats sauvegardés:', savedSearch.lastCheckResults.length, 'résultats');
-      console.log('📋 Premier résultat exemple:', savedSearch.lastCheckResults[0]);
-      
-      // Convertir TripResponse[] en EnrichedTripResponse[]
-      // S'assurer que les résultats sont bien formatés
-      const enrichedResults: EnrichedTripResponse[] = savedSearch.lastCheckResults.map((trip: any) => {
-        // Vérifier que le trip a la structure attendue
-        if (!trip.aller || !trip.retour) {
-          console.warn('⚠️ Résultat mal formaté:', trip);
-          return null;
-        }
-        return {
-          ...trip,
-          // Les résultats sauvegardés peuvent déjà être enrichis, sinon on les laisse tels quels
-        } as EnrichedTripResponse;
-      }).filter((trip): trip is EnrichedTripResponse => trip !== null);
-      
-      console.log('✅ Résultats enrichis:', enrichedResults.length, 'résultats valides');
-      console.log('📋 Premier résultat enrichi:', enrichedResults[0]);
-      
+    setSearchFormKey((k) => k + 1)
+    setError(null)
+
+    const editOnly = options?.editOnly === true
+
+    if (!editOnly && savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
+      const enrichedResults: EnrichedTripResponse[] = savedSearch.lastCheckResults
+        .map((trip: any) => {
+          if (!trip.aller || !trip.retour) return null
+          return { ...trip } as EnrichedTripResponse
+        })
+        .filter((trip): trip is EnrichedTripResponse => trip !== null)
+
       if (enrichedResults.length > 0) {
-        setSimpleResults(enrichedResults);
-        
-        // Mettre à jour lastSearchInfo pour afficher les informations de recherche
+        setSimpleResults(enrichedResults)
         setLastSearchInfo({
-          datePreset: null, // On ne sait pas quel preset était utilisé
-          airport: req.aeroport_depart || 'BVA',
+          datePreset: 'flexible',
+          airport,
           budget: req.budget_max || 100,
+          passengers: req.passengers && req.passengers > 0 ? req.passengers : 1,
           datesDepart: req.dates_depart || [],
           datesRetour: req.dates_retour || [],
-          excludedDestinations: req.destinations_exclues || []
-        });
+          excludedDestinations: excluded,
+        })
+        shouldScrollToResults.current = true
       } else {
-        console.warn('⚠️ Aucun résultat valide après filtrage');
-        setSimpleResults([]);
-        setLastSearchInfo(null);
+        setSimpleResults([])
+        setLastSearchInfo(null)
       }
     } else {
-      console.log('ℹ️ Aucun résultat sauvegardé pour cette recherche');
-      setSimpleResults([]);
-      setLastSearchInfo(null);
+      // Modifier = remplir le formulaire sans coller d'anciens résultats
+      setSimpleResults([])
+      setLastSearchInfo(null)
+      shouldScrollToResults.current = false
     }
-    
-    await updateSearchLastUsed(savedSearch.id)
+
     setActiveTab('search')
-    
-    console.log('✅ Recherche chargée, passage à l\'onglet recherche');
-    
-    // Marquer qu'on doit scroller vers les résultats après le rendu
-    if (savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
-      shouldScrollToResults.current = true;
-    }
+
+    // Empêcher l'effet aéroport d'effacer les exclusions juste après le load
+    window.setTimeout(() => {
+      setDestinationsExclues(excluded)
+      loadingSavedSearchRef.current = false
+      isLoadingFromStorage.current = false
+    }, 200)
+
+    void updateSearchLastUsed(savedSearch.id)
   }
 
   // Effet pour scroller vers les résultats quand ils sont affichés
@@ -494,11 +481,14 @@ function Dashboard() {
   useEffect(() => {
     if (aeroportDepart) {
       void loadDestinations(aeroportDepart)
-      isLoadingFromStorage.current = true
-      setDestinationsExclues([])
-      setTimeout(() => {
-        isLoadingFromStorage.current = false
-      }, 100)
+      // Ne pas vider les exclusions pendant le chargement d'une alerte (Modifier / Relancer)
+      if (!loadingSavedSearchRef.current) {
+        isLoadingFromStorage.current = true
+        setDestinationsExclues([])
+        setTimeout(() => {
+          isLoadingFromStorage.current = false
+        }, 100)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aeroportDepart])
@@ -707,6 +697,7 @@ function Dashboard() {
           <>
             <div className="app-col">
               <SimpleSearch
+                key={searchFormKey}
                 onResults={handleSimpleResults}
                 onLoading={setLoading}
                 onError={setError}
@@ -730,6 +721,7 @@ function Dashboard() {
                 onSearchEventId={setCurrentSearchEventId}
                 budget={budgetMax}
                 onBudgetChange={setBudgetMax}
+                initialPassengers={searchPassengers}
               />
 
               {error && (
@@ -1581,7 +1573,7 @@ function SearchTab({
 interface SavedTabProps {
   variant: 'alerts' | 'favorites'
   loading: boolean
-  onLoadSearch: (search: SavedSearch) => void
+  onLoadSearch: (search: SavedSearch, options?: { editOnly?: boolean }) => void
   onCheckFavorite: (favorite: SavedFavorite) => void
   onReloadSearch: (request: ScanRequest) => void
   formatDateFr: (dateStr: string) => string
@@ -2200,7 +2192,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           <span>{isExpanded ? 'Masquer' : 'Détails'}</span>
                         </motion.button>
                         <motion.button
-                          onClick={() => onLoadSearch(search)}
+                          onClick={() => onLoadSearch(search, { editOnly: true })}
                           whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.97 }}
                           className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-orange-200 text-[#E85A28] rounded-2xl hover:bg-[#FFF8F3] text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"

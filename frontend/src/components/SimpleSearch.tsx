@@ -61,6 +61,8 @@ interface SimpleSearchProps {
   budget?: number; // Budget initial depuis l'extérieur (pour charger une recherche sauvegardée)
   onBudgetChange?: (budget: number) => void; // Callback pour mettre à jour le budget dans le parent
   onSearchEventId?: (id: string) => void; // Callback pour stocker l'ID de l'événement de recherche
+  /** Passagers à restaurer quand on charge / modifie une alerte */
+  initialPassengers?: number;
 }
 
 const springConfig = {
@@ -90,17 +92,24 @@ export function SimpleSearch({
   formatDateFr,
   onSearchEventId,
   budget: externalBudget,
-  onBudgetChange
+  onBudgetChange,
+  initialPassengers = 1,
 }: SimpleSearchProps) {
   const { t } = useI18n();
+  const hasLoadedDatesOnMount =
+    flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
   const [budget, setBudget] = useState(externalBudget || 100);
-  const [passengers, setPassengers] = useState(1);
-  const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
+  const [passengers, setPassengers] = useState(
+    initialPassengers > 0 ? initialPassengers : 1,
+  );
+  const [datePreset, setDatePreset] = useState<DatePreset | null>(
+    hasLoadedDatesOnMount ? 'flexible' : null,
+  );
   const [isSearching, setIsSearching] = useState(false);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(hasLoadedDatesOnMount);
   const [presetDates, setPresetDates] = useState<{ dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }>({
-    dates_depart: [],
-    dates_retour: []
+    dates_depart: flexibleDates.dates_depart,
+    dates_retour: flexibleDates.dates_retour,
   });
   const [hasInteractedWithAirport, setHasInteractedWithAirport] = useState(false);
   const [showAirportError, setShowAirportError] = useState(false);
@@ -109,51 +118,47 @@ export function SimpleSearch({
   const airportSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const previousDatesRef = useRef<string>('');
-  const hasInitializedRef = useRef(false);
 
   // Synchroniser le budget externe avec l'état interne
   useEffect(() => {
     if (externalBudget !== undefined && externalBudget !== budget) {
-      console.log('💰 Mise à jour du budget:', externalBudget);
       setBudget(externalBudget);
     }
   }, [externalBudget, budget]);
 
-  // Détecter automatiquement quand des dates flexibles sont chargées depuis une recherche sauvegardée
   useEffect(() => {
-    const datesKey = JSON.stringify({ 
-      depart: flexibleDates.dates_depart, 
-      retour: flexibleDates.dates_retour 
+    if (initialPassengers > 0 && initialPassengers !== passengers) {
+      setPassengers(initialPassengers);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPassengers]);
+
+  // Hydrater le formulaire quand une alerte charge des dates dans le parent
+  useEffect(() => {
+    const datesKey = JSON.stringify({
+      depart: flexibleDates.dates_depart,
+      retour: flexibleDates.dates_retour,
     });
-    
-    // Éviter les déclenchements inutiles
-    if (datesKey === previousDatesRef.current && hasInitializedRef.current) {
+
+    if (datesKey === previousDatesRef.current) {
       return;
     }
-    
     previousDatesRef.current = datesKey;
-    hasInitializedRef.current = true;
-    
-    const hasLoadedDates = flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
-    console.log('🔍 Vérification chargement dates:', {
-      hasLoadedDates,
-      datesDepartLength: flexibleDates.dates_depart.length,
-      datesRetourLength: flexibleDates.dates_retour.length,
-      currentPreset: datePreset,
-      datesDepart: flexibleDates.dates_depart,
-      datesRetour: flexibleDates.dates_retour,
-      selectedAirport
-    });
-    
-    // Si des dates sont chargées et qu'on n'est pas déjà en mode flexible, activer le mode flexible
-    if (hasLoadedDates && datePreset !== 'flexible') {
-      console.log('📅 Dates flexibles chargées détectées, activation automatique du mode flexible');
-      console.log('Dates départ:', flexibleDates.dates_depart);
-      console.log('Dates retour:', flexibleDates.dates_retour);
-      setDatePreset('flexible');
-      setShowAdvancedOptions(true);
+
+    const hasLoadedDates =
+      flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
+
+    if (!hasLoadedDates) {
+      return;
     }
-  }, [flexibleDates.dates_depart, flexibleDates.dates_retour, datePreset, selectedAirport]);
+
+    setDatePreset('flexible');
+    setShowAdvancedOptions(true);
+    setPresetDates({
+      dates_depart: flexibleDates.dates_depart,
+      dates_retour: flexibleDates.dates_retour,
+    });
+  }, [flexibleDates.dates_depart, flexibleDates.dates_retour]);
 
   // Mettre à jour le budget dans le parent quand il change
   const handleBudgetChange = (newBudget: number) => {
