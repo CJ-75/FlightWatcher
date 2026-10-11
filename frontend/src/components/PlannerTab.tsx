@@ -31,6 +31,8 @@ import {
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 
+type TripGalleryDensity = 'solo' | 'duo' | 'multi'
+
 function inviteUrl(token: string) {
   return `${window.location.origin}/planner/invite/${token}`
 }
@@ -252,6 +254,253 @@ const STATUS_LABEL: Record<string, string> = {
   locked: 'Confirmé',
 }
 
+function TripsGallery({
+  trips,
+  cityGroups,
+  onOpen,
+}: {
+  trips: PlannedTrip[]
+  cityGroups: CityAirportGroup[]
+  onOpen: (id: string) => void
+}) {
+  const density: TripGalleryDensity =
+    trips.length === 1 ? 'solo' : trips.length === 2 ? 'duo' : 'multi'
+
+  if (density === 'solo') {
+    return (
+      <motion.div layout className="w-full">
+        <TripListCard
+          trip={trips[0]}
+          cityGroups={cityGroups}
+          density="solo"
+          index={0}
+          onOpen={onOpen}
+        />
+      </motion.div>
+    )
+  }
+
+  if (density === 'duo') {
+    return (
+      <motion.div
+        layout
+        className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 min-h-[min(70vh,640px)] md:items-stretch"
+      >
+        {trips.map((trip, index) => (
+          <TripListCard
+            key={trip.id}
+            trip={trip}
+            cityGroups={cityGroups}
+            density="duo"
+            index={index}
+            onOpen={onOpen}
+          />
+        ))}
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div
+      layout
+      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
+    >
+      {trips.map((trip, index) => (
+        <TripListCard
+          key={trip.id}
+          trip={trip}
+          cityGroups={cityGroups}
+          density="multi"
+          index={index}
+          onOpen={onOpen}
+        />
+      ))}
+    </motion.div>
+  )
+}
+
+function TripListCard({
+  trip,
+  cityGroups,
+  density,
+  index,
+  onOpen,
+}: {
+  trip: PlannedTrip
+  cityGroups: CityAirportGroup[]
+  density: TripGalleryDensity
+  index: number
+  onOpen: (id: string) => void
+}) {
+  const arrival = arrivalDisplayLabel(trip.arrival_airport, cityGroups)
+  const imageUri = arrival.isAny ? cityImageUrl(null) : cityImageUrl(arrival.city)
+  const codes = arrival.isAny ? [] : arrival.codes.split(' · ').filter(Boolean)
+  const cityLabel = arrival.isAny ? 'Destination libre' : arrival.city
+
+  const statusClass =
+    trip.status === 'locked'
+      ? 'bg-emerald-50/95 text-emerald-700'
+      : trip.status === 'planning'
+        ? 'bg-orange-50/95 text-[#E85A28]'
+        : 'bg-white/95 text-slate-600'
+
+  const meta = (
+    <>
+      <div className="flex flex-wrap gap-2">
+        <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
+          {trip.passengers} voy.
+        </span>
+        {trip.route_ok === false ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-amber-50 text-amber-800">
+            Route à mettre à jour
+          </span>
+        ) : null}
+        <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
+          max {trip.budget_max}€
+        </span>
+        {(trip.proposals_count ?? 0) > 0 ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFE8DC] text-[#E85A28]">
+            {trip.proposals_count} prop.
+          </span>
+        ) : null}
+      </div>
+      {trip.dates_depart?.[0] && trip.dates_retour?.[0] ? (
+        <p className="text-sm font-semibold text-slate-600 mt-3">
+          {formatDateFr(trip.dates_depart[0].date)} →{' '}
+          {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
+        </p>
+      ) : null}
+    </>
+  )
+
+  if (density === 'solo') {
+    return (
+      <motion.button
+        type="button"
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        onClick={() => onOpen(trip.id)}
+        className="group w-full text-left bg-white rounded-[32px] border border-orange-100/70 shadow-lg hover:shadow-2xl transition-all overflow-hidden"
+      >
+        <div className="grid lg:grid-cols-5 min-h-[min(72vh,560px)]">
+          <div className="relative lg:col-span-3 h-64 sm:h-80 lg:h-auto min-h-[280px]">
+            <img
+              src={imageUri}
+              alt={cityLabel}
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-black/10 lg:to-black/40" />
+            <span
+              className={`absolute top-5 right-5 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${statusClass}`}
+            >
+              {STATUS_LABEL[trip.status] || trip.status}
+            </span>
+            <div className="absolute bottom-6 left-6 right-6 lg:hidden">
+              <p className="text-white text-4xl font-black tracking-tight">{cityLabel}</p>
+              <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
+                <span>{trip.departure_airport}</span>
+                <span className="w-8 h-0.5 rounded bg-white/55" />
+                <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
+              </div>
+            </div>
+          </div>
+          <div className="lg:col-span-2 flex flex-col justify-between p-6 sm:p-8 lg:p-10">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28] mb-2">
+                Ton voyage
+              </p>
+              <h3 className="font-black text-3xl sm:text-4xl text-slate-900 tracking-tight leading-tight group-hover:text-[#E85A28] transition-colors">
+                {trip.name}
+              </h3>
+              <p className="hidden lg:block text-2xl font-bold text-slate-700 mt-3 tracking-tight">
+                {cityLabel}
+              </p>
+              <div className="hidden lg:flex items-center gap-2 mt-2 text-slate-500 font-bold text-sm tracking-wide">
+                <span>{trip.departure_airport}</span>
+                <span className="w-7 h-0.5 rounded bg-slate-300" />
+                <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
+                {codes.length > 1 ? (
+                  <span className="text-slate-400 font-semibold text-xs">+{codes.length - 1}</span>
+                ) : null}
+              </div>
+              <div className="mt-6">{meta}</div>
+            </div>
+            <div className="mt-8 pt-5 border-t border-orange-50 flex items-center justify-between">
+              <span className="text-base font-bold text-[#FF6B35]">Ouvrir le voyage</span>
+              <span className="w-11 h-11 rounded-2xl bg-[#FFF3EC] text-[#FF6B35] font-black text-xl flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
+                ›
+              </span>
+            </div>
+          </div>
+        </div>
+      </motion.button>
+    )
+  }
+
+  const imageH =
+    density === 'duo' ? 'h-56 sm:h-72 md:h-[min(46vh,360px)]' : 'h-44 sm:h-52'
+
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+      onClick={() => onOpen(trip.id)}
+      className={`group w-full text-left bg-white rounded-[28px] border border-orange-100/70 shadow-md hover:shadow-2xl hover:-translate-y-0.5 transition-all overflow-hidden h-full flex flex-col ${
+        density === 'duo' ? 'min-h-[420px]' : ''
+      }`}
+    >
+      <div className={`relative ${imageH} shrink-0`}>
+        <img
+          src={imageUri}
+          alt={cityLabel}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" />
+        <span
+          className={`absolute top-4 right-4 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${statusClass}`}
+        >
+          {STATUS_LABEL[trip.status] || trip.status}
+        </span>
+        <div className="absolute bottom-4 left-5 right-5">
+          <p
+            className={`text-white font-black tracking-tight ${
+              density === 'duo' ? 'text-3xl sm:text-4xl' : 'text-2xl sm:text-3xl'
+            }`}
+          >
+            {cityLabel}
+          </p>
+          <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
+            <span>{trip.departure_airport}</span>
+            <span className="w-7 h-0.5 rounded bg-white/55" />
+            <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
+            {codes.length > 1 ? (
+              <span className="text-white/75 font-semibold text-xs">+{codes.length - 1}</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <div className={`flex-1 flex flex-col ${density === 'duo' ? 'p-6 sm:p-7' : 'p-5'}`}>
+        <h3
+          className={`font-bold text-slate-900 tracking-tight group-hover:text-[#E85A28] transition-colors ${
+            density === 'duo' ? 'text-2xl' : 'text-xl'
+          }`}
+        >
+          {trip.name}
+        </h3>
+        <div className="mt-3 flex-1">{meta}</div>
+        <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
+          <span className="text-sm font-semibold text-[#FF6B35]">Voir le voyage</span>
+          <span className="text-[#FF6B35] text-xl leading-none group-hover:translate-x-0.5 transition-transform">
+            ›
+          </span>
+        </div>
+      </div>
+    </motion.button>
+  )
+}
+
 export function PlannerTab() {
   const { t } = useI18n()
   const [userId, setUserId] = useState<string | null>(null)
@@ -423,98 +672,11 @@ export function PlannerTab() {
           </div>
         </div>
       ) : (
-        <motion.div layout className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
-          {trips.map((trip, index) => {
-            const arrival = arrivalDisplayLabel(trip.arrival_airport, cityGroups)
-            const imageUri = arrival.isAny
-              ? cityImageUrl(null)
-              : cityImageUrl(arrival.city)
-            const codes = arrival.isAny ? [] : arrival.codes.split(' · ').filter(Boolean)
-            return (
-              <motion.button
-                key={trip.id}
-                type="button"
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => setSelectedTripId(trip.id)}
-                className="group w-full text-left bg-white rounded-[28px] border border-orange-100/70 shadow-md hover:shadow-2xl hover:-translate-y-0.5 transition-all overflow-hidden"
-              >
-                <div className="relative h-52 sm:h-60">
-                  <img
-                    src={imageUri}
-                    alt={arrival.city}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" />
-                  <span
-                    className={`absolute top-4 right-4 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
-                      trip.status === 'locked'
-                        ? 'bg-emerald-50/95 text-emerald-700'
-                        : trip.status === 'planning'
-                          ? 'bg-orange-50/95 text-[#E85A28]'
-                          : 'bg-white/95 text-slate-600'
-                    }`}
-                  >
-                    {STATUS_LABEL[trip.status] || trip.status}
-                  </span>
-                  <div className="absolute bottom-4 left-5 right-5">
-                    <p className="text-white text-3xl font-black tracking-tight">
-                      {arrival.isAny ? 'Destination libre' : arrival.city}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
-                      <span>{trip.departure_airport}</span>
-                      <span className="w-7 h-0.5 rounded bg-white/55" />
-                      <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
-                      {codes.length > 1 ? (
-                        <span className="text-white/75 font-semibold text-xs">
-                          +{codes.length - 1}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-                <div className="p-5 sm:p-6">
-                  <h3 className="font-bold text-xl text-slate-900 tracking-tight group-hover:text-[#E85A28] transition-colors">
-                    {trip.name}
-                  </h3>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
-                      {trip.passengers} voy.
-                    </span>
-                    {trip.route_ok === false ? (
-                      <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-amber-50 text-amber-800">
-                        Route à mettre à jour
-                      </span>
-                    ) : null}
-                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
-                      max {trip.budget_max}€
-                    </span>
-                    {(trip.proposals_count ?? 0) > 0 ? (
-                      <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFE8DC] text-[#E85A28]">
-                        {trip.proposals_count} prop.
-                      </span>
-                    ) : null}
-                  </div>
-                  {trip.dates_depart?.[0] && trip.dates_retour?.[0] ? (
-                    <p className="text-sm font-semibold text-slate-600 mt-3">
-                      {formatDateFr(trip.dates_depart[0].date)} →{' '}
-                      {formatDateFr(
-                        trip.dates_retour[trip.dates_retour.length - 1].date,
-                      )}
-                    </p>
-                  ) : null}
-                  <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-[#FF6B35]">Voir le voyage</span>
-                    <span className="text-[#FF6B35] text-xl leading-none group-hover:translate-x-0.5 transition-transform">
-                      ›
-                    </span>
-                  </div>
-                </div>
-              </motion.button>
-            )
-          })}
-        </motion.div>
+        <TripsGallery
+          trips={trips}
+          cityGroups={cityGroups}
+          onOpen={(id) => setSelectedTripId(id)}
+        />
       )}
 
       {showCreate ? (
