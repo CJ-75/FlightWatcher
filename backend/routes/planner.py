@@ -1,11 +1,12 @@
 """Planner API — collaborative trip planning with price scan proposals."""
 from __future__ import annotations
 
+import os
 import secrets
-from datetime import datetime
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from api_models import (
     AddTripMemberRequest,
@@ -13,6 +14,7 @@ from api_models import (
     DateAvecHoraire,
     UpdatePlannedTripRequest,
 )
+from email_notify import notify_trip_under_budget
 from flight_scanner import enrich_trip_results, scanner_vols_api
 from ryanair_routes import invalid_arrival_codes
 from supabase_deps import (
@@ -24,6 +26,9 @@ from supabase_deps import (
 )
 
 router = APIRouter()
+
+MIN_AUTO_SCAN_INTERVAL = 900
+CRON_SECRET = (os.getenv("CRON_SECRET") or "").strip()
 
 
 def _require_user(request: Request) -> str:
@@ -164,6 +169,13 @@ def _row_to_trip(
         "budget_max": row.get("budget_max") or 200,
         "invite_token": row["invite_token"],
         "status": row.get("status") or "planning",
+        "auto_scan_enabled": bool(row.get("auto_scan_enabled")),
+        "auto_scan_interval_seconds": int(
+            row.get("auto_scan_interval_seconds") or 3600
+        ),
+        "last_scan_at": row.get("last_scan_at"),
+        "last_notified_at": row.get("last_notified_at"),
+        "last_notified_cheapest": row.get("last_notified_cheapest"),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
         "proposals_count": proposals_count,
@@ -176,6 +188,291 @@ def _row_to_trip(
             "full_name": org_name,
             "avatar_url": org_avatar,
         },
+    }
+
+
+def _clamp_auto_scan_interval(n: Optional[int]) -> int:
+    try:
+        v = int(n if n is not None else 3600)
+    except (TypeError, ValueError):
+        v = 3600
+    return max(MIN_AUTO_SCAN_INTERVAL, min(86400 * 7, v))
+
+
+def _parse_iso_dt(raw) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        s = str(raw).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _proposal_prix_total(prop: dict) -> Optional[float]:
+    data = prop.get("trip_data") or {}
+    if isinstance(data, str):
+        import json
+
+        try:
+            data = json.loads(data)
+        except Exception:
+            return None
+    if not isinstance(data, dict):
+        return None
+    try:
+        return float(data.get("prix_total"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _cheapest_under_budget(
+    proposals: List[dict], budget_max: float
+) -> Optional[float]:
+    prices = []
+    for p in proposals:
+        price = _proposal_prix_total(p)
+        if price is not None and price <= budget_max:
+            prices.append(price)
+    return min(prices) if prices else None
+
+
+def _collect_trip_notify_emails(supabase, trip: dict) -> List[str]:
+    emails: List[str] = []
+    org_id = trip.get("organizer_id")
+    if org_id:
+        try:
+            prof = (
+                supabase.table("user_profiles")
+                .select("email")
+                .eq("id", org_id)
+                .limit(1)
+                .execute()
+            )
+            if prof.data:
+                emails.append(prof.data[0].get("email"))
+        except Exception as e:
+            print(f"⚠️ organizer email lookup: {e}")
+    try:
+        mems = (
+            supabase.table("trip_members")
+            .select("email")
+            .eq("trip_id", trip["id"])
+            .execute()
+        )
+        for m in mems.data or []:
+            emails.append(m.get("email"))
+    except Exception as e:
+        print(f"⚠️ members email lookup: {e}")
+    return emails
+
+
+def _maybe_notify_under_budget(
+    supabase, trip: dict, proposals: List[dict]
+) -> Tuple[bool, Optional[float]]:
+    """Email travelers if under-budget and cheaper than last notified price."""
+    budget_max = float(trip.get("budget_max") or 200)
+    cheapest = _cheapest_under_budget(proposals, budget_max)
+    if cheapest is None:
+        return False, None
+
+    last = trip.get("last_notified_cheapest")
+    try:
+        last_f = float(last) if last is not None else None
+    except (TypeError, ValueError):
+        last_f = None
+
+    if last_f is not None and cheapest >= last_f:
+        return False, cheapest
+
+    recipients = _collect_trip_notify_emails(supabase, trip)
+    if not recipients:
+        print(f"📧 no recipients for trip {trip.get('id')} — skip notify mark")
+        return False, cheapest
+
+    notify_trip_under_budget(
+        trip_id=str(trip["id"]),
+        trip_name=str(trip.get("name") or "Voyage"),
+        budget_max=budget_max,
+        cheapest=cheapest,
+        recipients=recipients,
+    )
+    now = _utcnow().isoformat()
+    # Record even if Resend skipped (no API key) to avoid spam once configured
+    supabase.table("planned_trips").update(
+        {
+            "last_notified_cheapest": cheapest,
+            "last_notified_at": now,
+            "updated_at": now,
+        }
+    ).eq("id", trip["id"]).execute()
+    return True, cheapest
+
+
+def _run_trip_scan(supabase, trip: dict) -> dict:
+    """Core scan logic (service role). Raises HTTPException on validation errors."""
+    trip_id = trip["id"]
+    dates_depart = _parse_date_list(trip.get("dates_depart"))
+    dates_retour = _parse_date_list(trip.get("dates_retour"))
+    if not dates_depart or not dates_retour:
+        raise HTTPException(
+            status_code=400,
+            detail="Dates aller/retour manquantes sur le voyage — impossible de scanner",
+        )
+
+    # Always search the whole calendar day of the trip dates
+    dates_depart = [
+        DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
+        for d in dates_depart
+    ]
+    dates_retour = [
+        DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
+        for d in dates_retour
+    ]
+
+    print(
+        f"🔎 Planner scan {trip_id} dates aller="
+        f"{[d.date for d in dates_depart]} retour={[d.date for d in dates_retour]} "
+        f"dep={trip.get('departure_airport')} arr={trip.get('arrival_airport')}"
+    )
+
+    arrival = (trip.get("arrival_airport") or "").strip().upper() or None
+    if arrival:
+        codes = [c.strip() for c in arrival.replace(";", ",").split(",") if c.strip()]
+        bad = invalid_arrival_codes(trip["departure_airport"], arrival)
+        if bad:
+            codes = [c for c in codes if c not in bad]
+            print(
+                f"⚠️ Scan {trip_id}: routes mortes ignorées {bad} "
+                f"(reste {codes or 'inspire'})"
+            )
+            if not codes:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Plus de vols Ryanair {trip['departure_airport']} → "
+                        f"{', '.join(bad)}. Change la destination du voyage "
+                        "ou passe en mode inspire (sans arrivée)."
+                    ),
+                )
+            supabase.table("planned_trips").update(
+                {
+                    "arrival_airport": ",".join(codes),
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).eq("id", trip_id).execute()
+        incluses = codes if codes else None
+    else:
+        incluses = None
+
+    resultats, num_requetes = scanner_vols_api(
+        aeroport_depart=trip["departure_airport"],
+        dates_depart=dates_depart,
+        dates_retour=dates_retour,
+        budget_max=int(trip.get("budget_max") or 200),
+        limite_allers=30,
+        destinations_exclues=[],
+        destinations_incluses=incluses,
+        record_prices=True,
+        passengers=int(trip.get("passengers") or 1),
+    )
+    enriched = enrich_trip_results(resultats, trip["departure_airport"])
+    enriched.sort(key=lambda t: t.prix_total)
+    top = enriched[:10]
+
+    supabase.table("trip_proposals").delete().eq("trip_id", trip_id).eq(
+        "status", "pending"
+    ).execute()
+
+    rows = [
+        {
+            "trip_id": trip_id,
+            "trip_data": _trip_data_json(t),
+            "status": "pending",
+        }
+        for t in top
+    ]
+
+    inserted: list = []
+    if rows:
+        res = supabase.table("trip_proposals").insert(rows).execute()
+        inserted = list(res.data or [])
+        if len(inserted) != len(rows):
+            print(
+                f"⚠️ Batch insert proposals: {len(inserted)}/{len(rows)} — retry unitaire"
+            )
+            inserted = []
+            for row in rows:
+                one = supabase.table("trip_proposals").insert(row).execute()
+                if one.data:
+                    inserted.append(one.data[0])
+                else:
+                    print(
+                        f"❌ Échec insert proposition: "
+                        f"{row.get('trip_data', {}).get('destination_code')}"
+                    )
+
+        if top and not inserted:
+            raise HTTPException(
+                status_code=500,
+                detail="Scan OK mais enregistrement des propositions échoué",
+            )
+
+    print(
+        f"✅ Planner scan {trip_id}: {len(inserted)} proposition(s) enregistrée(s) "
+        f"({num_requetes} req Ryanair)"
+    )
+
+    budget_max = int(trip.get("budget_max") or 200)
+    empty_reason = None
+    cheapest_found = None
+    if not inserted:
+        try:
+            diag, n_diag = scanner_vols_api(
+                aeroport_depart=trip["departure_airport"],
+                dates_depart=dates_depart,
+                dates_retour=dates_retour,
+                budget_max=max(budget_max * 4, 800),
+                limite_allers=8,
+                destinations_exclues=[],
+                destinations_incluses=incluses,
+                record_prices=False,
+                passengers=int(trip.get("passengers") or 1),
+            )
+            num_requetes += n_diag
+            if diag:
+                diag_sorted = sorted(diag, key=lambda t: t.prix_total)
+                cheapest_found = float(diag_sorted[0].prix_total)
+                empty_reason = "budget"
+            else:
+                empty_reason = "no_flights"
+        except Exception as diag_err:
+            print(f"⚠️ Diagnostic scan vide {trip_id}: {diag_err}")
+            empty_reason = "no_flights"
+
+    now = _utcnow().isoformat()
+    supabase.table("planned_trips").update(
+        {
+            "status": "planning",
+            "last_scan_at": now,
+            "updated_at": now,
+        }
+    ).eq("id", trip_id).execute()
+
+    return {
+        "proposals": inserted,
+        "nombre_requetes": num_requetes,
+        "saved": len(inserted),
+        "budget_max": budget_max,
+        "empty_reason": empty_reason,
+        "cheapest_found": cheapest_found,
     }
 
 
@@ -436,6 +733,17 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
         patch["dates_retour"] = [d.model_dump() for d in body.dates_retour]
     if body.budget_max is not None:
         patch["budget_max"] = int(body.budget_max)
+    if body.auto_scan_enabled is not None:
+        patch["auto_scan_enabled"] = bool(body.auto_scan_enabled)
+        if body.auto_scan_enabled and current.get("status") == "locked":
+            raise HTTPException(
+                status_code=400,
+                detail="Surveillance désactivée sur un voyage confirmé",
+            )
+    if body.auto_scan_interval_seconds is not None:
+        patch["auto_scan_interval_seconds"] = _clamp_auto_scan_interval(
+            body.auto_scan_interval_seconds
+        )
 
     dep = patch.get("departure_airport") or current.get("departure_airport")
     arr = (
@@ -575,162 +883,17 @@ async def scan_trip(trip_id: str, request: Request):
     supabase = _svc()
     trip = _require_organizer(supabase, trip_id, user_id)
 
+    if trip.get("status") == "locked":
+        raise HTTPException(
+            status_code=400, detail="Voyage confirmé — scan indisponible"
+        )
+
     supabase.table("planned_trips").update(
         {"status": "scanning", "updated_at": datetime.utcnow().isoformat()}
     ).eq("id", trip_id).execute()
 
     try:
-        dates_depart = _parse_date_list(trip.get("dates_depart"))
-        dates_retour = _parse_date_list(trip.get("dates_retour"))
-        if not dates_depart or not dates_retour:
-            raise HTTPException(
-                status_code=400,
-                detail="Dates aller/retour manquantes sur le voyage — impossible de scanner",
-            )
-
-        # Always search the whole calendar day of the trip dates
-        dates_depart = [
-            DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
-            for d in dates_depart
-        ]
-        dates_retour = [
-            DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
-            for d in dates_retour
-        ]
-
-        print(
-            f"🔎 Planner scan {trip_id} dates aller="
-            f"{[d.date for d in dates_depart]} retour={[d.date for d in dates_retour]} "
-            f"dep={trip.get('departure_airport')} arr={trip.get('arrival_airport')}"
-        )
-
-        arrival = (trip.get("arrival_airport") or "").strip().upper() or None
-        if arrival:
-            codes = [c.strip() for c in arrival.replace(";", ",").split(",") if c.strip()]
-            bad = invalid_arrival_codes(trip["departure_airport"], arrival)
-            if bad:
-                codes = [c for c in codes if c not in bad]
-                print(
-                    f"⚠️ Scan {trip_id}: routes mortes ignorées {bad} "
-                    f"(reste {codes or 'inspire'})"
-                )
-                if not codes:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"Plus de vols Ryanair {trip['departure_airport']} → "
-                            f"{', '.join(bad)}. Change la destination du voyage "
-                            "ou passe en mode inspire (sans arrivée)."
-                        ),
-                    )
-                # Persist cleaned arrival so next scans stay valid
-                supabase.table("planned_trips").update(
-                    {
-                        "arrival_airport": ",".join(codes),
-                        "updated_at": datetime.utcnow().isoformat(),
-                    }
-                ).eq("id", trip_id).execute()
-            incluses = codes if codes else None
-        else:
-            incluses = None
-
-        resultats, num_requetes = scanner_vols_api(
-            aeroport_depart=trip["departure_airport"],
-            dates_depart=dates_depart,
-            dates_retour=dates_retour,
-            budget_max=int(trip.get("budget_max") or 200),
-            limite_allers=30,
-            destinations_exclues=[],
-            destinations_incluses=incluses,
-            record_prices=True,
-            passengers=int(trip.get("passengers") or 1),
-        )
-        enriched = enrich_trip_results(resultats, trip["departure_airport"])
-        enriched.sort(key=lambda t: t.prix_total)
-        top = enriched[:10]
-
-        # Replace previous pending proposals with this scan batch
-        supabase.table("trip_proposals").delete().eq("trip_id", trip_id).eq(
-            "status", "pending"
-        ).execute()
-
-        rows = [
-            {
-                "trip_id": trip_id,
-                "trip_data": _trip_data_json(t),
-                "status": "pending",
-            }
-            for t in top
-        ]
-
-        inserted: list = []
-        if rows:
-            res = supabase.table("trip_proposals").insert(rows).execute()
-            inserted = list(res.data or [])
-            if len(inserted) != len(rows):
-                # Fallback one-by-one if batch partial/empty
-                print(
-                    f"⚠️ Batch insert proposals: {len(inserted)}/{len(rows)} — retry unitaire"
-                )
-                inserted = []
-                for row in rows:
-                    one = supabase.table("trip_proposals").insert(row).execute()
-                    if one.data:
-                        inserted.append(one.data[0])
-                    else:
-                        print(f"❌ Échec insert proposition: {row.get('trip_data', {}).get('destination_code')}")
-
-            if top and not inserted:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Scan OK mais enregistrement des propositions échoué",
-                )
-
-        print(
-            f"✅ Planner scan {trip_id}: {len(inserted)} proposition(s) enregistrée(s) "
-            f"({num_requetes} req Ryanair)"
-        )
-
-        budget_max = int(trip.get("budget_max") or 200)
-        empty_reason = None
-        cheapest_found = None
-        if not inserted:
-            # Diagnostic: vols existent-ils au-dessus du budget ?
-            try:
-                diag, n_diag = scanner_vols_api(
-                    aeroport_depart=trip["departure_airport"],
-                    dates_depart=dates_depart,
-                    dates_retour=dates_retour,
-                    budget_max=max(budget_max * 4, 800),
-                    limite_allers=8,
-                    destinations_exclues=[],
-                    destinations_incluses=incluses,
-                    record_prices=False,
-                    passengers=int(trip.get("passengers") or 1),
-                )
-                num_requetes += n_diag
-                if diag:
-                    diag_sorted = sorted(diag, key=lambda t: t.prix_total)
-                    cheapest_found = float(diag_sorted[0].prix_total)
-                    empty_reason = "budget"
-                else:
-                    empty_reason = "no_flights"
-            except Exception as diag_err:
-                print(f"⚠️ Diagnostic scan vide {trip_id}: {diag_err}")
-                empty_reason = "no_flights"
-
-        supabase.table("planned_trips").update(
-            {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
-        ).eq("id", trip_id).execute()
-
-        return {
-            "proposals": inserted,
-            "nombre_requetes": num_requetes,
-            "saved": len(inserted),
-            "budget_max": budget_max,
-            "empty_reason": empty_reason,
-            "cheapest_found": cheapest_found,
-        }
+        return _run_trip_scan(supabase, trip)
     except HTTPException:
         supabase.table("planned_trips").update(
             {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
@@ -742,6 +905,86 @@ async def scan_trip(trip_id: str, request: Request):
         ).eq("id", trip_id).execute()
         print(f"❌ Planner scan échoué {trip_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _require_cron(authorization: Optional[str]) -> None:
+    if not CRON_SECRET:
+        raise HTTPException(
+            status_code=503, detail="CRON_SECRET non configuré sur le serveur"
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization Bearer requis")
+    token = authorization.replace("Bearer ", "", 1).strip()
+    if token != CRON_SECRET:
+        raise HTTPException(status_code=403, detail="Secret cron invalide")
+
+
+@router.post("/api/planner/auto-scan")
+async def auto_scan_trips(authorization: Optional[str] = Header(None)):
+    """Cron job: scan planning trips with auto_scan_enabled when interval elapsed."""
+    _require_cron(authorization)
+    supabase = _svc()
+
+    result = (
+        supabase.table("planned_trips")
+        .select("*")
+        .eq("auto_scan_enabled", True)
+        .eq("status", "planning")
+        .execute()
+    )
+    trips = list(result.data or [])
+    now = _utcnow()
+    scanned = 0
+    notified = 0
+    skipped = 0
+    errors: List[dict] = []
+
+    for trip in trips:
+        trip_id = trip.get("id")
+        interval = _clamp_auto_scan_interval(trip.get("auto_scan_interval_seconds"))
+        last = _parse_iso_dt(trip.get("last_scan_at"))
+        if last is not None:
+            elapsed = (now - last).total_seconds()
+            if elapsed < interval:
+                skipped += 1
+                continue
+
+        try:
+            supabase.table("planned_trips").update(
+                {
+                    "status": "scanning",
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).eq("id", trip_id).execute()
+            scan_res = _run_trip_scan(supabase, trip)
+            scanned += 1
+            # Refresh notify baseline from DB row + scan result
+            did_notify, _ = _maybe_notify_under_budget(
+                supabase, trip, scan_res.get("proposals") or []
+            )
+            if did_notify:
+                notified += 1
+        except HTTPException as he:
+            supabase.table("planned_trips").update(
+                {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
+            ).eq("id", trip_id).execute()
+            errors.append({"trip_id": trip_id, "detail": he.detail})
+            print(f"⚠️ auto-scan HTTP {trip_id}: {he.detail}")
+        except Exception as e:
+            supabase.table("planned_trips").update(
+                {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
+            ).eq("id", trip_id).execute()
+            errors.append({"trip_id": trip_id, "detail": str(e)})
+            print(f"❌ auto-scan {trip_id}: {e}")
+
+    return {
+        "ok": True,
+        "eligible": len(trips),
+        "scanned": scanned,
+        "notified": notified,
+        "skipped": skipped,
+        "errors": errors,
+    }
 
 
 @router.post("/api/planner/proposals/{proposal_id}/accept")
@@ -773,7 +1016,11 @@ async def accept_proposal(proposal_id: str, request: Request):
         .execute()
     )
     supabase.table("planned_trips").update(
-        {"status": "locked", "updated_at": datetime.utcnow().isoformat()}
+        {
+            "status": "locked",
+            "auto_scan_enabled": False,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
     ).eq("id", proposal["trip_id"]).execute()
     return res.data[0] if res.data else proposal
 

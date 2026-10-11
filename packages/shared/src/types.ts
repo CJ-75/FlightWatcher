@@ -135,6 +135,12 @@ export interface PlannedTrip {
   budget_max: number
   invite_token: string
   status: PlannedTripStatus
+  /** Server-side price watch (cron) */
+  auto_scan_enabled?: boolean
+  auto_scan_interval_seconds?: number
+  last_scan_at?: string | null
+  last_notified_at?: string | null
+  last_notified_cheapest?: number | null
   created_at: string
   updated_at?: string
   proposals_count?: number
@@ -193,6 +199,18 @@ export interface CreatePlannedTripRequest {
   dates_depart: DateAvecHoraire[]
   dates_retour: DateAvecHoraire[]
   budget_max: number
+}
+
+export interface UpdatePlannedTripRequest {
+  name?: string
+  departure_airport?: string
+  arrival_airport?: string | null
+  passengers?: number
+  dates_depart?: DateAvecHoraire[]
+  dates_retour?: DateAvecHoraire[]
+  budget_max?: number
+  auto_scan_enabled?: boolean
+  auto_scan_interval_seconds?: number
 }
 
 export interface InvitePreview {

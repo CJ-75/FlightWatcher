@@ -18,6 +18,7 @@ import type {
   TripProposal,
   TripMember,
   TripResponse,
+  UpdatePlannedTripRequest,
 } from '../types'
 
 export interface ApiClientOptions {
@@ -195,7 +196,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }),
     getPlannedTrip: (id: string) =>
       request<PlannedTripDetail>(`/api/planner/trips/${encodeURIComponent(id)}`),
-    updatePlannedTrip: (id: string, body: Partial<CreatePlannedTripRequest>) =>
+    updatePlannedTrip: (id: string, body: UpdatePlannedTripRequest) =>
       request<PlannedTrip>(`/api/planner/trips/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(body),

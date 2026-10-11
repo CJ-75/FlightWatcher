@@ -1574,6 +1574,8 @@ function TripDetailView({
   const [editPreset, setEditPreset] = useState<DatePreset>('next-weekend')
   const [showEditFlexible, setShowEditFlexible] = useState(false)
   const [savingCriteria, setSavingCriteria] = useState(false)
+  const [watchBusy, setWatchBusy] = useState(false)
+  const [watchInterval, setWatchInterval] = useState(3600)
   const autoScanStarted = useRef(false)
 
   const syncEditFromTrip = useCallback((detail: PlannedTripDetail) => {
@@ -1581,6 +1583,9 @@ function TripDetailView({
     setEditDatesDepart(detail.dates_depart || [])
     setEditDatesRetour(detail.dates_retour || [])
     setEditPreset('flexible')
+    setWatchInterval(
+      Math.max(900, detail.auto_scan_interval_seconds || 3600),
+    )
   }, [])
 
   const load = useCallback(async () => {
@@ -1718,6 +1723,37 @@ function TripDetailView({
     autoScanStarted.current = true
     void scan().finally(() => onAutoScanDone?.())
   }, [autoScan, trip, isOrganizer, loading, scan, onAutoScanDone])
+
+  const setPriceWatch = async (enabled: boolean) => {
+    if (!trip) return
+    const interval = Math.max(900, watchInterval || 3600)
+    setWatchBusy(true)
+    setError(null)
+    try {
+      const updated = await getApiClient().updatePlannedTrip(tripId, {
+        auto_scan_enabled: enabled,
+        auto_scan_interval_seconds: interval,
+      })
+      setTrip((prev) =>
+        prev
+          ? {
+              ...prev,
+              auto_scan_enabled: updated.auto_scan_enabled ?? enabled,
+              auto_scan_interval_seconds:
+                updated.auto_scan_interval_seconds ?? interval,
+            }
+          : prev,
+      )
+      setWatchInterval(updated.auto_scan_interval_seconds ?? interval)
+      onToast(
+        enabled ? t('planner.watch.on') : t('planner.watch.off'),
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setWatchBusy(false)
+    }
+  }
 
   const accept = async (id: string) => {
     setActing(id)
@@ -1924,14 +1960,62 @@ function TripDetailView({
       {error ? <p className="text-red-600 text-sm font-medium">{error}</p> : null}
 
       {isOrganizer && trip.status !== 'locked' ? (
-        <button
-          type="button"
-          disabled={scanning}
-          onClick={() => void scan()}
-          className="w-full sm:w-auto app-btn-primary rounded-2xl px-6 disabled:opacity-60"
-        >
-          {scanning ? t('planner.scanning') : t('planner.scan')}
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            disabled={scanning}
+            onClick={() => void scan()}
+            className="w-full sm:w-auto app-btn-primary rounded-2xl px-6 disabled:opacity-60"
+          >
+            {scanning ? t('planner.scanning') : t('planner.scan')}
+          </button>
+
+          <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-4 py-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-bold text-slate-900">{t('planner.watch')}</p>
+                <p className="text-sm text-slate-500 mt-0.5">{t('planner.watch.hint')}</p>
+              </div>
+              <button
+                type="button"
+                disabled={watchBusy}
+                onClick={() => void setPriceWatch(!trip.auto_scan_enabled)}
+                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-bold transition-colors disabled:opacity-60 ${
+                  trip.auto_scan_enabled
+                    ? 'bg-slate-200 text-slate-700'
+                    : 'bg-primary-500 text-white'
+                }`}
+              >
+                {trip.auto_scan_enabled ? t('planner.watch.off') : t('planner.watch')}
+              </button>
+            </div>
+            {trip.auto_scan_enabled ? (
+              <p className="text-xs font-semibold text-primary-700">
+                {t('planner.watch.every', {
+                  minutes: Math.floor(
+                    (trip.auto_scan_interval_seconds || watchInterval || 3600) / 60,
+                  ),
+                })}
+              </p>
+            ) : (
+              <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className="font-semibold">{t('planner.watch.interval')}</span>
+                <select
+                  value={watchInterval}
+                  onChange={(e) => setWatchInterval(Number(e.target.value))}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-semibold"
+                >
+                  <option value={900}>15 min</option>
+                  <option value={1800}>30 min</option>
+                  <option value={3600}>1 h</option>
+                  <option value={7200}>2 h</option>
+                  <option value={21600}>6 h</option>
+                  <option value={86400}>24 h</option>
+                </select>
+              </label>
+            )}
+          </div>
+        </div>
       ) : null}
 
       {scanning ? (

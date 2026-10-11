@@ -23,6 +23,7 @@ export type {
   TripProposal,
     TripMember,
   CreatePlannedTripRequest,
+  UpdatePlannedTripRequest,
   InvitePreview,
   PlannedTripStatus,
   TripProposalStatus,

@@ -51,6 +51,8 @@ export function TripDetailScreen() {
   const [deleting, setDeleting] = useState(false)
   const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [watchBusy, setWatchBusy] = useState(false)
+  const [watchInterval, setWatchInterval] = useState(3600)
 
   const load = useCallback(async () => {
     setError(null)
@@ -59,6 +61,7 @@ export function TripDetailScreen() {
         __DEV__ && isGuest ? getGuestTrip(tripId) : await getApi().getPlannedTrip(tripId)
       if (!detail) throw new Error('Voyage introuvable')
       setTrip(detail)
+      setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
       navigation.setOptions({ title: detail.name || 'Voyage' })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Chargement impossible')
@@ -205,6 +208,36 @@ export function TripDetailScreen() {
     }
   }
 
+  const setPriceWatch = async (enabled: boolean) => {
+    if (__DEV__ && isGuest) {
+      Alert.alert('Surveillance', 'Disponible avec un compte connecté.')
+      return
+    }
+    const interval = Math.max(900, watchInterval || 3600)
+    setWatchBusy(true)
+    try {
+      const updated = await getApi().updatePlannedTrip(tripId, {
+        auto_scan_enabled: enabled,
+        auto_scan_interval_seconds: interval,
+      })
+      setTrip((prev) =>
+        prev
+          ? {
+              ...prev,
+              auto_scan_enabled: updated.auto_scan_enabled ?? enabled,
+              auto_scan_interval_seconds:
+                updated.auto_scan_interval_seconds ?? interval,
+            }
+          : prev,
+      )
+      setWatchInterval(updated.auto_scan_interval_seconds ?? interval)
+    } catch (e) {
+      Alert.alert('Surveillance', e instanceof Error ? e.message : 'Mise à jour échouée')
+    } finally {
+      setWatchBusy(false)
+    }
+  }
+
   const confirmDelete = () => {
     if (!trip) return
     Alert.alert(
@@ -333,12 +366,69 @@ export function TripDetailScreen() {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {isOrganizer && trip.status !== 'locked' ? (
-        <Button
-          label={scanning ? 'Scan en cours…' : 'Scanner les prix'}
-          onPress={() => void scan()}
-          loading={scanning}
-          disabled={scanning}
-        />
+        <>
+          <Button
+            label={scanning ? 'Scan en cours…' : 'Scanner les prix'}
+            onPress={() => void scan()}
+            loading={scanning}
+            disabled={scanning}
+          />
+          <View style={[styles.watchBox, shadow.soft]}>
+            <Text style={styles.watchTitle}>Surveiller les prix</Text>
+            <Text style={styles.watchHint}>
+              Email aux voyageurs dès qu’un vol est sous le budget/pers.
+            </Text>
+            <Button
+              label={
+                trip.auto_scan_enabled
+                  ? 'Arrêter la surveillance'
+                  : 'Activer la surveillance'
+              }
+              onPress={() => void setPriceWatch(!trip.auto_scan_enabled)}
+              loading={watchBusy}
+              disabled={watchBusy}
+              variant={trip.auto_scan_enabled ? 'secondary' : 'primary'}
+            />
+            {trip.auto_scan_enabled ? (
+              <Text style={styles.watchMeta}>
+                Toutes les{' '}
+                {Math.floor(
+                  (trip.auto_scan_interval_seconds || watchInterval || 3600) / 60,
+                )}{' '}
+                min
+              </Text>
+            ) : (
+              <View style={styles.intervalRow}>
+                {(
+                  [
+                    [900, '15 min'],
+                    [3600, '1 h'],
+                    [21600, '6 h'],
+                    [86400, '24 h'],
+                  ] as const
+                ).map(([sec, label]) => (
+                  <Pressable
+                    key={sec}
+                    onPress={() => setWatchInterval(sec)}
+                    style={[
+                      styles.intervalChip,
+                      watchInterval === sec && styles.intervalChipOn,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.intervalChipText,
+                        watchInterval === sec && styles.intervalChipTextOn,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        </>
       ) : null}
 
       {accepted ? (
@@ -545,4 +635,30 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSoft || '#FFF0EE',
   },
   deleteText: { fontFamily: fonts.bold, fontSize: 15, color: colors.danger },
+  watchBox: {
+    backgroundColor: '#FFF8F3',
+    borderRadius: 18,
+    padding: 16,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  watchTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
+  watchHint: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, lineHeight: 18 },
+  watchMeta: { fontFamily: fonts.semibold, fontSize: 12, color: colors.primaryInk },
+  intervalRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  intervalChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.lineStrong,
+  },
+  intervalChipOn: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  intervalChipText: { fontFamily: fonts.bold, fontSize: 12, color: colors.muted },
+  intervalChipTextOn: { color: colors.white },
 })

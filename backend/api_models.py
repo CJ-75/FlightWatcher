@@ -153,6 +153,8 @@ class UpdatePlannedTripRequest(BaseModel):
     dates_depart: Optional[List[DateAvecHoraire]] = None
     dates_retour: Optional[List[DateAvecHoraire]] = None
     budget_max: Optional[int] = None
+    auto_scan_enabled: Optional[bool] = None
+    auto_scan_interval_seconds: Optional[int] = None
 
 
 class AddTripMemberRequest(BaseModel):
