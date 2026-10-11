@@ -51,9 +51,9 @@ const PRESETS: { id: DatePresetId; label: string }[] = [
 ]
 
 const STATUS_LABEL: Record<string, string> = {
-  draft: 'Brouillon',
+  draft: 'Créé',
   scanning: 'Scan…',
-  planning: 'Propositions',
+  planning: 'Créé',
   locked: 'Confirmé',
 }
 
@@ -223,7 +223,8 @@ export function PlannerScreen() {
                     style={[
                       styles.statusPill,
                       item.status === 'locked' && styles.statusLocked,
-                      item.status === 'planning' && styles.statusPlanning,
+                      (item.status === 'planning' || item.status === 'draft') &&
+                        styles.statusPlanning,
                       item.status === 'scanning' && styles.statusScanning,
                     ]}
                   >

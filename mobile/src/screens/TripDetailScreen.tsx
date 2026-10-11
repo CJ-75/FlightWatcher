@@ -292,7 +292,14 @@ export function TripDetailScreen() {
             {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
           </Text>
         ) : null}
-        <Text style={styles.status}>Statut : {trip.status}</Text>
+        <Text style={styles.status}>
+          Statut :{' '}
+          {trip.status === 'locked'
+            ? 'Confirmé'
+            : trip.status === 'scanning'
+              ? 'Scan…'
+              : 'Créé'}
+        </Text>
       </View>
 
       {trip.route_ok === false ? (
