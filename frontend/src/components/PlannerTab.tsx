@@ -11,7 +11,7 @@ import type {
   TripProposal,
 } from '../types'
 import { getApiClient, normalizeAirports, destinationsToAirports, normalizeDestinations } from '../utils/apiClient'
-import { getCurrentUser, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
+import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
 import { BookingSas } from './BookingSas'
@@ -1904,7 +1904,13 @@ function ShareBar({
   )
 }
 
-function memberLabel(m: TripMember, currentUserId: string, t: (k: string) => string): string {
+function memberLabel(
+  m: TripMember,
+  currentUserId: string,
+  t: (k: string) => string,
+  accountName?: string | null,
+): string {
+  if (m.role === 'organizer' && accountName?.trim()) return accountName.trim()
   if (m.display_name?.trim()) return m.display_name.trim()
   if (m.user_id && m.user_id === currentUserId) return t('planner.members.you')
   if (m.role === 'organizer') return t('planner.members.organizer')
@@ -1929,6 +1935,56 @@ const MEMBER_AVATAR_STYLES = [
   'from-[#B45309] to-[#92400E]',
   'from-[#475569] to-[#334155]',
 ]
+
+async function loadAccountHolderInfo(userId: string): Promise<{
+  name: string
+  avatarUrl?: string
+} | null> {
+  try {
+    const current = await getCurrentUser()
+    let name = ''
+    let avatarUrl: string | undefined
+
+    if (current?.id === userId) {
+      name =
+        (current.user_metadata?.full_name as string | undefined)?.trim() ||
+        (current.user_metadata?.name as string | undefined)?.trim() ||
+        current.email?.split('@')[0] ||
+        ''
+      avatarUrl =
+        (current.user_metadata?.avatar_url as string | undefined) ||
+        (current.user_metadata?.picture as string | undefined) ||
+        undefined
+    }
+
+    const supabase = await getSupabaseClient()
+    if (supabase) {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('avatar_url, full_name')
+        .eq('id', userId)
+        .maybeSingle()
+      if (data?.full_name?.trim()) name = data.full_name.trim()
+      if (data?.avatar_url) avatarUrl = data.avatar_url
+      // Prefer live Google metadata avatar when it's the current user
+      if (current?.id === userId) {
+        const metaAvatar =
+          (current.user_metadata?.avatar_url as string | undefined) ||
+          (current.user_metadata?.picture as string | undefined)
+        if (metaAvatar) avatarUrl = metaAvatar
+        const metaName =
+          (current.user_metadata?.full_name as string | undefined)?.trim() ||
+          (current.user_metadata?.name as string | undefined)?.trim()
+        if (metaName) name = metaName
+      }
+    }
+
+    if (!name && !avatarUrl) return null
+    return { name: name || 'User', avatarUrl }
+  } catch {
+    return null
+  }
+}
 
 function TravelersPanel({
   members,
@@ -1965,6 +2021,28 @@ function TravelersPanel({
   const full = count >= 6
   const freeSlots = Math.max(0, seatTotal - count)
   const progress = Math.min(100, Math.round((count / Math.max(seatTotal, 1)) * 100))
+  const organizer = sorted.find((m) => m.role === 'organizer')
+  const organizerUserId = organizer?.user_id || (isOrganizer ? currentUserId : null)
+  const [accountHolder, setAccountHolder] = useState<{
+    name: string
+    avatarUrl?: string
+  } | null>(null)
+  const [avatarBroken, setAvatarBroken] = useState(false)
+
+  useEffect(() => {
+    setAvatarBroken(false)
+    if (!organizerUserId) {
+      setAccountHolder(null)
+      return
+    }
+    let cancelled = false
+    void loadAccountHolderInfo(organizerUserId).then((info) => {
+      if (!cancelled) setAccountHolder(info)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [organizerUserId])
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-orange-100/80 bg-white shadow-md">
@@ -2042,14 +2120,26 @@ function TravelersPanel({
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {sorted.map((m, i) => {
-              const label = memberLabel(m, currentUserId, t)
-              const onApp = m.status === 'joined' && !!m.user_id
               const isOrg = m.role === 'organizer'
+              const label = memberLabel(
+                m,
+                currentUserId,
+                t,
+                isOrg ? accountHolder?.name : null,
+              )
+              const onApp = m.status === 'joined' && !!m.user_id
               const isYou = !!m.user_id && m.user_id === currentUserId
-              const initial = label.trim().charAt(0).toUpperCase() || '?'
+              const initial =
+                label
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .toUpperCase()
+                  .slice(0, 2) || '?'
               const avatar = isOrg
                 ? MEMBER_AVATAR_STYLES[0]
                 : MEMBER_AVATAR_STYLES[i % MEMBER_AVATAR_STYLES.length]
+              const showPhoto = isOrg && !!accountHolder?.avatarUrl && !avatarBroken
               return (
                 <motion.li
                   key={m.id}
@@ -2059,12 +2149,21 @@ function TravelersPanel({
                   className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm hover:border-orange-200 hover:shadow-md transition-all"
                 >
                   <div
-                    className={`relative w-11 h-11 rounded-2xl bg-gradient-to-br ${avatar} flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm`}
+                    className={`relative w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm ${
+                      showPhoto ? 'bg-slate-100' : `bg-gradient-to-br ${avatar}`
+                    }`}
                   >
-                    {initial}
-                    {onApp ? (
-                      <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white" />
-                    ) : null}
+                    {showPhoto ? (
+                      <img
+                        src={accountHolder!.avatarUrl}
+                        alt={label}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                        onError={() => setAvatarBroken(true)}
+                      />
+                    ) : (
+                      initial
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
