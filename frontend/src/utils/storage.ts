@@ -62,6 +62,10 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
   if (supabase && user) {
     // Utiliser Supabase
     try {
+      const passengers = Math.min(
+        6,
+        Math.max(1, Number(search.request.passengers) || 1),
+      )
       const insertData = {
         user_id: user.id,
         name: search.name,
@@ -72,6 +76,7 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
         limite_allers: search.request.limite_allers || 50,
         destinations_exclues: search.request.destinations_exclues || [],
         destinations_incluses: search.request.destinations_incluses || null,
+        passengers,
         auto_check_enabled: search.autoCheckEnabled || false,
         check_interval_seconds: search.autoCheckIntervalSeconds || 3600,
         last_check_results: search.lastCheckResults || null,
@@ -93,25 +98,7 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
       
       console.log('✅ Recherche insérée avec succès:', data);
       
-      const saved: SavedSearch = {
-        id: data.id,
-        name: data.name,
-        request: {
-          aeroport_depart: data.departure_airport,
-          dates_depart: data.dates_depart,
-          dates_retour: data.dates_retour,
-          budget_max: data.budget_max,
-          limite_allers: data.limite_allers,
-          destinations_exclues: data.destinations_exclues || [],
-          destinations_incluses: data.destinations_incluses
-        },
-        createdAt: data.created_at,
-        lastUsed: data.last_used,
-        autoCheckEnabled: data.auto_check_enabled,
-        autoCheckIntervalSeconds: data.check_interval_seconds,
-        lastCheckResults: data.last_check_results,
-        lastCheckedAt: data.last_checked_at
-      }
+      const saved = mapSupabaseSearchToSavedSearch(data)
       
       // Write-through cache : mettre à jour le cache immédiatement
       const currentSearches = await getSavedSearches()
@@ -198,7 +185,7 @@ function mapSupabaseSearchToSavedSearch(item: any): SavedSearch {
       limite_allers: item.limite_allers,
       destinations_exclues: item.destinations_exclues || [],
       destinations_incluses: item.destinations_incluses,
-      passengers: item.passengers || undefined,
+      passengers: Math.min(6, Math.max(1, Number(item.passengers) || 1)),
     },
     createdAt: item.created_at,
     lastUsed: item.last_used,
@@ -207,6 +194,59 @@ function mapSupabaseSearchToSavedSearch(item: any): SavedSearch {
     lastCheckResults: item.last_check_results,
     lastCheckedAt: item.last_checked_at
   };
+}
+
+/** Update passenger count on a saved alert/search */
+export const updateSearchPassengers = async (
+  id: string,
+  passengers: number,
+): Promise<void> => {
+  const n = Math.min(6, Math.max(1, Math.round(passengers) || 1))
+  const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
+
+  if (user) {
+    const currentSearches = await getSavedSearches()
+    const updated = currentSearches.map((s) =>
+      s.id === id
+        ? { ...s, request: { ...s.request, passengers: n } }
+        : s,
+    )
+    setCache(user.id, 'searches', updated, false)
+  }
+
+  if (supabase && user) {
+    const { error } = await supabase
+      .from('saved_searches')
+      .update({ passengers: n })
+      .eq('id', id)
+      .eq('user_id', user.id)
+
+    if (error) {
+      console.error('Erreur update passengers:', error)
+      await getSavedSearches(true).then((searches) => {
+        setCache(user.id, 'searches', searches, true)
+      })
+      throw error
+    }
+
+    const currentSearches = getFromCache<SavedSearch[]>(user.id, 'searches')
+    if (currentSearches) {
+      setCache(user.id, 'searches', currentSearches, true)
+    }
+    autoExport()
+    return
+  }
+
+  const searches = await getSavedSearches()
+  const updated = searches.map((s) =>
+    s.id === id ? { ...s, request: { ...s.request, passengers: n } } : s,
+  )
+  localStorage.setItem(STORAGE_KEYS.SEARCHES, JSON.stringify(updated))
+  if (user) {
+    setCache(user.id, 'searches', updated, false)
+  }
+  autoExport()
 }
 
 export const getSavedSearches = async (forceRefresh: boolean = false): Promise<SavedSearch[]> => {
@@ -221,12 +261,20 @@ export const getSavedSearches = async (forceRefresh: boolean = false): Promise<S
     return data ? JSON.parse(data) : []
   }
   
-  // 1. Vérifier le cache si pas de refresh forcé
+  // 1. Vérifier le cache si pas de refresh forcé (re-normaliser les dates)
   if (!forceRefresh) {
     const cachedData = getFromCache<SavedSearch[]>(user.id, 'searches')
     if (cachedData !== null) {
       console.log('✅ Données récupérées depuis le cache:', cachedData.length, 'recherches');
-      return cachedData
+      return cachedData.map((s) => ({
+        ...s,
+        request: {
+          ...s.request,
+          dates_depart: normalizeStoredDates(s.request.dates_depart),
+          dates_retour: normalizeStoredDates(s.request.dates_retour),
+          passengers: Math.min(6, Math.max(1, Number(s.request.passengers) || 1)),
+        },
+      }))
     }
   }
   

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { ScanResponse, TripResponse, ScanRequest, DateAvecHoraire, Destination, Airport, EnrichedTripResponse } from './types'
 import { 
   saveSearch, getSavedSearches, deleteSearch, updateSearchLastUsed,
   saveFavorite, getFavorites, deleteFavorite, updateFavoriteStatus,
   saveExcludedDestinations,
-  updateSearchAutoCheck, updateSearchLastCheckResults, getActiveAutoChecks,
+  updateSearchAutoCheck, updateSearchLastCheckResults, updateSearchPassengers,
+  getActiveAutoChecks,
   setDevMode, getDevMode, saveNewResults, getNewResultsForSearch, clearNewResults,
   toggleFavoriteArchived, getArchivedFavorites, getActiveFavorites,
   isFavorite
@@ -20,6 +22,7 @@ import { DealDetailModal } from './components/DealDetailModal'
 import { PlannerTab } from './components/PlannerTab'
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { AlertsGuestLanding } from './components/AlertsGuestLanding'
+import { PassengerStepper } from './components/PassengerStepper'
 import type { LikedDeal, TravelDeal } from './types'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
@@ -93,6 +96,14 @@ function Dashboard() {
   const [destinationsExclues, setDestinationsExclues] = useState<string[]>([])
   const [searchPassengers, setSearchPassengers] = useState(1)
   const [searchLoadToken, setSearchLoadToken] = useState(0)
+  const [searchSeed, setSearchSeed] = useState<{
+    token: number
+    airport: string
+    dates_depart: DateAvecHoraire[]
+    dates_retour: DateAvecHoraire[]
+    budget: number
+    passengers: number
+  } | null>(null)
   const isLoadingFromStorage = useRef(false)
   const loadingSavedSearchRef = useRef(false)
   const shouldScrollToResults = useRef(false)
@@ -269,64 +280,80 @@ function Dashboard() {
 
     const datesDepartLoaded = normalizeDates(req.dates_depart)
     const datesRetourLoaded = normalizeDates(req.dates_retour)
+    const passengersLoaded =
+      req.passengers && req.passengers > 0 ? req.passengers : 1
+    const budgetLoaded = req.budget_max || 100
+    const nextToken = searchLoadToken + 1
 
     loadingSavedSearchRef.current = true
     isLoadingFromStorage.current = true
 
-    setAeroportDepart(airport)
-    setDatesDepart(datesDepartLoaded)
-    setDatesRetour(datesRetourLoaded)
-    setBudgetMax(req.budget_max || 100)
-    setLimiteAllers(req.limite_allers || 50)
-    setSearchPassengers(req.passengers && req.passengers > 0 ? req.passengers : 1)
-    setDestinationsExclues(excluded)
-    setCurrentRequest({
-      ...req,
-      aeroport_depart: airport,
-      dates_depart: datesDepartLoaded,
-      dates_retour: datesRetourLoaded,
-    })
-    setSearchLoadToken((t) => t + 1)
-    setError(null)
+    // flushSync: le formulaire Recherche monte avec les dates déjà en state
+    flushSync(() => {
+      setAeroportDepart(airport)
+      setDatesDepart(datesDepartLoaded)
+      setDatesRetour(datesRetourLoaded)
+      setBudgetMax(budgetLoaded)
+      setLimiteAllers(req.limite_allers || 50)
+      setSearchPassengers(passengersLoaded)
+      setDestinationsExclues(excluded)
+      setCurrentRequest({
+        ...req,
+        aeroport_depart: airport,
+        dates_depart: datesDepartLoaded,
+        dates_retour: datesRetourLoaded,
+        passengers: passengersLoaded,
+        budget_max: budgetLoaded,
+      })
+      setSearchLoadToken(nextToken)
+      setSearchSeed({
+        token: nextToken,
+        airport,
+        dates_depart: datesDepartLoaded,
+        dates_retour: datesRetourLoaded,
+        budget: budgetLoaded,
+        passengers: passengersLoaded,
+      })
+      setError(null)
 
-    const editOnly = options?.editOnly === true
+      const editOnly = options?.editOnly === true
+      if (!editOnly && savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
+        const enrichedResults: EnrichedTripResponse[] = savedSearch.lastCheckResults
+          .map((trip: any) => {
+            if (!trip.aller || !trip.retour) return null
+            return { ...trip } as EnrichedTripResponse
+          })
+          .filter((trip): trip is EnrichedTripResponse => trip !== null)
 
-    if (!editOnly && savedSearch.lastCheckResults && savedSearch.lastCheckResults.length > 0) {
-      const enrichedResults: EnrichedTripResponse[] = savedSearch.lastCheckResults
-        .map((trip: any) => {
-          if (!trip.aller || !trip.retour) return null
-          return { ...trip } as EnrichedTripResponse
-        })
-        .filter((trip): trip is EnrichedTripResponse => trip !== null)
-
-      if (enrichedResults.length > 0) {
-        setSimpleResults(enrichedResults)
-        setLastSearchInfo({
-          datePreset: 'flexible',
-          airport,
-          budget: req.budget_max || 100,
-          passengers: req.passengers && req.passengers > 0 ? req.passengers : 1,
-          datesDepart: datesDepartLoaded,
-          datesRetour: datesRetourLoaded,
-          excludedDestinations: excluded,
-        })
-        shouldScrollToResults.current = true
+        if (enrichedResults.length > 0) {
+          setSimpleResults(enrichedResults)
+          setLastSearchInfo({
+            datePreset: 'flexible',
+            airport,
+            budget: budgetLoaded,
+            passengers: passengersLoaded,
+            datesDepart: datesDepartLoaded,
+            datesRetour: datesRetourLoaded,
+            excludedDestinations: excluded,
+          })
+          shouldScrollToResults.current = true
+        } else {
+          setSimpleResults([])
+          setLastSearchInfo(null)
+        }
       } else {
         setSimpleResults([])
         setLastSearchInfo(null)
+        shouldScrollToResults.current = false
       }
-    } else {
-      // Modifier = remplir le formulaire sans coller d'anciens résultats
-      setSimpleResults([])
-      setLastSearchInfo(null)
-      shouldScrollToResults.current = false
-    }
+    })
 
     setActiveTab('search')
 
-    // Empêcher l'effet aéroport d'effacer les exclusions juste après le load
     window.setTimeout(() => {
       setDestinationsExclues(excluded)
+      setDatesDepart(datesDepartLoaded)
+      setDatesRetour(datesRetourLoaded)
       loadingSavedSearchRef.current = false
       isLoadingFromStorage.current = false
     }, 200)
@@ -735,6 +762,7 @@ function Dashboard() {
           <>
             <div className="app-col">
               <SimpleSearch
+                key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
                 onLoading={setLoading}
                 onError={setError}
@@ -742,7 +770,16 @@ function Dashboard() {
                 selectedAirport={aeroportDepart}
                 onAirportChange={setAeroportDepart}
                 AirportAutocomplete={AirportAutocomplete}
-                flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
+                flexibleDates={{
+                  dates_depart:
+                    searchSeed && searchSeed.token === searchLoadToken
+                      ? searchSeed.dates_depart
+                      : datesDepart,
+                  dates_retour:
+                    searchSeed && searchSeed.token === searchLoadToken
+                      ? searchSeed.dates_retour
+                      : datesRetour,
+                }}
                 onFlexibleDatesChange={(dates) => {
                   setDatesDepart(dates.dates_depart);
                   setDatesRetour(dates.dates_retour);
@@ -756,10 +793,25 @@ function Dashboard() {
                 onLimiteAllersChange={setLimiteAllers}
                 formatDateFr={formatDateFr}
                 onSearchEventId={setCurrentSearchEventId}
-                budget={budgetMax}
+                budget={
+                  searchSeed && searchSeed.token === searchLoadToken
+                    ? searchSeed.budget
+                    : budgetMax
+                }
                 onBudgetChange={setBudgetMax}
-                initialPassengers={searchPassengers}
+                initialPassengers={
+                  searchSeed && searchSeed.token === searchLoadToken
+                    ? searchSeed.passengers
+                    : searchPassengers
+                }
                 searchLoadToken={searchLoadToken}
+                forceFlexible={
+                  !!(
+                    searchSeed &&
+                    searchSeed.token === searchLoadToken &&
+                    (searchSeed.dates_depart.length > 0 || searchSeed.dates_retour.length > 0)
+                  )
+                }
               />
 
               {error && (
@@ -2145,6 +2197,38 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                               <span className="text-[#E85A28] font-bold">€</span>
                               <span className="text-slate-700 font-bold">{search.request.budget_max || 100}€</span>
                             </div>
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <span className="text-slate-500 font-bold">👤</span>
+                              <span className="text-slate-700 font-semibold">
+                                {search.request.passengers && search.request.passengers > 0
+                                  ? search.request.passengers
+                                  : 1}{' '}
+                                voy.
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="mb-3 max-w-xs rounded-2xl border border-orange-100 bg-[#FFF8F3] px-3 py-2">
+                            <PassengerStepper
+                              compact
+                              value={
+                                search.request.passengers && search.request.passengers > 0
+                                  ? search.request.passengers
+                                  : 1
+                              }
+                              onChange={(n) => {
+                                setSavedSearches((prev) =>
+                                  prev.map((s) =>
+                                    s.id === search.id
+                                      ? { ...s, request: { ...s.request, passengers: n } }
+                                      : s,
+                                  ),
+                                )
+                                void updateSearchPassengers(search.id, n).catch(() => {
+                                  void refreshData()
+                                })
+                              }}
+                            />
                           </div>
 
                           {/* Métadonnées */}

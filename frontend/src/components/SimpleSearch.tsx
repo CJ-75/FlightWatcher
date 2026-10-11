@@ -64,6 +64,8 @@ interface SimpleSearchProps {
   initialPassengers?: number;
   /** Incrémenté à chaque Modifier / Relancer pour forcer l’hydratation dates */
   searchLoadToken?: number;
+  /** Forcer le preset Flexible (Modifier une alerte avec dates explicites) */
+  forceFlexible?: boolean;
 }
 
 const springConfig = {
@@ -96,17 +98,19 @@ export function SimpleSearch({
   onBudgetChange,
   initialPassengers = 1,
   searchLoadToken = 0,
+  forceFlexible = false,
 }: SimpleSearchProps) {
   const { t } = useI18n();
   const hasParentDates =
     flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
+  const startFlexible = forceFlexible || hasParentDates;
 
   const [budget, setBudget] = useState(externalBudget || 100);
   const [passengers, setPassengers] = useState(
     initialPassengers > 0 ? initialPassengers : 1,
   );
   const [datePreset, setDatePreset] = useState<DatePreset | null>(
-    hasParentDates ? 'flexible' : null,
+    startFlexible ? 'flexible' : null,
   );
   const [isSearching, setIsSearching] = useState(false);
   const [presetDates, setPresetDates] = useState<{ dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }>({
@@ -118,36 +122,37 @@ export function SimpleSearch({
   const [localError, setLocalError] = useState<string | null>(null);
   const [showEmpty, setShowEmpty] = useState(false);
   const airportSectionRef = useRef<HTMLDivElement>(null);
+  const datesSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const appliedLoadTokenRef = useRef(0);
+  const syncedSeedRef = useRef(false);
 
-  // Appliquer l’hydratation pendant le render (fiable, pas de course useEffect)
-  if (searchLoadToken > 0 && searchLoadToken !== appliedLoadTokenRef.current) {
-    appliedLoadTokenRef.current = searchLoadToken;
-    if (hasParentDates && datePreset !== 'flexible') {
-      setDatePreset('flexible');
-    }
-    if (hasParentDates) {
-      setPresetDates({
-        dates_depart: flexibleDates.dates_depart,
-        dates_retour: flexibleDates.dates_retour,
-      });
-    }
-    if (initialPassengers > 0) {
-      setPassengers(initialPassengers);
-    }
-    if (externalBudget !== undefined) {
-      setBudget(externalBudget);
-    }
-  }
+  // Au mount après Modifier: resynchroniser les dates vers le parent + scroll
+  useEffect(() => {
+    if (syncedSeedRef.current) return
+    if (!startFlexible || !hasParentDates) return
+    syncedSeedRef.current = true
+    setDatePreset('flexible')
+    setPresetDates({
+      dates_depart: flexibleDates.dates_depart,
+      dates_retour: flexibleDates.dates_retour,
+    })
+    onFlexibleDatesChange({
+      dates_depart: flexibleDates.dates_depart,
+      dates_retour: flexibleDates.dates_retour,
+    })
+    const tId = window.setTimeout(() => {
+      datesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 120)
+    return () => clearTimeout(tId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchLoadToken])
 
-  // Si le parent a des dates (Modifier) mais le preset n’est pas encore flexible → forcer
   const effectivePreset: DatePreset | null =
-    datePreset ?? (hasParentDates ? 'flexible' : null);
+    datePreset ?? (startFlexible ? 'flexible' : null);
   const showFlexibleDates =
-    effectivePreset === 'flexible' || hasParentDates;
+    effectivePreset === 'flexible' || startFlexible || hasParentDates;
   const showPresetTimes =
-    !!effectivePreset && effectivePreset !== 'flexible' && !hasParentDates;
+    !!effectivePreset && effectivePreset !== 'flexible' && !hasParentDates && !forceFlexible;
 
   useEffect(() => {
     if (externalBudget !== undefined && externalBudget !== budget) {
@@ -161,17 +166,6 @@ export function SimpleSearch({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPassengers]);
-
-  // Garde-fou: dès que le parent reçoit des dates, basculer en flexible
-  useEffect(() => {
-    if (hasParentDates && datePreset !== 'flexible') {
-      setDatePreset('flexible');
-      setPresetDates({
-        dates_depart: flexibleDates.dates_depart,
-        dates_retour: flexibleDates.dates_retour,
-      });
-    }
-  }, [hasParentDates, datePreset, flexibleDates.dates_depart, flexibleDates.dates_retour]);
 
   const handleBudgetChange = (newBudget: number) => {
     setBudget(newBudget);
@@ -401,7 +395,11 @@ export function SimpleSearch({
       </div>
 
       <DatePresets
-        selected={effectivePreset === 'flexible' || hasParentDates ? 'flexible' : effectivePreset}
+        selected={
+          effectivePreset === 'flexible' || startFlexible || hasParentDates
+            ? 'flexible'
+            : effectivePreset
+        }
         onChange={(preset) => {
           setDatePreset(preset);
           setLocalError(null);
@@ -412,7 +410,9 @@ export function SimpleSearch({
             onFlexibleDatesChange({ dates_depart: [], dates_retour: [] });
           }
         }}
-        onFlexibleClick={handleFlexibleClick}
+        onFlexibleClick={() => {
+          handleFlexibleClick();
+        }}
       />
 
       {showPresetTimes && effectivePreset && (
@@ -439,7 +439,7 @@ export function SimpleSearch({
 
       {showFlexibleDates && (
         <motion.div
-          key={`flex-dates-${searchLoadToken}-${flexibleDates.dates_depart.map((d) => `${d.date}:${d.heure_min}-${d.heure_max}`).join('|')}-${flexibleDates.dates_retour.map((d) => `${d.date}:${d.heure_min}-${d.heure_max}`).join('|')}`}
+          ref={datesSectionRef}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={springConfig}
@@ -448,6 +448,14 @@ export function SimpleSearch({
           <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
             {t('search.times')}
           </label>
+          {hasParentDates ? (
+            <p className="text-xs sm:text-sm text-slate-500 mb-3">
+              {flexibleDates.dates_depart.length} départ
+              {flexibleDates.dates_depart.length > 1 ? 's' : ''} ·{' '}
+              {flexibleDates.dates_retour.length} retour
+              {flexibleDates.dates_retour.length > 1 ? 's' : ''} chargés depuis l’alerte
+            </p>
+          ) : null}
           <FlexibleDatesSelector
             flexibleDates={flexibleDates}
             onFlexibleDatesChange={onFlexibleDatesChange}

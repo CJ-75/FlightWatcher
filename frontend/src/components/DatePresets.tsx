@@ -25,8 +25,9 @@ const springConfig = {
 };
 
   const handleClick = (preset: DatePreset) => {
-    if (preset === 'flexible' && onFlexibleClick) {
-      onFlexibleClick();
+    if (preset === 'flexible') {
+      onChange('flexible');
+      onFlexibleClick?.();
     } else {
       onChange(preset);
     }
