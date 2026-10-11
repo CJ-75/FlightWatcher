@@ -6,6 +6,7 @@ import { PassengerStepper } from './PassengerStepper';
 import { DatePresets, DatePreset } from './DatePresets';
 import { AdvancedOptions } from './AdvancedOptions';
 import { DateWithTimes } from './DateWithTimes';
+import { FlexibleDatesSelector } from './FlexibleDatesSelector';
 import { InspireRequest, EnrichedTripResponse, DateAvecHoraire, Destination } from '../types';
 import { Airport } from '../types';
 import { LoadingSkeleton } from './LoadingSkeleton';
@@ -411,7 +412,7 @@ export function SimpleSearch({
         onFlexibleClick={handleFlexibleClick}
       />
 
-      {/* Section Horaires par jour - visible pour tous les presets sauf flexible */}
+      {/* Horaires — presets classiques */}
       {datePreset && datePreset !== 'flexible' && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
@@ -425,7 +426,29 @@ export function SimpleSearch({
           </label>
           <DateWithTimes
             preset={datePreset}
-            onDatesChange={setPresetDates}
+            onDatesChange={(dates) => {
+              setPresetDates(dates)
+              onFlexibleDatesChange(dates)
+            }}
+            formatDateFr={formatDateFr}
+          />
+        </motion.div>
+      )}
+
+      {/* Dates + horaires — mode flexible / alerte chargée (visible hors options avancées) */}
+      {datePreset === 'flexible' && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={springConfig}
+          className="mb-6 sm:mb-8"
+        >
+          <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
+            {t('search.times')}
+          </label>
+          <FlexibleDatesSelector
+            flexibleDates={flexibleDates}
+            onFlexibleDatesChange={onFlexibleDatesChange}
             formatDateFr={formatDateFr}
           />
         </motion.div>
@@ -443,6 +466,7 @@ export function SimpleSearch({
         limiteAllers={limiteAllers}
         onLimiteAllersChange={onLimiteAllersChange}
         formatDateFr={formatDateFr}
+        hideFlexibleDates
       />
 
       {localError && (

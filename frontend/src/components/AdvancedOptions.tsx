@@ -19,6 +19,8 @@ interface AdvancedOptionsProps {
   limiteAllers: number;
   onLimiteAllersChange: (value: number) => void;
   formatDateFr: (dateStr: string) => string;
+  /** Dates flexibles déjà affichées dans le formulaire principal */
+  hideFlexibleDates?: boolean;
 }
 
 const springConfig = {
@@ -39,19 +41,20 @@ export function AdvancedOptions({
   onLoadDestinations,
   limiteAllers,
   onLimiteAllersChange,
-  formatDateFr
+  formatDateFr,
+  hideFlexibleDates = false,
 }: AdvancedOptionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showDestinations, setShowDestinations] = useState(false);
   const dateDepartInputRef = useState<HTMLInputElement | null>(null)[0];
   const dateRetourInputRef = useState<HTMLInputElement | null>(null)[0];
 
-  // Ouvrir automatiquement les options avancées quand le preset est 'flexible'
+  // Ouvrir auto seulement si les dates flexibles sont encore dans ce panneau
   useEffect(() => {
-    if (datePreset === 'flexible') {
+    if (datePreset === 'flexible' && !hideFlexibleDates) {
       setIsOpen(true);
     }
-  }, [datePreset]);
+  }, [datePreset, hideFlexibleDates]);
 
   const addDate = (type: 'depart' | 'retour', dateStr: string) => {
     const dateObj: DateAvecHoraire = { 
@@ -137,8 +140,7 @@ export function AdvancedOptions({
             className="overflow-hidden"
           >
             <div className="mt-4 space-y-6">
-              {/* Dates flexibles - seulement si preset = flexible */}
-              {datePreset === 'flexible' && (
+              {datePreset === 'flexible' && !hideFlexibleDates && (
                 <div className="space-y-4">
                   <h3 className="text-sm sm:text-base font-bold text-slate-900">📅 Dates flexibles</h3>
                   <FlexibleDatesSelector

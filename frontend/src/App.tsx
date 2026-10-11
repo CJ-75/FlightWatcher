@@ -237,17 +237,50 @@ function Dashboard() {
     const excluded = req.destinations_exclues || []
     const airport = (req.aeroport_depart || 'BVA').trim().toUpperCase()
 
+    const normalizeDates = (raw: unknown): DateAvecHoraire[] => {
+      let list: unknown = raw
+      if (typeof list === 'string') {
+        try {
+          list = JSON.parse(list)
+        } catch {
+          return []
+        }
+      }
+      if (!Array.isArray(list)) return []
+      return list
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const d = item as Record<string, unknown>
+          const date = String(d.date || '').trim()
+          if (!date) return null
+          return {
+            date,
+            heure_min: String(d.heure_min || '06:00'),
+            heure_max: String(d.heure_max || '23:59'),
+          } as DateAvecHoraire
+        })
+        .filter((d): d is DateAvecHoraire => !!d)
+    }
+
+    const datesDepartLoaded = normalizeDates(req.dates_depart)
+    const datesRetourLoaded = normalizeDates(req.dates_retour)
+
     loadingSavedSearchRef.current = true
     isLoadingFromStorage.current = true
 
     setAeroportDepart(airport)
-    setDatesDepart(req.dates_depart || [])
-    setDatesRetour(req.dates_retour || [])
+    setDatesDepart(datesDepartLoaded)
+    setDatesRetour(datesRetourLoaded)
     setBudgetMax(req.budget_max || 100)
     setLimiteAllers(req.limite_allers || 50)
     setSearchPassengers(req.passengers && req.passengers > 0 ? req.passengers : 1)
     setDestinationsExclues(excluded)
-    setCurrentRequest(req)
+    setCurrentRequest({
+      ...req,
+      aeroport_depart: airport,
+      dates_depart: datesDepartLoaded,
+      dates_retour: datesRetourLoaded,
+    })
     setSearchFormKey((k) => k + 1)
     setError(null)
 
@@ -268,8 +301,8 @@ function Dashboard() {
           airport,
           budget: req.budget_max || 100,
           passengers: req.passengers && req.passengers > 0 ? req.passengers : 1,
-          datesDepart: req.dates_depart || [],
-          datesRetour: req.dates_retour || [],
+          datesDepart: datesDepartLoaded,
+          datesRetour: datesRetourLoaded,
           excludedDestinations: excluded,
         })
         shouldScrollToResults.current = true
@@ -936,11 +969,12 @@ interface AirportAutocompleteProps {
 }
 
 function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(value ? value.toUpperCase() : '')
   const [airports, setAirports] = useState<Airport[]>([])
   const [filteredAirports, setFilteredAirports] = useState<Airport[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedAirport, setSelectedAirport] = useState<Airport | null>(null)
+  const [isTyping, setIsTyping] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -960,32 +994,31 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
     loadAirports()
   }, [])
 
-  // Synchroniser avec la valeur externe seulement si elle change depuis l'extérieur
-  // (pas pendant que l'utilisateur tape)
-  const previousValueRef = useRef(value)
+  // Hydrater l'affichage depuis la valeur externe (Modifier / Relancer)
+  // Important: aussi quand la liste airports arrive après le mount (sinon le champ reste vide).
   useEffect(() => {
-    // Seulement mettre à jour si la valeur change depuis l'extérieur (pas pendant la saisie)
-    if (value !== previousValueRef.current) {
-      previousValueRef.current = value
-      if (value) {
-        const airport = airports.find(a => a.code === value.toUpperCase())
-        if (airport && selectedAirport?.code !== airport.code) {
-          setSelectedAirport(airport)
-          setQuery(`${airport.code} - ${airport.name}, ${airport.city}, ${airport.country}`)
-        } else if (!airport) {
-          setQuery(value)
-          setSelectedAirport(null)
-        }
-      } else {
-        setQuery('')
-        setSelectedAirport(null)
-      }
+    if (isTyping) return
+
+    if (!value) {
+      setQuery('')
+      setSelectedAirport(null)
+      return
     }
-  }, [value, airports, selectedAirport])
+
+    const code = value.toUpperCase()
+    const airport = airports.find((a) => a.code === code)
+    if (airport) {
+      setSelectedAirport(airport)
+      setQuery(`${airport.code} - ${airport.name}, ${airport.city}, ${airport.country}`)
+    } else {
+      setSelectedAirport(null)
+      setQuery(code)
+    }
+  }, [value, airports, isTyping])
 
   // Filtrer les aéroports selon la recherche
   useEffect(() => {
-    if (!query.trim()) {
+    if (!query.trim() || selectedAirport) {
       setFilteredAirports([])
       return
     }
@@ -996,11 +1029,11 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
       airport.name.toLowerCase().includes(queryLower) ||
       airport.city.toLowerCase().includes(queryLower) ||
       airport.country.toLowerCase().includes(queryLower)
-    ).slice(0, 20) // Limiter à 20 résultats pour la performance
+    ).slice(0, 20)
 
     setFilteredAirports(filtered)
     setShowDropdown(filtered.length > 0)
-  }, [query, airports])
+  }, [query, airports, selectedAirport])
 
   // Fermer le dropdown si on clique en dehors
   useEffect(() => {
@@ -1020,29 +1053,25 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
   }, [])
 
   const handleSelectAirport = (airport: Airport) => {
+    setIsTyping(false)
     setSelectedAirport(airport)
     setQuery(`${airport.code} - ${airport.name}, ${airport.city}, ${airport.country}`)
-    previousValueRef.current = airport.code
     onChange(airport.code)
     setShowDropdown(false)
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
+    setIsTyping(true)
+    setSelectedAirport(null)
     setQuery(newValue)
     setShowDropdown(true)
     
-    // Si l'utilisateur efface tout, réinitialiser
     if (!newValue.trim()) {
+      setIsTyping(false)
       onChange('')
-      setSelectedAirport(null)
-      previousValueRef.current = ''
       return
     }
-    
-    // Ne pas forcer la sélection automatique - laisser l'utilisateur continuer à taper
-    // La sélection se fera uniquement via clic ou Enter
-    // Ne pas mettre à jour onChange pendant que l'utilisateur tape, seulement quand il sélectionne
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -1069,9 +1098,14 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
         value={query}
         onChange={handleInputChange}
         onFocus={() => {
+          setIsTyping(true)
           if (filteredAirports.length > 0) {
             setShowDropdown(true)
           }
+        }}
+        onBlur={() => {
+          // Laisser le clic dropdown se faire avant de re-sync
+          window.setTimeout(() => setIsTyping(false), 150)
         }}
         onKeyDown={handleKeyDown}
         placeholder="Rechercher un aéroport (code, nom, ville ou pays)..."
