@@ -1977,31 +1977,55 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   }
 
   return (
-    <div className="w-full space-y-8">
+    <div className="relative w-full">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-20 -right-10 w-72 h-72 rounded-full bg-[#FF6B35]/15 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-40 -left-16 w-56 h-56 rounded-full bg-[#FFB088]/20 blur-3xl"
+      />
 
+      <div className="relative space-y-6 sm:space-y-8">
       {variant === 'alerts' && (
       <>
-      {/* Outils de test en mode développeur */}
+      <div className="mb-2">
+        <p className="app-kicker mb-1.5">{t('nav.alerts')}</p>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <h2 className="app-title">{t('alerts.title')}</h2>
+            <p className="app-subtitle mt-1.5">{t('alerts.subtitle')}</p>
+          </div>
+          {savedSearches.length > 0 ? (
+            <span className="inline-flex self-start sm:self-auto text-xs font-bold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#E85A28]">
+              {t('alerts.count', {
+                count: savedSearches.length,
+                s: savedSearches.length > 1 ? 's' : '',
+              })}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
       {devMode && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-400 rounded-2xl p-5 shadow-lg"
+          className="rounded-[28px] border border-amber-200 bg-amber-50/90 p-5 shadow-sm"
         >
-          <h3 className="text-lg font-black text-yellow-900 mb-4 flex items-center gap-2">
-            <span>🛠️</span>
-            <span>Outils de test (Mode développeur)</span>
+          <h3 className="text-sm font-black uppercase tracking-wider text-amber-900 mb-3">
+            Mode développeur
           </h3>
           <div className="flex gap-3 flex-wrap items-center">
             <motion.button
               onClick={testNotification}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-semibold shadow-md"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="px-4 py-2.5 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] text-sm font-bold shadow-sm"
             >
-              🔔 Tester notification
+              Tester notification
             </motion.button>
-            <span className="text-sm text-gray-700 font-medium">ou</span>
             <select
               onChange={(e) => {
                 if (e.target.value) {
@@ -2009,10 +2033,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   e.target.value = ''
                 }
               }}
-              className="px-4 py-2.5 border-2 border-gray-300 rounded-xl text-sm font-medium bg-white hover:border-blue-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-4 py-2.5 border border-orange-200 rounded-2xl text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-primary-300"
               defaultValue=""
             >
-              <option value="">Tester nouveaux résultats pour...</option>
+              <option value="">Tester nouveaux résultats…</option>
               {savedSearches.map(search => (
                 <option key={search.id} value={search.id}>{search.name}</option>
               ))}
@@ -2021,31 +2045,19 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         </motion.div>
       )}
 
-      {/* Alertes / recherches automatisées */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl shadow-xl overflow-hidden"
-      >
-        <div className="bg-gradient-to-r from-[#FF6B35] to-[#E85A28] p-6">
-          <h2 className="text-3xl font-black text-white flex items-center gap-3">
-            <span>🔔</span>
-            <span>{t('alerts.title')}</span>
-            <span className="text-xl bg-white/20 px-3 py-1 rounded-full">
-              {savedSearches.length}
-            </span>
-          </h2>
-        </div>
-        
-        <div className="p-6">
-          {savedSearches.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-6xl mb-4">🔔</div>
-              <p className="text-xl text-gray-500 font-medium">{t('alerts.empty')}</p>
-              <p className="text-sm text-gray-400 mt-2">{t('alerts.emptyHint')}</p>
+      {savedSearches.length === 0 ? (
+        <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />
+          <div className="relative">
+            <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
+              🔔
             </div>
-          ) : (
-            <div className="grid gap-4">
+            <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">{t('alerts.empty')}</p>
+            <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">{t('alerts.emptyHint')}</p>
+          </div>
+        </div>
+      ) : (
+            <div className="grid gap-4 sm:gap-5">
               {savedSearches.map((search, index) => {
                 const isExpanded = expandedSearches.has(search.id)
                 const newResultsCount = getNewResultsCount(search.id)
@@ -2053,40 +2065,34 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 return (
                   <motion.div
                     key={search.id}
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="group relative bg-gradient-to-br from-white to-slate-50 rounded-xl border-2 border-slate-200 hover:border-primary-400 transition-all duration-300 overflow-hidden shadow-md hover:shadow-xl"
+                    transition={{ delay: index * 0.04 }}
+                    className="group relative bg-white rounded-[28px] border border-orange-100/70 hover:border-orange-200 transition-all duration-300 overflow-hidden shadow-md hover:shadow-xl"
                   >
-                    {/* Badge nouveau résultats */}
                     {newResultsCount > 0 && (
-                      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10">
+                      <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10">
                         <motion.button
                           onClick={() => openLightbox(search.id)}
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          className="relative bg-gradient-to-r from-red-500 to-pink-500 text-white px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm shadow-lg hover:shadow-xl min-h-[36px] sm:min-h-[40px] active:scale-95"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="relative bg-[#FF6B35] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm shadow-md shadow-orange-500/25 min-h-[36px]"
                         >
-                          🆕 {newResultsCount} nouveau{newResultsCount > 1 ? 'x' : ''}
+                          {newResultsCount} nouveau{newResultsCount > 1 ? 'x' : ''}
                         </motion.button>
                       </div>
                     )}
 
-                    <div className="p-3 sm:p-4 md:p-5">
-                      {/* En-tête */}
+                    <div className="p-4 sm:p-5 md:p-6">
                       <div className="flex flex-col sm:flex-row items-start justify-between mb-3 sm:mb-4 gap-3 sm:gap-4">
                         <div className="flex-1 w-full sm:w-auto sm:pr-4">
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
-                            <h3 className="text-lg sm:text-xl font-black text-slate-900">{search.name}</h3>
+                            <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">{search.name}</h3>
                             {search.autoCheckEnabled && (
-                              <motion.span
-                                animate={{ scale: [1, 1.05, 1] }}
-                                transition={{ duration: 2, repeat: Infinity }}
-                                className="inline-flex items-center gap-1 px-2 sm:px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold self-start sm:self-auto"
-                              >
-                                <span>🔔</span>
-                                <span>Auto-vérif</span>
-                              </motion.span>
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#FFF3EC] text-[#E85A28] rounded-full text-xs font-bold self-start sm:self-auto">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B35] animate-pulse" />
+                                Auto-vérif
+                              </span>
                             )}
                           </div>
                           
@@ -2097,15 +2103,15 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                               <span className="text-slate-700 font-semibold">{search.request.aeroport_depart || 'BVA'}</span>
                             </div>
                             <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-indigo-500 font-bold">📅</span>
+                              <span className="text-[#E85A28] font-bold">📅</span>
                               <span className="text-slate-700">{search.request.dates_depart.length} départ</span>
                             </div>
                             <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-blue-500 font-bold">🔙</span>
+                              <span className="text-slate-500 font-bold">↩</span>
                               <span className="text-slate-700">{search.request.dates_retour.length} retour</span>
                             </div>
                             <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-emerald-500 font-bold">💰</span>
+                              <span className="text-[#E85A28] font-bold">€</span>
                               <span className="text-slate-700 font-bold">{search.request.budget_max || 100}€</span>
                             </div>
                           </div>
@@ -2135,24 +2141,18 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                         </div>
                       </div>
 
-                      {/* Actions principales */}
-                      <div className="flex flex-wrap gap-2 sm:gap-2 mb-3">
+                      <div className="flex flex-wrap gap-2 mb-3">
                         <motion.button
                           onClick={() => onLoadSearch(search)}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          className="flex-1 sm:flex-none px-4 py-2.5 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] text-xs sm:text-sm font-bold shadow-sm shadow-orange-500/20 flex items-center justify-center gap-1.5 min-h-[44px]"
                         >
-                          <span>📂</span>
                           <span>{t('saved.load')}</span>
                         </motion.button>
                         <motion.button
                           onClick={async () => {
-                            // D'abord charger les paramètres dans le formulaire (comme "Charger")
-                            // Cela charge les paramètres et passe à l'onglet recherche
                             await onLoadSearch(search)
-                            // Puis relancer la recherche avec les nouveaux résultats
-                            // Le délai permet de s'assurer que le chargement est terminé
                             setTimeout(() => {
                               onReloadSearch(search.request)
                             }, 200)
@@ -2160,11 +2160,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                             await refreshData()
                           }}
                           disabled={loading}
-                          whileHover={{ scale: loading ? 1 : 1.05 }}
-                          whileTap={{ scale: loading ? 1 : 0.95 }}
-                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
+                          whileHover={{ scale: loading ? 1 : 1.03 }}
+                          whileTap={{ scale: loading ? 1 : 0.97 }}
+                          className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-orange-200 text-[#E85A28] rounded-2xl hover:bg-[#FFF8F3] disabled:opacity-50 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
                         >
-                          <span>🔄</span>
                           <span>{t('saved.reload')}</span>
                         </motion.button>
                         <motion.button
@@ -2173,17 +2172,13 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                             const isConfigOpen = showAutoCheckConfig[search.id] || false
                             
                             if (isEnabled) {
-                              // Désactiver l'auto-check directement
                               stopAutoCheck(search.id)
                               await updateSearchAutoCheck(search.id, false)
                               await refreshData()
                             } else if (isConfigOpen) {
-                              // Si la configuration est déjà ouverte, la fermer
                               setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
                             } else {
-                              // Ouvrir la configuration pour choisir l'intervalle avant d'activer
                               setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: true }))
-                              // Initialiser l'intervalle si pas encore défini (minimum 15 minutes)
                               if (!intervalSeconds[search.id]) {
                                 setIntervalSeconds(prev => ({ 
                                   ...prev, 
@@ -2194,26 +2189,23 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                               }
                             }
                           }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95 ${
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          className={`flex-1 sm:flex-none px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold shadow-sm flex items-center justify-center gap-1.5 min-h-[44px] ${
                             search.autoCheckEnabled 
-                              ? 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white' 
-                              : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white'
+                              ? 'bg-slate-900 text-white hover:bg-slate-800' 
+                              : 'bg-[#FFF3EC] text-[#E85A28] hover:bg-[#FFE8DC]'
                           }`}
                         >
-                          <span>{search.autoCheckEnabled ? '⏸️' : '🔔'}</span>
-                          <span className="hidden sm:inline">Auto-vérif</span>
-                          <span className="sm:hidden">Auto</span>
+                          <span>{search.autoCheckEnabled ? 'Pause' : 'Auto-vérif'}</span>
                         </motion.button>
                         <motion.button
                           onClick={() => toggleSearchExpanded(search.id)}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 text-slate-700 rounded-2xl hover:bg-slate-200 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
                         >
-                          <span>{isExpanded ? '▼' : '▶'}</span>
-                          <span>Détails</span>
+                          <span>{isExpanded ? 'Masquer' : 'Détails'}</span>
                         </motion.button>
                         <motion.button
                           onClick={() => {
@@ -2226,14 +2218,13 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           }}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
-                          className="px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-md min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-auto active:scale-95 flex items-center justify-center"
+                          className="px-3.5 py-2.5 bg-white border border-red-200 text-red-600 rounded-2xl hover:bg-red-50 text-xs sm:text-sm font-bold min-h-[44px] min-w-[44px] flex items-center justify-center"
                           title={t('saved.delete')}
                         >
-                          🗑️
+                          ✕
                         </motion.button>
                       </div>
                       
-                      {/* Configuration auto-check affichée directement sous les boutons */}
                       {showAutoCheckConfig[search.id] && !search.autoCheckEnabled && (
                         <motion.div
                           initial={{ opacity: 0, y: -10, height: 0 }}
@@ -2242,22 +2233,21 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           transition={{ duration: 0.3 }}
                           className="w-full mt-3 overflow-hidden"
                         >
-                            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl border-2 border-blue-200 shadow-xl p-5 sm:p-6">
-                              {/* En-tête avec icône */}
-                              <div className="flex items-center gap-3 mb-4 pb-3 border-b-2 border-blue-200">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-                                  <span className="text-xl">🔔</span>
+                            <div className="rounded-2xl border border-orange-200 bg-[#FFF8F3] p-5 sm:p-6">
+                              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-orange-100">
+                                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] flex items-center justify-center shadow-sm text-white font-black">
+                                  ⏱
                                 </div>
                                 <div>
-                                  <h4 className="text-base sm:text-lg font-black text-slate-900">Configuration auto-vérification</h4>
-                                  <p className="text-xs sm:text-sm text-slate-600">Choisissez la fréquence de vérification</p>
+                                  <h4 className="text-base sm:text-lg font-black text-slate-900">Auto-vérification</h4>
+                                  <p className="text-xs sm:text-sm text-slate-600">Choisis la fréquence de surveillance</p>
                                 </div>
                               </div>
 
                               {/* Options prédéfinies */}
                               <div className="mb-5">
                                 <label className="block text-sm font-bold text-slate-700 mb-3">
-                                  ⚡ Options rapides
+                                  Options rapides
                                 </label>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                                   {[
@@ -2277,10 +2267,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                         }))}
                                         whileHover={{ scale: 1.05, y: -2 }}
                                         whileTap={{ scale: 0.95 }}
-                                        className={`px-3 sm:px-4 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
+                                        className={`px-3 sm:px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all duration-200 ${
                                           isSelected
-                                            ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg ring-2 ring-blue-400 ring-offset-2'
-                                            : 'bg-white text-slate-700 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-300 shadow-md hover:shadow-lg'
+                                            ? 'bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white shadow-md shadow-orange-500/25'
+                                            : 'bg-white text-slate-700 hover:bg-[#FFF8F3] border border-orange-100 hover:border-orange-200 shadow-sm'
                                         }`}
                                       >
                                         <div className="flex flex-col items-center gap-1">
@@ -2293,10 +2283,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                 </div>
                               </div>
 
-                              {/* Configuration personnalisée */}
-                              <div className="mb-5 p-4 bg-white/60 rounded-xl border-2 border-slate-200">
+                              <div className="mb-5 p-4 bg-white rounded-2xl border border-orange-100">
                                 <label className="block text-sm font-bold text-slate-700 mb-3">
-                                  ⚙️ Intervalle personnalisé
+                                  Intervalle personnalisé
                                 </label>
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                                   <div className="flex items-center gap-3 flex-1">
@@ -2312,14 +2301,14 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                           [search.id]: Math.max(900, value)
                                         }))
                                       }}
-                                      className="w-28 px-4 py-2.5 border-2 border-slate-300 rounded-xl text-sm font-semibold focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-white shadow-sm"
+                                      className="w-28 px-4 py-2.5 border border-orange-200 rounded-2xl text-sm font-semibold focus:border-[#FF6B35] focus:ring-2 focus:ring-orange-200 bg-white"
                                     />
                                     <span className="text-sm font-medium text-slate-600">
                                       secondes
                                     </span>
                                   </div>
-                                  <div className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">
-                                    Min: 15 minutes
+                                  <div className="px-3 py-1.5 bg-[#FFF3EC] text-[#E85A28] rounded-full text-xs font-bold">
+                                    Min. 15 min
                                   </div>
                                 </div>
                                 {intervalSeconds[search.id] && (
@@ -2330,15 +2319,14 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                 )}
                               </div>
 
-                              {/* Boutons d'action */}
-                              <div className="flex gap-3 justify-end pt-3 border-t-2 border-blue-200">
+                              <div className="flex gap-3 justify-end pt-3 border-t border-orange-100">
                                 <motion.button
                                   onClick={() => {
                                     setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
                                   }}
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 shadow-md transition-colors min-h-[44px]"
+                                  whileHover={{ scale: 1.03 }}
+                                  whileTap={{ scale: 0.97 }}
+                                  className="px-5 py-2.5 rounded-2xl text-sm font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors min-h-[44px]"
                                 >
                                   Annuler
                                 </motion.button>
@@ -2352,14 +2340,11 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                     setShowAutoCheckConfig(prev => ({ ...prev, [search.id]: false }))
                                     await refreshData()
                                   }}
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className="px-6 py-2.5 rounded-xl text-sm font-bold min-h-[44px] active:scale-95 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all"
+                                  whileHover={{ scale: 1.03 }}
+                                  whileTap={{ scale: 0.97 }}
+                                  className="px-6 py-2.5 rounded-2xl text-sm font-bold min-h-[44px] bg-gradient-to-r from-[#FF6B35] to-[#E85A28] text-white shadow-md shadow-orange-500/25"
                                 >
-                                  <span className="flex items-center gap-2">
-                                    <span>▶️</span>
-                                    <span>Activer l'auto-vérification</span>
-                                  </span>
+                                  Activer
                                 </motion.button>
                               </div>
                             </div>
@@ -2374,33 +2359,33 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           exit={{ opacity: 0, height: 0 }}
                           className="mt-4 pt-4 border-t border-slate-200"
                         >
-                          <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                          <div className="bg-[#FFF8F3] rounded-2xl p-4 space-y-3 border border-orange-100">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                               <div>
-                                <span className="font-bold text-slate-700">Dates de départ:</span>
+                                <span className="font-bold text-slate-700">Dates de départ</span>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   {search.request.dates_depart.slice(0, 3).map((d, i) => (
-                                    <span key={i} className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                                    <span key={i} className="px-2.5 py-1 bg-white text-[#E85A28] border border-orange-100 rounded-full text-xs font-semibold">
                                       {formatDateFr(d.date)}
                                     </span>
                                   ))}
                                   {search.request.dates_depart.length > 3 && (
-                                    <span className="px-2 py-1 bg-slate-200 text-slate-600 rounded text-xs">
+                                    <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
                                       +{search.request.dates_depart.length - 3}
                                     </span>
                                   )}
                                 </div>
                               </div>
                               <div>
-                                <span className="font-bold text-slate-700">Dates de retour:</span>
+                                <span className="font-bold text-slate-700">Dates de retour</span>
                                 <div className="mt-1 flex flex-wrap gap-2">
                                   {search.request.dates_retour.slice(0, 3).map((d, i) => (
-                                    <span key={i} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                    <span key={i} className="px-2.5 py-1 bg-white text-slate-700 border border-orange-100 rounded-full text-xs font-semibold">
                                       {formatDateFr(d.date)}
                                     </span>
                                   ))}
                                   {search.request.dates_retour.length > 3 && (
-                                    <span className="px-2 py-1 bg-slate-200 text-slate-600 rounded text-xs">
+                                    <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
                                       +{search.request.dates_retour.length - 3}
                                     </span>
                                   )}
@@ -2415,28 +2400,21 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 )
               })}
             </div>
-          )}
-        </div>
-      </motion.div>
+      )}
       </>
       )}
 
       {variant === 'favorites' && (
       <>
-      {/* Favoris */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-2xl shadow-xl overflow-hidden"
-      >
-        <div className="bg-gradient-to-r from-pink-500 to-rose-600 p-4 sm:p-5 md:p-6">
-          <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            {t('favorites.title')}
-          </h2>
-        </div>
+      <div className="mb-2">
+        <p className="app-kicker mb-1.5">{t('nav.favorites')}</p>
+        <h2 className="app-title">{t('favorites.title')}</h2>
+        <p className="app-subtitle mt-1.5">{t('favorites.subtitle')}</p>
+      </div>
 
-        <div className="px-4 sm:px-6 pt-5 pb-2">
-          <div className="flex p-1.5 rounded-2xl bg-[#FFF3EC] gap-1">
+      <div className="relative">
+        <div className="mb-4">
+          <div className="flex p-1.5 rounded-2xl bg-white/80 border border-orange-100/80 shadow-sm gap-1">
             <button
               type="button"
               onClick={() => setFavoritesKind('flights')}
@@ -2511,13 +2489,18 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
           ) : null}
         </div>
         
-        <div className="p-6 pt-4">
+        <div className="pt-2">
           {favoritesKind === 'deals' ? (
             likedDeals.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="text-6xl mb-4">❤️</div>
-                <p className="text-xl text-gray-500 font-medium">{t('favorites.dealsEmptyTitle')}</p>
-                <p className="text-sm text-gray-400 mt-2">{t('favorites.dealsEmpty')}</p>
+              <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+                <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />
+                <div className="relative">
+                  <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
+                    ♥
+                  </div>
+                  <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">{t('favorites.dealsEmptyTitle')}</p>
+                  <p className="text-sm text-slate-500 max-w-md mx-auto">{t('favorites.dealsEmpty')}</p>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
@@ -2533,13 +2516,19 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
               </div>
             )
           ) : favorites.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="text-6xl mb-4">❤️</div>
-              <p className="text-xl text-gray-500 font-medium">Aucun voyage en favori</p>
-              <p className="text-sm text-gray-400 mt-2">Ajoutez des voyages à vos favoris depuis les résultats de recherche</p>
+            <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+              <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />
+              <div className="relative">
+                <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
+                  ♥
+                </div>
+                <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">Aucun favori</p>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  Ajoute des voyages depuis les résultats de recherche.
+                </p>
+              </div>
             </div>
           ) : (() => {
-            // Filtrer les favoris selon le filtre sélectionné
             const filteredFavorites = favoritesFilter === 'all' 
               ? favorites 
               : favoritesFilter === 'active'
@@ -2548,9 +2537,8 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             
             if (filteredFavorites.length === 0) {
               return (
-                <div className="text-center py-16">
-                  <div className="text-6xl mb-4">{favoritesFilter === 'archived' ? '📦' : '✨'}</div>
-                  <p className="text-xl text-gray-500 font-medium">
+                <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-sm p-8 text-center">
+                  <p className="font-bold text-slate-700">
                     {favoritesFilter === 'archived' 
                       ? 'Aucun voyage archivé' 
                       : 'Aucun voyage actif'}
@@ -2560,24 +2548,23 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             }
             
             return (
-              <div className="grid gap-5">
+              <div className="grid gap-4 sm:gap-5">
                 {filteredFavorites.map((favorite, index) => (
                   <motion.div
                     key={favorite.id}
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`group relative rounded-xl border-2 overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 ${
+                    transition={{ delay: index * 0.04 }}
+                    className={`group relative rounded-[28px] border overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 ${
                       favorite.archived 
-                        ? 'border-slate-300 bg-gradient-to-br from-slate-50 to-slate-100 opacity-80' 
-                        : 'border-pink-200 bg-gradient-to-br from-pink-50 via-rose-50 to-white'
+                        ? 'border-slate-200 bg-slate-50/90 opacity-85' 
+                        : 'border-orange-100/70 bg-white hover:border-orange-200'
                     }`}
                   >
-                    {/* Badge archivé */}
                     {favorite.archived && (
-                      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-10">
-                        <span className="px-2 sm:px-3 py-1 bg-slate-500 text-white text-xs font-bold rounded-full shadow-md">
-                          📦 Archivé
+                      <div className="absolute top-3 right-3 z-10">
+                        <span className="px-2.5 py-1 bg-slate-700 text-white text-[11px] font-bold rounded-full">
+                          Archivé
                         </span>
                       </div>
                     )}
@@ -2618,7 +2605,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                   )}
                                   {/* Prix Total - Mobile */}
                                   <div className="flex flex-col items-end">
-                                    <span className="text-2xl font-black text-pink-600 leading-none">
+                                    <span className="text-2xl font-black text-[#E85A28] leading-none">
                                       {favorite.trip.prix_total.toFixed(0)}€
                                     </span>
                                     <span className="text-xs text-slate-500 font-medium">total</span>
@@ -2644,7 +2631,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                               
                               {/* Desktop: Prix Total - mis en évidence (caché sur mobile) */}
                               <div className="hidden sm:flex items-baseline gap-2 pt-3 border-t border-slate-200">
-                                <span className="text-3xl sm:text-4xl md:text-5xl font-black text-pink-600 leading-none">
+                                <span className="text-3xl sm:text-4xl md:text-5xl font-black text-[#E85A28] leading-none">
                                   {favorite.trip.prix_total.toFixed(0)}€
                                 </span>
                                 <span className="text-sm sm:text-base text-slate-500 font-medium">total</span>
@@ -2686,9 +2673,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                         <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
                           <motion.button
                             onClick={() => handleBookFavorite(favorite)}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            className="flex-1 sm:flex-none px-4 py-2.5 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] text-xs sm:text-sm font-bold shadow-sm shadow-orange-500/20 flex items-center justify-center gap-1.5 min-h-[44px]"
                           >
                             {t('card.book')}
                           </motion.button>
@@ -2697,16 +2684,15 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                               toggleFavoriteArchived(favorite.id)
                               refreshData()
                             }}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold shadow-md flex items-center justify-center gap-1.5 sm:gap-2 min-h-[44px] sm:min-h-[40px] active:scale-95 ${
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px] ${
                               favorite.archived
-                                ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
-                                : 'bg-gradient-to-r from-slate-500 to-slate-600 hover:from-slate-600 hover:to-slate-700 text-white'
+                                ? 'bg-[#FFF3EC] text-[#E85A28] hover:bg-[#FFE8DC]'
+                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                             }`}
                             title={favorite.archived ? 'Désarchiver' : 'Archiver'}
                           >
-                            <span>{favorite.archived ? '📤' : '📦'}</span>
                             <span className="hidden sm:inline">{favorite.archived ? 'Désarchiver' : 'Archiver'}</span>
                             <span className="sm:hidden">{favorite.archived ? 'Désarch.' : 'Archiver'}</span>
                           </motion.button>
@@ -2717,82 +2703,73 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                 refreshData()
                               }
                             }}
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="px-3 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 text-xs sm:text-sm font-semibold shadow-md min-h-[44px] sm:min-h-[40px] min-w-[44px] sm:min-w-auto active:scale-95 flex items-center justify-center"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            className="px-3.5 py-2.5 bg-white border border-red-200 text-red-600 rounded-2xl hover:bg-red-50 text-xs sm:text-sm font-bold min-h-[44px] min-w-[44px] flex items-center justify-center"
                             title={t('saved.delete')}
                           >
-                            🗑️
+                            ✕
                           </motion.button>
                         </div>
                       </div>
 
-                      {/* Détails des vols */}
-                      <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-5 pt-4 sm:pt-5 border-t-2 border-slate-200">
-                        <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          className="bg-white rounded-xl p-3 sm:p-4 border-2 border-green-200 shadow-md"
-                        >
+                      <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-5 pt-4 sm:pt-5 border-t border-orange-100">
+                        <div className="rounded-2xl p-3 sm:p-4 border border-orange-100 bg-[#FFF8F3]">
                           <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <div className="text-xs sm:text-sm font-black text-green-600 flex items-center gap-1.5 sm:gap-2">
-                              <span>✈️</span>
-                              <span>ALLER</span>
+                            <div className="text-xs sm:text-sm font-black text-[#E85A28] tracking-wide">
+                              ALLER
                             </div>
-                            <div className="text-lg sm:text-xl font-black text-green-600">
+                            <div className="text-lg sm:text-xl font-black text-[#E85A28]">
                               {favorite.trip.aller.price.toFixed(0)}€
                             </div>
                           </div>
                           <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                             <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Date:</span>
+                              <span className="font-semibold text-slate-700">Date</span>
                               <span className="text-slate-600">{formatDateFr(favorite.trip.aller.departureTime)}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Heure:</span>
+                              <span className="font-semibold text-slate-700">Heure</span>
                               <span className="text-slate-600">{new Date(favorite.trip.aller.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Vol:</span>
+                              <span className="font-semibold text-slate-700">Vol</span>
                               <span className="text-slate-600 font-mono">{favorite.trip.aller.flightNumber}</span>
                             </div>
-                            <div className="flex justify-between pt-2 border-t border-green-100">
-                              <span className="text-slate-500 text-xs">Trajet:</span>
+                            <div className="flex justify-between pt-2 border-t border-orange-100">
+                              <span className="text-slate-500 text-xs">Trajet</span>
                               <span className="text-slate-700 font-bold">{favorite.trip.aller.origin} → {favorite.trip.aller.destination}</span>
                             </div>
                           </div>
-                        </motion.div>
-                        <motion.div
-                          whileHover={{ scale: 1.02 }}
-                          className="bg-white rounded-xl p-3 sm:p-4 border-2 border-blue-200 shadow-md"
-                        >
+                        </div>
+                        <div className="rounded-2xl p-3 sm:p-4 border border-slate-200 bg-slate-50/80">
                           <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <div className="text-xs sm:text-sm font-black text-blue-600 flex items-center gap-1.5 sm:gap-2">
-                              <span>🔙</span>
-                              <span>RETOUR</span>
+                            <div className="text-xs sm:text-sm font-black text-slate-700 tracking-wide">
+                              RETOUR
                             </div>
-                            <div className="text-lg sm:text-xl font-black text-blue-600">
+                            <div className="text-lg sm:text-xl font-black text-slate-800">
                               {favorite.trip.retour.price.toFixed(0)}€
                             </div>
                           </div>
                           <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                             <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Date:</span>
+                              <span className="font-semibold text-slate-700">Date</span>
                               <span className="text-slate-600">{formatDateFr(favorite.trip.retour.departureTime)}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Heure:</span>
+                              <span className="font-semibold text-slate-700">Heure</span>
                               <span className="text-slate-600">{new Date(favorite.trip.retour.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Vol:</span>
+                              <span className="font-semibold text-slate-700">Vol</span>
                               <span className="text-slate-600 font-mono">{favorite.trip.retour.flightNumber}</span>
                             </div>
-                            <div className="flex justify-between pt-2 border-t border-blue-100">
-                              <span className="text-slate-500 text-xs">Trajet:</span>
+                            <div className="flex justify-between pt-2 border-t border-slate-200">
+                              <span className="text-slate-500 text-xs">Trajet</span>
                               <span className="text-slate-700 font-bold">{favorite.trip.retour.origin} → {favorite.trip.retour.destination}</span>
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -2809,9 +2786,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             onClose={() => setSelectedLikedDeal(null)}
           />
         ) : null}
-      </motion.div>
+      </div>
       </>
       )}
+      </div>
 
       {/* Lightbox pour afficher les nouveaux résultats (Alertes) */}
       {variant === 'alerts' && showLightbox && lightboxResults && (
@@ -2832,11 +2810,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             className="bg-white rounded-3xl border border-line shadow-lift max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 bg-gradient-to-r from-emerald-500 to-teal-600 p-6 flex items-center justify-between z-10">
+            <div className="sticky top-0 bg-gradient-to-r from-[#FF6B35] to-[#E85A28] p-6 flex items-center justify-between z-10">
               <div>
-                <h2 className="text-3xl font-black text-white flex items-center gap-3">
-                  <span>🆕</span>
-                  <span>Nouveaux résultats</span>
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  Nouveaux résultats
                 </h2>
                 <p className="text-white/90 mt-2 font-medium">
                   {lightboxResults.searchName}
@@ -2855,9 +2832,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   setShowLightbox(false)
                   setLightboxResults(null)
                 }}
-                whileHover={{ scale: 1.1, rotate: 90 }}
-                whileTap={{ scale: 0.9 }}
-                className="text-white hover:text-white/80 text-3xl font-bold w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="text-white text-2xl font-bold w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-white/20 transition-colors"
               >
                 ✕
               </motion.button>
@@ -2882,7 +2859,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   ))}
               </div>
             </div>
-            <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 p-4 flex justify-end gap-3">
+            <div className="sticky bottom-0 bg-white border-t border-orange-100 p-4 flex justify-end gap-3">
               <motion.button
                 onClick={() => {
                   clearNewResults(lightboxResults.searchId)
@@ -2890,9 +2867,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   setLightboxResults(null)
                   refreshData()
                 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="px-6 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-xl hover:from-slate-700 hover:to-slate-800 font-semibold shadow-md"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="px-5 py-3 bg-slate-100 text-slate-700 rounded-2xl hover:bg-slate-200 font-bold"
               >
                 Marquer comme lus
               </motion.button>
@@ -2901,9 +2878,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   setShowLightbox(false)
                   setLightboxResults(null)
                 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 font-semibold shadow-md"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="px-6 py-3 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] font-bold shadow-sm shadow-orange-500/20"
               >
                 Fermer
               </motion.button>
@@ -2958,38 +2935,38 @@ function TripCard({ trip, onSaveFavorite, isFavorite: isFav }: {
   }
 
   return (
-    <div className="border-2 border-indigo-200 rounded-lg p-5 hover:shadow-md 
-                   transition-shadow bg-gradient-to-r from-white to-indigo-50">
+    <div className="rounded-[28px] border border-orange-100/70 p-5 hover:shadow-xl 
+                   transition-shadow bg-white shadow-md">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="text-xl font-bold text-gray-800">
+          <h3 className="text-xl font-black text-slate-900 tracking-tight">
             {trip.destination_code} - {trip.aller.destinationFull}
           </h3>
         </div>
         <div className="text-right flex items-center gap-3">
           <div>
-            <div className="text-2xl font-bold text-indigo-600">
+            <div className="text-2xl font-black text-[#E85A28]">
               {trip.prix_total.toFixed(2)}€
             </div>
-            <div className="text-xs text-gray-500">total</div>
+            <div className="text-xs text-slate-500">total</div>
           </div>
           <button
             onClick={onSaveFavorite}
             className={`text-2xl transition-transform hover:scale-110 ${
-              isFav ? 'text-red-500' : 'text-gray-300 hover:text-red-400'
+              isFav ? 'text-[#E85A28]' : 'text-gray-300 hover:text-[#FF6B35]'
             }`}
             title={isFav ? 'Déjà en favoris' : 'Ajouter aux favoris'}
           >
-            {isFav ? '❤️' : '🤍'}
+            {isFav ? '♥' : '♡'}
           </button>
         </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+        <div className="bg-[#FFF8F3] rounded-2xl p-4 border border-orange-100">
           <div className="flex items-center mb-2">
-            <span className="text-green-600 font-semibold mr-2">✈️ ALLER</span>
-            <span className="text-sm text-gray-600">{trip.aller.price.toFixed(2)}€</span>
+            <span className="text-[#E85A28] font-bold mr-2">ALLER</span>
+            <span className="text-sm text-slate-600">{trip.aller.price.toFixed(2)}€</span>
           </div>
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Date:</span> {formatDate(trip.aller.departureTime)}</div>
@@ -2999,16 +2976,16 @@ function TripCard({ trip, onSaveFavorite, isFavorite: isFav }: {
           </div>
         </div>
 
-        <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
           <div className="flex items-center mb-2">
-            <span className="text-blue-600 font-semibold mr-2">🔙 RETOUR</span>
-            <span className="text-sm text-gray-600">{trip.retour.price.toFixed(2)}€</span>
+            <span className="text-slate-700 font-bold mr-2">RETOUR</span>
+            <span className="text-sm text-slate-600">{trip.retour.price.toFixed(2)}€</span>
           </div>
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Date:</span> {formatDate(trip.retour.departureTime)}</div>
             <div><span className="font-semibold">Heure:</span> {formatTime(trip.retour.departureTime)}</div>
             <div><span className="font-semibold">Vol:</span> {trip.retour.flightNumber}</div>
-            <div className="text-xs text-gray-600">{trip.retour.origin} → {trip.retour.destination}</div>
+            <div className="text-xs text-slate-600">{trip.retour.origin} → {trip.retour.destination}</div>
           </div>
         </div>
       </div>

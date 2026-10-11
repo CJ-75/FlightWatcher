@@ -17,8 +17,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.favorites': 'Favoris',
 
     'alerts.title': 'Alertes',
-    'alerts.empty': 'Aucune alerte configurée',
-    'alerts.emptyHint': 'Sauvegarde une recherche puis active l’auto-vérif pour être notifié des nouveaux prix.',
+    'alerts.subtitle': 'Surveille tes recherches et découvre les nouveaux prix.',
+    'alerts.empty': 'Aucune alerte pour l’instant',
+    'alerts.emptyHint': 'Sauvegarde une recherche, puis active l’auto-vérif pour être notifié.',
+    'alerts.count': '{count} alerte{s}',
     'alerts.guest.title': 'Des alertes qui veillent pour toi',
     'alerts.guest.lead': 'Relance automatiquement tes recherches et découvre les nouveaux weekends dès qu’ils apparaissent.',
     'alerts.guest.step1': 'Sauvegarde une recherche',
@@ -218,7 +220,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.redirecting': 'Redirection en cours...',
     
     // Favorites
-    'favorites.title': 'Mes Favoris',
+    'favorites.title': 'Favoris',
+    'favorites.subtitle': 'Tes coups de cœur, vols et deals, au même endroit.',
     'favorites.favoritesTitle': 'Voyages favoris',
     'favorites.empty': 'Aucun favori pour le moment',
     'favorites.emptyBody': 'Ajoute un voyage ou like un deal.',
@@ -296,8 +299,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.favorites': 'Favorites',
 
     'alerts.title': 'Alerts',
-    'alerts.empty': 'No alerts set up yet',
-    'alerts.emptyHint': 'Save a search, then turn on auto-check to get notified about new prices.',
+    'alerts.subtitle': 'Watch your searches and catch new prices as they appear.',
+    'alerts.empty': 'No alerts yet',
+    'alerts.emptyHint': 'Save a search, then turn on auto-check to get notified.',
+    'alerts.count': '{count} alert{s}',
     'alerts.guest.title': 'Alerts that watch for you',
     'alerts.guest.lead': 'Automatically re-run your searches and spot new weekends as soon as they appear.',
     'alerts.guest.step1': 'Save a search',
@@ -497,7 +502,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.redirecting': 'Redirecting...',
     
     // Favorites
-    'favorites.title': 'My Favorites',
+    'favorites.title': 'Favorites',
+    'favorites.subtitle': 'Your saved flights and deals, in one place.',
     'favorites.favoritesTitle': 'Favorite trips',
     'favorites.empty': 'No favorites yet',
     'favorites.emptyBody': 'Save a trip or like a deal.',
