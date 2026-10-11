@@ -8,7 +8,7 @@ import {
   updateSearchAutoCheck, updateSearchLastCheckResults, updateSearchPassengers,
   getActiveAutoChecks,
   setDevMode, getDevMode, saveNewResults, getNewResultsForSearch, clearNewResults,
-  toggleFavoriteArchived, getArchivedFavorites, getActiveFavorites,
+  toggleFavoriteArchived,
   isFavorite
 } from './utils/storage'
 import type { NewResult } from './utils/storage'
@@ -1690,29 +1690,38 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
   const [expandedSearches, setExpandedSearches] = useState<Set<string>>(new Set())
 
-  const refreshData = async () => {
+  const refreshData = async (force = false, opts?: { resetFilter?: boolean }) => {
     try {
       if (variant === 'alerts') {
-        const searches = await getSavedSearches()
+        const searches = await getSavedSearches(force)
         setSavedSearches(searches)
         return
       }
-      const favs = await getFavorites()
-      let deals: LikedDeal[] = []
-      try {
-        deals = await getApiClient().getLikedDeals()
-      } catch {
-        deals = []
-      }
+      // Favoris: toujours tout charger d’un coup (vols + deals)
+      const [favs, deals] = await Promise.all([
+        getFavorites(force),
+        getApiClient()
+          .getLikedDeals()
+          .catch(() => [] as LikedDeal[]),
+      ])
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
+      if (opts?.resetFilter) setFavoritesFilter('all')
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
       try {
         if (variant === 'alerts') {
           setSavedSearches(await getSavedSearches(true))
         } else {
-          setFavorites(await getFavorites(true))
+          const [favs, deals] = await Promise.all([
+            getFavorites(true),
+            getApiClient()
+              .getLikedDeals()
+              .catch(() => [] as LikedDeal[]),
+          ])
+          setFavorites(favs)
+          setLikedDeals(Array.isArray(deals) ? deals : [])
+          if (opts?.resetFilter) setFavoritesFilter('all')
         }
       } catch (fallbackError) {
         console.error('❌ Erreur fallback refreshData:', fallbackError)
@@ -1763,15 +1772,18 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
     }
   }, [])
 
-  // Charger les données au montage - s'exécute toujours même si le rendu échoue
+  // Charger les données au montage / à chaque ouverture d’onglet
   useEffect(() => {
     if (!userId) return
-    // Utiliser un timeout pour s'assurer que le composant est monté
     const timer = setTimeout(() => {
-      refreshData()
+      // Favoris: force refresh pour tout avoir tout de suite (pas de cache partiel)
+      void refreshData(variant === 'favorites', {
+        resetFilter: variant === 'favorites',
+      })
     }, 0)
     return () => clearTimeout(timer)
-  }, [userId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, variant])
 
   // Fonction pour afficher une notification Toast dans le frontend
   const showNotification = (_title: string, body: string, _searchName: string, _newResults: TripResponse[]) => {
@@ -2544,11 +2556,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             <div className="flex gap-2 flex-wrap mt-4">
               <button
                 type="button"
-                onClick={async () => {
-                  setFavoritesFilter('all')
-                  const all = await getFavorites()
-                  setFavorites(all)
-                }}
+                onClick={() => setFavoritesFilter('all')}
                 className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
                   favoritesFilter === 'all'
                     ? 'bg-primary-500 text-white'
@@ -2559,11 +2567,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  setFavoritesFilter('active')
-                  const active = await getActiveFavorites()
-                  setFavorites(active)
-                }}
+                onClick={() => setFavoritesFilter('active')}
                 className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
                   favoritesFilter === 'active'
                     ? 'bg-primary-500 text-white'
@@ -2574,11 +2578,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  setFavoritesFilter('archived')
-                  const archived = await getArchivedFavorites()
-                  setFavorites(archived)
-                }}
+                onClick={() => setFavoritesFilter('archived')}
                 className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
                   favoritesFilter === 'archived'
                     ? 'bg-primary-500 text-white'
