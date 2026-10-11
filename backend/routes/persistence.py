@@ -210,6 +210,63 @@ async def save_favorite_supabase(favorite: SavedFavoriteRequest, request: Reques
         raise HTTPException(status_code=500, detail=f"Erreur Supabase: {str(e)}")
 
 
+def _favorite_trip_date(item: dict):
+    """Return date of trip (return preferred) for lifecycle rules."""
+    from datetime import date as date_cls
+
+    raw = item.get("return_date") or item.get("outbound_date")
+    if not raw and item.get("return_flight"):
+        rt = item["return_flight"]
+        if isinstance(rt, dict):
+            raw = (rt.get("departureTime") or "")[:10]
+    if not raw and item.get("outbound_flight"):
+        ob = item["outbound_flight"]
+        if isinstance(ob, dict):
+            raw = (ob.get("departureTime") or "")[:10]
+    if not raw:
+        return None
+    try:
+        return date_cls.fromisoformat(str(raw)[:10])
+    except Exception:
+        return None
+
+
+def _apply_favorites_lifecycle(supabase, user_id: str, rows: list) -> list:
+    """Archive after trip+30d, delete after trip+60d. Returns surviving rows."""
+    from datetime import date as date_cls
+
+    today = date_cls.today()
+    kept = []
+    for item in rows:
+        trip_d = _favorite_trip_date(item)
+        if trip_d is None:
+            kept.append(item)
+            continue
+        age = (today - trip_d).days
+        fav_id = item.get("id")
+        if age >= 60:
+            try:
+                supabase.table("favorites").delete().eq("id", fav_id).eq(
+                    "user_id", user_id
+                ).execute()
+                print(f"🧹 Favorite deleted (J+60): {fav_id}")
+            except Exception as e:
+                print(f"⚠️ delete favorite lifecycle: {e}")
+                kept.append(item)
+            continue
+        if age >= 30 and not item.get("is_archived"):
+            try:
+                supabase.table("favorites").update({"is_archived": True}).eq(
+                    "id", fav_id
+                ).eq("user_id", user_id).execute()
+                item = {**item, "is_archived": True}
+                print(f"📦 Favorite archived (J+30): {fav_id}")
+            except Exception as e:
+                print(f"⚠️ archive favorite lifecycle: {e}")
+        kept.append(item)
+    return kept
+
+
 @router.get("/api/supabase/favorites", response_model=List[SavedFavoriteResponse])
 @optional_auth
 async def get_favorites_supabase(request: Request):
@@ -229,10 +286,12 @@ async def get_favorites_supabase(request: Request):
             .order("created_at", desc=False)\
             .execute()
 
-        result.data.reverse()
+        rows = list(result.data or [])
+        rows.reverse()
+        rows = _apply_favorites_lifecycle(supabase, user_id, rows)
 
         favorites = []
-        for item in result.data:
+        for item in rows:
             trip = TripResponse(
                 aller=FlightResponse(**item["outbound_flight"]),
                 retour=FlightResponse(**item["return_flight"]),
@@ -247,6 +306,7 @@ async def get_favorites_supabase(request: Request):
                 search_request=search_request,
                 created_at=item["created_at"],
                 is_still_valid=item.get("is_available"),
+                archived=bool(item.get("is_archived")),
             ))
 
         return favorites

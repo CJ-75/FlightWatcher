@@ -103,6 +103,7 @@ class SavedFavoriteResponse(BaseModel):
     search_request: ScanRequest
     created_at: str
     is_still_valid: Optional[bool] = None
+    archived: Optional[bool] = False
 
 
 class SearchEventRequest(BaseModel):

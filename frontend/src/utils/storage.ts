@@ -5,6 +5,88 @@ import { getFromCache, setCache, invalidateCache } from './cache'
 
 export type { SavedSearch, SavedFavorite }
 
+/** Days after trip date → auto-archive / hard-delete */
+const FAVORITE_ARCHIVE_AFTER_DAYS = 30
+const FAVORITE_DELETE_AFTER_DAYS = 60
+
+function favoriteTripDate(fav: SavedFavorite): Date | null {
+  const raw =
+    fav.trip?.retour?.departureTime ||
+    fav.trip?.aller?.departureTime ||
+    null
+  if (!raw) return null
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return null
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function daysSinceFavoriteTrip(fav: SavedFavorite, now = new Date()): number | null {
+  const tripDate = favoriteTripDate(fav)
+  if (!tripDate) return null
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  return Math.floor((today.getTime() - tripDate.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+/**
+ * Archive favorites older than 30 days past trip date; delete after 60 days.
+ * Persists changes to Supabase / localStorage when needed.
+ */
+async function applyFavoritesLifecycle(
+  favorites: SavedFavorite[],
+  opts?: { userId?: string; supabase?: any },
+): Promise<SavedFavorite[]> {
+  const toArchive: string[] = []
+  const toDelete: string[] = []
+
+  for (const fav of favorites) {
+    const age = daysSinceFavoriteTrip(fav)
+    if (age === null) continue
+    if (age >= FAVORITE_DELETE_AFTER_DAYS) {
+      toDelete.push(fav.id)
+    } else if (age >= FAVORITE_ARCHIVE_AFTER_DAYS && !fav.archived) {
+      toArchive.push(fav.id)
+    }
+  }
+
+  if (toArchive.length === 0 && toDelete.length === 0) {
+    return favorites
+  }
+
+  const { userId, supabase } = opts || {}
+  if (supabase && userId) {
+    await Promise.all([
+      ...toDelete.map((id) =>
+        supabase.from('favorites').delete().eq('id', id).eq('user_id', userId),
+      ),
+      ...toArchive.map((id) =>
+        supabase
+          .from('favorites')
+          .update({ is_archived: true })
+          .eq('id', id)
+          .eq('user_id', userId),
+      ),
+    ])
+  } else {
+    // localStorage path handled by caller via returned list
+  }
+
+  const deleteSet = new Set(toDelete)
+  const archiveSet = new Set(toArchive)
+  const next = favorites
+    .filter((f) => !deleteSet.has(f.id))
+    .map((f) => (archiveSet.has(f.id) ? { ...f, archived: true } : f))
+
+  if (toDelete.length || toArchive.length) {
+    console.log('🧹 Favoris lifecycle:', {
+      archived: toArchive.length,
+      deleted: toDelete.length,
+    })
+  }
+  return next
+}
+
 export interface NewResult {
   searchId: string
   searchName: string
@@ -751,7 +833,12 @@ export const getFavorites = async (forceRefresh: boolean = false): Promise<Saved
   // Si pas d'utilisateur, fallback localStorage classique
   if (!user) {
     const data = localStorage.getItem(STORAGE_KEYS.FAVORITES)
-    return data ? JSON.parse(data) : []
+    const local = data ? (JSON.parse(data) as SavedFavorite[]) : []
+    const cleaned = await applyFavoritesLifecycle(local)
+    if (cleaned.length !== local.length || cleaned.some((f, i) => f.archived !== local[i]?.archived)) {
+      localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(cleaned))
+    }
+    return cleaned
   }
   
   // 1. Vérifier le cache si pas de refresh forcé
@@ -759,7 +846,14 @@ export const getFavorites = async (forceRefresh: boolean = false): Promise<Saved
     const cachedData = getFromCache<SavedFavorite[]>(user.id, 'favorites')
     if (cachedData !== null) {
       console.log('✅ Données récupérées depuis le cache:', cachedData.length, 'favoris');
-      return cachedData
+      const cleaned = await applyFavoritesLifecycle(cachedData, {
+        userId: user.id,
+        supabase: supabase || undefined,
+      })
+      if (cleaned !== cachedData) {
+        setCache(user.id, 'favorites', cleaned, true)
+      }
+      return cleaned
     }
   }
   
@@ -780,13 +874,15 @@ export const getFavorites = async (forceRefresh: boolean = false): Promise<Saved
       
       console.log('✅ Données récupérées depuis Supabase:', { count: data?.length || 0 });
       
-      // Mapper les données
       const mappedFavorites = (data || []).map(mapSupabaseFavoriteToSavedFavorite)
+      const cleaned = await applyFavoritesLifecycle(mappedFavorites, {
+        userId: user.id,
+        supabase,
+      })
       
-      // Mettre à jour le cache avec les données Supabase
-      setCache(user.id, 'favorites', mappedFavorites, true)
+      setCache(user.id, 'favorites', cleaned, true)
       
-      return mappedFavorites
+      return cleaned
     } catch (error) {
       console.error('Erreur récupération Supabase, fallback cache/localStorage:', error)
       // En cas d'erreur, essayer le cache (même expiré) ou localStorage
@@ -801,12 +897,13 @@ export const getFavorites = async (forceRefresh: boolean = false): Promise<Saved
   // 3. Fallback localStorage classique (pour compatibilité)
   const data = localStorage.getItem(STORAGE_KEYS.FAVORITES)
   if (data) {
-    const favorites = JSON.parse(data)
-    // Mettre en cache pour la prochaine fois
+    const favorites = JSON.parse(data) as SavedFavorite[]
+    const cleaned = await applyFavoritesLifecycle(favorites)
+    localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(cleaned))
     if (user) {
-      setCache(user.id, 'favorites', favorites, false)
+      setCache(user.id, 'favorites', cleaned, false)
     }
-    return favorites
+    return cleaned
   }
   
   return []
