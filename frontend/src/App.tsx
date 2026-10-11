@@ -1688,7 +1688,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [favoritesFilter, setFavoritesFilter] = useState<'all' | 'active' | 'archived'>('all')
   const [favoritesKind, setFavoritesKind] = useState<'flights' | 'deals'>('flights')
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
-  const [expandedSearches, setExpandedSearches] = useState<Set<string>>(new Set())
 
   const refreshData = async (force = false, opts?: { resetFilter?: boolean }) => {
     try {
@@ -2034,18 +2033,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
     openLightbox(searchId)
   }
 
-  const toggleSearchExpanded = (searchId: string) => {
-    setExpandedSearches(prev => {
-      const next = new Set(prev)
-      if (next.has(searchId)) {
-        next.delete(searchId)
-      } else {
-        next.add(searchId)
-      }
-      return next
-    })
-  }
-
   if (!authReady) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-500">
@@ -2142,8 +2129,8 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       ) : (
             <div className="grid gap-4 sm:gap-5">
               {savedSearches.map((search, index) => {
-                const isExpanded = expandedSearches.has(search.id)
                 const newResultsCount = getNewResultsCount(search.id)
+                const destCodes = (search.request.destinations_incluses || []).filter(Boolean)
                 
                 return (
                   <motion.div
@@ -2166,97 +2153,116 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                       </div>
                     )}
 
-                    <div className="p-4 sm:p-5 md:p-6">
-                      <div className="flex flex-col sm:flex-row items-start justify-between mb-3 sm:mb-4 gap-3 sm:gap-4">
-                        <div className="flex-1 w-full sm:w-auto sm:pr-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                    <div className="p-4 sm:p-5 md:p-6 space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                             <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">{search.name}</h3>
                             {search.autoCheckEnabled && (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#FFF3EC] text-[#E85A28] rounded-full text-xs font-bold self-start sm:self-auto">
                                 <span className="w-1.5 h-1.5 rounded-full bg-[#FF6B35] animate-pulse" />
-                                Auto-vérif
+                                Auto-vérif · {Math.floor((search.autoCheckIntervalSeconds || 900) / 60)} min
                               </span>
                             )}
                           </div>
-                          
-                          {/* Infos principales */}
-                          <div className="flex flex-wrap gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm mb-2 sm:mb-3">
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-primary-500 font-bold">✈️</span>
-                              <span className="text-slate-700 font-semibold">{search.request.aeroport_depart || 'BVA'}</span>
+
+                          <div className="flex flex-wrap gap-2 text-xs sm:text-sm">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF8F3] border border-orange-100 px-2.5 py-1 font-semibold text-slate-700">
+                              {search.request.aeroport_depart || 'BVA'}
+                              {destCodes.length > 0 ? ` → ${destCodes.slice(0, 3).join(' · ')}${destCodes.length > 3 ? ` +${destCodes.length - 3}` : ''}` : ' · inspire'}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF8F3] border border-orange-100 px-2.5 py-1 font-bold text-slate-800">
+                              {search.request.budget_max || 100}€/pers
+                            </span>
+                          </div>
+
+                          <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-3 py-3 space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-primary-700 mb-1.5">Départ</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {search.request.dates_depart.slice(0, 4).map((d, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-white text-[#E85A28] border border-orange-100 rounded-full text-xs font-semibold">
+                                      {formatDateFr(d.date)}
+                                    </span>
+                                  ))}
+                                  {search.request.dates_depart.length > 4 && (
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
+                                      +{search.request.dates_depart.length - 4}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Retour</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {search.request.dates_retour.slice(0, 4).map((d, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-white text-slate-700 border border-orange-100 rounded-full text-xs font-semibold">
+                                      {formatDateFr(d.date)}
+                                    </span>
+                                  ))}
+                                  {search.request.dates_retour.length > 4 && (
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
+                                      +{search.request.dates_retour.length - 4}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-[#E85A28] font-bold">📅</span>
-                              <span className="text-slate-700">{search.request.dates_depart.length} départ</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-slate-500 font-bold">↩</span>
-                              <span className="text-slate-700">{search.request.dates_retour.length} retour</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-[#E85A28] font-bold">€</span>
-                              <span className="text-slate-700 font-bold">{search.request.budget_max || 100}€</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 sm:gap-2">
-                              <span className="text-slate-500 font-bold">👤</span>
-                              <span className="text-slate-700 font-semibold">
-                                {search.request.passengers && search.request.passengers > 0
-                                  ? search.request.passengers
-                                  : 1}{' '}
-                                voy.
-                              </span>
+
+                            <div className="max-w-xs">
+                              <PassengerStepper
+                                compact
+                                value={
+                                  search.request.passengers && search.request.passengers > 0
+                                    ? search.request.passengers
+                                    : 1
+                                }
+                                onChange={(n) => {
+                                  setSavedSearches((prev) =>
+                                    prev.map((s) =>
+                                      s.id === search.id
+                                        ? { ...s, request: { ...s.request, passengers: n } }
+                                        : s,
+                                    ),
+                                  )
+                                  void updateSearchPassengers(search.id, n).catch(() => {
+                                    void refreshData()
+                                  })
+                                }}
+                              />
                             </div>
                           </div>
 
-                          <div className="mb-3 max-w-xs rounded-2xl border border-orange-100 bg-[#FFF8F3] px-3 py-2">
-                            <PassengerStepper
-                              compact
-                              value={
-                                search.request.passengers && search.request.passengers > 0
-                                  ? search.request.passengers
-                                  : 1
-                              }
-                              onChange={(n) => {
-                                setSavedSearches((prev) =>
-                                  prev.map((s) =>
-                                    s.id === search.id
-                                      ? { ...s, request: { ...s.request, passengers: n } }
-                                      : s,
-                                  ),
-                                )
-                                void updateSearchPassengers(search.id, n).catch(() => {
-                                  void refreshData()
-                                })
-                              }}
-                            />
-                          </div>
-
-                          {/* Métadonnées */}
                           <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-slate-500">
                             <span>Créé le {new Date(search.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/ \./g, '.')}</span>
-                            {search.lastUsed && (
-                              <span className="flex items-center gap-1">
-                                <span>•</span>
-                                <span>Utilisé le {new Date(search.lastUsed).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }).replace(/ \./g, '.')}</span>
-                              </span>
-                            )}
                             {search.lastCheckedAt && (
                               <span className="flex items-center gap-1 text-blue-600 font-semibold">
                                 <span>•</span>
-                                <span>✓ Vérifié: {new Date(search.lastCheckedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/ \./g, '.')}</span>
-                              </span>
-                            )}
-                            {search.autoCheckEnabled && (
-                              <span className="flex items-center gap-1 text-green-600 font-semibold">
-                                <span>•</span>
-                                <span>Toutes les {Math.floor((search.autoCheckIntervalSeconds || 900) / 60)} min</span>
+                                <span>Vérifié {new Date(search.lastCheckedAt).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/ \./g, '.')}</span>
                               </span>
                             )}
                           </div>
                         </div>
+
+                        <motion.button
+                          onClick={() => {
+                            if (confirm(t('saved.delete') + ' ?')) {
+                              stopAutoCheck(search.id)
+                              deleteSearch(search.id)
+                              refreshData()
+                            }
+                          }}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="shrink-0 px-3 py-2 bg-white border border-red-200 text-red-600 rounded-2xl hover:bg-red-50 text-xs font-bold min-h-[40px] min-w-[40px] flex items-center justify-center"
+                          title={t('saved.delete')}
+                        >
+                          ✕
+                        </motion.button>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 mb-3">
+                      <div className="flex flex-wrap gap-2">
                         <motion.button
                           onClick={async () => {
                             await onLoadSearch(search)
@@ -2307,35 +2313,12 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           <span>{search.autoCheckEnabled ? 'Pause' : 'Auto-vérif'}</span>
                         </motion.button>
                         <motion.button
-                          onClick={() => toggleSearchExpanded(search.id)}
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 text-slate-700 rounded-2xl hover:bg-slate-200 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
-                        >
-                          <span>{isExpanded ? 'Masquer' : 'Détails'}</span>
-                        </motion.button>
-                        <motion.button
                           onClick={() => onLoadSearch(search, { editOnly: true })}
                           whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.97 }}
                           className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-orange-200 text-[#E85A28] rounded-2xl hover:bg-[#FFF8F3] text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px]"
                         >
                           <span>{t('saved.load')}</span>
-                        </motion.button>
-                        <motion.button
-                          onClick={() => {
-                            if (confirm(t('saved.delete') + ' ?')) {
-                              stopAutoCheck(search.id)
-                              deleteSearch(search.id)
-                              refreshData()
-                            }
-                          }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="px-3.5 py-2.5 bg-white border border-red-200 text-red-600 rounded-2xl hover:bg-red-50 text-xs sm:text-sm font-bold min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          title={t('saved.delete')}
-                        >
-                          ✕
                         </motion.button>
                       </div>
                       
@@ -2345,7 +2328,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                           animate={{ opacity: 1, y: 0, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
                           transition={{ duration: 0.3 }}
-                          className="w-full mt-3 overflow-hidden"
+                          className="w-full overflow-hidden"
                         >
                             <div className="rounded-2xl border border-orange-200 bg-[#FFF8F3] p-5 sm:p-6">
                               <div className="flex items-center gap-3 mb-4 pb-3 border-b border-orange-100">
@@ -2358,7 +2341,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                 </div>
                               </div>
 
-                              {/* Options prédéfinies */}
                               <div className="mb-5">
                                 <label className="block text-sm font-bold text-slate-700 mb-3">
                                   Options rapides
@@ -2464,51 +2446,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                             </div>
                           </motion.div>
                         )}
-
-                      {/* Section détails expandable */}
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-4 pt-4 border-t border-slate-200"
-                        >
-                          <div className="bg-[#FFF8F3] rounded-2xl p-4 space-y-3 border border-orange-100">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <span className="font-bold text-slate-700">Dates de départ</span>
-                                <div className="mt-1 flex flex-wrap gap-2">
-                                  {search.request.dates_depart.slice(0, 3).map((d, i) => (
-                                    <span key={i} className="px-2.5 py-1 bg-white text-[#E85A28] border border-orange-100 rounded-full text-xs font-semibold">
-                                      {formatDateFr(d.date)}
-                                    </span>
-                                  ))}
-                                  {search.request.dates_depart.length > 3 && (
-                                    <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
-                                      +{search.request.dates_depart.length - 3}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div>
-                                <span className="font-bold text-slate-700">Dates de retour</span>
-                                <div className="mt-1 flex flex-wrap gap-2">
-                                  {search.request.dates_retour.slice(0, 3).map((d, i) => (
-                                    <span key={i} className="px-2.5 py-1 bg-white text-slate-700 border border-orange-100 rounded-full text-xs font-semibold">
-                                      {formatDateFr(d.date)}
-                                    </span>
-                                  ))}
-                                  {search.request.dates_retour.length > 3 && (
-                                    <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-semibold">
-                                      +{search.request.dates_retour.length - 3}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
                     </div>
                   </motion.div>
                 )
