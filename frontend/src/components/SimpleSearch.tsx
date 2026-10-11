@@ -48,7 +48,6 @@ interface SimpleSearchProps {
   selectedAirport: string;
   onAirportChange: (code: string) => void;
   AirportAutocomplete: React.ComponentType<{ value: string; onChange: (code: string) => void }>;
-  // Advanced options
   flexibleDates: { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] };
   onFlexibleDatesChange: (dates: { dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }) => void;
   excludedDestinations: string[];
@@ -59,11 +58,12 @@ interface SimpleSearchProps {
   limiteAllers: number;
   onLimiteAllersChange: (value: number) => void;
   formatDateFr: (dateStr: string) => string;
-  budget?: number; // Budget initial depuis l'extérieur (pour charger une recherche sauvegardée)
-  onBudgetChange?: (budget: number) => void; // Callback pour mettre à jour le budget dans le parent
-  onSearchEventId?: (id: string) => void; // Callback pour stocker l'ID de l'événement de recherche
-  /** Passagers à restaurer quand on charge / modifie une alerte */
+  budget?: number;
+  onBudgetChange?: (budget: number) => void;
+  onSearchEventId?: (id: string) => void;
   initialPassengers?: number;
+  /** Incrémenté à chaque Modifier / Relancer pour forcer l’hydratation dates */
+  searchLoadToken?: number;
 }
 
 const springConfig = {
@@ -95,19 +95,20 @@ export function SimpleSearch({
   budget: externalBudget,
   onBudgetChange,
   initialPassengers = 1,
+  searchLoadToken = 0,
 }: SimpleSearchProps) {
   const { t } = useI18n();
-  const hasLoadedDatesOnMount =
+  const hasParentDates =
     flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
+
   const [budget, setBudget] = useState(externalBudget || 100);
   const [passengers, setPassengers] = useState(
     initialPassengers > 0 ? initialPassengers : 1,
   );
   const [datePreset, setDatePreset] = useState<DatePreset | null>(
-    hasLoadedDatesOnMount ? 'flexible' : null,
+    hasParentDates ? 'flexible' : null,
   );
   const [isSearching, setIsSearching] = useState(false);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(hasLoadedDatesOnMount);
   const [presetDates, setPresetDates] = useState<{ dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }>({
     dates_depart: flexibleDates.dates_depart,
     dates_retour: flexibleDates.dates_retour,
@@ -118,9 +119,36 @@ export function SimpleSearch({
   const [showEmpty, setShowEmpty] = useState(false);
   const airportSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const previousDatesRef = useRef<string>('');
+  const appliedLoadTokenRef = useRef(0);
 
-  // Synchroniser le budget externe avec l'état interne
+  // Appliquer l’hydratation pendant le render (fiable, pas de course useEffect)
+  if (searchLoadToken > 0 && searchLoadToken !== appliedLoadTokenRef.current) {
+    appliedLoadTokenRef.current = searchLoadToken;
+    if (hasParentDates && datePreset !== 'flexible') {
+      setDatePreset('flexible');
+    }
+    if (hasParentDates) {
+      setPresetDates({
+        dates_depart: flexibleDates.dates_depart,
+        dates_retour: flexibleDates.dates_retour,
+      });
+    }
+    if (initialPassengers > 0) {
+      setPassengers(initialPassengers);
+    }
+    if (externalBudget !== undefined) {
+      setBudget(externalBudget);
+    }
+  }
+
+  // Si le parent a des dates (Modifier) mais le preset n’est pas encore flexible → forcer
+  const effectivePreset: DatePreset | null =
+    datePreset ?? (hasParentDates ? 'flexible' : null);
+  const showFlexibleDates =
+    effectivePreset === 'flexible' || hasParentDates;
+  const showPresetTimes =
+    !!effectivePreset && effectivePreset !== 'flexible' && !hasParentDates;
+
   useEffect(() => {
     if (externalBudget !== undefined && externalBudget !== budget) {
       setBudget(externalBudget);
@@ -134,34 +162,17 @@ export function SimpleSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPassengers]);
 
-  // Hydrater le formulaire quand une alerte charge des dates dans le parent
+  // Garde-fou: dès que le parent reçoit des dates, basculer en flexible
   useEffect(() => {
-    const datesKey = JSON.stringify({
-      depart: flexibleDates.dates_depart,
-      retour: flexibleDates.dates_retour,
-    });
-
-    if (datesKey === previousDatesRef.current) {
-      return;
+    if (hasParentDates && datePreset !== 'flexible') {
+      setDatePreset('flexible');
+      setPresetDates({
+        dates_depart: flexibleDates.dates_depart,
+        dates_retour: flexibleDates.dates_retour,
+      });
     }
-    previousDatesRef.current = datesKey;
+  }, [hasParentDates, datePreset, flexibleDates.dates_depart, flexibleDates.dates_retour]);
 
-    const hasLoadedDates =
-      flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
-
-    if (!hasLoadedDates) {
-      return;
-    }
-
-    setDatePreset('flexible');
-    setShowAdvancedOptions(true);
-    setPresetDates({
-      dates_depart: flexibleDates.dates_depart,
-      dates_retour: flexibleDates.dates_retour,
-    });
-  }, [flexibleDates.dates_depart, flexibleDates.dates_retour]);
-
-  // Mettre à jour le budget dans le parent quand il change
   const handleBudgetChange = (newBudget: number) => {
     setBudget(newBudget);
     onBudgetChange?.(newBudget);
@@ -169,21 +180,18 @@ export function SimpleSearch({
 
   const handleFlexibleClick = () => {
     setDatePreset('flexible');
-    setShowAdvancedOptions(true);
   };
 
-  // Fonction pour valider qu'un code d'aéroport est valide
   const isValidAirportCode = (code: string): boolean => {
     if (!code || code.trim() === '') return false;
     const codeUpper = code.trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(codeUpper)) return false;
-    // Liste pas encore chargée : accepter le code IATA (évite bouton bloqué)
     if (!airports || airports.length === 0) return true;
     return airports.some((a) => a.code === codeUpper);
   };
 
   const resolvePresetDates = (preset: DatePreset) => {
-    if (preset === 'flexible') {
+    if (preset === 'flexible' || hasParentDates) {
       return flexibleDates;
     }
     if (presetDates.dates_depart.length > 0 && presetDates.dates_retour.length > 0) {
@@ -192,18 +200,14 @@ export function SimpleSearch({
     return withFullDayHours(generateDatesFromPreset(preset));
   };
 
-  // Vérifier si le bouton doit être désactivé
-  // Le bouton est désactivé si : recherche en cours OU pas de période sélectionnée OU aéroport invalide
-  const isButtonDisabled = isSearching || !datePreset || !isValidAirportCode(selectedAirport);
+  const activePreset = (effectivePreset || datePreset) as DatePreset | null;
+  const isButtonDisabled = isSearching || !activePreset || !isValidAirportCode(selectedAirport);
 
-  // Gérer l'affichage du message d'erreur avec timeout
   useEffect(() => {
     if (showAirportError) {
-      // Nettoyer le timeout précédent s'il existe
       if (errorTimeoutRef.current) {
         clearTimeout(errorTimeoutRef.current);
       }
-      // Masquer le message après 5 secondes
       errorTimeoutRef.current = setTimeout(() => {
         setShowAirportError(false);
       }, 5000);
@@ -215,10 +219,9 @@ export function SimpleSearch({
     };
   }, [showAirportError]);
 
-  // Gérer le clic sur le bouton désactivé
   const handleButtonClick = () => {
     if (isButtonDisabled) {
-      if (!datePreset) {
+      if (!activePreset) {
         const msg = t('search.error.noPeriod');
         setLocalError(msg);
         onError(msg);
@@ -240,12 +243,7 @@ export function SimpleSearch({
   };
 
   const handleSearch = async () => {
-    if (!datePreset) {
-      const msg = t('search.error.noPeriod');
-      setLocalError(msg);
-      onError(msg);
-      return;
-    }
+    const presetForSearch: DatePreset = activePreset || 'flexible';
 
     if (!selectedAirport || selectedAirport.trim() === '') {
       const msg = t('search.error.noAirport');
@@ -261,15 +259,18 @@ export function SimpleSearch({
       return;
     }
 
-    const resolvedDates = resolvePresetDates(datePreset);
+    const resolvedDates = resolvePresetDates(presetForSearch);
     if (resolvedDates.dates_depart.length === 0 || resolvedDates.dates_retour.length === 0) {
-      const msg = datePreset === 'flexible' ? t('search.error.noDates') : t('search.error.waitDates');
+      const msg =
+        presetForSearch === 'flexible' || hasParentDates
+          ? t('search.error.noDates')
+          : t('search.error.waitDates');
       setLocalError(msg);
       onError(msg);
       return;
     }
 
-    if (datePreset !== 'flexible') {
+    if (presetForSearch !== 'flexible' && !hasParentDates) {
       setPresetDates(resolvedDates);
     }
 
@@ -282,7 +283,7 @@ export function SimpleSearch({
     try {
       const request: InspireRequest = {
         budget,
-        date_preset: datePreset,
+        date_preset: hasParentDates || presetForSearch === 'flexible' ? 'flexible' : presetForSearch,
         departure: selectedAirport.trim().toUpperCase(),
         passengers,
         flexible_dates: {
@@ -302,7 +303,7 @@ export function SimpleSearch({
 
       void getApiClient().trackSearchEvent({
           departure_airport: selectedAirport.trim().toUpperCase(),
-          date_preset: datePreset,
+          date_preset: request.date_preset,
           budget,
           dates_depart: resolvedDates.dates_depart,
           dates_retour: resolvedDates.dates_retour,
@@ -327,7 +328,7 @@ export function SimpleSearch({
         });
 
       onResults(trips, {
-        datePreset,
+        datePreset: request.date_preset,
         airport: selectedAirport.trim().toUpperCase(),
         budget,
         passengers,
@@ -377,11 +378,11 @@ export function SimpleSearch({
           {t('search.departure')}
         </label>
         <AirportAutocomplete
+          key={`airport-${selectedAirport}-${searchLoadToken}`}
           value={selectedAirport}
           onChange={(code) => {
             setHasInteractedWithAirport(true);
             onAirportChange(code);
-            // Si l'aéroport devient valide, masquer le message d'erreur
             if (isValidAirportCode(code)) {
               setShowAirportError(false);
             }
@@ -400,20 +401,21 @@ export function SimpleSearch({
       </div>
 
       <DatePresets
-        selected={datePreset}
+        selected={effectivePreset === 'flexible' || hasParentDates ? 'flexible' : effectivePreset}
         onChange={(preset) => {
           setDatePreset(preset);
           setLocalError(null);
           setShowEmpty(false);
           if (preset !== 'flexible') {
-            setPresetDates(withFullDayHours(generateDatesFromPreset(preset)));
+            const generated = withFullDayHours(generateDatesFromPreset(preset));
+            setPresetDates(generated);
+            onFlexibleDatesChange({ dates_depart: [], dates_retour: [] });
           }
         }}
         onFlexibleClick={handleFlexibleClick}
       />
 
-      {/* Horaires — presets classiques */}
-      {datePreset && datePreset !== 'flexible' && (
+      {showPresetTimes && effectivePreset && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
@@ -425,7 +427,7 @@ export function SimpleSearch({
             {t('search.times')}
           </label>
           <DateWithTimes
-            preset={datePreset}
+            preset={effectivePreset}
             onDatesChange={(dates) => {
               setPresetDates(dates)
               onFlexibleDatesChange(dates)
@@ -435,9 +437,9 @@ export function SimpleSearch({
         </motion.div>
       )}
 
-      {/* Dates + horaires — mode flexible / alerte chargée (visible hors options avancées) */}
-      {datePreset === 'flexible' && (
+      {showFlexibleDates && (
         <motion.div
+          key={`flex-dates-${searchLoadToken}-${flexibleDates.dates_depart.map((d) => `${d.date}:${d.heure_min}-${d.heure_max}`).join('|')}-${flexibleDates.dates_retour.map((d) => `${d.date}:${d.heure_min}-${d.heure_max}`).join('|')}`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={springConfig}
@@ -455,7 +457,7 @@ export function SimpleSearch({
       )}
 
       <AdvancedOptions
-        datePreset={datePreset}
+        datePreset={hasParentDates || effectivePreset === 'flexible' ? 'flexible' : effectivePreset}
         flexibleDates={flexibleDates}
         onFlexibleDatesChange={onFlexibleDatesChange}
         excludedDestinations={excludedDestinations}
@@ -508,4 +510,3 @@ export function SimpleSearch({
     </motion.div>
   );
 }
-

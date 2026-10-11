@@ -1,4 +1,4 @@
-import { ScanRequest, TripResponse, type SavedSearch, type SavedFavorite } from '../types'
+import { ScanRequest, TripResponse, type SavedSearch, type SavedFavorite, type DateAvecHoraire } from '../types'
 import { STORAGE_KEYS } from '@flightwatcher/shared'
 import { getSupabaseClient, getCurrentUser } from '../lib/supabase'
 import { getFromCache, setCache, invalidateCache } from './cache'
@@ -151,6 +151,36 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
 /**
  * Mappe les données Supabase vers SavedSearch
  */
+function normalizeStoredDates(raw: unknown): DateAvecHoraire[] {
+  let list: unknown = raw
+  if (typeof list === 'string') {
+    try {
+      list = JSON.parse(list)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(list)) return []
+  return list
+    .map((item) => {
+      if (typeof item === 'string') {
+        const date = item.trim()
+        if (!date) return null
+        return { date, heure_min: '06:00', heure_max: '23:59' }
+      }
+      if (!item || typeof item !== 'object') return null
+      const d = item as Record<string, unknown>
+      const date = String(d.date || d.Date || '').trim()
+      if (!date) return null
+      return {
+        date,
+        heure_min: String(d.heure_min || d.heureMin || '06:00'),
+        heure_max: String(d.heure_max || d.heureMax || '23:59'),
+      }
+    })
+    .filter((d): d is DateAvecHoraire => !!d)
+}
+
 function mapSupabaseSearchToSavedSearch(item: any): SavedSearch {
   // Gérer les deux noms de colonnes possibles (ancien schéma vs nouveau)
   const departureAirport = item.departure_airport || item.aeroport_depart;
@@ -162,12 +192,13 @@ function mapSupabaseSearchToSavedSearch(item: any): SavedSearch {
     name: item.name,
     request: {
       aeroport_depart: departureAirport,
-      dates_depart: item.dates_depart,
-      dates_retour: item.dates_retour,
+      dates_depart: normalizeStoredDates(item.dates_depart),
+      dates_retour: normalizeStoredDates(item.dates_retour),
       budget_max: item.budget_max,
       limite_allers: item.limite_allers,
       destinations_exclues: item.destinations_exclues || [],
-      destinations_incluses: item.destinations_incluses
+      destinations_incluses: item.destinations_incluses,
+      passengers: item.passengers || undefined,
     },
     createdAt: item.created_at,
     lastUsed: item.last_used,

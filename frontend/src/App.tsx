@@ -92,7 +92,7 @@ function Dashboard() {
   const [currentRequest, setCurrentRequest] = useState<ScanRequest | null>(null)
   const [destinationsExclues, setDestinationsExclues] = useState<string[]>([])
   const [searchPassengers, setSearchPassengers] = useState(1)
-  const [searchFormKey, setSearchFormKey] = useState(0)
+  const [searchLoadToken, setSearchLoadToken] = useState(0)
   const isLoadingFromStorage = useRef(false)
   const loadingSavedSearchRef = useRef(false)
   const shouldScrollToResults = useRef(false)
@@ -249,14 +249,19 @@ function Dashboard() {
       if (!Array.isArray(list)) return []
       return list
         .map((item) => {
+          if (typeof item === 'string') {
+            const date = item.trim()
+            if (!date) return null
+            return { date, heure_min: '06:00', heure_max: '23:59' } as DateAvecHoraire
+          }
           if (!item || typeof item !== 'object') return null
           const d = item as Record<string, unknown>
-          const date = String(d.date || '').trim()
+          const date = String(d.date || d.Date || '').trim()
           if (!date) return null
           return {
             date,
-            heure_min: String(d.heure_min || '06:00'),
-            heure_max: String(d.heure_max || '23:59'),
+            heure_min: String(d.heure_min || d.heureMin || '06:00'),
+            heure_max: String(d.heure_max || d.heureMax || '23:59'),
           } as DateAvecHoraire
         })
         .filter((d): d is DateAvecHoraire => !!d)
@@ -281,7 +286,7 @@ function Dashboard() {
       dates_depart: datesDepartLoaded,
       dates_retour: datesRetourLoaded,
     })
-    setSearchFormKey((k) => k + 1)
+    setSearchLoadToken((t) => t + 1)
     setError(null)
 
     const editOnly = options?.editOnly === true
@@ -730,7 +735,6 @@ function Dashboard() {
           <>
             <div className="app-col">
               <SimpleSearch
-                key={searchFormKey}
                 onResults={handleSimpleResults}
                 onLoading={setLoading}
                 onError={setError}
@@ -755,6 +759,7 @@ function Dashboard() {
                 budget={budgetMax}
                 onBudgetChange={setBudgetMax}
                 initialPassengers={searchPassengers}
+                searchLoadToken={searchLoadToken}
               />
 
               {error && (
