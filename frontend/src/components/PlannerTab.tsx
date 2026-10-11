@@ -383,7 +383,7 @@ function TripListCard({
         className="group w-full text-left bg-white rounded-[32px] border border-orange-100/70 shadow-lg hover:shadow-2xl transition-all overflow-hidden"
       >
         <div className="grid lg:grid-cols-5 min-h-[min(72vh,560px)]">
-          <div className="relative lg:col-span-3 h-64 sm:h-80 lg:h-auto min-h-[280px]">
+          <div className="relative lg:col-span-3 h-64 sm:h-80 lg:h-auto min-h-[280px] overflow-hidden">
             <img
               src={imageUri}
               alt={cityLabel}
@@ -451,7 +451,7 @@ function TripListCard({
         density === 'duo' ? 'min-h-[420px]' : ''
       }`}
     >
-      <div className={`relative ${imageH} shrink-0`}>
+      <div className={`relative ${imageH} shrink-0 overflow-hidden`}>
         <img
           src={imageUri}
           alt={cityLabel}
