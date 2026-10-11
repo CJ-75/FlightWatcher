@@ -4,4 +4,4 @@
 ALTER TABLE trip_members
     ADD COLUMN IF NOT EXISTS email TEXT;
 
-COMMENT ON COLUMN trip_members.email IS 'Guest invite email (Resend) — optional until invite is sent';
+COMMENT ON COLUMN trip_members.email IS 'Guest invite email';

@@ -1767,7 +1767,7 @@ function TripDetailView({
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow p-8 text-center text-slate-500">
-            {isOrganizer ? t('planner.scan.emptyPrompt') : 'Pas encore de propositions.'}
+            {isOrganizer ? t('planner.scan.emptyPrompt') : t('planner.proposals.empty')}
           </div>
         )
       ) : null}
