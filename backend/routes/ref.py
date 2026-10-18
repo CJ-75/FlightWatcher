@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from ryanair_routes import fetch_destinations_by_country
+from airports_catalog import common_airports_from_travelpayouts, merge_airport_lists
 from city_names_fr import (
     CITY_FR_BY_IATA,
     COUNTRY_FR_BY_ISO,
@@ -74,13 +75,12 @@ def _generate_airports_from_api(country_names: dict) -> List[dict]:
 
 @router.get("/api/airports")
 def get_airports(query: Optional[str] = None):
-    """Récupère la liste des aéroports avec code, ville et pays, optionnellement filtrée par recherche"""
+    """Ryanair actives + aéroports courants (Travelpayouts), labels FR."""
     try:
         country_names = dict(COUNTRY_FR_BY_ISO)
 
-        # Prefer live Ryanair active airports (CSV can lag behind route changes)
-        airports = _generate_airports_from_api(country_names)
-        if not airports:
+        ryanair = _generate_airports_from_api(country_names)
+        if not ryanair:
             airports_file = os.path.join(
                 os.path.dirname(__file__), "..", "..", "ryanair-py", "ryanair", "airports.csv"
             )
@@ -94,7 +94,7 @@ def get_airports(query: Optional[str] = None):
                         airport_name = row.get("name", "").strip()
                         if not iata_code or len(iata_code) != 3:
                             continue
-                        airports.append(
+                        ryanair.append(
                             localize_airport_dict(
                                 {
                                     "code": iata_code,
@@ -106,6 +106,10 @@ def get_airports(query: Optional[str] = None):
                                 }
                             )
                         )
+
+        common = common_airports_from_travelpayouts(country_names)
+        # Ryanair first so their FR labels win on overlap
+        airports = merge_airport_lists(ryanair, common)
 
         if query:
             query_lower = query.lower()
@@ -120,8 +124,6 @@ def get_airports(query: Optional[str] = None):
                 )
             ]
 
-        airports.sort(key=lambda x: x["code"])
-
         return {"airports": airports, "count": len(airports)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -129,7 +131,7 @@ def get_airports(query: Optional[str] = None):
 
 @router.get("/api/destinations")
 def get_destinations(airport: str = "BVA"):
-    """Destinations desservies depuis un aéroport (routes officielles Ryanair)."""
+    """Destinations: routes Ryanair si dispo, sinon catalogue commun (multi-compagnies)."""
     try:
         code = (airport or "BVA").strip().upper()
         if len(code) != 3:
@@ -137,8 +139,15 @@ def get_destinations(airport: str = "BVA"):
 
         destinations_par_pays = _destinations_from_routes(code)
         if not destinations_par_pays:
-            # Fallback: fenêtres de vols si le widget routes échoue
             destinations_par_pays = _destinations_from_flights(code)
+
+        # Si peu / pas de routes Ryanair (ex. CDG), enrichir avec le catalogue commun
+        ryanair_count = sum(len(v) for v in destinations_par_pays.values())
+        if ryanair_count < 15:
+            destinations_par_pays = _merge_destination_maps(
+                destinations_par_pays,
+                _destinations_from_catalog(exclude_code=code),
+            )
 
         result = {}
         for pays in sorted(destinations_par_pays.keys()):
@@ -148,14 +157,45 @@ def get_destinations(airport: str = "BVA"):
 
         total = sum(len(dests) for dests in result.values())
         print(
-            f"  ✓ {total} destination(s) desservie(s) depuis {code} "
-            f"({len(result)} pays)"
+            f"  ✓ {total} destination(s) depuis {code} ({len(result)} pays)"
         )
         return {"destinations": result, "aeroport": code}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _merge_destination_maps(base: dict, extra: dict) -> dict:
+    out = defaultdict(dict)
+    for pays, items in (base or {}).items():
+        for code, dest in items.items():
+            out[pays][code] = dest
+    for pays, items in (extra or {}).items():
+        for code, dest in items.items():
+            if code not in out[pays]:
+                out[pays][code] = dest
+    return out
+
+
+def _destinations_from_catalog(*, exclude_code: str) -> dict:
+    """Popular airports as destinations for exclude / multi-airline UX."""
+    country_names = dict(COUNTRY_FR_BY_ISO)
+    airports = common_airports_from_travelpayouts(country_names)
+    by_country = defaultdict(dict)
+    for a in airports:
+        dest_code = (a.get("code") or "").strip().upper()
+        if dest_code == exclude_code or len(dest_code) != 3:
+            continue
+        pays = (a.get("country") or "Autre").strip() or "Autre"
+        city = (a.get("city") or dest_code).strip()
+        by_country[pays][dest_code] = {
+            "code": dest_code,
+            "nom": city,
+            "pays": pays,
+            "destinationFull": f"{city}, {pays}",
+        }
+    return by_country
 
 
 def _destinations_from_routes(airport_code: str) -> dict:
