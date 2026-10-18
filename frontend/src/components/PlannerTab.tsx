@@ -28,6 +28,7 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   pickPopularCityGroups,
+  resolvePopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 
@@ -848,8 +849,6 @@ const CREATE_STEPS = [
   { id: 3 as const, label: 'Détails', title: 'Cadre du voyage', hint: 'Dates, budget, voyageurs' },
 ]
 
-const POPULAR_DEPARTURE_CODES = ['BVA', 'CRL', 'ORY', 'CDG', 'LTN', 'STN', 'MAD', 'BCN', 'FCO', 'BGY']
-
 function CreateTripModal({
   onClose,
   onCreated,
@@ -916,12 +915,10 @@ function CreateTripModal({
     [airports, departure],
   )
 
-  const popularDepartures = useMemo(() => {
-    const byCode = new Map(airports.map((a) => [a.code, a]))
-    return POPULAR_DEPARTURE_CODES.map((code) => byCode.get(code)).filter(
-      (a): a is Airport => Boolean(a),
-    )
-  }, [airports])
+  const popularDepartures = useMemo(
+    () => resolvePopularAirports(airports),
+    [airports],
+  )
 
   const filteredDepartures = useMemo(() => {
     const q = airportQuery.trim().toLowerCase()

@@ -11,26 +11,8 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
+import { resolvePopularAirports } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
-
-/** Top Ryanair hubs (FR + nearby) shown first in the picker. */
-const POPULAR = [
-  'BVA',
-  'MRS',
-  'NCE',
-  'TLS',
-  'NTE',
-  'LIL',
-  'BIQ',
-  'BZR',
-  'LRH',
-  'GNB',
-  'FSC',
-  'PGF',
-  'STN',
-  'DUB',
-  'BCN',
-] as const
 
 type Props = {
   airports: Airport[]
@@ -78,11 +60,10 @@ export function AirportPicker({
     [airports, value],
   )
 
-  const popularAirports = useMemo(() => {
-    const safe = Array.isArray(airports) ? airports : []
-    const byCode = new Map(safe.map((a) => [a.code, a]))
-    return POPULAR.map((code) => byCode.get(code)).filter(Boolean) as Airport[]
-  }, [airports])
+  const popularAirports = useMemo(
+    () => resolvePopularAirports(airports),
+    [airports],
+  )
 
   const popularCodes = useMemo(
     () => new Set(popularAirports.map((a) => a.code)),
@@ -181,7 +162,7 @@ export function AirportPicker({
 
       {!compact && popularAirports.length > 0 ? (
         <View style={styles.popularRow}>
-          {popularAirports.slice(0, 6).map((a) => {
+          {popularAirports.slice(0, 10).map((a) => {
             const active = a.code === value
             return (
               <Pressable

@@ -7,6 +7,44 @@ export interface CityAirportGroup {
   airports: Airport[]
 }
 
+/**
+ * Quick-pick hubs for home search forms (FR majors + nearby EU).
+ * Only codes present in the loaded catalog are shown as chips.
+ */
+export const POPULAR_AIRPORT_CODES = [
+  'CDG',
+  'ORY',
+  'BVA',
+  'LYS',
+  'MRS',
+  'NCE',
+  'TLS',
+  'BOD',
+  'NTE',
+  'LIL',
+  'LHR',
+  'LGW',
+  'AMS',
+  'BRU',
+  'CRL',
+  'BCN',
+  'MAD',
+  'FCO',
+  'MXP',
+  'DUB',
+] as const
+
+export type PopularAirportCode = (typeof POPULAR_AIRPORT_CODES)[number]
+
+/** Resolve popular codes against a loaded airport list (order preserved). */
+export function resolvePopularAirports(airports: Airport[]): Airport[] {
+  const safe = Array.isArray(airports) ? airports : []
+  const byCode = new Map(safe.map((a) => [a.code.toUpperCase(), a]))
+  return POPULAR_AIRPORT_CODES.map((code) => byCode.get(code)).filter(
+    (a): a is Airport => Boolean(a),
+  )
+}
+
 const FALLBACK_CITY_IMAGE =
   'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80&auto=format&fit=crop'
 

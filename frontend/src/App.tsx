@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { ScanResponse, TripResponse, ScanRequest, DateAvecHoraire, Destination, Airport, EnrichedTripResponse } from './types'
 import { 
@@ -37,7 +37,7 @@ import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
-import { buildBookingUrl } from '@flightwatcher/shared'
+import { buildBookingUrl, resolvePopularAirports } from '@flightwatcher/shared'
 
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
 
@@ -1024,6 +1024,7 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
   const [isTyping, setIsTyping] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const popularAirports = useMemo(() => resolvePopularAirports(airports), [airports])
 
   // Charger tous les aéroports au montage
   useEffect(() => {
@@ -1063,24 +1064,37 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
     }
   }, [value, airports, isTyping])
 
-  // Filtrer les aéroports selon la recherche
+  // Filtrer les aéroports selon la recherche (hubs populaires en tête / à vide)
   useEffect(() => {
-    if (!query.trim() || selectedAirport) {
+    if (selectedAirport) {
       setFilteredAirports([])
       return
     }
 
-    const queryLower = query.toLowerCase()
-    const filtered = airports.filter(airport =>
-      airport.code.toLowerCase().includes(queryLower) ||
-      airport.name.toLowerCase().includes(queryLower) ||
-      airport.city.toLowerCase().includes(queryLower) ||
-      airport.country.toLowerCase().includes(queryLower)
-    ).slice(0, 20)
+    const q = query.trim().toLowerCase()
+    if (!q) {
+      setFilteredAirports(popularAirports.slice(0, 12))
+      return
+    }
 
-    setFilteredAirports(filtered)
-    setShowDropdown(filtered.length > 0)
-  }, [query, airports, selectedAirport])
+    const popularCodes = new Set(popularAirports.map((a) => a.code))
+    const matched = airports.filter(
+      (airport) =>
+        airport.code.toLowerCase().includes(q) ||
+        airport.name.toLowerCase().includes(q) ||
+        airport.city.toLowerCase().includes(q) ||
+        airport.country.toLowerCase().includes(q),
+    )
+    matched.sort((a, b) => {
+      const ap = popularCodes.has(a.code) ? 0 : 1
+      const bp = popularCodes.has(b.code) ? 0 : 1
+      if (ap !== bp) return ap - bp
+      return a.city.localeCompare(b.city, 'fr')
+    })
+
+    setFilteredAirports(matched.slice(0, 20))
+    setShowDropdown(matched.length > 0)
+  }, [query, airports, selectedAirport, popularAirports])
 
   // Fermer le dropdown si on clique en dehors
   useEffect(() => {
@@ -1146,23 +1160,47 @@ function AirportAutocomplete({ value, onChange }: AirportAutocompleteProps) {
         onChange={handleInputChange}
         onFocus={() => {
           setIsTyping(true)
-          if (filteredAirports.length > 0) {
-            setShowDropdown(true)
-          }
+          setShowDropdown(true)
         }}
         onBlur={() => {
           // Laisser le clic dropdown se faire avant de re-sync
           window.setTimeout(() => setIsTyping(false), 150)
         }}
         onKeyDown={handleKeyDown}
-        placeholder="Rechercher un aéroport (code, nom, ville ou pays)..."
+        placeholder="CDG, Paris, Lyon, Londres…"
         className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px]"
       />
+      {popularAirports.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {popularAirports.slice(0, 10).map((airport) => {
+            const active = value.toUpperCase() === airport.code
+            return (
+              <button
+                key={airport.code}
+                type="button"
+                onClick={() => handleSelectAirport(airport)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold border transition-colors min-h-[36px] ${
+                  active
+                    ? 'bg-primary-500 text-white border-primary-500'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-primary-300 hover:bg-primary-50'
+                }`}
+              >
+                {airport.code}
+              </button>
+            )
+          })}
+        </div>
+      )}
       {showDropdown && filteredAirports.length > 0 && (
         <div
           ref={dropdownRef}
           className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 sm:max-h-80 overflow-y-auto"
         >
+          {!query.trim() && !selectedAirport ? (
+            <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">
+              Aéroports populaires
+            </div>
+          ) : null}
           {filteredAirports.map((airport, index) => (
             <button
               key={`${airport.code}-${index}-${airport.city}`}
@@ -1301,7 +1339,7 @@ function SearchTab({
             onChange={setAeroportDepart}
           />
           <p className="text-xs text-gray-500 mt-1">
-            Recherchez par code aéroport (ex: BVA), ville (ex: Beauvais) ou pays (ex: France)
+            Recherchez par code (ex: CDG), ville (ex: Paris) ou pays (ex: France)
           </p>
         </div>
 
