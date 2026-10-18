@@ -181,10 +181,14 @@ export function SimpleSearch({
 
   const isValidAirportCode = (code: string): boolean => {
     if (!code || code.trim() === '') return false;
-    const codeUpper = code.trim().toUpperCase();
-    if (!/^[A-Z]{3}$/.test(codeUpper)) return false;
+    // Multi-origin: "CDG,ORY,BVA" — accept when format looks like IATA list
+    const parts = code
+      .split(/[,;|]/)
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean);
+    if (!parts.length || parts.some((p) => !/^[A-Z]{3}$/.test(p))) return false;
     if (!airports || airports.length === 0) return true;
-    return airports.some((a) => a.code === codeUpper);
+    return parts.every((p) => airports.some((a) => a.code === p));
   };
 
   const resolvePresetDates = (preset: DatePreset) => {

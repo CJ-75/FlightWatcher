@@ -10,7 +10,9 @@ PATH = ROOT / "src" / "cityImages.ts"
 
 
 def upgrade(url: str) -> str:
-    url = re.sub(r"/\d+px-", "/800px-", url)
+    # Wikimedia only allows specific widths (see https://w.wiki/GHai).
+    # 330px is the size returned by the REST summary API and is reliable.
+    url = re.sub(r"/\d+px-", "/330px-", url)
     parsed = urlparse(url)
     # Drop utm_* junk from Wikipedia REST API
     return urlunparse(parsed._replace(query=""))

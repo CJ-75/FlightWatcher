@@ -12,11 +12,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { EnrichedTripResponse, SavedFavorite, ScanRequest } from '@flightwatcher/shared'
 import {
   STORAGE_KEYS,
+  cityDisplayNameFr,
   createAsyncKVStore,
+  formatDateFr,
   kvSetJson,
+  parseAirportCodes,
   translate,
   tripFavoriteKey,
-  formatDateFr,
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { RootStackParamList } from '../../App'
@@ -51,6 +53,7 @@ export function ResultsScreen({ route }: Props) {
   const [saving, setSaving] = useState(false)
   const [showRoulette, setShowRoulette] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
 
   const loadFavorites = useCallback(async () => {
     try {
@@ -76,6 +79,41 @@ export function ResultsScreen({ route }: Props) {
   const isFavorite = (trip: EnrichedTripResponse) => favoriteKeys.has(tripFavoriteKey(trip))
 
   const passengers = searchInfo?.passengers || 1
+
+  const availableOrigins = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of trips) {
+      const o = (t.aller?.origin || '').trim().toUpperCase()
+      if (o.length === 3) set.add(o)
+    }
+    return [...set].sort()
+  }, [trips])
+
+  useEffect(() => {
+    // Reset filter when results change; default = all origins visible
+    setOriginFilter(null)
+  }, [trips])
+
+  const visibleTrips = useMemo(() => {
+    if (!originFilter || originFilter.size === 0) return trips
+    return trips.filter((t) => originFilter.has((t.aller?.origin || '').toUpperCase()))
+  }, [trips, originFilter])
+
+  const toggleOriginFilter = (code: string) => {
+    setOriginFilter((prev) => {
+      const base = prev ?? new Set(availableOrigins)
+      const next = new Set(base)
+      if (next.has(code)) {
+        if (next.size <= 1) return next
+        next.delete(code)
+      } else {
+        next.add(code)
+      }
+      // If all selected → null (no filter)
+      if (next.size === availableOrigins.length) return null
+      return next
+    })
+  }
 
   const buildScanRequest = (): ScanRequest | null => {
     if (!searchInfo) return null
@@ -156,10 +194,19 @@ export function ResultsScreen({ route }: Props) {
     }
   }
 
+  const departureDisplay = useMemo(() => {
+    if (!searchInfo?.airport) return ''
+    const codes = parseAirportCodes(searchInfo.airport)
+    if (!codes.length) return searchInfo.airport
+    const city = cityDisplayNameFr(codes[0])
+    if (codes.length === 1) return city ? `${city} · ${codes[0]}` : codes[0]
+    return city ? `${city} · ${codes.join(' · ')}` : codes.join(' · ')
+  }, [searchInfo])
+
   const summary = useMemo(() => {
     if (!searchInfo) return null
     return {
-      airport: searchInfo.airport,
+      airport: departureDisplay || searchInfo.airport,
       budget: searchInfo.budget,
       passengers: searchInfo.passengers || 1,
       preset: PRESET_LABELS[searchInfo.datePreset] || searchInfo.datePreset,
@@ -168,7 +215,7 @@ export function ResultsScreen({ route }: Props) {
       firstDepart: searchInfo.datesDepart[0]?.date,
       firstRetour: searchInfo.datesRetour[0]?.date,
     }
-  }, [searchInfo])
+  }, [searchInfo, departureDisplay])
 
   return (
     <View style={styles.root}>
@@ -180,14 +227,39 @@ export function ResultsScreen({ route }: Props) {
           paddingTop: spacing.md,
           paddingBottom: insets.bottom + spacing.xxxl,
         }}
-        data={trips}
-        keyExtractor={(item, i) => `${item.destination_code}-${item.aller.departureTime}-${i}`}
+        data={visibleTrips}
+        keyExtractor={(item, i) =>
+          `${item.aller.origin}-${item.destination_code}-${item.aller.departureTime}-${i}`
+        }
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>{translate('fr', 'results.title')}</Text>
             <Text style={styles.count}>
-              {trips.length} destination{trips.length > 1 ? 's' : ''}
+              {visibleTrips.length} destination{visibleTrips.length > 1 ? 's' : ''}
+              {visibleTrips.length !== trips.length ? ` / ${trips.length}` : ''}
             </Text>
+
+            {availableOrigins.length > 1 ? (
+              <View style={styles.originFilter}>
+                <Text style={styles.originFilterLabel}>Filtrer par aéroport de départ</Text>
+                <View style={styles.originChips}>
+                  {availableOrigins.map((code) => {
+                    const active = !originFilter || originFilter.has(code)
+                    return (
+                      <Pressable
+                        key={code}
+                        onPress={() => toggleOriginFilter(code)}
+                        style={[styles.originChip, active && styles.originChipOn]}
+                      >
+                        <Text style={[styles.originChipText, active && styles.originChipTextOn]}>
+                          {code}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              </View>
+            ) : null}
 
             {summary ? (
               <View style={[styles.summary, shadow.soft]}>
@@ -296,7 +368,7 @@ export function ResultsScreen({ route }: Props) {
         loading={saving}
         defaultName={
           searchInfo
-            ? `${searchInfo.airport} · ${searchInfo.budget}€ · ${PRESET_LABELS[searchInfo.datePreset] || ''}`
+            ? `${departureDisplay || searchInfo.airport} · ${searchInfo.budget}€ · ${PRESET_LABELS[searchInfo.datePreset] || ''}`
             : undefined
         }
         onClose={() => setShowSave(false)}
@@ -305,7 +377,7 @@ export function ResultsScreen({ route }: Props) {
 
       <RouletteModal
         visible={showRoulette}
-        trips={trips}
+        trips={visibleTrips}
         budget={searchInfo?.budget || 9999}
         onClose={() => setShowRoulette(false)}
         onBook={(t) => {
@@ -325,6 +397,34 @@ const styles = StyleSheet.create({
   header: { marginBottom: spacing.lg },
   title: { ...type.title },
   count: { ...type.caption, marginTop: 6, fontFamily: fonts.semibold },
+  originFilter: { marginTop: 14 },
+  originFilterLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 8,
+    includeFontPadding: false,
+  },
+  originChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  originChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  originChipOn: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  originChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.inkSoft,
+    includeFontPadding: false,
+  },
+  originChipTextOn: { color: colors.primary },
   summary: {
     marginTop: 14,
     backgroundColor: colors.white,

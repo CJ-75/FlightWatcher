@@ -93,11 +93,22 @@ export function DestinationCard({
     });
   };
 
-  const cityName = cityDisplayNameFr(trip.destination_code);
-  const airportLine = arrivalAirportSubtitle(
+  const cityName = cityDisplayNameFr(
     trip.destination_code,
     trip.aller.destinationFull,
   );
+  const originCode = (trip.aller.origin || '').trim().toUpperCase();
+  const destCode = (
+    trip.aller.destination ||
+    trip.destination_code ||
+    ''
+  )
+    .trim()
+    .toUpperCase();
+  const routeLabel =
+    originCode && destCode
+      ? `${originCode} → ${destCode}`
+      : arrivalAirportSubtitle(trip.destination_code, trip.aller.destinationFull);
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     iata: trip.destination_code,
@@ -116,7 +127,8 @@ export function DestinationCard({
       transition={springConfig}
       className="rounded-3xl overflow-hidden bg-white border border-line shadow-soft w-full h-full flex flex-col"
     >
-      <div className="relative w-full aspect-[5/3] sm:aspect-[16/10] bg-line shrink-0">
+      {/* Fixed hero height on every card — image never changes layout */}
+      <div className="relative w-full h-44 sm:h-48 bg-line shrink-0 overflow-hidden">
         {!imageFailed ? (
           <>
             {!imageLoaded && (
@@ -125,7 +137,7 @@ export function DestinationCard({
             <img
               src={imageUrl}
               alt={cityName}
-              className={`w-full h-full object-cover transition-opacity duration-300 ${
+              className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-300 ${
                 imageLoaded ? 'opacity-100' : 'opacity-0'
               }`}
               loading="lazy"
@@ -141,7 +153,7 @@ export function DestinationCard({
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent pointer-events-none" />
 
         {trip.is_good_deal ? (
           <span className="absolute top-3 left-3 sm:top-3.5 sm:left-3.5 bg-accent-500 text-white text-xs font-bold px-3 py-1.5 rounded-full">
@@ -169,19 +181,19 @@ export function DestinationCard({
           <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
             {cityName}
           </h3>
-          <p className="text-sm text-white/90 font-medium mt-0.5 truncate">
-            {airportLine}
+          <p className="text-sm text-white/95 font-bold tracking-wide mt-0.5 truncate tabular-nums">
+            {routeLabel}
           </p>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="text-[11px] font-bold tracking-wide bg-white/25 text-white px-2.5 py-1 rounded-full">
+          <div className="mt-2 flex flex-nowrap items-center gap-1.5 h-6 overflow-hidden">
+            <span className="text-[11px] font-bold tracking-wide bg-white/25 text-white px-2.5 py-1 rounded-full truncate max-w-[55%]">
               {airlineLabel}
             </span>
             {(trip.transfers ?? 0) > 0 ? (
-              <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">
                 {trip.transfers} escale{(trip.transfers || 0) > 1 ? 's' : ''}
               </span>
             ) : (
-              <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-400/90 text-white px-2 py-0.5 rounded-full">
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-emerald-400/90 text-white px-2 py-0.5 rounded-full">
                 Direct
               </span>
             )}
@@ -189,19 +201,23 @@ export function DestinationCard({
         </div>
       </div>
 
-      <div className="p-4 sm:p-5 bg-white flex flex-col flex-1">
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div>
+      <div className="p-4 sm:p-5 bg-white flex flex-col flex-1 min-h-0">
+        <div className="flex items-start justify-between gap-3 mb-4 min-h-[3.25rem]">
+          <div className="min-w-0">
             <p className="text-3xl sm:text-[2rem] font-extrabold text-primary-500 tracking-tight leading-none">
               {Math.round(trip.prix_total)} €
             </p>
             <p className="text-xs sm:text-sm text-muted font-medium mt-1">{t('card.total')}</p>
           </div>
           {typeof trip.discount_percent === 'number' && trip.discount_percent > 20 ? (
-            <span className="bg-primary-50 text-primary-700 text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-full">
+            <span className="shrink-0 bg-primary-50 text-primary-700 text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-full">
               -{Math.round(trip.discount_percent)}%
             </span>
-          ) : null}
+          ) : (
+            <span className="shrink-0 invisible text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-full" aria-hidden>
+              -00%
+            </span>
+          )}
         </div>
 
         <div className="rounded-2xl bg-primary-50 mb-4 overflow-hidden">

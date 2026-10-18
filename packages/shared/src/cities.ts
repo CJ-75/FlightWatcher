@@ -60,123 +60,218 @@ function normalizeCityKey(city: string): string {
 
 /** IATA → French city (metro / common Ryanair destinations). */
 const CITY_FR_BY_IATA: Record<string, string> = {
-  STN: 'Londres',
-  LTN: 'Londres',
-  LGW: 'Londres',
-  LHR: 'Londres',
-  SEN: 'Londres',
-  BVA: 'Paris',
-  CDG: 'Paris',
-  ORY: 'Paris',
-  XCR: 'Paris',
-  LIS: 'Lisbonne',
-  OPO: 'Porto',
-  FAO: 'Faro',
-  BCN: 'Barcelone',
-  MAD: 'Madrid',
-  SVQ: 'Séville',
-  VLC: 'Valence',
-  ALC: 'Alicante',
-  AGP: 'Malaga',
-  PMI: 'Palma',
-  IBZ: 'Ibiza',
-  ACE: 'Lanzarote',
-  FUE: 'Fuerteventura',
-  TFS: 'Tenerife',
-  TFN: 'Tenerife',
-  LPA: 'Grande Canarie',
-  MAH: 'Minorque',
-  FCO: 'Rome',
-  CIA: 'Rome',
-  BGY: 'Bergame',
-  MXP: 'Milan',
-  LIN: 'Milan',
-  VCE: 'Venise',
-  TSF: 'Venise',
-  NAP: 'Naples',
-  PSA: 'Pise',
-  FLR: 'Florence',
-  BLQ: 'Bologne',
-  TRN: 'Turin',
-  GOA: 'Gênes',
-  PMO: 'Palerme',
-  CTA: 'Catane',
-  CAG: 'Cagliari',
-  AHO: 'Alghero',
-  BRI: 'Bari',
-  BDS: 'Brindisi',
-  AOI: 'Ancône',
-  ATH: 'Athènes',
-  SKG: 'Thessalonique',
-  HER: 'Héraklion',
-  CHQ: 'La Canée',
-  RHO: 'Rhodes',
-  KGS: 'Kos',
-  JMK: 'Mykonos',
-  JTR: 'Santorin',
-  CFU: 'Corfou',
-  ZTH: 'Zante',
-  EFL: 'Céphalonie',
-  PRG: 'Prague',
-  WAW: 'Varsovie',
-  KRK: 'Cracovie',
-  GDN: 'Gdansk',
-  WRO: 'Wroclaw',
-  BUD: 'Budapest',
-  OTP: 'Bucarest',
-  BBU: 'Bucarest',
-  SOF: 'Sofia',
-  VIE: 'Vienne',
-  SZG: 'Salzbourg',
-  ZRH: 'Zurich',
-  GVA: 'Genève',
-  BSL: 'Bâle',
-  BRU: 'Bruxelles',
-  CRL: 'Charleroi',
-  AMS: 'Amsterdam',
-  CPH: 'Copenhague',
-  ARN: 'Stockholm',
-  GOT: 'Göteborg',
-  OSL: 'Oslo',
-  HEL: 'Helsinki',
-  BER: 'Berlin',
-  MUC: 'Munich',
-  HAM: 'Hambourg',
-  CGN: 'Cologne',
-  DUS: 'Düsseldorf',
-  FRA: 'Francfort',
-  HAJ: 'Hanovre',
-  DRS: 'Dresde',
-  BRE: 'Brême',
-  EDI: 'Édimbourg',
-  GLA: 'Glasgow',
-  MAN: 'Manchester',
-  BHX: 'Birmingham',
-  BRS: 'Bristol',
-  DUB: 'Dublin',
-  ORK: 'Cork',
-  BFS: 'Belfast',
-  RAK: 'Marrakech',
-  CMN: 'Casablanca',
-  TNG: 'Tanger',
-  FEZ: 'Fès',
-  AGA: 'Agadir',
-  MLA: 'Malte',
-  KEF: 'Reykjavik',
-  TIA: 'Tirana',
-  BEG: 'Belgrade',
-  ZAG: 'Zagreb',
-  SPU: 'Split',
-  DBV: 'Dubrovnik',
-  LJU: 'Ljubljana',
-  BTS: 'Bratislava',
-  NCE: 'Nice',
-  MRS: 'Marseille',
-  TLS: 'Toulouse',
-  NTE: 'Nantes',
-  LYS: 'Lyon',
-  BOD: 'Bordeaux',
-  BIQ: 'Biarritz',
+  "ACE": "Lanzarote",
+  "AGA": "Agadir",
+  "AGP": "Malaga",
+  "AHO": "Alghero",
+  "AJA": "Ajaccio",
+  "ALC": "Alicante",
+  "AMM": "Amman",
+  "AMS": "Amsterdam",
+  "AOI": "Ancône",
+  "AQJ": "Aqaba",
+  "ARN": "Stockholm",
+  "ATH": "Athènes",
+  "BBU": "Bucarest",
+  "BCN": "Barcelone",
+  "BDS": "Brindisi",
+  "BEG": "Belgrade",
+  "BER": "Berlin",
+  "BFS": "Belfast",
+  "BGO": "Bergen",
+  "BGY": "Bergame",
+  "BHX": "Birmingham",
+  "BIA": "Bastia",
+  "BIO": "Bilbao",
+  "BIQ": "Biarritz",
+  "BLQ": "Bologne",
+  "BNX": "Banja Luka",
+  "BOD": "Bordeaux",
+  "BOJ": "Burgas",
+  "BRE": "Brême",
+  "BRI": "Bari",
+  "BRQ": "Brno",
+  "BRS": "Bristol",
+  "BRU": "Bruxelles",
+  "BSL": "Bâle",
+  "BTS": "Bratislava",
+  "BUD": "Budapest",
+  "BVA": "Paris",
+  "BVE": "Brive",
+  "BZR": "Béziers",
+  "CAG": "Cagliari",
+  "CCF": "Carcassonne",
+  "CDG": "Paris",
+  "CFE": "Clermont-Ferrand",
+  "CFU": "Corfou",
+  "CGN": "Cologne",
+  "CHQ": "La Canée",
+  "CIA": "Rome",
+  "CLJ": "Cluj-Napoca",
+  "CLY": "Calvi",
+  "CMF": "Chambéry",
+  "CMN": "Casablanca",
+  "CPH": "Copenhague",
+  "CRL": "Charleroi",
+  "CTA": "Catane",
+  "DBV": "Dubrovnik",
+  "DLE": "Dole",
+  "DRS": "Dresde",
+  "DTM": "Dortmund",
+  "DUB": "Dublin",
+  "DUS": "Düsseldorf",
+  "ECN": "Ercan",
+  "EDI": "Édimbourg",
+  "EFL": "Céphalonie",
+  "EGC": "Bergerac",
+  "EIN": "Eindhoven",
+  "ESU": "Essaouira",
+  "ETZ": "Metz",
+  "FAO": "Faro",
+  "FCO": "Rome",
+  "FEZ": "Fès",
+  "FLR": "Florence",
+  "FMM": "Memmingen",
+  "FRA": "Francfort",
+  "FSC": "Figari",
+  "FUE": "Fuerteventura",
+  "GDN": "Gdansk",
+  "GLA": "Glasgow",
+  "GNB": "Grenoble",
+  "GOA": "Gênes",
+  "GOT": "Göteborg",
+  "GRO": "Gérone",
+  "GRX": "Grenade",
+  "GRZ": "Graz",
+  "GVA": "Genève",
+  "HAJ": "Hanovre",
+  "HAM": "Hambourg",
+  "HEL": "Helsinki",
+  "HER": "Héraklion",
+  "HHN": "Hahn",
+  "IAS": "Iasi",
+  "IBZ": "Ibiza",
+  "INI": "Nis",
+  "INN": "Innsbruck",
+  "JMK": "Mykonos",
+  "JTR": "Santorin",
+  "KEF": "Reykjavik",
+  "KGS": "Kos",
+  "KLX": "Kalamata",
+  "KRK": "Cracovie",
+  "KTW": "Katowice",
+  "KVA": "Kavala",
+  "LBA": "Leeds",
+  "LCA": "Larnaca",
+  "LCJ": "Lodz",
+  "LEI": "Almería",
+  "LEJ": "Leipzig",
+  "LGW": "Londres",
+  "LHR": "Londres",
+  "LIL": "Lille",
+  "LIN": "Milan",
+  "LIS": "Lisbonne",
+  "LJU": "Ljubljana",
+  "LNZ": "Linz",
+  "LPA": "Grande Canarie",
+  "LPL": "Liverpool",
+  "LRH": "La Rochelle",
+  "LTN": "Londres",
+  "LUX": "Luxembourg",
+  "LYS": "Lyon",
+  "MAD": "Madrid",
+  "MAH": "Minorque",
+  "MAN": "Manchester",
+  "MLA": "Malte",
+  "MLH": "Mulhouse",
+  "MMX": "Malmö",
+  "MPL": "Montpellier",
+  "MRS": "Marseille",
+  "MUC": "Munich",
+  "MXP": "Milan",
+  "NAP": "Naples",
+  "NCE": "Nice",
+  "NCL": "Newcastle",
+  "NDR": "Nador",
+  "NRN": "Weeze",
+  "NTE": "Nantes",
+  "NUE": "Nuremberg",
+  "NYO": "Stockholm",
+  "OHD": "Ohrid",
+  "OPO": "Porto",
+  "ORK": "Cork",
+  "ORY": "Paris",
+  "OSL": "Oslo",
+  "OTP": "Bucarest",
+  "OUD": "Oujda",
+  "OUL": "Oulu",
+  "OVD": "Asturies",
+  "PFO": "Paphos",
+  "PGF": "Perpignan",
+  "PIS": "Poitiers",
+  "PMI": "Palma",
+  "PMO": "Palerme",
+  "POZ": "Poznan",
+  "PRG": "Prague",
+  "PRN": "Pristina",
+  "PSA": "Pise",
+  "PSR": "Pescara",
+  "PUY": "Pula",
+  "PVK": "Préveza",
+  "RAK": "Marrakech",
+  "RBA": "Rabat",
+  "RDZ": "Rodez",
+  "REU": "Reus",
+  "RHO": "Rhodes",
+  "RKV": "Reykjavik",
+  "RTM": "Rotterdam",
+  "RVN": "Rovaniemi",
+  "SBZ": "Sibiu",
+  "SCN": "Sarrebruck",
+  "SCQ": "Saint-Jacques-de-Compostelle",
+  "SDR": "Santander",
+  "SEN": "Londres",
+  "SJJ": "Sarajevo",
+  "SKG": "Thessalonique",
+  "SKP": "Skopje",
+  "SNN": "Shannon",
+  "SOF": "Sofia",
+  "SPU": "Split",
+  "STN": "Londres",
+  "STR": "Stuttgart",
+  "SUF": "Lamezia",
+  "SVG": "Stavanger",
+  "SVQ": "Séville",
+  "SXB": "Strasbourg",
+  "SZG": "Salzbourg",
+  "TFN": "Tenerife",
+  "TFS": "Tenerife",
+  "TGD": "Podgorica",
+  "TIA": "Tirana",
+  "TIV": "Tivat",
+  "TKU": "Turku",
+  "TLS": "Toulouse",
+  "TMP": "Tampere",
+  "TNG": "Tanger",
+  "TOS": "Tromsø",
+  "TRN": "Turin",
+  "TRS": "Trieste",
+  "TSF": "Venise",
+  "TSR": "Timisoara",
+  "TUF": "Tours",
+  "VAR": "Varna",
+  "VCE": "Venise",
+  "VIE": "Vienne",
+  "VLC": "Valence",
+  "WAW": "Varsovie",
+  "WRO": "Wroclaw",
+  "XCR": "Paris",
+  "XRY": "Jerez",
+  "ZAD": "Zadar",
+  "ZAG": "Zagreb",
+  "ZAZ": "Saragosse",
+  "ZRH": "Zurich",
+  "ZTH": "Zante",
 }
 
 const CITY_EN_TO_FR: Record<string, string> = {
@@ -241,20 +336,37 @@ const CITY_EN_TO_FR: Record<string, string> = {
   naples: 'Naples',
 }
 
-/** French display name for a city, preferring IATA then EN→FR map. */
+/** French display name for a city, preferring IATA then EN→FR / label. */
 export function cityDisplayNameFr(
   code?: string | null,
   label?: string | null,
 ): string {
   const iata = (code || '').trim().toUpperCase()
   if (iata && CITY_FR_BY_IATA[iata]) return CITY_FR_BY_IATA[iata]
+
   const raw = (label || '').trim()
   if (!raw) return iata || ''
-  const key = normalizeCityKey(raw)
-  if (CITY_EN_TO_FR[key]) return CITY_EN_TO_FR[key]
-  const head = key.split(/[\s,\-–—]+/)[0]
-  if (head && CITY_EN_TO_FR[head]) return CITY_EN_TO_FR[head]
-  return raw
+
+  // destinationFull is often "Airport, Country"
+  const beforeComma = raw.split(',')[0]?.trim() || raw
+  const candidates = [
+    beforeComma,
+    ...beforeComma.split(/[\s\-–—/]+/).filter(Boolean),
+  ]
+  for (const part of candidates) {
+    const key = normalizeCityKey(part)
+    if (CITY_EN_TO_FR[key]) return CITY_EN_TO_FR[key]
+  }
+
+  // Prefer a human label over a bare IATA trigram
+  if (
+    beforeComma &&
+    normalizeCityKey(beforeComma) !== normalizeCityKey(iata) &&
+    beforeComma.length > 3
+  ) {
+    return beforeComma
+  }
+  return iata || beforeComma
 }
 
 /** French airport label by IATA (when distinct from city). */
@@ -491,7 +603,7 @@ export function pickPopularCityGroups(
   return out
 }
 
-/** Parse stored arrival_airport ("FCO" or "FCO,CIA"). */
+/** Parse stored airport list ("FCO" or "FCO,CIA" / "CDG,ORY,BVA"). */
 export function parseArrivalCodes(value: string | null | undefined): string[] {
   if (!value) return []
   return value
@@ -500,9 +612,46 @@ export function parseArrivalCodes(value: string | null | undefined): string[] {
     .filter((c) => /^[A-Z]{3}$/.test(c))
 }
 
+/** Alias — same encoding for departure multi-airport selections. */
+export const parseAirportCodes = parseArrivalCodes
+
 export function encodeArrivalCodes(codes: string[]): string | null {
   const unique = [...new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))]
   return unique.length ? unique.join(',') : null
+}
+
+/** Alias — encode departure selection as "CDG,ORY,BVA". */
+export const encodeAirportCodes = encodeArrivalCodes
+
+/** True if every IATA in value exists in the catalog (or format-ok when catalog empty). */
+export function isValidAirportSelection(
+  value: string | null | undefined,
+  airports: Airport[] = [],
+): boolean {
+  const codes = parseAirportCodes(value)
+  if (!codes.length) return false
+  if (!airports.length) return true
+  const set = new Set(airports.map((a) => a.code.toUpperCase()))
+  return codes.every((c) => set.has(c))
+}
+
+/** Label for a multi-airport selection, e.g. "Paris · CDG · ORY · BVA". */
+export function airportSelectionLabel(
+  value: string | null | undefined,
+  groups: CityAirportGroup[],
+): string {
+  const codes = parseAirportCodes(value)
+  if (!codes.length) return ''
+  const group = findCityGroupByCodes(groups, codes)
+  if (group) {
+    const selected = group.airports.filter((a) => codes.includes(a.code))
+    const codesPart = selected.map((a) => a.code).join(' · ')
+    if (selected.length === group.airports.length) {
+      return selected.length > 1 ? `${group.city} · tous (${codesPart})` : `${group.city} · ${codesPart}`
+    }
+    return `${group.city} · ${codesPart}`
+  }
+  return codes.join(' · ')
 }
 
 export function findCityGroupByCodes(

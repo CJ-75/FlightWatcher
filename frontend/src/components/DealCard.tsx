@@ -63,7 +63,7 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
       <button
         type="button"
         onClick={onClick}
-        className="relative w-full aspect-[16/10] bg-line shrink-0 overflow-hidden text-left"
+        className="relative w-full h-44 sm:h-48 bg-line shrink-0 overflow-hidden text-left"
       >
         {!imageFailed ? (
           <>
@@ -73,7 +73,7 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
             <img
               src={imageUrl}
               alt={deal.city}
-              className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04] ${
+              className={`absolute inset-0 h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.04] ${
                 imageLoaded ? 'opacity-100' : 'opacity-0'
               }`}
               loading="lazy"

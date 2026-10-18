@@ -184,8 +184,14 @@ def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> Li
     """Enrichit les résultats de trips avec discount, images et flags"""
     enriched = []
 
-    for trip in trips[:30]:
-        avg_price = get_avg_price_last_month(departure_airport, trip.destination_code)
+    origin_count = max(
+        1,
+        len([c for c in (departure_airport or "").replace(";", ",").split(",") if c.strip()]),
+    )
+    cap = min(len(trips), max(30, 20 * origin_count))
+    for trip in trips[:cap]:
+        origin = (trip.aller.origin or departure_airport or "").split(",")[0].strip().upper()
+        avg_price = get_avg_price_last_month(origin or departure_airport, trip.destination_code)
         discount_percent = calculate_discount(trip.prix_total, avg_price)
         enriched_trip = EnrichedTripResponse(
             aller=_localize_flight(trip.aller),

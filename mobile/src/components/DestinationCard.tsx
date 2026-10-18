@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   Linking,
-  Dimensions,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
@@ -39,7 +38,8 @@ interface Props {
   isFavorite?: boolean
 }
 
-const width = Dimensions.get('window').width
+/** Same hero image height on every trip card (independent of screen/content). */
+const HERO_HEIGHT = 176
 
 function formatDate(dateStr: string) {
   const date = new Date(dateStr)
@@ -64,11 +64,22 @@ export function DestinationCard({
   secondaryAction,
   isFavorite,
 }: Props) {
-  const cityName = cityDisplayNameFr(trip.destination_code)
-  const airportLine = arrivalAirportSubtitle(
+  const cityName = cityDisplayNameFr(
     trip.destination_code,
     trip.aller.destinationFull,
   )
+  const originCode = (trip.aller.origin || '').trim().toUpperCase()
+  const destCode = (
+    trip.aller.destination ||
+    trip.destination_code ||
+    ''
+  )
+    .trim()
+    .toUpperCase()
+  const routeLabel =
+    originCode && destCode
+      ? `${originCode} → ${destCode}`
+      : arrivalAirportSubtitle(trip.destination_code, trip.aller.destinationFull)
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     iata: trip.destination_code,
@@ -91,7 +102,12 @@ export function DestinationCard({
     <View style={[styles.card, shadow.soft]}>
       <View style={styles.hero}>
         {!failed ? (
-          <Image source={{ uri: imageUrl }} style={styles.image} onError={() => setFailed(true)} />
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+            onError={() => setFailed(true)}
+          />
         ) : (
           <LinearGradient colors={[colors.primary, colors.primaryDeep]} style={styles.image}>
             <Text style={styles.fallbackText}>{cityName}</Text>
@@ -126,11 +142,13 @@ export function DestinationCard({
             {cityName}
           </Text>
           <Text style={styles.route} numberOfLines={1}>
-            {airportLine}
+            {routeLabel}
           </Text>
           <View style={styles.badgeRow}>
-            <View style={styles.metaBadge}>
-              <Text style={styles.airlineBadgeText}>{airlineLabel}</Text>
+            <View style={[styles.metaBadge, styles.airlineBadge]}>
+              <Text style={styles.airlineBadgeText} numberOfLines={1}>
+                {airlineLabel}
+              </Text>
             </View>
             <View style={[styles.metaBadge, transfers === 0 && styles.metaBadgeDirect]}>
               <Text style={styles.metaBadgeText}>
@@ -216,8 +234,6 @@ export function DestinationCard({
   )
 }
 
-const heroHeight = Math.min(200, Math.round(width * 0.48))
-
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
@@ -227,8 +243,19 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
-  hero: { height: heroHeight, backgroundColor: colors.line },
-  image: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
+  hero: {
+    width: '100%',
+    height: HERO_HEIGHT,
+    backgroundColor: colors.line,
+    overflow: 'hidden',
+  },
+  image: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: HERO_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   fallbackText: {
     color: colors.white,
     fontFamily: fonts.extrabold,
@@ -275,18 +302,29 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   route: {
-    color: 'rgba(255,255,255,0.88)',
-    fontFamily: fonts.medium,
-    fontSize: 13,
+    color: 'rgba(255,255,255,0.95)',
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    letterSpacing: 0.4,
     marginTop: 4,
   },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    height: 22,
+    overflow: 'hidden',
+  },
   metaBadge: {
     backgroundColor: 'rgba(255,255,255,0.22)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
+    flexShrink: 0,
   },
+  airlineBadge: { flexShrink: 1, maxWidth: '58%' },
   metaBadgeDirect: { backgroundColor: 'rgba(16,185,129,0.85)' },
   airlineBadgeText: {
     color: colors.white,

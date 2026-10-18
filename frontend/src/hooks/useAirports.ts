@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Airport } from '../types'
+import { isValidAirportSelection } from '@flightwatcher/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
 
 export function useAirports(autoLoad = true) {
@@ -25,12 +26,8 @@ export function useAirports(autoLoad = true) {
   }, [autoLoad, load])
 
   const isValidAirportCode = useCallback(
-    (code: string): boolean => {
-      if (!airports.length || !code?.trim()) return false
-      const codeUpper = code.trim().toUpperCase()
-      return /^[A-Z]{3}$/.test(codeUpper) && airports.some((a) => a.code === codeUpper)
-    },
-    [airports]
+    (code: string): boolean => isValidAirportSelection(code, airports),
+    [airports],
   )
 
   return { airports, loading, error, load, isValidAirportCode, setAirports }

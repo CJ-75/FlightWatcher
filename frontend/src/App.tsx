@@ -38,6 +38,7 @@ import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import { buildBookingUrl, resolvePopularAirports } from '@flightwatcher/shared'
+import { CityAirportSelect } from './components/CityAirportSelect'
 
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
 
@@ -58,6 +59,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
+  const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
   const [showRoulette, setShowRoulette] = useState(false)
   const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
@@ -606,6 +608,37 @@ function Dashboard() {
     )
   }
 
+  const availableOrigins = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of simpleResults) {
+      const o = (t.aller?.origin || '').trim().toUpperCase()
+      if (o.length === 3) set.add(o)
+    }
+    return [...set].sort()
+  }, [simpleResults])
+
+  const visibleSimpleResults = useMemo(() => {
+    if (!originFilter || originFilter.size === 0) return simpleResults
+    return simpleResults.filter((t) =>
+      originFilter.has((t.aller?.origin || '').toUpperCase()),
+    )
+  }, [simpleResults, originFilter])
+
+  const toggleOriginFilter = (code: string) => {
+    setOriginFilter((prev) => {
+      const base = prev ?? new Set(availableOrigins)
+      const next = new Set(base)
+      if (next.has(code)) {
+        if (next.size <= 1) return next
+        next.delete(code)
+      } else {
+        next.add(code)
+      }
+      if (next.size === availableOrigins.length) return null
+      return next
+    })
+  }
+
   const handleSimpleResults = (results: EnrichedTripResponse[], searchInfo?: {
     datePreset: string | null
     airport: string
@@ -617,6 +650,7 @@ function Dashboard() {
     direct?: boolean
   }) => {
     setSimpleResults(results)
+    setOriginFilter(null)
     setError(null)
     if (searchInfo) {
       setLastSearchInfo(searchInfo)
@@ -769,7 +803,7 @@ function Dashboard() {
                 airports={airports}
                 selectedAirport={aeroportDepart}
                 onAirportChange={setAeroportDepart}
-                AirportAutocomplete={AirportAutocomplete}
+                AirportAutocomplete={CityAirportSelect}
                 flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
                 onFlexibleDatesChange={(dates) => {
                   // Dès que l’utilisateur édite, lâcher le seed figé de Modifier
@@ -887,6 +921,11 @@ function Dashboard() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4">
                   <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
                     🎯 Destinations trouvées
+                    {visibleSimpleResults.length !== simpleResults.length ? (
+                      <span className="block sm:inline text-base sm:text-xl font-bold text-slate-500 sm:ml-2">
+                        ({visibleSimpleResults.length}/{simpleResults.length})
+                      </span>
+                    ) : null}
                   </h2>
                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                     <motion.button
@@ -912,14 +951,40 @@ function Dashboard() {
                     </motion.button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-                  {simpleResults.map((trip, index) => (
+                {availableOrigins.length > 1 ? (
+                  <div className="mb-4 sm:mb-5">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+                      Filtrer par aéroport de départ
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {availableOrigins.map((code) => {
+                        const active = !originFilter || originFilter.has(code)
+                        return (
+                          <button
+                            key={code}
+                            type="button"
+                            onClick={() => toggleOriginFilter(code)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-bold border min-h-[36px] ${
+                              active
+                                ? 'bg-primary-500 text-white border-primary-500'
+                                : 'bg-white text-slate-600 border-slate-200'
+                            }`}
+                          >
+                            {code}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
+                  {visibleSimpleResults.map((trip, index) => (
                     <motion.div
-                      key={`${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
+                      key={`${trip.aller.origin}-${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: Math.min(index * 0.05, 0.4) }}
-                      className="min-w-0"
+                      className="min-w-0 h-full"
                     >
                       <DestinationCard
                         trip={trip}
@@ -965,7 +1030,7 @@ function Dashboard() {
       {/* Roulette Mode Modal */}
       {showRoulette && (
         <RouletteMode
-          trips={simpleResults}
+          trips={visibleSimpleResults}
           budget={rouletteBudget}
           onClose={() => setShowRoulette(false)}
           onSaveFavorite={handleSimpleSaveFavorite}

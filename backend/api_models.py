@@ -31,7 +31,7 @@ class DateAvecHoraire(BaseModel):
 
 
 class ScanRequest(BaseModel):
-    aeroport_depart: str = "BVA"  # Code IATA de l'aéroport de départ
+    aeroport_depart: str = "BVA"  # IATA départ (un ou plusieurs: "BVA" / "CDG,ORY,BVA")
     dates_depart: List[DateAvecHoraire]  # Dates avec horaires individuels
     dates_retour: List[DateAvecHoraire]  # Dates avec horaires individuels
     budget_max: Optional[int] = 200  # Prix max aller-retour PAR PERSONNE
@@ -64,7 +64,7 @@ class AutoCheckResponse(BaseModel):
 class InspireRequest(BaseModel):
     budget: int  # Max aller-retour PAR PERSONNE
     date_preset: str  # 'weekend', 'next-weekend', 'next-week', 'flexible'
-    departure: str  # Code aéroport
+    departure: str  # IATA départ (un ou plusieurs: "BVA" / "CDG,ORY,BVA")
     flexible_dates: Optional[Dict[str, List[DateAvecHoraire]]] = None  # Dates avec horaires individuels (pour tous les presets maintenant)
     destinations_exclues: Optional[List[str]] = None
     limite_allers: Optional[int] = None

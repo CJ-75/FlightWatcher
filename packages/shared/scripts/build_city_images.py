@@ -46,7 +46,8 @@ def fetch(title: str, lang: str = "en") -> str | None:
     import re
     from urllib.parse import urlparse, urlunparse
 
-    thumb = re.sub(r"/\d+px-", "/800px-", thumb)
+    # Keep Wikimedia's allowed width (REST summary uses 330px).
+    thumb = re.sub(r"/\d+px-", "/330px-", thumb)
     return urlunparse(urlparse(thumb)._replace(query=""))
 
 

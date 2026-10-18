@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -21,17 +21,23 @@ import type {
   EnrichedTripResponse,
 } from '@flightwatcher/shared'
 import {
-  generateDatesFromPreset,
+  airportSelectionLabel,
+  encodeAirportCodes,
+  findCityGroupByCodes,
   formatDateFr,
+  generateDatesFromPreset,
+  groupAirportsByCity,
+  isValidAirportSelection,
   normalizeAirports,
   normalizeDestinations,
+  parseAirportCodes,
   translate,
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../../App'
-import { AirportPicker } from '../components/AirportPicker'
+import { CityAirportPicker } from '../components/CityAirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
@@ -73,6 +79,7 @@ export function SearchScreen() {
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0])
   const [error, setError] = useState<string | null>(null)
+  const expandedDefaultRef = useRef(false)
 
   const [showFlexible, setShowFlexible] = useState(false)
   const [showExclude, setShowExclude] = useState(false)
@@ -85,7 +92,20 @@ export function SearchScreen() {
   useEffect(() => {
     getApi()
       .getAirports()
-      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+      .then((raw) => {
+        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+        setAirports(list)
+        // First load: BVA → all Paris airports (CDG, ORY, BVA…)
+        if (!expandedDefaultRef.current && list.length) {
+          expandedDefaultRef.current = true
+          const groups = groupAirportsByCity(list)
+          const paris = findCityGroupByCodes(groups, ['BVA', 'CDG', 'ORY'])
+          if (paris && paris.airports.length > 1) {
+            const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+            if (encoded) setAirport(encoded)
+          }
+        }
+      })
       .catch(() => undefined)
   }, [])
 
@@ -103,28 +123,53 @@ export function SearchScreen() {
     return () => clearInterval(id)
   }, [loading])
 
+  const originCodes = useMemo(() => parseAirportCodes(airport), [airport])
+  const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
+  const departureLabel = useMemo(
+    () => airportSelectionLabel(airport, cityGroups) || airport,
+    [airport, cityGroups],
+  )
+  const departureShort = useMemo(() => {
+    const group = findCityGroupByCodes(cityGroups, originCodes)
+    if (group && originCodes.length > 1) {
+      return `${group.city} (${originCodes.length})`
+    }
+    return originCodes.join(' · ') || airport
+  }, [cityGroups, originCodes, airport])
+
   const loadDestinations = useCallback(async () => {
-    if (!airport || airport.length !== 3) return
+    if (!originCodes.length) return
     setLoadingDest(true)
     try {
-      const raw = await getApi().getDestinations(airport)
-      setDestinations(normalizeDestinations(raw as never))
+      const batches = await Promise.all(
+        originCodes.map((code) =>
+          getApi()
+            .getDestinations(code)
+            .then((raw) => normalizeDestinations(raw as never))
+            .catch(() => [] as Destination[]),
+        ),
+      )
+      const byCode = new Map<string, Destination>()
+      for (const list of batches) {
+        for (const d of list) byCode.set(d.code, d)
+      }
+      setDestinations([...byCode.values()])
     } catch {
       setDestinations([])
     } finally {
       setLoadingDest(false)
     }
-  }, [airport])
+  }, [originCodes])
 
   useEffect(() => {
     setExcluded([])
     setDestinations([])
-    if (airport.length === 3) void loadDestinations()
-  }, [airport, loadDestinations])
+    if (originCodes.length) void loadDestinations()
+  }, [originCodes, loadDestinations])
 
   const activeDates = preset === 'flexible' ? flexibleDates : presetDates
   const isValidAirport = useMemo(
-    () => airports.length === 0 || airports.some((a) => a.code === airport),
+    () => isValidAirportSelection(airport, airports),
     [airports, airport],
   )
 
@@ -162,8 +207,8 @@ export function SearchScreen() {
 
   const onSearch = async () => {
     setError(null)
-    if (!airport || airport.length !== 3 || !isValidAirport) {
-      setError(translate('fr', 'search.departureError') || 'Choisis un aéroport valide')
+    if (!originCodes.length || !isValidAirport) {
+      setError(translate('fr', 'search.departureError') || 'Choisis une ville / aéroport valide')
       return
     }
     if (activeDates.dates_depart.length === 0 || activeDates.dates_retour.length === 0) {
@@ -209,7 +254,7 @@ export function SearchScreen() {
 
       navigation.navigate('Results', {
         trips: result.resultats as EnrichedTripResponse[],
-        title: `${airport} · ${budget}€/pers · ${passengers}p`,
+        title: `${departureShort} · ${budget}€/pers · ${passengers}p`,
         searchInfo: {
           airport,
           budget,
@@ -241,7 +286,7 @@ export function SearchScreen() {
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingTitle}>{loadingMsg}</Text>
         <Text style={styles.loadingSub}>
-          {airport} · {budget}€/pers · {passengers}p
+          {departureLabel} · {budget}€/pers · {passengers}p
         </Text>
       </View>
     )
@@ -311,7 +356,7 @@ export function SearchScreen() {
             <View style={[styles.divider, compact && styles.dividerCompact]} />
 
             <Text style={[styles.label, compact && styles.labelCompact]}>Départ</Text>
-            <AirportPicker compact airports={airports} value={airport} onChange={setAirport} />
+            <CityAirportPicker airports={airports} value={airport} onChange={setAirport} />
 
             <View style={[styles.divider, compact && styles.dividerCompact]} />
 
