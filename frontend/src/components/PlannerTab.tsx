@@ -948,33 +948,30 @@ function CreateTripModal({
     let cancelled = false
     void (async () => {
       try {
-        const maps = await Promise.all(
+        const lists = await Promise.all(
           origins.map(async (code) => {
             try {
               return normalizeDestinations(
-                (await getApiClient().getDestinations(code)) as any,
+                await getApiClient().getDestinations(code),
               )
             } catch {
-              return {} as Record<string, Airport[]>
+              return []
             }
           }),
         )
         if (cancelled) return
-        // Merge destination catalogs from all selected origins
-        const merged: Record<string, any[]> = {}
+        // Merge flat destination lists from all selected origins
         const seen = new Set<string>()
-        for (const map of maps) {
-          for (const [country, list] of Object.entries(map || {})) {
-            if (!merged[country]) merged[country] = []
-            for (const d of list as any[]) {
-              const code = (d?.code || '').toUpperCase()
-              if (!code || seen.has(code)) continue
-              seen.add(code)
-              merged[country].push(d)
-            }
+        const merged = []
+        for (const list of lists) {
+          for (const d of list) {
+            const code = (d?.code || '').toUpperCase()
+            if (!code || seen.has(code)) continue
+            seen.add(code)
+            merged.push(d)
           }
         }
-        const next = destinationsToAirports(merged as any)
+        const next = destinationsToAirports(merged)
         setArrivalAirports(next)
         setArrivalCodes((codes) => {
           const allowed = new Set(next.map((a) => a.code))
