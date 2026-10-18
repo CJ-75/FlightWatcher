@@ -3,15 +3,34 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.request
 from collections import defaultdict
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 from city_names_fr import city_for_code, country_for_code
 
-# Short in-memory cache so planner create/scan don't hit Ryanair every call
-_CACHE: Dict[str, tuple[float, Set[str]]] = {}
+# Short in-memory cache so planner create/scan don't hit Ryanair every call.
+# Empty sets are cached too (CDG/ORY return 404 — not Ryanair bases).
+_CACHE: Dict[str, Tuple[float, Set[str]]] = {}
 _CACHE_TTL_SEC = 60 * 60  # 1h
+_NEG_CACHE_TTL_SEC = 6 * 60 * 60  # 6h for known empty / 404 origins
+_WIDGET_EMPTY_LOGGED: Set[str] = set()
+
+
+def _cache_get(code: str) -> Optional[Set[str]]:
+    cached = _CACHE.get(code)
+    if not cached:
+        return None
+    ts, codes = cached
+    ttl = _NEG_CACHE_TTL_SEC if not codes else _CACHE_TTL_SEC
+    if time.time() - ts >= ttl:
+        return None
+    return set(codes)
+
+
+def _cache_set(code: str, codes: Set[str]) -> None:
+    _CACHE[code] = (time.time(), set(codes))
 
 
 def fetch_served_codes(departure: str) -> Set[str]:
@@ -20,10 +39,9 @@ def fetch_served_codes(departure: str) -> Set[str]:
     if len(code) != 3:
         return set()
 
-    now = time.time()
-    cached = _CACHE.get(code)
-    if cached and now - cached[0] < _CACHE_TTL_SEC:
-        return set(cached[1])
+    hit = _cache_get(code)
+    if hit is not None:
+        return hit
 
     url = (
         "https://www.ryanair.com/api/views/locate/searchWidget/routes/fr/airport/"
@@ -42,19 +60,36 @@ def fetch_served_codes(departure: str) -> Set[str]:
             dest = (arr.get("code") or "").strip().upper()
             if len(dest) == 3:
                 codes.add(dest)
+    except urllib.error.HTTPError as e:
+        # 404 = airport not in Ryanair network (CDG, ORY…) — cache empty, log once
+        if code not in _WIDGET_EMPTY_LOGGED:
+            print(f"ℹ️  Routes Ryanair {code}: HTTP {e.code} (pas de base Ryanair, cache)")
+            _WIDGET_EMPTY_LOGGED.add(code)
+        _cache_set(code, set())
+        return set()
     except Exception as e:
-        print(f"⚠️  Routes Ryanair {code}: {e}")
-        if cached:
-            return set(cached[1])
+        if code not in _WIDGET_EMPTY_LOGGED:
+            print(f"⚠️  Routes Ryanair {code}: {e}")
+            _WIDGET_EMPTY_LOGGED.add(code)
+        # Cache empty briefly so list/get don't hammer the widget
+        _cache_set(code, set())
         return set()
 
-    _CACHE[code] = (now, codes)
+    _cache_set(code, codes)
     return set(codes)
 
 
 def fetch_destinations_by_country(departure: str) -> dict:
     """Grouped destinations for /api/destinations (same source as served codes)."""
     code = (departure or "").strip().upper()
+    if len(code) != 3:
+        return {}
+
+    # Reuse served-codes negative cache: skip widget HTTP for known empty origins
+    hit = _cache_get(code)
+    if hit is not None and not hit:
+        return {}
+
     url = (
         "https://www.ryanair.com/api/views/locate/searchWidget/routes/fr/airport/"
         + code
@@ -92,9 +127,21 @@ def fetch_destinations_by_country(departure: str) -> dict:
                 "pays": country,
                 "destinationFull": dest_full,
             }
-        _CACHE[code] = (time.time(), codes)
+        _cache_set(code, codes)
+    except urllib.error.HTTPError as e:
+        if code not in _WIDGET_EMPTY_LOGGED:
+            print(
+                f"ℹ️  Routes widget {code}: HTTP {e.code} "
+                "(pas de base Ryanair → catalogue commun)"
+            )
+            _WIDGET_EMPTY_LOGGED.add(code)
+        _cache_set(code, set())
+        return {}
     except Exception as e:
-        print(f"⚠️  Routes widget échoué pour {code}: {e}")
+        if code not in _WIDGET_EMPTY_LOGGED:
+            print(f"⚠️  Routes widget échoué pour {code}: {e}")
+            _WIDGET_EMPTY_LOGGED.add(code)
+        _cache_set(code, set())
         return {}
     return by_country
 
@@ -104,6 +151,9 @@ def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
 
     ``departure`` may be a single IATA or comma-separated city airports
     (e.g. ``CDG,ORY,BVA``). Empty arrival = ok.
+
+    Ryanair-only check: if no origin has Ryanair routes (all CDG/ORY…),
+    do not block — Travelpayouts may still serve the route.
     """
     if not arrival:
         return []
@@ -121,10 +171,22 @@ def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
     ]
     if not deps:
         return []
+
+    # Prefer origins that likely have Ryanair data first (BVA before CDG)
+    deps_sorted = sorted(
+        deps,
+        key=lambda c: 0 if _cache_get(c) else 1,
+    )
+
     served: Set[str] = set()
-    for dep in deps:
+    remaining = set(codes)
+    for dep in deps_sorted:
+        if not remaining:
+            break
         served |= fetch_served_codes(dep)
+        remaining -= served
+
     if not served:
-        # If Ryanair unreachable, don't block create/scan
+        # No Ryanair coverage from any origin — don't block multi-provider trips
         return []
     return [c for c in codes if c not in served]

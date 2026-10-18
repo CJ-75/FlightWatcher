@@ -138,16 +138,17 @@ def get_destinations(airport: str = "BVA"):
             raise HTTPException(status_code=400, detail="Code aéroport invalide")
 
         destinations_par_pays = _destinations_from_routes(code)
+        # Widget vide (ex. CDG/ORY) → catalogue commun direct, pas le fallback vols Ryanair
         if not destinations_par_pays:
-            destinations_par_pays = _destinations_from_flights(code)
-
-        # Si peu / pas de routes Ryanair (ex. CDG), enrichir avec le catalogue commun
-        ryanair_count = sum(len(v) for v in destinations_par_pays.values())
-        if ryanair_count < 15:
-            destinations_par_pays = _merge_destination_maps(
-                destinations_par_pays,
-                _destinations_from_catalog(exclude_code=code),
-            )
+            destinations_par_pays = _destinations_from_catalog(exclude_code=code)
+        else:
+            # Peu de routes Ryanair → enrichir avec le catalogue commun
+            ryanair_count = sum(len(v) for v in destinations_par_pays.values())
+            if ryanair_count < 15:
+                destinations_par_pays = _merge_destination_maps(
+                    destinations_par_pays,
+                    _destinations_from_catalog(exclude_code=code),
+                )
 
         result = {}
         for pays in sorted(destinations_par_pays.keys()):
