@@ -382,6 +382,7 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
         destinations_incluses=incluses,
         record_prices=True,
         passengers=int(trip.get("passengers") or 1),
+        direct=bool(trip.get("direct") or False),
     )
     enriched = enrich_trip_results(resultats, trip["departure_airport"])
     enriched.sort(key=lambda t: t.prix_total)
@@ -445,6 +446,7 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
                 destinations_incluses=incluses,
                 record_prices=False,
                 passengers=int(trip.get("passengers") or 1),
+                direct=bool(trip.get("direct") or False),
             )
             num_requetes += n_diag
             if diag:

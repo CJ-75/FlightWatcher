@@ -169,6 +169,22 @@ export function DestinationCard({
           <p className="text-sm text-white/90 font-medium mt-0.5 truncate">
             {airportLine}
           </p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">
+              {String(trip.provider || 'ryanair') === 'travelpayouts'
+                ? trip.airline || 'Aviasales'
+                : 'Ryanair'}
+            </span>
+            {(trip.transfers ?? 0) > 0 ? (
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">
+                {trip.transfers} escale{(trip.transfers || 0) > 1 ? 's' : ''}
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-400/90 text-white px-2 py-0.5 rounded-full">
+                Direct
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

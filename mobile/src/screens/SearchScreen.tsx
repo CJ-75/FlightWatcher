@@ -46,7 +46,7 @@ const PRESETS: { id: DatePresetId; label: string; hint: string }[] = [
   { id: 'flexible', label: 'Dates libres', hint: 'Je choisis' },
 ]
 
-const LOADING_MESSAGES = ['On scanne Ryanair…', 'On croise les prix…', 'Presque là…']
+const LOADING_MESSAGES = ['On scanne les vols…', 'On croise les prix…', 'Presque là…']
 
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -57,6 +57,7 @@ export function SearchScreen() {
   const [airport, setAirport] = useState('BVA')
   const [budget, setBudget] = useState(150)
   const [passengers, setPassengers] = useState(1)
+  const [directOnly, setDirectOnly] = useState(false)
   const [preset, setPreset] = useState<DatePresetId>('next-weekend')
   const [presetDates, setPresetDates] = useState<FlexibleDates>(() =>
     generateDatesFromPreset('next-weekend'),
@@ -179,6 +180,7 @@ export function SearchScreen() {
         date_preset: preset,
         departure: airport.trim().toUpperCase(),
         passengers,
+        direct: directOnly,
         flexible_dates: {
           dates_depart: activeDates.dates_depart,
           dates_retour: activeDates.dates_retour,
@@ -274,7 +276,7 @@ export function SearchScreen() {
           <View style={[styles.carrierRow, compact && styles.carrierRowCompact]}>
             <View style={styles.carrierBadge}>
               <Text style={styles.carrierDot}>✈</Text>
-              <Text style={styles.carrierBadgeText}>Ryanair pour l’instant</Text>
+              <Text style={styles.carrierBadgeText}>Ryanair + multi-compagnies</Text>
             </View>
           </View>
         </View>
@@ -292,6 +294,19 @@ export function SearchScreen() {
             <View style={[styles.divider, compact && styles.dividerCompact]} />
 
             <PassengerStepper value={passengers} onChange={setPassengers} />
+
+            <View style={[styles.divider, compact && styles.dividerCompact]} />
+
+            <Pressable
+              style={styles.directRow}
+              onPress={() => setDirectOnly((v) => !v)}
+              hitSlop={8}
+            >
+              <View style={[styles.directBox, directOnly && styles.directBoxOn]}>
+                {directOnly ? <Text style={styles.directCheck}>✓</Text> : null}
+              </View>
+              <Text style={styles.directLabel}>Vols directs uniquement</Text>
+            </Pressable>
 
             <View style={[styles.divider, compact && styles.dividerCompact]} />
 
@@ -601,6 +616,37 @@ const styles = StyleSheet.create({
   },
   labelCompact: {
     marginBottom: 4,
+  },
+  directRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  directBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+  },
+  directBoxOn: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  directCheck: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    lineHeight: 14,
+  },
+  directLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

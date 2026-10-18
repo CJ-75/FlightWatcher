@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { EnrichedTripResponse } from '../types';
 import { getSessionId } from '../utils/session';
-import { buildRyanairBookingUrl } from '@flightwatcher/shared';
+import { bookingPartnerMeta, buildBookingUrl } from '@flightwatcher/shared';
 
 interface BookingSasProps {
   trip: EnrichedTripResponse;
   passengers?: number;
   onClose: () => void;
   onSaveFavorite: () => void;
-  searchEventId?: string | null; // ID de l'événement de recherche associé
+  searchEventId?: string | null;
 }
 
 const springConfig = {
@@ -19,34 +19,51 @@ const springConfig = {
   mass: 0.5
 };
 
-// Configuration modulaire des partenaires
 interface Partner {
   id: string;
   name: string;
   logo: string;
   description: string;
   redirectUrl: (trip: EnrichedTripResponse, passengers?: number) => string;
-  priority: number; // Plus bas = affiché en premier
+  priority: number;
   enabled: boolean;
 }
 
-function buildPartners(passengers: number): Partner[] {
+function buildPartners(trip: EnrichedTripResponse, passengers: number): Partner[] {
   const adults = Math.min(6, Math.max(1, passengers || 1));
+  const meta = bookingPartnerMeta(trip);
+  const isTp =
+    String(trip.provider || '').toLowerCase() === 'travelpayouts' ||
+    !!(trip.booking_url && trip.booking_url.includes('aviasales'));
+
+  if (isTp) {
+    return [
+      {
+        id: meta.partner_id,
+        name: meta.partner_name,
+        logo: '🎫',
+        description: 'Réservez via Aviasales (multi-compagnies)',
+        redirectUrl: (t) => buildBookingUrl(t, adults),
+        priority: 1,
+        enabled: true,
+      },
+    ];
+  }
+
   return [
     {
       id: 'ryanair',
       name: 'Ryanair',
       logo: '✈️',
       description: 'Réservez directement sur le site officiel',
-      redirectUrl: (trip) => buildRyanairBookingUrl(trip, adults),
+      redirectUrl: (t) => buildBookingUrl(t, adults),
       priority: 1,
       enabled: true,
     },
   ];
 }
 
-// Temps d'affichage avant redirection automatique (en millisecondes)
-const AUTO_REDIRECT_DELAY = 3000; // 3 secondes
+const AUTO_REDIRECT_DELAY = 3000;
 
 export function BookingSas({
   trip,
@@ -55,25 +72,23 @@ export function BookingSas({
   onSaveFavorite,
   searchEventId,
 }: BookingSasProps) {
-  const partners = buildPartners(passengers);
+  const partners = buildPartners(trip, passengers);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [countdown, setCountdown] = useState(AUTO_REDIRECT_DELAY / 1000);
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const [hasTrackedEvent, setHasTrackedEvent] = useState(false); // Protection contre les doublons
+  const [hasTrackedEvent, setHasTrackedEvent] = useState(false);
 
-  // Filtrer et trier les partenaires activés
   const availablePartners = partners
     .filter(p => p.enabled)
     .sort((a, b) => a.priority - b.priority);
 
-  // Sélectionner le premier partenaire par défaut
   useEffect(() => {
-    if (availablePartners.length > 0 && !selectedPartner) {
-      setSelectedPartner(availablePartners[0]);
-    }
-  }, [availablePartners.length]);
+    setSelectedPartner(availablePartners[0] || null);
+    setCountdown(AUTO_REDIRECT_DELAY / 1000);
+    setIsRedirecting(false);
+    setHasTrackedEvent(false);
+  }, [trip.destination_code, trip.aller.departureTime, trip.provider]);
 
-  // Compte à rebours pour redirection automatique
   useEffect(() => {
     if (!selectedPartner || isRedirecting || hasTrackedEvent) return;
 
@@ -91,7 +106,6 @@ export function BookingSas({
   }, [selectedPartner, isRedirecting, hasTrackedEvent]);
 
   const handleRedirect = (partner: Partner) => {
-    // Protection contre les appels multiples
     if (isRedirecting || hasTrackedEvent) {
       return;
     }
@@ -100,7 +114,6 @@ export function BookingSas({
     setHasTrackedEvent(true);
     const url = partner.redirectUrl(trip);
     
-    // Enregistrer l'événement SAS pour analytics (non-bloquant)
     fetch('/api/analytics/booking-sas-event', {
       method: 'POST',
       headers: {
@@ -121,7 +134,6 @@ export function BookingSas({
     })
     .then(async (response) => {
       if (!response.ok) {
-        // Essayer de parser comme JSON, sinon utiliser le texte
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const errorData = await response.json();
@@ -137,7 +149,6 @@ export function BookingSas({
     });
     
     window.open(url, '_blank');
-    // Fermer la modal après un court délai
     setTimeout(() => {
       onClose();
     }, 500);
@@ -161,7 +172,6 @@ export function BookingSas({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-3xl border border-line shadow-lift max-w-2xl w-full p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto"
       >
-        {/* Bouton fermer */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200 transition-colors z-10"
@@ -169,10 +179,9 @@ export function BookingSas({
           ✕
         </button>
 
-        {/* Header */}
         <div className="text-center mb-6">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2">
-            ✈️ Réserver votre vol
+            Réserver votre vol
           </h2>
           <p className="text-slate-600 font-medium">
             {cityName} - {trip.prix_total.toFixed(0)}€ / pers.
@@ -180,7 +189,6 @@ export function BookingSas({
           </p>
         </div>
 
-        {/* Compte à rebours */}
         {!isRedirecting && selectedPartner && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -194,7 +202,6 @@ export function BookingSas({
           </motion.div>
         )}
 
-        {/* Liste des partenaires */}
         <div className="space-y-3 mb-6">
           {availablePartners.map((partner) => (
             <motion.button
@@ -227,7 +234,6 @@ export function BookingSas({
           ))}
         </div>
 
-        {/* Bouton sauvegarder */}
         <motion.button
           onClick={(e) => {
             e.stopPropagation();
@@ -237,10 +243,9 @@ export function BookingSas({
           whileTap={{ scale: 0.98 }}
           className="w-full bg-slate-100 text-slate-700 rounded-full px-6 py-3 font-semibold hover:bg-slate-200 transition-colors mb-4"
         >
-          ❤️ Sauvegarder ce voyage
+          Sauvegarder ce voyage
         </motion.button>
 
-        {/* Message de redirection */}
         {isRedirecting && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -254,4 +259,3 @@ export function BookingSas({
     </motion.div>
   );
 }
-

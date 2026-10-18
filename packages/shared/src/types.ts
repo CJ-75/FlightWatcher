@@ -9,11 +9,17 @@ export interface FlightResponse {
   currency: string
 }
 
+export type FlightProviderId = 'ryanair' | 'travelpayouts'
+
 export interface TripResponse {
   aller: FlightResponse
   retour: FlightResponse
   prix_total: number
   destination_code: string
+  provider?: FlightProviderId | string
+  airline?: string | null
+  transfers?: number | null
+  booking_url?: string | null
 }
 
 export interface ScanResponse {
@@ -46,6 +52,8 @@ export interface ScanRequest {
   destinations_incluses?: string[] | null
   /** Adult passengers (Ryanair adultPaxCount). Default 1. */
   passengers?: number
+  /** Non-stop only (Travelpayouts). Default false. */
+  direct?: boolean
 }
 
 export interface Airport {
@@ -75,6 +83,8 @@ export interface InspireRequest {
   limite_allers?: number
   /** Adult passengers (Ryanair adultPaxCount). Default 1. */
   passengers?: number
+  /** Non-stop only (Travelpayouts). Default false. */
+  direct?: boolean
 }
 
 export interface InspireResponse {

@@ -1,28 +1,20 @@
 """
-Flight scanning logic for Ryanair API.
+Flight scanning — orchestrates Ryanair + Travelpayouts providers.
 """
-import sys
-import os
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
-# Ajouter le chemin parent pour importer ryanair
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'ryanair-py'))
-
-from ryanair import Ryanair
-
 from api_models import (
     DateAvecHoraire,
-    FlightResponse,
-    TripResponse,
     EnrichedTripResponse,
+    TripResponse,
 )
 from city_names_fr import destination_full_fr
-from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, record_price_history
+from providers.orchestrator import search_roundtrips as _search_roundtrips
+from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client
 
 
-def _localize_flight(flight: FlightResponse) -> FlightResponse:
-    """Rewrite origin/destination labels to French city names."""
+def _localize_flight(flight):
     data = {
         "originFull": destination_full_fr(flight.origin, fallback_full=flight.originFull),
         "destinationFull": destination_full_fr(
@@ -32,14 +24,6 @@ def _localize_flight(flight: FlightResponse) -> FlightResponse:
     if hasattr(flight, "model_copy"):
         return flight.model_copy(update=data)
     return flight.copy(update=data)
-
-
-def _clamp_passengers(passengers: Optional[int]) -> int:
-    try:
-        n = int(passengers or 1)
-    except (TypeError, ValueError):
-        n = 1
-    return max(1, min(6, n))
 
 
 def scanner_vols_api(
@@ -52,159 +36,21 @@ def scanner_vols_api(
     destinations_incluses: List[str] = None,
     record_prices: bool = True,
     passengers: int = 1,
+    direct: bool = False,
 ) -> Tuple[List[TripResponse], int]:
-    """
-    Fonction de scan optimisée :
-    1. Récupère TOUS les vols aller d'abord
-    2. Trie par prix et garde les plus pertinents
-    3. Cherche les retours uniquement pour les meilleurs allers
-    """
-    api = Ryanair(currency="EUR")
-    resultats = []
-    pax = _clamp_passengers(passengers)
-    # budget_max = max per person; Ryanair adultPaxCount returns totals for N adults
-    pax_params = {"adultPaxCount": pax} if pax > 1 else None
-    budget_total = int(budget_max) * pax
-
-    if not dates_depart or not dates_retour:
-        return [], 0
-
-    destinations_exclues = destinations_exclues or []
-    destinations_incluses = destinations_incluses if destinations_incluses is not None else None
-
-    print(
-        f"📥 Étape 1: vols aller depuis {aeroport_depart} "
-        f"({pax} pax, budget {budget_max}€/pers → max {budget_total}€)..."
+    """Multi-provider round-trip search (Ryanair + Travelpayouts when configured)."""
+    return _search_roundtrips(
+        aeroport_depart=aeroport_depart,
+        dates_depart=dates_depart,
+        dates_retour=dates_retour,
+        budget_max=budget_max,
+        limite_allers=limite_allers,
+        destinations_exclues=destinations_exclues,
+        destinations_incluses=destinations_incluses,
+        record_prices=record_prices,
+        passengers=passengers,
+        direct=direct,
     )
-    tous_vols_aller = []
-
-    for date_config in dates_depart:
-        date_obj = datetime.fromisoformat(date_config.date).date()
-        try:
-            vols = api.get_cheapest_flights(
-                airport=aeroport_depart,
-                date_from=date_obj,
-                date_to=date_obj,
-                departure_time_from=date_config.heure_min or "00:00",
-                departure_time_to=date_config.heure_max or "23:59",
-                max_price=budget_total,
-                custom_params=pax_params,
-            )
-            for vol in vols:
-                vol_date = vol.departureTime.date()
-                vol_heure = vol.departureTime.time()
-                heure_min = datetime.strptime(date_config.heure_min or "00:00", "%H:%M").time()
-                heure_max = datetime.strptime(date_config.heure_max or "23:59", "%H:%M").time()
-
-                if vol_date == date_obj and heure_min <= vol_heure <= heure_max:
-                    dest_code = vol.destination
-                    if dest_code in destinations_exclues:
-                        continue
-                    if destinations_incluses is not None and dest_code not in destinations_incluses:
-                        continue
-                    tous_vols_aller.append(vol)
-        except Exception as e:
-            print(f"  Erreur pour la date {date_config.date}: {e}")
-            continue
-
-    print(f"  ✓ {len(tous_vols_aller)} vol(s) aller trouvé(s)")
-
-    if not tous_vols_aller:
-        return [], api.num_queries
-
-    tous_vols_aller.sort(key=lambda v: v.price)
-
-    vols_aller_optimises = {}
-    for vol in tous_vols_aller:
-        dest = vol.destination
-        if dest not in vols_aller_optimises or vol.price < vols_aller_optimises[dest].price:
-            vols_aller_optimises[dest] = vol
-
-    vols_aller_filtres = sorted(vols_aller_optimises.values(), key=lambda v: v.price)[:limite_allers]
-    print(f"  ✓ {len(vols_aller_filtres)} destination(s) retenue(s) pour recherche de retours")
-
-    print(f"📤 Étape 2: Recherche des vols retour pour les meilleures destinations...")
-    for vol_aller in vols_aller_filtres:
-        destination_code = vol_aller.destination
-        meilleur_retour = None
-        meilleur_prix_total = float('inf')
-
-        for date_retour_config in dates_retour:
-            date_retour_obj = datetime.fromisoformat(date_retour_config.date).date()
-            try:
-                vols_retour = api.get_cheapest_flights(
-                    airport=destination_code,
-                    date_from=date_retour_obj,
-                    date_to=date_retour_obj,
-                    destination_airport=aeroport_depart,
-                    departure_time_from=date_retour_config.heure_min or "00:00",
-                    departure_time_to=date_retour_config.heure_max or "23:59",
-                    max_price=budget_total,
-                    custom_params=pax_params,
-                )
-
-                for vol_retour in vols_retour:
-                    vol_retour_date = vol_retour.departureTime.date()
-                    vol_retour_heure = vol_retour.departureTime.time()
-                    heure_min = datetime.strptime(date_retour_config.heure_min or "00:00", "%H:%M").time()
-                    heure_max = datetime.strptime(date_retour_config.heure_max or "23:59", "%H:%M").time()
-
-                    if (
-                        vol_retour_date == date_retour_obj
-                        and heure_min <= vol_retour_heure <= heure_max
-                    ):
-                        prix_groupe = vol_aller.price + vol_retour.price
-                        if prix_groupe <= budget_total and prix_groupe < meilleur_prix_total:
-                            meilleur_retour = vol_retour
-                            meilleur_prix_total = prix_groupe
-            except Exception:
-                continue
-
-        if meilleur_retour:
-            # Normalize to per-person so budget / UI stay "par personne"
-            aller_pp = round(vol_aller.price / pax, 2)
-            retour_pp = round(meilleur_retour.price / pax, 2)
-            resultats.append(
-                TripResponse(
-                    aller=_localize_flight(
-                        FlightResponse(
-                            flightNumber=vol_aller.flightNumber,
-                            origin=vol_aller.origin,
-                            originFull=vol_aller.originFull,
-                            destination=vol_aller.destination,
-                            destinationFull=vol_aller.destinationFull,
-                            departureTime=vol_aller.departureTime.isoformat(),
-                            price=aller_pp,
-                            currency=vol_aller.currency,
-                        )
-                    ),
-                    retour=_localize_flight(
-                        FlightResponse(
-                            flightNumber=meilleur_retour.flightNumber,
-                            origin=meilleur_retour.origin,
-                            originFull=meilleur_retour.originFull,
-                            destination=meilleur_retour.destination,
-                            destinationFull=meilleur_retour.destinationFull,
-                            departureTime=meilleur_retour.departureTime.isoformat(),
-                            price=retour_pp,
-                            currency=meilleur_retour.currency,
-                        )
-                    ),
-                    prix_total=round(aller_pp + retour_pp, 2),
-                    destination_code=destination_code,
-                )
-            )
-
-    print(f"  ✓ {len(resultats)} voyage(s) aller-retour complet(s) trouvé(s)")
-
-    if record_prices and resultats and SUPABASE_AVAILABLE:
-        try:
-            trips_dict = [trip.model_dump() for trip in resultats]
-            record_price_history(trips_dict)
-        except Exception as e:
-            print(f"⚠️ Erreur enregistrement price_history: {e}")
-
-    return resultats, api.num_queries
 
 
 def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[DateAvecHoraire]]:
@@ -338,15 +184,18 @@ def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> Li
     """Enrichit les résultats de trips avec discount, images et flags"""
     enriched = []
 
-    for trip in trips[:15]:
+    for trip in trips[:30]:
         avg_price = get_avg_price_last_month(departure_airport, trip.destination_code)
         discount_percent = calculate_discount(trip.prix_total, avg_price)
-        # Client résout l'image via cityImageUrl (source.unsplash.com est mort)
         enriched_trip = EnrichedTripResponse(
             aller=_localize_flight(trip.aller),
             retour=_localize_flight(trip.retour),
             prix_total=trip.prix_total,
             destination_code=trip.destination_code,
+            provider=trip.provider or "ryanair",
+            airline=trip.airline,
+            transfers=trip.transfers,
+            booking_url=trip.booking_url,
             discount_percent=discount_percent if discount_percent > 0 else None,
             is_good_deal=discount_percent > 20,
             image_url=None,

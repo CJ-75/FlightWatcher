@@ -37,7 +37,7 @@ import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
-import { buildRyanairBookingUrl } from '@flightwatcher/shared'
+import { buildBookingUrl } from '@flightwatcher/shared'
 
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
 
@@ -614,6 +614,7 @@ function Dashboard() {
     datesDepart: DateAvecHoraire[]
     datesRetour: DateAvecHoraire[]
     excludedDestinations: string[]
+    direct?: boolean
   }) => {
     setSimpleResults(results)
     setError(null)
@@ -627,7 +628,8 @@ function Dashboard() {
         budget_max: searchInfo.budget,
         passengers: searchInfo.passengers || 1,
         limite_allers: limiteAllers,
-        destinations_exclues: searchInfo.excludedDestinations.length > 0 ? searchInfo.excludedDestinations : undefined
+        destinations_exclues: searchInfo.excludedDestinations.length > 0 ? searchInfo.excludedDestinations : undefined,
+        direct: !!searchInfo.direct,
       }
       setCurrentRequest(request)
     }
@@ -1740,7 +1742,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
 
   // Fonction pour construire l'URL Ryanair à partir d'un favori
   const buildRyanairUrl = (favorite: SavedFavorite): string => {
-    return buildRyanairBookingUrl(favorite.trip, favorite.searchRequest?.passengers || 1)
+    return buildBookingUrl(favorite.trip, favorite.searchRequest?.passengers || 1)
   }
 
   // Fonction pour ouvrir BookingSas avec le favori (comme dans les résultats de recherche)

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet, Modal, Linking, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
-import { buildRyanairBookingUrl } from '@flightwatcher/shared'
+import { bookingPartnerMeta, buildBookingUrl } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { colors, fonts, shadow } from '../theme'
 
@@ -55,12 +55,13 @@ export function BookingSheet({
     if (!trip || tracked.current) return
     tracked.current = true
     setRedirecting(true)
-    const url = buildRyanairBookingUrl(trip, passengers)
+    const url = buildBookingUrl(trip, passengers)
+    const meta = bookingPartnerMeta(trip)
     void getApi()
       .trackBookingSasEvent({
         trip,
-        partner_id: 'ryanair',
-        partner_name: 'Ryanair',
+        partner_id: meta.partner_id,
+        partner_name: meta.partner_name,
         redirect_url: url,
         source: 'mobile',
         search_event_id: searchEventId || undefined,
@@ -76,6 +77,8 @@ export function BookingSheet({
   if (!trip) return null
 
   const city = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
+  const meta = bookingPartnerMeta(trip)
+  const isTp = meta.partner_id === 'aviasales'
 
   return (
     <Modal visible={!!trip} transparent animationType="slide" onRequestClose={onClose}>
@@ -91,10 +94,14 @@ export function BookingSheet({
         </Text>
 
         <View style={styles.partner}>
-          <Text style={styles.partnerEmoji}>✈️</Text>
+          <Text style={styles.partnerEmoji}>{isTp ? '🎫' : '✈️'}</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.partnerName}>Ryanair</Text>
-            <Text style={styles.partnerDesc}>Site officiel — redirection automatique</Text>
+            <Text style={styles.partnerName}>{meta.partner_name}</Text>
+            <Text style={styles.partnerDesc}>
+              {isTp
+                ? 'Aviasales — multi-compagnies · redirection automatique'
+                : 'Site officiel — redirection automatique'}
+            </Text>
           </View>
           {redirecting ? (
             <ActivityIndicator color={colors.primary} />
@@ -104,7 +111,9 @@ export function BookingSheet({
         </View>
 
         <Pressable onPress={() => void redirect()} style={styles.cta}>
-          <Text style={styles.ctaText}>Ouvrir Ryanair maintenant</Text>
+          <Text style={styles.ctaText}>
+            Ouvrir {isTp ? 'Aviasales' : 'Ryanair'} maintenant
+          </Text>
         </Pressable>
 
         {onSaveFavorite ? (
@@ -132,77 +141,61 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: 'center',
-    width: 36,
+    width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.lineStrong,
+    backgroundColor: colors.line,
     marginBottom: 14,
   },
   title: {
     fontFamily: fonts.extrabold,
     fontSize: 22,
-    lineHeight: 28,
     color: colors.ink,
-    includeFontPadding: false,
+    letterSpacing: -0.5,
   },
   sub: {
+    marginTop: 6,
     fontFamily: fonts.medium,
     fontSize: 14,
-    lineHeight: 20,
     color: colors.muted,
-    marginTop: 4,
     marginBottom: 18,
-    includeFontPadding: false,
   },
   partner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.canvas,
-    borderRadius: 16,
     padding: 14,
+    borderRadius: 16,
+    backgroundColor: colors.canvas,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
     marginBottom: 14,
   },
   partnerEmoji: { fontSize: 28 },
-  partnerName: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  partnerDesc: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.muted,
-    includeFontPadding: false,
-  },
-  countdown: {
-    fontFamily: fonts.extrabold,
-    fontSize: 18,
-    color: colors.primary,
-    includeFontPadding: false,
-  },
+  partnerName: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
+  partnerDesc: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted, marginTop: 2 },
+  countdown: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.primary },
   cta: {
     backgroundColor: colors.primary,
-    borderRadius: 14,
-    minHeight: 52,
+    borderRadius: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  ctaText: { fontFamily: fonts.bold, fontSize: 15, color: colors.white },
+  fav: {
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: colors.canvas,
     marginBottom: 8,
   },
-  ctaText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
-  fav: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  favText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.inkSoft },
+  favText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
   cancel: {
     textAlign: 'center',
     fontFamily: fonts.medium,
     fontSize: 14,
-    color: colors.faint,
-    marginTop: 4,
-    marginBottom: 4,
+    color: colors.muted,
+    paddingVertical: 10,
   },
 })

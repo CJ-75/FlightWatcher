@@ -41,6 +41,7 @@ interface SimpleSearchProps {
     datesDepart: DateAvecHoraire[]
     datesRetour: DateAvecHoraire[]
     excludedDestinations: string[]
+    direct?: boolean
   }) => void;
   onLoading: (loading: boolean) => void;
   onError: (error: string | null) => void;
@@ -109,6 +110,7 @@ export function SimpleSearch({
   const startFlexible = forceFlexible || hasParentDates;
 
   const [budget, setBudget] = useState(externalBudget || 100);
+  const [directOnly, setDirectOnly] = useState(false);
   const [passengers, setPassengers] = useState(
     initialPassengers > 0 ? initialPassengers : 1,
   );
@@ -281,6 +283,7 @@ export function SimpleSearch({
         date_preset: presetForSearch === 'flexible' ? 'flexible' : presetForSearch,
         departure: selectedAirport.trim().toUpperCase(),
         passengers,
+        direct: directOnly,
         flexible_dates: {
           dates_depart: resolvedDates.dates_depart,
           dates_retour: resolvedDates.dates_retour,
@@ -329,7 +332,8 @@ export function SimpleSearch({
         passengers,
         datesDepart: resolvedDates.dates_depart,
         datesRetour: resolvedDates.dates_retour,
-        excludedDestinations
+        excludedDestinations,
+        direct: directOnly,
       });
 
       setShowEmpty(trips.length === 0);
@@ -460,6 +464,18 @@ export function SimpleSearch({
           />
         </motion.div>
       )}
+
+      <label className="mb-4 sm:mb-6 flex items-center gap-3 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={directOnly}
+          onChange={(e) => setDirectOnly(e.target.checked)}
+          className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
+        />
+        <span className="text-sm sm:text-base font-semibold text-slate-800">
+          Vols directs uniquement
+        </span>
+      </label>
 
       <AdvancedOptions
         datePreset={hasParentDates || effectivePreset === 'flexible' ? 'flexible' : effectivePreset}

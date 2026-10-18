@@ -18,6 +18,10 @@ class TripResponse(BaseModel):
     retour: FlightResponse
     prix_total: float
     destination_code: str
+    provider: Optional[str] = "ryanair"  # ryanair | travelpayouts
+    airline: Optional[str] = None
+    transfers: Optional[int] = None
+    booking_url: Optional[str] = None
 
 
 class DateAvecHoraire(BaseModel):
@@ -35,6 +39,7 @@ class ScanRequest(BaseModel):
     destinations_exclues: Optional[List[str]] = []  # Codes IATA des destinations à exclure
     destinations_incluses: Optional[List[str]] = None  # Codes IATA des destinations à inclure (si None, toutes sauf exclues)
     passengers: Optional[int] = 1  # Adultes (Ryanair adultPaxCount), 1–6
+    direct: Optional[bool] = False  # Non-stop only (Travelpayouts)
 
 
 class ScanResponse(BaseModel):
@@ -64,6 +69,7 @@ class InspireRequest(BaseModel):
     destinations_exclues: Optional[List[str]] = None
     limite_allers: Optional[int] = None
     passengers: Optional[int] = 1  # Adultes (Ryanair adultPaxCount), 1–6
+    direct: Optional[bool] = False  # Non-stop only (Travelpayouts)
 
 
 class EnrichedTripResponse(TripResponse):

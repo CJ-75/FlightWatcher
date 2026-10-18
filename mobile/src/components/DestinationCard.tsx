@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import {
   arrivalAirportSubtitle,
-  buildRyanairBookingUrl,
+  buildBookingUrl,
   cityDisplayNameFr,
   resolveTripImageUrl,
 } from '@flightwatcher/shared'
@@ -76,8 +76,14 @@ export function DestinationCard({
       onBook()
       return
     }
-    await Linking.openURL(buildRyanairBookingUrl(trip, passengers))
+    await Linking.openURL(buildBookingUrl(trip, passengers))
   }
+
+  const providerLabel =
+    String(trip.provider || 'ryanair') === 'travelpayouts'
+      ? trip.airline || 'Aviasales'
+      : 'Ryanair'
+  const transfers = trip.transfers ?? 0
 
   return (
     <View style={[styles.card, shadow.soft]}>
@@ -120,6 +126,16 @@ export function DestinationCard({
           <Text style={styles.route} numberOfLines={1}>
             {airportLine}
           </Text>
+          <View style={styles.badgeRow}>
+            <View style={styles.metaBadge}>
+              <Text style={styles.metaBadgeText}>{providerLabel}</Text>
+            </View>
+            <View style={[styles.metaBadge, transfers === 0 && styles.metaBadgeDirect]}>
+              <Text style={styles.metaBadgeText}>
+                {transfers > 0 ? `${transfers} escale${transfers > 1 ? 's' : ''}` : 'Direct'}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -261,6 +277,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
     marginTop: 4,
+  },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  metaBadge: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  metaBadgeDirect: { backgroundColor: 'rgba(16,185,129,0.85)' },
+  metaBadgeText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   body: { padding: spacing.lg },
   priceRow: {

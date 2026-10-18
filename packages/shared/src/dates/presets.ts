@@ -184,6 +184,39 @@ export function buildRyanairBookingUrl(
   return `https://www.ryanair.com/fr/fr/trip/flights/select?${params.toString()}`
 }
 
+export type BookableTrip = {
+  provider?: string | null
+  booking_url?: string | null
+  aller: { origin: string; destination: string; departureTime: string }
+  retour: { departureTime: string }
+}
+
+/** Prefer Travelpayouts/Aviasales booking_url when present; else Ryanair deep-link. */
+export function buildBookingUrl(trip: BookableTrip, passengers = 1): string {
+  const provider = String(trip.provider || '').toLowerCase()
+  const url = (trip.booking_url || '').trim()
+  if ((provider === 'travelpayouts' || url) && url.startsWith('http')) {
+    return url
+  }
+  return buildRyanairBookingUrl(trip, passengers)
+}
+
+export function bookingPartnerMeta(trip: {
+  provider?: string | null
+  booking_url?: string | null
+  airline?: string | null
+}): { partner_id: string; partner_name: string } {
+  const provider = String(trip.provider || '').toLowerCase()
+  if (provider === 'travelpayouts' || (trip.booking_url || '').includes('aviasales')) {
+    const airline = (trip.airline || '').trim().toUpperCase()
+    return {
+      partner_id: 'aviasales',
+      partner_name: airline ? `Aviasales · ${airline}` : 'Aviasales',
+    }
+  }
+  return { partner_id: 'ryanair', partner_name: 'Ryanair' }
+}
+
 export function tripFavoriteKey(trip: {
   aller: { flightNumber?: string; departureTime: string }
   retour: { flightNumber?: string; departureTime: string }

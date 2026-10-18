@@ -33,6 +33,7 @@ def generate_cache_key(request: ScanRequest) -> str:
         "dates_retour": [d.model_dump() for d in request.dates_retour],
         "destinations_exclues": sorted(request.destinations_exclues or []),
         "destinations_incluses": sorted(request.destinations_incluses) if request.destinations_incluses else None,
+        "direct": bool(request.direct),
     }
     cache_str = json.dumps(cache_data, sort_keys=True)
     return hashlib.md5(cache_str.encode()).hexdigest()
@@ -88,6 +89,7 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
             destinations_incluses=request.destinations_incluses,
             record_prices=True,
             passengers=request.passengers or 1,
+            direct=bool(request.direct),
         )
 
         if SUPABASE_AVAILABLE and resultats:
@@ -163,6 +165,7 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
             destinations_incluses=None,
             record_prices=True,
             passengers=request.passengers or 1,
+            direct=bool(request.direct),
         )
 
         enriched_results = enrich_trip_results(resultats, request.departure)
@@ -198,6 +201,7 @@ async def auto_check_flights(request: Request):
             destinations_exclues=body.get("destinations_exclues", []),
             destinations_incluses=body.get("destinations_incluses"),
             passengers=body.get("passengers", 1),
+            direct=bool(body.get("direct", False)),
         )
 
         resultats, num_requetes = scanner_vols_api(
@@ -209,6 +213,7 @@ async def auto_check_flights(request: Request):
             destinations_exclues=scan_request.destinations_exclues or [],
             destinations_incluses=scan_request.destinations_incluses,
             passengers=scan_request.passengers or 1,
+            direct=bool(scan_request.direct),
         )
 
         previous_results = []
