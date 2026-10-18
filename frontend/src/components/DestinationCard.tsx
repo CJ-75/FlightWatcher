@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import {
   arrivalAirportSubtitle,
   cityDisplayNameFr,
+  formatAirlineLabel,
   resolveTripImageUrl,
 } from '@flightwatcher/shared';
 import { EnrichedTripResponse } from '../types';
@@ -104,6 +105,7 @@ export function DestinationCard({
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const airlineLabel = formatAirlineLabel(trip);
 
   return (
     <motion.div
@@ -170,10 +172,8 @@ export function DestinationCard({
             {airportLine}
           </p>
           <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">
-              {String(trip.provider || 'ryanair') === 'travelpayouts'
-                ? trip.airline || 'Aviasales'
-                : 'Ryanair'}
+            <span className="text-[11px] font-bold tracking-wide bg-white/25 text-white px-2.5 py-1 rounded-full">
+              {airlineLabel}
             </span>
             {(trip.transfers ?? 0) > 0 ? (
               <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">

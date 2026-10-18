@@ -1,4 +1,5 @@
 import type { DateAvecHoraire } from '../types'
+import { formatAirlineLabel } from '../airlines'
 
 export type DatePresetId = 'weekend' | 'next-weekend' | 'next-week' | 'flexible'
 
@@ -208,10 +209,11 @@ export function bookingPartnerMeta(trip: {
 }): { partner_id: string; partner_name: string } {
   const provider = String(trip.provider || '').toLowerCase()
   if (provider === 'travelpayouts' || (trip.booking_url || '').includes('aviasales')) {
-    const airline = (trip.airline || '').trim().toUpperCase()
+    const airline = formatAirlineLabel(trip)
     return {
       partner_id: 'aviasales',
-      partner_name: airline ? `Aviasales · ${airline}` : 'Aviasales',
+      partner_name:
+        airline && airline !== 'Multi-compagnies' ? `Aviasales · ${airline}` : 'Aviasales',
     }
   }
   return { partner_id: 'ryanair', partner_name: 'Ryanair' }

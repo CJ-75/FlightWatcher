@@ -14,6 +14,7 @@ import {
   arrivalAirportSubtitle,
   buildBookingUrl,
   cityDisplayNameFr,
+  formatAirlineLabel,
   resolveTripImageUrl,
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
@@ -79,10 +80,7 @@ export function DestinationCard({
     await Linking.openURL(buildBookingUrl(trip, passengers))
   }
 
-  const providerLabel =
-    String(trip.provider || 'ryanair') === 'travelpayouts'
-      ? trip.airline || 'Aviasales'
-      : 'Ryanair'
+  const airlineLabel = formatAirlineLabel(trip)
   const transfers = trip.transfers ?? 0
 
   return (
@@ -128,7 +126,7 @@ export function DestinationCard({
           </Text>
           <View style={styles.badgeRow}>
             <View style={styles.metaBadge}>
-              <Text style={styles.metaBadgeText}>{providerLabel}</Text>
+              <Text style={styles.airlineBadgeText}>{airlineLabel}</Text>
             </View>
             <View style={[styles.metaBadge, transfers === 0 && styles.metaBadgeDirect]}>
               <Text style={styles.metaBadgeText}>
@@ -286,6 +284,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   metaBadgeDirect: { backgroundColor: 'rgba(16,185,129,0.85)' },
+  airlineBadgeText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 0.2,
+  },
   metaBadgeText: {
     color: colors.white,
     fontFamily: fonts.bold,
