@@ -77,6 +77,22 @@ def send_password_reset_email(*, email: str, reset_link: str) -> bool:
     return send_email([email], subject, html)
 
 
+def send_password_changed_email(*, email: str) -> bool:
+    subject = "Mot de passe modifié — FlightWatcher"
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
+      <h2 style="margin:0 0 12px;color:#E85A28">Mot de passe mis à jour</h2>
+      <p>Le mot de passe de ton compte FlightWatcher vient d’être modifié.</p>
+      <p>Si tu es à l’origine de ce changement, aucune action n’est nécessaire.</p>
+      <p style="font-size:13px;color:#64748b">Si tu n’as pas fait cette modification,
+         connecte-toi dès que possible et change à nouveau ton mot de passe
+         depuis <strong>Sécurité</strong> dans l’app.</p>
+      <p style="font-size:12px;color:#94a3b8">FlightWatcher</p>
+    </div>
+    """
+    return send_email([email], subject, html)
+
+
 def notify_trip_under_budget(
     *,
     trip_id: str,

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, signOut, signInWithGoogle, onAuthStateChange } from '../lib/supabase';
 import { migrateLocalStorageToSupabase } from '../utils/migration';
-import { getApiClient } from '../utils/apiClient';
 import { useI18n } from '../contexts/I18nContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import type { User } from '@supabase/supabase-js';
@@ -21,8 +20,6 @@ export function UserMenu() {
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
-  const [securityMsg, setSecurityMsg] = useState<string | null>(null);
-  const [securityBusy, setSecurityBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -158,26 +155,6 @@ export function UserMenu() {
     setLoading(false);
   };
 
-  const handleChangePassword = async () => {
-    setSecurityBusy(true);
-    setSecurityMsg(null);
-    try {
-      const res = await getApiClient().requestPasswordReset();
-      setSecurityMsg(
-        res.email_masked
-          ? t('auth.security.emailSent', { email: res.email_masked })
-          : t('auth.security.emailSentGeneric'),
-      );
-    } catch (e) {
-      setSecurityMsg(
-        e instanceof Error ? e.message : t('auth.security.sendError'),
-      );
-    } finally {
-      setSecurityBusy(false);
-    }
-  };
-
-
   // Précharger l'image de l'avatar pour le menu
   useEffect(() => {
     if (user) {
@@ -312,36 +289,19 @@ export function UserMenu() {
                 </div>
 
                 <div className="p-2 space-y-1">
-                  <div className="px-3 pt-1 pb-1">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                      {t('auth.security.title')}
-                    </p>
-                  </div>
                   <button
-                    onClick={() => void handleChangePassword()}
-                    disabled={securityBusy}
+                    onClick={() => {
+                      setIsOpen(false)
+                      navigate('/security')
+                    }}
                     type="button"
-                    className="w-full flex items-start gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-ink hover:bg-primary-50 transition-colors disabled:opacity-50 min-h-[44px] text-left"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-ink hover:bg-primary-50 transition-colors min-h-[44px]"
                   >
-                    <svg className="w-5 h-5 shrink-0 mt-0.5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 shrink-0 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
-                    <span className="flex-1">
-                      <span className="block">
-                        {securityBusy ? t('auth.security.sending') : t('auth.security.changePassword')}
-                      </span>
-                      <span className="block text-xs font-medium text-muted mt-0.5 leading-snug">
-                        {t('auth.security.changePasswordHint')}
-                      </span>
-                    </span>
+                    <span>{t('auth.security.title')}</span>
                   </button>
-                  {securityMsg ? (
-                    <p className="mx-2 mb-1 px-3 py-2 text-xs font-medium rounded-xl bg-[#FFF8F3] text-[#E85A28] border border-orange-100">
-                      {securityMsg}
-                    </p>
-                  ) : null}
-
-                  <div className="h-px bg-line mx-2 my-1" />
 
                   <button
                     onClick={handleSignOut}

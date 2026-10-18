@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import PlannerInvite from './pages/PlannerInvite'
 import AuthCallback from './auth/callback'
 import ResetPassword from './pages/ResetPassword'
+import Security from './pages/Security'
 import { AdminLogin } from './admin/AdminLogin'
 import { AdminLayout } from './admin/AdminLayout'
 import { AdminRoute } from './admin/AdminApp'
@@ -29,6 +30,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/auth/reset-password" element={<ResetPassword />} />
+        <Route path="/security" element={<Security />} />
         <Route path="/planner/invite/:token" element={<PlannerInvite />} />
         
         {/* Routes admin */}

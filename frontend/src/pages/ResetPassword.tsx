@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getSupabaseClient, updatePassword } from '../lib/supabase'
+import { getApiClient } from '../utils/apiClient'
 import { useI18n } from '../contexts/I18nContext'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
 
@@ -65,11 +66,17 @@ export default function ResetPassword() {
     }
     setBusy(true)
     const { error: err } = await updatePassword(password)
-    setBusy(false)
     if (err) {
+      setBusy(false)
       setError(err.message)
       return
     }
+    try {
+      await getApiClient().notifyPasswordChanged()
+    } catch {
+      // Password already updated — confirmation email is best-effort
+    }
+    setBusy(false)
     setDone(true)
     setTimeout(() => navigate('/'), 1800)
   }

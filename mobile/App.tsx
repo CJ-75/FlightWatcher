@@ -23,6 +23,7 @@ import { PlannerScreen } from './src/screens/PlannerScreen'
 import { TripDetailScreen } from './src/screens/TripDetailScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
+import { SecurityScreen } from './src/screens/SecurityScreen'
 import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
@@ -52,6 +53,7 @@ export type RootStackParamList = {
   TripDetail: {
     tripId: string
   }
+  Security: undefined
 }
 
 export type MainTabParamList = {
@@ -192,6 +194,23 @@ function RootNavigator() {
             options={{
               headerShown: true,
               title: 'Voyage',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
+          />
+          <Stack.Screen
+            name="Security"
+            component={SecurityScreen}
+            options={{
+              headerShown: true,
+              title: 'Sécurité',
               headerStyle: { backgroundColor: colors.canvas },
               headerTintColor: colors.primary,
               headerTitleStyle: {

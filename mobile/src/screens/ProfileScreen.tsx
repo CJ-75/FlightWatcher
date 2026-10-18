@@ -6,13 +6,13 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { CommonActions, useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
-import { apiBase, getApi } from '../lib/client'
+import { apiBase } from '../lib/client'
 import { Button } from '../components/ui/Button'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
@@ -27,8 +27,13 @@ export function ProfileScreen() {
     setAppearLoggedOut,
   } = useAuth()
   const insets = useSafeAreaInsets()
+  const navigation = useNavigation()
   const [loginLoading, setLoginLoading] = useState(false)
-  const [securityBusy, setSecurityBusy] = useState(false)
+
+  const openSecurity = () => {
+    // Profile is inside tabs; Security lives on the root stack
+    navigation.dispatch(CommonActions.navigate({ name: 'Security' }))
+  }
 
   // Logged-out landing (real guest landings) for preview / no user
   if (!viewUser) {
@@ -126,6 +131,22 @@ export function ProfileScreen() {
           <Text style={styles.email}>{viewUser!.email}</Text>
         </View>
 
+        {!isGuest ? (
+          <Pressable
+            onPress={openSecurity}
+            style={({ pressed }) => [
+              styles.securityRow,
+              shadow.soft,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.securityRowLabel}>
+              {translate('fr', 'auth.security.title')}
+            </Text>
+            <Text style={styles.securityRowChevron}>›</Text>
+          </Pressable>
+        ) : null}
+
         <View style={[styles.infoCard, shadow.soft]}>
           <Text style={styles.infoLabel}>API</Text>
           <Text style={styles.infoValue} numberOfLines={1}>
@@ -137,55 +158,6 @@ export function ProfileScreen() {
           <View style={[styles.infoCard, shadow.soft, { marginTop: spacing.md }]}>
             <Text style={styles.infoLabel}>Aperçu Expo</Text>
             <Text style={styles.infoValue}>Planner et Favoris en local, sans login Google</Text>
-          </View>
-        ) : null}
-
-        {!isGuest ? (
-          <View style={[styles.securityCard, shadow.soft]}>
-            <Text style={styles.securityKicker}>
-              {translate('fr', 'auth.security.title')}
-            </Text>
-            <Text style={styles.securityTitle}>
-              {translate('fr', 'auth.security.changePassword')}
-            </Text>
-            <Text style={styles.securityHint}>
-              {translate('fr', 'auth.security.changePasswordHint')}
-            </Text>
-            <Button
-              label={
-                securityBusy
-                  ? translate('fr', 'auth.security.sending')
-                  : translate('fr', 'auth.security.changePassword')
-              }
-              onPress={() => {
-                void (async () => {
-                  setSecurityBusy(true)
-                  try {
-                    const res = await getApi().requestPasswordReset()
-                    Alert.alert(
-                      translate('fr', 'auth.security.title'),
-                      res.email_masked
-                        ? translate('fr', 'auth.security.emailSent', {
-                            email: res.email_masked,
-                          })
-                        : translate('fr', 'auth.security.emailSentGeneric'),
-                    )
-                  } catch (e) {
-                    Alert.alert(
-                      translate('fr', 'auth.security.title'),
-                      e instanceof Error
-                        ? e.message
-                        : translate('fr', 'auth.security.sendError'),
-                    )
-                  } finally {
-                    setSecurityBusy(false)
-                  }
-                })()
-              }}
-              loading={securityBusy}
-              disabled={securityBusy}
-              style={{ marginTop: spacing.md }}
-            />
           </View>
         ) : null}
 
@@ -273,34 +245,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
   },
-  securityCard: {
+  securityRow: {
     marginTop: spacing.lg,
     backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  securityKicker: {
+  securityRowLabel: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.1,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  securityTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
   },
-  securityHint: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
+  securityRowChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 22,
     color: colors.muted,
-    lineHeight: 18,
-    marginTop: 2,
+    lineHeight: 24,
   },
   guestWrap: {
     flex: 1,

@@ -77,8 +77,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
       })
 
       if (!response.ok) {
-        const detail = await response.text().catch(() => response.statusText)
-        throw new Error(`API ${response.status}: ${detail}`)
+        const raw = await response.text().catch(() => response.statusText)
+        let message = raw || response.statusText
+        try {
+          const parsed = JSON.parse(raw) as { detail?: unknown }
+          if (typeof parsed?.detail === 'string') message = parsed.detail
+          else if (Array.isArray(parsed?.detail)) {
+            message = parsed.detail
+              .map((d) =>
+                typeof d === 'object' && d && 'msg' in d
+                  ? String((d as { msg: unknown }).msg)
+                  : String(d),
+              )
+              .join(', ')
+          }
+        } catch {
+          /* keep raw */
+        }
+        throw new Error(message)
       }
 
       if (response.status === 204) {
@@ -247,6 +263,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<{ ok: boolean; email_masked?: string }>('/api/auth/password-reset', {
         method: 'POST',
       }),
+
+    changePassword: (body: { current_password: string; new_password: string }) =>
+      request<{ ok: boolean; email_masked?: string; email_sent?: boolean }>(
+        '/api/auth/change-password',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      ),
+
+    notifyPasswordChanged: () =>
+      request<{ ok: boolean; email_masked?: string }>(
+        '/api/auth/password-changed-notify',
+        { method: 'POST' },
+      ),
   }
 }
 
