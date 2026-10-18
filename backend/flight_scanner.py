@@ -17,7 +17,21 @@ from api_models import (
     TripResponse,
     EnrichedTripResponse,
 )
+from city_names_fr import destination_full_fr
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, record_price_history
+
+
+def _localize_flight(flight: FlightResponse) -> FlightResponse:
+    """Rewrite origin/destination labels to French city names."""
+    data = {
+        "originFull": destination_full_fr(flight.origin, fallback_full=flight.originFull),
+        "destinationFull": destination_full_fr(
+            flight.destination, fallback_full=flight.destinationFull
+        ),
+    }
+    if hasattr(flight, "model_copy"):
+        return flight.model_copy(update=data)
+    return flight.copy(update=data)
 
 
 def _clamp_passengers(passengers: Optional[int]) -> int:
@@ -152,25 +166,29 @@ def scanner_vols_api(
             retour_pp = round(meilleur_retour.price / pax, 2)
             resultats.append(
                 TripResponse(
-                    aller=FlightResponse(
-                        flightNumber=vol_aller.flightNumber,
-                        origin=vol_aller.origin,
-                        originFull=vol_aller.originFull,
-                        destination=vol_aller.destination,
-                        destinationFull=vol_aller.destinationFull,
-                        departureTime=vol_aller.departureTime.isoformat(),
-                        price=aller_pp,
-                        currency=vol_aller.currency,
+                    aller=_localize_flight(
+                        FlightResponse(
+                            flightNumber=vol_aller.flightNumber,
+                            origin=vol_aller.origin,
+                            originFull=vol_aller.originFull,
+                            destination=vol_aller.destination,
+                            destinationFull=vol_aller.destinationFull,
+                            departureTime=vol_aller.departureTime.isoformat(),
+                            price=aller_pp,
+                            currency=vol_aller.currency,
+                        )
                     ),
-                    retour=FlightResponse(
-                        flightNumber=meilleur_retour.flightNumber,
-                        origin=meilleur_retour.origin,
-                        originFull=meilleur_retour.originFull,
-                        destination=meilleur_retour.destination,
-                        destinationFull=meilleur_retour.destinationFull,
-                        departureTime=meilleur_retour.departureTime.isoformat(),
-                        price=retour_pp,
-                        currency=meilleur_retour.currency,
+                    retour=_localize_flight(
+                        FlightResponse(
+                            flightNumber=meilleur_retour.flightNumber,
+                            origin=meilleur_retour.origin,
+                            originFull=meilleur_retour.originFull,
+                            destination=meilleur_retour.destination,
+                            destinationFull=meilleur_retour.destinationFull,
+                            departureTime=meilleur_retour.departureTime.isoformat(),
+                            price=retour_pp,
+                            currency=meilleur_retour.currency,
+                        )
                     ),
                     prix_total=round(aller_pp + retour_pp, 2),
                     destination_code=destination_code,
@@ -325,8 +343,8 @@ def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> Li
         discount_percent = calculate_discount(trip.prix_total, avg_price)
         # Client résout l'image via cityImageUrl (source.unsplash.com est mort)
         enriched_trip = EnrichedTripResponse(
-            aller=trip.aller,
-            retour=trip.retour,
+            aller=_localize_flight(trip.aller),
+            retour=_localize_flight(trip.retour),
             prix_total=trip.prix_total,
             destination_code=trip.destination_code,
             discount_percent=discount_percent if discount_percent > 0 else None,

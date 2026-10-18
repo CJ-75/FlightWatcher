@@ -66,6 +66,307 @@ function normalizeCityKey(city: string): string {
     .trim()
 }
 
+/** IATA → French city (metro / common Ryanair destinations). */
+const CITY_FR_BY_IATA: Record<string, string> = {
+  STN: 'Londres',
+  LTN: 'Londres',
+  LGW: 'Londres',
+  LHR: 'Londres',
+  SEN: 'Londres',
+  BVA: 'Paris',
+  CDG: 'Paris',
+  ORY: 'Paris',
+  XCR: 'Paris',
+  LIS: 'Lisbonne',
+  OPO: 'Porto',
+  FAO: 'Faro',
+  BCN: 'Barcelone',
+  MAD: 'Madrid',
+  SVQ: 'Séville',
+  VLC: 'Valence',
+  ALC: 'Alicante',
+  AGP: 'Malaga',
+  PMI: 'Palma',
+  IBZ: 'Ibiza',
+  ACE: 'Lanzarote',
+  FUE: 'Fuerteventura',
+  TFS: 'Tenerife',
+  TFN: 'Tenerife',
+  LPA: 'Grande Canarie',
+  MAH: 'Minorque',
+  FCO: 'Rome',
+  CIA: 'Rome',
+  BGY: 'Bergame',
+  MXP: 'Milan',
+  LIN: 'Milan',
+  VCE: 'Venise',
+  TSF: 'Venise',
+  NAP: 'Naples',
+  PSA: 'Pise',
+  FLR: 'Florence',
+  BLQ: 'Bologne',
+  TRN: 'Turin',
+  GOA: 'Gênes',
+  PMO: 'Palerme',
+  CTA: 'Catane',
+  CAG: 'Cagliari',
+  AHO: 'Alghero',
+  BRI: 'Bari',
+  BDS: 'Brindisi',
+  AOI: 'Ancône',
+  ATH: 'Athènes',
+  SKG: 'Thessalonique',
+  HER: 'Héraklion',
+  CHQ: 'La Canée',
+  RHO: 'Rhodes',
+  KGS: 'Kos',
+  JMK: 'Mykonos',
+  JTR: 'Santorin',
+  CFU: 'Corfou',
+  ZTH: 'Zante',
+  EFL: 'Céphalonie',
+  PRG: 'Prague',
+  WAW: 'Varsovie',
+  KRK: 'Cracovie',
+  GDN: 'Gdansk',
+  WRO: 'Wroclaw',
+  BUD: 'Budapest',
+  OTP: 'Bucarest',
+  BBU: 'Bucarest',
+  SOF: 'Sofia',
+  VIE: 'Vienne',
+  SZG: 'Salzbourg',
+  ZRH: 'Zurich',
+  GVA: 'Genève',
+  BSL: 'Bâle',
+  BRU: 'Bruxelles',
+  CRL: 'Charleroi',
+  AMS: 'Amsterdam',
+  CPH: 'Copenhague',
+  ARN: 'Stockholm',
+  GOT: 'Göteborg',
+  OSL: 'Oslo',
+  HEL: 'Helsinki',
+  BER: 'Berlin',
+  MUC: 'Munich',
+  HAM: 'Hambourg',
+  CGN: 'Cologne',
+  DUS: 'Düsseldorf',
+  FRA: 'Francfort',
+  HAJ: 'Hanovre',
+  DRS: 'Dresde',
+  BRE: 'Brême',
+  EDI: 'Édimbourg',
+  GLA: 'Glasgow',
+  MAN: 'Manchester',
+  BHX: 'Birmingham',
+  BRS: 'Bristol',
+  DUB: 'Dublin',
+  ORK: 'Cork',
+  BFS: 'Belfast',
+  RAK: 'Marrakech',
+  CMN: 'Casablanca',
+  TNG: 'Tanger',
+  FEZ: 'Fès',
+  AGA: 'Agadir',
+  MLA: 'Malte',
+  KEF: 'Reykjavik',
+  TIA: 'Tirana',
+  BEG: 'Belgrade',
+  ZAG: 'Zagreb',
+  SPU: 'Split',
+  DBV: 'Dubrovnik',
+  LJU: 'Ljubljana',
+  BTS: 'Bratislava',
+  NCE: 'Nice',
+  MRS: 'Marseille',
+  TLS: 'Toulouse',
+  NTE: 'Nantes',
+  LYS: 'Lyon',
+  BOD: 'Bordeaux',
+  BIQ: 'Biarritz',
+}
+
+const CITY_EN_TO_FR: Record<string, string> = {
+  athens: 'Athènes',
+  lisbon: 'Lisbonne',
+  london: 'Londres',
+  vienna: 'Vienne',
+  copenhagen: 'Copenhague',
+  warsaw: 'Varsovie',
+  krakow: 'Cracovie',
+  cracow: 'Cracovie',
+  seville: 'Séville',
+  sevilla: 'Séville',
+  valencia: 'Valence',
+  venice: 'Venise',
+  florence: 'Florence',
+  milan: 'Milan',
+  rome: 'Rome',
+  munich: 'Munich',
+  cologne: 'Cologne',
+  hamburg: 'Hambourg',
+  brussels: 'Bruxelles',
+  geneva: 'Genève',
+  zurich: 'Zurich',
+  basel: 'Bâle',
+  edinburgh: 'Édimbourg',
+  barcelona: 'Barcelone',
+  malaga: 'Malaga',
+  palermo: 'Palerme',
+  catania: 'Catane',
+  genoa: 'Gênes',
+  bologna: 'Bologne',
+  pisa: 'Pise',
+  bergamo: 'Bergame',
+  bucharest: 'Bucarest',
+  thessaloniki: 'Thessalonique',
+  heraklion: 'Héraklion',
+  chania: 'La Canée',
+  corfu: 'Corfou',
+  kefalonia: 'Céphalonie',
+  zakynthos: 'Zante',
+  santorini: 'Santorin',
+  malta: 'Malte',
+  tangier: 'Tanger',
+  fez: 'Fès',
+  gothenburg: 'Göteborg',
+  ancona: 'Ancône',
+  bremen: 'Brême',
+  dusseldorf: 'Düsseldorf',
+  frankfurt: 'Francfort',
+  hanover: 'Hanovre',
+  hannover: 'Hanovre',
+  dresden: 'Dresde',
+  menorca: 'Minorque',
+  'gran canaria': 'Grande Canarie',
+  'las palmas': 'Grande Canarie',
+  treviso: 'Venise',
+  stansted: 'Londres',
+  luton: 'Londres',
+  gatwick: 'Londres',
+  prague: 'Prague',
+  naples: 'Naples',
+}
+
+/** French display name for a city, preferring IATA then EN→FR map. */
+export function cityDisplayNameFr(
+  code?: string | null,
+  label?: string | null,
+): string {
+  const iata = (code || '').trim().toUpperCase()
+  if (iata && CITY_FR_BY_IATA[iata]) return CITY_FR_BY_IATA[iata]
+  const raw = (label || '').trim()
+  if (!raw) return iata || ''
+  const key = normalizeCityKey(raw)
+  if (CITY_EN_TO_FR[key]) return CITY_EN_TO_FR[key]
+  const head = key.split(/[\s,\-–—]+/)[0]
+  if (head && CITY_EN_TO_FR[head]) return CITY_EN_TO_FR[head]
+  return raw
+}
+
+/** French airport label by IATA (when distinct from city). */
+const AIRPORT_FR_BY_IATA: Record<string, string> = {
+  STN: 'Londres-Stansted',
+  LTN: 'Londres-Luton',
+  LGW: 'Londres-Gatwick',
+  LHR: 'Londres-Heathrow',
+  SEN: 'Londres-Southend',
+  BVA: 'Paris Beauvais',
+  CDG: 'Paris Charles de Gaulle',
+  ORY: 'Paris Orly',
+  BGY: 'Milan-Bergame',
+  MXP: 'Milan Malpensa',
+  LIN: 'Milan Linate',
+  FCO: 'Rome-Fiumicino',
+  CIA: 'Rome-Ciampino',
+  VCE: 'Venise Marco Polo',
+  TSF: 'Venise-Trévise',
+  CRL: 'Bruxelles-Charleroi',
+  BRU: 'Bruxelles-Zaventem',
+  BSL: 'Bâle-Mulhouse',
+  ATH: 'Athènes',
+  CPH: 'Copenhague',
+  VIE: 'Vienne',
+  HAM: 'Hambourg',
+  WAW: 'Varsovie-Chopin',
+  KRK: 'Cracovie',
+  OTP: 'Bucarest Otopeni',
+  LIS: 'Lisbonne',
+  BCN: 'Barcelone El Prat',
+  SVQ: 'Séville',
+  VLC: 'Valence',
+  EDI: 'Édimbourg',
+  GOT: 'Göteborg-Landvetter',
+  LPA: 'Grande Canarie',
+  TFS: 'Ténérife Sud',
+  TFN: 'Ténérife Nord',
+  CTA: 'Catane',
+  HER: 'Héraklion',
+  CHQ: 'La Canée',
+  JTR: 'Santorin',
+  EFL: 'Céphalonie',
+  FRA: 'Francfort',
+  DUS: 'Düsseldorf',
+  CGN: 'Cologne',
+  GVA: 'Genève',
+  ZRH: 'Zurich',
+  MLA: 'Malte',
+  FEZ: 'Fès',
+  TNG: 'Tanger',
+  RAK: 'Marrakech',
+  NAP: 'Naples',
+  PSA: 'Pise',
+  BLQ: 'Bologne',
+  PMO: 'Palerme',
+  SKG: 'Thessalonique',
+  PRG: 'Prague',
+  BUD: 'Budapest',
+  AMS: 'Amsterdam',
+  DUB: 'Dublin',
+  MAN: 'Manchester',
+  BHX: 'Birmingham',
+  BRS: 'Bristol',
+  GLA: 'Glasgow',
+  BER: 'Berlin',
+  MUC: 'Munich',
+  NCE: 'Nice',
+  MRS: 'Marseille',
+  TLS: 'Toulouse',
+  NTE: 'Nantes',
+  LYS: 'Lyon',
+  BOD: 'Bordeaux',
+  BIQ: 'Biarritz',
+}
+
+/** Airport display name (FR), falling back to destinationFull / city. */
+export function airportDisplayNameFr(
+  code?: string | null,
+  label?: string | null,
+): string {
+  const iata = (code || '').trim().toUpperCase()
+  if (iata && AIRPORT_FR_BY_IATA[iata]) return AIRPORT_FR_BY_IATA[iata]
+  const raw = (label || '').trim()
+  if (raw) {
+    const translated = cityDisplayNameFr(null, raw)
+    return translated || raw
+  }
+  return cityDisplayNameFr(iata, null) || iata
+}
+
+/** Card subtitle: "Aéroport · XXX" for arrival. */
+export function arrivalAirportSubtitle(
+  code?: string | null,
+  destinationFull?: string | null,
+): string {
+  const iata = (code || '').trim().toUpperCase()
+  const fromFull = (destinationFull || '').split(',')[0]?.trim() || ''
+  const airport = airportDisplayNameFr(iata, fromFull)
+  if (!iata) return airport
+  if (!airport || normalizeCityKey(airport) === normalizeCityKey(iata)) return iata
+  return `${airport} · ${iata}`
+}
+
 export function cityImageUrl(city: string | null | undefined): string {
   if (!city) return FALLBACK_CITY_IMAGE
   const key = normalizeCityKey(city)
@@ -90,7 +391,7 @@ export function resolveTripImageUrl(opts: {
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
   const map = new Map<string, CityAirportGroup>()
   for (const a of airports) {
-    const city = (a.city || '').trim()
+    const city = cityDisplayNameFr(a.code, a.city)
     const country = (a.country || '').trim()
     if (!city) continue
     const key = `${normalizeCityKey(city)}|${normalizeCityKey(country)}`

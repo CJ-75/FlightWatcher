@@ -7,6 +7,8 @@ import urllib.request
 from collections import defaultdict
 from typing import Dict, Optional, Set
 
+from city_names_fr import city_for_code, country_for_code
+
 # Short in-memory cache so planner create/scan don't hit Ryanair every call
 _CACHE: Dict[str, tuple[float, Set[str]]] = {}
 _CACHE_TTL_SEC = 60 * 60  # 1h
@@ -72,10 +74,18 @@ def fetch_destinations_by_country(departure: str) -> dict:
             if len(dest_code) != 3:
                 continue
             codes.add(dest_code)
-            city = ((arr.get("city") or {}).get("name") or arr.get("name") or dest_code).strip()
-            country = ((arr.get("country") or {}).get("name") or "Autre").strip()
-            name = (arr.get("name") or city).strip()
-            dest_full = f"{name}, {country}" if country else name
+            city = city_for_code(
+                dest_code,
+                ((arr.get("city") or {}).get("name") or arr.get("name") or dest_code),
+            )
+            iso = ((arr.get("country") or {}).get("code") or "").strip().upper()
+            country = country_for_code(
+                dest_code,
+                ((arr.get("country") or {}).get("name") or "Autre"),
+            )
+            if not country and iso:
+                country = iso
+            dest_full = f"{city}, {country}" if country else city
             by_country[country][dest_code] = {
                 "code": dest_code,
                 "nom": city,

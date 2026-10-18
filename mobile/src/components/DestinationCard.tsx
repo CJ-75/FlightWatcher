@@ -10,7 +10,12 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
-import { buildRyanairBookingUrl, resolveTripImageUrl } from '@flightwatcher/shared'
+import {
+  arrivalAirportSubtitle,
+  buildRyanairBookingUrl,
+  cityDisplayNameFr,
+  resolveTripImageUrl,
+} from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { HeartIcon } from './HeartIcon'
 
@@ -58,7 +63,11 @@ export function DestinationCard({
   secondaryAction,
   isFavorite,
 }: Props) {
-  const cityName = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
+  const cityName = cityDisplayNameFr(trip.destination_code)
+  const airportLine = arrivalAirportSubtitle(
+    trip.destination_code,
+    trip.aller.destinationFull,
+  )
   const imageUrl = resolveTripImageUrl({ city: cityName, imageUrl: trip.image_url })
   const [failed, setFailed] = useState(false)
 
@@ -108,8 +117,8 @@ export function DestinationCard({
           <Text style={styles.city} numberOfLines={1}>
             {cityName}
           </Text>
-          <Text style={styles.route}>
-            {trip.aller.origin}  →  {trip.destination_code}
+          <Text style={styles.route} numberOfLines={1}>
+            {airportLine}
           </Text>
         </View>
       </View>

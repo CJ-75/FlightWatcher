@@ -7,6 +7,13 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from ryanair_routes import fetch_destinations_by_country
+from city_names_fr import (
+    CITY_FR_BY_IATA,
+    COUNTRY_FR_BY_ISO,
+    city_for_code,
+    country_for_code,
+    localize_airport_dict,
+)
 from fastapi import APIRouter, HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'ryanair-py'))
@@ -37,12 +44,16 @@ def _generate_airports_from_api(country_names: dict) -> List[dict]:
             name = (item.get('name') or code).strip()
             city = ((item.get('city') or {}).get('name') or name).strip()
             iso = ((item.get('country') or {}).get('code') or '').strip().upper()
-            airports_list.append({
-                'code': code,
-                'name': name,
-                'city': city,
-                'country': country_names.get(iso, iso or 'Europe'),
-            })
+            airports_list.append(
+                localize_airport_dict(
+                    {
+                        'code': code,
+                        'name': name,
+                        'city': CITY_FR_BY_IATA.get(code) or city,
+                        'country': country_names.get(iso, iso or 'Europe'),
+                    }
+                )
+            )
 
         airports_list.sort(key=lambda a: a['code'])
         print(f"  ✓ {len(airports_list)} aéroport(s) Ryanair trouvé(s)")
@@ -65,17 +76,7 @@ def _generate_airports_from_api(country_names: dict) -> List[dict]:
 def get_airports(query: Optional[str] = None):
     """Récupère la liste des aéroports avec code, ville et pays, optionnellement filtrée par recherche"""
     try:
-        country_names = {
-            'FR': 'France', 'GB': 'Royaume-Uni', 'ES': 'Espagne', 'IT': 'Italie',
-            'DE': 'Allemagne', 'PT': 'Portugal', 'GR': 'Grèce', 'IE': 'Irlande',
-            'BE': 'Belgique', 'NL': 'Pays-Bas', 'CH': 'Suisse', 'AT': 'Autriche',
-            'PL': 'Pologne', 'CZ': 'République tchèque', 'HU': 'Hongrie', 'RO': 'Roumanie',
-            'BG': 'Bulgarie', 'HR': 'Croatie', 'SI': 'Slovénie', 'SK': 'Slovaquie',
-            'DK': 'Danemark', 'SE': 'Suède', 'NO': 'Norvège', 'FI': 'Finlande',
-            'AL': 'Albanie', 'BA': 'Bosnie-Herzégovine', 'CY': 'Chypre', 'EE': 'Estonie',
-            'LT': 'Lituanie', 'LU': 'Luxembourg', 'LV': 'Lettonie', 'ME': 'Monténégro',
-            'MT': 'Malte', 'RS': 'Serbie', 'TR': 'Turquie', 'MA': 'Maroc', 'JO': 'Jordanie',
-        }
+        country_names = dict(COUNTRY_FR_BY_ISO)
 
         # Prefer live Ryanair active airports (CSV can lag behind route changes)
         airports = _generate_airports_from_api(country_names)
@@ -94,12 +95,16 @@ def get_airports(query: Optional[str] = None):
                         if not iata_code or len(iata_code) != 3:
                             continue
                         airports.append(
-                            {
-                                "code": iata_code,
-                                "name": airport_name or "N/A",
-                                "city": municipality or "N/A",
-                                "country": country_names.get(iso_country, iso_country),
-                            }
+                            localize_airport_dict(
+                                {
+                                    "code": iata_code,
+                                    "name": airport_name or "N/A",
+                                    "city": municipality or "N/A",
+                                    "country": country_names.get(
+                                        iso_country, iso_country
+                                    ),
+                                }
+                            )
                         )
 
         if query:
@@ -183,10 +188,12 @@ def _destinations_from_flights(airport_code: str) -> dict:
         else:
             country = "Autre"
         if dest_code not in by_country[country]:
-            by_country[country][dest_code] = {
+            city = city_for_code(dest_code, dest_full.split(",")[0].strip())
+            pays = country_for_code(dest_code, country) or country
+            by_country[pays][dest_code] = {
                 "code": dest_code,
-                "nom": dest_full.split(",")[0].strip(),
-                "pays": country,
-                "destinationFull": dest_full,
+                "nom": city,
+                "pays": pays,
+                "destinationFull": f"{city}, {pays}",
             }
     return by_country

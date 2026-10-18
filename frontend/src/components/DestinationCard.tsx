@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { resolveTripImageUrl } from '@flightwatcher/shared';
+import {
+  arrivalAirportSubtitle,
+  cityDisplayNameFr,
+  resolveTripImageUrl,
+} from '@flightwatcher/shared';
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
 
@@ -88,8 +92,11 @@ export function DestinationCard({
     });
   };
 
-  const cityName =
-    trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code;
+  const cityName = cityDisplayNameFr(trip.destination_code);
+  const airportLine = arrivalAirportSubtitle(
+    trip.destination_code,
+    trip.aller.destinationFull,
+  );
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     imageUrl: trip.image_url,
@@ -159,8 +166,8 @@ export function DestinationCard({
           <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
             {cityName}
           </h3>
-          <p className="text-sm text-white/90 font-medium mt-0.5">
-            {trip.aller.origin} → {trip.destination_code}
+          <p className="text-sm text-white/90 font-medium mt-0.5 truncate">
+            {airportLine}
           </p>
         </div>
       </div>
