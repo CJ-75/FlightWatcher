@@ -36,26 +36,13 @@ function buildPartners(trip: EnrichedTripResponse, passengers: number): Partner[
     String(trip.provider || '').toLowerCase() === 'travelpayouts' ||
     !!(trip.booking_url && trip.booking_url.includes('aviasales'));
 
-  if (isTp) {
-    return [
-      {
-        id: meta.partner_id,
-        name: meta.partner_name,
-        logo: '🎫',
-        description: 'Réservez via Aviasales (multi-compagnies)',
-        redirectUrl: (t) => buildBookingUrl(t, adults),
-        priority: 1,
-        enabled: true,
-      },
-    ];
-  }
-
+  // UI copy is provider-agnostic; partner id/name kept for analytics only.
   return [
     {
-      id: 'ryanair',
-      name: 'Ryanair',
+      id: meta.partner_id || (isTp ? 'aviasales' : 'ryanair'),
+      name: meta.partner_name || (isTp ? 'aviasales' : 'ryanair'),
       logo: '✈️',
-      description: 'Réservez directement sur le site officiel',
+      description: 'Redirection vers le site de réservation',
       redirectUrl: (t) => buildBookingUrl(t, adults),
       priority: 1,
       enabled: true,
@@ -196,7 +183,7 @@ export function BookingSas({
             className="bg-primary-50 border-2 border-primary-200 rounded-xl p-4 mb-6 text-center"
           >
             <p className="text-sm text-primary-700 font-semibold">
-              Redirection automatique vers {selectedPartner.name} dans{' '}
+              Redirection automatique dans{' '}
               <span className="text-2xl font-black text-primary-500">{countdown}</span> seconde{countdown > 1 ? 's' : ''}
             </p>
           </motion.div>
@@ -218,7 +205,7 @@ export function BookingSas({
             >
               <div className="text-4xl">{partner.logo}</div>
               <div className="flex-1 text-left">
-                <div className="font-bold text-slate-900 text-lg">{partner.name}</div>
+                <div className="font-bold text-slate-900 text-lg">Continuer la réservation</div>
                 <div className="text-sm text-slate-600">{partner.description}</div>
               </div>
               {selectedPartner?.id === partner.id && (

@@ -25,48 +25,67 @@ def parse_origins(aeroport_depart: str) -> List[str]:
     return out or ["BVA"]
 
 
-def _dedupe_key(trip: TripResponse) -> str:
-    day_out = (trip.aller.departureTime or "")[:10]
-    day_back = (trip.retour.departureTime or "")[:10]
+def _time_slot(iso: str, bucket_minutes: int = 30) -> str:
+    """Round ISO departure to a créneau (default 30 min) for schedule dedupe."""
+    raw = (iso or "").strip()
+    if len(raw) < 16:
+        return raw[:10] if raw else ""
+    day = raw[:10]
+    try:
+        hh = int(raw[11:13])
+        mm = int(raw[14:16])
+    except (TypeError, ValueError):
+        return raw[:16]
+    total = max(0, min(24 * 60 - 1, hh * 60 + mm))
+    rounded = (total // bucket_minutes) * bucket_minutes
+    return f"{day}T{rounded // 60:02d}:{rounded % 60:02d}"
+
+
+def _schedule_key(trip: TripResponse) -> str:
+    """Same origin/dest + same aller/retour créneau → one offer."""
     origin = (trip.aller.origin or "").upper()
-    return f"{origin}|{trip.destination_code}|{day_out}|{day_back}|{trip.provider or ''}"
+    dest = (trip.destination_code or trip.aller.destination or "").upper()
+    out = _time_slot(trip.aller.departureTime or "")
+    back = _time_slot(trip.retour.departureTime or "")
+    return f"{origin}|{dest}|{out}|{back}"
 
 
-def _soft_price_bucket(price: float) -> int:
-    return int(round(float(price) / 5.0) * 5)
+def _provider_rank(provider: Optional[str]) -> int:
+    """Lower = preferred. Ryanair wins over Aviasales/Travelpayouts on duplicates."""
+    p = (provider or "").lower()
+    if p == "ryanair":
+        return 0
+    if p in ("travelpayouts", "aviasales"):
+        return 2
+    return 1
+
+
+def _prefer_trip(a: TripResponse, b: TripResponse) -> TripResponse:
+    """Prefer Ryanair over Aviasales; else cheaper."""
+    ra, rb = _provider_rank(a.provider), _provider_rank(b.provider)
+    if ra != rb:
+        return a if ra < rb else b
+    return a if a.prix_total <= b.prix_total else b
 
 
 def merge_trips(batches: List[List[TripResponse]]) -> List[TripResponse]:
-    """Merge provider results: sort by price, soft-dedupe same dest/days/price."""
-    merged: List[TripResponse] = []
-    seen_exact = set()
-    seen_soft = set()
+    """
+    Merge provider results and collapse schedule duplicates.
+    Same BVA→XXX créneau from Ryanair + Aviasales → keep Ryanair.
+    """
+    by_schedule: dict[str, TripResponse] = {}
 
-    flat: List[TripResponse] = []
     for batch in batches:
-        flat.extend(batch or [])
-    flat.sort(key=lambda t: (t.prix_total, t.provider or "", t.destination_code))
+        for trip in batch or []:
+            key = _schedule_key(trip)
+            prev = by_schedule.get(key)
+            if prev is None:
+                by_schedule[key] = trip
+            else:
+                by_schedule[key] = _prefer_trip(prev, trip)
 
-    for trip in flat:
-        exact = _dedupe_key(trip)
-        if exact in seen_exact:
-            continue
-        soft = (
-            f"{(trip.aller.origin or '').upper()}|"
-            f"{trip.destination_code}|"
-            f"{(trip.aller.departureTime or '')[:10]}|"
-            f"{(trip.retour.departureTime or '')[:10]}|"
-            f"{_soft_price_bucket(trip.prix_total)}"
-        )
-        # Keep both providers if prices differ; drop near-duplicates same day
-        if soft in seen_soft and (trip.provider or "") == "travelpayouts":
-            # Prefer keeping first (usually cheaper); skip near-dup TP
-            continue
-        seen_exact.add(exact)
-        seen_soft.add(soft)
-        merged.append(trip)
-
-    merged.sort(key=lambda t: t.prix_total)
+    merged = list(by_schedule.values())
+    merged.sort(key=lambda t: (t.prix_total, _provider_rank(t.provider), t.destination_code))
     return merged
 
 

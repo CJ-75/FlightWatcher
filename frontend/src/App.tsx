@@ -798,7 +798,15 @@ function Dashboard() {
               <SimpleSearch
                 key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
-                onLoading={setLoading}
+                onLoading={(isLoading) => {
+                  setLoading(isLoading)
+                  if (isLoading) {
+                    setSimpleResults([])
+                    setOriginFilter(null)
+                    setLastSearchInfo(null)
+                    setCurrentSearchEventId(null)
+                  }
+                }}
                 onError={setError}
                 airports={airports}
                 selectedAirport={aeroportDepart}

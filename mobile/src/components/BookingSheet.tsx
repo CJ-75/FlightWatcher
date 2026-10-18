@@ -77,8 +77,6 @@ export function BookingSheet({
   if (!trip) return null
 
   const city = trip.aller.destinationFull?.split(',')[0]?.trim() || trip.destination_code
-  const meta = bookingPartnerMeta(trip)
-  const isTp = meta.partner_id === 'aviasales'
 
   return (
     <Modal visible={!!trip} transparent animationType="slide" onRequestClose={onClose}>
@@ -94,14 +92,10 @@ export function BookingSheet({
         </Text>
 
         <View style={styles.partner}>
-          <Text style={styles.partnerEmoji}>{isTp ? '🎫' : '✈️'}</Text>
+          <Text style={styles.partnerEmoji}>✈️</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.partnerName}>{meta.partner_name}</Text>
-            <Text style={styles.partnerDesc}>
-              {isTp
-                ? 'Aviasales — multi-compagnies · redirection automatique'
-                : 'Site officiel — redirection automatique'}
-            </Text>
+            <Text style={styles.partnerName}>Continuer la réservation</Text>
+            <Text style={styles.partnerDesc}>Redirection automatique vers le site de réservation</Text>
           </View>
           {redirecting ? (
             <ActivityIndicator color={colors.primary} />
@@ -111,9 +105,7 @@ export function BookingSheet({
         </View>
 
         <Pressable onPress={() => void redirect()} style={styles.cta}>
-          <Text style={styles.ctaText}>
-            Ouvrir {isTp ? 'Aviasales' : 'Ryanair'} maintenant
-          </Text>
+          <Text style={styles.ctaText}>Ouvrir maintenant</Text>
         </Pressable>
 
         {onSaveFavorite ? (
