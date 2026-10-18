@@ -1,4 +1,9 @@
 import type { Airport } from './types'
+import {
+  CITY_IMAGES,
+  FALLBACK_CITY_IMAGE,
+  FALLBACK_CITY_IMAGES,
+} from './cityImages'
 
 export interface CityAirportGroup {
   key: string
@@ -43,57 +48,6 @@ export function resolvePopularAirports(airports: Airport[]): Airport[] {
   return POPULAR_AIRPORT_CODES.map((code) => byCode.get(code)).filter(
     (a): a is Airport => Boolean(a),
   )
-}
-
-const FALLBACK_CITY_IMAGE =
-  'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=900&q=80&auto=format&fit=crop'
-
-/** Curated Unsplash photos for popular Ryanair cities (stable URLs). */
-const CITY_IMAGES: Record<string, string> = {
-  lisbonne: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80&auto=format&fit=crop',
-  lisbon: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80&auto=format&fit=crop',
-  barcelone: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=900&q=80&auto=format&fit=crop',
-  barcelona: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=900&q=80&auto=format&fit=crop',
-  rome: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=900&q=80&auto=format&fit=crop',
-  roma: 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=900&q=80&auto=format&fit=crop',
-  porto: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80&auto=format&fit=crop',
-  budapest: 'https://images.unsplash.com/photo-1541343672885-9be56236302a?w=900&q=80&auto=format&fit=crop',
-  cracovie: 'https://images.unsplash.com/photo-1517824806704-9040b037703b?w=900&q=80&auto=format&fit=crop',
-  krakow: 'https://images.unsplash.com/photo-1517824806704-9040b037703b?w=900&q=80&auto=format&fit=crop',
-  cracow: 'https://images.unsplash.com/photo-1517824806704-9040b037703b?w=900&q=80&auto=format&fit=crop',
-  prague: 'https://images.unsplash.com/photo-1549918864-48ac979795d9?w=900&q=80&auto=format&fit=crop',
-  praha: 'https://images.unsplash.com/photo-1549918864-48ac979795d9?w=900&q=80&auto=format&fit=crop',
-  vienne: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=900&q=80&auto=format&fit=crop',
-  vienna: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=900&q=80&auto=format&fit=crop',
-  paris: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=900&q=80&auto=format&fit=crop',
-  londres: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900&q=80&auto=format&fit=crop',
-  london: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900&q=80&auto=format&fit=crop',
-  milan: 'https://images.unsplash.com/photo-1513581166391-887a96ddeafd?w=900&q=80&auto=format&fit=crop',
-  milano: 'https://images.unsplash.com/photo-1513581166391-887a96ddeafd?w=900&q=80&auto=format&fit=crop',
-  madrid: 'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?w=900&q=80&auto=format&fit=crop',
-  berlin: 'https://images.unsplash.com/photo-1560969184-10fe8719e047?w=900&q=80&auto=format&fit=crop',
-  amsterdam: 'https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=900&q=80&auto=format&fit=crop',
-  dubrovnik: 'https://images.unsplash.com/photo-1555990793-da11153b2473?w=900&q=80&auto=format&fit=crop',
-  nicola: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
-  nice: 'https://images.unsplash.com/photo-1491167109373-3ebfe792f4e0?w=900&q=80&auto=format&fit=crop',
-  marseille: 'https://images.unsplash.com/photo-1585834340592-c27c83957488?w=900&q=80&auto=format&fit=crop',
-  seville: 'https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=900&q=80&auto=format&fit=crop',
-  sevilla: 'https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=900&q=80&auto=format&fit=crop',
-  valence: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=900&q=80&auto=format&fit=crop',
-  valencia: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=900&q=80&auto=format&fit=crop',
-  athènes: 'https://images.unsplash.com/photo-1555990538-17392572c5f0?w=900&q=80&auto=format&fit=crop',
-  athens: 'https://images.unsplash.com/photo-1555990538-17392572c5f0?w=900&q=80&auto=format&fit=crop',
-  dublin: 'https://images.unsplash.com/photo-1549918864-48ac979795d9?w=900&q=80&auto=format&fit=crop',
-  edinbourg: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=900&q=80&auto=format&fit=crop',
-  edinburgh: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=900&q=80&auto=format&fit=crop',
-  catania: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
-  birmingham: 'https://images.unsplash.com/photo-1520986606214-8b456906c813?w=900&q=80&auto=format&fit=crop',
-  palerme: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
-  palermo: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80&auto=format&fit=crop',
-  malaga: 'https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=900&q=80&auto=format&fit=crop',
-  faro: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80&auto=format&fit=crop',
-  naples: 'https://images.unsplash.com/photo-1534308143481-c55f00be8bd7?w=900&q=80&auto=format&fit=crop',
-  napoli: 'https://images.unsplash.com/photo-1534308143481-c55f00be8bd7?w=900&q=80&auto=format&fit=crop',
 }
 
 function normalizeCityKey(city: string): string {
@@ -405,10 +359,46 @@ export function arrivalAirportSubtitle(
   return `${airport} · ${iata}`
 }
 
-export function cityImageUrl(city: string | null | undefined): string {
-  if (!city) return FALLBACK_CITY_IMAGE
-  const key = normalizeCityKey(city)
-  return CITY_IMAGES[key] || FALLBACK_CITY_IMAGE
+function hashCityKey(key: string): number {
+  let h = 0
+  for (let i = 0; i < key.length; i += 1) {
+    h = (h * 31 + key.charCodeAt(i)) >>> 0
+  }
+  return h
+}
+
+/** Pick a stable travel photo when the city is not in the curated map. */
+function fallbackImageForKey(key: string): string {
+  if (!key) return FALLBACK_CITY_IMAGE
+  const pool = FALLBACK_CITY_IMAGES
+  if (!pool.length) return FALLBACK_CITY_IMAGE
+  return pool[hashCityKey(key) % pool.length] || FALLBACK_CITY_IMAGE
+}
+
+/**
+ * Hero image for a city name (FR/EN) and optional IATA.
+ * Uses Wikimedia-curated photos when available; otherwise a stable varied fallback.
+ */
+export function cityImageUrl(
+  city: string | null | undefined,
+  iata?: string | null,
+): string {
+  const code = (iata || '').trim().toUpperCase()
+  if (code && CITY_FR_BY_IATA[code]) {
+    const fromIata = normalizeCityKey(CITY_FR_BY_IATA[code])
+    if (CITY_IMAGES[fromIata]) return CITY_IMAGES[fromIata]
+  }
+
+  if (city) {
+    const key = normalizeCityKey(city)
+    if (CITY_IMAGES[key]) return CITY_IMAGES[key]
+    const head = key.split(/[\s,\-–—/]+/)[0]
+    if (head && CITY_IMAGES[head]) return CITY_IMAGES[head]
+    return fallbackImageForKey(key || head || code)
+  }
+
+  if (code) return fallbackImageForKey(code)
+  return FALLBACK_CITY_IMAGE
 }
 
 /**
@@ -417,13 +407,14 @@ export function cityImageUrl(city: string | null | undefined): string {
  */
 export function resolveTripImageUrl(opts: {
   city?: string | null
+  iata?: string | null
   imageUrl?: string | null
 }): string {
   const raw = (opts.imageUrl || '').trim()
-  if (raw && !/source\.unsplash\.com/i.test(raw)) {
+  if (raw && !/source\.unsplash\.com/i.test(raw) && !/placehold/i.test(raw)) {
     return raw
   }
-  return cityImageUrl(opts.city)
+  return cityImageUrl(opts.city, opts.iata)
 }
 
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {

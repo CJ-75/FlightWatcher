@@ -83,9 +83,7 @@ export function BudgetSlider({ value, onChange, min = 20, max = 1000, step = 10 
         </Pressable>
         <View style={styles.valueBlock}>
           <Text style={styles.hint}>Budget max / personne</Text>
-          <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
-            {value}€
-          </Text>
+          <Text style={styles.value}>{value}€</Text>
           <Text style={styles.subHint}>aller-retour</Text>
         </View>
         <Pressable onPress={() => bump(step)} hitSlop={8} style={styles.stepBtn}>
@@ -148,7 +146,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     includeFontPadding: false,
   },
-  valueBlock: { flex: 1, alignItems: 'center' },
+  valueBlock: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
+  },
   hint: {
     fontFamily: fonts.medium,
     fontSize: 11,
@@ -158,10 +161,11 @@ const styles = StyleSheet.create({
   value: {
     fontFamily: fonts.extrabold,
     fontSize: 28,
-    lineHeight: 32,
+    lineHeight: 34,
     letterSpacing: -1,
     color: colors.ink,
     includeFontPadding: false,
+    textAlign: 'center',
   },
   subHint: {
     fontFamily: fonts.medium,

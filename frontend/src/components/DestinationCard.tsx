@@ -100,6 +100,7 @@ export function DestinationCard({
   );
   const imageUrl = resolveTripImageUrl({
     city: cityName,
+    iata: trip.destination_code,
     imageUrl: trip.image_url,
   });
 

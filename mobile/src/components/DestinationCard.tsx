@@ -69,7 +69,11 @@ export function DestinationCard({
     trip.destination_code,
     trip.aller.destinationFull,
   )
-  const imageUrl = resolveTripImageUrl({ city: cityName, imageUrl: trip.image_url })
+  const imageUrl = resolveTripImageUrl({
+    city: cityName,
+    iata: trip.destination_code,
+    imageUrl: trip.image_url,
+  })
   const [failed, setFailed] = useState(false)
 
   const openBook = async () => {
