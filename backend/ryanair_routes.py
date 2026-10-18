@@ -100,7 +100,11 @@ def fetch_destinations_by_country(departure: str) -> dict:
 
 
 def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
-    """Return arrival IATA codes that are NOT served from departure. Empty arrival = ok."""
+    """Return arrival IATA codes not served from any departure origin.
+
+    ``departure`` may be a single IATA or comma-separated city airports
+    (e.g. ``CDG,ORY,BVA``). Empty arrival = ok.
+    """
     if not arrival:
         return []
     codes = [
@@ -110,7 +114,16 @@ def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
     ]
     if not codes:
         return []
-    served = fetch_served_codes(departure)
+    deps = [
+        c.strip().upper()
+        for c in str(departure or "").replace(";", ",").split(",")
+        if c.strip() and len(c.strip()) == 3 and c.strip().isalpha()
+    ]
+    if not deps:
+        return []
+    served: Set[str] = set()
+    for dep in deps:
+        served |= fetch_served_codes(dep)
     if not served:
         # If Ryanair unreachable, don't block create/scan
         return []

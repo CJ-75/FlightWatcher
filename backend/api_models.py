@@ -150,6 +150,7 @@ class CreatePlannedTripRequest(BaseModel):
     arrival_airport: Optional[str] = None
     passengers: int = 1
     budget_max: int = 200
+    direct: Optional[bool] = False
 
 
 class UpdatePlannedTripRequest(BaseModel):
@@ -160,6 +161,7 @@ class UpdatePlannedTripRequest(BaseModel):
     dates_depart: Optional[List[DateAvecHoraire]] = None
     dates_retour: Optional[List[DateAvecHoraire]] = None
     budget_max: Optional[int] = None
+    direct: Optional[bool] = None
     auto_scan_enabled: Optional[bool] = None
     auto_scan_interval_seconds: Optional[int] = None
 

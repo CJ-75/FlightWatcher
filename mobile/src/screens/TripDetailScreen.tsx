@@ -16,7 +16,7 @@ import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { EnrichedTripResponse, PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
-import { formatDateFr } from '@flightwatcher/shared'
+import { cityDisplayNameFr, formatDateFr, parseAirportCodes } from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -36,6 +36,18 @@ import { Button } from '../components/ui/Button'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
+
+function departureRouteLabel(value: string | null | undefined): string {
+  const codes = parseAirportCodes(value)
+  if (!codes.length) return value || '—'
+  const cities = [...new Set(codes.map((c) => cityDisplayNameFr(c)))]
+  if (cities.length === 1) {
+    return codes.length > 1
+      ? `${cities[0]} · ${codes.join(' · ')}`
+      : `${cities[0]} · ${codes[0]}`
+  }
+  return codes.join(' · ')
+}
 
 export function TripDetailScreen() {
   const insets = useSafeAreaInsets()
@@ -84,6 +96,16 @@ export function TripDetailScreen() {
   const scan = async () => {
     setScanning(true)
     setError(null)
+    // Clear previous pending proposals immediately (Search parity)
+    setTrip((prev) =>
+      prev
+        ? {
+            ...prev,
+            proposals: (prev.proposals || []).filter((p) => p.status !== 'pending'),
+            proposals_count: 0,
+          }
+        : prev,
+    )
     try {
       if (__DEV__ && isGuest) {
         const updated = await scanGuestTrip(tripId)
@@ -312,10 +334,11 @@ export function TripDetailScreen() {
       <View style={[styles.summary, shadow.soft]}>
         <Text style={styles.name}>{trip.name}</Text>
         <Text style={styles.meta}>
-          {trip.departure_airport}
+          {departureRouteLabel(trip.departure_airport)}
           {trip.arrival_airport
             ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
             : ' · inspire'}
+          {trip.direct ? ' · directs' : ''}
         </Text>
         <Text style={styles.meta}>
           max {trip.budget_max}€/pers
@@ -340,8 +363,8 @@ export function TripDetailScreen() {
         <View style={[styles.routeWarn, shadow.soft]}>
           <Text style={styles.routeWarnTitle}>Route plus desservie</Text>
           <Text style={styles.routeWarnBody}>
-            Ryanair ne dessert plus {(trip.invalid_arrival_codes || []).join(', ')} depuis{' '}
-            {trip.departure_airport}.
+            Plus de vols vers {(trip.invalid_arrival_codes || []).join(', ')} depuis{' '}
+            {departureRouteLabel(trip.departure_airport)}.
           </Text>
           {isOrganizer ? (
             <Pressable
@@ -386,7 +409,7 @@ export function TripDetailScreen() {
         </>
       ) : null}
 
-      {accepted ? (
+      {accepted && !scanning ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Proposition acceptée</Text>
           <DestinationCard
@@ -397,7 +420,20 @@ export function TripDetailScreen() {
         </View>
       ) : null}
 
-      {pending.length > 0 ? (
+      {scanning ? (
+        <View style={[styles.empty, shadow.soft]}>
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Scan en cours…</Text>
+          <Text style={styles.emptyBody}>
+            {departureRouteLabel(trip.departure_airport)}
+            {trip.arrival_airport
+              ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+              : ' → inspire'}
+          </Text>
+        </View>
+      ) : null}
+
+      {!scanning && pending.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Propositions ({pending.length})</Text>
           {pending.map((p) => (

@@ -55,8 +55,8 @@ def _clamp_passengers(n: Optional[int]) -> int:
     return max(1, min(6, v))
 
 
-def _normalize_arrival(raw: Optional[str]) -> Optional[str]:
-    """One IATA or comma-separated city airports (e.g. LIS,OPO)."""
+def _normalize_airport_list(raw: Optional[str], *, kind: str) -> Optional[str]:
+    """One IATA or comma-separated city airports (e.g. CDG,ORY,BVA)."""
     if not raw:
         return None
     codes = [
@@ -66,11 +66,23 @@ def _normalize_arrival(raw: Optional[str]) -> Optional[str]:
     ]
     bad = [c for c in codes if len(c) != 3 or not c.isalpha()]
     if bad:
+        label = "d'arrivée" if kind == "arrival" else "de départ"
         raise HTTPException(
             status_code=400,
-            detail=f"Aéroport(s) d'arrivée invalide(s): {', '.join(bad)}",
+            detail=f"Aéroport(s) {label} invalide(s): {', '.join(bad)}",
         )
     return ",".join(codes) if codes else None
+
+
+def _normalize_arrival(raw: Optional[str]) -> Optional[str]:
+    return _normalize_airport_list(raw, kind="arrival")
+
+
+def _normalize_departure(raw: Optional[str]) -> str:
+    dep = _normalize_airport_list(raw, kind="departure")
+    if not dep:
+        raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
+    return dep
 
 
 def _trip_data_json(trip) -> dict:
@@ -164,6 +176,7 @@ def _row_to_trip(
         "departure_airport": dep,
         "arrival_airport": arr,
         "passengers": row.get("passengers") or 1,
+        "direct": bool(row.get("direct")),
         "dates_depart": row.get("dates_depart") or [],
         "dates_retour": row.get("dates_retour") or [],
         "budget_max": row.get("budget_max") or 200,
@@ -357,7 +370,7 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Plus de vols Ryanair {trip['departure_airport']} → "
+                        f"Plus de vols {trip['departure_airport']} → "
                         f"{', '.join(bad)}. Change la destination du voyage "
                         "ou passe en mode inspire (sans arrivée)."
                     ),
@@ -614,10 +627,8 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
     if not body.dates_depart or not body.dates_retour:
         raise HTTPException(status_code=400, detail="Dates aller et retour requises")
 
-    dep = (body.departure_airport or "").strip().upper()
+    dep = _normalize_departure(body.departure_airport)
     arr = _normalize_arrival(body.arrival_airport)
-    if len(dep) != 3 or not dep.isalpha():
-        raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
 
     bad = invalid_arrival_codes(dep, arr)
     if bad:
@@ -625,7 +636,7 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
             status_code=400,
             detail=(
                 f"Route indisponible depuis {dep} : {', '.join(bad)}. "
-                "Choisis une destination encore desservie par Ryanair."
+                "Choisis une destination encore desservie, ou retire l’arrivée."
             ),
         )
 
@@ -636,6 +647,7 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
         "departure_airport": dep,
         "arrival_airport": arr,
         "passengers": _clamp_passengers(body.passengers),
+        "direct": bool(body.direct),
         "dates_depart": [d.model_dump() for d in body.dates_depart],
         "dates_retour": [d.model_dump() for d in body.dates_retour],
         "budget_max": int(body.budget_max or 200),
@@ -717,10 +729,7 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
     if body.name is not None:
         patch["name"] = body.name.strip()
     if body.departure_airport is not None:
-        dep = body.departure_airport.strip().upper()
-        if len(dep) != 3 or not dep.isalpha():
-            raise HTTPException(status_code=400, detail="Aéroport de départ invalide")
-        patch["departure_airport"] = dep
+        patch["departure_airport"] = _normalize_departure(body.departure_airport)
     # Allow explicit null to clear arrival (inspire mode)
     fields_set = getattr(body, "model_fields_set", None) or getattr(
         body, "__fields_set__", set()
@@ -729,6 +738,8 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
         patch["arrival_airport"] = _normalize_arrival(body.arrival_airport)
     if body.passengers is not None:
         patch["passengers"] = _clamp_passengers(body.passengers)
+    if body.direct is not None:
+        patch["direct"] = bool(body.direct)
     if body.dates_depart is not None:
         patch["dates_depart"] = [d.model_dump() for d in body.dates_depart]
     if body.dates_retour is not None:

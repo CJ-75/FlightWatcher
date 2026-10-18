@@ -20,19 +20,36 @@ import { PassengerStepper } from './PassengerStepper'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
+  airportSelectionLabel,
   arrivalDisplayLabel,
+  cityDisplayNameFr,
   cityImageUrl,
+  encodeAirportCodes,
   encodeArrivalCodes,
   findCityGroupByKey,
   formatDateFr,
   generateDatesFromPreset,
   groupAirportsByCity,
+  parseAirportCodes,
   pickPopularCityGroups,
-  resolvePopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
+import { CityAirportSelect } from './CityAirportSelect'
 
 type TripGalleryDensity = 'solo' | 'duo' | 'multi'
+
+/** Compact label for multi-IATA departure without needing city groups. */
+function departureRouteLabel(value: string | null | undefined): string {
+  const codes = parseAirportCodes(value)
+  if (!codes.length) return value || '—'
+  const cities = [...new Set(codes.map((c) => cityDisplayNameFr(c)))]
+  if (cities.length === 1) {
+    return codes.length > 1
+      ? `${cities[0]} · ${codes.join(' · ')}`
+      : `${cities[0]} · ${codes[0]}`
+  }
+  return codes.join(' · ')
+}
 
 function inviteUrl(token: string) {
   return `${window.location.origin}/planner/invite/${token}`
@@ -540,7 +557,7 @@ function TripListCard({
             <div className="absolute bottom-6 left-6 right-6 lg:hidden">
               <p className="text-white text-4xl font-black tracking-tight">{cityLabel}</p>
               <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
-                <span>{trip.departure_airport}</span>
+                <span>{departureRouteLabel(trip.departure_airport)}</span>
                 <span className="w-8 h-0.5 rounded bg-white/55" />
                 <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
               </div>
@@ -558,7 +575,7 @@ function TripListCard({
                 {cityLabel}
               </p>
               <div className="hidden lg:flex items-center gap-2 mt-2 text-slate-500 font-bold text-sm tracking-wide">
-                <span>{trip.departure_airport}</span>
+                <span>{departureRouteLabel(trip.departure_airport)}</span>
                 <span className="w-7 h-0.5 rounded bg-slate-300" />
                 <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
                 {codes.length > 1 ? (
@@ -614,7 +631,7 @@ function TripListCard({
             {cityLabel}
           </p>
           <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
-            <span>{trip.departure_airport}</span>
+            <span>{departureRouteLabel(trip.departure_airport)}</span>
             <span className="w-7 h-0.5 rounded bg-white/55" />
             <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
             {codes.length > 1 ? (
@@ -879,10 +896,10 @@ function CreateTripModal({
   const [arrivalCodes, setArrivalCodes] = useState<string[]>([])
   const [airports, setAirports] = useState<Airport[]>([])
   const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
-  const [airportQuery, setAirportQuery] = useState('')
   const [cityQuery, setCityQuery] = useState('')
   const [passengers, setPassengers] = useState(2)
   const [budget, setBudget] = useState(150)
+  const [directOnly, setDirectOnly] = useState(false)
   const [preset, setPreset] = useState<DatePreset>('next-weekend')
   const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>(initial.dates_depart)
   const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>(initial.dates_retour)
@@ -890,6 +907,11 @@ function CreateTripModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const departureGroups = useMemo(() => groupAirportsByCity(airports), [airports])
+  const departureLabel = useMemo(
+    () => airportSelectionLabel(departure, departureGroups) || departureRouteLabel(departure),
+    [departure, departureGroups],
+  )
   const cityGroups = useMemo(() => groupAirportsByCity(arrivalAirports), [arrivalAirports])
   const selectedCity = useMemo(
     () => findCityGroupByKey(cityGroups, arrivalCityKey),
@@ -910,40 +932,6 @@ function CreateTripModal({
 
   const popularCities = useMemo(() => pickPopularCityGroups(cityGroups, 8), [cityGroups])
 
-  const departureAirport = useMemo(
-    () => airports.find((a) => a.code === departure) ?? null,
-    [airports, departure],
-  )
-
-  const popularDepartures = useMemo(
-    () => resolvePopularAirports(airports),
-    [airports],
-  )
-
-  const filteredDepartures = useMemo(() => {
-    const q = airportQuery.trim().toLowerCase()
-    if (q.length < 2) return []
-    const scored = airports
-      .map((a) => {
-        const code = a.code.toLowerCase()
-        const city = a.city.toLowerCase()
-        const name = a.name.toLowerCase()
-        const country = a.country.toLowerCase()
-        let score = 0
-        if (code === q) score = 100
-        else if (code.startsWith(q)) score = 90
-        else if (city.startsWith(q)) score = 80
-        else if (city.includes(q)) score = 60
-        else if (name.includes(q) || country.includes(q)) score = 40
-        else if (code.includes(q)) score = 30
-        else return null
-        return { a, score }
-      })
-      .filter((x): x is { a: Airport; score: number } => Boolean(x))
-      .sort((x, y) => y.score - x.score || x.a.city.localeCompare(y.a.city))
-    return scored.slice(0, 8).map((x) => x.a)
-  }, [airports, airportQuery])
-
   useEffect(() => {
     void getApiClient()
       .getAirports()
@@ -952,16 +940,41 @@ function CreateTripModal({
   }, [])
 
   useEffect(() => {
-    if (!departure) {
+    const origins = parseAirportCodes(departure)
+    if (!origins.length) {
       setArrivalAirports([])
       return
     }
     let cancelled = false
-    void getApiClient()
-      .getDestinations(departure)
-      .then((raw) => {
+    void (async () => {
+      try {
+        const maps = await Promise.all(
+          origins.map(async (code) => {
+            try {
+              return normalizeDestinations(
+                (await getApiClient().getDestinations(code)) as any,
+              )
+            } catch {
+              return {} as Record<string, Airport[]>
+            }
+          }),
+        )
         if (cancelled) return
-        const next = destinationsToAirports(normalizeDestinations(raw as any))
+        // Merge destination catalogs from all selected origins
+        const merged: Record<string, any[]> = {}
+        const seen = new Set<string>()
+        for (const map of maps) {
+          for (const [country, list] of Object.entries(map || {})) {
+            if (!merged[country]) merged[country] = []
+            for (const d of list as any[]) {
+              const code = (d?.code || '').toUpperCase()
+              if (!code || seen.has(code)) continue
+              seen.add(code)
+              merged[country].push(d)
+            }
+          }
+        }
+        const next = destinationsToAirports(merged as any)
         setArrivalAirports(next)
         setArrivalCodes((codes) => {
           const allowed = new Set(next.map((a) => a.code))
@@ -972,21 +985,14 @@ function CreateTripModal({
           }
           return codes
         })
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setArrivalAirports([])
-      })
+      }
+    })()
     return () => {
       cancelled = true
     }
   }, [departure])
-
-  const selectDeparture = (airport: Airport) => {
-    setDeparture(airport.code)
-    setAirportQuery('')
-    setError(null)
-    setStep(2)
-  }
 
   const selectCity = (group: CityAirportGroup | null, advance = false) => {
     if (!group) {
@@ -1000,6 +1006,20 @@ function CreateTripModal({
     setArrivalCodes(group.airports.map((a) => a.code))
     if (!name.trim() || name.startsWith('Weekend ')) setName(`Weekend ${group.city}`)
     if (advance) setStep(3)
+  }
+
+  const toggleArrivalAirport = (code: string) => {
+    const upper = code.toUpperCase()
+    setArrivalCodes((prev) => {
+      const set = new Set(prev)
+      if (set.has(upper)) {
+        if (set.size <= 1) return prev
+        set.delete(upper)
+      } else {
+        set.add(upper)
+      }
+      return [...set]
+    })
   }
 
   const onPreset = (p: DatePreset) => {
@@ -1020,8 +1040,8 @@ function CreateTripModal({
   const goNext = () => {
     setError(null)
     if (step === 1) {
-      if (!departure) {
-        setError('Choisis un aéroport de départ')
+      if (!parseAirportCodes(departure).length) {
+        setError('Choisis une ville / aéroport de départ')
         return
       }
       setStep(2)
@@ -1043,14 +1063,17 @@ function CreateTripModal({
   }
 
   const submit = async () => {
-    if (!departure) {
-      setError('Choisis un aéroport de départ')
+    const depEncoded = encodeAirportCodes(parseAirportCodes(departure))
+    if (!depEncoded) {
+      setError('Choisis une ville / aéroport de départ')
       setStep(1)
       return
     }
     const tripName =
       name.trim() ||
-      (selectedCity ? `Weekend ${selectedCity.city}` : `Weekend depuis ${departure}`)
+      (selectedCity
+        ? `Weekend ${selectedCity.city}`
+        : `Weekend depuis ${departureLabel || depEncoded}`)
     if (!datesDepart.length || !datesRetour.length) {
       setError('Dates requises')
       return
@@ -1059,12 +1082,13 @@ function CreateTripModal({
     setError(null)
     const body: CreatePlannedTripRequest = {
       name: tripName,
-      departure_airport: departure.trim().toUpperCase(),
+      departure_airport: depEncoded,
       arrival_airport: encodeArrivalCodes(arrivalCodes),
       passengers,
       dates_depart: datesDepart,
       dates_retour: datesRetour,
       budget_max: budget,
+      direct: directOnly,
     }
     try {
       const trip = await getApiClient().createPlannedTrip(body)
@@ -1144,148 +1168,24 @@ function CreateTripModal({
               initial={{ opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.25 }}
-              className="space-y-6"
+              className="space-y-5"
             >
-              {popularDepartures.length > 0 ? (
-                <div>
-                  <p className="text-sm font-bold text-slate-700 mb-3">Départs fréquents</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
-                    {popularDepartures.map((a, i) => {
-                      const active = departure === a.code
-                      return (
-                        <motion.button
-                          key={a.code}
-                          type="button"
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.03 }}
-                          whileHover={{ y: -2 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => selectDeparture(a)}
-                          className={`relative overflow-hidden rounded-2xl text-left h-[104px] sm:h-[112px] group border-2 transition-shadow ${
-                            active
-                              ? 'border-[#FF6B35] shadow-md shadow-orange-500/20'
-                              : 'border-transparent hover:border-orange-200 shadow-sm'
-                          }`}
-                        >
-                          <img
-                            src={cityImageUrl(a.city)}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/10" />
-                          {active ? (
-                            <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-[#FF6B35] text-white text-[10px] font-black flex items-center justify-center">
-                              ✓
-                            </span>
-                          ) : null}
-                          <div className="relative h-full flex flex-col justify-end p-2.5 sm:p-3">
-                            <span className="inline-flex self-start px-1.5 py-0.5 rounded-md bg-white/95 text-[11px] font-black tracking-wider text-slate-900 mb-1">
-                              {a.code}
-                            </span>
-                            <p className="text-white font-bold text-sm sm:text-[15px] leading-tight truncate drop-shadow-sm">
-                              {a.city}
-                            </p>
-                          </div>
-                        </motion.button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ) : airports.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-6">Chargement des aéroports…</p>
-              ) : null}
-
-              <div className="relative">
-                <p className="text-sm font-bold text-slate-700 mb-2">Autre aéroport</p>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                      <circle cx="11" cy="11" r="7" />
-                      <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                    </svg>
-                  </span>
-                  <input
-                    value={airportQuery}
-                    onChange={(e) => setAirportQuery(e.target.value)}
-                    placeholder="Tape une ville ou un code…"
-                    autoComplete="off"
-                    className="w-full border border-slate-200 rounded-2xl pl-11 pr-4 py-3.5 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 bg-white"
-                  />
-                  {airportQuery ? (
-                    <button
-                      type="button"
-                      onClick={() => setAirportQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-500 text-xs font-bold hover:bg-slate-200"
-                      aria-label="Effacer"
-                    >
-                      ✕
-                    </button>
-                  ) : null}
-                </div>
-
-                {airportQuery.trim().length > 0 && airportQuery.trim().length < 2 ? (
-                  <p className="mt-2 text-xs text-slate-400 font-medium px-1">
-                    Continue à taper pour afficher des suggestions…
-                  </p>
-                ) : null}
-
-                {airportQuery.trim().length >= 2 ? (
-                  <div className="absolute left-0 right-0 z-20 mt-1.5 max-h-[260px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lift">
-                    {filteredDepartures.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-8 px-4">
-                        Aucun aéroport pour « {airportQuery.trim()} »
-                      </p>
-                    ) : (
-                      <ul className="py-1.5" role="listbox">
-                        {filteredDepartures.map((a) => {
-                          const active = departure === a.code
-                          return (
-                            <li key={a.code}>
-                              <button
-                                type="button"
-                                role="option"
-                                aria-selected={active}
-                                onClick={() => selectDeparture(a)}
-                                className={`w-full flex items-center gap-3 text-left px-3.5 py-2.5 transition-colors ${
-                                  active ? 'bg-[#FFF3EC]' : 'hover:bg-slate-50'
-                                }`}
-                              >
-                                <span
-                                  className={`shrink-0 w-12 h-10 rounded-xl font-black tracking-wider text-xs flex items-center justify-center ${
-                                    active ? 'bg-[#FF6B35] text-white' : 'bg-slate-100 text-slate-800'
-                                  }`}
-                                >
-                                  {a.code}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  <span className="block font-bold text-slate-900 truncate text-sm">{a.city}</span>
-                                  <span className="block text-xs text-slate-500 truncate">
-                                    {a.name} · {a.country}
-                                  </span>
-                                </span>
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                ) : null}
+              <div>
+                <p className="text-sm font-bold text-slate-700 mb-2">Ville de départ</p>
+                <CityAirportSelect
+                  value={departure}
+                  onChange={(encoded) => {
+                    setDeparture(encoded)
+                    setError(null)
+                  }}
+                />
               </div>
-
-              {departureAirport && !airportQuery.trim() ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-[#FFF3EC] px-4 py-3">
-                  <div className="w-11 h-11 rounded-xl bg-[#FF6B35] text-white font-black flex items-center justify-center tracking-wider shrink-0 text-sm">
-                    {departureAirport.code}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-slate-900 truncate">{departureAirport.city}</p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {departureAirport.name} · {departureAirport.country}
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold text-[#E85A28]">Sélectionné</span>
+              {departure ? (
+                <div className="rounded-2xl border border-orange-200 bg-[#FFF3EC] px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-[#E85A28] mb-1">
+                    Sélectionné
+                  </p>
+                  <p className="font-bold text-slate-900">{departureLabel}</p>
                 </div>
               ) : null}
             </motion.div>
@@ -1299,9 +1199,9 @@ function CreateTripModal({
               transition={{ duration: 0.25 }}
               className="space-y-4"
             >
-              <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
-                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-100 font-black text-slate-800 tracking-wider">
-                  {departure}
+              <div className="flex items-center gap-2 text-sm text-slate-500 font-medium flex-wrap">
+                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-800">
+                  {departureLabel || departure}
                 </span>
                 <span>→</span>
                 <span>{selectedCity ? selectedCity.city : 'Toutes destinations'}</span>
@@ -1321,28 +1221,71 @@ function CreateTripModal({
               </button>
 
               {selectedCity ? (
-                <div className="relative rounded-2xl overflow-hidden h-36 sm:h-40 shadow-sm">
-                  <img
-                    src={cityImageUrl(selectedCity.city)}
-                    alt={selectedCity.city}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
-                    <div>
-                      <p className="text-white font-black text-xl tracking-tight">{selectedCity.city}</p>
-                      <p className="text-white/85 text-xs font-medium">
-                        {selectedCity.airports.map((a) => a.code).join(' · ')}
-                      </p>
+                <div className="space-y-3">
+                  <div className="relative rounded-2xl overflow-hidden h-36 sm:h-40 shadow-sm">
+                    <img
+                      src={cityImageUrl(selectedCity.city)}
+                      alt={selectedCity.city}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                      <div>
+                        <p className="text-white font-black text-xl tracking-tight">
+                          {selectedCity.city}
+                        </p>
+                        <p className="text-white/85 text-xs font-medium">
+                          {arrivalCodes.join(' · ') ||
+                            selectedCity.airports.map((a) => a.code).join(' · ')}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => selectCity(null)}
+                        className="text-xs font-bold bg-white/95 text-slate-800 px-3 py-1.5 rounded-full"
+                      >
+                        Effacer
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => selectCity(null)}
-                      className="text-xs font-bold bg-white/95 text-slate-800 px-3 py-1.5 rounded-full"
-                    >
-                      Effacer
-                    </button>
                   </div>
+                  {selectedCity.airports.length > 1 ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-slate-500">
+                          Aéroports de {selectedCity.city}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setArrivalCodes(selectedCity.airports.map((a) => a.code))
+                          }
+                          className="text-xs font-bold text-primary-600"
+                        >
+                          Tous
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedCity.airports.map((a) => {
+                          const on = arrivalCodes.includes(a.code)
+                          return (
+                            <button
+                              key={a.code}
+                              type="button"
+                              onClick={() => toggleArrivalAirport(a.code)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] ${
+                                on
+                                  ? 'bg-primary-50 text-primary-700 border-primary-300'
+                                  : 'bg-white text-slate-500 border-slate-200'
+                              }`}
+                              title={a.name}
+                            >
+                              {a.code}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -1366,7 +1309,7 @@ function CreateTripModal({
               ) : null}
 
               <p className="text-[11px] text-slate-400">
-                Routes Ryanair depuis {departure} · mises à jour en direct
+                Destinations depuis {departureLabel || departure} · multi-compagnies
               </p>
               <input
                 value={cityQuery}
@@ -1418,11 +1361,17 @@ function CreateTripModal({
               className="space-y-5 max-w-xl mx-auto"
             >
               <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <span className="font-black tracking-wider text-slate-900">{departure}</span>
+                <span className="font-bold text-slate-900">{departureLabel || departure}</span>
                 <span className="text-slate-400">→</span>
                 <span className="font-semibold text-slate-800">
                   {selectedCity ? selectedCity.city : 'Toutes destinations'}
                 </span>
+                {directOnly ? (
+                  <>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-slate-600 font-medium">directs</span>
+                  </>
+                ) : null}
                 {datesDepart[0] && datesRetour[0] ? (
                   <>
                     <span className="text-slate-300">·</span>
@@ -1442,7 +1391,7 @@ function CreateTripModal({
                   placeholder={
                     selectedCity
                       ? `Weekend ${selectedCity.city}`
-                      : `Weekend depuis ${departure || '…'}`
+                      : `Weekend depuis ${departureLabel || '…'}`
                   }
                   className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
@@ -1462,6 +1411,17 @@ function CreateTripModal({
               <div className="[&>div]:mb-4">
                 <PassengerStepper value={passengers} onChange={setPassengers} />
               </div>
+              <label className="mb-4 flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={directOnly}
+                  onChange={(e) => setDirectOnly(e.target.checked)}
+                  className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
+                />
+                <span className="text-sm font-semibold text-slate-800">
+                  Vols directs uniquement
+                </span>
+              </label>
               <div className="[&>div]:mb-2">
                 <BudgetSlider value={budget} onChange={setBudget} />
               </div>
@@ -1483,7 +1443,7 @@ function CreateTripModal({
             <button
               type="button"
               onClick={goNext}
-              disabled={step === 1 && !departure}
+              disabled={step === 1 && !parseAirportCodes(departure).length}
               className="app-btn-primary rounded-2xl disabled:opacity-50 sm:min-w-[200px] py-3.5"
             >
               Continuer
@@ -1551,6 +1511,7 @@ function TripDetailView({
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -1606,6 +1567,26 @@ function TripDetailView({
   const pending = (trip?.proposals || []).filter((p) => p.status === 'pending')
   const accepted = (trip?.proposals || []).find((p) => p.status === 'accepted')
 
+  const proposalOrigins = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of pending) {
+      const o = (p.trip_data?.aller?.origin || '').trim().toUpperCase()
+      if (o.length === 3) set.add(o)
+    }
+    return [...set].sort()
+  }, [pending])
+
+  const visiblePending = useMemo(() => {
+    if (!originFilter || originFilter.size === 0) return pending
+    return pending.filter((p) =>
+      originFilter.has((p.trip_data?.aller?.origin || '').toUpperCase()),
+    )
+  }, [pending, originFilter])
+
+  useEffect(() => {
+    setOriginFilter(null)
+  }, [pending.length, trip?.id])
+
   const suggestedBudget = useMemo(() => {
     if (!scanEmpty?.cheapest) return null
     return Math.min(1000, Math.max(20, Math.ceil(scanEmpty.cheapest / 10) * 10))
@@ -1640,6 +1621,17 @@ function TripDetailView({
     setScanning(true)
     setScanEmpty(null)
     setError(null)
+    setOriginFilter(null)
+    // Hide previous proposals immediately (parity with Search clear-on-search)
+    setTrip((prev) =>
+      prev
+        ? {
+            ...prev,
+            proposals: (prev.proposals || []).filter((p) => p.status !== 'pending'),
+            proposals_count: 0,
+          }
+        : prev,
+    )
     try {
       const scanRes = await getApiClient().scanPlannedTrip(tripId)
       const proposals = scanRes.proposals || []
@@ -1895,8 +1887,11 @@ function TripDetailView({
           </span>
         </div>
         <p className="text-slate-500">
-          {trip.departure_airport}
-          {trip.arrival_airport ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}` : ' · inspire'}
+          {departureRouteLabel(trip.departure_airport)}
+          {trip.arrival_airport
+            ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+            : ' · inspire'}
+          {trip.direct ? ' · directs' : ''}
           {' · '}
           {trip.budget_max}€/pers
         </p>
@@ -1985,15 +1980,18 @@ function TripDetailView({
           <div className="mx-auto mb-3 w-9 h-9 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
           <p className="font-bold text-slate-900">{t('planner.scan.auto')}</p>
           <p className="text-sm text-slate-500 mt-1">
-            {trip.departure_airport}
-            {trip.arrival_airport ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}` : ' → inspire'}
+            {departureRouteLabel(trip.departure_airport)}
+            {trip.arrival_airport
+              ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+              : ' → inspire'}
+            {trip.direct ? ' · directs' : ''}
             {' · '}
             {trip.budget_max}€/pers
           </p>
         </div>
       ) : null}
 
-      {accepted ? (
+      {accepted && !scanning ? (
         <section className="space-y-4">
           <h3 className="font-bold text-lg text-ink">Proposition acceptée</h3>
           <div className="max-w-md">
@@ -2006,13 +2004,54 @@ function TripDetailView({
         </section>
       ) : null}
 
-      {pending.length > 0 ? (
+      {!scanning && pending.length > 0 ? (
         <section className="space-y-4">
-          <h3 className="font-bold text-lg text-ink">
-            {t('planner.proposals')} ({pending.length})
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h3 className="font-bold text-lg text-ink">
+              {t('planner.proposals')} ({visiblePending.length}
+              {visiblePending.length !== pending.length
+                ? `/${pending.length}`
+                : ''}
+              )
+            </h3>
+            {proposalOrigins.length > 1 ? (
+              <div className="flex flex-wrap gap-2">
+                {proposalOrigins.map((code) => {
+                  const active = !originFilter || originFilter.has(code)
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      onClick={() => {
+                        setOriginFilter((prev) => {
+                          const base =
+                            prev ?? new Set(proposalOrigins)
+                          const next = new Set(base)
+                          if (next.has(code)) {
+                            if (next.size <= 1) return next
+                            next.delete(code)
+                          } else {
+                            next.add(code)
+                          }
+                          if (next.size === proposalOrigins.length) return null
+                          return next
+                        })
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold border min-h-[36px] ${
+                        active
+                          ? 'bg-primary-500 text-white border-primary-500'
+                          : 'bg-white text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {code}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {pending.map((p) => (
+            {visiblePending.map((p) => (
               <ProposalCard
                 key={p.id}
                 proposal={p}

@@ -21,21 +21,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, PlannedTrip } from '@flightwatcher/shared'
 import {
   arrivalDisplayLabel,
+  cityDisplayNameFr,
   cityImageUrl,
   destinationsToAirports,
+  encodeAirportCodes,
   encodeArrivalCodes,
   formatDateFr,
   generateDatesFromPreset,
   groupAirportsByCity,
   normalizeAirports,
   normalizeDestinations,
+  parseAirportCodes,
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
-import { AirportPicker } from '../components/AirportPicker'
+import { CityAirportPicker } from '../components/CityAirportPicker'
 import { CityPicker } from '../components/CityPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
@@ -49,6 +52,18 @@ const PRESETS: { id: DatePresetId; label: string }[] = [
   { id: 'next-weekend', label: 'Weekend prochain' },
   { id: 'flexible', label: 'Dates libres' },
 ]
+
+function departureRouteLabel(value: string | null | undefined): string {
+  const codes = parseAirportCodes(value)
+  if (!codes.length) return value || '—'
+  const cities = [...new Set(codes.map((c) => cityDisplayNameFr(c)))]
+  if (cities.length === 1) {
+    return codes.length > 1
+      ? `${cities[0]} · ${codes.join(' · ')}`
+      : `${cities[0]} · ${codes[0]}`
+  }
+  return codes.join(' · ')
+}
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Créé',
@@ -242,7 +257,9 @@ export function PlannerScreen() {
                       {arrival.isAny ? 'Destination libre' : arrival.city}
                     </Text>
                     <View style={styles.routeRow}>
-                      <Text style={styles.routeCode}>{item.departure_airport}</Text>
+                      <Text style={styles.routeCode}>
+                        {departureRouteLabel(item.departure_airport)}
+                      </Text>
                       <View style={styles.routeDash} />
                       <Text style={styles.routeCode}>
                         {arrival.isAny ? 'ANY' : arrival.codes.split(' · ')[0]}
@@ -449,6 +466,7 @@ function CreateTripModal({
   const [arrivalCodes, setArrivalCodes] = useState<string[]>([])
   const [passengers, setPassengers] = useState(2)
   const [budget, setBudget] = useState(150)
+  const [directOnly, setDirectOnly] = useState(false)
   const [preset, setPreset] = useState<DatePresetId>('next-weekend')
   const [presetDates, setPresetDates] = useState<FlexibleDates>(() => {
     const d = generateDatesFromPreset('next-weekend')
@@ -484,16 +502,39 @@ function CreateTripModal({
   }, [visible])
 
   React.useEffect(() => {
-    if (!visible || !departure) return
+    const origins = parseAirportCodes(departure)
+    if (!visible || !origins.length) {
+      if (!origins.length) setArrivalAirports([])
+      return
+    }
     let cancelled = false
-    getApi()
-      .getDestinations(departure)
-      .then((raw) => {
+    void (async () => {
+      try {
+        const maps = await Promise.all(
+          origins.map(async (code) => {
+            try {
+              return normalizeDestinations((await getApi().getDestinations(code)) as any)
+            } catch {
+              return {}
+            }
+          }),
+        )
         if (cancelled) return
-        const dests = normalizeDestinations(raw as any)
-        const next = destinationsToAirports(dests)
+        const merged: Record<string, any[]> = {}
+        const seen = new Set<string>()
+        for (const map of maps) {
+          for (const [country, list] of Object.entries(map || {})) {
+            if (!merged[country]) merged[country] = []
+            for (const d of list as any[]) {
+              const code = (d?.code || '').toUpperCase()
+              if (!code || seen.has(code)) continue
+              seen.add(code)
+              merged[country].push(d)
+            }
+          }
+        }
+        const next = destinationsToAirports(merged as any)
         setArrivalAirports(next)
-        // Clear arrival if no longer served from this departure
         setArrivalCodes((codes) => {
           const allowed = new Set(next.map((a) => a.code))
           const kept = codes.filter((c) => allowed.has(c))
@@ -503,10 +544,10 @@ function CreateTripModal({
           }
           return codes
         })
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setArrivalAirports([])
-      })
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -544,17 +585,23 @@ function CreateTripModal({
       setError('Choisis des dates aller et retour')
       return
     }
+    const depEncoded = encodeAirportCodes(parseAirportCodes(departure))
+    if (!depEncoded) {
+      setError('Choisis une ville / aéroport de départ')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
       const payload = {
         name: name.trim(),
-        departure_airport: departure,
+        departure_airport: depEncoded,
         arrival_airport: encodeArrivalCodes(arrivalCodes),
         passengers,
         dates_depart: dates.dates_depart,
         dates_retour: dates.dates_retour,
         budget_max: budget,
+        direct: directOnly,
       }
       const trip =
         __DEV__ && isGuest
@@ -601,7 +648,7 @@ function CreateTripModal({
 
           <View>
             <Text style={styles.fieldLabel}>Départ</Text>
-            <AirportPicker airports={airports} value={departure} onChange={setDeparture} compact />
+            <CityAirportPicker airports={airports} value={departure} onChange={setDeparture} />
           </View>
 
           <View>
@@ -625,6 +672,18 @@ function CreateTripModal({
           </View>
 
           <PassengerStepper value={passengers} onChange={setPassengers} />
+
+          <Pressable
+            style={styles.directRow}
+            onPress={() => setDirectOnly((v) => !v)}
+            hitSlop={8}
+          >
+            <View style={[styles.directBox, directOnly && styles.directBoxOn]}>
+              {directOnly ? <Text style={styles.directCheck}>✓</Text> : null}
+            </View>
+            <Text style={styles.directLabel}>Vols directs uniquement</Text>
+          </Pressable>
+
           <BudgetSlider value={budget} onChange={setBudget} />
 
           <View>
@@ -1180,6 +1239,38 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     marginBottom: 8,
+  },
+  directRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  directBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  directBoxOn: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  directCheck: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.white,
+    includeFontPadding: false,
+  },
+  directLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+    includeFontPadding: false,
   },
   input: {
     backgroundColor: colors.white,

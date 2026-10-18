@@ -257,6 +257,7 @@ export function addGuestTrip(body: CreatePlannedTripRequest): PlannedTrip {
     departure_airport: body.departure_airport,
     arrival_airport: body.arrival_airport ?? null,
     passengers: body.passengers,
+    direct: !!body.direct,
     dates_depart: body.dates_depart,
     dates_retour: body.dates_retour,
     budget_max: body.budget_max,

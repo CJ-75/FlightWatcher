@@ -137,9 +137,12 @@ export interface PlannedTrip {
   id: string
   organizer_id: string
   name: string
+  /** Single IATA or comma-separated city airports (e.g. CDG,ORY,BVA). */
   departure_airport: string
   arrival_airport?: string | null
   passengers: number
+  /** Non-stop only when scanning (aligned with Search). */
+  direct?: boolean
   dates_depart: DateAvecHoraire[]
   dates_retour: DateAvecHoraire[]
   budget_max: number
@@ -209,6 +212,7 @@ export interface CreatePlannedTripRequest {
   dates_depart: DateAvecHoraire[]
   dates_retour: DateAvecHoraire[]
   budget_max: number
+  direct?: boolean
 }
 
 export interface UpdatePlannedTripRequest {
@@ -219,6 +223,7 @@ export interface UpdatePlannedTripRequest {
   dates_depart?: DateAvecHoraire[]
   dates_retour?: DateAvecHoraire[]
   budget_max?: number
+  direct?: boolean
   auto_scan_enabled?: boolean
   auto_scan_interval_seconds?: number
 }
