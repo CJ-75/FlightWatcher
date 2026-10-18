@@ -175,6 +175,21 @@ export const resetPassword = async (email: string): Promise<{ error: Error | nul
   return { error: error ? new Error(error.message) : null }
 }
 
+/** Set a new password (session must be recovery / logged-in). */
+export const updatePassword = async (
+  newPassword: string,
+): Promise<{ error: Error | null }> => {
+  const client = await getSupabaseClient()
+  if (!client) {
+    return { error: new Error("Supabase n'est pas configuré") }
+  }
+  if (!newPassword || newPassword.length < 8) {
+    return { error: new Error('Mot de passe trop court (8 caractères min.)') }
+  }
+  const { error } = await client.auth.updateUser({ password: newPassword })
+  return { error: error ? new Error(error.message) : null }
+}
+
 /**
  * Se connecter avec Google OAuth
  */

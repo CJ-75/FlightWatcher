@@ -59,6 +59,24 @@ def send_email(to: List[str], subject: str, html: str) -> bool:
         return False
 
 
+def send_password_reset_email(*, email: str, reset_link: str) -> bool:
+    subject = "Changer ton mot de passe — FlightWatcher"
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
+      <h2 style="margin:0 0 12px;color:#E85A28">Sécurité du compte</h2>
+      <p>Tu as demandé à changer ton mot de passe FlightWatcher.</p>
+      <p>Clique sur le bouton ci-dessous (valide quelques minutes) :</p>
+      <p><a href="{reset_link}" style="display:inline-block;background:#FF6B35;color:#fff;
+         text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
+         Choisir un nouveau mot de passe</a></p>
+      <p style="font-size:13px;color:#64748b">Si tu n’es pas à l’origine de cette demande,
+         ignore cet email — ton compte reste inchangé.</p>
+      <p style="font-size:12px;color:#94a3b8">FlightWatcher</p>
+    </div>
+    """
+    return send_email([email], subject, html)
+
+
 def notify_trip_under_budget(
     *,
     trip_id: str,

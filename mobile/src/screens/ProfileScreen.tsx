@@ -6,12 +6,13 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
-import { apiBase } from '../lib/client'
+import { apiBase, getApi } from '../lib/client'
 import { Button } from '../components/ui/Button'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
@@ -27,6 +28,7 @@ export function ProfileScreen() {
   } = useAuth()
   const insets = useSafeAreaInsets()
   const [loginLoading, setLoginLoading] = useState(false)
+  const [securityBusy, setSecurityBusy] = useState(false)
 
   // Logged-out landing (real guest landings) for preview / no user
   if (!viewUser) {
@@ -138,6 +140,55 @@ export function ProfileScreen() {
           </View>
         ) : null}
 
+        {!isGuest ? (
+          <View style={[styles.securityCard, shadow.soft]}>
+            <Text style={styles.securityKicker}>
+              {translate('fr', 'auth.security.title')}
+            </Text>
+            <Text style={styles.securityTitle}>
+              {translate('fr', 'auth.security.changePassword')}
+            </Text>
+            <Text style={styles.securityHint}>
+              {translate('fr', 'auth.security.changePasswordHint')}
+            </Text>
+            <Button
+              label={
+                securityBusy
+                  ? translate('fr', 'auth.security.sending')
+                  : translate('fr', 'auth.security.changePassword')
+              }
+              onPress={() => {
+                void (async () => {
+                  setSecurityBusy(true)
+                  try {
+                    const res = await getApi().requestPasswordReset()
+                    Alert.alert(
+                      translate('fr', 'auth.security.title'),
+                      res.email_masked
+                        ? translate('fr', 'auth.security.emailSent', {
+                            email: res.email_masked,
+                          })
+                        : translate('fr', 'auth.security.emailSentGeneric'),
+                    )
+                  } catch (e) {
+                    Alert.alert(
+                      translate('fr', 'auth.security.title'),
+                      e instanceof Error
+                        ? e.message
+                        : translate('fr', 'auth.security.sendError'),
+                    )
+                  } finally {
+                    setSecurityBusy(false)
+                  }
+                })()
+              }}
+              loading={securityBusy}
+              disabled={securityBusy}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
+        ) : null}
+
         {__DEV__ ? (
           <Pressable
             onPress={() => setAppearLoggedOut(true)}
@@ -221,6 +272,35 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
     color: colors.inkSoft,
+  },
+  securityCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    gap: 4,
+  },
+  securityKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  securityTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  securityHint: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+    marginTop: 2,
   },
   guestWrap: {
     flex: 1,

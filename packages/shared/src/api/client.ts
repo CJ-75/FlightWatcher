@@ -242,6 +242,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
         `/api/planner/invite/${encodeURIComponent(token)}/join`,
         { method: 'POST' },
       ),
+
+    requestPasswordReset: () =>
+      request<{ ok: boolean; email_masked?: string }>('/api/auth/password-reset', {
+        method: 'POST',
+      }),
   }
 }
 
