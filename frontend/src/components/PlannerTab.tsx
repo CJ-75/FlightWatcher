@@ -1262,33 +1262,39 @@ function CreateTripModal({
                         {selectedCity.airports.map((a) => {
                           const on = arrivalCodes.includes(a.code)
                           return (
-                            <button
+                            <motion.button
                               key={a.code}
                               type="button"
                               onClick={() => toggleArrivalAirport(a.code)}
                               aria-pressed={on}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] ${
+                              whileHover={{ y: -1 }}
+                              whileTap={{ scale: 0.96 }}
+                              transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] transition-colors duration-200 ease-out ${
                                 on
                                   ? 'bg-primary-50 text-primary-700 border-primary-300'
-                                  : 'bg-white text-slate-500 border-slate-200'
+                                  : 'bg-white text-slate-500 border-slate-200 hover:border-primary-200 hover:bg-primary-50/40'
                               }`}
                               title={a.name}
                             >
-                              {on ? (
+                              <span
+                                className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border transition-all duration-200 ease-out ${
+                                  on
+                                    ? 'bg-primary-500 border-primary-500 scale-100'
+                                    : 'bg-white border-slate-300 scale-95'
+                                }`}
+                                aria-hidden
+                              >
                                 <span
-                                  className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary-500 text-white text-[9px] leading-none"
-                                  aria-hidden
+                                  className={`text-[9px] leading-none text-white transition-opacity duration-200 ${
+                                    on ? 'opacity-100' : 'opacity-0'
+                                  }`}
                                 >
                                   ✓
                                 </span>
-                              ) : (
-                                <span
-                                  className="inline-flex w-3.5 h-3.5 rounded-full border border-slate-300"
-                                  aria-hidden
-                                />
-                              )}
+                              </span>
                               {a.code}
-                            </button>
+                            </motion.button>
                           )
                         })}
                       </div>
