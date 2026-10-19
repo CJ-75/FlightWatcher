@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { Airport } from '../types'
 import {
   airportSelectionLabel,
@@ -15,10 +16,28 @@ type Props = {
   onChange: (encoded: string) => void
 }
 
+const PLACEHOLDER_CITIES = ['Paris', 'Lyon', 'Marseille'] as const
+
+function FranceFlag({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 3 2"
+      className={className}
+      aria-hidden
+      focusable="false"
+    >
+      <rect width="1" height="2" x="0" fill="#002395" />
+      <rect width="1" height="2" x="1" fill="#fff" />
+      <rect width="1" height="2" x="2" fill="#ED2939" />
+    </svg>
+  )
+}
+
 export function CityAirportSelect({ value, onChange }: Props) {
   const [airports, setAirports] = useState<Airport[]>([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -48,6 +67,17 @@ export function CityAirportSelect({ value, onChange }: Props) {
     () => airportSelectionLabel(value, groups),
     [value, groups],
   )
+
+  // Hide animated hint as soon as the field is focused / opened
+  const showAnimatedPlaceholder = !open && !label
+
+  useEffect(() => {
+    if (!showAnimatedPlaceholder) return
+    const id = window.setInterval(() => {
+      setPlaceholderIndex((i) => (i + 1) % PLACEHOLDER_CITIES.length)
+    }, 2200)
+    return () => window.clearInterval(id)
+  }, [showAnimatedPlaceholder])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -102,20 +132,43 @@ export function CityAirportSelect({ value, onChange }: Props) {
 
   return (
     <div ref={rootRef} className="relative">
-      <input
-        type="text"
-        value={open ? query : label || ''}
-        onChange={(e) => {
-          setQuery(e.target.value)
-          setOpen(true)
-        }}
-        onFocus={() => {
-          setOpen(true)
-          setQuery('')
-        }}
-        placeholder="Paris, Lyon, Londres…"
-        className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px]"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={open ? query : label || ''}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => {
+            setOpen(true)
+            setQuery('')
+          }}
+          placeholder=""
+          aria-label="Ville de départ"
+          className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px]"
+        />
+        {showAnimatedPlaceholder ? (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center px-3 sm:px-4"
+            aria-hidden
+          >
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={PLACEHOLDER_CITIES[placeholderIndex]}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="inline-flex items-center gap-2 text-sm sm:text-base text-slate-400 font-medium"
+              >
+                <FranceFlag className="w-[18px] h-3 sm:w-5 sm:h-[14px] rounded-[2px] shadow-sm ring-1 ring-black/10 shrink-0" />
+                {PLACEHOLDER_CITIES[placeholderIndex]}
+              </motion.span>
+            </AnimatePresence>
+          </div>
+        ) : null}
+      </div>
 
       {selectedGroup && selectedGroup.airports.length > 1 ? (
         <div className="mt-3">
@@ -139,13 +192,27 @@ export function CityAirportSelect({ value, onChange }: Props) {
                   key={a.code}
                   type="button"
                   onClick={() => toggleAirport(a.code)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] ${
+                  aria-pressed={on}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] ${
                     on
                       ? 'bg-primary-50 text-primary-700 border-primary-300'
                       : 'bg-white text-slate-500 border-slate-200'
                   }`}
                   title={a.name}
                 >
+                  {on ? (
+                    <span
+                      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary-500 text-white text-[9px] leading-none"
+                      aria-hidden
+                    >
+                      ✓
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex w-3.5 h-3.5 rounded-full border border-slate-300"
+                      aria-hidden
+                    />
+                  )}
                   {a.code}
                 </button>
               )
