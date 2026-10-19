@@ -31,7 +31,6 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   parseAirportCodes,
-  pickPopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { CityAirportSelect } from './CityAirportSelect'
@@ -919,7 +918,7 @@ function CreateTripModal({
   )
   const filteredCities = useMemo(() => {
     const q = cityQuery.trim().toLowerCase()
-    if (!q) return cityGroups.slice(0, 40)
+    if (!q) return []
     return cityGroups
       .filter(
         (g) =>
@@ -929,8 +928,6 @@ function CreateTripModal({
       )
       .slice(0, 40)
   }, [cityGroups, cityQuery])
-
-  const popularCities = useMemo(() => pickPopularCityGroups(cityGroups, 8), [cityGroups])
 
   useEffect(() => {
     void getApiClient()
@@ -1286,65 +1283,60 @@ function CreateTripModal({
                 </div>
               ) : null}
 
-              {popularCities.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {popularCities.map((g) => (
-                    <button
-                      key={g.key}
-                      type="button"
-                      onClick={() => selectCity(g, true)}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${
-                        g.key === arrivalCityKey
-                          ? 'bg-[#FF6B35] text-white border-[#FF6B35]'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-orange-300'
-                      }`}
-                    >
-                      {g.city}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
               <p className="text-[11px] text-slate-400">
                 Destinations depuis {departureLabel || departure} · multi-compagnies
               </p>
-              <input
-                value={cityQuery}
-                onChange={(e) => setCityQuery(e.target.value)}
-                placeholder="Chercher une ville…"
-                className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-primary-300"
-              />
-              <div className="max-h-[260px] sm:max-h-[300px] overflow-y-auto space-y-1.5 rounded-2xl border border-slate-100 p-1.5 bg-white">
-                {filteredCities.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-10">
-                    {arrivalAirports.length === 0 ? 'Chargement des destinations…' : 'Aucune ville trouvée'}
-                  </p>
-                ) : (
-                  filteredCities.map((g) => (
-                    <button
-                      key={g.key}
-                      type="button"
-                      onClick={() => selectCity(g, true)}
-                      className={`w-full flex items-center gap-3 text-left px-2.5 py-2.5 rounded-xl transition-colors ${
-                        g.key === arrivalCityKey
-                          ? 'bg-[#FFF3EC] ring-1 ring-orange-200'
-                          : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <img
-                        src={cityImageUrl(g.city)}
-                        alt=""
-                        className="w-12 h-12 rounded-xl object-cover shrink-0"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-slate-900 truncate">{g.city}</p>
-                        <p className="text-xs text-slate-500 truncate">
-                          {g.country} · {g.airports.map((a) => a.code).join(' · ')}
-                        </p>
-                      </div>
-                    </button>
-                  ))
-                )}
+              <div className="relative">
+                <input
+                  value={cityQuery}
+                  onChange={(e) => setCityQuery(e.target.value)}
+                  placeholder="Chercher une ville…"
+                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-primary-300"
+                  autoComplete="off"
+                />
+                {cityQuery.trim() ? (
+                  <div className="absolute left-0 right-0 z-20 mt-1.5 max-h-[260px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lift">
+                    {arrivalAirports.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-8 px-4">
+                        Chargement des destinations…
+                      </p>
+                    ) : filteredCities.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-8 px-4">
+                        Aucune ville pour « {cityQuery.trim()} »
+                      </p>
+                    ) : (
+                      filteredCities.map((g) => (
+                        <button
+                          key={g.key}
+                          type="button"
+                          onClick={() => {
+                            selectCity(g, true)
+                            setCityQuery('')
+                          }}
+                          className={`w-full flex items-center gap-3 text-left px-3 py-2.5 transition-colors ${
+                            g.key === arrivalCityKey
+                              ? 'bg-[#FFF3EC]'
+                              : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <img
+                            src={cityImageUrl(g.city)}
+                            alt=""
+                            className="w-10 h-10 rounded-xl object-cover shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-slate-900 truncate text-sm">
+                              {g.city}
+                            </p>
+                            <p className="text-xs text-slate-500 truncate">
+                              {g.country} · {g.airports.map((a) => a.code).join(' · ')}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
               </div>
             </motion.div>
           ) : null}

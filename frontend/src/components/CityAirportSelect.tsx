@@ -6,7 +6,6 @@ import {
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
-  resolvePopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
@@ -50,23 +49,9 @@ export function CityAirportSelect({ value, onChange }: Props) {
     [value, groups],
   )
 
-  const popular = useMemo(() => {
-    const out: CityAirportGroup[] = []
-    const seen = new Set<string>()
-    for (const a of resolvePopularAirports(airports)) {
-      const g = findCityGroupByCodes(groups, [a.code])
-      if (g && !seen.has(g.key)) {
-        out.push(g)
-        seen.add(g.key)
-      }
-      if (out.length >= 10) break
-    }
-    return out
-  }, [airports, groups])
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return groups.slice(0, 40)
+    if (!q) return []
     return groups
       .filter(
         (g) =>
@@ -131,28 +116,6 @@ export function CityAirportSelect({ value, onChange }: Props) {
         placeholder="Paris, Lyon, Londres…"
         className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px]"
       />
-
-      {popular.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {popular.map((g) => {
-            const active = selectedGroup?.key === g.key
-            return (
-              <button
-                key={g.key}
-                type="button"
-                onClick={() => selectCity(g)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold border transition-colors min-h-[36px] ${
-                  active
-                    ? 'bg-primary-500 text-white border-primary-500'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-primary-300 hover:bg-primary-50'
-                }`}
-              >
-                {g.city}
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
 
       {selectedGroup && selectedGroup.airports.length > 1 ? (
         <div className="mt-3">
