@@ -767,12 +767,20 @@ function Dashboard() {
         <div className="w-full mb-5 sm:mb-7 space-y-4">
           {/* Brand + compte : pleine largeur */}
           <header className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('search')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              aria-label="FlightWatcher — retour à la recherche"
+            >
               <p className="app-kicker mb-0.5">FlightWatcher</p>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>
-            </div>
+            </button>
             <div className="shrink-0 flex items-center">
               <UserMenu />
             </div>
