@@ -1266,13 +1266,27 @@ function CreateTripModal({
                               key={a.code}
                               type="button"
                               onClick={() => toggleArrivalAirport(a.code)}
-                              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] ${
+                              aria-pressed={on}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] ${
                                 on
                                   ? 'bg-primary-50 text-primary-700 border-primary-300'
                                   : 'bg-white text-slate-500 border-slate-200'
                               }`}
                               title={a.name}
                             >
+                              {on ? (
+                                <span
+                                  className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary-500 text-white text-[9px] leading-none"
+                                  aria-hidden
+                                >
+                                  ✓
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex w-3.5 h-3.5 rounded-full border border-slate-300"
+                                  aria-hidden
+                                />
+                              )}
                               {a.code}
                             </button>
                           )
