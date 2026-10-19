@@ -17,10 +17,10 @@ import {
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
-  resolvePopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
+import { CountryFlag } from './CountryFlag'
 
 type Props = {
   airports: Airport[]
@@ -29,10 +29,17 @@ type Props = {
   onChange: (encoded: string) => void
 }
 
+const PLACEHOLDER_CITIES = [
+  { city: 'Paris', country: 'France' },
+  { city: 'Lyon', country: 'France' },
+  { city: 'Marseille', country: 'France' },
+] as const
+
 export function CityAirportPicker({ airports, value, onChange }: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
 
   const groups = useMemo(() => groupAirportsByCity(airports), [airports])
   const selectedCodes = useMemo(() => parseAirportCodes(value), [value])
@@ -41,27 +48,23 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     [groups, selectedCodes],
   )
   const label = useMemo(
-    () => airportSelectionLabel(value, groups) || 'Choisir une ville',
+    () => airportSelectionLabel(value, groups),
     [value, groups],
   )
 
-  const popular = useMemo(() => {
-    const out: CityAirportGroup[] = []
-    const seen = new Set<string>()
-    for (const a of resolvePopularAirports(airports)) {
-      const g = findCityGroupByCodes(groups, [a.code])
-      if (g && !seen.has(g.key)) {
-        out.push(g)
-        seen.add(g.key)
-      }
-      if (out.length >= 8) break
-    }
-    return out
-  }, [airports, groups])
+  const showPlaceholder = !selectedGroup && !label
+
+  useEffect(() => {
+    if (!showPlaceholder) return
+    const id = setInterval(() => {
+      setPlaceholderIndex((i) => (i + 1) % PLACEHOLDER_CITIES.length)
+    }, 2200)
+    return () => clearInterval(id)
+  }, [showPlaceholder])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return groups
+    if (!q) return []
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
@@ -102,7 +105,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     const upper = code.toUpperCase()
     const set = new Set(selectedCodes)
     if (set.has(upper)) {
-      if (set.size <= 1) return // keep at least one
+      if (set.size <= 1) return
       set.delete(upper)
     } else {
       set.add(upper)
@@ -117,17 +120,21 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     if (encoded) onChange(encoded)
   }
 
+  const placeholder = PLACEHOLDER_CITIES[placeholderIndex]
+
   const renderCity = (group: CityAirportGroup) => {
     const codes = group.airports.map((a) => a.code)
-    const active =
-      selectedGroup?.key === group.key &&
-      selectedCodes.length > 0 &&
-      selectedCodes.every((c) => codes.includes(c))
+    const active = selectedGroup?.key === group.key
     return (
       <Pressable
         onPress={() => selectCity(group)}
-        style={[styles.row, active && styles.rowActive]}
+        style={({ pressed }) => [
+          styles.row,
+          active && styles.rowActive,
+          pressed && { opacity: 0.9 },
+        ]}
       >
+        <CountryFlag country={group.country} size={{ width: 22, height: 15 }} />
         <View style={styles.rowBody}>
           <Text style={styles.rowCity} numberOfLines={1}>
             {group.city}
@@ -135,6 +142,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           <Text style={styles.rowMeta} numberOfLines={1}>
             {group.airports.length} aéroport{group.airports.length > 1 ? 's' : ''} ·{' '}
             {codes.join(' · ')}
+            {group.country ? ` · ${group.country}` : ''}
           </Text>
         </View>
         {active ? <Text style={styles.check}>✓</Text> : null}
@@ -148,50 +156,57 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.trigger, pressed && styles.triggerPressed]}
       >
-        <View style={styles.codeBadge}>
-          <Text style={styles.codeText}>
-            {selectedCodes.length <= 1 ? selectedCodes[0] || '—' : `${selectedCodes.length}`}
-          </Text>
-        </View>
+        {selectedGroup ? (
+          <CountryFlag
+            country={selectedGroup.country}
+            size={{ width: 28, height: 20 }}
+            style={styles.triggerFlag}
+          />
+        ) : showPlaceholder ? (
+          <CountryFlag
+            country={placeholder.country}
+            size={{ width: 28, height: 20 }}
+            style={styles.triggerFlag}
+          />
+        ) : (
+          <View style={styles.codeBadge}>
+            <Text style={styles.codeText}>—</Text>
+          </View>
+        )}
         <View style={styles.triggerBody}>
-          <Text style={styles.triggerTitle} numberOfLines={1}>
-            {selectedGroup?.city || label}
-          </Text>
-          <Text style={styles.triggerSub} numberOfLines={1}>
-            {selectedCodes.length
-              ? selectedCodes.join(' · ')
-              : 'Ville ou code IATA'}
-          </Text>
+          {showPlaceholder ? (
+            <>
+              <Text style={styles.triggerPlaceholder} numberOfLines={1}>
+                {placeholder.city}
+              </Text>
+              <Text style={styles.triggerSub} numberOfLines={1}>
+                Ville ou code IATA
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.triggerTitle} numberOfLines={1}>
+                {selectedGroup?.city || label}
+              </Text>
+              <Text style={styles.triggerSub} numberOfLines={1}>
+                {selectedCodes.length ? selectedCodes.join(' · ') : 'Ville ou code IATA'}
+              </Text>
+            </>
+          )}
         </View>
         <Text style={styles.chevron}>›</Text>
       </Pressable>
 
-      {popular.length > 0 ? (
-        <View style={styles.popularRow}>
-          {popular.slice(0, 8).map((g) => {
-            const active = selectedGroup?.key === g.key
-            return (
-              <Pressable
-                key={g.key}
-                onPress={() => selectCity(g)}
-                style={[styles.popularChip, active && styles.popularChipActive]}
-              >
-                <Text
-                  style={[styles.popularCode, active && styles.popularCodeActive]}
-                  numberOfLines={1}
-                >
-                  {g.city}
-                </Text>
-              </Pressable>
-            )
-          })}
-        </View>
-      ) : null}
-
       {selectedGroup && selectedGroup.airports.length > 1 ? (
         <View style={styles.subBlock}>
           <View style={styles.subHeader}>
-            <Text style={styles.subTitle}>Aéroports de {selectedGroup.city}</Text>
+            <View style={styles.subTitleRow}>
+              <CountryFlag
+                country={selectedGroup.country}
+                size={{ width: 14, height: 10 }}
+              />
+              <Text style={styles.subTitle}>Aéroports de {selectedGroup.city}</Text>
+            </View>
             <Pressable onPress={selectAllInGroup} hitSlop={8}>
               <Text style={styles.subAll}>Tous</Text>
             </Pressable>
@@ -203,16 +218,17 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                 <Pressable
                   key={a.code}
                   onPress={() => toggleAirport(a.code)}
-                  style={[styles.subChip, on && styles.subChipOn]}
+                  style={({ pressed }) => [
+                    styles.subChip,
+                    on && styles.subChipOn,
+                    pressed && { transform: [{ scale: 0.97 }], opacity: 0.92 },
+                  ]}
                 >
+                  <View style={[styles.tick, on && styles.tickOn]}>
+                    {on ? <Text style={styles.tickMark}>✓</Text> : null}
+                  </View>
                   <Text style={[styles.subChipText, on && styles.subChipTextOn]}>
                     {a.code}
-                  </Text>
-                  <Text
-                    style={[styles.subChipName, on && styles.subChipNameOn]}
-                    numberOfLines={1}
-                  >
-                    {a.name.replace(new RegExp(`^${a.city}\\s*[-–]?\\s*`, 'i'), '') || a.city}
                   </Text>
                 </Pressable>
               )
@@ -236,7 +252,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             </Pressable>
           </View>
           <Text style={styles.sheetHint}>
-            Choisir une ville sélectionne tous ses aéroports (ex. Paris → CDG, ORY, BVA).
+            Tape une ville — tous ses aéroports sont sélectionnés (ex. Paris → CDG, ORY, BVA).
           </Text>
           <TextInput
             value={query}
@@ -245,6 +261,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             placeholderTextColor={colors.faint}
             autoCorrect={false}
             autoCapitalize="characters"
+            autoFocus
             style={styles.search}
           />
           {exactAirport ? (
@@ -272,7 +289,11 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             renderItem={({ item }) => renderCity(item)}
             ListEmptyComponent={
               exactAirport ? null : (
-                <Text style={styles.empty}>Aucune ville trouvée</Text>
+                <Text style={styles.empty}>
+                  {query.trim()
+                    ? 'Aucune ville trouvée'
+                    : 'Commence à taper pour chercher une ville'}
+                </Text>
               )
             }
           />
@@ -296,6 +317,9 @@ const styles = StyleSheet.create({
     ...shadow.soft,
   },
   triggerPressed: { opacity: 0.92 },
+  triggerFlag: {
+    borderRadius: 4,
+  },
   codeBadge: {
     minWidth: 44,
     height: 44,
@@ -308,37 +332,30 @@ const styles = StyleSheet.create({
   codeText: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
   triggerBody: { flex: 1, minWidth: 0 },
   triggerTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
+  triggerPlaceholder: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.faint,
+  },
   triggerSub: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted, marginTop: 2 },
   chevron: { fontSize: 22, color: colors.faint, fontFamily: fonts.bold },
-  popularRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  popularChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  popularChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  popularCode: { fontFamily: fonts.bold, fontSize: 13, color: colors.primaryInk },
-  popularCodeActive: { color: colors.white },
-  subBlock: { marginTop: 12 },
+  subBlock: { marginTop: 8, marginBottom: 0 },
   subHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
+  subTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   subTitle: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
   subAll: { fontFamily: fonts.bold, fontSize: 12, color: colors.primary },
-  subRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  subRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   subChip: {
-    maxWidth: '48%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     borderRadius: 10,
     backgroundColor: colors.canvas,
     borderWidth: 1,
@@ -348,15 +365,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
     borderColor: colors.primary,
   },
+  tick: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tickOn: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  tickMark: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: colors.white,
+    lineHeight: 11,
+  },
   subChipText: { fontFamily: fonts.bold, fontSize: 13, color: colors.inkSoft },
   subChipTextOn: { color: colors.primary },
-  subChipName: {
-    fontFamily: fonts.medium,
-    fontSize: 10,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  subChipNameOn: { color: colors.primaryInk },
   sheet: { flex: 1, backgroundColor: colors.canvas, paddingHorizontal: 16 },
   sheetHandle: {
     alignSelf: 'center',

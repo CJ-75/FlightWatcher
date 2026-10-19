@@ -376,8 +376,8 @@ export function SimpleSearch({
 
       <PassengerStepper value={passengers} onChange={setPassengers} />
 
-      <div ref={airportSectionRef} className="mb-6 sm:mb-8">
-        <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
+      <div ref={airportSectionRef} className="mb-4 sm:mb-5">
+        <label className="text-base sm:text-lg font-bold text-slate-900 mb-2 sm:mb-3 block">
           {t('search.departure')}
         </label>
         <AirportAutocomplete
@@ -404,6 +404,18 @@ export function SimpleSearch({
           </motion.p>
         )}
       </div>
+
+      <label className="mb-4 sm:mb-6 flex items-center gap-3 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={directOnly}
+          onChange={(e) => setDirectOnly(e.target.checked)}
+          className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
+        />
+        <span className="text-sm sm:text-base font-semibold text-slate-800">
+          Vols directs uniquement
+        </span>
+      </label>
 
       <DatePresets
         selected={effectivePreset}
@@ -470,18 +482,6 @@ export function SimpleSearch({
           />
         </motion.div>
       )}
-
-      <label className="mb-4 sm:mb-6 flex items-center gap-3 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={directOnly}
-          onChange={(e) => setDirectOnly(e.target.checked)}
-          className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
-        />
-        <span className="text-sm sm:text-base font-semibold text-slate-800">
-          Vols directs uniquement
-        </span>
-      </label>
 
       <AdvancedOptions
         datePreset={hasParentDates || effectivePreset === 'flexible' ? 'flexible' : effectivePreset}

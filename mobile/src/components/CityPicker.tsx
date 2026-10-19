@@ -16,10 +16,10 @@ import {
   cityImageUrl,
   findCityGroupByKey,
   groupAirportsByCity,
-  pickPopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow } from '../theme'
+import { CountryFlag } from './CountryFlag'
 
 type Props = {
   airports: Airport[]
@@ -45,12 +45,9 @@ export function CityPicker({
     [groups, valueKey],
   )
 
-  // Dynamically filtered by served routes passed as `airports`
-  const popular = useMemo(() => pickPopularCityGroups(groups, 10), [groups])
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return groups
+    if (!q) return []
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
@@ -75,10 +72,18 @@ export function CityPicker({
       >
         {selected ? (
           <View style={styles.triggerInner}>
-            <Image
-              source={{ uri: cityImageUrl(selected.city) }}
-              style={styles.triggerThumb}
-            />
+            <View style={styles.triggerThumbWrap}>
+              <Image
+                source={{ uri: cityImageUrl(selected.city) }}
+                style={styles.triggerThumb}
+              />
+              <View style={styles.triggerFlagBadge}>
+                <CountryFlag
+                  country={selected.country}
+                  size={{ width: 16, height: 11 }}
+                />
+              </View>
+            </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.triggerCity} numberOfLines={1}>
                 {selected.city}
@@ -161,37 +166,25 @@ export function CityPicker({
                     <Text style={styles.rowMeta}>Sans filtre de destination</Text>
                   </View>
                 </Pressable>
-
-                {!query.trim() && popular.length > 0 ? (
-                  <>
-                    <Text style={styles.section}>Populaires</Text>
-                    {popular.map((g) => (
-                      <CityRow
-                        key={`pop-${g.key}`}
-                        group={g}
-                        selected={g.key === valueKey}
-                        onPress={() => {
-                          onChange(g)
-                          setOpen(false)
-                        }}
-                      />
-                    ))}
-                    <Text style={[styles.section, { marginTop: 8 }]}>Toutes les villes</Text>
-                  </>
+                {!query.trim() ? (
+                  <Text style={styles.section}>Tape une ville pour chercher</Text>
                 ) : null}
               </View>
             }
-            renderItem={({ item }) =>
-              !query.trim() && popular.some((p) => p.key === item.key) ? null : (
-                <CityRow
-                  group={item}
-                  selected={item.key === valueKey}
-                  onPress={() => {
-                    onChange(item)
-                    setOpen(false)
-                  }}
-                />
-              )
+            renderItem={({ item }) => (
+              <CityRow
+                group={item}
+                selected={item.key === valueKey}
+                onPress={() => {
+                  onChange(item)
+                  setOpen(false)
+                }}
+              />
+            )}
+            ListEmptyComponent={
+              query.trim() ? (
+                <Text style={styles.emptyHint}>Aucune ville trouvée</Text>
+              ) : null
             }
           />
         </View>
@@ -214,7 +207,12 @@ function CityRow({
       onPress={onPress}
       style={({ pressed }) => [styles.row, selected && styles.rowOn, pressed && { opacity: 0.9 }]}
     >
-      <Image source={{ uri: cityImageUrl(group.city) }} style={styles.rowThumb} />
+      <View style={styles.rowThumbWrap}>
+        <Image source={{ uri: cityImageUrl(group.city) }} style={styles.rowThumb} />
+        <View style={styles.rowFlagBadge}>
+          <CountryFlag country={group.country} size={{ width: 16, height: 11 }} />
+        </View>
+      </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {group.city}
@@ -242,11 +240,25 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 12,
   },
+  triggerThumbWrap: {
+    width: 48,
+    height: 48,
+    position: 'relative',
+  },
   triggerThumb: {
     width: 48,
     height: 48,
     borderRadius: 14,
     backgroundColor: colors.line,
+  },
+  triggerFlagBadge: {
+    position: 'absolute',
+    right: -3,
+    bottom: -3,
+    borderRadius: 3,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: colors.white,
   },
   triggerAny: {
     width: 48,
@@ -348,11 +360,32 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryMuted,
     backgroundColor: colors.primarySoft,
   },
+  rowThumbWrap: {
+    width: 52,
+    height: 52,
+    position: 'relative',
+  },
   rowThumb: {
     width: 52,
     height: 52,
     borderRadius: 14,
     backgroundColor: colors.line,
+  },
+  rowFlagBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    borderRadius: 3,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  emptyHint: {
+    textAlign: 'center',
+    marginTop: 24,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.muted,
   },
   rowAny: {
     width: 52,

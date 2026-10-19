@@ -1243,8 +1243,8 @@ function CreateTripModal({
                     </div>
                   </div>
                   {selectedCity.airports.length > 1 ? (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
+                    <div className="mt-1">
+                      <div className="flex items-center justify-between mb-1.5">
                         <p className="text-xs font-semibold text-slate-500">
                           Aéroports de {selectedCity.city}
                         </p>
@@ -1258,7 +1258,7 @@ function CreateTripModal({
                           Tous
                         </button>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5">
                         {selectedCity.airports.map((a) => {
                           const on = arrivalCodes.includes(a.code)
                           return (
@@ -1267,10 +1267,9 @@ function CreateTripModal({
                               type="button"
                               onClick={() => toggleArrivalAirport(a.code)}
                               aria-pressed={on}
-                              whileHover={{ y: -1 }}
                               whileTap={{ scale: 0.96 }}
                               transition={{ type: 'spring', stiffness: 480, damping: 28 }}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] transition-colors duration-200 ease-out ${
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[32px] transition-colors duration-200 ease-out ${
                                 on
                                   ? 'bg-primary-50 text-primary-700 border-primary-300'
                                   : 'bg-white text-slate-500 border-slate-200 hover:border-primary-200 hover:bg-primary-50/40'
@@ -1304,7 +1303,7 @@ function CreateTripModal({
               ) : null}
 
               <p className="text-[11px] text-slate-400">
-                Destinations depuis {departureLabel || departure} · multi-compagnies
+                Destinations depuis {departureLabel || departure}
               </p>
               <div className="relative">
                 <input

@@ -80,6 +80,7 @@ export function SearchScreen() {
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0])
   const [error, setError] = useState<string | null>(null)
   const expandedDefaultRef = useRef(false)
+  const scrollRef = useRef<ScrollView>(null)
 
   const [showFlexible, setShowFlexible] = useState(false)
   const [showExclude, setShowExclude] = useState(false)
@@ -306,7 +307,14 @@ export function SearchScreen() {
         ]}
       >
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <View style={[styles.brandRow, compact && { marginBottom: 4 }]}>
+          <Pressable
+            onPress={() => {
+              scrollRef.current?.scrollTo({ y: 0, animated: true })
+            }}
+            style={[styles.brandRow, compact && { marginBottom: 4 }]}
+            accessibilityRole="button"
+            accessibilityLabel="FlightWatcher — haut de page"
+          >
             <View style={[styles.logoMark, compact && { width: 30, height: 30, borderRadius: 9 }]}>
               <Text style={[styles.logoLetter, compact && { fontSize: 15 }]}>F</Text>
             </View>
@@ -314,19 +322,14 @@ export function SearchScreen() {
               <Text style={styles.brandName}>FlightWatcher</Text>
               {!compact ? <Text style={styles.brandTag}>Vols bas prix</Text> : null}
             </View>
-          </View>
+          </Pressable>
           <Text style={[styles.hero, compact && styles.heroCompact]} numberOfLines={1}>
             Weekend <Text style={styles.heroAccent}>pas cher</Text>
           </Text>
-          <View style={[styles.carrierRow, compact && styles.carrierRowCompact]}>
-            <View style={styles.carrierBadge}>
-              <Text style={styles.carrierDot}>✈</Text>
-              <Text style={styles.carrierBadgeText}>Ryanair + multi-compagnies</Text>
-            </View>
-          </View>
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={styles.cardArea}
           contentContainerStyle={styles.cardScroll}
           keyboardShouldPersistTaps="handled"
@@ -342,8 +345,11 @@ export function SearchScreen() {
 
             <View style={[styles.divider, compact && styles.dividerCompact]} />
 
+            <Text style={[styles.label, compact && styles.labelCompact]}>Départ</Text>
+            <CityAirportPicker airports={airports} value={airport} onChange={setAirport} />
+
             <Pressable
-              style={styles.directRow}
+              style={[styles.directRow, styles.directAfterAirport]}
               onPress={() => setDirectOnly((v) => !v)}
               hitSlop={8}
             >
@@ -352,11 +358,6 @@ export function SearchScreen() {
               </View>
               <Text style={styles.directLabel}>Vols directs uniquement</Text>
             </Pressable>
-
-            <View style={[styles.divider, compact && styles.dividerCompact]} />
-
-            <Text style={[styles.label, compact && styles.labelCompact]}>Départ</Text>
-            <CityAirportPicker airports={airports} value={airport} onChange={setAirport} />
 
             <View style={[styles.divider, compact && styles.dividerCompact]} />
 
@@ -571,39 +572,6 @@ const styles = StyleSheet.create({
   heroAccent: {
     color: colors.primary,
   },
-  carrierRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  carrierRowCompact: {
-    marginTop: 5,
-  },
-  carrierBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: colors.ink,
-  },
-  carrierDot: {
-    fontSize: 10,
-    lineHeight: 12,
-    color: colors.primary,
-    includeFontPadding: false,
-  },
-  carrierBadgeText: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    lineHeight: 14,
-    color: colors.white,
-    letterSpacing: 0.1,
-    includeFontPadding: false,
-  },
   cardArea: {
     flex: 1,
   },
@@ -692,6 +660,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 14,
     color: colors.ink,
+  },
+  directAfterAirport: {
+    marginTop: 10,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

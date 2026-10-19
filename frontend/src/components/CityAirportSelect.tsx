@@ -183,8 +183,8 @@ export function CityAirportSelect({ value, onChange }: Props) {
       </div>
 
       {selectedGroup && selectedGroup.airports.length > 1 ? (
-        <div className="mt-3">
-          <div className="flex items-center justify-between mb-2">
+        <div className="mt-2 mb-0">
+          <div className="flex items-center justify-between mb-1.5">
             <p className="text-xs font-semibold text-slate-500 inline-flex items-center gap-1.5">
               <CountryFlag country={selectedGroup.country} className="w-3.5 h-2.5" />
               Aéroports de {selectedGroup.city}
@@ -197,7 +197,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
               Tous
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {selectedGroup.airports.map((a) => {
               const on = selectedCodes.includes(a.code)
               return (
@@ -206,10 +206,9 @@ export function CityAirportSelect({ value, onChange }: Props) {
                   type="button"
                   onClick={() => toggleAirport(a.code)}
                   aria-pressed={on}
-                  whileHover={{ y: -1 }}
                   whileTap={{ scale: 0.96 }}
                   transition={{ type: 'spring', stiffness: 480, damping: 28 }}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[34px] transition-colors duration-200 ease-out ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[32px] transition-colors duration-200 ease-out ${
                     on
                       ? 'bg-primary-50 text-primary-700 border-primary-300'
                       : 'bg-white text-slate-500 border-slate-200 hover:border-primary-200 hover:bg-primary-50/40'
