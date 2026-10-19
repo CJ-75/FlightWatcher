@@ -10,28 +10,20 @@ import {
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
+import { CountryFlag } from './CountryFlag'
 
 type Props = {
   value: string
   onChange: (encoded: string) => void
 }
 
-const PLACEHOLDER_CITIES = ['Paris', 'Lyon', 'Marseille'] as const
+const PLACEHOLDER_CITIES = [
+  { city: 'Paris', country: 'France' },
+  { city: 'Lyon', country: 'France' },
+  { city: 'Marseille', country: 'France' },
+] as const
 
-function FranceFlag({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 3 2"
-      className={className}
-      aria-hidden
-      focusable="false"
-    >
-      <rect width="1" height="2" x="0" fill="#002395" />
-      <rect width="1" height="2" x="1" fill="#fff" />
-      <rect width="1" height="2" x="2" fill="#ED2939" />
-    </svg>
-  )
-}
+const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[14px]'
 
 export function CityAirportSelect({ value, onChange }: Props) {
   const [airports, setAirports] = useState<Airport[]>([])
@@ -68,8 +60,8 @@ export function CityAirportSelect({ value, onChange }: Props) {
     [value, groups],
   )
 
-  // Hide animated hint as soon as the field is focused / opened
   const showAnimatedPlaceholder = !open && !label
+  const showSelectedFlag = !open && !!selectedGroup && !!label
 
   useEffect(() => {
     if (!showAnimatedPlaceholder) return
@@ -130,6 +122,8 @@ export function CityAirportSelect({ value, onChange }: Props) {
     if (encoded) onChange(encoded)
   }
 
+  const placeholder = PLACEHOLDER_CITIES[placeholderIndex]
+
   return (
     <div ref={rootRef} className="relative">
       <div className="relative">
@@ -146,24 +140,42 @@ export function CityAirportSelect({ value, onChange }: Props) {
           }}
           placeholder=""
           aria-label="Ville de départ"
-          className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px]"
+          className={`w-full py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px] pr-3 sm:pr-4 ${
+            showSelectedFlag || showAnimatedPlaceholder
+              ? 'pl-10 sm:pl-11'
+              : 'pl-3 sm:pl-4'
+          }`}
         />
+
+        {showSelectedFlag && selectedGroup ? (
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 sm:pl-3.5"
+            aria-hidden
+          >
+            <CountryFlag
+              country={selectedGroup.country}
+              className={FLAG_CLASS}
+              title={selectedGroup.country}
+            />
+          </div>
+        ) : null}
+
         {showAnimatedPlaceholder ? (
           <div
-            className="pointer-events-none absolute inset-0 flex items-center px-3 sm:px-4"
+            className="pointer-events-none absolute inset-0 flex items-center pl-3 sm:pl-3.5 pr-3"
             aria-hidden
           >
             <AnimatePresence mode="wait">
               <motion.span
-                key={PLACEHOLDER_CITIES[placeholderIndex]}
+                key={placeholder.city}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 className="inline-flex items-center gap-2 text-sm sm:text-base text-slate-400 font-medium"
               >
-                <FranceFlag className="w-[18px] h-3 sm:w-5 sm:h-[14px] rounded-[2px] shadow-sm ring-1 ring-black/10 shrink-0" />
-                {PLACEHOLDER_CITIES[placeholderIndex]}
+                <CountryFlag country={placeholder.country} className={FLAG_CLASS} />
+                {placeholder.city}
               </motion.span>
             </AnimatePresence>
           </div>
@@ -173,7 +185,8 @@ export function CityAirportSelect({ value, onChange }: Props) {
       {selectedGroup && selectedGroup.airports.length > 1 ? (
         <div className="mt-3">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-slate-500">
+            <p className="text-xs font-semibold text-slate-500 inline-flex items-center gap-1.5">
+              <CountryFlag country={selectedGroup.country} className="w-3.5 h-2.5" />
               Aéroports de {selectedGroup.city}
             </p>
             <button
@@ -243,11 +256,20 @@ export function CityAirportSelect({ value, onChange }: Props) {
                   active ? 'bg-primary-100' : ''
                 }`}
               >
-                <div className="font-semibold text-gray-800">{g.city}</div>
-                <div className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                  {g.airports.length} aéroport{g.airports.length > 1 ? 's' : ''} ·{' '}
-                  {g.airports.map((a) => a.code).join(' · ')}
-                  {g.country ? ` · ${g.country}` : ''}
+                <div className="flex items-center gap-2.5">
+                  <CountryFlag
+                    country={g.country}
+                    className="w-5 h-[14px]"
+                    title={g.country}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-gray-800">{g.city}</div>
+                    <div className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                      {g.airports.length} aéroport{g.airports.length > 1 ? 's' : ''} ·{' '}
+                      {g.airports.map((a) => a.code).join(' · ')}
+                      {g.country ? ` · ${g.country}` : ''}
+                    </div>
+                  </div>
                 </div>
               </button>
             )
