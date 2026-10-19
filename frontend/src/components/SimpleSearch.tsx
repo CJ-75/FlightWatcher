@@ -381,7 +381,9 @@ export function SimpleSearch({
           {t('search.departure')}
         </label>
         <AirportAutocomplete
-          key={`airport-${selectedAirport}-${searchLoadToken}`}
+          // Ne pas inclure selectedAirport dans la key : un toggle multi-aéroports
+          // remonterait tout le champ et casserait la fluidité du clic.
+          key={`airport-${searchLoadToken}`}
           value={selectedAirport}
           onChange={(code) => {
             setHasInteractedWithAirport(true);

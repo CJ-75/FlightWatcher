@@ -37,7 +37,13 @@ import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
-import { buildBookingUrl, resolvePopularAirports } from '@flightwatcher/shared'
+import {
+  buildBookingUrl,
+  findCityGroupByCodes,
+  groupAirportsByCity,
+  parseAirportCodes,
+  resolvePopularAirports,
+} from '@flightwatcher/shared'
 import { CityAirportSelect } from './components/CityAirportSelect'
 
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
@@ -542,21 +548,34 @@ function Dashboard() {
     // (hook keeps its own error; surface critical ones)
   }
 
-  // Charger automatiquement les destinations quand l'aéroport change ou au chargement initial
+  // Clé ville (pas la liste d'IATA) — un toggle CDG/ORY/BVA ne doit pas
+  // relancer le chargement destinations ni remonter le formulaire.
+  const departureCityKey = useMemo(() => {
+    const codes = parseAirportCodes(aeroportDepart)
+    if (!codes.length) return ''
+    const group = findCityGroupByCodes(groupAirportsByCity(airports), codes)
+    return group?.key || [...codes].sort().join(',')
+  }, [aeroportDepart, airports])
+
+  const prevDepartureCityKey = useRef('')
+
+  // Charger les destinations quand la ville de départ change (pas à chaque sous-aéroport)
   useEffect(() => {
-    if (aeroportDepart) {
-      void loadDestinations(aeroportDepart)
-      // Ne pas vider les exclusions pendant le chargement d'une alerte (Modifier / Relancer)
-      if (!loadingSavedSearchRef.current) {
-        isLoadingFromStorage.current = true
-        setDestinationsExclues([])
-        setTimeout(() => {
-          isLoadingFromStorage.current = false
-        }, 100)
-      }
+    if (!aeroportDepart || !departureCityKey) return
+    const cityChanged = departureCityKey !== prevDepartureCityKey.current
+    prevDepartureCityKey.current = departureCityKey
+
+    void loadDestinations(aeroportDepart)
+    // Ne vider les exclusions que lors d'un vrai changement de ville
+    if (cityChanged && !loadingSavedSearchRef.current) {
+      isLoadingFromStorage.current = true
+      setDestinationsExclues([])
+      setTimeout(() => {
+        isLoadingFromStorage.current = false
+      }, 100)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aeroportDepart])
+  }, [departureCityKey])
 
   // Sauvegarder automatiquement les destinations exclues quand elles changent
   // (sauf lors du chargement initial depuis localStorage)
