@@ -5,6 +5,7 @@ import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
+import { DealWeekendCalendar } from './DealWeekendCalendar'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 
@@ -23,6 +24,26 @@ export function DealsTab() {
   const [origin, setOrigin] = useState('')
   const [maxPp, setMaxPp] = useState(0)
   const [windowKind, setWindowKind] = useState<'' | DealWindowKind>('')
+  const [adults, setAdults] = useState(2)
+  const [occupancies, setOccupancies] = useState<number[]>([2])
+  const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
+
+  useEffect(() => {
+    void fetch('/api/config')
+      .then((r) => r.json())
+      .then((cfg) => {
+        const occ = Array.isArray(cfg?.occupancies)
+          ? cfg.occupancies.map(Number).filter((n: number) => n >= 1)
+          : [2]
+        setOccupancies(occ.length ? occ : [2])
+        if (occ.length && !occ.includes(2)) setAdults(occ[0])
+        const kinds = Array.isArray(cfg?.window_kinds)
+          ? (cfg.window_kinds as DealWindowKind[])
+          : (['FRI_SUN'] as DealWindowKind[])
+        setWindowKinds(kinds.length ? kinds : ['FRI_SUN'])
+      })
+      .catch(() => undefined)
+  }, [])
 
   const loadLikes = useCallback(async () => {
     try {
@@ -46,7 +67,7 @@ export function DealsTab() {
         origin: origin || undefined,
         window: windowKind || undefined,
         max_pp: maxPp > 0 ? maxPp : undefined,
-        adults: 2,
+        adults,
       })
       setDeals(Array.isArray(list) ? list : [])
       await loadLikes()
@@ -56,7 +77,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, origin, windowKind, maxPp])
+  }, [t, loadLikes, origin, windowKind, maxPp, adults])
 
   useEffect(() => {
     void load()
@@ -101,8 +122,12 @@ export function DealsTab() {
     if (origin) parts.push(origin)
     if (maxPp > 0) parts.push(`≤ ${maxPp} €`)
     if (windowKind) parts.push(windowKind === 'FRI_SUN' ? 'ven→dim' : 'sam→lun')
+    if (adults === 1) parts.push('solo')
+    else if (adults !== 2) parts.push(`${adults} ad.`)
     return parts.join(' · ')
-  }, [origin, maxPp, windowKind])
+  }, [origin, maxPp, windowKind, adults])
+
+  const calendarDeal = deals.find((d) => d.destination) || null
 
   return (
     <div className="w-full">
@@ -161,11 +186,41 @@ export function DealsTab() {
             className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[8rem]"
           >
             <option value="">{t('deals.filterAll')}</option>
-            <option value="FRI_SUN">Ven → Dim</option>
-            <option value="SAT_MON">Sam → Lun</option>
+            {windowKinds.includes('FRI_SUN') ? (
+              <option value="FRI_SUN">Ven → Dim</option>
+            ) : null}
+            {windowKinds.includes('SAT_MON') ? (
+              <option value="SAT_MON">Sam → Lun</option>
+            ) : null}
           </select>
         </label>
+        {occupancies.length > 1 ? (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+            Occupants
+            <select
+              value={adults}
+              onChange={(e) => setAdults(Number(e.target.value))}
+              className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[7rem]"
+            >
+              {occupancies.map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? 'Solo (1)' : `${n} adultes`}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
+
+      {origin && calendarDeal?.destination ? (
+        <DealWeekendCalendar
+          iata={calendarDeal.destination}
+          cityName={calendarDeal.city}
+          origin={origin}
+          adults={adults}
+          windowKind={windowKind || 'FRI_SUN'}
+        />
+      ) : null}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">

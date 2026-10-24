@@ -356,6 +356,45 @@ export interface DealsListParams {
   max_pp?: number
 }
 
+export interface DealCalendarCell {
+  window_id: string
+  kind?: DealWindowKind | string
+  checkin?: string
+  checkout?: string
+  nights?: number
+  hotel_id?: string | null
+  hotel_min_public?: number | null
+  flight_pp?: number | null
+  price_pp?: number | null
+  status: 'ok' | 'no_flight' | 'no_hotel' | 'empty' | string
+}
+
+export interface DealCalendarResponse {
+  destination: {
+    id: string
+    slug?: string
+    city_name?: string
+    iata_arrival?: string
+  }
+  origin_iata: string
+  adults: number
+  window_kind: DealWindowKind | string
+  cells: DealCalendarCell[]
+  status: string
+  fetched_at?: string | null
+  expires_at?: string | null
+}
+
+export interface DealCalendarParams {
+  origin: string
+  slug?: string
+  destination_id?: string
+  /** Arrival IATA (TravelDeal.destination). */
+  iata?: string
+  adults?: number
+  window?: DealWindowKind
+}
+
 export type HotelBookingStatus =
   | 'draft'
   | 'prebooked'

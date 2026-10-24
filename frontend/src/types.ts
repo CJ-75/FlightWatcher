@@ -21,6 +21,8 @@ export type {
   DealProviderId,
   DealsListParams,
   DealWindowKind,
+  DealCalendarCell,
+  DealCalendarResponse,
   DealRevalidateResponse,
   HotelBooking,
   PlannedTrip,

@@ -16,6 +16,8 @@ import type {
   SavedSearch,
   TravelDeal,
   DealsListParams,
+  DealCalendarParams,
+  DealCalendarResponse,
   DealRevalidateRequest,
   DealRevalidateResponse,
   HotelBooking,
@@ -205,6 +207,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
+
+    getDealCalendar: (params: DealCalendarParams) => {
+      const q = new URLSearchParams()
+      q.set('origin', params.origin)
+      if (params.slug) q.set('slug', params.slug)
+      if (params.destination_id) q.set('destination_id', params.destination_id)
+      if (params.iata) q.set('iata', params.iata)
+      if (params.adults != null) q.set('adults', String(params.adults))
+      if (params.window) q.set('window', params.window)
+      return request<DealCalendarResponse>(`/api/deals/calendar?${q.toString()}`)
+    },
 
     revalidateDeal: (dealKey: string, body: DealRevalidateRequest = {}) =>
       request<DealRevalidateResponse>(

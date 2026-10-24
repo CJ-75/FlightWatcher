@@ -91,6 +91,7 @@ class DealsConfig:
     currency: str
     guest_nationality: str
     weekends_ahead: int
+    calendar_weekends_ahead: int
     window_kinds: Tuple[str, ...]
     occupancies: Tuple[int, ...]
     budget_flight_pp: float
@@ -143,6 +144,7 @@ def load_deals_config() -> DealsConfig:
         currency=_env("DEALS_CURRENCY", "EUR") or "EUR",
         guest_nationality=_env("DEALS_GUEST_NATIONALITY", "FR") or "FR",
         weekends_ahead=max(1, _env_int("DEALS_WEEKENDS_AHEAD", 3)),
+        calendar_weekends_ahead=max(1, _env_int("DEALS_CALENDAR_WEEKENDS_AHEAD", 8)),
         window_kinds=kinds,
         occupancies=occupancies,
         budget_flight_pp=_env_float("DEALS_BUDGET_FLIGHT_PP", 150.0),
@@ -199,6 +201,7 @@ def deals_config_public_dict(cfg: Optional[DealsConfig] = None) -> Dict[str, Any
         "window_kinds": list(cfg.window_kinds),
         "occupancies": list(cfg.occupancies),
         "weekends_ahead": cfg.weekends_ahead,
+        "calendar_weekends_ahead": cfg.calendar_weekends_ahead,
         "budget_flight_pp": cfg.budget_flight_pp,
         "budget_pack_pp": cfg.budget_pack_pp,
         "excluded_fees_display": cfg.excluded_fees_display,

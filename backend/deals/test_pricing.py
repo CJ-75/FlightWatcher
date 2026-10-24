@@ -107,6 +107,7 @@ class TestConfigGuards(unittest.TestCase):
             currency="EUR",
             guest_nationality="FR",
             weekends_ahead=3,
+            calendar_weekends_ahead=8,
             window_kinds=("FRI_SUN",),
             occupancies=(2,),
             budget_flight_pp=150,

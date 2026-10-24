@@ -30,6 +30,7 @@ export function DealsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [origin, setOrigin] = useState('')
+  const [adults, setAdults] = useState(2)
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -38,7 +39,7 @@ export function DealsScreen() {
     try {
       const list = await getApi().getDeals({
         origin: origin || undefined,
-        adults: 2,
+        adults,
       })
       setDeals(Array.isArray(list) ? list : [])
       await refreshLikes()
@@ -49,7 +50,7 @@ export function DealsScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [refreshLikes, origin])
+  }, [refreshLikes, origin, adults])
 
   useFocusEffect(
     useCallback(() => {
@@ -101,6 +102,14 @@ export function DealsScreen() {
                     </Pressable>
                   )
                 })}
+                <Pressable
+                  onPress={() => setAdults((a) => (a === 1 ? 2 : 1))}
+                  style={[styles.chip, adults === 1 && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, adults === 1 && styles.chipTextActive]}>
+                    {adults === 1 ? 'Solo' : '2 ad.'}
+                  </Text>
+                </Pressable>
               </View>
             </View>
           }
