@@ -302,6 +302,39 @@ async def job_refresh_deal_flights(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/jobs/refresh-hotel-rates")
+async def job_refresh_hotel_rates(
+    authorization: Optional[str] = Header(None),
+    slug: Optional[str] = Query(None, description="Limiter à une destination (slug)"),
+    force: bool = Query(False, description="Ignorer TTL / is_due"),
+):
+    """
+    Remplit hotel_rates_cache (LiteAPI /hotels/rates + scoring SSP).
+    Skip si pas de vol en cache. Protégé par CRON_SECRET.
+    """
+    require_cron(authorization)
+    try:
+        from deals.hotel_rates import refresh_hotel_rates
+        from deals.liteapi_config import load_deals_config
+
+        cfg = load_deals_config()
+        if not cfg.api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Clé LiteAPI manquante (LITEAPI_API_KEY_SANDBOX ou _PROD)",
+            )
+        supabase = _svc()
+        slugs = [slug] if slug else None
+        summary = refresh_hotel_rates(
+            supabase, cfg=cfg, slugs=slugs, force=force
+        )
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
     """Get a single deal by id or deal_key."""
