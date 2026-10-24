@@ -67,10 +67,11 @@ def pick_diverse_hotels(
     *,
     used_ids: Set[str],
     top_n: int = 1,
+    allow_reuse: bool = False,
 ) -> List[Dict[str, Any]]:
     """
-    Prefer hotels not already shown as a card primary for this destination.
-    Falls back to the ranked list if the pool is exhausted (reuse allowed then).
+    Prefer hotels not already used as a card primary (global wall set).
+    Default allow_reuse=False → empty if nothing unique left (stricter).
     """
     clean: List[Dict[str, Any]] = [h for h in candidates if isinstance(h, dict)]
     if not clean:
@@ -79,15 +80,33 @@ def pick_diverse_hotels(
     fresh: List[Dict[str, Any]] = []
     for h in clean:
         hid = _hotel_id(h)
-        if hid and hid in used_ids:
+        if not hid or hid in used_ids:
             continue
         fresh.append(h)
         if len(fresh) >= n:
             break
     if fresh:
         return fresh[:n]
-    # Pool exhausted for this dest — reuse ranked order rather than blank card
-    return clean[:n]
+    if allow_reuse:
+        return clean[:n]
+    return []
+
+
+def collect_duplicate_primary_keys(rows: Sequence[Dict[str, Any]]) -> Set[str]:
+    """deal_keys whose primary hotel_id appears on more than one active card."""
+    counts: Dict[str, List[str]] = {}
+    for row in rows:
+        prim = primary_hotel_id(row.get("hotel_top3"))
+        key = str(row.get("deal_key") or "")
+        if not prim or not key:
+            continue
+        counts.setdefault(prim, []).append(key)
+    dup_keys: Set[str] = set()
+    for _hid, keys in counts.items():
+        if len(keys) > 1:
+            # Keep first occurrence; force reassign the rest
+            dup_keys.update(keys[1:])
+    return dup_keys
 
 
 def batch_load_destinations(
@@ -236,24 +255,24 @@ def materialize_deals_wall(
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+    dup_keys = collect_duplicate_primary_keys(rows)
     need = []
     skipped_ready = 0
-    # hotel_id already shown as card primary per destination_id
-    used_by_dest: Dict[str, Set[str]] = {}
+    # Global wall set: one hotel_id = one card primary max
+    used_global: Set[str] = set()
     for row in rows:
-        iata = str(row.get("dest_iata") or "").upper()
+        key = str(row.get("deal_key") or "")
         prim = primary_hotel_id(row.get("hotel_top3"))
-        # Seed used set from ready rows so soft-fill doesn't clone them
-        if prim and iata:
-            # dest id resolved later — keep temporary by iata key too
-            used_by_dest.setdefault(f"iata:{iata}", set()).add(prim)
-        if not force and hotel_top3_ready(row.get("hotel_top3")):
+        must_fix = force or key in dup_keys or not hotel_top3_ready(
+            row.get("hotel_top3")
+        )
+        if not must_fix:
+            if prim:
+                used_global.add(prim)
             skipped_ready += 1
             continue
         need.append(row)
 
-    iatas = [str(r.get("dest_iata") or "").upper() for r in need]
-    # Also resolve dests for already-ready rows (used_by_dest remapping)
     all_iatas = list(
         {
             str(r.get("dest_iata") or "").upper()
@@ -261,17 +280,10 @@ def materialize_deals_wall(
             if str(r.get("dest_iata") or "").strip()
         }
     )
-    dest_map = batch_load_destinations(supabase, all_iatas or iatas)
+    dest_map = batch_load_destinations(supabase, all_iatas)
     dest_ids = [str(d["id"]) for d in dest_map.values()]
     rates = batch_load_rates(supabase, dest_ids=dest_ids, adults=adults)
-    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=24)
-
-    # Remap iata-seeded used set onto destination_id
-    for iata, dest in dest_map.items():
-        did = str(dest["id"])
-        seed = used_by_dest.pop(f"iata:{iata}", set())
-        if seed:
-            used_by_dest.setdefault(did, set()).update(seed)
+    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=40)
 
     from deals.hotel_budget import filter_hotels_for_flight
     from deals.pool_photos import overlay_pool_photos, photos_map_from_pool
@@ -281,6 +293,7 @@ def materialize_deals_wall(
     with_rates = 0
     errors = 0
     diversified = 0
+    skipped_no_unique = 0
     now = datetime.now(timezone.utc).isoformat()
 
     all_hids: List[str] = []
@@ -303,10 +316,10 @@ def materialize_deals_wall(
         hotel_payload: Optional[List[Dict[str, Any]]] = None
         is_soft = False
         dest_id = str(dest["id"]) if dest else ""
-        used = used_by_dest.setdefault(dest_id, set()) if dest_id else set()
 
         if dest:
             looked = rates.get((dest_id, cin, cout, int(adults)))
+            ranked: List[Dict[str, Any]] = []
             if looked:
                 top = looked.get("top") or (
                     [looked["offer"]] if looked.get("offer") else []
@@ -315,56 +328,48 @@ def materialize_deals_wall(
                     top if isinstance(top, list) else [],
                     flight_pp=flight_pp,
                     adults=adults,
-                    top_n=8,
+                    top_n=12,
                     require_photo=False,
                     checkin=cin,
                     checkout=cout,
                 )
-                picked = pick_diverse_hotels(ranked, used_ids=used, top_n=1)
-                if picked:
-                    prim_id = _hotel_id(picked[0])
-                    used_alts = set(used)
-                    if prim_id:
-                        used_alts.add(prim_id)
-                    alts = pick_diverse_hotels(
-                        [
-                            h
-                            for h in ranked
-                            if _hotel_id(h) and _hotel_id(h) != prim_id
-                        ],
-                        used_ids=used_alts,
-                        top_n=2,
-                    )
-                    hotel_payload = picked + alts
-                    with_rates += 1
-            if not hotel_payload:
-                pool = pools.get(dest_id) or []
-                picked = pick_diverse_hotels(pool, used_ids=used, top_n=1)
-                if picked:
-                    prim_id = _hotel_id(picked[0])
-                    used_alts = set(used)
-                    if prim_id:
-                        used_alts.add(prim_id)
-                    alts = pick_diverse_hotels(
-                        [
-                            h
-                            for h in pool
-                            if _hotel_id(h) and _hotel_id(h) != prim_id
-                        ],
-                        used_ids=used_alts,
-                        top_n=2,
-                    )
-                    hotel_payload = picked + alts
-                    is_soft = True
-                    soft += 1
+            pool = pools.get(dest_id) or []
+            # Merge rates then pool — first unique primary wins
+            candidates = list(ranked) + [
+                h for h in pool if _hotel_id(h) not in {_hotel_id(x) for x in ranked}
+            ]
+            picked = pick_diverse_hotels(
+                candidates, used_ids=used_global, top_n=1, allow_reuse=False
+            )
+            if not picked:
+                skipped_no_unique += 1
+                continue
+            prim_id = _hotel_id(picked[0])
+            used_alts = set(used_global)
+            if prim_id:
+                used_alts.add(prim_id)
+            alts = pick_diverse_hotels(
+                [h for h in candidates if _hotel_id(h) and _hotel_id(h) != prim_id],
+                used_ids=used_alts,
+                top_n=2,
+                allow_reuse=False,
+            )
+            hotel_payload = picked + alts
+            if ranked and any(_hotel_id(h) == prim_id for h in ranked):
+                with_rates += 1
+            else:
+                is_soft = True
+                soft += 1
 
         if not hotel_payload:
             continue
 
         prim = _hotel_id(hotel_payload[0])
-        if prim and dest_id and prim not in used:
-            used.add(prim)
-            diversified += 1
+        if not prim or prim in used_global:
+            skipped_no_unique += 1
+            continue
+        used_global.add(prim)
+        diversified += 1
 
         for h in hotel_payload:
             hid = _hotel_id(h)
@@ -407,6 +412,8 @@ def materialize_deals_wall(
         "with_rates": with_rates,
         "soft_fill": soft,
         "diversified_primaries": diversified,
+        "duplicate_keys_forced": len(dup_keys),
+        "skipped_no_unique_hotel": skipped_no_unique,
         "errors": errors,
         "at": now,
     }

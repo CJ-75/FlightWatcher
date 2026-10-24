@@ -8,7 +8,11 @@ from deals.community_list import (
     _hotel_top3_ready,
     invalidate_list_cache,
 )
-from deals.materialize_wall import hotel_top3_ready, pick_diverse_hotels
+from deals.materialize_wall import (
+    collect_duplicate_primary_keys,
+    hotel_top3_ready,
+    pick_diverse_hotels,
+)
 
 
 class TestReady(unittest.TestCase):
@@ -55,13 +59,24 @@ class TestDiversePool(unittest.TestCase):
             {"hotel_id": "C", "photo": "https://x/c.jpg"},
         ]
         used = {"A"}
-        picked = pick_diverse_hotels(pool, used_ids=used, top_n=1)
+        picked = pick_diverse_hotels(pool, used_ids=used, top_n=1, allow_reuse=False)
         self.assertEqual(picked[0]["hotel_id"], "B")
 
-    def test_fallback_when_exhausted(self):
+    def test_strict_no_reuse(self):
         pool = [{"hotel_id": "A", "photo": "https://x/a.jpg"}]
-        picked = pick_diverse_hotels(pool, used_ids={"A"}, top_n=1)
-        self.assertEqual(picked[0]["hotel_id"], "A")
+        picked = pick_diverse_hotels(
+            pool, used_ids={"A"}, top_n=1, allow_reuse=False
+        )
+        self.assertEqual(picked, [])
+
+    def test_detect_duplicate_keys(self):
+        rows = [
+            {"deal_key": "d1", "hotel_top3": [{"hotel_id": "H1", "photo": "x"}]},
+            {"deal_key": "d2", "hotel_top3": [{"hotel_id": "H1", "photo": "x"}]},
+            {"deal_key": "d3", "hotel_top3": [{"hotel_id": "H2", "photo": "x"}]},
+        ]
+        dups = collect_duplicate_primary_keys(rows)
+        self.assertEqual(dups, {"d2"})
 
 
 if __name__ == "__main__":

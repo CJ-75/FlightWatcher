@@ -456,23 +456,14 @@ def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 3) -> Lis
     return out
 
 
-def _batch_fill_missing_hotels(
+def _diversify_primary_hotels(
     supabase, rows: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """
-    Last-resort list fill when materialize lagged: batch pool by dest (no compose).
-    Rows that already have a photo are left untouched.
+    Strict wall rule: each card primary hotel_id appears at most once in the response.
+    Missing hotels + duplicate primaries are reassigned from pool (no reuse if possible).
     """
     if not supabase or not rows:
-        return rows
-    need_iatas: List[str] = []
-    for r in rows:
-        if _hotel_top3_has_photo(r.get("hotel_top3")):
-            continue
-        iata = str(r.get("dest_iata") or "").upper()
-        if len(iata) == 3:
-            need_iatas.append(iata)
-    if not need_iatas:
         return rows
 
     from deals.materialize_wall import (
@@ -480,50 +471,77 @@ def _batch_fill_missing_hotels(
         batch_pool_by_dest,
         pick_diverse_hotels,
         primary_hotel_id,
+        _hotel_id,
     )
 
-    dest_map = batch_load_destinations(supabase, need_iatas)
-    dest_ids = [str(d["id"]) for d in dest_map.values()]
-    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=24)
-    used_by_dest: Dict[str, set] = {}
-    # Hotels already on cards in this response
-    for r in rows:
-        if not _hotel_top3_has_photo(r.get("hotel_top3")):
-            continue
-        iata = str(r.get("dest_iata") or "").upper()
-        dest = dest_map.get(iata)
-        if not dest:
-            continue
-        prim = primary_hotel_id(r.get("hotel_top3"))
-        if prim:
-            used_by_dest.setdefault(str(dest["id"]), set()).add(prim)
+    all_iatas = [
+        str(r.get("dest_iata") or "").upper()
+        for r in rows
+        if len(str(r.get("dest_iata") or "").strip()) == 3
+    ]
+    if not all_iatas:
+        return rows
 
+    dest_map = batch_load_destinations(supabase, all_iatas)
+    dest_ids = [str(d["id"]) for d in dest_map.values()]
+    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=40)
+
+    used_global: set = set()
     out: List[Dict[str, Any]] = []
-    for r in rows:
-        if _hotel_top3_has_photo(r.get("hotel_top3")):
-            out.append(r)
-            continue
+
+    # Higher score first so best deals keep their hotel when conflict
+    ordered = sorted(
+        enumerate(rows),
+        key=lambda ir: -(float((ir[1] or {}).get("deal_score") or 0)),
+    )
+    by_index: Dict[int, Dict[str, Any]] = {}
+
+    for idx, r in ordered:
+        hotels = r.get("hotel_top3") if isinstance(r.get("hotel_top3"), list) else []
+        prim = primary_hotel_id(hotels)
         iata = str(r.get("dest_iata") or "").upper()
         dest = dest_map.get(iata)
-        if not dest:
-            out.append(r)
-            continue
-        did = str(dest["id"])
-        used = used_by_dest.setdefault(did, set())
+        did = str(dest["id"]) if dest else ""
         pool = pools.get(did) or []
-        picked = pick_diverse_hotels(pool, used_ids=used, top_n=1)
-        if not picked:
-            out.append(r)
+
+        need_new = (not prim) or (prim in used_global) or (not _hotel_top3_has_photo(hotels))
+        if not need_new and prim:
+            used_global.add(prim)
+            by_index[idx] = r
             continue
-        prim = primary_hotel_id(picked)
-        if prim:
-            used.add(prim)
-        alts = pick_diverse_hotels(
-            [h for h in pool if primary_hotel_id([h]) != prim],
-            used_ids=used,
-            top_n=2,
+
+        # Candidates: current top3 (rotate) then pool
+        candidates: List[Dict[str, Any]] = []
+        for h in hotels:
+            if isinstance(h, dict):
+                candidates.append(h)
+        for h in pool:
+            hid = _hotel_id(h)
+            if hid and all(_hotel_id(c) != hid for c in candidates):
+                candidates.append(h)
+
+        picked = pick_diverse_hotels(
+            candidates, used_ids=used_global, top_n=1, allow_reuse=False
         )
-        out.append({**r, "hotel_top3": picked + alts})
+        if not picked:
+            # Strict: drop hotel rather than show a duplicate primary
+            by_index[idx] = {**r, "hotel_top3": []}
+            continue
+
+        new_prim = primary_hotel_id(picked)
+        if new_prim:
+            used_global.add(new_prim)
+        used_alts = set(used_global)
+        alts = pick_diverse_hotels(
+            [h for h in candidates if _hotel_id(h) and _hotel_id(h) != new_prim],
+            used_ids=used_alts,
+            top_n=2,
+            allow_reuse=False,
+        )
+        by_index[idx] = {**r, "hotel_top3": picked + alts}
+
+    for i, r in enumerate(rows):
+        out.append(by_index.get(i, r))
     return out
 
 
@@ -549,7 +567,8 @@ def _enrich_rows_to_deals(
     from city_names_fr import city_for_code
 
     if supabase is not None:
-        rows = _batch_fill_missing_hotels(supabase, rows)
+        # Fill missing + force unique primary hotel across the wall response
+        rows = _diversify_primary_hotels(supabase, rows)
 
     # Card photo SoT = hotel_pool (batch)
     all_ids: List[str] = []
