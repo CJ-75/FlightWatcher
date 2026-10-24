@@ -23,21 +23,28 @@ def create_draft(
     deal_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     token = secrets.token_urlsafe(24)
-    flight = (payload or {}).get("flight") or {}
-    hotel = (payload or {}).get("hotel")
-    dates = (payload or {}).get("dates") or {}
+    raw = dict(payload or {})
+    if deal_key and not raw.get("deal_key"):
+        raw["deal_key"] = deal_key
+    # Never persist client-stated pack price — rebuild from deal/rates.
+    from deals.draft_pricing import trust_create_payload
+
+    trusted = trust_create_payload(supabase, raw)
+    flight = trusted.get("flight") or {}
+    hotel = trusted.get("hotel")
+    dates = trusted.get("dates") or {}
     row = {
         "draft_token": token,
         "user_id": user_id,
         "status": "draft",
-        "payload": payload or {},
-        "deal_key": deal_key or payload.get("deal_key"),
-        "origin_iata": payload.get("origin_iata") or payload.get("departure_airport"),
-        "dest_iata": payload.get("destination") or flight.get("destination"),
-        "city_name": payload.get("city"),
+        "payload": trusted,
+        "deal_key": deal_key or trusted.get("deal_key"),
+        "origin_iata": trusted.get("origin_iata") or trusted.get("departure_airport"),
+        "dest_iata": trusted.get("destination") or flight.get("destination") or flight.get("destination_iata"),
+        "city_name": trusted.get("city"),
         "out_date": dates.get("outbound"),
         "ret_date": dates.get("inbound"),
-        "adults": int(payload.get("adults") or 2),
+        "adults": int(trusted.get("adults") or 2),
         "expires_at": (_now() + timedelta(days=7)).isoformat(),
         "created_at": _now().isoformat(),
         "updated_at": _now().isoformat(),
@@ -148,22 +155,20 @@ def update_draft_hotel(
     hotel: Optional[Dict[str, Any]],
     price_per_person: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Compose / switch hotel on an existing Mon voyage draft (flight stays)."""
+    """
+    Compose / switch hotel on an existing Mon voyage draft (flight stays).
+    `price_per_person` from the client is ignored — server recalculates.
+    """
+    _ = price_per_person  # intentionally unused (API compat)
     row = get_draft(supabase, draft_token)
     if not row:
         return None
     now = _now().isoformat()
-    patch: Dict[str, Any] = {
-        "hotel": hotel,
-        "compose_hotel": False,
-        "hotel_selected_at": now,
-    }
-    if price_per_person is not None:
-        try:
-            patch["price_per_person"] = round(float(price_per_person), 2)
-        except (TypeError, ValueError):
-            pass
-    payload = _merge_payload(row, patch)
+    from deals.draft_pricing import trust_hotel_patch
+
+    payload = trust_hotel_patch(supabase, row, hotel)
+    payload["hotel_selected_at"] = now
+    trusted_hotel = payload.get("hotel")
     res = (
         supabase.table("my_trip_drafts")
         .update({"payload": payload, "updated_at": now})
@@ -171,7 +176,7 @@ def update_draft_hotel(
         .execute()
     )
     out = (res.data or [{**row, "payload": payload}])[0]
-    out["hotel"] = hotel
+    out["hotel"] = trusted_hotel
     return out
 
 

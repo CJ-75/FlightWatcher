@@ -728,7 +728,7 @@ class MyTripHotelRequest(BaseModel):
 
 @router.patch("/api/deals/my-trip/{draft_token}/hotel")
 async def update_my_trip_hotel(draft_token: str, body: MyTripHotelRequest):
-    """Switch / set hotel on a Mon voyage draft (flight unchanged)."""
+    """Switch / set hotel on a Mon voyage draft (flight unchanged). Price is server-side."""
     try:
         from deals.my_trips import update_draft_hotel
 
@@ -736,11 +736,13 @@ async def update_my_trip_hotel(draft_token: str, body: MyTripHotelRequest):
             _svc(),
             draft_token,
             hotel=body.hotel,
-            price_per_person=body.price_per_person,
+            # body.price_per_person intentionally ignored
         )
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable")
         return row
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:

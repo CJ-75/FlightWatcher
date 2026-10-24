@@ -91,7 +91,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
               board: deal.board,
               public_hotel_price: deal.price_breakdown?.hotel_public_total,
               excluded_fees: deal.price_breakdown?.excluded_fees,
-              photo: deal.hotel?.photo || deal.image_url,
+              photo: deal.image_url,
             } as TravelDealHotel,
           ]
         : []
@@ -386,18 +386,15 @@ export function DealDetailScreen({ route, navigation }: Props) {
           <View style={styles.secondaryLinks}>
             <Pressable
               onPress={() => {
-                navigation.navigate(
-                  'Main' as never,
-                  {
-                    screen: 'Search',
-                    params: {
-                      origin: deal.origin_iata || deal.departure_airport,
-                      adults,
-                      destination: deal.destination,
-                      city: deal.city,
-                    },
-                  } as never,
-                )
+                navigation.navigate('Main', {
+                  screen: 'Search',
+                  params: {
+                    origin: deal.origin_iata || deal.departure_airport,
+                    adults,
+                    destination: deal.destination,
+                    city: deal.city,
+                  },
+                })
               }}
               hitSlop={8}
             >

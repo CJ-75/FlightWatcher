@@ -41,9 +41,22 @@ export type SearchInfo = {
   searchEventId?: string | null
 }
 
+export type MainTabParamList = {
+  Search: { origin?: string; adults?: number; destination?: string; city?: string } | undefined
+  Deals: undefined
+  Planner: undefined
+  Favorites: undefined
+  Profile: undefined
+}
+
 export type RootStackParamList = {
   Login: undefined
-  Main: undefined
+  Main:
+    | undefined
+    | {
+        screen?: keyof MainTabParamList
+        params?: MainTabParamList[keyof MainTabParamList]
+      }
   Results: {
     trips: EnrichedTripResponse[]
     title?: string
@@ -58,14 +71,6 @@ export type RootStackParamList = {
   Security: undefined
   Bookings: undefined
   DealCheckout: { dealId: string; hotelId?: string }
-}
-
-export type MainTabParamList = {
-  Search: { origin?: string; adults?: number; destination?: string; city?: string } | undefined
-  Deals: undefined
-  Planner: undefined
-  Favorites: undefined
-  Profile: undefined
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()

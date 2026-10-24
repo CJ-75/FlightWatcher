@@ -49,7 +49,7 @@ export function DealCardGallery({ hotelId, seedPhotos, alt, onOpen }: Props) {
       <button
         type="button"
         onClick={onOpen}
-        className="relative w-full h-52 sm:h-56 bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center"
+        className="relative w-full h-56 sm:h-60 bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center"
       >
         <span className="text-white text-2xl font-extrabold px-4 text-center">{alt}</span>
       </button>
@@ -61,7 +61,7 @@ export function DealCardGallery({ hotelId, seedPhotos, alt, onOpen }: Props) {
 
   return (
     <div
-      className="relative w-full h-52 sm:h-56 bg-line shrink-0 overflow-hidden"
+      className="relative w-full h-56 sm:h-60 bg-line shrink-0 overflow-hidden"
       onMouseEnter={loadGallery}
       onTouchStart={loadGallery}
     >

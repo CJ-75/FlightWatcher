@@ -30,8 +30,8 @@ export type HotelPhotoGalleryProps = {
   hotelName?: string
   cityLabel?: string
   height?: number
-  topRight?: React.ReactNode
-  bottomLeft?: React.ReactNode
+  topRight?: React.ReactElement | null
+  bottomLeft?: React.ReactElement | null
   onImageError?: () => void
 }
 
@@ -159,8 +159,18 @@ export function HotelPhotoGallery({
           pointerEvents="none"
         />
 
-        {topRight ? <View style={styles.topRight}>{topRight}</View> : null}
-        {bottomLeft ? <View style={styles.bottomLeft}>{bottomLeft}</View> : null}
+        {topRight ? (
+          <View style={styles.topRight} pointerEvents="box-none">
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {topRight as any}
+          </View>
+        ) : null}
+        {bottomLeft ? (
+          <View style={styles.bottomLeft} pointerEvents="box-none">
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {bottomLeft as any}
+          </View>
+        ) : null}
 
         <View style={styles.counter}>
           <Text style={styles.counterText}>
@@ -198,7 +208,7 @@ export function HotelPhotoGallery({
         statusBarTranslucent
       >
         <View style={[styles.lightbox, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-          {Platform.OS === 'android' ? <StatusBar backgroundColor="#0C1222" barStyle="light-content" /> : null}
+          {Platform.OS === 'android' ? <StatusBar barStyle="light-content" /> : null}
           <View style={styles.lightboxHeader}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.lightboxTitle} numberOfLines={1}>

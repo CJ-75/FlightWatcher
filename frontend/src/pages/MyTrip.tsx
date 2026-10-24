@@ -256,7 +256,7 @@ export default function MyTrip() {
           ) : null}
           {isCached ? (
             <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
-              Prix repéré récemment · à confirmer chez le partenaire
+              Prix agrégateur · à confirmer chez le partenaire
             </p>
           ) : null}
           {payload.baggage_line || payload.route_hint ? (

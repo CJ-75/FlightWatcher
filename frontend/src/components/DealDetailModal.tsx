@@ -146,7 +146,7 @@ export function DealDetailModal({
               board: deal.board,
               public_hotel_price: deal.price_breakdown?.hotel_public_total,
               excluded_fees: deal.price_breakdown?.excluded_fees,
-              photo: deal.hotel?.photo || deal.image_url,
+              photo: deal.image_url,
             } as TravelDealHotel,
           ]
         : []

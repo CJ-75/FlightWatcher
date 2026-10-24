@@ -147,18 +147,16 @@ export function DealsScreen() {
   )
   const fillerDeals = useMemo(
     () =>
-      sort === 'recommended' && queryOrigin
-        ? deals.filter((d) => d.flags?.match_origin === false)
-        : [],
-    [deals, queryOrigin, sort],
+      queryOrigin ? deals.filter((d) => d.flags?.match_origin === false) : [],
+    [deals, queryOrigin],
   )
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
     const dir = sort === 'price_asc' ? 1 : -1
-    return [...deals].sort(
+    return [...matchedDeals].sort(
       (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
     )
-  }, [sort, matchedDeals, deals])
+  }, [sort, matchedDeals])
 
   const listData =
     fillerDeals.length > 0
@@ -371,7 +369,7 @@ export function DealsScreen() {
             if (item.kind === 'filler_header') {
               return (
                 <View style={styles.fillerHeader}>
-                  <Text style={styles.fillerTitle}>Aussi intéressants</Text>
+                  <Text style={styles.fillerTitle}>Depuis d’autres aéroports</Text>
                   <Text style={styles.fillerSub}>
                     Autres départs pour compléter ta sélection
                   </Text>

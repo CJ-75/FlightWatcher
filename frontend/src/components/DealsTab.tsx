@@ -184,22 +184,20 @@ export function DealsTab() {
     [deals, queryOrigin],
   )
 
+  /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(
     () =>
-      sort === 'recommended' && queryOrigin
-        ? deals.filter((d) => d.flags?.match_origin === false)
-        : [],
-    [deals, queryOrigin, sort],
+      queryOrigin ? deals.filter((d) => d.flags?.match_origin === false) : [],
+    [deals, queryOrigin],
   )
 
-  /** Price sort merges everything into one ordered list. */
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
     const dir = sort === 'price_asc' ? 1 : -1
-    return [...deals].sort(
+    return [...matchedDeals].sort(
       (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
     )
-  }, [sort, matchedDeals, deals])
+  }, [sort, matchedDeals])
 
   return (
     <div className="w-full">
@@ -392,9 +390,9 @@ export function DealsTab() {
           </motion.div>
           {fillerDeals.length > 0 ? (
             <div>
-              <p className="text-sm font-bold text-ink mb-1">Aussi intéressants</p>
+              <p className="text-sm font-bold text-ink mb-1">Depuis d’autres aéroports</p>
               <p className="text-xs text-muted mb-4">
-                Autres départs pour compléter ta sélection
+                Hors de ton aéroport de départ — triés à part
               </p>
               <motion.div
                 layout
@@ -431,7 +429,9 @@ export function DealsTab() {
         />
       ) : null}
 
-      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
+      {toast ? (
+        <Toast message={toast} isVisible onClose={() => setToast(null)} />
+      ) : null}
     </div>
   )
 }

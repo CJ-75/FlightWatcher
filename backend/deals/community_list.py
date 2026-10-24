@@ -25,7 +25,7 @@ def _verified_today_label(last_verified_at: Any) -> Optional[str]:
             dt = dt.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         if dt.date() == now.date():
-            return "Prix vérifié aujourd'hui"
+            return "Vérifié"
     except ValueError:
         return None
     return None

@@ -244,7 +244,11 @@ export function BookingSheet({
             ) : hotelError ? (
               <View style={styles.loadingBox}>
                 <Text style={styles.hint}>{hotelError}</Text>
-                <Pressable onPress={() => void loadHotels()}>
+                <Pressable
+                  onPress={() => {
+                    if (trip) void loadHotels(trip)
+                  }}
+                >
                   <Text style={styles.link}>Réessayer</Text>
                 </Pressable>
                 <Pressable onPress={() => void finalize(null)}>

@@ -230,24 +230,25 @@ function normalizeStoredDates(raw: unknown): DateAvecHoraire[] {
     }
   }
   if (!Array.isArray(list)) return []
-  return list
-    .map((item) => {
-      if (typeof item === 'string') {
-        const date = item.trim()
-        if (!date) return null
-        return { date, heure_min: '06:00', heure_max: '23:59' }
-      }
-      if (!item || typeof item !== 'object') return null
-      const d = item as Record<string, unknown>
-      const date = String(d.date || d.Date || '').trim()
-      if (!date) return null
-      return {
-        date,
-        heure_min: String(d.heure_min || d.heureMin || '06:00'),
-        heure_max: String(d.heure_max || d.heureMax || '23:59'),
-      }
+  const out: DateAvecHoraire[] = []
+  for (const item of list) {
+    if (typeof item === 'string') {
+      const date = item.trim()
+      if (!date) continue
+      out.push({ date, heure_min: '06:00', heure_max: '23:59' })
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const d = item as Record<string, unknown>
+    const date = String(d.date || d.Date || '').trim()
+    if (!date) continue
+    out.push({
+      date,
+      heure_min: String(d.heure_min || d.heureMin || '06:00'),
+      heure_max: String(d.heure_max || d.heureMax || '23:59'),
     })
-    .filter((d): d is DateAvecHoraire => !!d)
+  }
+  return out
 }
 
 function mapSupabaseSearchToSavedSearch(item: any): SavedSearch {

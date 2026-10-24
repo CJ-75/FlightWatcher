@@ -18,10 +18,87 @@ const springConfig = {
   mass: 0.5,
 }
 
-function formatDateShort(dateStr: string) {
+const DAYS_SHORT = ['dim', 'lun', 'mar', 'mer', 'jeu', 'ven', 'sam']
+const MONTHS_SHORT = [
+  'jan',
+  'fév',
+  'mar',
+  'avr',
+  'mai',
+  'jun',
+  'jul',
+  'aoû',
+  'sep',
+  'oct',
+  'nov',
+  'déc',
+]
+
+function parseDealDate(dateStr: string) {
   const date = new Date(dateStr + 'T12:00:00')
-  const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
-  return `${date.getDate()} ${months[date.getMonth()]}`
+  return {
+    dow: DAYS_SHORT[date.getDay()],
+    day: date.getDate(),
+    month: MONTHS_SHORT[date.getMonth()],
+  }
+}
+
+function formatClock(iso?: string | null) {
+  if (!iso) return null
+  const m = String(iso).match(/T(\d{2}):(\d{2})/)
+  return m ? `${m[1]}:${m[2]}` : null
+}
+
+function boardLabel(board?: string | null) {
+  if (!board) return null
+  const b = board.toUpperCase()
+  if (b.includes('BI') || /breakfast|petit/i.test(board)) return 'Petit-déj inclus'
+  if (b.includes('HB') || /half|demi/i.test(board)) return 'Demi-pension'
+  if (b.includes('FB') || /full|pension compl/i.test(board)) return 'Pension complète'
+  if (b.includes('AI') || /all.?inclusive/i.test(board)) return 'All inclusive'
+  if (b.includes('RO') || /room only|chambre seule/i.test(board)) return null
+  return board
+}
+
+function distanceLabel(deal: TravelDeal) {
+  const m = deal.hotel?.distance_m
+  if (m == null) return deal.distance_label || null
+  if (m < 800) return 'Centre-ville'
+  if (m < 1000) return `${Math.round(m)} m du centre`
+  return `${(m / 1000).toFixed(1)} km du centre`
+}
+
+function DealDateRange({ outbound, inbound }: { outbound: string; inbound: string }) {
+  const out = parseDealDate(outbound)
+  const ret = parseDealDate(inbound)
+  return (
+    <div
+      className="shrink-0 flex items-stretch gap-1"
+      aria-label={`Du ${out.dow} ${out.day} ${out.month} au ${ret.dow} ${ret.day} ${ret.month}`}
+    >
+      <DateCell {...out} />
+      <div className="flex items-center self-center px-0.5" aria-hidden>
+        <span className="w-3.5 h-px bg-primary-300" />
+      </div>
+      <DateCell {...ret} />
+    </div>
+  )
+}
+
+function DateCell({ dow, day, month }: { dow: string; day: number; month: string }) {
+  return (
+    <div className="w-[3.15rem] rounded-xl bg-primary-50 border border-primary-100 overflow-hidden text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+      <p className="text-[9px] font-bold uppercase tracking-[0.06em] text-primary-700/75 bg-primary-100/60 py-[3px] leading-none">
+        {dow}
+      </p>
+      <p className="text-[1.125rem] font-black text-primary-900 tabular-nums leading-none pt-1.5 tracking-tight">
+        {day}
+      </p>
+      <p className="text-[10px] font-semibold text-primary-600/90 pb-1.5 leading-none mt-0.5">
+        {month}
+      </p>
+    </div>
+  )
 }
 
 function HeartSvg({ filled }: { filled: boolean }) {
@@ -42,6 +119,37 @@ function HeartSvg({ filled }: { filled: boolean }) {
   )
 }
 
+function SoftChip({ children, tone = 'neutral' }: { children: string; tone?: 'neutral' | 'good' }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-lg border px-2 py-0.5 text-[10px] font-bold leading-tight ${
+        tone === 'good'
+          ? 'border-emerald-100 bg-emerald-50 text-emerald-800'
+          : 'border-line bg-canvas text-ink-soft'
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** City / airport name only — never IATA trigrams on cards. */
+function cardPlaceLabel(
+  label?: string | null,
+  fallback?: string | null,
+): string {
+  const raw = (label || '').trim()
+  if (raw) {
+    const noCode = raw.replace(/\s*\([A-Z]{3}\)\s*$/i, '').trim()
+    const head = noCode.split(/[,–—]/)[0]?.trim() || noCode
+    if (head && !/^[A-Z]{3}$/.test(head)) return head
+    if (noCode && !/^[A-Z]{3}$/.test(noCode)) return noCode
+  }
+  const fb = (fallback || '').trim()
+  if (fb && !/^[A-Z]{3}$/.test(fb)) return fb
+  return 'Départ'
+}
+
 export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) {
   const { t } = useI18n()
   const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
@@ -54,19 +162,59 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   const adults = dealAdults(deal)
   const stars = Number(deal.hotel_stars || deal.hotel?.stars || 0)
   const hotelName = deal.hotel_name || deal.hotel?.name || 'Hôtel'
-  // Card: short route (IATA / city). Full airport names live in detail.
-  const origin =
-    deal.origin_iata ||
-    deal.departure_airport ||
-    (deal.origin_airport_label || '').split(/[,(]/)[0]?.trim() ||
-    ''
-  const dest = deal.city
-  const chip =
-    deal.flight?.direct
-      ? 'Direct'
-      : deal.flags?.verified_label
-        ? 'Vérifié'
-        : dealBadgeLabels(deal)[0] || null
+  const origin = cardPlaceLabel(deal.origin_airport_label)
+  const dest =
+    (deal.city || '').trim() ||
+    cardPlaceLabel(deal.arrival_airport_label) ||
+    'Destination'
+
+  const flightPp = Math.round(
+    deal.price_breakdown?.flight_pp ?? deal.flight?.price_pp ?? 0,
+  )
+  const breakdown = deal.price_breakdown as
+    | (typeof deal.price_breakdown & { hotel_pp?: number })
+    | undefined
+  const hotelPp = Math.round(
+    breakdown?.hotel_pp ??
+      (breakdown?.hotel_public_total != null && adults > 0
+        ? breakdown.hotel_public_total / adults
+        : Math.max(0, deal.price_per_person - flightPp)),
+  )
+
+  const outTime = formatClock(deal.flight?.outbound_local || deal.flight?.out_dep_local)
+  const retTime = formatClock(deal.flight?.inbound_local || deal.flight?.ret_dep_local)
+  const airline = deal.flight?.airline || deal.flight?.carrier
+  const board = boardLabel(deal.board || deal.hotel?.board)
+  const dist = distanceLabel(deal)
+  const rating =
+    deal.hotel?.rating != null ? Number(deal.hotel.rating).toFixed(1) : null
+  const reviews = deal.hotel?.review_count
+
+  const pills: { label: string; tone: 'neutral' | 'good' }[] = []
+  if (deal.flight?.direct) pills.push({ label: 'Vol direct', tone: 'good' })
+  if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
+    pills.push({ label: 'Annul. gratuite', tone: 'good' })
+  }
+  if (board) pills.push({ label: board, tone: 'neutral' })
+  if (deal.flags?.verified_label) pills.push({ label: 'Prix vérifié', tone: 'good' })
+  const showPills = pills.slice(0, 3)
+
+  const flightMeta = [
+    airline,
+    outTime ? `↗ ${outTime}` : null,
+    retTime ? `↘ ${retTime}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const hotelMeta = [
+    rating
+      ? `${rating}/10${reviews != null ? ` · ${reviews} avis` : ''}`
+      : null,
+    dist,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <motion.article
@@ -131,45 +279,71 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onClick}
-        className="text-left w-full flex flex-col flex-1 gap-2 p-3.5 sm:p-4"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-2xl sm:text-[1.75rem] font-extrabold text-primary-500 tracking-tight leading-none tabular-nums">
-              {Math.round(deal.price_per_person)} €
-            </p>
-            <p className="text-[11px] text-muted font-medium mt-1 truncate">
-              / pers. · {deal.nights}n · {adults} ad.
-            </p>
+      <div className="flex flex-col flex-1 min-h-0">
+        <button
+          type="button"
+          onClick={onClick}
+          className="text-left w-full flex-1 space-y-2.5 p-3.5 sm:p-4 pb-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-2xl sm:text-[1.75rem] font-extrabold text-primary-500 tracking-tight leading-none tabular-nums">
+                {Math.round(deal.price_per_person)} €
+              </p>
+              <p className="text-[11px] text-muted font-medium mt-1.5 leading-snug">
+                / pers. · {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {adults} ad.
+                {flightPp > 0 || hotelPp > 0 ? (
+                  <span className="block sm:inline sm:before:content-['·_'] text-ink-soft">
+                    vol {flightPp || '—'} € + hôtel {hotelPp || '—'} €
+                  </span>
+                ) : null}
+              </p>
+            </div>
+            <DealDateRange outbound={deal.dates.outbound} inbound={deal.dates.inbound} />
           </div>
-          <div className="shrink-0 rounded-xl bg-primary-50 border border-primary-100 px-2.5 py-1.5 text-right">
-            <p className="text-[11px] font-bold text-primary-800 leading-tight tabular-nums">
-              {formatDateShort(deal.dates.outbound)}
-            </p>
-            <p className="text-[10px] font-semibold text-primary-500 leading-none my-0.5">↓</p>
-            <p className="text-[11px] font-bold text-primary-800 leading-tight tabular-nums">
-              {formatDateShort(deal.dates.inbound)}
-            </p>
-          </div>
-        </div>
 
-        <p className="text-xs font-semibold text-ink truncate">
-          {origin || '—'}
-          <span className="text-slate-300 mx-1">→</span>
-          {dest}
-          {chip ? (
-            <span className="ml-1.5 font-bold text-emerald-700">· {chip}</span>
+          <div>
+            <p className="text-xs font-semibold text-ink truncate">
+              {origin || '—'}
+              <span className="text-slate-300 mx-1">→</span>
+              {dest}
+            </p>
+            {flightMeta ? (
+              <p className="text-[11px] text-muted mt-0.5 truncate">{flightMeta}</p>
+            ) : null}
+          </div>
+
+          <div>
+            <p className="text-sm font-bold text-ink truncate">
+              {stars > 0 ? `${'★'.repeat(Math.min(5, Math.round(stars)))} ` : ''}
+              {hotelName}
+            </p>
+            {hotelMeta ? (
+              <p className="text-[11px] text-muted mt-0.5 truncate">{hotelMeta}</p>
+            ) : null}
+          </div>
+
+          {showPills.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {showPills.map((p) => (
+                <SoftChip key={p.label} tone={p.tone}>
+                  {p.label}
+                </SoftChip>
+              ))}
+            </div>
           ) : null}
-        </p>
+        </button>
 
-        <p className="text-sm font-bold text-ink truncate">
-          {stars > 0 ? `${'★'.repeat(Math.min(5, Math.round(stars)))} ` : ''}
-          {hotelName}
-        </p>
-      </button>
+        <div className="shrink-0 px-3.5 sm:px-4 pb-3.5 sm:pb-4 pt-0">
+          <button
+            type="button"
+            onClick={onClick}
+            className="w-full inline-flex items-center justify-center rounded-2xl bg-[#FF6B35] hover:bg-[#E85A28] text-white font-bold text-sm min-h-[48px] px-4 shadow-md shadow-orange-500/25 active:scale-[0.98] transition-all"
+          >
+            {t('deals.viewOffer')}
+          </button>
+        </div>
+      </div>
     </motion.article>
   )
 }

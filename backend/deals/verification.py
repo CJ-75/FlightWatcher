@@ -14,11 +14,12 @@ LEVEL_LIVE = "live"
 LEVEL_CACHED = "cached"
 
 CACHED_BADGE = {
-    "label": "Prix repéré récemment · à confirmer chez le partenaire",
+    # Short tag for cards; full honesty stays in tooltip / Mon voyage copy
+    "label": "À confirmer",
     "discount_pct": None,
     "scope": "flight",
     "tooltip": (
-        "Prix issu d'un agrégateur (pas une vérification en direct). "
+        "Prix repéré récemment via un agrégateur (pas une vérif. en direct). "
         "Confirme le tarif chez le partenaire avant de réserver."
     ),
     "verification_level": LEVEL_CACHED,
