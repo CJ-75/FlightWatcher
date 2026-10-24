@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
+import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
 
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '—'
@@ -30,9 +31,13 @@ function partnerLabel(provider?: string, bookingUrl?: string): string {
  */
 export default function MyTrip() {
   const { token } = useParams<{ token: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [draft, setDraft] = useState<MyTripDraft | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [composeOpen, setComposeOpen] = useState(
+    () => searchParams.get('compose') === '1',
+  )
   const [claiming, setClaiming] = useState(false)
   const [showPriceAsk, setShowPriceAsk] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
@@ -86,6 +91,15 @@ export default function MyTrip() {
   const flightUrl = flight.booking_url || payload.booking_url || ''
   const city = draft?.city_name || payload.city || '—'
   const price = payload.price_per_person
+  const wantsCompose =
+    composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
+
+  const closeCompose = () => {
+    setComposeOpen(false)
+    const next = new URLSearchParams(searchParams)
+    next.delete('compose')
+    setSearchParams(next, { replace: true })
+  }
   const vlevel =
     flight.verification_level ||
     payload.flags?.verification_level ||
@@ -255,6 +269,15 @@ export default function MyTrip() {
           ) : null}
         </div>
 
+        {wantsCompose && token && draft ? (
+          <MyTripHotelCompose
+            draft={draft}
+            token={token}
+            onUpdated={(row) => setDraft(row)}
+            onDone={closeCompose}
+          />
+        ) : null}
+
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-bold text-slate-900">1. Réserver le vol</h2>
@@ -329,41 +352,43 @@ export default function MyTrip() {
           ) : null}
         </section>
 
-        <section
-          className={`rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm ${
-            flightBooked ? '' : 'opacity-60'
-          }`}
-        >
-          <h2 className="font-bold text-slate-900">2. Réserver l’hôtel</h2>
-          {!flightBooked ? (
-            <p className="text-sm text-slate-600">
-              Confirme d’abord « J’ai réservé mon vol ✓ » pour débloquer l’hôtel aux dates du
-              vol
-              {outDate && retDate
-                ? ` (${formatDate(outDate)} → ${formatDate(retDate)})`
-                : ''}
-              .
-            </p>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+          <h2 className="font-bold text-slate-900">2. Hôtel du voyage</h2>
+          {hotel && typeof hotel === 'object' && (hotel as any).name ? (
+            <p className="text-sm text-slate-700 font-medium">{(hotel as any).name}</p>
           ) : (
-            <>
-              <p className="text-sm text-slate-600">
-                Dates du vol : {formatDate(outDate)} → {formatDate(retDate)}
-              </p>
-              {hotel && typeof hotel === 'object' && (hotel as any).name ? (
-                <p className="text-sm text-slate-700 font-medium">{(hotel as any).name}</p>
-              ) : (
-                <p className="text-sm text-slate-600">Choisir un hôtel pour ces dates.</p>
-              )}
-              {draft.deal_key || hotel ? (
-                <Link
-                  to={hotelHref}
-                  className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl"
-                >
-                  Réserver l’hôtel
-                </Link>
-              ) : null}
-            </>
+            <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
           )}
+          <p className="text-sm text-slate-600">
+            Dates : {formatDate(outDate)} → {formatDate(retDate)}
+          </p>
+          {!wantsCompose ? (
+            <button
+              type="button"
+              onClick={() => {
+                setComposeOpen(true)
+                const next = new URLSearchParams(searchParams)
+                next.set('compose', '1')
+                setSearchParams(next, { replace: true })
+              }}
+              className="w-full text-center border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-800 font-bold py-3 rounded-xl"
+            >
+              Modifier l’hôtel
+            </button>
+          ) : null}
+          {flightBooked && (draft.deal_key || hotel) ? (
+            <Link
+              to={hotelHref}
+              className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl"
+            >
+              Réserver l’hôtel
+            </Link>
+          ) : !flightBooked ? (
+            <p className="text-xs text-slate-500">
+              Réserve le vol (étape 1), puis confirme « J’ai réservé mon vol ✓ » pour
+              débloquer la réservation hôtel in-app.
+            </p>
+          ) : null}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">

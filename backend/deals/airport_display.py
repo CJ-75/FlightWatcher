@@ -50,26 +50,34 @@ def airport_differs_from_city(airport_label: str, city_name: str) -> bool:
     return True
 
 
-def format_from_airport(iata: str, city_name: str) -> Optional[str]:
-    """« depuis Paris-Beauvais » when airport name ≠ city."""
+def _airport_full_name(iata: str) -> str:
+    """Always resolve IATA → human airport name (FR)."""
+    code = (iata or "").strip().upper()
+    if not code:
+        return ""
     try:
         from city_names_fr import airport_name_for_code
 
-        label = airport_name_for_code(iata, iata)
+        return (airport_name_for_code(code, code) or code).strip()
     except Exception:
-        label = iata
+        return code
+
+
+def format_from_airport(iata: str, city_name: str) -> Optional[str]:
+    """« depuis Paris-Beauvais » when airport name ≠ city (hint only)."""
+    label = _airport_full_name(iata)
+    if not label:
+        return None
     if not airport_differs_from_city(label, city_name or ""):
         return None
     return f"depuis {label}"
 
 
 def format_arrival_airport(iata: str, city_name: str) -> Optional[str]:
-    try:
-        from city_names_fr import airport_name_for_code
-
-        label = airport_name_for_code(iata, iata)
-    except Exception:
-        label = iata
+    """« arrivée Milan-Bergame » when airport name ≠ city (hint only)."""
+    label = _airport_full_name(iata)
+    if not label:
+        return None
     if not airport_differs_from_city(label, city_name or ""):
         return None
     return f"arrivée {label}"
@@ -95,17 +103,24 @@ def enrich_route_labels(
     origin_city: Optional[str] = None,
     distance_km: Optional[float] = None,
 ) -> Dict[str, Any]:
+    """
+    Always expose full airport names for UI cards/lightbox.
+    route_hint keeps the shorter « depuis / arrivée » notes when useful.
+    """
     origin_city = origin_city or ""
     # Infer Paris for BVA/CDG/ORY if unknown
-    if not origin_city and origin_iata.upper() in ("BVA", "CDG", "ORY"):
+    if not origin_city and (origin_iata or "").upper() in ("BVA", "CDG", "ORY"):
         origin_city = "Paris"
-    from_lbl = format_from_airport(origin_iata, origin_city or origin_iata)
-    arr_lbl = format_arrival_airport(dest_iata, city_name or dest_iata)
+
+    origin_name = _airport_full_name(origin_iata)
+    arrival_name = _airport_full_name(dest_iata)
+    from_hint = format_from_airport(origin_iata, origin_city or origin_iata)
+    arr_hint = format_arrival_airport(dest_iata, city_name or dest_iata)
     dist_lbl = distance_label(distance_km)
-    parts = [p for p in (from_lbl, arr_lbl, dist_lbl) if p]
+    parts = [p for p in (from_hint, arr_hint, dist_lbl) if p]
     return {
-        "origin_airport_label": from_lbl,
-        "arrival_airport_label": arr_lbl,
+        "origin_airport_label": origin_name or None,
+        "arrival_airport_label": arrival_name or None,
         "distance_label": dist_lbl,
         "route_hint": " · ".join(parts) if parts else None,
     }

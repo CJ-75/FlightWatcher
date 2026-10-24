@@ -274,6 +274,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify({}) },
       ),
 
+    updateMyTripHotel: (
+      draftToken: string,
+      body: { hotel: Record<string, unknown> | null; price_per_person?: number | null },
+    ) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/hotel`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      ),
+
     emailMyTrip: (draftToken: string, body: { email: string; consent: boolean }) =>
       request<{ ok: boolean; email?: string; error?: string }>(
         `/api/deals/my-trip/${encodeURIComponent(draftToken)}/email`,

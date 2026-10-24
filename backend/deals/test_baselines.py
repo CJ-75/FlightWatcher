@@ -57,7 +57,11 @@ class TestBaselineStats(unittest.TestCase):
         self.assertIn("Vol", badge["label"])
         self.assertEqual(badge["scope"], "flight")
         soft = badge_for_baseline({"baseline_kind": "estimated"})
-        self.assertEqual(soft["label"], "Très bon prix")
+        self.assertIsNone(soft["label"])
+        no_disc = badge_for_baseline(
+            {"baseline_kind": "observed", "reliable": True, "discount_pct": None}
+        )
+        self.assertIsNone(no_disc["label"])
 
 
 class TestBuildBaselines(unittest.TestCase):

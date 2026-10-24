@@ -64,10 +64,23 @@ class TestAirportDisplay(unittest.TestCase):
             origin_city="Paris",
             distance_km=48,
         )
-        self.assertIn("Beauvais", labels["origin_airport_label"] or "")
-        self.assertIn("Bergame", labels["arrival_airport_label"] or "")
+        # Full names always (not raw IATA)
+        self.assertEqual(labels["origin_airport_label"], "Paris-Beauvais")
+        self.assertEqual(labels["arrival_airport_label"], "Milan-Bergame")
         self.assertIn("48 km", labels["distance_label"] or "")
         self.assertTrue(labels["route_hint"])
+        self.assertIn("depuis", labels["route_hint"] or "")
+
+    def test_same_city_airport_still_named(self):
+        labels = enrich_route_labels(
+            origin_iata="LIS",
+            dest_iata="BCN",
+            city_name="Barcelone",
+            origin_city="Lisbonne",
+            distance_km=10,
+        )
+        self.assertEqual(labels["origin_airport_label"], "Lisbonne")
+        self.assertEqual(labels["arrival_airport_label"], "Barcelone El Prat")
 
 
 class TestRevalidatePax(unittest.TestCase):

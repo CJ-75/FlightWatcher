@@ -182,7 +182,7 @@ export function HotelPhotoGallery({
             <button
               key={`${p.url}-${i}`}
               type="button"
-              className="relative shrink-0 grow-0 basis-full min-w-full w-full aspect-[4/3] max-h-[56vh] snap-center snap-always focus:outline-none"
+              className="relative shrink-0 grow-0 basis-full min-w-full w-full aspect-[5/4] max-h-[42vh] snap-center snap-always focus:outline-none"
               onClick={() => openAt(i)}
             >
               <img

@@ -655,6 +655,12 @@ class MyTripDraftRequest(BaseModel):
     flight: Optional[Dict[str, Any]] = None
     hotel: Optional[Dict[str, Any]] = None
     price_per_person: Optional[float] = None
+    booking_url: Optional[str] = None
+    baggage_line: Optional[str] = None
+    route_hint: Optional[str] = None
+    price_pax_note: Optional[str] = None
+    # Open hotel switcher on Mon voyage after create
+    compose_hotel: Optional[bool] = None
     payload: Optional[Dict[str, Any]] = None
 
 
@@ -706,6 +712,32 @@ async def claim_my_trip(draft_token: str, request: Request):
         from deals.my_trips import claim_draft
 
         row = claim_draft(_svc(), draft_token, user_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MyTripHotelRequest(BaseModel):
+    hotel: Optional[Dict[str, Any]] = None
+    price_per_person: Optional[float] = None
+
+
+@router.patch("/api/deals/my-trip/{draft_token}/hotel")
+async def update_my_trip_hotel(draft_token: str, body: MyTripHotelRequest):
+    """Switch / set hotel on a Mon voyage draft (flight unchanged)."""
+    try:
+        from deals.my_trips import update_draft_hotel
+
+        row = update_draft_hotel(
+            _svc(),
+            draft_token,
+            hotel=body.hotel,
+            price_per_person=body.price_per_person,
+        )
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable")
         return row

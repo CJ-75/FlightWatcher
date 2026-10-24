@@ -34,6 +34,7 @@ export function DealsTab() {
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -172,20 +173,33 @@ export function DealsTab() {
     if (origin) parts.push(origin.split(',')[0] || origin)
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
+    if (sort === 'price_asc') parts.push(t('deals.sortPriceAsc'))
+    else if (sort === 'price_desc') parts.push(t('deals.sortPriceDesc'))
     return parts.join(' · ')
-  }, [origin, adults])
+  }, [origin, adults, sort, t])
 
   const matchedDeals = useMemo(
     () =>
-      queryOrigin
-        ? deals.filter((d) => d.flags?.match_origin !== false)
-        : deals,
+      queryOrigin ? deals.filter((d) => d.flags?.match_origin !== false) : deals,
     [deals, queryOrigin],
   )
+
   const fillerDeals = useMemo(
-    () => (queryOrigin ? deals.filter((d) => d.flags?.match_origin === false) : []),
-    [deals, queryOrigin],
+    () =>
+      sort === 'recommended' && queryOrigin
+        ? deals.filter((d) => d.flags?.match_origin === false)
+        : [],
+    [deals, queryOrigin, sort],
   )
+
+  /** Price sort merges everything into one ordered list. */
+  const gridDeals = useMemo(() => {
+    if (sort === 'recommended') return matchedDeals
+    const dir = sort === 'price_asc' ? 1 : -1
+    return [...deals].sort(
+      (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
+    )
+  }, [sort, matchedDeals, deals])
 
   return (
     <div className="w-full">
@@ -254,15 +268,67 @@ export function DealsTab() {
               ) : null}
             </div>
             <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
+
+            <div className="mt-4 pt-4 border-t border-line">
+              <label className="text-base sm:text-lg font-bold text-slate-900 block mb-2">
+                {t('deals.sort')}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ['recommended', t('deals.sortRecommended')],
+                    ['price_asc', t('deals.sortPriceAsc')],
+                    ['price_desc', t('deals.sortPriceDesc')],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSort(id)}
+                    className={`rounded-full px-3.5 py-2 text-xs font-bold border transition-colors ${
+                      sort === id
+                        ? 'bg-primary-500 text-white border-primary-500'
+                        : 'bg-white text-ink border-line hover:border-primary-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </motion.div>
         ) : null}
       </div>
 
       {!loading && !error && deals.length > 0 ? (
-        <p className="text-sm font-semibold text-muted mb-4">
-          {deals.length} offre{deals.length > 1 ? 's' : ''}
-          {filterLabel ? ` · ${filterLabel}` : ''}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <p className="text-sm font-semibold text-muted">
+            {deals.length} offre{deals.length > 1 ? 's' : ''}
+            {filterLabel ? ` · ${filterLabel}` : ''}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ['recommended', t('deals.sortRecommended')],
+                ['price_asc', 'Prix ↑'],
+                ['price_desc', 'Prix ↓'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSort(id)}
+                className={`rounded-full px-3 py-1.5 text-[11px] font-bold border transition-colors ${
+                  sort === id
+                    ? 'bg-primary-500 text-white border-primary-500'
+                    : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       {loading ? (
@@ -314,7 +380,7 @@ export function DealsTab() {
             layout
             className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
           >
-            {matchedDeals.map((deal) => (
+            {gridDeals.map((deal) => (
               <DealCard
                 key={deal.id}
                 deal={deal}

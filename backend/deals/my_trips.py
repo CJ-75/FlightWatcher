@@ -141,6 +141,40 @@ def _merge_payload(row: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]
     return payload
 
 
+def update_draft_hotel(
+    supabase,
+    draft_token: str,
+    *,
+    hotel: Optional[Dict[str, Any]],
+    price_per_person: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """Compose / switch hotel on an existing Mon voyage draft (flight stays)."""
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return None
+    now = _now().isoformat()
+    patch: Dict[str, Any] = {
+        "hotel": hotel,
+        "compose_hotel": False,
+        "hotel_selected_at": now,
+    }
+    if price_per_person is not None:
+        try:
+            patch["price_per_person"] = round(float(price_per_person), 2)
+        except (TypeError, ValueError):
+            pass
+    payload = _merge_payload(row, patch)
+    res = (
+        supabase.table("my_trip_drafts")
+        .update({"payload": payload, "updated_at": now})
+        .eq("id", row["id"])
+        .execute()
+    )
+    out = (res.data or [{**row, "payload": payload}])[0]
+    out["hotel"] = hotel
+    return out
+
+
 def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
     """Lot F — step ① done → unlock hotel at flight dates."""
     row = get_draft(supabase, draft_token)

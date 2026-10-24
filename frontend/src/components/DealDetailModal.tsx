@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -31,18 +31,35 @@ function formatDate(dateStr: string) {
   })
 }
 
-function formatTime(iso?: string) {
-  if (!iso) return null
+function formatDateShort(dateStr: string) {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+  })
+}
+
+function formatTime(iso?: string | null) {
+  if (!iso || typeof iso !== 'string') return null
+  const raw = iso.trim()
+  if (!raw || raw === '—' || raw === '--') return null
   try {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) {
-      const m = iso.match(/T(\d{2}:\d{2})/)
-      return m ? m[1] : null
-    }
+    // Prefer explicit clock from ISO-like strings (avoids TZ shift)
+    const m = raw.match(/T(\d{2}):(\d{2})/)
+    if (m) return `${m[1]}:${m[2]}`
+    const d = new Date(raw)
+    if (Number.isNaN(d.getTime())) return null
     return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
   } catch {
     return null
   }
+}
+
+/** Community deals use out_dep_local / ret_dep_local; assembled deals use *_local. */
+function flightLegTimes(flight?: TravelDeal['flight'] | null) {
+  if (!flight) return { out: null as string | null, ret: null as string | null }
+  const out = formatTime(flight.outbound_local || flight.out_dep_local)
+  const ret = formatTime(flight.inbound_local || flight.ret_dep_local)
+  return { out, ret }
 }
 
 function HeartSvg({ filled }: { filled: boolean }) {
@@ -63,6 +80,20 @@ function HeartSvg({ filled }: { filled: boolean }) {
   )
 }
 
+function FactChip({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'good' | 'warn' }) {
+  const toneClass =
+    tone === 'good'
+      ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+      : tone === 'warn'
+        ? 'bg-amber-50 text-amber-900 border-amber-100'
+        : 'bg-slate-50 text-slate-700 border-slate-100'
+  return (
+    <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${toneClass}`}>
+      {children}
+    </span>
+  )
+}
+
 export function DealDetailModal({
   deal,
   onClose,
@@ -74,6 +105,7 @@ export function DealDetailModal({
   const { t, language } = useI18n()
   const navigate = useNavigate()
   const [startingTrip, setStartingTrip] = useState(false)
+  const [composingHotel, setComposingHotel] = useState(false)
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [checkout, setCheckout] = useState(false)
   const [bookingEnabled, setBookingEnabled] = useState(true)
@@ -85,7 +117,6 @@ export function DealDetailModal({
       .catch(() => undefined)
   }, [])
 
-  // Lot F — open hotel checkout when arriving from Mon voyage
   useEffect(() => {
     if (!deal) return
     try {
@@ -156,13 +187,13 @@ export function DealDetailModal({
   const pricePp = selected
     ? pricePpWithHotel(deal, hotelTotal)
     : deal.price_per_person
+  const flightPp = Math.round(deal.price_breakdown?.flight_pp ?? deal.flight?.price_pp ?? 0)
   const fees =
     selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
   const verifiedLabel = deal.flags?.verified_label
   const age = verifiedLabel
     ? null
     : formatFetchedAt(deal.fetched_at, language === 'en' ? 'en-GB' : 'fr-FR')
-  // Hero = photo hôtel uniquement (pas d'image ville)
   const hotelPhoto = (
     selected?.photo ||
     deal.hotel?.photo ||
@@ -177,53 +208,84 @@ export function DealDetailModal({
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
 
+  const hotelName = selected?.name || deal.hotel_name || 'Hôtel'
+  const stars = Number(selected?.stars || deal.hotel_stars || 0)
+  const distanceM = selected?.distance_m ?? deal.hotel?.distance_m
+  const rating = selected?.rating
+  const board = selected?.board || deal.board
+  const { out: outTime, ret: inTime } = flightLegTimes(deal.flight)
+  const totalForParty = Math.round(pricePp * adults)
+
+  const buildDraftPayload = async (opts?: { composeHotel?: boolean }) => {
+    let booking = flightUrl || deal.booking_url
+    let flightPpLive = deal.flight?.price_pp
+    let priceNote: string | null = deal.price_pax_note || null
+    const key = deal.deal_key || deal.id
+    if (adults > 2 && key) {
+      try {
+        const rv = await getApiClient().revalidateDealFlight(key, adults)
+        if (rv.booking_url) booking = rv.booking_url
+        if (rv.checked_pp != null) flightPpLive = rv.checked_pp
+        if (rv.price_note) priceNote = rv.price_note
+        else if (rv.available === false) priceNote = 'Vol à confirmer pour ce nombre de voyageurs'
+        else if (rv.delta_pct != null && Math.abs(rv.delta_pct) >= 3) {
+          priceNote = `Prix vérifié pour ${adults} voyageurs`
+        }
+      } catch {
+        /* keep displayed */
+      }
+    }
+    return {
+      deal_key: key,
+      origin_iata: deal.origin_iata || deal.departure_airport,
+      departure_airport: deal.origin_airport_label || deal.departure_airport,
+      destination: deal.destination || deal.flight?.destination_iata,
+      city: deal.city,
+      dates: deal.dates,
+      adults,
+      flight: {
+        ...deal.flight,
+        price_pp: flightPpLive ?? deal.flight?.price_pp,
+        booking_url: booking,
+        destination_iata:
+          deal.flight?.destination_iata || deal.destination || undefined,
+      },
+      hotel: selected || deal.hotel,
+      price_per_person: pricePp,
+      booking_url: booking,
+      price_pax_note: priceNote,
+      baggage_line: deal.baggage_line,
+      route_hint: deal.route_hint,
+      compose_hotel: Boolean(opts?.composeHotel),
+    }
+  }
+
   const startMyTrip = async () => {
     setStartingTrip(true)
     try {
-      let booking = flightUrl || deal.booking_url
-      let flightPp = deal.flight?.price_pp
-      let priceNote: string | null = deal.price_pax_note || null
-      const key = deal.deal_key || deal.id
-      if (adults > 2 && key) {
-        try {
-          const rv = await getApiClient().revalidateDealFlight(key, adults)
-          if (rv.booking_url) booking = rv.booking_url
-          if (rv.checked_pp != null) flightPp = rv.checked_pp
-          if (rv.price_note) priceNote = rv.price_note
-          else if (rv.available === false) priceNote = 'Vol à confirmer pour ce nombre de voyageurs'
-          else if (rv.delta_pct != null && Math.abs(rv.delta_pct) >= 3) {
-            priceNote = `Prix vérifié pour ${adults} voyageurs`
-          }
-        } catch {
-          /* keep displayed */
-        }
-      }
-      const draft = await getApiClient().createMyTrip({
-        deal_key: key,
-        origin_iata: deal.origin_iata || deal.departure_airport,
-        departure_airport: deal.origin_airport_label || deal.departure_airport,
-        destination: deal.destination,
-        city: deal.city,
-        dates: deal.dates,
-        adults,
-        flight: {
-          ...deal.flight,
-          price_pp: flightPp ?? deal.flight?.price_pp,
-          booking_url: booking,
-        },
-        hotel: selected || deal.hotel,
-        price_per_person: pricePp,
-        booking_url: booking,
-        price_pax_note: priceNote,
-        baggage_line: deal.baggage_line,
-        route_hint: deal.route_hint,
-      })
+      const draft = await getApiClient().createMyTrip(await buildDraftPayload())
       onClose()
       navigate(`/trip/${draft.draft_token}`)
     } catch {
       if (flightUrl) window.open(flightUrl, '_blank', 'noopener,noreferrer')
     } finally {
       setStartingTrip(false)
+    }
+  }
+
+  /** Create draft with locked flight → Mon voyage compose (switch hotel). */
+  const startComposeHotel = async () => {
+    setComposingHotel(true)
+    try {
+      const draft = await getApiClient().createMyTrip(
+        await buildDraftPayload({ composeHotel: true }),
+      )
+      onClose()
+      navigate(`/trip/${draft.draft_token}?compose=1`)
+    } catch {
+      /* stay on modal — user can retry */
+    } finally {
+      setComposingHotel(false)
     }
   }
 
@@ -252,8 +314,8 @@ export function DealDetailModal({
             hotelId={selected?.id || deal.hotel?.id}
             seedPhoto={hotelPhoto}
             seedPhotos={seedPhotos}
-            alt={selected?.name || deal.hotel_name || deal.city}
-            hotelName={selected?.name || deal.hotel_name}
+            alt={hotelName}
+            hotelName={hotelName}
             cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
             language={language === 'en' ? 'en' : 'fr'}
             topRight={
@@ -292,155 +354,239 @@ export function DealDetailModal({
             }
           />
 
-          <div className="p-5 sm:p-6 space-y-5">
-            <div className="hidden sm:block">
-              {deal.badge ? (
-                <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">
-                  {deal.badge}
-                </span>
+          <div className="p-5 sm:p-6 space-y-6">
+            {/* 1. Decision header */}
+            <header className="space-y-3">
+              <div className="hidden sm:block">
+                {deal.badge ? (
+                  <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">
+                    {deal.badge}
+                  </span>
+                ) : null}
+                <h2 className="text-2xl sm:text-[1.75rem] font-black text-ink tracking-tight leading-tight">
+                  {deal.city}
+                  <span className="text-slate-400 font-bold text-lg sm:text-xl"> · {deal.country}</span>
+                </h2>
+              </div>
+
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Prix du pack
+                  </p>
+                  <p className="text-4xl font-black text-primary-500 tracking-tight leading-none tabular-nums">
+                    {Math.round(pricePp)} €
+                    <span className="text-base font-bold text-slate-500 ml-1.5">/ pers.</span>
+                  </p>
+                  <p className="text-sm text-slate-600 mt-2 font-medium">
+                    {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {adults} voyageur
+                    {adults > 1 ? 's' : ''}
+                    {adults >= 2 ? (
+                      <span className="text-slate-400"> · soit {totalForParty} € à {adults}</span>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-primary-50 border border-primary-100 px-4 py-3 text-right min-w-[9.5rem]">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-primary-700/70 mb-1">
+                    Week-end
+                  </p>
+                  <p className="text-sm font-black text-primary-800 leading-snug">
+                    {formatDateShort(deal.dates.outbound)}
+                    <span className="text-primary-400 mx-1">→</span>
+                    {formatDateShort(deal.dates.inbound)}
+                  </p>
+                  <p className="text-[11px] text-primary-700/80 mt-1 font-medium line-clamp-2 max-w-[9rem] sm:max-w-none">
+                    depuis {deal.origin_airport_label || deal.departure_airport || '—'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick decision facts */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {deal.flight?.direct ? <FactChip tone="good">Vol direct</FactChip> : null}
+                {deal.flight?.airline ? <FactChip>{deal.flight.airline}</FactChip> : null}
+                {board ? <FactChip>{board}</FactChip> : null}
+                {selected?.refundable ? <FactChip tone="good">Annulation gratuite</FactChip> : null}
+                {stars > 0 ? <FactChip>{Math.round(stars)}★</FactChip> : null}
+                {rating != null ? (
+                  <FactChip tone={Number(rating) >= 8 ? 'good' : 'neutral'}>
+                    {Number(rating).toFixed(1)}/10
+                    {selected?.review_count != null ? ` · ${selected.review_count} avis` : ''}
+                  </FactChip>
+                ) : null}
+                {distanceM != null ? (
+                  <FactChip>
+                    {distanceM < 1000
+                      ? `${Math.round(distanceM)} m du centre`
+                      : `${(distanceM / 1000).toFixed(1)} km du centre`}
+                  </FactChip>
+                ) : null}
+                {verifiedLabel ? (
+                  <FactChip tone="good">{verifiedLabel}</FactChip>
+                ) : age ? (
+                  <FactChip>Prix {age}</FactChip>
+                ) : null}
+                {fees > 0 ? (
+                  <FactChip tone="warn">+{Math.round(fees)} € taxe sur place</FactChip>
+                ) : null}
+              </div>
+
+              {deal.price_pax_note ? (
+                <p className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-medium">
+                  {deal.price_pax_note}
+                </p>
               ) : null}
-              <h2 className="text-2xl sm:text-3xl font-black text-ink tracking-tight">{deal.city}</h2>
-              <p className="text-slate-500 text-sm">{deal.country}</p>
-            </div>
+            </header>
 
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-3xl font-black text-primary-500">
-                  {Math.round(pricePp)} €
+            {/* 2. Pack at a glance — Vol | Hôtel */}
+            <section className="grid sm:grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-line bg-white p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {t('deals.flight')}
+                  </p>
+                  <p className="text-sm font-black text-ink tabular-nums">{flightPp} €</p>
+                </div>
+                {/* Mobile: stacked full names; desktop: one line */}
+                <div className="sm:hidden space-y-0.5">
+                  <p className="text-sm font-bold text-ink leading-snug">
+                    {deal.origin_airport_label || deal.departure_airport || '—'}
+                  </p>
+                  <p className="text-[10px] text-slate-300 leading-none">↓</p>
+                  <p className="text-sm font-bold text-ink leading-snug">
+                    {deal.arrival_airport_label || deal.city}
+                  </p>
+                </div>
+                <p className="hidden sm:block text-sm font-bold text-ink leading-snug">
+                  {deal.origin_airport_label || deal.departure_airport || '—'}
+                  <span className="text-slate-300 mx-1.5">→</span>
+                  {deal.arrival_airport_label || deal.city}
                 </p>
-                <p className="text-sm text-slate-500">
-                  {t('deals.perPersonHint', { nights: deal.nights, adults })}
-                </p>
-                {deal.price_pax_note ? (
-                  <p className="text-xs text-amber-800 mt-0.5">{deal.price_pax_note}</p>
-                ) : adults >= 2 ? (
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {t('deals.totalForTwo', { total: Math.round(pricePp * 2) })}
+                <div className="mt-2 space-y-1.5 text-xs text-slate-600">
+                  <p className="flex justify-between gap-3">
+                    <span className="text-slate-400 font-semibold">Aller</span>
+                    <span className="font-semibold text-ink text-right">
+                      {formatDate(deal.dates.outbound)}
+                      {outTime ? ` · ${outTime}` : ''}
+                    </span>
+                  </p>
+                  <p className="flex justify-between gap-3">
+                    <span className="text-slate-400 font-semibold">Retour</span>
+                    <span className="font-semibold text-ink text-right">
+                      {formatDate(deal.dates.inbound)}
+                      {inTime ? ` · ${inTime}` : ''}
+                    </span>
+                  </p>
+                  {deal.flight?.direct ? (
+                    <p className="text-emerald-700 font-semibold pt-0.5">Vol direct</p>
+                  ) : null}
+                </div>
+                {deal.baggage_line ? (
+                  <p className="text-xs text-slate-600 mt-2 pt-2 border-t border-slate-100">
+                    {deal.baggage_line}
                   </p>
                 ) : null}
+                {deal.route_hint ? (
+                  <p className="text-[11px] text-slate-400 mt-1">{deal.route_hint}</p>
+                ) : null}
               </div>
-              <div className="text-right">
-                <p className="text-sm font-bold text-slate-900 truncate max-w-[220px]">
-                  {selected?.stars
-                    ? `${'★'.repeat(Math.min(5, Math.round(Number(selected.stars))))} `
-                    : ''}
-                  {selected?.name || deal.hotel_name || 'Hôtel'}
+
+              <div className="rounded-2xl border border-line bg-white p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {t('deals.hotel')}
+                  </p>
+                  <p className="text-sm font-black text-ink tabular-nums">
+                    {Math.round(hotelTotal)} €
+                    <span className="text-[10px] font-semibold text-slate-400 ml-1">total</span>
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-ink leading-snug line-clamp-2">
+                  {stars > 0 ? `${'★'.repeat(Math.min(5, Math.round(stars)))} ` : ''}
+                  {hotelName}
                 </p>
-                {selected?.distance_m != null || deal.hotel?.distance_m != null ? (
-                  <p className="text-xs text-slate-500">
-                    à {Math.round(Number(selected?.distance_m ?? deal.hotel?.distance_m))} m du
-                    centre
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  {[
+                    board,
+                    rating != null ? `${Number(rating).toFixed(1)}/10` : null,
+                    distanceM != null
+                      ? distanceM < 1000
+                        ? `${Math.round(distanceM)} m centre`
+                        : `${(distanceM / 1000).toFixed(1)} km centre`
+                      : null,
+                    selected?.refundable ? 'Annul. gratuite' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || `${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`}
+                </p>
+                {selected?.cancel_deadline ? (
+                  <p className="text-[11px] text-emerald-700 mt-2 pt-2 border-t border-slate-100 font-medium">
+                    Annul. avant {formatDate(selected.cancel_deadline.slice(0, 10))}
                   </p>
-                ) : null}
-                {selected?.rating != null ? (
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {Number(selected.rating).toFixed(1)}/10
-                    {selected.review_count != null ? ` · ${selected.review_count} avis` : ''}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            {fees > 0 ? (
-              <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 font-medium inline-block">
-                {t('deals.taxOnSite', { fees: Math.round(fees) })}
-              </p>
-            ) : null}
-            {verifiedLabel ? (
-              <p className="text-xs text-emerald-700 font-medium">{verifiedLabel}</p>
-            ) : age ? (
-              <p className="text-xs text-slate-400">{t('deals.priceAge', { age })}</p>
-            ) : null}
-            {deal.badge_meta?.tooltip ? (
-              <p className="text-xs text-slate-500" title={deal.badge_meta.tooltip}>
-                {deal.badge}
-              </p>
-            ) : null}
-            {deal.baggage_line || deal.route_hint ? (
-              <div className="text-xs text-slate-600 space-y-0.5">
-                {deal.baggage_line ? <p>{deal.baggage_line}</p> : null}
-                {deal.route_hint ? <p className="text-slate-500">{deal.route_hint}</p> : null}
-              </div>
-            ) : null}
-
-            <h3 className="text-xl font-bold text-slate-900">{deal.title}</h3>
-            <p className="text-slate-600 text-sm leading-relaxed">{deal.description}</p>
-
-            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5 leading-relaxed">
-              {t('deals.twoBookings')}
-            </p>
-
-            {/* Flight */}
-            <section>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
-                {t('deals.flight')}
-              </p>
-              <div className="rounded-xl border border-slate-100 bg-slate-50 divide-y divide-slate-100">
-                <Row
-                  label="Départ"
-                  value={deal.origin_airport_label || deal.departure_airport || '—'}
-                />
-                {deal.arrival_airport_label ? (
-                  <Row label="Arrivée" value={deal.arrival_airport_label} />
-                ) : null}
-                <Row
-                  label="Dates"
-                  value={`${formatDate(deal.dates.outbound)} → ${formatDate(deal.dates.inbound)}`}
-                />
-                {deal.flight ? (
-                  <>
-                    <Row
-                      label="Aller"
-                      value={[
-                        formatTime(deal.flight.outbound_local),
-                        deal.flight.direct ? 'Direct' : null,
-                        deal.flight.airline,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') || '—'}
-                    />
-                    <Row
-                      label="Retour"
-                      value={formatTime(deal.flight.inbound_local) || '—'}
-                    />
-                    <Row
-                      label="Vol / pers."
-                      value={`${Math.round(deal.flight.price_pp)} €`}
-                    />
-                  </>
                 ) : null}
               </div>
             </section>
 
-            {/* Hotel + switcher */}
-            <section>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {t('deals.hotel')}
-                </p>
-                {hotelOptions.length > 1 ? (
-                  <span className="text-[11px] font-semibold text-primary-600">
-                    {t('deals.changeHotel')}
+            {/* 3. Price transparency */}
+            <section className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+                {t('deals.priceBreakdown')}
+              </p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-600">{t('deals.flightPp')}</span>
+                  <span className="font-semibold text-ink tabular-nums">{flightPp} €</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-600">
+                    {t('deals.hotelTotal')}
+                    <span className="text-slate-400"> / {adults}</span>
                   </span>
+                  <span className="font-semibold text-ink tabular-nums">
+                    {adults > 0 ? Math.round(hotelTotal / adults) : Math.round(hotelTotal)} €
+                  </span>
+                </div>
+                {fees > 0 ? (
+                  <div className="flex justify-between gap-3 text-amber-800">
+                    <span>Taxe sur place</span>
+                    <span className="font-semibold tabular-nums">+{Math.round(fees)} €</span>
+                  </div>
                 ) : null}
+                <div className="flex justify-between gap-3 pt-2 border-t border-slate-200/80">
+                  <span className="font-bold text-ink">Total / pers.</span>
+                  <span className="font-black text-primary-600 tabular-nums text-base">
+                    {Math.round(pricePp)} €
+                  </span>
+                </div>
               </div>
+              <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
+                {t('deals.twoBookings')}
+              </p>
+            </section>
 
-              {hotelOptions.length > 1 ? (
-                <div className="grid gap-2 mb-3">
+            {/* 4. Hotel alternatives — decision switcher */}
+            {hotelOptions.length > 1 ? (
+              <section>
+                <div className="flex items-baseline justify-between gap-2 mb-3">
+                  <h3 className="text-sm font-bold text-ink">Choisir l’hôtel</h3>
+                  <p className="text-[11px] text-slate-400">{hotelOptions.length} options</p>
+                </div>
+                <div className="grid gap-2">
                   {hotelOptions.map((h) => {
                     const active = h.id === (selected?.id || '')
                     const hTotal = h.public_hotel_price ?? 0
                     const hPp = pricePpWithHotel(deal, hTotal || hotelTotal)
                     const thumb = h.photo || h.photos?.[0]
+                    const delta = Math.round(hPp - pricePp)
                     return (
                       <button
                         key={h.id}
                         type="button"
                         onClick={() => setHotelId(h.id)}
-                        className={`text-left rounded-xl border px-2.5 py-2.5 transition-colors ${
+                        className={`text-left rounded-2xl border px-3 py-3 transition-colors ${
                           active
-                            ? 'border-primary-400 bg-primary-50'
-                            : 'border-slate-100 bg-white hover:border-primary-200'
+                            ? 'border-primary-400 bg-primary-50 ring-1 ring-primary-200'
+                            : 'border-line bg-white hover:border-primary-200'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -448,15 +594,19 @@ export function DealDetailModal({
                             <img
                               src={thumb}
                               alt=""
-                              className="w-14 h-14 rounded-lg object-cover shrink-0"
+                              className="w-14 h-14 rounded-xl object-cover shrink-0"
                             />
-                          ) : null}
+                          ) : (
+                            <div className="w-14 h-14 rounded-xl bg-slate-100 shrink-0" />
+                          )}
                           <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-sm text-slate-900 truncate">
-                              {h.stars ? `${'★'.repeat(Math.min(5, Math.round(Number(h.stars))))} ` : ''}
+                            <p className="font-bold text-sm text-ink truncate">
+                              {h.stars
+                                ? `${'★'.repeat(Math.min(5, Math.round(Number(h.stars))))} `
+                                : ''}
                               {h.name || 'Hôtel'}
                             </p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
+                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                               {[
                                 h.board,
                                 h.refundable ? 'Annul. gratuite' : null,
@@ -469,64 +619,39 @@ export function DealDetailModal({
                                 .join(' · ')}
                             </p>
                           </div>
-                          <p className="text-sm font-bold text-primary-600 shrink-0">
-                            {Math.round(hPp)} €
-                          </p>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-black text-primary-600 tabular-nums">
+                              {Math.round(hPp)} €
+                            </p>
+                            {!active && delta !== 0 ? (
+                              <p
+                                className={`text-[10px] font-bold ${
+                                  delta > 0 ? 'text-slate-400' : 'text-emerald-600'
+                                }`}
+                              >
+                                {delta > 0 ? `+${delta}` : delta} €
+                              </p>
+                            ) : active ? (
+                              <p className="text-[10px] font-bold text-primary-500">Sélectionné</p>
+                            ) : null}
+                          </div>
                         </div>
                       </button>
                     )
                   })}
                 </div>
-              ) : null}
-
-              <div className="rounded-xl border border-slate-100 bg-slate-50 divide-y divide-slate-100">
-                <Row
-                  label={t('deals.selectedHotel')}
-                  value={`${selected?.name || deal.hotel_name || '—'}${
-                    selected?.stars || deal.hotel_stars
-                      ? ` · ${selected?.stars || deal.hotel_stars}★`
-                      : ''
-                  }`}
-                />
-                {(selected?.board || deal.board) ? (
-                  <Row label="Pension" value={String(selected?.board || deal.board)} />
-                ) : null}
-                {selected?.rating != null ? (
-                  <Row
-                    label="Note"
-                    value={t('deals.reviews', {
-                      rating: Number(selected.rating).toFixed(1),
-                      count: selected.review_count ?? '—',
-                    })}
-                  />
-                ) : null}
-              </div>
-            </section>
-
-            {/* Breakdown */}
-            <section>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
-                {t('deals.priceBreakdown')}
-              </p>
-              <div className="rounded-xl border border-slate-100 bg-white divide-y divide-slate-100">
-                <Row
-                  label={t('deals.flightPp')}
-                  value={`${Math.round(deal.price_breakdown?.flight_pp ?? deal.flight?.price_pp ?? 0)} €`}
-                />
-                <Row
-                  label={t('deals.hotelTotal')}
-                  value={`${Math.round(hotelTotal)} €`}
-                />
-                <Row label="Total / pers." value={`${Math.round(pricePp)} €`} />
-              </div>
-            </section>
+              </section>
+            ) : null}
 
             {deal.highlights?.length ? (
-              <ul className="space-y-1.5">
-                {deal.highlights.map((h) => (
-                  <li key={h} className="text-sm text-slate-800 flex gap-2">
-                    <span className="text-primary-500 font-bold">·</span>
-                    {h}
+              <ul className="grid sm:grid-cols-2 gap-2">
+                {deal.highlights.slice(0, 4).map((h) => (
+                  <li
+                    key={h}
+                    className="text-sm text-slate-700 flex gap-2 items-start rounded-xl bg-slate-50 px-3 py-2"
+                  >
+                    <span className="text-primary-500 font-black shrink-0">✓</span>
+                    <span className="leading-snug">{h}</span>
                   </li>
                 ))}
               </ul>
@@ -536,7 +661,22 @@ export function DealDetailModal({
               cancelDeadline={selected?.cancel_deadline || deal.hotel?.cancel_deadline}
             />
 
-            <div className="flex flex-col gap-2 pt-1 pb-20 sm:pb-2">
+            <div className="flex flex-col gap-2 pb-20 sm:pb-2">
+              <button
+                type="button"
+                onClick={() => void startComposeHotel()}
+                disabled={composingHotel || startingTrip}
+                className="w-full text-center border-2 border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-800 font-bold py-3 rounded-xl transition-colors disabled:opacity-60"
+              >
+                {composingHotel
+                  ? '…'
+                  : (
+                    <>
+                      <span className="sm:hidden">Modifier l’hôtel</span>
+                      <span className="hidden sm:inline">Modifier l’hôtel · composer le voyage</span>
+                    </>
+                  )}
+              </button>
               {onOtherDates ? (
                 <button
                   type="button"
@@ -551,7 +691,7 @@ export function DealDetailModal({
                   <button
                     type="button"
                     onClick={() => setCheckout(true)}
-                    className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl transition-colors"
+                    className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-semibold py-3 rounded-xl transition-colors text-sm"
                   >
                     Réserver l’hôtel seul
                   </button>
@@ -569,18 +709,20 @@ export function DealDetailModal({
             </div>
           </div>
 
-          {/* Sticky booking bar — travel-site pattern */}
           <div
             className="sticky bottom-0 z-20 border-t border-line bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6 flex items-center gap-3"
             style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
           >
             <div className="min-w-0 flex-1">
-              <p className="text-lg font-black text-primary-500 leading-none">
+              <p className="text-lg font-black text-primary-500 leading-none tabular-nums">
                 {Math.round(pricePp)} €
                 <span className="text-xs font-semibold text-slate-500 ml-1">/ pers.</span>
               </p>
               <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {selected?.name || deal.hotel_name || deal.city}
+                {formatDateShort(deal.dates.outbound)} → {formatDateShort(deal.dates.inbound)}
+                {' · '}
+                {deal.nights}n
+                {adults >= 2 ? ` · ${totalForParty} € à ${adults}` : ''}
               </p>
             </div>
             <button
@@ -595,14 +737,5 @@ export function DealDetailModal({
         </motion.div>
       </motion.div>
     </AnimatePresence>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="px-4 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-0.5">{label}</p>
-      <p className="text-sm font-semibold text-slate-900">{value}</p>
-    </div>
   )
 }

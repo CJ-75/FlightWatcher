@@ -34,6 +34,13 @@ function formatDate(dateStr: string) {
   })
 }
 
+function formatClock(iso?: string | null) {
+  if (!iso) return null
+  const m = String(iso).match(/T(\d{2}):(\d{2})/)
+  if (m) return `${m[1]}:${m[2]}`
+  return null
+}
+
 export function DealDetailScreen({ route, navigation }: Props) {
   const { dealId } = route.params
   const insets = useSafeAreaInsets()
@@ -43,6 +50,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [startingTrip, setStartingTrip] = useState(false)
+  const [composingHotel, setComposingHotel] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -155,29 +163,37 @@ export function DealDetailScreen({ route, navigation }: Props) {
     if (url) await openUrl(url)
   }
 
+  const buildDraftPayload = (opts?: { composeHotel?: boolean }) => ({
+    deal_key: deal.deal_key || deal.id,
+    origin_iata: deal.origin_iata || deal.departure_airport,
+    departure_airport: deal.origin_airport_label || deal.departure_airport,
+    destination: deal.destination,
+    city: deal.city,
+    dates: deal.dates,
+    adults,
+    flight: deal.flight,
+    hotel: selected || deal.hotel,
+    price_per_person: pricePp,
+    booking_url: flightUrl || deal.booking_url,
+    baggage_line: deal.baggage_line,
+    route_hint: deal.route_hint,
+    price_pax_note: deal.price_pax_note,
+    compose_hotel: Boolean(opts?.composeHotel),
+  })
+
+  const openDraft = async (composeHotel?: boolean) => {
+    const draft = await getApi().createMyTrip(buildDraftPayload({ composeHotel }))
+    const q = composeHotel ? '?compose=1' : ''
+    const url = `${getWebOrigin()}/trip/${draft.draft_token}${q}`
+    await WebBrowser.openBrowserAsync(url, {
+      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    })
+  }
+
   const startMyTrip = async () => {
     setStartingTrip(true)
     try {
-      const draft = await getApi().createMyTrip({
-        deal_key: deal.deal_key || deal.id,
-        origin_iata: deal.origin_iata || deal.departure_airport,
-        departure_airport: deal.origin_airport_label || deal.departure_airport,
-        destination: deal.destination,
-        city: deal.city,
-        dates: deal.dates,
-        adults,
-        flight: deal.flight,
-        hotel: selected || deal.hotel,
-        price_per_person: pricePp,
-        booking_url: flightUrl || deal.booking_url,
-        baggage_line: deal.baggage_line,
-        route_hint: deal.route_hint,
-        price_pax_note: deal.price_pax_note,
-      })
-      const url = `${getWebOrigin()}/trip/${draft.draft_token}`
-      await WebBrowser.openBrowserAsync(url, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-      })
+      await openDraft(false)
     } catch {
       if (flightUrl) await openUrl(flightUrl)
     } finally {
@@ -185,12 +201,28 @@ export function DealDetailScreen({ route, navigation }: Props) {
     }
   }
 
+  const startComposeHotel = async () => {
+    setComposingHotel(true)
+    try {
+      await openDraft(true)
+    } catch {
+      /* ignore — user can retry */
+    } finally {
+      setComposingHotel(false)
+    }
+  }
+
+  const outTime = formatClock(deal.flight?.outbound_local || deal.flight?.out_dep_local)
+  const inTime = formatClock(deal.flight?.inbound_local || deal.flight?.ret_dep_local)
+  const flightPp = Math.round(deal.flight?.price_pp ?? deal.price_breakdown?.flight_pp ?? 0)
+  const hotelPp = Math.max(0, Math.round(pricePp - flightPp))
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 168 }}
       >
         <HotelPhotoGallery
           hotelId={selected?.id || deal.hotel?.id}
@@ -231,45 +263,56 @@ export function DealDetailScreen({ route, navigation }: Props) {
           <Text style={styles.priceHint}>
             {deal.price_pax_note
               ? deal.price_pax_note
-              : `/ pers. · ${deal.nights} nuits · base ${adults} adultes`}
+              : `/ pers. · ${deal.nights} nuits · ${adults} ad.`}
+            {flightPp > 0 || hotelPp > 0
+              ? ` · vol ${flightPp || '—'} + hôtel ${hotelPp || '—'}`
+              : ''}
           </Text>
           {fees > 0 ? (
             <Text style={styles.tax}>+ {Math.round(fees)} € taxe de séjour sur place</Text>
           ) : null}
-          {deal.baggage_line ? (
-            <Text style={styles.baggage}>{deal.baggage_line}</Text>
-          ) : null}
-          {deal.route_hint ? (
-            <Text style={styles.routeHint}>{deal.route_hint}</Text>
-          ) : null}
-
-          <Text style={styles.title}>{deal.title}</Text>
-          <Text style={styles.description}>{deal.description}</Text>
 
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
-              Deux réservations distinctes : vol via la compagnie / partenaire, hôtel via
-              FlightWatcher.
+              Deux réservations : vol (compagnie) + hôtel (FlightWatcher).
             </Text>
           </View>
 
+          {/* Vol — full names wrap, times visible without horizontal scroll */}
           <View style={[styles.infoCard, shadow.soft]}>
-            <InfoRow
-              label="Départ"
-              value={deal.origin_airport_label || deal.departure_airport || '—'}
-            />
-            {deal.arrival_airport_label ? (
-              <InfoRow label="Arrivée" value={deal.arrival_airport_label} />
+            <Text style={styles.cardSectionLabel}>Vol</Text>
+            <Text style={styles.airportLine}>
+              {deal.origin_airport_label || deal.departure_airport || '—'}
+            </Text>
+            <Text style={styles.airportArrow}>↓</Text>
+            <Text style={styles.airportLine}>
+              {deal.arrival_airport_label || deal.city}
+            </Text>
+            <View style={styles.legRow}>
+              <Text style={styles.legLabel}>Aller</Text>
+              <Text style={styles.legValue}>
+                {formatDate(deal.dates.outbound)}
+                {outTime ? ` · ${outTime}` : ''}
+              </Text>
+            </View>
+            <View style={styles.legRow}>
+              <Text style={styles.legLabel}>Retour</Text>
+              <Text style={styles.legValue}>
+                {formatDate(deal.dates.inbound)}
+                {inTime ? ` · ${inTime}` : ''}
+              </Text>
+            </View>
+            {deal.flight?.direct ? (
+              <Text style={styles.directHint}>Vol direct</Text>
             ) : null}
-            <InfoRow
-              label="Dates"
-              value={`${formatDate(deal.dates.outbound)} → ${formatDate(deal.dates.inbound)}`}
-            />
-            {deal.flight ? (
-              <InfoRow
-                label="Vol / pers."
-                value={`${Math.round(deal.flight.price_pp)} €${deal.flight.direct ? ' · Direct' : ''}`}
-              />
+            {deal.baggage_line ? (
+              <Text style={styles.baggage}>{deal.baggage_line}</Text>
+            ) : null}
+            {deal.route_hint ? (
+              <Text style={styles.routeHint}>{deal.route_hint}</Text>
+            ) : null}
+            {flightPp > 0 ? (
+              <Text style={styles.flightPriceLine}>{flightPp} € / pers. vol A/R</Text>
             ) : null}
           </View>
 
@@ -303,23 +346,35 @@ export function DealDetailScreen({ route, navigation }: Props) {
           ) : null}
 
           <View style={[styles.infoCard, shadow.soft]}>
-            <InfoRow
-              label="Hôtel"
-              value={`${selected?.name || deal.hotel_name || '—'}${
-                selected?.stars || deal.hotel_stars
-                  ? ` · ${selected?.stars || deal.hotel_stars}★`
-                  : ''
-              }`}
-            />
+            <Text style={styles.cardSectionLabel}>Hôtel</Text>
+            <Text style={styles.hotelTitle}>
+              {selected?.stars || deal.hotel_stars
+                ? `${'★'.repeat(Math.min(5, Math.round(Number(selected?.stars || deal.hotel_stars))))} `
+                : ''}
+              {selected?.name || deal.hotel_name || '—'}
+            </Text>
             {(selected?.board || deal.board) ? (
-              <InfoRow label="Pension" value={String(selected?.board || deal.board)} last />
+              <Text style={styles.hotelMeta}>{String(selected?.board || deal.board)}</Text>
             ) : null}
+            <Pressable
+              onPress={() => void startComposeHotel()}
+              disabled={composingHotel || startingTrip}
+              style={({ pressed }) => [
+                styles.composeBtn,
+                pressed && { opacity: 0.9 },
+                (composingHotel || startingTrip) && { opacity: 0.55 },
+              ]}
+            >
+              <Text style={styles.composeBtnText}>
+                {composingHotel ? '…' : 'Modifier l’hôtel · composer'}
+              </Text>
+            </Pressable>
           </View>
 
           {deal.highlights?.length ? (
             <View style={styles.highlights}>
               <Text style={styles.sectionLabel}>Inclus</Text>
-              {deal.highlights.map((h) => (
+              {deal.highlights.slice(0, 4).map((h) => (
                 <View key={h} style={styles.highlightRow}>
                   <Text style={styles.bullet}>·</Text>
                   <Text style={styles.highlightText}>{h}</Text>
@@ -327,95 +382,83 @@ export function DealDetailScreen({ route, navigation }: Props) {
               ))}
             </View>
           ) : null}
+
+          <View style={styles.secondaryLinks}>
+            <Pressable
+              onPress={() => {
+                navigation.navigate(
+                  'Main' as never,
+                  {
+                    screen: 'Search',
+                    params: {
+                      origin: deal.origin_iata || deal.departure_airport,
+                      adults,
+                      destination: deal.destination,
+                      city: deal.city,
+                    },
+                  } as never,
+                )
+              }}
+              hitSlop={8}
+            >
+              <Text style={styles.linkText}>Voir d’autres dates</Text>
+            </Pressable>
+            {deal.provider === 'liteapi' || deal.deal_key ? (
+              <Pressable
+                onPress={() =>
+                  navigation.navigate('DealCheckout', {
+                    dealId: deal.id,
+                    hotelId: selected?.id || deal.hotel?.id,
+                  })
+                }
+                hitSlop={8}
+              >
+                <Text style={styles.linkText}>Réserver l’hôtel seul</Text>
+              </Pressable>
+            ) : hasPartnerUrl ? (
+              <Pressable onPress={() => void openUrl(deal.booking_url)} hitSlop={8}>
+                <Text style={styles.linkText}>Voir l’offre</Text>
+              </Pressable>
+            ) : null}
+            {flightUrl ? (
+              <Pressable onPress={() => void openFlight()} hitSlop={8}>
+                <Text style={styles.linkText}>Réserver le vol</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
 
+      {/* Sticky decision bar — price + primary CTA only */}
       <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }, shadow.lift]}>
+        <View style={styles.ctaPriceCol}>
+          <Text style={styles.ctaPrice}>
+            {Math.round(pricePp)} €
+            <Text style={styles.ctaPriceUnit}> / pers.</Text>
+          </Text>
+          <Text style={styles.ctaPriceMeta} numberOfLines={1}>
+            {formatDate(deal.dates.outbound)} → {formatDate(deal.dates.inbound)}
+            {' · '}
+            {deal.nights}n
+          </Text>
+        </View>
         <Pressable
           onPress={() => void startMyTrip()}
-          disabled={startingTrip}
-          style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }, startingTrip && { opacity: 0.6 }]}
+          disabled={startingTrip || composingHotel}
+          style={({ pressed }) => [
+            styles.ctaPrimary,
+            pressed && { opacity: 0.9 },
+            (startingTrip || composingHotel) && { opacity: 0.6 },
+          ]}
         >
-          <Text style={styles.ctaText}>
-            {startingTrip ? '…' : 'Continuer ce voyage'}
-          </Text>
+          <Text style={styles.ctaText}>{startingTrip ? '…' : 'Continuer'}</Text>
         </Pressable>
-        <Pressable
-          onPress={() => {
-            navigation.navigate(
-              'Main' as never,
-              {
-                screen: 'Search',
-                params: {
-                  origin: deal.origin_iata || deal.departure_airport,
-                  adults,
-                  destination: deal.destination,
-                  city: deal.city,
-                },
-              } as never,
-            )
-          }}
-          style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
-        >
-          <Text style={styles.ctaSecondaryText}>Voir d’autres dates</Text>
-        </Pressable>
-        {deal.provider === 'liteapi' || deal.deal_key ? (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('DealCheckout', {
-                dealId: deal.id,
-                hotelId: selected?.id || deal.hotel?.id,
-              })
-            }
-            style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.ctaSecondaryText}>Réserver l’hôtel seul</Text>
-          </Pressable>
-        ) : hasPartnerUrl ? (
-          <Pressable
-            onPress={() => void openUrl(deal.booking_url)}
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.ctaText}>Voir l’offre</Text>
-          </Pressable>
-        ) : (
-          <View style={[styles.cta, styles.ctaDisabled]}>
-            <Text style={[styles.ctaText, { color: colors.muted }]}>
-              Réserver l’hôtel (bientôt)
-            </Text>
-          </View>
-        )}
-        {flightUrl ? (
-          <Pressable
-            onPress={() => void openFlight()}
-            style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.ctaSecondaryText}>Réserver le vol</Text>
-          </Pressable>
-        ) : null}
       </View>
     </View>
   )
 }
 
-function InfoRow({
-  label,
-  value,
-  last,
-}: {
-  label: string
-  value: string
-  last?: boolean
-}) {
-  return (
-    <View style={[styles.infoRow, !last && styles.infoRowBorder]}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  )
-}
-
-const heroH = Math.min(280, Math.round(width * 0.62))
+const heroH = Math.min(240, Math.round(width * 0.52))
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
@@ -452,20 +495,20 @@ const styles = StyleSheet.create({
   city: {
     color: colors.white,
     fontFamily: fonts.extrabold,
-    fontSize: 30,
-    letterSpacing: -0.8,
+    fontSize: 26,
+    letterSpacing: -0.6,
   },
   country: {
     color: 'rgba(255,255,255,0.85)',
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     marginTop: 2,
   },
-  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  price: { ...type.price, fontSize: 36 },
-  priceHint: { ...type.caption, marginTop: 2 },
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  price: { ...type.price, fontSize: 32 },
+  priceHint: { ...type.caption, marginTop: 2, lineHeight: 16 },
   baggage: {
-    marginTop: 8,
+    marginTop: 10,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.inkSoft,
@@ -479,64 +522,118 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   tax: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: '#92400e',
   },
-  title: {
-    fontFamily: fonts.bold,
-    fontSize: 22,
-    color: colors.ink,
-    letterSpacing: -0.4,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  description: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    lineHeight: 24,
-    color: colors.inkSoft,
-    marginBottom: spacing.md,
-  },
   notice: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.md,
-    padding: 12,
-    marginBottom: spacing.xl,
+    padding: 10,
+    marginTop: 12,
+    marginBottom: spacing.lg,
   },
   noticeText: {
     fontFamily: fonts.medium,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     color: colors.primaryInk,
   },
   infoCard: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.xl,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
-  infoRow: { paddingVertical: 14 },
-  infoRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  infoLabel: {
+  cardSectionLabel: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    color: colors.muted,
+    fontSize: 10,
+    color: colors.faint,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  infoValue: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink },
-  switchBlock: { marginBottom: spacing.xl },
-  sectionLabel: {
+  airportLine: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+    lineHeight: 20,
+  },
+  airportArrow: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.faint,
+    marginVertical: 2,
+  },
+  legRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 8,
+  },
+  legLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.muted,
+    width: 52,
+  },
+  legValue: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.ink,
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+  directHint: {
+    marginTop: 8,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: '#047857',
+  },
+  flightPriceLine: {
+    marginTop: 8,
     fontFamily: fonts.bold,
     fontSize: 13,
+    color: colors.ink,
+  },
+  hotelTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+    lineHeight: 21,
+  },
+  hotelMeta: {
+    marginTop: 4,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  composeBtn: {
+    marginTop: 12,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  composeBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.primaryInk,
+  },
+  switchBlock: { marginBottom: spacing.lg },
+  sectionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
@@ -560,15 +657,25 @@ const styles = StyleSheet.create({
   hotelOptionName: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
   hotelOptionMeta: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
   hotelOptionPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
-  highlights: { marginBottom: spacing.xl },
+  highlights: { marginBottom: spacing.lg },
   highlightRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
   bullet: { fontFamily: fonts.bold, fontSize: 16, color: colors.primary, lineHeight: 22 },
   highlightText: {
     flex: 1,
     fontFamily: fonts.medium,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.ink,
-    lineHeight: 22,
+    lineHeight: 20,
+  },
+  secondaryLinks: {
+    gap: 14,
+    paddingBottom: spacing.md,
+    alignItems: 'flex-start',
+  },
+  linkText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.primary,
   },
   ctaBar: {
     position: 'absolute',
@@ -577,28 +684,37 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: colors.white,
     paddingHorizontal: spacing.xl,
-    paddingTop: 12,
-    gap: 8,
+    paddingTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.line,
   },
-  cta: {
+  ctaPriceCol: { flex: 1, minWidth: 0 },
+  ctaPrice: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.primary,
+  },
+  ctaPriceUnit: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  ctaPriceMeta: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  ctaPrimary: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctaDisabled: { backgroundColor: colors.line },
-  ctaText: { ...type.button, color: colors.white },
-  ctaSecondary: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    borderRadius: radius.md,
     minHeight: 48,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
   },
-  ctaSecondaryText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
+  ctaText: { ...type.button, color: colors.white },
 })

@@ -21,7 +21,7 @@ class TestBaselineGuard(unittest.TestCase):
         self.assertIsNotNone(badge.get("discount_pct"))
         soft = soften_badge_if_stale(badge, baselines_fresh=False)
         self.assertIsNone(soft.get("discount_pct"))
-        self.assertEqual(soft["label"], "Très bon prix")
+        self.assertIsNone(soft.get("label"))
         self.assertTrue(soft.get("baselines_stale"))
 
     def test_fresh_keeps_percent(self):

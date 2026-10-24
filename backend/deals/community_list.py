@@ -34,29 +34,52 @@ def _verified_today_label(last_verified_at: Any) -> Optional[str]:
 def badge_for_baseline(baseline: Dict[str, Any]) -> Dict[str, Any]:
     """
     Honest badge: flight-only vs usual price (30d).
-    reliable → percent; estimated → soft label.
+
+    Only show a badge when we have a real measured discount_pct.
+    Soft-fill / estimated / unreliable → no badge (avoids « Très bon prix » everywhere).
     """
     kind = baseline.get("baseline_kind") or "observed"
     disc = baseline.get("discount_pct")
-    if kind == "estimated" or disc is None:
+    if (
+        kind == "estimated"
+        or baseline.get("soft_fill")
+        or disc is None
+    ):
         return {
-            "label": "Très bon prix",
+            "label": None,
             "discount_pct": None,
             "scope": "flight",
-            "tooltip": (
-                "Comparaison estimée au prix attendu sur ce type de trajet "
-                "(historique encore limité sur FlightWatcher)."
-            ),
+            "tooltip": None,
         }
+    try:
+        pct = float(disc)
+    except (TypeError, ValueError):
+        return {"label": None, "discount_pct": None, "scope": "flight", "tooltip": None}
+    if pct < 15:
+        # Keep badge rare: only meaningful savings
+        return {"label": None, "discount_pct": None, "scope": "flight", "tooltip": None}
     return {
-        "label": f"Vol −{int(round(float(disc)))} % moins cher que d'habitude",
-        "discount_pct": float(disc),
+        "label": f"Vol −{int(round(pct))} % moins cher que d'habitude",
+        "discount_pct": pct,
         "scope": "flight",
         "tooltip": (
             "Par rapport au prix médian observé sur FlightWatcher pour ce trajet "
             "et cette période, sur les 30 derniers jours. Ce n'est pas une promo compagnie."
         ),
     }
+
+
+def _airport_label(iata: Any) -> Optional[str]:
+    code = str(iata or "").strip().upper()
+    if not code:
+        return None
+    try:
+        from city_names_fr import airport_name_for_code
+
+        name = (airport_name_for_code(code, code) or "").strip()
+        return name or code
+    except Exception:
+        return code
 
 
 def _hotel_photo(h: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -173,8 +196,10 @@ def row_to_travel_deal(
         "adults": adults,
         "baggage_line": baggage.get("line"),
         "route_hint": route.get("route_hint"),
-        "origin_airport_label": route.get("origin_airport_label"),
-        "arrival_airport_label": route.get("arrival_airport_label"),
+        "origin_airport_label": route.get("origin_airport_label")
+        or _airport_label(row.get("origin_iata")),
+        "arrival_airport_label": route.get("arrival_airport_label")
+        or _airport_label(row.get("dest_iata")),
         "distance_label": route.get("distance_label"),
         "price_pax_note": price_pax_note,
         "flight": {
@@ -184,6 +209,9 @@ def row_to_travel_deal(
             "airline": flight.get("carrier"),
             "booking_url": flight.get("booking_url"),
             "direct": flight.get("direct", True),
+            # Canonical UI fields + raw snapshot keys
+            "outbound_local": flight.get("out_dep_local") or flight.get("outbound_local"),
+            "inbound_local": flight.get("ret_dep_local") or flight.get("inbound_local"),
             "out_dep_local": flight.get("out_dep_local"),
             "ret_dep_local": flight.get("ret_dep_local"),
             "verification_level": vlevel,

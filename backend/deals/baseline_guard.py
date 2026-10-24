@@ -22,7 +22,7 @@ def baselines_freshness(
 ) -> Tuple[bool, Optional[datetime], str]:
     """
     Returns (fresh, last_ok_at, reason).
-    fresh=False → UI must show « Très bon prix » instead of %.
+    fresh=False → percentage badges are hidden (no soft substitute spam).
     """
     now = now or datetime.now(timezone.utc)
     last = last_successful_run_at(supabase, JOB_REFRESH_BASELINES)
@@ -43,13 +43,13 @@ def soften_badge_if_stale(
     *,
     baselines_fresh: bool,
 ) -> Dict[str, Any]:
-    """Replace percentage badges when baselines are stale."""
+    """Hide percentage badges when baselines are stale (no soft label flood)."""
     if baselines_fresh:
         return badge
-    if badge.get("discount_pct") is None and "Très bon prix" in str(badge.get("label") or ""):
+    if badge.get("discount_pct") is None and not badge.get("label"):
         return badge
     return {
-        "label": "Très bon prix",
+        "label": None,
         "discount_pct": None,
         "scope": "flight",
         "tooltip": (

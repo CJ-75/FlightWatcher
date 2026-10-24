@@ -141,9 +141,10 @@ def trip_to_observation(
         "ret_date": ret_date,
         "nights": nights,
         "trip_type": trip_type_for_nights(nights),
-        "out_dep_local": str(out_dep)[:32] if out_dep else None,
-        "out_arr_local": str(_leg(aller, "arrivalTime") or "")[:32] or None,
-        "ret_dep_local": str(ret_dep)[:32] if ret_dep else None,
+        # Keep full ISO local times (TZ offset can exceed 32 chars)
+        "out_dep_local": str(out_dep)[:64] if out_dep else None,
+        "out_arr_local": (str(_leg(aller, "arrivalTime") or "")[:64] or None),
+        "ret_dep_local": str(ret_dep)[:64] if ret_dep else None,
         "price_pp_eur": round(price_pp, 2),
         "direct": direct,
         "carrier": carrier,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -6,16 +6,15 @@ import {
   Pressable,
   StyleSheet,
   Dimensions,
+  FlatList,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
-import {
-  dealAdults,
-  dealBadgeLabels,
-  formatFetchedAt,
-  resolveTripImageUrl,
-} from '@flightwatcher/shared'
+import { dealAdults, dealBadgeLabels } from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
+import { getApi } from '../lib/client'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 type Props = {
@@ -25,61 +24,153 @@ type Props = {
   onToggleLike?: () => void
 }
 
-const width = Dimensions.get('window').width
+const screenW = Dimensions.get('window').width
+const CARD_PAD = spacing.xl * 2
+const heroW = screenW - CARD_PAD
+/** Image-led: ~55% of card height on phone */
+const heroHeight = Math.min(220, Math.round(screenW * 0.52))
 
-function formatDate(dateStr: string) {
+function formatDateShort(dateStr: string) {
   const date = new Date(dateStr + 'T12:00:00')
-  const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
   const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'jun', 'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
-  return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
+  return `${date.getDate()} ${months[date.getMonth()]}`
 }
 
+function uniqueUrls(urls: (string | undefined | null)[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const u of urls) {
+    const s = (u || '').trim()
+    if (!s || seen.has(s)) continue
+    seen.add(s)
+    out.push(s)
+  }
+  return out
+}
+
+/**
+ * Image-led deal card — short text; full airports / breakdown in detail.
+ */
 export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
-  const [failed, setFailed] = useState(false)
   const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
-  if (!hotelPhoto) return null
-  const imageUrl = resolveTripImageUrl({
-    city: deal.city,
-    imageUrl: hotelPhoto,
-  })
-  const badges = dealBadgeLabels(deal)
+  const [photos, setPhotos] = useState(() =>
+    uniqueUrls([...(deal.hotel?.photos || []), hotelPhoto]).slice(0, 12),
+  )
+  const [idx, setIdx] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const fetchedRef = useRef(false)
+  const didSwipeRef = useRef(false)
+
   const adults = dealAdults(deal)
-  const fees = deal.price_breakdown?.excluded_fees ?? 0
-  const age = formatFetchedAt(deal.fetched_at)
+  const stars = Number(deal.hotel_stars || deal.hotel?.stars || 0)
+  const hotelName = deal.hotel_name || deal.hotel?.name || 'Hôtel'
+  const origin =
+    deal.origin_iata ||
+    deal.departure_airport ||
+    (deal.origin_airport_label || '').split(/[,(]/)[0]?.trim() ||
+    ''
+  const chip =
+    deal.flight?.direct
+      ? 'Direct'
+      : deal.flags?.verified_label
+        ? 'Vérifié'
+        : dealBadgeLabels(deal)[0] || null
+
+  const loadGallery = useCallback(() => {
+    const hid = (deal.hotel?.id || '').trim()
+    if (fetchedRef.current || !hid || hid === 'primary') return
+    fetchedRef.current = true
+    void getApi()
+      .getHotelGallery(hid, { language: 'fr', fallback: photos[0] || hotelPhoto })
+      .then((res) => {
+        const next = uniqueUrls((res.photos || []).map((p) => p.url)).slice(0, 16)
+        if (next.length > 1) setPhotos(next)
+      })
+      .catch(() => {
+        fetchedRef.current = false
+      })
+  }, [deal.hotel?.id, photos, hotelPhoto])
+
+  if (!hotelPhoto && photos.length === 0) return null
+
+  const onMomentum = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const x = e.nativeEvent.contentOffset.x
+    const i = Math.round(x / heroW)
+    setIdx(Math.max(0, Math.min(i, photos.length - 1)))
+  }
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, shadow.soft, pressed && styles.pressed]}
-    >
+    <View style={[styles.card, shadow.soft]}>
       <View style={styles.hero}>
-        {!failed ? (
-          <Image source={{ uri: imageUrl }} style={styles.image} onError={() => setFailed(true)} />
+        {!failed && photos.length > 0 ? (
+          <FlatList
+            data={photos}
+            keyExtractor={(uri, i) => `${uri}-${i}`}
+            horizontal
+            pagingEnabled
+            nestedScrollEnabled
+            directionalLockEnabled
+            disableIntervalMomentum
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            onScrollBeginDrag={() => {
+              didSwipeRef.current = false
+              loadGallery()
+            }}
+            onScrollEndDrag={(e) => {
+              if (Math.abs(e.nativeEvent.contentOffset.x % heroW) > 12) {
+                didSwipeRef.current = true
+              }
+            }}
+            onMomentumScrollEnd={(e) => {
+              onMomentum(e)
+              setTimeout(() => {
+                didSwipeRef.current = false
+              }, 80)
+            }}
+            renderItem={({ item, index: i }) => (
+              <Pressable
+                onPress={() => {
+                  if (didSwipeRef.current) return
+                  onPress()
+                }}
+                style={{ width: heroW, height: heroHeight }}
+              >
+                <Image
+                  source={{ uri: item }}
+                  style={styles.image}
+                  onError={() => {
+                    if (i === 0 && photos.length === 1) setFailed(true)
+                  }}
+                />
+              </Pressable>
+            )}
+          />
         ) : (
-          <LinearGradient colors={[colors.primary, colors.primaryDeep]} style={styles.image}>
-            <Text style={styles.fallbackText}>{deal.city}</Text>
-          </LinearGradient>
+          <Pressable onPress={onPress} style={styles.image}>
+            <LinearGradient colors={[colors.primary, colors.primaryDeep]} style={styles.image}>
+              <Text style={styles.fallbackText}>{deal.city}</Text>
+            </LinearGradient>
+          </Pressable>
         )}
+
         <LinearGradient
-          colors={['transparent', 'rgba(12,18,34,0.15)', 'rgba(12,18,34,0.82)']}
+          colors={['rgba(12,18,34,0.15)', 'transparent', 'rgba(12,18,34,0.78)']}
           locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFill}
+          pointerEvents="none"
         />
 
         {deal.badge ? (
-          <View style={styles.dealBadge}>
-            <Text style={styles.dealText}>{deal.badge}</Text>
+          <View style={styles.dealBadge} pointerEvents="none">
+            <Text style={styles.dealText} numberOfLines={1}>
+              {deal.badge}
+            </Text>
           </View>
         ) : null}
 
         {onToggleLike ? (
-          <Pressable
-            onPress={onToggleLike}
-            hitSlop={10}
-            style={styles.likeBtn}
-            accessibilityRole="button"
-            accessibilityLabel={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-          >
+          <Pressable onPress={onToggleLike} hitSlop={12} style={styles.likeBtn}>
             <HeartIcon
               size={20}
               filled={!!liked}
@@ -88,212 +179,170 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
           </Pressable>
         ) : null}
 
-        <View style={styles.heroText}>
-          <Text style={styles.city} numberOfLines={1}>
-            {deal.city}
-          </Text>
-          <Text style={styles.route} numberOfLines={1}>
-            {deal.origin_airport_label || deal.departure_airport} → {deal.city} ·{' '}
-            {deal.nights} nuit{deal.nights > 1 ? 's' : ''}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.body}>
-        <View style={styles.priceRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.price}>{Math.round(deal.price_per_person)} €</Text>
-            <Text style={styles.priceHint}>
-              {deal.price_pax_note
-                ? deal.price_pax_note
-                : `/ pers. · base ${adults} ad. · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`}
-            </Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Text style={styles.metaChipText} numberOfLines={2}>
-              {formatDate(deal.dates.outbound)} → {formatDate(deal.dates.inbound)}
-            </Text>
-          </View>
-        </View>
-
-        {badges.length > 0 ? (
-          <View style={styles.badges}>
-            {badges.map((b) => (
-              <View key={b} style={styles.badgeChip}>
-                <Text style={styles.badgeChipText}>{b}</Text>
-              </View>
+        {photos.length > 1 ? (
+          <View style={styles.dots} pointerEvents="none">
+            {photos.slice(0, 5).map((_, i) => (
+              <View
+                key={i}
+                style={[styles.dot, i === Math.min(idx, 4) && styles.dotActive]}
+              />
             ))}
           </View>
         ) : null}
 
-        {deal.baggage_line || deal.route_hint ? (
-          <View style={styles.metaLines}>
-            {deal.baggage_line ? (
-              <Text style={styles.metaLine} numberOfLines={2}>
-                {deal.baggage_line}
-              </Text>
-            ) : null}
-            {deal.route_hint ? (
-              <Text style={styles.metaLineMuted} numberOfLines={2}>
-                {deal.route_hint}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
-        <Text style={styles.title} numberOfLines={2}>
-          {deal.title}
-        </Text>
-        {deal.hotel_name || deal.hotel?.name ? (
-          <Text style={styles.hotel} numberOfLines={1}>
-            {(deal.hotel_stars || deal.hotel?.stars)
-              ? `${'★'.repeat(Math.min(5, Math.round(Number(deal.hotel_stars || deal.hotel?.stars))))} `
-              : ''}
-            {deal.hotel_name || deal.hotel?.name}
+        <View style={styles.heroText} pointerEvents="none">
+          <Text style={styles.city} numberOfLines={1}>
+            {deal.city}
           </Text>
-        ) : null}
-        {fees > 0 ? (
-          <Text style={styles.tax}>+ {Math.round(fees)} € taxe sur place</Text>
-        ) : null}
-        {age ? <Text style={styles.age}>Prix constaté {age}</Text> : null}
+          {deal.country ? (
+            <Text style={styles.country} numberOfLines={1}>
+              {deal.country}
+            </Text>
+          ) : null}
+        </View>
       </View>
-    </Pressable>
+
+      <Pressable onPress={onPress} style={styles.body}>
+        <View style={styles.priceRow}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.price}>{Math.round(deal.price_per_person)} €</Text>
+            <Text style={styles.priceHint} numberOfLines={1}>
+              / pers. · {deal.nights}n · {adults} ad.
+            </Text>
+          </View>
+          <View style={styles.datesChip}>
+            <Text style={styles.datesText}>{formatDateShort(deal.dates.outbound)}</Text>
+            <Text style={styles.datesArrow}>↓</Text>
+            <Text style={styles.datesText}>{formatDateShort(deal.dates.inbound)}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.route} numberOfLines={1}>
+          {origin || '—'} → {deal.city}
+          {chip ? ` · ${chip}` : ''}
+        </Text>
+
+        <Text style={styles.hotel} numberOfLines={1}>
+          {stars > 0 ? `${'★'.repeat(Math.min(5, Math.round(stars)))} ` : ''}
+          {hotelName}
+        </Text>
+      </Pressable>
+    </View>
   )
 }
-
-const heroHeight = Math.min(200, Math.round(width * 0.48))
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     overflow: 'hidden',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-  },
-  pressed: {
-    opacity: 0.96,
-    transform: [{ scale: 0.99 }],
   },
   hero: { height: heroHeight, backgroundColor: colors.line },
   image: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   fallbackText: {
     color: colors.white,
     fontFamily: fonts.extrabold,
-    fontSize: 28,
-    letterSpacing: -0.8,
+    fontSize: 26,
   },
   dealBadge: {
     position: 'absolute',
-    top: 14,
-    left: 14,
+    top: 12,
+    left: 12,
+    maxWidth: '55%',
     backgroundColor: colors.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: radius.full,
+    zIndex: 3,
   },
   dealText: {
     color: colors.white,
     fontFamily: fonts.bold,
-    fontSize: 12,
-    letterSpacing: 0.2,
+    fontSize: 11,
   },
   likeBtn: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    top: 10,
+    right: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 3,
   },
-  heroText: { position: 'absolute', left: 16, right: 16, bottom: 16 },
+  dots: {
+    position: 'absolute',
+    bottom: 52,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
+    zIndex: 2,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  dotActive: { width: 12, backgroundColor: colors.white },
+  heroText: { position: 'absolute', left: 14, right: 56, bottom: 12, zIndex: 2 },
   city: {
     color: colors.white,
     fontFamily: fonts.extrabold,
-    fontSize: 26,
-    letterSpacing: -0.8,
+    fontSize: 24,
+    letterSpacing: -0.5,
   },
-  route: {
-    color: 'rgba(255,255,255,0.88)',
+  country: {
+    color: 'rgba(255,255,255,0.85)',
     fontFamily: fonts.medium,
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: 12,
+    marginTop: 2,
   },
-  body: { padding: spacing.lg },
+  body: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 14, gap: 6 },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: spacing.sm,
+    gap: 10,
   },
-  price: { ...type.price, fontSize: 30 },
-  priceHint: { ...type.caption, marginTop: 2 },
-  metaChip: {
+  price: { ...type.price, fontSize: 26 },
+  priceHint: { ...type.caption, marginTop: 2, fontSize: 11 },
+  datesChip: {
     backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    maxWidth: '48%',
+    paddingVertical: 7,
+    minWidth: 72,
+    alignItems: 'flex-end',
   },
-  metaChipText: {
+  datesText: {
     color: colors.primaryInk,
     fontFamily: fonts.bold,
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 15,
   },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  badgeChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.canvas,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-  },
-  badgeChipText: {
+  datesArrow: {
+    color: colors.primary,
     fontFamily: fonts.semibold,
-    fontSize: 11,
-    color: colors.inkSoft,
+    fontSize: 10,
+    lineHeight: 12,
+    marginVertical: 1,
   },
-  metaLines: { marginBottom: 8, gap: 2 },
-  metaLine: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.inkSoft,
-    lineHeight: 15,
-  },
-  metaLineMuted: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: colors.muted,
-    lineHeight: 15,
-  },
-  title: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
+  route: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
     color: colors.ink,
-    letterSpacing: -0.2,
   },
   hotel: {
-    marginTop: 4,
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.muted,
-  },
-  tax: {
-    marginTop: 6,
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: '#92400e',
-  },
-  age: {
-    marginTop: 4,
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: colors.faint,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.ink,
   },
 })

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -38,6 +38,7 @@ export function DealsScreen() {
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
@@ -132,21 +133,41 @@ export function DealsScreen() {
     }, [load]),
   )
 
-  const filterSummary = [adults !== 2 ? `${adults} ad.` : null].filter(Boolean).join(' · ')
-  const matchedDeals = queryOrigin
-    ? deals.filter((d) => d.flags?.match_origin !== false)
-    : deals
-  const fillerDeals = queryOrigin
-    ? deals.filter((d) => d.flags?.match_origin === false)
-    : []
+  const filterSummary = [
+    adults !== 2 ? `${adults} ad.` : null,
+    sort === 'price_asc' ? 'Prix ↑' : sort === 'price_desc' ? 'Prix ↓' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const matchedDeals = useMemo(
+    () =>
+      queryOrigin ? deals.filter((d) => d.flags?.match_origin !== false) : deals,
+    [deals, queryOrigin],
+  )
+  const fillerDeals = useMemo(
+    () =>
+      sort === 'recommended' && queryOrigin
+        ? deals.filter((d) => d.flags?.match_origin === false)
+        : [],
+    [deals, queryOrigin, sort],
+  )
+  const gridDeals = useMemo(() => {
+    if (sort === 'recommended') return matchedDeals
+    const dir = sort === 'price_asc' ? 1 : -1
+    return [...deals].sort(
+      (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
+    )
+  }, [sort, matchedDeals, deals])
+
   const listData =
     fillerDeals.length > 0
       ? [
-          ...matchedDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
+          ...gridDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
           { kind: 'filler_header' as const },
           ...fillerDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
         ]
-      : matchedDeals.map((d) => ({ kind: 'deal' as const, deal: d }))
+      : gridDeals.map((d) => ({ kind: 'deal' as const, deal: d }))
 
   return (
     <View style={styles.root}>
@@ -240,15 +261,74 @@ export function DealsScreen() {
                     <View style={styles.divider} />
 
                     <PassengerStepper value={adults} onChange={setAdults} />
+
+                    <View style={styles.divider} />
+                    <Text style={styles.label}>Trier</Text>
+                    <View style={styles.sortRow}>
+                      {(
+                        [
+                          ['recommended', 'Recommandés'],
+                          ['price_asc', 'Prix ↑'],
+                          ['price_desc', 'Prix ↓'],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <Pressable
+                          key={id}
+                          onPress={() => setSort(id)}
+                          style={[
+                            styles.sortChip,
+                            sort === id && styles.sortChipActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sortChipText,
+                              sort === id && styles.sortChipTextActive,
+                            ]}
+                          >
+                            {label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
                 ) : null}
               </View>
 
               {!loading && !error && deals.length > 0 ? (
-                <Text style={styles.count}>
-                  {deals.length} offre{deals.length > 1 ? 's' : ''}
-                  {filterSummary ? ` · ${filterSummary}` : ''}
-                </Text>
+                <View style={styles.countRow}>
+                  <Text style={styles.count}>
+                    {deals.length} offre{deals.length > 1 ? 's' : ''}
+                    {filterSummary ? ` · ${filterSummary}` : ''}
+                  </Text>
+                  <View style={styles.sortRowCompact}>
+                    {(
+                      [
+                        ['recommended', 'Reco'],
+                        ['price_asc', 'Prix ↑'],
+                        ['price_desc', 'Prix ↓'],
+                      ] as const
+                    ).map(([id, label]) => (
+                      <Pressable
+                        key={id}
+                        onPress={() => setSort(id)}
+                        style={[
+                          styles.sortChipSm,
+                          sort === id && styles.sortChipActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.sortChipTextSm,
+                            sort === id && styles.sortChipTextActive,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
               ) : null}
             </View>
           }
@@ -424,10 +504,58 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   count: {
-    marginTop: 4,
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.muted,
+    flexShrink: 1,
+  },
+  countRow: {
+    marginTop: 4,
+    gap: 10,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  sortRowCompact: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  sortChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+  },
+  sortChipSm: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+  },
+  sortChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  sortChipText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.ink,
+  },
+  sortChipTextSm: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.muted,
+  },
+  sortChipTextActive: {
+    color: colors.white,
   },
   fillerHeader: {
     marginTop: 8,
