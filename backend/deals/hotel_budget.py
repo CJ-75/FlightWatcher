@@ -187,12 +187,19 @@ def filter_hotels_for_city(
 
     cap = tier_night_cap(night_prices, tier)
     filtered = prepared
-    # Need a real distribution before cutting: with ≤4 scored hotels the
-    # median/confort cap almost always drops the list to 2.
-    if cap is not None and len(prepared) >= 6:
-        filtered = [h for h in prepared if float(h["night_price"]) <= cap + 1e-6]
+    if cap is not None:
+        under = [h for h in prepared if float(h["night_price"]) <= cap + 1e-6]
+        # Legacy rates top_n=3: median cut left 2 — keep the short destination
+        # list intact. From 4+ scored hotels, apply the city tier normally.
+        if len(prepared) <= 3:
+            filtered = prepared
+        elif under:
+            filtered = under
+        else:
+            filtered = prepared
+            cap = tier_night_cap(night_prices, "charme")
 
-    # If tier empties the list (tiny pool), fall back to all with photos
+    # If tier empties the list, fall back to all with photos
     if not filtered and prepared:
         filtered = prepared
         cap = tier_night_cap(night_prices, "charme")

@@ -264,7 +264,7 @@ def row_to_travel_deal(
             "destination_iata": row.get("dest_iata"),
         },
         "hotel": hotel,
-        "alt_hotels": hotels[1:3] if hotels else [],
+        "alt_hotels": hotels[1:8] if hotels else [],
         "price_breakdown": {
             "flight_pp": price_flight,
             "hotel_pp": hotel_pp if hotel_bookable else None,
@@ -403,7 +403,7 @@ def _overlay_pool_photos_on_rows(
     return filled
 
 
-def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 3) -> List[Dict[str, Any]]:
+def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 8) -> List[Dict[str, Any]]:
     """Last-resort browse fill: hotel_pool rows that already have a photo."""
     if not supabase or not dest_iata:
         return []
@@ -531,11 +531,11 @@ def _diversify_primary_hotels(
         new_prim = primary_hotel_id(picked)
         if new_prim:
             used_global.add(new_prim)
-        used_alts = set(used_global)
+        # Destination shortlist: up to 7 alts from this airport's pool/rates
         alts = pick_diverse_hotels(
             [h for h in candidates if _hotel_id(h) and _hotel_id(h) != new_prim],
-            used_ids=used_alts,
-            top_n=2,
+            used_ids={new_prim} if new_prim else set(),
+            top_n=7,
             allow_reuse=False,
         )
         by_index[idx] = {**r, "hotel_top3": picked + alts}
@@ -597,7 +597,7 @@ def _enrich_rows_to_deals(
                 hotels,
                 flight_pp=fpp,
                 adults=adults_n,
-                top_n=3,
+                top_n=8,
                 require_photo=True,
                 checkin=str(r.get("out_date") or "")[:10],
                 checkout=str(r.get("ret_date") or "")[:10],
@@ -609,7 +609,7 @@ def _enrich_rows_to_deals(
                     h
                     for h in hotels
                     if isinstance(h, dict) and _hotel_photo(h)
-                ][:3]
+                ][:8]
                 capped_rows.append({**r, "hotel_top3": kept})
         else:
             capped_rows.append(r)

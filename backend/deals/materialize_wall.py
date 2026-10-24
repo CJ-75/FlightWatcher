@@ -346,13 +346,12 @@ def materialize_deals_wall(
                 skipped_no_unique += 1
                 continue
             prim_id = _hotel_id(picked[0])
-            used_alts = set(used_global)
-            if prim_id:
-                used_alts.add(prim_id)
+            # Alts = more hotels for THIS destination airport (not wall-unique).
+            # Only exclude this card's primary so each dest keeps a real shortlist.
             alts = pick_diverse_hotels(
                 [h for h in candidates if _hotel_id(h) and _hotel_id(h) != prim_id],
-                used_ids=used_alts,
-                top_n=2,
+                used_ids={prim_id} if prim_id else set(),
+                top_n=7,
                 allow_reuse=False,
             )
             hotel_payload = picked + alts
