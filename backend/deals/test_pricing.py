@@ -115,6 +115,8 @@ class TestConfigGuards(unittest.TestCase):
             score_weights={},
             excluded_fees_display="separate",
             flight_cta_timing="after_hotel",
+            ui_enabled=True,
+            booking_enabled=True,
         )
         with self.assertRaises(LiteApiConfigError):
             validate_liteapi_keys(cfg)

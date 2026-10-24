@@ -463,3 +463,13 @@ async def update_settings(settings_data: SettingsUpdateRequest):
     
     return {"success": True, "features": []}
 
+
+@router.get("/deals-metrics")
+@require_admin
+async def admin_deals_metrics(request: Request):
+    """L11 go/no-go + cache/funnel snapshot for admin dashboard."""
+    from deals.metrics import collect_deals_metrics
+
+    supabase = get_supabase_service_client() or get_supabase_client()
+    return collect_deals_metrics(supabase)
+

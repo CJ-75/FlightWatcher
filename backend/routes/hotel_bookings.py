@@ -116,6 +116,11 @@ async def prebook(body: PrebookRequest, request: Request):
     """
     user_id = _require_user(request)
     cfg = load_deals_config()
+    if not cfg.booking_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Réservation hôtel désactivée (phase lecture seule)",
+        )
     if not cfg.api_key:
         raise HTTPException(status_code=503, detail="LiteAPI non configuré")
     if not body.offer_id:

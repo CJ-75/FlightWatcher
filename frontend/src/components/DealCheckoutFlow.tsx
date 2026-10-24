@@ -8,6 +8,7 @@ import type {
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
+import { DealComplianceNotice } from './DealComplianceNotice'
 
 type Step = 'revalidate' | 'confirm' | 'guests' | 'pay' | 'pending' | 'done' | 'error'
 
@@ -267,15 +268,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
                   Total affiché : <strong>{Math.round(price)} € / pers.</strong>
                   {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
                 </p>
-                <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
-                  Deux réservations distinctes. L’hôtel reste dû selon ses conditions si le vol
-                  est modifié ou annulé.
-                </p>
-                {reval?.cancel_deadline ? (
-                  <p className="text-xs text-slate-500">
-                    Annulation hôtel (GMT) : {reval.cancel_deadline}
-                  </p>
-                ) : null}
+                <DealComplianceNotice cancelDeadline={reval?.cancel_deadline} />
                 <div className="grid sm:grid-cols-2 gap-3">
                   <input
                     className="rounded-xl border border-line px-3 py-2.5 text-sm"

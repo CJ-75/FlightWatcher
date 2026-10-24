@@ -27,6 +27,7 @@ export function DealsTab() {
   const [adults, setAdults] = useState(2)
   const [occupancies, setOccupancies] = useState<number[]>([2])
   const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
+  const [readonlyBanner, setReadonlyBanner] = useState(false)
 
   useEffect(() => {
     void fetch('/api/config')
@@ -41,6 +42,7 @@ export function DealsTab() {
           ? (cfg.window_kinds as DealWindowKind[])
           : (['FRI_SUN'] as DealWindowKind[])
         setWindowKinds(kinds.length ? kinds : ['FRI_SUN'])
+        setReadonlyBanner(Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false)
       })
       .catch(() => undefined)
   }, [])
@@ -139,6 +141,11 @@ export function DealsTab() {
           </h2>
           <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitle')}</p>
           <p className="text-xs text-muted mt-1.5 max-w-xl">{t('deals.alertHint')}</p>
+          {readonlyBanner ? (
+            <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
+              {t('deals.readonlyBanner')}
+            </p>
+          ) : null}
         </div>
         {!loading && !error && deals.length > 0 ? (
           <p className="text-sm font-semibold text-muted shrink-0">

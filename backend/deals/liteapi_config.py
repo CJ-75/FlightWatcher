@@ -51,6 +51,13 @@ def _parse_occupancies(raw: str) -> List[int]:
     return out or [2]
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env(name)
+    if not raw:
+        return default
+    return raw.lower() in ("1", "true", "yes", "on")
+
+
 def _parse_score_weights(raw: str) -> Dict[str, float]:
     defaults = {
         "prix": 1.0,
@@ -101,6 +108,9 @@ class DealsConfig:
     excluded_fees_display: str  # "separate" | "included"
     # Product: show flight redirect CTA after hotel confirmation
     flight_cta_timing: str  # "after_hotel" | "before_hotel"
+    # L11: hide Deals tab / block in-app hotel booking (prod read-only phase)
+    ui_enabled: bool
+    booking_enabled: bool
 
     @property
     def is_liteapi(self) -> bool:
@@ -109,6 +119,10 @@ class DealsConfig:
     @property
     def is_sandbox(self) -> bool:
         return self.liteapi_env == "sandbox"
+
+    @property
+    def is_prod_readonly(self) -> bool:
+        return self.is_liteapi and self.liteapi_env == "prod" and self.ui_enabled and not self.booking_enabled
 
 
 def load_deals_config() -> DealsConfig:
@@ -152,6 +166,8 @@ def load_deals_config() -> DealsConfig:
         score_weights=_parse_score_weights(_env("DEALS_SCORE_WEIGHTS")),
         excluded_fees_display=_env("DEALS_EXCLUDED_FEES_DISPLAY", "separate") or "separate",
         flight_cta_timing=_env("DEALS_FLIGHT_CTA_TIMING", "after_hotel") or "after_hotel",
+        ui_enabled=_env_bool("DEALS_UI_ENABLED", True),
+        booking_enabled=_env_bool("DEALS_BOOKING_ENABLED", True),
     )
 
 
@@ -206,5 +222,8 @@ def deals_config_public_dict(cfg: Optional[DealsConfig] = None) -> Dict[str, Any
         "budget_pack_pp": cfg.budget_pack_pp,
         "excluded_fees_display": cfg.excluded_fees_display,
         "flight_cta_timing": cfg.flight_cta_timing,
+        "ui_enabled": cfg.ui_enabled,
+        "booking_enabled": cfg.booking_enabled,
+        "prod_readonly": cfg.is_prod_readonly,
         "payment_public_key": cfg.payment_public_key if cfg.is_liteapi else None,
     }

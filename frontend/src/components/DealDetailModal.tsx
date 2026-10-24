@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   dealAdults,
@@ -9,6 +9,7 @@ import {
 import type { TravelDeal, TravelDealHotel } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
+import { DealComplianceNotice } from './DealComplianceNotice'
 
 interface DealDetailModalProps {
   deal: TravelDeal | null
@@ -68,6 +69,14 @@ export function DealDetailModal({
   const { t, language } = useI18n()
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [checkout, setCheckout] = useState(false)
+  const [bookingEnabled, setBookingEnabled] = useState(true)
+
+  useEffect(() => {
+    void fetch('/api/config')
+      .then((r) => r.json())
+      .then((cfg) => setBookingEnabled(cfg?.booking_enabled !== false))
+      .catch(() => undefined)
+  }, [])
 
   const hotelOptions = useMemo(() => {
     if (!deal) return [] as TravelDealHotel[]
@@ -366,15 +375,29 @@ export function DealDetailModal({
               </ul>
             ) : null}
 
+            <DealComplianceNotice
+              cancelDeadline={selected?.cancel_deadline || deal.hotel?.cancel_deadline}
+            />
+
             <div className="flex flex-col gap-2 pt-1">
               {deal.provider === 'liteapi' || deal.deal_key ? (
-                <button
-                  type="button"
-                  onClick={() => setCheckout(true)}
-                  className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors"
-                >
-                  Réserver l’hôtel
-                </button>
+                bookingEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => setCheckout(true)}
+                    className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors"
+                  >
+                    Réserver l’hôtel
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full text-center bg-slate-200 text-slate-500 font-bold py-3.5 rounded-xl cursor-not-allowed"
+                  >
+                    {t('deals.bookingDisabled')}
+                  </button>
+                )
               ) : hasPartnerUrl ? (
                 <a
                   href={deal.booking_url}

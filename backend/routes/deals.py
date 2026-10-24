@@ -83,6 +83,28 @@ def _row_to_liked(row: dict) -> dict:
     }
 
 
+@router.get("/api/deals/metrics")
+async def deals_metrics(authorization: Optional[str] = Header(None)):
+    """
+    Observability snapshot (L11): latences process, caches, funnel bookings, go/no-go.
+    Protégé par CRON_SECRET (ou service role côté ops).
+    """
+    require_cron(authorization)
+    try:
+        from deals.metrics import collect_deals_metrics
+
+        supabase = None
+        try:
+            supabase = _svc()
+        except HTTPException:
+            supabase = None
+        return collect_deals_metrics(supabase)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals")
 async def list_deals(
     origin: Optional[str] = Query(None, description="IATA départ"),

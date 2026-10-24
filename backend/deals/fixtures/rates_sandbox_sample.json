@@ -1,0 +1,60 @@
+{
+  "_comment": "Anonymized LiteAPI-like /hotels/rates shape for unit tests (L11). No PII.",
+  "data": [
+    {
+      "hotelId": "htl_demo_001",
+      "roomTypes": [
+        {
+          "offerId": "off_demo_aaa",
+          "offerRetailRate": { "amount": 148.0, "currency": "EUR" },
+          "suggestedSellingPrice": { "amount": 162.0, "currency": "EUR", "source": "example.com" },
+          "rates": [
+            {
+              "boardType": "BI",
+              "boardName": "Breakfast included",
+              "maxOccupancy": 2,
+              "commission": [{ "amount": 12.0 }],
+              "retailRate": {
+                "total": [{ "amount": 148.0, "currency": "EUR" }],
+                "suggestedSellingPrice": [
+                  { "amount": 162.0, "currency": "EUR", "source": "example.com" }
+                ],
+                "taxesAndFees": [
+                  { "included": true, "amount": 20.0 },
+                  { "included": false, "amount": 8.5, "description": "city tax" }
+                ]
+              },
+              "cancellationPolicies": {
+                "refundableTag": "RFN",
+                "cancelPolicyInfos": [
+                  { "cancelTime": "2026-11-01T12:00:00Z", "amount": 0 }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "hotelId": "htl_demo_002",
+      "roomTypes": [
+        {
+          "offerId": "off_demo_bbb",
+          "offerRetailRate": [{ "amount": 110 }],
+          "suggestedSellingPrice": [{ "amount": 110 }],
+          "rates": [
+            {
+              "boardType": "RO",
+              "boardName": "Room only",
+              "retailRate": {
+                "total": [{ "amount": 110 }],
+                "taxesAndFees": [{ "included": false, "amount": 5 }]
+              },
+              "cancellationPolicies": { "refundableTag": "NRFN" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

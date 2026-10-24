@@ -116,6 +116,7 @@ function MainTabs() {
         component={SearchScreen}
         options={{ title: 'Recherche', headerShown: false }}
       />
+      {/* Deals tab always registered; screen can no-op if DEALS_UI_ENABLED=false via config */}
       <Tab.Screen
         name="Deals"
         component={DealsScreen}

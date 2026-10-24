@@ -12,7 +12,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal } from '@flightwatcher/shared'
-import { getApi } from '../lib/client'
+import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -31,12 +31,30 @@ export function DealsScreen() {
   const [error, setError] = useState<string | null>(null)
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
+  const [uiEnabled, setUiEnabled] = useState(true)
+  const [readonlyBanner, setReadonlyBanner] = useState(false)
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
     setError(null)
     try {
+      try {
+        const cfgRes = await fetch(`${apiBase}/api/config`)
+        if (cfgRes.ok) {
+          const cfg = await cfgRes.json()
+          setUiEnabled(cfg?.ui_enabled !== false)
+          setReadonlyBanner(
+            Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false,
+          )
+          if (cfg?.ui_enabled === false) {
+            setDeals([])
+            return
+          }
+        }
+      } catch {
+        /* ignore */
+      }
       const list = await getApi().getDeals({
         origin: origin || undefined,
         adults,
@@ -87,6 +105,14 @@ export function DealsScreen() {
             <View style={styles.header}>
               <Text style={styles.title}>Deals</Text>
               <Text style={styles.subtitle}>Week-ends vol + hôtel, prêts à partir</Text>
+              {!uiEnabled ? (
+                <Text style={styles.subtitle}>Onglet deals désactivé (calibration).</Text>
+              ) : null}
+              {readonlyBanner && uiEnabled ? (
+                <Text style={[styles.subtitle, { color: colors.primary }]}>
+                  Lecture seule — réservation hôtel fermée.
+                </Text>
+              ) : null}
               <View style={styles.chips}>
                 {ORIGINS.map((o) => {
                   const active = origin === o

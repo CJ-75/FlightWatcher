@@ -11,6 +11,29 @@ export function dateFromFlightIso(iso?: string | null): string | null {
   return m ? m[1] : null
 }
 
+/** LiteAPI cancel deadlines are GMT — show in user locale. */
+export function formatCancelDeadlineLocal(
+  iso?: string | null,
+  locale = 'fr-FR',
+): string | null {
+  if (!iso) return null
+  try {
+    const raw = String(iso).trim()
+    const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw)
+    const d = new Date(hasTz ? raw : `${raw}Z`)
+    if (Number.isNaN(d.getTime())) return raw
+    return d.toLocaleString(locale, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return String(iso)
+  }
+}
+
 /** Recompute price_pp when switching hotel from alt_hotels (cache only). */
 export function pricePpWithHotel(
   deal: TravelDeal,

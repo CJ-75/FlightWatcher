@@ -113,14 +113,32 @@ class LiteApiClient:
                     elapsed_ms,
                     n_hotels,
                 )
+                try:
+                    from deals.metrics import record_liteapi_call
+
+                    record_liteapi_call(path, elapsed_ms, ok=True)
+                except Exception:
+                    pass
                 return data
             except httpx.TimeoutException as e:
                 last_exc = e
                 if attempt + 1 < attempts:
                     logger.warning("liteapi_timeout endpoint=%s attempt=%s", path, attempt + 1)
                     continue
+                try:
+                    from deals.metrics import record_liteapi_call
+
+                    record_liteapi_call(path, int((time.monotonic() - t0) * 1000), ok=False)
+                except Exception:
+                    pass
                 raise LiteApiError(f"LiteAPI {path} timeout", status_code=None) from e
             except LiteApiError:
+                try:
+                    from deals.metrics import record_liteapi_call
+
+                    record_liteapi_call(path, int((time.monotonic() - t0) * 1000), ok=False)
+                except Exception:
+                    pass
                 raise
             except Exception as e:
                 last_exc = e

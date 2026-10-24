@@ -20,6 +20,7 @@ import { ActivatedPage } from './admin/pages/ActivatedPage'
 import { PlansPage } from './admin/pages/PlansPage'
 import { SettingsPage } from './admin/pages/SettingsPage'
 import { TestsPage } from './admin/pages/TestsPage'
+import { DealsMetricsPage } from './admin/pages/DealsMetricsPage'
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
           <Route path="searches" element={<SearchesPage />} />
           <Route path="activated" element={<ActivatedPage />} />
           <Route path="plans" element={<PlansPage />} />
+          <Route path="deals" element={<DealsMetricsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="tests" element={<TestsPage />} />
         </Route>

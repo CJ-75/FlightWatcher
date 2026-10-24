@@ -63,6 +63,7 @@ function Dashboard() {
     return 'search'
   })
   const [loading, setLoading] = useState(false)
+  const [dealsUiEnabled, setDealsUiEnabled] = useState(true)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
@@ -366,6 +367,18 @@ function Dashboard() {
 
     void updateSearchLastUsed(savedSearch.id)
   }
+
+  useEffect(() => {
+    void fetch('/api/config')
+      .then((r) => r.json())
+      .then((cfg) => {
+        const on = cfg?.ui_enabled !== false
+        setDealsUiEnabled(on)
+        if (!on && activeTab === 'deals') setActiveTab('search')
+      })
+      .catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
+  }, [])
 
   // Effet pour scroller vers les résultats quand ils sont affichés
   useEffect(() => {
@@ -792,7 +805,9 @@ function Dashboard() {
               {(
                 [
                   { id: 'search' as const, label: t('nav.search') },
-                  { id: 'deals' as const, label: t('nav.deals') },
+                  ...(dealsUiEnabled
+                    ? [{ id: 'deals' as const, label: t('nav.deals') }]
+                    : []),
                   { id: 'planner' as const, label: t('nav.planner') },
                   { id: 'alerts' as const, label: t('nav.alerts') },
                   { id: 'saved' as const, label: t('nav.saved') },
