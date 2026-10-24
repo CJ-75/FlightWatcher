@@ -249,15 +249,25 @@ def _ready_with_options(
     participants: int,
     extras: Dict[str, Any],
 ) -> Dict[str, Any]:
-    from deals.hotel_budget import filter_hotels_for_flight, hotel_pp_of
+    from deals.hotel_budget import filter_hotels_for_city, hotel_pp_of, nights_between
 
     candidates = list(top or [])
     if offer and offer not in candidates:
-        candidates = [offer] + [c for c in candidates if c.get("hotel_id") != offer.get("hotel_id")]
-    options = filter_hotels_for_flight(
+        candidates = [offer] + [
+            c for c in candidates if c.get("hotel_id") != offer.get("hotel_id")
+        ]
+    checkin = base.get("checkin")
+    checkout = base.get("checkout")
+    nights = nights_between(
+        str(checkin) if checkin else None,
+        str(checkout) if checkout else None,
+    )
+    options, meta = filter_hotels_for_city(
         candidates,
-        flight_pp=flight_pp,
         adults=participants,
+        nights=nights,
+        tier="confort",
+        sort="value",
         top_n=8,
         require_photo=True,
     )
@@ -276,13 +286,14 @@ def _ready_with_options(
         "hotel_name": (primary or {}).get("name"),
         "hotel_id": (primary or {}).get("hotel_id"),
         "options": options,
-        "max_hotel_pp": None,
+        "max_hotel_pp": meta.get("night_cap"),  # night € cap (confort), not flight×
+        "night_cap": meta.get("night_cap"),
+        "median_night": meta.get("median_night"),
+        "tier": meta.get("tier"),
+        "nights": nights,
     }
-    from deals.hotel_budget import max_hotel_pp
-
-    out["max_hotel_pp"] = max_hotel_pp(flight_pp)
     if not primary:
-        out["reason"] = "no_hotel_in_flight_budget"
+        out["reason"] = "no_hotel_in_city_tier"
     return out
 
 
@@ -580,12 +591,15 @@ def _run_fetch_job(
                 job_flight_pp = (_jobs.get(job_id) or {}).get("flight_pp")
             except Exception:
                 job_flight_pp = None
-        from deals.hotel_budget import filter_hotels_for_flight, max_hotel_pp
+        from deals.hotel_budget import filter_hotels_for_city, nights_between
 
-        options = filter_hotels_for_flight(
+        nights = nights_between(checkin.isoformat(), checkout.isoformat())
+        options, meta = filter_hotels_for_city(
             cands,
-            flight_pp=job_flight_pp,
             adults=participants,
+            nights=nights,
+            tier="confort",
+            sort="value",
             top_n=8,
             require_photo=True,
         )
@@ -609,7 +623,11 @@ def _run_fetch_job(
                 "hotel_name": (options[0].get("name") if options else None),
                 "hotel_id": (options[0].get("hotel_id") if options else None),
                 "options": options,
-                "max_hotel_pp": max_hotel_pp(job_flight_pp),
+                "max_hotel_pp": meta.get("night_cap"),
+                "night_cap": meta.get("night_cap"),
+                "median_night": meta.get("median_night"),
+                "tier": meta.get("tier"),
+                "nights": nights,
             }
     except Exception as e:
         logger.warning("upsell_fetch_fail job=%s: %s", job_id, e)

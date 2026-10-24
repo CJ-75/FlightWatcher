@@ -379,6 +379,8 @@ def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dic
             adults=adults_n,
             top_n=3,
             require_photo=True,
+            checkin=str(row.get("out_date") or "")[:10],
+            checkout=str(row.get("ret_date") or "")[:10],
         )
         if not ranked:
             return row
@@ -431,7 +433,13 @@ def _enrich_rows_to_deals(
         hotels = r.get("hotel_top3") or []
         if isinstance(hotels, list) and hotels:
             ranked = filter_hotels_for_flight(
-                hotels, flight_pp=fpp, adults=adults_n, top_n=3, require_photo=True
+                hotels,
+                flight_pp=fpp,
+                adults=adults_n,
+                top_n=3,
+                require_photo=True,
+                checkin=str(r.get("out_date") or "")[:10],
+                checkout=str(r.get("ret_date") or "")[:10],
             )
             capped_rows.append({**r, "hotel_top3": ranked} if ranked else {**r, "hotel_top3": []})
         else:

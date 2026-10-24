@@ -401,6 +401,8 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 adults=2,
                 top_n=3,
                 require_photo=True,
+                checkin=out_d,
+                checkout=ret_d,
             )
             if ranked:
                 hotel_payload = ranked
@@ -439,6 +441,8 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                         adults=2,
                         top_n=1,
                         require_photo=True,
+                        checkin=out_d,
+                        checkout=ret_d,
                     )
                     if ranked:
                         hotel_payload = ranked

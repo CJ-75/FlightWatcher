@@ -106,7 +106,7 @@ export default function MyTrip() {
         : '/'
 
   const onFlightClick = async () => {
-    if (!requireLogin()) return
+    // Guest OK — affiliate click tracked with draft_token
     setFlightClicked(true)
     if (!draft?.deal_key && !payload.deal_key) {
       return
@@ -134,7 +134,8 @@ export default function MyTrip() {
   }
 
   const onFlightBooked = async () => {
-    if (!token || !requireLogin()) return
+    // Guest OK — draft token is enough
+    if (!token) return
     setMarkingBooked(true)
     try {
       const row = await getApiClient().markMyTripFlightBooked(token)
@@ -267,17 +268,15 @@ export default function MyTrip() {
             Deux réservations distinctes (vol + hôtel). Le lien ouvre le partenaire ci-dessous.
           </p>
           {flightUrl ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (!requireLogin()) return
-                void onFlightClick()
-                window.open(flightUrl, '_blank', 'noopener,noreferrer')
-              }}
+            <a
+              href={flightUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => void onFlightClick()}
               className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl"
             >
               {cta}
-            </button>
+            </a>
           ) : (
             <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
               Lien vol indisponible pour l’instant — réessaie dans un instant.
@@ -356,16 +355,12 @@ export default function MyTrip() {
                 <p className="text-sm text-slate-600">Choisir un hôtel pour ces dates.</p>
               )}
               {draft.deal_key || hotel ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!requireLogin()) return
-                    window.location.href = hotelHref
-                  }}
+                <Link
+                  to={hotelHref}
                   className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl"
                 >
                   Réserver l’hôtel
-                </button>
+                </Link>
               ) : null}
             </>
           )}
@@ -461,8 +456,8 @@ export default function MyTrip() {
           <div className="bg-white rounded-3xl shadow-lift border border-line max-w-sm w-full p-6 text-center">
             <h3 className="text-xl font-black text-ink">Connecte-toi pour continuer</h3>
             <p className="text-sm text-muted mt-2">
-              Tu peux consulter ce brouillon librement. Pour réserver, marquer le vol ou
-              inviter, une connexion est nécessaire.
+              Réservation vol et suivi « j’ai réservé » restent possibles sans compte. La
+              connexion sert à inviter, synchroniser et ouvrir le Planner.
             </p>
             <button
               type="button"

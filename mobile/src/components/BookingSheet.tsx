@@ -45,32 +45,27 @@ export function BookingSheet({
   const [hotelError, setHotelError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [draftToken, setDraftToken] = useState<string | null>(null)
+  const [hotelsReady, setHotelsReady] = useState(false)
+  const [nightCap, setNightCap] = useState<number | null>(null)
 
-  useEffect(() => {
-    if (!trip) {
-      setStep(1)
-      setOptions([])
-      setSelected(null)
-      setDraftToken(null)
-      setHotelError(null)
-    }
-  }, [trip])
-
-  if (!trip) return null
-
-  const city = cityDisplayNameFr(
-    trip.destination_code,
-    trip.aller?.destinationFull?.split(',')[0]?.trim(),
-  )
-  const flightPp = Number(trip.prix_total) || 0
+  const city = trip
+    ? cityDisplayNameFr(
+        trip.destination_code,
+        trip.aller?.destinationFull?.split(',')[0]?.trim(),
+      )
+    : ''
+  const flightPp = Number(trip?.prix_total) || 0
   const pax = Math.min(6, Math.max(1, passengers || 1))
-  const checkin = dateFromFlightIso(trip.aller?.departureTime)
-  const checkout = dateFromFlightIso(trip.retour?.departureTime)
-  const flightUrl = buildBookingUrl(trip, pax)
+  const checkin = trip ? dateFromFlightIso(trip.aller?.departureTime) : null
+  const checkout = trip ? dateFromFlightIso(trip.retour?.departureTime) : null
+  const flightUrl = trip ? buildBookingUrl(trip, pax) : ''
   const totalPp = Math.round(flightPp + (selected?.hotel_pp || 0))
 
-  const loadHotels = async () => {
-    if (!trip.destination_code || !checkin || !checkout) {
+  const loadHotels = async (current: EnrichedTripResponse) => {
+    const cin = dateFromFlightIso(current.aller?.departureTime)
+    const cout = dateFromFlightIso(current.retour?.departureTime)
+    const fp = Number(current.prix_total) || 0
+    if (!current.destination_code || !cin || !cout) {
       setHotelError('Dates ou destination manquantes')
       return
     }
@@ -78,13 +73,21 @@ export function BookingSheet({
     setHotelError(null)
     try {
       const item = {
-        iata: trip.destination_code,
-        checkin,
-        checkout,
+        iata: current.destination_code,
+        checkin: cin,
+        checkout: cout,
         participants: pax,
-        flight_pp: flightPp,
+        flight_pp: fp,
       }
       let result = (await getApi().lookupHotelUpsell([item])).results?.[0]
+      if (result?.status === 'ready' && (result.options?.length || result.hotel)) {
+        const opts = result.options || (result.hotel ? [result.hotel] : [])
+        setOptions(opts)
+        setNightCap(result.night_cap ?? result.max_hotel_pp ?? null)
+        if (opts[0]) setSelected(opts[0])
+        setHotelsReady(true)
+        return
+      }
       if (result?.status === 'miss' || result?.status === 'pending') {
         result = await getApi().fetchHotelUpsell(item)
       }
@@ -94,32 +97,58 @@ export function BookingSheet({
           const job = await getApi().getHotelUpsellJob(result.job_id!)
           if (job.done && job.status === 'ready') {
             setOptions(job.options || [])
+            setNightCap(job.night_cap ?? job.max_hotel_pp ?? null)
             if (job.options?.[0]) setSelected(job.options[0])
-            if (!job.options?.length) setHotelError('Aucun hôtel cohérent avec ce vol')
+            if (!job.options?.length) {
+              setHotelError('Aucun hôtel confort pour ces dates')
+            }
+            setHotelsReady(true)
             return
           }
           if (job.done) {
             setHotelError('Aucun hôtel disponible')
+            setHotelsReady(true)
             return
           }
         }
         setHotelError('Recherche trop longue — réessaie')
+        setHotelsReady(true)
         return
       }
       const opts = result?.options || (result?.hotel ? [result.hotel] : [])
       setOptions(opts)
+      setNightCap(result?.night_cap ?? result?.max_hotel_pp ?? null)
       if (opts[0]) setSelected(opts[0])
-      if (!opts.length) setHotelError('Aucun hôtel dans le budget de ce vol')
+      if (!opts.length) setHotelError('Aucun hôtel confort pour ces dates')
+      setHotelsReady(true)
     } catch {
       setHotelError('Impossible de charger les hôtels')
+      setHotelsReady(true)
     } finally {
       setLoadingHotels(false)
     }
   }
 
+  useEffect(() => {
+    if (!trip) {
+      setStep(1)
+      setOptions([])
+      setSelected(null)
+      setDraftToken(null)
+      setHotelError(null)
+      setHotelsReady(false)
+      setNightCap(null)
+      return
+    }
+    void loadHotels(trip)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip])
+
+  if (!trip) return null
+
   const goHotels = () => {
     setStep(2)
-    void loadHotels()
+    if (!hotelsReady) void loadHotels(trip)
   }
 
   const finalize = async (hotel: HotelUpsellOption | null) => {
@@ -177,8 +206,16 @@ export function BookingSheet({
               {pax > 1 ? ` · ${pax} voyageurs` : ''}
             </Text>
             <Text style={styles.hint}>
-              Ajoute un hôtel (max ~{Math.round(flightPp * 2.5)} €/pers.) ou continue avec le vol.
+              Ajoute un hôtel bien noté (gamme confort) ou continue avec le vol.
             </Text>
+            {loadingHotels ? (
+              <Text style={styles.hint}>Préparation des hôtels…</Text>
+            ) : hotelsReady && options.length > 0 ? (
+              <Text style={[styles.hint, { color: colors.primary }]}>
+                {options.length} hôtel{options.length > 1 ? 's' : ''} prêt
+                {options.length > 1 ? 's' : ''}
+              </Text>
+            ) : null}
             <Pressable onPress={goHotels} style={styles.cta}>
               <Text style={styles.ctaText}>Ajouter un hôtel</Text>
             </Pressable>
@@ -195,7 +232,10 @@ export function BookingSheet({
         {step === 2 && (
           <>
             <Text style={styles.title}>Choisis ton hôtel</Text>
-            <Text style={styles.sub}>Meilleures notes · budget cohérent avec le vol</Text>
+            <Text style={styles.sub}>
+              Meilleur rapport note/prix
+              {nightCap != null ? ` · ≤ ~${Math.round(nightCap)} €/nuit` : ''}
+            </Text>
             {loadingHotels ? (
               <View style={styles.loadingBox}>
                 <ActivityIndicator color={colors.primary} />

@@ -43,10 +43,11 @@ export function TripComboWizard({
   const [selected, setSelected] = useState<HotelUpsellOption | null>(null)
   const [loadingHotels, setLoadingHotels] = useState(false)
   const [hotelError, setHotelError] = useState<string | null>(null)
-  const [maxHotelPp, setMaxHotelPp] = useState<number | null>(null)
+  const [nightCap, setNightCap] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
   const [draftToken, setDraftToken] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [hotelsReady, setHotelsReady] = useState(false)
 
   const city = cityDisplayNameFr(
     trip.destination_code,
@@ -60,15 +61,34 @@ export function TripComboWizard({
   const hotelPp = selected?.hotel_pp ?? 0
   const totalPp = Math.round(flightPp + (selected ? hotelPp : 0))
 
+  const applyHotelResult = (
+    opts: HotelUpsellOption[],
+    night?: number | null,
+    reason?: string | null,
+  ) => {
+    setOptions(opts)
+    if (night != null) setNightCap(night)
+    if (opts[0]) setSelected(opts[0])
+    setHotelsReady(true)
+    if (!opts.length) {
+      setHotelError(
+        reason === 'no_hotel_in_city_tier' || reason === 'no_hotel_in_flight_budget'
+          ? 'Aucun hôtel confort pour ces dates — élargis ou continue sans hôtel'
+          : 'Aucun hôtel pour cette destination',
+      )
+    } else {
+      setHotelError(null)
+    }
+  }
+
   const loadHotels = async () => {
     if (!trip.destination_code || !checkin || !checkout) {
       setHotelError('Dates ou destination manquantes')
       return
     }
+    if (hotelsReady && options.length > 0) return
     setLoadingHotels(true)
     setHotelError(null)
-    setOptions([])
-    setSelected(null)
     try {
       const item = {
         iata: trip.destination_code,
@@ -77,9 +97,19 @@ export function TripComboWizard({
         participants: pax,
         flight_pp: flightPp,
       }
+      // 1) Cache-only lookup (hotel_rates_cache) — often ready
       let result = (
         await getApiClient().lookupHotelUpsell([item])
       ).results?.[0]
+
+      if (result?.status === 'ready' && (result.options?.length || result.hotel)) {
+        applyHotelResult(
+          result.options || (result.hotel ? [result.hotel] : []),
+          result.night_cap ?? result.max_hotel_pp,
+          result.reason,
+        )
+        return
+      }
 
       if (result?.status === 'miss' || result?.status === 'pending') {
         result = await getApiClient().fetchHotelUpsell(item)
@@ -90,52 +120,53 @@ export function TripComboWizard({
           await new Promise((r) => setTimeout(r, 1200))
           const job = await getApiClient().getHotelUpsellJob(result.job_id!)
           if (job.done && job.status === 'ready') {
-            setOptions(job.options || [])
-            setMaxHotelPp(job.max_hotel_pp ?? flightPp * 2.5)
-            if (job.options?.[0]) setSelected(job.options[0])
-            if (!job.options?.length) {
-              setHotelError('Aucun hôtel cohérent avec ce vol')
-            }
+            applyHotelResult(
+              job.options || [],
+              job.night_cap ?? job.max_hotel_pp,
+              null,
+            )
             return
           }
           if (job.done) {
             setHotelError('Aucun hôtel disponible pour ces dates')
+            setHotelsReady(true)
             return
           }
         }
         setHotelError('Recherche hôtel trop longue — réessaie')
+        setHotelsReady(true)
         return
       }
 
       if (result?.status === 'rate_limited') {
         setHotelError('Trop de demandes — réessaie dans un moment')
+        setHotelsReady(true)
         return
       }
 
-      const opts = result?.options || (result?.hotel ? [result.hotel] : [])
-      setOptions(opts)
-      setMaxHotelPp(result?.max_hotel_pp ?? flightPp * 2.5)
-      if (opts[0]) setSelected(opts[0])
-      if (!opts.length) {
-        setHotelError(
-          result?.reason === 'no_hotel_in_flight_budget' || result?.status === 'miss'
-            ? 'Aucun hôtel dans le budget de ce vol'
-            : 'Aucun hôtel pour cette destination',
-        )
-      }
+      applyHotelResult(
+        result?.options || (result?.hotel ? [result.hotel] : []),
+        result?.night_cap ?? result?.max_hotel_pp,
+        result?.reason,
+      )
     } catch {
       setHotelError('Impossible de charger les hôtels')
+      setHotelsReady(true)
     } finally {
       setLoadingHotels(false)
     }
   }
 
+  // Prefetch during step 1 (user reads flight recap)
   useEffect(() => {
-    if (step === 2) void loadHotels()
+    void loadHotels()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
+  }, [])
 
-  const goHotels = () => setStep(2)
+  const goHotels = () => {
+    setStep(2)
+    if (!hotelsReady) void loadHotels()
+  }
   const skipHotel = () => {
     setSelected(null)
     void finalize(null)
@@ -260,9 +291,17 @@ export function TripComboWizard({
                   </span>
                 </p>
                 <p className="text-sm text-muted mt-3 leading-relaxed">
-                  Ajoute un hôtel cohérent avec ce prix (max ~{Math.round(flightPp * 2.5)}{' '}
-                  €/pers.), ou continue avec le vol seul.
+                  Ajoute un hôtel bien noté dans la gamme confort de la ville, ou continue
+                  avec le vol seul.
                 </p>
+                {loadingHotels ? (
+                  <p className="text-xs text-muted mt-2">Préparation des hôtels…</p>
+                ) : hotelsReady && options.length > 0 ? (
+                  <p className="text-xs text-emerald-700 mt-2 font-semibold">
+                    {options.length} hôtel{options.length > 1 ? 's' : ''} prêt
+                    {options.length > 1 ? 's' : ''}
+                  </p>
+                ) : null}
                 <div className="mt-8 space-y-3">
                   <button
                     type="button"
@@ -295,8 +334,10 @@ export function TripComboWizard({
                   Choisis ton hôtel
                 </h2>
                 <p className="text-sm text-muted mt-1">
-                  Meilleures notes, budget ≤ {Math.round(maxHotelPp ?? flightPp * 2.5)}{' '}
-                  €/pers.
+                  Meilleur rapport note/prix
+                  {nightCap != null
+                    ? ` · confort ≤ ~${Math.round(nightCap)} €/nuit`
+                    : ' · gamme confort de la ville'}
                 </p>
 
                 {loadingHotels && (

@@ -493,7 +493,12 @@ export interface HotelUpsellResult {
   hotel_id?: string | null
   hotel?: HotelUpsellOption | null
   options?: HotelUpsellOption[]
+  /** @deprecated night_cap preferred — was flight×2.5 */
   max_hotel_pp?: number | null
+  night_cap?: number | null
+  median_night?: number | null
+  tier?: string | null
+  nights?: number | null
   flight_pp?: number | null
   city?: string | null
   destination_slug?: string | null
@@ -517,6 +522,10 @@ export interface HotelUpsellJob {
   hotel_id?: string | null
   options?: HotelUpsellOption[]
   max_hotel_pp?: number | null
+  night_cap?: number | null
+  median_night?: number | null
+  tier?: string | null
+  nights?: number | null
   error?: string
 }
 
