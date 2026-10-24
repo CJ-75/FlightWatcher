@@ -58,7 +58,7 @@ def create_draft(
     }
 
 
-def get_draft(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
+def get_draft(supabase, draft_token: str, *, touch_view: bool = False) -> Optional[Dict[str, Any]]:
     res = (
         supabase.table("my_trip_drafts")
         .select("*")
@@ -84,6 +84,17 @@ def get_draft(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
                 return None
         except ValueError:
             pass
+    if touch_view:
+        # Lot G — return-to-page signal (last_viewed_at in payload)
+        try:
+            now = _now().isoformat()
+            payload = _merge_payload(row, {"last_viewed_at": now})
+            supabase.table("my_trip_drafts").update(
+                {"payload": payload, "updated_at": now}
+            ).eq("id", row["id"]).execute()
+            row = {**row, "payload": payload, "updated_at": now}
+        except Exception as e:
+            logger.debug("touch_view: %s", e)
     return row
 
 

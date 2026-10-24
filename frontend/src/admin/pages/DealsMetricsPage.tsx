@@ -3,12 +3,58 @@ import { getAccessToken } from '../../lib/supabase'
 import { resolveApiUrl } from '../../utils/apiBase'
 import { StatsCard } from '../components/StatsCard'
 
+type RiseBlock = {
+  n_clicks?: number
+  n_rise?: number
+  rise_pct?: number | null
+}
+
+type OriginRow = {
+  origin_iata: string
+  active: number
+  live: number
+  cached: number
+  live_share?: number | null
+  cached_share?: number | null
+  avg_hours_since_verified?: number | null
+}
+
+type Launch = {
+  kill_switch?: {
+    cached_enabled_effective?: boolean
+    runtime_flag?: string | null
+    env_default?: boolean
+    kill_min_clicks?: number
+    kill_threshold?: number
+  }
+  price_rise?: {
+    live_7d?: RiseBlock
+    live_30d?: RiseBlock
+    cached_7d?: RiseBlock
+    cached_30d?: RiseBlock
+  }
+  mon_voyage_return?: {
+    n_clicks_with_draft?: number
+    n_returned?: number
+    return_pct?: number | null
+    window_h?: number
+    days?: number
+  }
+  deals_by_origin?: {
+    total_active?: number
+    origins?: OriginRow[]
+    error?: string
+  }
+  error?: string
+}
+
 type Metrics = {
   generated_at?: string
   provider?: string
   liteapi_env?: string | null
   ui_enabled?: boolean
   booking_enabled?: boolean
+  launch?: Launch
   process?: {
     calls_total?: number
     latency_ms_p50?: number | null
@@ -24,6 +70,7 @@ type Metrics = {
       margin_gap_avg?: number | null
       hotels_scored?: number
     }
+    community?: Record<string, unknown>
   }
   go_no_go?: {
     ready?: boolean
@@ -32,6 +79,23 @@ type Metrics = {
     warnings?: string[]
     checklist?: Array<{ id: string; label: string; status: string; note?: string }>
   }
+}
+
+function pct(v: number | null | undefined) {
+  if (v == null) return '—'
+  return `${v}%`
+}
+
+function RiseCell({ label, block }: { label: string; block?: RiseBlock }) {
+  return (
+    <div className="rounded-lg bg-[#1a1d2a] px-3 py-2">
+      <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className="text-xl font-bold text-white mt-0.5">{pct(block?.rise_pct)}</p>
+      <p className="text-xs text-gray-500">
+        {block?.n_rise ?? 0} / {block?.n_clicks ?? 0} clics
+      </p>
+    </div>
+  )
 }
 
 export function DealsMetricsPage() {
@@ -64,6 +128,11 @@ export function DealsMetricsPage() {
   }, [])
 
   const gng = data?.go_no_go
+  const launch = data?.launch
+  const kill = launch?.kill_switch
+  const rise = launch?.price_rise
+  const ret = launch?.mon_voyage_return
+  const byOrigin = launch?.deals_by_origin
   const verdict = !gng
     ? '—'
     : gng.ready
@@ -77,7 +146,7 @@ export function DealsMetricsPage() {
       <div>
         <h1 className="text-2xl font-bold">Deals · métriques</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Observabilité L11 + checklist §12 (validation juridique hors app)
+          Lot G — mesure minimale lancement · {data?.generated_at || '—'}
         </p>
       </div>
 
@@ -86,6 +155,112 @@ export function DealsMetricsPage() {
 
       {data ? (
         <>
+          {/* ——— Lot G ——— */}
+          <section className="space-y-4">
+            <h2 className="text-lg font-bold text-white">Lancement (G)</h2>
+
+            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-gray-300">
+                  1. Taux de hausse au clic
+                </p>
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                    kill?.cached_enabled_effective
+                      ? 'bg-emerald-900/50 text-emerald-300'
+                      : 'bg-red-900/50 text-red-300'
+                  }`}
+                >
+                  Cached {kill?.cached_enabled_effective ? 'ON' : 'OFF (kill)'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Interrupteur C4 · flag=
+                {kill?.runtime_flag ?? '—'} · seuil={kill?.kill_threshold ?? '—'} · min
+                clics={kill?.kill_min_clicks ?? '—'}
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <RiseCell label="Live 7 j" block={rise?.live_7d} />
+                <RiseCell label="Live 30 j" block={rise?.live_30d} />
+                <RiseCell label="Cached 7 j" block={rise?.cached_7d} />
+                <RiseCell label="Cached 30 j" block={rise?.cached_30d} />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4 space-y-2">
+              <p className="text-sm font-semibold text-gray-300">
+                2. Retour Mon voyage (après clic sortant)
+              </p>
+              <p className="text-3xl font-black text-white">{pct(ret?.return_pct)}</p>
+              <p className="text-sm text-gray-400">
+                {ret?.n_returned ?? 0} retours / {ret?.n_clicks_with_draft ?? 0} clics avec
+                brouillon · fenêtre {ret?.window_h ?? 24} h · {ret?.days ?? 7} j
+              </p>
+              <p className="text-xs text-gray-500">
+                Compte : « J’ai réservé ✓ », feedback prix, ou rechargement de la page trip.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4 space-y-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold text-gray-300">
+                  3. Deals actifs par origine
+                </p>
+                <p className="text-sm text-gray-400">
+                  Total {byOrigin?.total_active ?? 0}
+                </p>
+              </div>
+              {byOrigin?.error ? (
+                <p className="text-sm text-red-300">{byOrigin.error}</p>
+              ) : null}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-700">
+                      <th className="py-2 pr-3 font-medium">Origine</th>
+                      <th className="py-2 pr-3 font-medium">Actifs</th>
+                      <th className="py-2 pr-3 font-medium">Live</th>
+                      <th className="py-2 pr-3 font-medium">Cached</th>
+                      <th className="py-2 font-medium">Âge vérif. moy.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(byOrigin?.origins || []).map((o) => (
+                      <tr key={o.origin_iata} className="border-b border-gray-800">
+                        <td className="py-2 pr-3 font-bold text-white">{o.origin_iata}</td>
+                        <td className="py-2 pr-3">{o.active}</td>
+                        <td className="py-2 pr-3 text-emerald-300">
+                          {o.live}
+                          {o.live_share != null
+                            ? ` (${Math.round(o.live_share * 100)}%)`
+                            : ''}
+                        </td>
+                        <td className="py-2 pr-3 text-amber-300">
+                          {o.cached}
+                          {o.cached_share != null
+                            ? ` (${Math.round(o.cached_share * 100)}%)`
+                            : ''}
+                        </td>
+                        <td className="py-2 text-gray-400">
+                          {o.avg_hours_since_verified != null
+                            ? `${o.avg_hours_since_verified} h`
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                    {(byOrigin?.origins || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-4 text-gray-500">
+                          Aucun deal actif
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatsCard title="Go / no-go" value={verdict} subtitle={data.provider || ''} />
             <StatsCard
@@ -154,37 +329,6 @@ export function DealsMetricsPage() {
                 </li>
               ))}
             </ul>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4">
-              <p className="text-sm font-semibold mb-2">Funnel bookings</p>
-              <pre className="text-xs text-gray-400 overflow-auto">
-                {JSON.stringify(data.caches?.booking_funnel || {}, null, 2)}
-              </pre>
-            </div>
-            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4">
-              <p className="text-sm font-semibold mb-2">Appels / endpoint</p>
-              <pre className="text-xs text-gray-400 overflow-auto">
-                {JSON.stringify(data.process?.calls_by_endpoint || {}, null, 2)}
-              </pre>
-            </div>
-            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4 lg:col-span-2">
-              <p className="text-sm font-semibold mb-2">Clics sortants vol (7 j)</p>
-              <p className="text-2xl font-bold text-white mb-2">
-                {String((data.caches as any)?.community?.outbound_clicks_7d ?? 0)}
-              </p>
-              <pre className="text-xs text-gray-400 overflow-auto">
-                {JSON.stringify(
-                  (data.caches as any)?.community?.outbound_by_partner || {},
-                  null,
-                  2,
-                )}
-              </pre>
-              <p className="text-xs text-gray-500 mt-2">
-                {(data.caches as any)?.community?.affiliate_note || ''}
-              </p>
-            </div>
           </div>
         </>
       ) : null}

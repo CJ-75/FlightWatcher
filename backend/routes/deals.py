@@ -763,7 +763,7 @@ async def get_my_trip(draft_token: str):
     try:
         from deals.my_trips import get_draft
 
-        row = get_draft(_svc(), draft_token)
+        row = get_draft(_svc(), draft_token, touch_view=True)
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable ou expiré")
         return row

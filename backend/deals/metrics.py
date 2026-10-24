@@ -248,6 +248,12 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         snapshot["community"] = _community_stats(supabase)
         snapshot["baseline_guard"] = _baseline_guard_stats(supabase, cfg)
         snapshot["cached_kill"] = _cached_kill_stats(supabase, cfg)
+        try:
+            from deals.launch_metrics import collect_launch_metrics
+
+            snapshot["launch"] = collect_launch_metrics(supabase, cfg=cfg)
+        except Exception as e:
+            snapshot["launch"] = {"error": str(e)}
 
     verdict = go_no_go(cfg, snapshot)
     return {
@@ -262,6 +268,7 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         "cached_enabled_env": cfg.cached_enabled,
         "process": process,
         "caches": snapshot,
+        "launch": snapshot.get("launch"),
         "go_no_go": verdict,
     }
 
