@@ -185,9 +185,18 @@ export function DealsScreen() {
                 <>
                   <Text style={styles.emptyTitle}>Aucun deal pour l’instant</Text>
                   <Text style={styles.emptyBody}>
-                    Pas encore de bonne affaire depuis cet aéroport. Essaie une autre
-                    ville ou lance une recherche.
+                    {origin
+                      ? `Pas encore de bonne affaire depuis ${origin}. Essaie un aéroport proche ou lance une recherche.`
+                      : 'Pas encore de bonne affaire. Choisis un aéroport ou lance une recherche.'}
                   </Text>
+                  <Pressable
+                    onPress={() =>
+                      (navigation as { navigate: (a: string) => void }).navigate('Search')
+                    }
+                    style={styles.retryBtn}
+                  >
+                    <Text style={styles.retryText}>Lancer une recherche</Text>
+                  </Pressable>
                 </>
               )}
             </View>

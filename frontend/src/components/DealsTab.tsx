@@ -8,6 +8,7 @@ import { DealDetailModal } from './DealDetailModal'
 import { DealWeekendCalendar } from './DealWeekendCalendar'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
+import { openSearchFromDeals } from '../utils/searchPrefill'
 
 const ORIGIN_OPTIONS = ['', 'BVA', 'ORY', 'CDG', 'MRS', 'NCE', 'LYS', 'TLS'] as const
 const BUDGET_OPTIONS = [0, 200, 250, 300, 350, 450] as const
@@ -29,6 +30,7 @@ export function DealsTab() {
   const occupancies = [1, 2, 3, 4, 5, 6]
   const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [readonlyBanner, setReadonlyBanner] = useState(false)
+  const [calendarEnabled, setCalendarEnabled] = useState(false)
 
   useEffect(() => {
     void fetch('/api/config')
@@ -39,9 +41,19 @@ export function DealsTab() {
           : (['FRI_SUN'] as DealWindowKind[])
         setWindowKinds(kinds.length ? kinds : ['FRI_SUN'])
         setReadonlyBanner(Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false)
+        setCalendarEnabled(Boolean(cfg?.calendar_enabled))
       })
       .catch(() => undefined)
   }, [])
+
+  const goSearch = (opts?: { destination?: string; city?: string }) => {
+    openSearchFromDeals({
+      origin: origin || undefined,
+      destination: opts?.destination,
+      city: opts?.city,
+      adults,
+    })
+  }
 
   const loadLikes = useCallback(async () => {
     try {
@@ -214,7 +226,7 @@ export function DealsTab() {
         </label>
       </div>
 
-      {origin && calendarDeal?.destination ? (
+      {calendarEnabled && origin && calendarDeal?.destination ? (
         <DealWeekendCalendar
           iata={calendarDeal.destination}
           cityName={calendarDeal.city}
@@ -256,7 +268,18 @@ export function DealsTab() {
       ) : deals.length === 0 ? (
         <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.emptyTitle')}</p>
-          <p className="text-sm text-muted">{t('deals.emptyBody')}</p>
+          <p className="text-sm text-muted mb-4">
+            {origin
+              ? t('deals.emptyBody', { origin })
+              : t('deals.emptyBodyAll')}
+          </p>
+          <button
+            type="button"
+            onClick={() => goSearch()}
+            className="app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
+          >
+            {t('deals.openSearch')}
+          </button>
         </div>
       ) : (
         <motion.div
@@ -281,6 +304,13 @@ export function DealsTab() {
           liked={likedIds.has(selected.id)}
           onToggleLike={() => void toggleLike(selected)}
           onClose={() => setSelected(null)}
+          onOtherDates={() => {
+            goSearch({
+              destination: selected.destination || selected.flight?.destination_iata,
+              city: selected.city,
+            })
+            setSelected(null)
+          }}
         />
       ) : null}
 

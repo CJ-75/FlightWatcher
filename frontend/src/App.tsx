@@ -33,6 +33,11 @@ import { SaveSearchModal } from './components/SaveSearchModal'
 import { Toast } from './components/Toast'
 import { motion } from 'framer-motion'
 import { getSessionId } from './utils/session'
+import {
+  OPEN_SEARCH_EVENT,
+  consumeSearchPrefill,
+  type SearchPrefill,
+} from './utils/searchPrefill'
 import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { useAirports } from './hooks/useAirports'
@@ -378,6 +383,36 @@ function Dashboard() {
       })
       .catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
+  }, [])
+
+  // Lot E — Deals → Search prérempli (origine / voyageurs ; dest en toast)
+  useEffect(() => {
+    const applyPrefill = (prefill: SearchPrefill | null) => {
+      if (!prefill) return
+      if (prefill.origin) {
+        setAeroportDepart(String(prefill.origin).trim().toUpperCase())
+      }
+      if (prefill.adults && prefill.adults >= 1) {
+        setSearchPassengers(Math.min(6, Math.max(1, Number(prefill.adults))))
+        setSearchLoadToken((n) => n + 1)
+      }
+      const destLabel = prefill.city || prefill.destination
+      if (destLabel) {
+        setToastType('info')
+        setToastMessage(
+          `Recherche pour ${destLabel} — choisis tes dates puis lance le scan.`,
+        )
+      }
+      setActiveTab('search')
+    }
+
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<SearchPrefill>).detail
+      applyPrefill(detail || consumeSearchPrefill())
+    }
+    window.addEventListener(OPEN_SEARCH_EVENT, onOpen)
+    applyPrefill(consumeSearchPrefill())
+    return () => window.removeEventListener(OPEN_SEARCH_EVENT, onOpen)
   }, [])
 
   // Effet pour scroller vers les résultats quand ils sont affichés

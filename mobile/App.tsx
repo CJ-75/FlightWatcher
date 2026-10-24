@@ -61,7 +61,7 @@ export type RootStackParamList = {
 }
 
 export type MainTabParamList = {
-  Search: undefined
+  Search: { origin?: string; adults?: number; destination?: string; city?: string } | undefined
   Deals: undefined
   Planner: undefined
   Favorites: undefined

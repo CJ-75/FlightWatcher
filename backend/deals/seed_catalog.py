@@ -16,13 +16,78 @@ logger = logging.getLogger("deals.seed_catalog")
 DEFAULT_FR_ORIGINS = ["BVA", "ORY", "CDG", "MRS", "NCE", "LYS", "TLS", "BOD", "NTE", "SXB"]
 
 
+def _parse_iata_list(raw: str) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for part in (raw or "").replace(";", ",").split(","):
+        code = part.strip().upper()
+        if len(code) == 3 and code.isalpha() and code not in seen:
+            seen.add(code)
+            out.append(code)
+    return out
+
+
 def _origins(cfg: DealsConfig) -> List[str]:
     import os
 
     raw = (os.getenv("DEALS_ORIGINS") or "").strip()
     if raw:
-        return [p.strip().upper() for p in raw.split(",") if len(p.strip()) == 3]
+        return _parse_iata_list(raw)
     return list(DEFAULT_FR_ORIGINS)
+
+
+def _priority_origins() -> List[str]:
+    import os
+
+    raw = (
+        os.getenv("SEED_PRIORITY_ORIGINS") or "BVA,MRS,NTE,BOD,TLS,LYS"
+    ).strip()
+    return _parse_iata_list(raw)
+
+
+def ordered_seed_origins(cfg: DealsConfig) -> List[str]:
+    """Priority origins first, then the rest of DEALS_ORIGINS."""
+    all_o = _origins(cfg)
+    allow = set(all_o)
+    ordered: List[str] = []
+    seen = set()
+    for code in _priority_origins() + all_o:
+        if code in allow and code not in seen:
+            seen.add(code)
+            ordered.append(code)
+    return ordered or all_o
+
+
+def date_pairs_from_sets(raw: Optional[str] = None) -> List[Tuple[str, str]]:
+    """
+    SEED_DATE_SETS tokens e.g. WEEKEND3,SHORT1,WEEK1
+    Default Lot E: 3 weekends + 1 short midweek.
+    """
+    import os
+
+    spec = (raw if raw is not None else os.getenv("SEED_DATE_SETS", "WEEKEND3,SHORT1") or "").strip()
+    pairs: List[Tuple[str, str]] = []
+    for token in spec.replace(";", ",").split(","):
+        t = token.strip().upper()
+        if not t:
+            continue
+        if t.startswith("WEEKEND"):
+            n = int("".join(c for c in t[7:] if c.isdigit()) or "3")
+            pairs.extend(_weekend_dates(max(1, n)))
+        elif t.startswith("SHORT"):
+            n = int("".join(c for c in t[5:] if c.isdigit()) or "1")
+            pairs.extend(_short_midweek(max(1, n)))
+        elif t.startswith("WEEK"):
+            n = int("".join(c for c in t[4:] if c.isdigit()) or "1")
+            pairs.extend(_week_stays(max(1, n)))
+    # Dedup preserve order
+    seen = set()
+    uniq: List[Tuple[str, str]] = []
+    for p in pairs:
+        if p not in seen:
+            seen.add(p)
+            uniq.append(p)
+    return uniq or _weekend_dates(3)
 
 
 def _norm(values: Sequence[float]) -> List[float]:
@@ -241,7 +306,7 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
     Respects SEED_SCAN_BUDGET_PER_DAY; skips cells with fresh organic obs (<12h).
     """
     cfg = cfg or load_deals_config()
-    origins = _origins(cfg)
+    origins = ordered_seed_origins(cfg)
     budget = cfg.seed_scan_budget_per_day
 
     from deals.job_runs import scans_done_today
@@ -271,11 +336,12 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-    date_pairs = _weekend_dates(3) + _short_midweek(2) + _week_stays(2)
+    date_pairs = date_pairs_from_sets()
     scans_done = 0
     skipped_organic = 0
     errors = 0
     aborted_circuit = False
+    cell_gaps_h: List[float] = []
 
     from api_models import DateAvecHoraire
     from providers.orchestrator import search_roundtrips
@@ -325,6 +391,15 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
                     continue
 
                 try:
+                    gap = _hours_since_last_seed_cell(
+                        supabase,
+                        origin=origin,
+                        served_city_id=city_id,
+                        out_date=out_d,
+                    )
+                    if gap is not None:
+                        cell_gaps_h.append(gap)
+
                     trips, _nq = search_roundtrips(
                         aeroport_depart=origin,
                         dates_depart=[DateAvecHoraire(date=out_d)],
@@ -360,6 +435,16 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
         if aborted_circuit:
             break
 
+    avg_gap = (
+        round(sum(cell_gaps_h) / len(cell_gaps_h), 1) if cell_gaps_h else None
+    )
+    if avg_gap is not None:
+        logger.info(
+            "seed_scan avg hours since last same-cell seed: %s (n=%s)",
+            avg_gap,
+            len(cell_gaps_h),
+        )
+
     return {
         "ok": True,
         "scans": scans_done,
@@ -369,5 +454,42 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
         "skipped_organic": skipped_organic,
         "errors": errors,
         "aborted_circuit": aborted_circuit,
+        "origins_order": origins,
+        "date_pairs": len(date_pairs),
+        "avg_cell_gap_h": avg_gap,
         "dry_run": dry_run,
     }
+
+
+def _hours_since_last_seed_cell(
+    supabase,
+    *,
+    origin: str,
+    served_city_id: Any,
+    out_date: str,
+) -> Optional[float]:
+    if not served_city_id:
+        return None
+    try:
+        res = (
+            supabase.table("price_observations")
+            .select("observed_at")
+            .eq("origin_iata", origin)
+            .eq("served_city_id", served_city_id)
+            .eq("out_date", out_date)
+            .eq("source", "seed_batch")
+            .order("observed_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return None
+        raw = res.data[0].get("observed_at")
+        if not raw:
+            return None
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 3600.0
+    except Exception:
+        return None

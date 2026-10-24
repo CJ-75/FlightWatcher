@@ -19,6 +19,8 @@ interface DealDetailModalProps {
   liked?: boolean
   onToggleLike?: () => void
   onNeedLogin?: () => void
+  /** Lot E — open Search prefilled with origin / dest / pax. */
+  onOtherDates?: () => void
 }
 
 function formatDate(dateStr: string) {
@@ -67,6 +69,7 @@ export function DealDetailModal({
   liked,
   onToggleLike,
   onNeedLogin,
+  onOtherDates,
 }: DealDetailModalProps) {
   const { t, language } = useI18n()
   const navigate = useNavigate()
@@ -489,6 +492,15 @@ export function DealDetailModal({
               >
                 {startingTrip ? '…' : 'Continuer ce voyage'}
               </button>
+              {onOtherDates ? (
+                <button
+                  type="button"
+                  onClick={onOtherDates}
+                  className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-semibold py-3 rounded-xl transition-colors"
+                >
+                  {t('deals.otherDates')}
+                </button>
+              ) : null}
               {deal.provider === 'liteapi' || (deal.deal_key && deal.hotel) ? (
                 bookingEnabled ? (
                   <button

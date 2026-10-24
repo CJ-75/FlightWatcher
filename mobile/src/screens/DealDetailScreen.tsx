@@ -295,6 +295,25 @@ export function DealDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }, shadow.lift]}>
+        <Pressable
+          onPress={() => {
+            navigation.navigate(
+              'Main' as never,
+              {
+                screen: 'Search',
+                params: {
+                  origin: deal.origin_iata || deal.departure_airport,
+                  adults,
+                  destination: deal.destination,
+                  city: deal.city,
+                },
+              } as never,
+            )
+          }}
+          style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={styles.ctaSecondaryText}>Voir d’autres dates</Text>
+        </Pressable>
         {deal.provider === 'liteapi' || deal.deal_key ? (
           <Pressable
             onPress={() =>

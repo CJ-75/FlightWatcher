@@ -11,7 +11,8 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
+import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type {
@@ -36,7 +37,7 @@ import {
   type FlexibleDates,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
-import type { RootStackParamList } from '../../App'
+import type { MainTabParamList, RootStackParamList } from '../../App'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
@@ -56,6 +57,7 @@ const LOADING_MESSAGES = ['On scanne les vols…', 'On croise les prix…', 'Pre
 
 export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const route = useRoute<RouteProp<MainTabParamList, 'Search'>>()
   const insets = useSafeAreaInsets()
   const { height: windowH } = useWindowDimensions()
   const compact = windowH < 780
@@ -78,6 +80,14 @@ export function SearchScreen() {
   const [loadingDest, setLoadingDest] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0])
+
+  // Lot E — prefill from Deals « autres dates » / empty CTA
+  useEffect(() => {
+    const p = route.params
+    if (!p) return
+    if (p.origin) setAirport(String(p.origin).toUpperCase())
+    if (p.adults && p.adults >= 1) setPassengers(Math.min(6, p.adults))
+  }, [route.params])
   const [error, setError] = useState<string | null>(null)
   const expandedDefaultRef = useRef(false)
   const scrollRef = useRef<ScrollView>(null)
