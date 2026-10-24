@@ -20,13 +20,37 @@ from flight_scanner import (
     get_dates_from_preset,
     enrich_trip_results,
 )
-from scan_log import slog, slog_banner, slog_dates
+from scan_log import slog, slog_banner, slog_dates, slog_provider_results
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, optional_auth
 
 router = APIRouter()
 
 # Dedicated pool so inspire/scan never stall the asyncio loop (hotels/other routes stay responsive)
 _SCAN_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fw-scan")
+
+
+def _print_provider_breakdown(origin: str, merged_n: int) -> None:
+    """Always print Ryanair / Travelpayouts counts in the uvicorn terminal."""
+    try:
+        from providers.orchestrator import get_last_provider_counts
+
+        last = get_last_provider_counts()
+        if last.get("counts") is not None:
+            slog_provider_results(
+                last.get("counts") or {},
+                merged_n=int(last.get("merged_n") or merged_n),
+                origin=str(last.get("origin") or origin or "?"),
+                elapsed_s=float(last.get("elapsed_s") or 0),
+                pending_names=last.get("pending") or None,
+            )
+            return
+    except Exception as e:
+        slog(f"provider counts: {e}")
+    slog_provider_results(
+        {},
+        merged_n=merged_n,
+        origin=(origin or "?").upper(),
+    )
 
 
 def generate_cache_key(request: ScanRequest) -> str:
@@ -119,6 +143,7 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
 
         loop = asyncio.get_running_loop()
         resultats, num_requetes = await loop.run_in_executor(_SCAN_POOL, _run_scan)
+        _print_provider_breakdown(request.aeroport_depart or "BVA", len(resultats or []))
 
         # Cache write off the critical path — vols d’abord
         if SUPABASE_AVAILABLE and resultats:
@@ -166,7 +191,7 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
 @optional_auth
 async def inspire_trip(request: InspireRequest, http_request: Request = None):
     """Endpoint simplifié pour mode découverte avec enrichissement"""
-    slog_banner("✨ POST /api/inspire — requête reçue")
+    slog_banner("POST /api/inspire")
     slog(f"  origine     : {request.departure}")
     slog(f"  preset      : {request.date_preset}")
     slog(f"  budget      : {request.budget} €/pers")
@@ -230,16 +255,18 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
             _SCAN_POOL, _inspire_scan_and_enrich
         )
 
+        _print_provider_breakdown(request.departure or "?", len(enriched_results or []))
+
         slog(
-            f"🏁 Inspire terminé: {len(enriched_results)} destination(s), "
-            f"{num_requetes} requête(s) provider"
+            f"Inspire done: {len(enriched_results)} destination(s), "
+            f"{num_requetes} provider request(s)"
         )
         if enriched_results:
             top = enriched_results[:5]
             for t in top:
                 slog(
-                    f"  · {t.destination_code or '?'} "
-                    f"{getattr(t, 'prix_total', '?')}€ "
+                    f"  - {t.destination_code or '?'} "
+                    f"{getattr(t, 'prix_total', '?')}EUR "
                     f"[{getattr(t, 'provider', '?')}]"
                 )
         return InspireResponse(

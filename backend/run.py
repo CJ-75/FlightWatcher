@@ -16,8 +16,10 @@ def signal_handler(sig, frame):
 if __name__ == "__main__":
     # Logs scan/inspire visibles immédiatement dans le terminal
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     try:
-        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+        sys.stdout.reconfigure(line_buffering=True, encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(line_buffering=True, encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
     except Exception:
         pass
 

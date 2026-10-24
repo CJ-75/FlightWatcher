@@ -11,7 +11,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, Future, wait, FIRST_COMPLETED
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 from api_models import DateAvecHoraire, TripResponse
 from providers.base import SearchParams
@@ -19,6 +19,13 @@ from providers.ryanair_budget import PURPOSE_ORGANIC
 from providers.ryanair_provider import RyanairProvider
 from providers.throttle import fast_search_path, is_circuit_open
 from providers.travelpayouts_provider import TravelpayoutsProvider, travelpayouts_enabled
+
+# Last race breakdown — read by /inspire so the summary prints on the request thread
+LAST_PROVIDER_COUNTS: dict[str, Any] = {}
+
+
+def get_last_provider_counts() -> dict:
+    return dict(LAST_PROVIDER_COUNTS)
 
 
 def _active_providers(only: Optional[Sequence[str]] = None) -> list:
@@ -171,29 +178,23 @@ def _log_provider_counts(
     pending_names: Optional[Sequence[str]] = None,
 ) -> None:
     """One clear terminal block: Ryanair vs Travelpayouts vs merged."""
-    from scan_log import slog
+    from scan_log import slog_provider_results
 
-    ry = counts.get("ryanair")
-    tp = counts.get("travelpayouts")
-    slog("")
-    slog("-" * 56)
-    slog(f"📊 RÉSULTATS PROVIDERS  ·  {origin}  ·  {elapsed_s:.1f}s")
-    if ry is None:
-        slog("   Ryanair       : (en cours / skip)")
-    else:
-        slog(f"   Ryanair       : {ry} A/R")
-    if tp is None:
-        slog("   Travelpayouts : (en cours / skip)")
-    else:
-        slog(f"   Travelpayouts : {tp} A/R")
-    for name, n in sorted(counts.items()):
-        if name in ("ryanair", "travelpayouts"):
-            continue
-        slog(f"   {name:<14}: {n} A/R")
-    slog(f"   → Fusionnés   : {merged_n} A/R (dédupliqués)")
-    if pending_names:
-        slog(f"   ⏳ encore en fond : {', '.join(pending_names)}")
-    slog("-" * 56)
+    global LAST_PROVIDER_COUNTS
+    LAST_PROVIDER_COUNTS = {
+        "counts": dict(counts),
+        "merged_n": int(merged_n),
+        "origin": origin,
+        "elapsed_s": float(elapsed_s),
+        "pending": list(pending_names or []),
+    }
+    slog_provider_results(
+        counts,
+        merged_n=merged_n,
+        origin=origin,
+        elapsed_s=elapsed_s,
+        pending_names=pending_names,
+    )
 
 
 def _race_providers(
