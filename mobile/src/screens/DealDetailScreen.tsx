@@ -318,7 +318,9 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
           {hotelOptions.length > 1 ? (
             <View style={styles.switchBlock}>
-              <Text style={styles.sectionLabel}>Changer d’hôtel</Text>
+              <Text style={styles.sectionLabel}>
+                {deal.city ? `Hôtels à ${deal.city}` : 'Changer d’hôtel'}
+              </Text>
               {hotelOptions.map((h) => {
                 const active = h.id === selected?.id
                 const hPp = pricePpWithHotel(deal, h.public_hotel_price ?? hotelTotal)

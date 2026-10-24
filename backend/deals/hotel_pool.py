@@ -408,6 +408,20 @@ def upsert_destinations(supabase: Any) -> List[Dict[str, Any]]:
             .execute()
         )
         data = list(sel.data or [])
+    # Link catalogue rows to served_cities (city-axis hotel pools)
+    try:
+        from deals.city_mapping import link_destinations_to_served_cities
+
+        link_destinations_to_served_cities(supabase)
+        sel = (
+            supabase.table("deal_destinations")
+            .select("*")
+            .eq("active", True)
+            .execute()
+        )
+        data = list(sel.data or data)
+    except Exception as e:
+        logger.warning("link_destinations_to_served_cities: %s", e)
     return data
 
 

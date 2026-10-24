@@ -568,8 +568,14 @@ export function DealDetailModal({
             {hotelOptions.length > 1 ? (
               <section>
                 <div className="flex items-baseline justify-between gap-2 mb-3">
-                  <h3 className="text-sm font-bold text-ink">Choisir l’hôtel</h3>
-                  <p className="text-[11px] text-slate-400">{hotelOptions.length} options</p>
+                  <h3 className="text-sm font-bold text-ink">
+                    {deal.city
+                      ? `Hôtels à ${deal.city}`
+                      : 'Choisir l’hôtel'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {hotelOptions.length} option{hotelOptions.length > 1 ? 's' : ''}
+                  </p>
                 </div>
                 <div className="grid gap-2">
                   {hotelOptions.map((h) => {

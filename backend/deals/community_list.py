@@ -404,13 +404,14 @@ def _overlay_pool_photos_on_rows(
 
 
 def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 8) -> List[Dict[str, Any]]:
-    """Last-resort browse fill: hotel_pool rows that already have a photo."""
+    """Last-resort browse fill: hotel_pool for the arrival city (served_city)."""
     if not supabase or not dest_iata:
         return []
     try:
-        from deals.upsell import find_destination_by_iata
+        from deals.city_mapping import resolve_hotel_destination
 
-        dest = find_destination_by_iata(supabase, dest_iata)
+        resolved = resolve_hotel_destination(supabase, iata=dest_iata)
+        dest = (resolved or {}).get("destination")
         if not dest:
             return []
         res = (
@@ -421,7 +422,7 @@ def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 8) -> Lis
             )
             .eq("destination_id", dest["id"])
             .order("pool_rank")
-            .limit(12)
+            .limit(40)
             .execute()
         )
     except Exception:

@@ -531,7 +531,10 @@ export interface HotelUpsellResult {
   tier?: string | null
   nights?: number | null
   flight_pp?: number | null
+  /** Arrival city label (served city), not airport code */
   city?: string | null
+  served_city_id?: string | null
+  destination_id?: string | null
   destination_slug?: string | null
   window_id?: string | null
   window_kind?: string | null

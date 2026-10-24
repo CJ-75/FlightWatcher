@@ -258,3 +258,244 @@ def iatas_for_served_city(supabase, served_city_id: str) -> List[str]:
         return [str(r["iata"]).upper() for r in (res.data or []) if r.get("iata")]
     except Exception:
         return []
+
+
+_DEST_SELECT = (
+    "id,slug,city_name,iata_arrival,timezone,pool_radius_m,active,"
+    "served_city_id,center_lat,center_lng,country_code,priority"
+)
+
+
+def _destination_row(supabase, **filters: Any) -> Optional[Dict[str, Any]]:
+    """Single active deal_destinations row; ignores unknown columns on older DBs."""
+    try:
+        q = (
+            supabase.table("deal_destinations")
+            .select(_DEST_SELECT)
+            .eq("active", True)
+        )
+        for k, v in filters.items():
+            if v is None:
+                continue
+            q = q.eq(k, v)
+        r = q.limit(1).execute()
+        return (r.data or [None])[0]
+    except Exception as e:
+        # served_city_id column may be missing before migration
+        msg = str(e).lower()
+        if "served_city_id" in msg or "column" in msg:
+            try:
+                q = (
+                    supabase.table("deal_destinations")
+                    .select(
+                        "id,slug,city_name,iata_arrival,timezone,"
+                        "pool_radius_m,active,center_lat,center_lng,"
+                        "country_code,priority"
+                    )
+                    .eq("active", True)
+                )
+                for k, v in filters.items():
+                    if v is None or k == "served_city_id":
+                        continue
+                    q = q.eq(k, v)
+                if "served_city_id" in filters:
+                    return None
+                r = q.limit(1).execute()
+                return (r.data or [None])[0]
+            except Exception as e2:
+                logger.warning("destination_row fallback: %s", e2)
+                return None
+        logger.warning("destination_row: %s", e)
+        return None
+
+
+def find_destination_by_served_city(
+    supabase, served_city_id: str
+) -> Optional[Dict[str, Any]]:
+    if not served_city_id:
+        return None
+    return _destination_row(supabase, served_city_id=served_city_id)
+
+
+def find_destination_by_iata_exact(
+    supabase, iata: str
+) -> Optional[Dict[str, Any]]:
+    code = (iata or "").strip().upper()
+    if len(code) != 3:
+        return None
+    return _destination_row(supabase, iata_arrival=code)
+
+
+def resolve_hotel_destination(
+    supabase,
+    *,
+    iata: Optional[str] = None,
+    city: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Arrival airport or city name → hotel catalogue destination (city-axis).
+
+    Order: IATA → served_city → deal_destinations.served_city_id
+    (fallback primary_iata / exact iata_arrival / city_name).
+    Origin is never used.
+    """
+    code = (iata or "").strip().upper()
+    name = (city or "").strip()
+
+    served: Optional[Dict[str, Any]] = None
+    if len(code) == 3:
+        served = resolve_served_city(supabase, code)
+    if not served and name:
+        try:
+            res = (
+                supabase.table("served_cities")
+                .select(
+                    "id,slug,city_name,country_code,primary_iata,"
+                    "center_lat,center_lng,timezone,verified"
+                )
+                .ilike("city_name", name)
+                .limit(1)
+                .execute()
+            )
+            row = (res.data or [None])[0]
+            if row:
+                served = {
+                    "served_city_id": row.get("id"),
+                    "city_name": row.get("city_name"),
+                    "country_code": row.get("country_code") or "",
+                    "slug": row.get("slug"),
+                    "primary_iata": (row.get("primary_iata") or "").upper() or None,
+                    "center_lat": row.get("center_lat"),
+                    "center_lng": row.get("center_lng"),
+                    "timezone": row.get("timezone") or "Europe/Paris",
+                    "verified": bool(row.get("verified")),
+                    "iata": code or (row.get("primary_iata") or ""),
+                }
+        except Exception as e:
+            logger.warning("resolve_hotel_destination city %s: %s", name, e)
+
+    dest: Optional[Dict[str, Any]] = None
+    if served and served.get("served_city_id"):
+        dest = find_destination_by_served_city(supabase, str(served["served_city_id"]))
+
+    primary = None
+    if served:
+        primary = (served.get("primary_iata") or "").upper() or None
+    if not dest and primary:
+        dest = find_destination_by_iata_exact(supabase, primary)
+    if not dest and len(code) == 3:
+        dest = find_destination_by_iata_exact(supabase, code)
+    if not dest and name:
+        try:
+            res = (
+                supabase.table("deal_destinations")
+                .select(_DEST_SELECT)
+                .ilike("city_name", name)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+            )
+            dest = (res.data or [None])[0]
+        except Exception:
+            try:
+                res = (
+                    supabase.table("deal_destinations")
+                    .select(
+                        "id,slug,city_name,iata_arrival,timezone,"
+                        "pool_radius_m,active"
+                    )
+                    .ilike("city_name", name)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                dest = (res.data or [None])[0]
+            except Exception as e:
+                logger.warning("resolve_hotel_destination dest by name: %s", e)
+
+    if not dest:
+        return None
+
+    city_name = (
+        (served or {}).get("city_name")
+        or dest.get("city_name")
+        or name
+        or code
+        or ""
+    )
+    primary_out = (
+        primary
+        or (dest.get("iata_arrival") or "").upper()
+        or code
+        or None
+    )
+    served_city_id = (
+        (served or {}).get("served_city_id")
+        or dest.get("served_city_id")
+    )
+    return {
+        "destination": dest,
+        "destination_id": dest.get("id"),
+        "served_city_id": served_city_id,
+        "city_name": city_name,
+        "primary_iata": primary_out,
+        "iata": code or primary_out,
+        "slug": dest.get("slug") or (served or {}).get("slug"),
+        "pool_radius_m": dest.get("pool_radius_m"),
+        "timezone": dest.get("timezone") or (served or {}).get("timezone"),
+    }
+
+
+def link_destinations_to_served_cities(supabase) -> Dict[str, Any]:
+    """
+    Set deal_destinations.served_city_id from served_cities
+    (slug / primary_iata / city_name). Safe to re-run.
+    """
+    linked = 0
+    skipped = 0
+    try:
+        dests = (
+            supabase.table("deal_destinations")
+            .select("id,slug,city_name,iata_arrival,served_city_id")
+            .eq("active", True)
+            .execute()
+        ).data or []
+    except Exception as e:
+        # Column missing
+        logger.warning("link_destinations: %s", e)
+        return {"linked": 0, "skipped": 0, "error": str(e)}
+
+    cities = (
+        supabase.table("served_cities")
+        .select("id,slug,city_name,primary_iata")
+        .execute()
+    ).data or []
+    by_slug = {str(c.get("slug") or "").lower(): c for c in cities if c.get("slug")}
+    by_iata = {
+        str(c.get("primary_iata") or "").upper(): c
+        for c in cities
+        if c.get("primary_iata")
+    }
+    by_name = {
+        str(c.get("city_name") or "").lower(): c for c in cities if c.get("city_name")
+    }
+
+    for d in dests:
+        if d.get("served_city_id"):
+            skipped += 1
+            continue
+        sc = (
+            by_slug.get(str(d.get("slug") or "").lower())
+            or by_iata.get(str(d.get("iata_arrival") or "").upper())
+            or by_name.get(str(d.get("city_name") or "").lower())
+        )
+        if not sc:
+            continue
+        try:
+            supabase.table("deal_destinations").update(
+                {"served_city_id": sc["id"]}
+            ).eq("id", d["id"]).execute()
+            linked += 1
+        except Exception as e:
+            logger.warning("link dest %s: %s", d.get("slug"), e)
+    return {"linked": linked, "skipped": skipped, "destinations": len(dests)}

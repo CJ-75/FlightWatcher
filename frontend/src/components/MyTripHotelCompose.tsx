@@ -28,6 +28,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nightCap, setNightCap] = useState<number | null>(null)
+  const [cityLabel, setCityLabel] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +77,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
               : []
         setOptions(opts)
         if (result?.night_cap != null) setNightCap(Number(result.night_cap))
+        if (result?.city) setCityLabel(String(result.city))
         // Prefer current hotel if still in list
         const curId = String(currentHotel?.id || currentHotel?.hotel_id || '')
         const match = opts.find(
@@ -83,7 +85,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         )
         setSelected(match || opts[0] || null)
         if (!opts.length) {
-          setError('Aucun hôtel disponible pour ces dates')
+          setError('Aucun hôtel disponible pour cette ville / ces dates')
         }
       } catch {
         if (!cancelled) setError('Impossible de charger les hôtels')
@@ -135,7 +137,9 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         <p className="text-[11px] font-bold uppercase tracking-wider text-primary-700/70">
           Composer le voyage
         </p>
-        <h2 className="text-xl font-black text-ink mt-1">Choisir un autre hôtel</h2>
+        <h2 className="text-xl font-black text-ink mt-1">
+          {cityLabel ? `Hôtels à ${cityLabel}` : 'Choisir un autre hôtel'}
+        </h2>
         <p className="text-sm text-slate-600 mt-1">
           Le vol reste le même
           {flightPp > 0 ? ` (${Math.round(flightPp)} € / pers.)` : ''}.

@@ -121,18 +121,25 @@ def _rates_still_usable(
 
 
 def find_destination_by_iata(supabase: Any, iata: str) -> Optional[Dict[str, Any]]:
-    iata = (iata or "").strip().upper()
-    if not iata:
+    """
+    Arrival IATA → hotel catalogue destination via served city
+    (FCO/CIA → Rome). Prefer resolve_hotel_destination for full meta.
+    """
+    from deals.city_mapping import resolve_hotel_destination
+
+    resolved = resolve_hotel_destination(supabase, iata=iata)
+    if not resolved:
         return None
-    r = (
-        supabase.table("deal_destinations")
-        .select("id,slug,city_name,iata_arrival,timezone,pool_radius_m,active")
-        .eq("iata_arrival", iata)
-        .eq("active", True)
-        .limit(1)
-        .execute()
-    )
-    return (r.data or [None])[0]
+    dest = resolved.get("destination")
+    if not isinstance(dest, dict):
+        return None
+    # Ensure city label / served_city_id visible to callers
+    out = dict(dest)
+    if resolved.get("city_name"):
+        out["city_name"] = resolved["city_name"]
+    if resolved.get("served_city_id") and not out.get("served_city_id"):
+        out["served_city_id"] = resolved["served_city_id"]
+    return out
 
 
 def find_window_by_dates(
@@ -364,9 +371,17 @@ def lookup_upsell(
     if not cin or not cout or cout <= cin:
         return {**base, "status": "unavailable", "reason": "bad_dates"}
 
-    dest = find_destination_by_iata(supabase, iata)
+    from deals.city_mapping import resolve_hotel_destination
+
+    resolved = resolve_hotel_destination(supabase, iata=iata)
+    dest = resolved.get("destination") if resolved else None
     if not dest:
         return {**base, "status": "unavailable", "reason": "not_in_catalogue"}
+
+    city_label = (resolved or {}).get("city_name") or dest.get("city_name")
+    served_city_id = (resolved or {}).get("served_city_id") or dest.get("served_city_id")
+    base["city"] = city_label
+    base["served_city_id"] = served_city_id
 
     rooms, adults = rooms_for_participants(participants)
     window = find_window_by_dates(supabase, cin, cout)
@@ -389,7 +404,8 @@ def lookup_upsell(
                     "mode": "canonical",
                     "destination_id": dest["id"],
                     "destination_slug": dest.get("slug"),
-                    "city": dest.get("city_name"),
+                    "city": city_label,
+                    "served_city_id": served_city_id,
                     "window_id": window["id"],
                     "window_kind": window.get("kind"),
                     "adults_lookup": adults,
@@ -419,7 +435,8 @@ def lookup_upsell(
                 "mode": "rates_by_dates",
                 "destination_id": dest["id"],
                 "destination_slug": dest.get("slug"),
-                "city": dest.get("city_name"),
+                "city": city_label,
+                "served_city_id": served_city_id,
                 "window_id": window["id"] if window else None,
                 "window_kind": window.get("kind") if window else None,
                 "adults_lookup": adults,
@@ -450,7 +467,8 @@ def lookup_upsell(
                 "mode": "ondemand",
                 "destination_id": dest["id"],
                 "destination_slug": dest.get("slug"),
-                "city": dest.get("city_name"),
+                "city": city_label,
+                "served_city_id": served_city_id,
                 "window_id": window["id"] if window else None,
                 "window_kind": window.get("kind") if window else None,
                 "adults_lookup": adults,
@@ -467,7 +485,8 @@ def lookup_upsell(
             "mode": "ondemand",
             "destination_id": dest["id"],
             "destination_slug": dest.get("slug"),
-            "city": dest.get("city_name"),
+            "city": city_label,
+            "served_city_id": served_city_id,
             "adults_lookup": adults,
             "rooms": rooms,
             "reason": "fetch_in_progress",
@@ -478,6 +497,8 @@ def lookup_upsell(
             "status": "unavailable",
             "mode": "ondemand",
             "destination_id": dest["id"],
+            "city": city_label,
+            "served_city_id": served_city_id,
             "reason": ondemand.get("status"),
         }
 
@@ -487,7 +508,8 @@ def lookup_upsell(
         "mode": "canonical" if window else "ondemand",
         "destination_id": dest["id"],
         "destination_slug": dest.get("slug"),
-        "city": dest.get("city_name"),
+        "city": city_label,
+        "served_city_id": served_city_id,
         "window_id": window["id"] if window else None,
         "window_kind": window.get("kind") if window else None,
         "adults_lookup": adults,

@@ -112,15 +112,30 @@ def collect_duplicate_primary_keys(rows: Sequence[Dict[str, Any]]) -> Set[str]:
 def batch_load_destinations(
     supabase: Any, iatas: Sequence[str]
 ) -> Dict[str, Dict[str, Any]]:
-    from deals.upsell import find_destination_by_iata
+    """Map each arrival IATA → hotel destination via served city (city-axis)."""
+    from deals.city_mapping import resolve_hotel_destination
 
     out: Dict[str, Dict[str, Any]] = {}
+    # Cache by destination_id so CIA/FCO share one dest object
+    by_dest_id: Dict[str, Dict[str, Any]] = {}
     for raw in iatas:
         code = (raw or "").strip().upper()
         if not code or code in out:
             continue
-        dest = find_destination_by_iata(supabase, code)
-        if dest:
+        resolved = resolve_hotel_destination(supabase, iata=code)
+        if not resolved or not resolved.get("destination"):
+            continue
+        dest = dict(resolved["destination"])
+        if resolved.get("city_name"):
+            dest["city_name"] = resolved["city_name"]
+        if resolved.get("served_city_id"):
+            dest["served_city_id"] = resolved["served_city_id"]
+        did = str(dest.get("id") or "")
+        if did and did in by_dest_id:
+            out[code] = by_dest_id[did]
+        else:
+            if did:
+                by_dest_id[did] = dest
             out[code] = dest
     return out
 

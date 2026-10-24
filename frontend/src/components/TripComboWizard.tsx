@@ -331,7 +331,7 @@ export function TripComboWizard({
                 transition={{ duration: 0.2 }}
               >
                 <h2 className="text-xl font-black text-ink tracking-tight mt-1">
-                  Choisis ton hôtel
+                  {city ? `Hôtels à ${city}` : 'Choisis ton hôtel'}
                 </h2>
                 <p className="text-sm text-muted mt-1">
                   Meilleur rapport note/prix
