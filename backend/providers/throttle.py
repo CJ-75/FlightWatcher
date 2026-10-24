@@ -47,15 +47,21 @@ def _seed_pause_s() -> float:
 
 
 def wait_provider_slot(provider: str = "") -> None:
-    """Serialize outbound provider HTTP with a minimum gap."""
+    """Serialize outbound provider HTTP with a minimum gap.
+
+    Sleep happens *outside* the lock so parallel searches / circuit checks
+    are not blocked for the whole gap (was causing Search to look hung).
+    """
     global _last_call_at
     gap = _min_interval_s()
-    with _lock:
-        now = time.monotonic()
-        wait = (_last_call_at + gap) - now
-        if wait > 0:
-            time.sleep(wait)
-        _last_call_at = time.monotonic()
+    while True:
+        with _lock:
+            now = time.monotonic()
+            wait = (_last_call_at + gap) - now
+            if wait <= 0:
+                _last_call_at = now
+                return
+        time.sleep(min(wait, gap))
 
 
 def seed_cell_pause() -> None:

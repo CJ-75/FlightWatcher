@@ -17,12 +17,14 @@ class TestRyanairBudget(unittest.TestCase):
         os.environ.pop("RYANAIR_BUDGET_PER_HOUR", None)
 
     def test_acquire_until_exhausted(self):
-        self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_CLICK))
         self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_REVALIDATE))
-        self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_ORGANIC))
+        self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_REVALIDATE))
+        self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_REVALIDATE))
         self.assertFalse(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_PROMOTE))
+        # User Search / click never blocked by the hourly cap
+        self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_ORGANIC))
+        self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_CLICK))
         snap = ryanair_budget.status_snapshot()
-        self.assertEqual(snap["used_last_hour"], 3)
         self.assertEqual(snap["remaining"], 0)
         self.assertGreaterEqual(snap["denied_by_purpose"].get("promote", 0), 1)
 

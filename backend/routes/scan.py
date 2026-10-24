@@ -43,6 +43,11 @@ def generate_cache_key(request: ScanRequest) -> str:
 @optional_auth
 async def scan_flights(request: ScanRequest, http_request: Request = None):
     """Scan les vols avec paramètres personnalisés et cache"""
+    print(
+        f"🔍 POST /api/scan origin={request.aeroport_depart} "
+        f"budget={request.budget_max} pax={request.passengers}",
+        flush=True,
+    )
     try:
         cache_key = generate_cache_key(request)
         cached_result = None
@@ -131,6 +136,12 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
 @optional_auth
 async def inspire_trip(request: InspireRequest, http_request: Request = None):
     """Endpoint simplifié pour mode découverte avec enrichissement"""
+    print(
+        f"✨ POST /api/inspire origin={request.departure} "
+        f"preset={request.date_preset} budget={request.budget} "
+        f"pax={request.passengers}",
+        flush=True,
+    )
     try:
         if request.flexible_dates:
             dates_depart_raw = request.flexible_dates.get('dates_depart', [])

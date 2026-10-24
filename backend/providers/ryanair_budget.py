@@ -1,8 +1,8 @@
 """
 v3.2 — shared Ryanair hourly call budget (priority queue).
 
-Priority (lower = more important):
-  click → revalidate → organic → promote
+Background jobs (revalidate / promote) are capped per hour.
+User-facing Search (organic) and click revalidate always proceed.
 
 Seed must NOT call Ryanair (Travelpayouts only).
 """
@@ -57,12 +57,19 @@ def remaining() -> int:
 def try_acquire(purpose: str) -> bool:
     """
     Reserve one Ryanair HTTP slot for this hour.
-    Higher-priority purposes always win while budget remains;
-    we do not preempt in-flight calls — just refuse lower priority when empty.
+
+    User-facing Search (organic) and click revalidate always proceed —
+    the hourly cap only throttles background jobs (revalidate / promote).
     """
     purpose = (purpose or PURPOSE_ORGANIC).lower()
     if purpose not in PRIORITY:
         purpose = PURPOSE_ORGANIC
+    # Never block the Search tab / outbound click checks
+    if purpose in (PURPOSE_ORGANIC, PURPOSE_CLICK):
+        with _lock:
+            _prune(time.monotonic())
+            _calls.append(time.monotonic())
+        return True
     with _lock:
         now = time.monotonic()
         _prune(now)
@@ -77,13 +84,14 @@ def try_acquire(purpose: str) -> bool:
             )
             return False
         _calls.append(now)
-        logger.debug(
-            "ryanair budget OK purpose=%s used=%s/%s",
-            purpose,
-            len(_calls),
-            budget,
-        )
-        return True
+        used = len(_calls)
+    logger.debug(
+        "ryanair budget OK purpose=%s used=%s/%s",
+        purpose,
+        used,
+        budget,
+    )
+    return True
 
 
 def status_snapshot() -> Dict[str, object]:
