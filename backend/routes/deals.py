@@ -1,11 +1,12 @@
-"""Deals listing + user liked deals."""
+"""Deals listing + user liked deals + batch jobs."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from deals.cron_auth import require_cron
 from deals.provider import get_deal_provider
 from supabase_deps import (
     SUPABASE_AVAILABLE,
@@ -224,6 +225,52 @@ async def unlike_deal(deal_id: str, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur liked_deals: {str(e)}")
+
+
+@router.post("/api/deals/jobs/seed-destinations")
+async def job_seed_destinations(authorization: Optional[str] = Header(None)):
+    """Upsert the 10 curated destinations (no LiteAPI call)."""
+    require_cron(authorization)
+    try:
+        from deals.hotel_pool import upsert_destinations
+
+        supabase = _svc()
+        rows = upsert_destinations(supabase)
+        return {"upserted": len(rows), "slugs": [r.get("slug") for r in rows]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/bootstrap-hotel-pools")
+async def job_bootstrap_hotel_pools(
+    authorization: Optional[str] = Header(None),
+    slug: Optional[str] = Query(None, description="Limiter à une destination (slug)"),
+):
+    """
+    Mensuel / manuel : seed destinations + rebuild hotel_pool via LiteAPI /data/hotels.
+    Requires LITEAPI_API_KEY_* and service role Supabase.
+    """
+    require_cron(authorization)
+    try:
+        from deals.hotel_pool import bootstrap_hotel_pools
+        from deals.liteapi_config import load_deals_config
+
+        cfg = load_deals_config()
+        if not cfg.api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Clé LiteAPI manquante (LITEAPI_API_KEY_SANDBOX ou _PROD)",
+            )
+        supabase = _svc()
+        slugs = [slug] if slug else None
+        summary = bootstrap_hotel_pools(supabase, cfg=cfg, slugs=slugs)
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api/deals/{deal_id}")

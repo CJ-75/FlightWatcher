@@ -140,18 +140,33 @@ class LiteApiClient:
         city_name: Optional[str] = None,
         offset: int = 0,
         limit: int = 100,
+        min_rating: Optional[float] = None,
+        min_reviews_count: Optional[int] = None,
+        star_rating: Optional[str] = None,
     ) -> Any:
         params: Dict[str, Any] = {"offset": offset, "limit": limit}
         if latitude is not None and longitude is not None:
             params["latitude"] = latitude
             params["longitude"] = longitude
             if radius is not None:
-                params["radius"] = radius
+                params["radius"] = max(1000, int(radius))
         if country_code:
             params["countryCode"] = country_code
         if city_name:
             params["cityName"] = city_name
+        if min_rating is not None:
+            params["minRating"] = min_rating
+        if min_reviews_count is not None:
+            params["minReviewsCount"] = min_reviews_count
+        if star_rating:
+            params["starRating"] = star_rating
         return self._request("GET", self.cfg.search_base, "/data/hotels", params=params)
+
+    def list_hotel_types(self) -> Any:
+        return self._request("GET", self.cfg.search_base, "/data/hotelTypes")
+
+    def list_facilities(self) -> Any:
+        return self._request("GET", self.cfg.search_base, "/data/facilities")
 
     # --- Rates ---
 
