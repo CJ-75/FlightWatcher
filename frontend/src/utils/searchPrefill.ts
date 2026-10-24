@@ -1,15 +1,20 @@
 /** Lot E — open Search tab with origin / destination / pax / dates from Deals. */
 
+import type { DateAvecHoraire } from '../types'
+
 export type SearchPrefill = {
   origin?: string
   destination?: string
   city?: string
   adults?: number
-  /** YYYY-MM-DD — aller */
+  /** YYYY-MM-DD — aller (single-day shortcut) */
   outbound?: string
-  /** YYYY-MM-DD — retour */
+  /** YYYY-MM-DD — retour (single-day shortcut) */
   inbound?: string
-  /** If true with outbound+inbound+origin → run inspire immediately */
+  /** Full flexible dates (same shape as Search) */
+  dates_depart?: DateAvecHoraire[]
+  dates_retour?: DateAvecHoraire[]
+  /** If true with origin + dates → run inspire immediately */
   autoSearch?: boolean
 }
 

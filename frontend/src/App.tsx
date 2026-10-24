@@ -420,13 +420,34 @@ function Dashboard() {
           : null
       if (pax) setSearchPassengers(pax)
 
+      const fromArrays =
+        Array.isArray(prefill.dates_depart) &&
+        Array.isArray(prefill.dates_retour) &&
+        prefill.dates_depart.length > 0 &&
+        prefill.dates_retour.length > 0
+
       const out = prefill.outbound?.slice(0, 10)
       const ret = prefill.inbound?.slice(0, 10)
-      const hasDates = Boolean(out && ret && ret > out)
+      const hasSingle = Boolean(out && ret && ret > out)
 
-      if (hasDates && out && ret) {
-        const dates_depart = [day(out)]
-        const dates_retour = [day(ret)]
+      if (fromArrays || hasSingle) {
+        const dates_depart = fromArrays
+          ? prefill.dates_depart!.map((d) => ({
+              date: String(d.date).slice(0, 10),
+              heure_min: d.heure_min || '06:00',
+              heure_max: d.heure_max || '23:59',
+            }))
+          : [day(out!)]
+        const dates_retour = fromArrays
+          ? prefill.dates_retour!.map((d) => ({
+              date: String(d.date).slice(0, 10),
+              heure_min: d.heure_min || '06:00',
+              heure_max: d.heure_max || '23:59',
+            }))
+          : [day(ret!)]
+        const labelOut = dates_depart[0]?.date || out || '?'
+        const labelRet =
+          dates_retour[dates_retour.length - 1]?.date || ret || '?'
         setSearchLoadToken((n) => {
           const nextToken = n + 1
           setDatesDepart(dates_depart)
@@ -445,8 +466,8 @@ function Dashboard() {
         setToastType('info')
         setToastMessage(
           prefill.autoSearch
-            ? `Recherche live ${out} → ${ret}…`
-            : `Dates ${out} → ${ret} prêtes — lance le scan.`,
+            ? `Recherche live ${labelOut} → ${labelRet}…`
+            : `Dates ${labelOut} → ${labelRet} prêtes — lance le scan.`,
         )
       } else {
         if (pax) setSearchLoadToken((n) => n + 1)

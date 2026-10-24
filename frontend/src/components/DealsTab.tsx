@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import type { TravelDeal } from '../types'
+import { formatDateFr, generateDatesFromPreset } from '@flightwatcher/shared'
+import type { DateAvecHoraire, TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
+import { DatePresets, type DatePreset } from './DatePresets'
+import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
+
+const fullDay = (d: DateAvecHoraire): DateAvecHoraire => ({
+  date: d.date.slice(0, 10),
+  heure_min: d.heure_min || '06:00',
+  heure_max: d.heure_max || '23:59',
+})
 
 const springConfig = {
   type: 'spring' as const,
@@ -35,9 +44,22 @@ export function DealsTab() {
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
-  const [outDate, setOutDate] = useState('')
-  const [retDate, setRetDate] = useState('')
+  const [datePreset, setDatePreset] = useState<DatePreset | null>('next-weekend')
+  const [flexibleDates, setFlexibleDates] = useState<{
+    dates_depart: DateAvecHoraire[]
+    dates_retour: DateAvecHoraire[]
+  }>({ dates_depart: [], dates_retour: [] })
+  const [presetDates, setPresetDates] = useState(() => {
+    const d = generateDatesFromPreset('next-weekend')
+    return {
+      dates_depart: d.dates_depart.map(fullDay),
+      dates_retour: d.dates_retour.map(fullDay),
+    }
+  })
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const activeDates =
+    datePreset === 'flexible' ? flexibleDates : presetDates
 
   useEffect(() => {
     void fetch('/api/config')
@@ -71,24 +93,31 @@ export function DealsTab() {
 
   const datesReady =
     Boolean(origin?.trim()) &&
-    Boolean(outDate) &&
-    Boolean(retDate) &&
-    retDate > outDate
+    activeDates.dates_depart.length > 0 &&
+    activeDates.dates_retour.length > 0
 
   const runDatedSearch = () => {
-    if (!datesReady) {
-      setToast(
-        !origin?.trim()
-          ? 'Choisis une origine pour lancer la recherche'
-          : 'Indique une date aller et une date retour (retour après l’aller)',
-      )
+    if (!origin?.trim()) {
+      setToast('Choisis une origine pour lancer la recherche')
       return
     }
+    if (
+      activeDates.dates_depart.length === 0 ||
+      activeDates.dates_retour.length === 0
+    ) {
+      setToast('Choisis des dates aller et retour (comme dans Search)')
+      if (datePreset !== 'flexible') setDatePreset('flexible')
+      return
+    }
+    const dates_depart = activeDates.dates_depart.map(fullDay)
+    const dates_retour = activeDates.dates_retour.map(fullDay)
     openSearchFromDeals({
       origin: origin.trim(),
       adults,
-      outbound: outDate,
-      inbound: retDate,
+      dates_depart,
+      dates_retour,
+      outbound: dates_depart[0]?.date,
+      inbound: dates_retour[dates_retour.length - 1]?.date,
       autoSearch: true,
     })
   }
@@ -200,13 +229,19 @@ export function DealsTab() {
     if (origin) parts.push(origin.split(',')[0] || origin)
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
-    if (outDate && retDate) {
-      parts.push(`${outDate.slice(5)} → ${retDate.slice(5)}`)
+    const out = activeDates.dates_depart[0]?.date
+    const ret = activeDates.dates_retour[activeDates.dates_retour.length - 1]?.date
+    if (out && ret) {
+      parts.push(
+        activeDates.dates_depart.length + activeDates.dates_retour.length > 2
+          ? `${activeDates.dates_depart.length} aller · ${activeDates.dates_retour.length} retour`
+          : `${out.slice(5)} → ${ret.slice(5)}`,
+      )
     }
     if (sort === 'price_asc') parts.push(t('deals.sortPriceAsc'))
     else if (sort === 'price_desc') parts.push(t('deals.sortPriceDesc'))
     return parts.join(' · ')
-  }, [origin, adults, outDate, retDate, sort, t])
+  }, [origin, adults, activeDates, sort, t])
 
   const matchedDeals = useMemo(
     () =>
@@ -298,47 +333,38 @@ export function DealsTab() {
             <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
 
             <div className="mt-4 pt-4 border-t border-line">
-              <label className="text-base sm:text-lg font-bold text-slate-900 block mb-2">
-                Dates (recherche live)
-              </label>
-              <p className="text-xs text-muted mb-3">
-                Choisis aller + retour : on lance une vraie recherche vols (pas le mur Deals).
+              <p className="text-xs text-muted mb-1">
+                Même sélecteur que Search — lance une vraie recherche vols (pas le mur).
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted block mb-1">
-                    Aller
-                  </label>
-                  <input
-                    type="date"
-                    value={outDate}
-                    min={new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      setOutDate(v)
-                      if (retDate && v && retDate <= v) setRetDate('')
-                    }}
-                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-primary-200"
+              <DatePresets
+                selected={datePreset}
+                onChange={(preset) => {
+                  setDatePreset(preset)
+                  if (preset !== 'flexible') {
+                    const generated = generateDatesFromPreset(preset)
+                    setPresetDates({
+                      dates_depart: generated.dates_depart.map(fullDay),
+                      dates_retour: generated.dates_retour.map(fullDay),
+                    })
+                    setFlexibleDates({ dates_depart: [], dates_retour: [] })
+                  }
+                }}
+                onFlexibleClick={() => setDatePreset('flexible')}
+              />
+              {datePreset === 'flexible' ? (
+                <div className="mb-3">
+                  <FlexibleDatesSelector
+                    flexibleDates={flexibleDates}
+                    onFlexibleDatesChange={setFlexibleDates}
+                    formatDateFr={formatDateFr}
                   />
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted block mb-1">
-                    Retour
-                  </label>
-                  <input
-                    type="date"
-                    value={retDate}
-                    min={outDate || new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => setRetDate(e.target.value)}
-                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-primary-200"
-                  />
-                </div>
-              </div>
+              ) : null}
               <button
                 type="button"
                 onClick={runDatedSearch}
                 disabled={!datesReady}
-                className={`mt-3 w-full sm:w-auto rounded-full px-5 py-2.5 text-sm font-bold transition-colors ${
+                className={`mt-1 w-full sm:w-auto rounded-full px-5 py-2.5 text-sm font-bold transition-colors ${
                   datesReady
                     ? 'bg-primary-500 text-white hover:bg-primary-600'
                     : 'bg-slate-100 text-slate-400 cursor-not-allowed'

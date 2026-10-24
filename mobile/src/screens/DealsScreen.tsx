@@ -14,7 +14,13 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, TravelDeal } from '@flightwatcher/shared'
-import { normalizeAirports, type FlexibleDates } from '@flightwatcher/shared'
+import {
+  formatDateFr,
+  generateDatesFromPreset,
+  normalizeAirports,
+  type DatePresetId,
+  type FlexibleDates,
+} from '@flightwatcher/shared'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { CityAirportPicker } from '../components/CityAirportPicker'
@@ -43,11 +49,23 @@ export function DealsScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [dateModalOpen, setDateModalOpen] = useState(false)
+  const [datePreset, setDatePreset] = useState<DatePresetId>('next-weekend')
+  const [presetDates, setPresetDates] = useState<FlexibleDates>(() =>
+    generateDatesFromPreset('next-weekend'),
+  )
   const [flexDates, setFlexDates] = useState<FlexibleDates>({
     dates_depart: [],
     dates_retour: [],
   })
   const [airports, setAirports] = useState<Airport[]>([])
+
+  const activeDates = datePreset === 'flexible' ? flexDates : presetDates
+
+  useEffect(() => {
+    if (datePreset !== 'flexible') {
+      setPresetDates(generateDatesFromPreset(datePreset))
+    }
+  }, [datePreset])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
   const configLoadedRef = useRef(false)
@@ -270,25 +288,84 @@ export function DealsScreen() {
                     <PassengerStepper value={adults} onChange={setAdults} />
 
                     <View style={styles.divider} />
-                    <Text style={styles.label}>Dates (recherche live)</Text>
+                    <Text style={styles.label}>Quand ?</Text>
                     <Text style={styles.originHint}>
-                      Aller + retour → vraie recherche vols (pas le mur Deals).
+                      Même UI que Search — recherche vols live (pas le mur).
                     </Text>
+                    <View style={styles.presetRow}>
+                      {(
+                        [
+                          {
+                            id: 'next-weekend' as const,
+                            label: 'Weekend prochain',
+                            hint: 'Sam → Dim',
+                          },
+                          {
+                            id: 'flexible' as const,
+                            label: 'Dates libres',
+                            hint: 'Je choisis',
+                          },
+                        ] as const
+                      ).map((p) => {
+                        const active = datePreset === p.id
+                        return (
+                          <Pressable
+                            key={p.id}
+                            onPress={() => {
+                              setDatePreset(p.id)
+                              if (p.id === 'flexible') setDateModalOpen(true)
+                            }}
+                            style={[styles.presetCard, active && styles.presetCardActive]}
+                          >
+                            <Text
+                              style={[
+                                styles.presetLabel,
+                                active && styles.presetLabelActive,
+                              ]}
+                            >
+                              {p.label}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.presetHint,
+                                active && styles.presetHintActive,
+                              ]}
+                            >
+                              {p.hint}
+                            </Text>
+                          </Pressable>
+                        )
+                      })}
+                    </View>
                     <Pressable
-                      onPress={() => setDateModalOpen(true)}
+                      onPress={() => {
+                        setDatePreset('flexible')
+                        setDateModalOpen(true)
+                      }}
                       style={styles.datesBtn}
                     >
                       <Text style={styles.datesBtnText}>
-                        {flexDates.dates_depart[0]?.date &&
-                        flexDates.dates_retour[0]?.date
-                          ? `${flexDates.dates_depart[0].date} → ${flexDates.dates_retour[0].date}`
-                          : 'Choisir aller / retour'}
+                        {(() => {
+                          const out = activeDates.dates_depart[0]?.date
+                          const ret =
+                            activeDates.dates_retour[
+                              activeDates.dates_retour.length - 1
+                            ]?.date
+                          if (!out || !ret) return 'Choisir aller / retour'
+                          if (datePreset === 'flexible') {
+                            return `${activeDates.dates_depart.length} aller · ${activeDates.dates_retour.length} retour`
+                          }
+                          return `${formatDateFr(out)} → ${formatDateFr(ret)}`
+                        })()}
                       </Text>
                     </Pressable>
                     <Pressable
                       onPress={() => {
-                        const out = flexDates.dates_depart[0]?.date
-                        const ret = flexDates.dates_retour[0]?.date
+                        const out = activeDates.dates_depart[0]?.date
+                        const ret =
+                          activeDates.dates_retour[
+                            activeDates.dates_retour.length - 1
+                          ]?.date
                         if (!origin.trim()) {
                           Alert.alert('Origine', 'Choisis une ville / aéroport de départ')
                           return
@@ -298,6 +375,7 @@ export function DealsScreen() {
                             'Dates',
                             'Indique une date aller et une date retour (retour après l’aller)',
                           )
+                          setDatePreset('flexible')
                           setDateModalOpen(true)
                           return
                         }
@@ -316,8 +394,8 @@ export function DealsScreen() {
                         styles.searchBtn,
                         !(
                           origin.trim() &&
-                          flexDates.dates_depart[0]?.date &&
-                          flexDates.dates_retour[0]?.date
+                          activeDates.dates_depart[0]?.date &&
+                          activeDates.dates_retour[0]?.date
                         ) && styles.searchBtnDisabled,
                       ]}
                     >
@@ -456,8 +534,11 @@ export function DealsScreen() {
 
       <FlexibleDatesModal
         visible={dateModalOpen}
-        value={flexDates}
-        onChange={setFlexDates}
+        value={datePreset === 'flexible' ? flexDates : presetDates}
+        onChange={(v) => {
+          setDatePreset('flexible')
+          setFlexDates(v)
+        }}
         onClose={() => setDateModalOpen(false)}
       />
     </View>
@@ -572,6 +653,39 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 16,
   },
+  presetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  presetCard: {
+    flexGrow: 1,
+    minWidth: '42%',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  presetCardActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  presetLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  presetLabelActive: { color: colors.white },
+  presetHint: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.muted,
+  },
+  presetHintActive: { color: 'rgba(255,255,255,0.85)' },
   datesBtn: {
     marginTop: 10,
     borderWidth: StyleSheet.hairlineWidth,
