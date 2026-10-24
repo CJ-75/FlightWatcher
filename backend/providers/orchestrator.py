@@ -154,9 +154,46 @@ def _drain_late(fut: Future, name: str) -> None:
 
     try:
         trips, nq = fut.result()
-        slog(f"⏱ late [{name}] finished: {len(trips or [])} trips, {nq} req (cache warm)")
+        n = len(trips or [])
+        slog("")
+        slog(f"📦 RÉSULTATS [{name}] (late/cache) : {n} A/R  ({nq} req)")
+        slog(f"⏱ late [{name}] finished — cache warm")
     except Exception as e:
         slog(f"⏱ late [{name}] error: {e}")
+
+
+def _log_provider_counts(
+    counts: dict[str, int],
+    *,
+    merged_n: int,
+    origin: str,
+    elapsed_s: float,
+    pending_names: Optional[Sequence[str]] = None,
+) -> None:
+    """One clear terminal block: Ryanair vs Travelpayouts vs merged."""
+    from scan_log import slog
+
+    ry = counts.get("ryanair")
+    tp = counts.get("travelpayouts")
+    slog("")
+    slog("-" * 56)
+    slog(f"📊 RÉSULTATS PROVIDERS  ·  {origin}  ·  {elapsed_s:.1f}s")
+    if ry is None:
+        slog("   Ryanair       : (en cours / skip)")
+    else:
+        slog(f"   Ryanair       : {ry} A/R")
+    if tp is None:
+        slog("   Travelpayouts : (en cours / skip)")
+    else:
+        slog(f"   Travelpayouts : {tp} A/R")
+    for name, n in sorted(counts.items()):
+        if name in ("ryanair", "travelpayouts"):
+            continue
+        slog(f"   {name:<14}: {n} A/R")
+    slog(f"   → Fusionnés   : {merged_n} A/R (dédupliqués)")
+    if pending_names:
+        slog(f"   ⏳ encore en fond : {', '.join(pending_names)}")
+    slog("-" * 56)
 
 
 def _race_providers(
@@ -174,12 +211,23 @@ def _race_providers(
     """
     from scan_log import slog
 
+    origin = (params.aeroport_depart or "?").upper()
+
     if not providers:
         return [], 0
     if len(providers) == 1:
-        return providers[0].search_roundtrips(params)
+        p = providers[0]
+        trips, nq = p.search_roundtrips(params)
+        _log_provider_counts(
+            {p.name: len(trips or [])},
+            merged_n=len(trips or []),
+            origin=origin,
+            elapsed_s=0.0,
+        )
+        return trips, nq
 
     batches: List[List[TripResponse]] = []
+    counts: dict[str, int] = {}
     total_queries = 0
     providers_done: set[str] = set()
     start = time.monotonic()
@@ -221,18 +269,22 @@ def _race_providers(
                 name = futures[fut]
                 try:
                     trips, nq = fut.result()
+                    n = len(trips or [])
                     batches.append(trips or [])
+                    counts[name] = n
                     total_queries += int(nq or 0)
                     providers_done.add(name)
-                    slog(f"✅ provider {name}: {len(trips or [])} trips, {nq} req")
+                    slog(f"✅ [{name}] {n} A/R trouvés  ({nq} req)")
                     if first_done_at is None:
                         first_done_at = time.monotonic()
                 except Exception as e:
-                    slog(f"❌ provider {name} failed: {e}")
+                    slog(f"❌ [{name}] échec: {e}")
+                    counts[name] = 0
                     providers_done.add(name)
                     if first_done_at is None:
                         first_done_at = time.monotonic()
 
+        pending_names = [futures[f] for f in pending]
         # Late providers → background (cache); don't cancel mid-HTTP
         for fut in pending:
             name = futures[fut]
@@ -242,9 +294,17 @@ def _race_providers(
                 daemon=True,
                 name=f"fw-late-{name}",
             ).start()
-            slog(f"⏳ provider {name} continues in background")
+            slog(f"⏳ [{name}] continue en fond (comptera en late)")
 
-    return merge_trips(batches), total_queries
+        merged = merge_trips(batches)
+        _log_provider_counts(
+            counts,
+            merged_n=len(merged),
+            origin=origin,
+            elapsed_s=time.monotonic() - start,
+            pending_names=pending_names or None,
+        )
+        return merged, total_queries
 
 
 def _search_one_origin(
