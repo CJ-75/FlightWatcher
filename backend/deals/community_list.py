@@ -686,18 +686,19 @@ def list_community_deals(
     origin: Optional[str] = None,
     adults: Optional[int] = None,
     max_pp: Optional[float] = None,
-    limit: int = 20,
+    limit: int = 36,
 ) -> List[Dict[str, Any]]:
     """
     Browse: deals with hotel photo only (no city stock, no flight-only cards).
     Read path is cache-only enrichment — hotel composition happens in jobs.
+    Default ~36 for choice; hard cap 48 (single wall, no pagination yet).
     """
     import logging
 
     log = logging.getLogger("deals.community_list")
     t0 = time.monotonic()
     adults_n = int(adults or 2)
-    target = max(12, min(int(limit or 20), 48))
+    target = max(12, min(int(limit or 36), 48))
     with _list_cache_lock:
         epoch = _list_cache_epoch
     cache_key = f"hp2|{epoch}|{origin or ''}|{adults_n}|{max_pp}|{target}"

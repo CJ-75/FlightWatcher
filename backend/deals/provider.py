@@ -29,6 +29,7 @@ class DealProvider(ABC):
         adults: Optional[int] = None,
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
+        limit: Optional[int] = None,
     ) -> List[dict]:
         raise NotImplementedError
 
@@ -50,6 +51,7 @@ class MockDealProvider(DealProvider):
         adults: Optional[int] = None,
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
+        limit: Optional[int] = None,
     ) -> List[dict]:
         deals = list(self._deals)
         if origin:
@@ -57,6 +59,8 @@ class MockDealProvider(DealProvider):
             deals = [d for d in deals if (d.get("departure_airport") or "").upper() == origin_u]
         if max_pp is not None:
             deals = [d for d in deals if float(d.get("price_per_person") or 0) <= float(max_pp)]
+        cap = max(1, min(int(limit or 36), 48))
+        deals = deals[:cap]
         return deals
 
     def get_deal(self, deal_id: str) -> Optional[dict]:
@@ -311,6 +315,7 @@ class LiteApiDealProvider(DealProvider):
         adults: Optional[int] = None,
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
+        limit: Optional[int] = None,
     ) -> List[dict]:
         from deals.deal_assemble import load_caches_and_assemble
         from deals.liteapi_config import load_deals_config
@@ -324,7 +329,11 @@ class LiteApiDealProvider(DealProvider):
                 from deals.community_list import list_community_deals
 
                 community = list_community_deals(
-                    supabase, origin=origin, adults=adults, max_pp=max_pp
+                    supabase,
+                    origin=origin,
+                    adults=adults,
+                    max_pp=max_pp,
+                    limit=int(limit or 36),
                 )
                 if community:
                     return community

@@ -434,6 +434,8 @@ export interface DealsListParams {
   adults?: number
   window?: DealWindowKind
   max_pp?: number
+  /** Wall size (backend default 36, max 48) */
+  limit?: number
 }
 
 export interface DealCalendarCell {

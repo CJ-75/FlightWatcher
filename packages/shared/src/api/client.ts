@@ -207,6 +207,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (params?.adults != null) q.set('adults', String(params.adults))
       if (params?.window) q.set('window', params.window)
       if (params?.max_pp != null) q.set('max_pp', String(params.max_pp))
+      if (params?.limit != null) q.set('limit', String(params.limit))
       const qs = q.toString()
       return request<TravelDeal[]>(`/api/deals${qs ? `?${qs}` : ''}`)
     },

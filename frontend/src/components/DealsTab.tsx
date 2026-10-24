@@ -27,7 +27,7 @@ export function DealsTab() {
   const [selected, setSelected] = useState<TravelDeal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
-  /** Empty = browse ~30 deals with hotels; set origin to prioritize matches. */
+  /** Empty = browse ~36 deals with hotels; set origin to prioritize matches. */
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
@@ -114,6 +114,7 @@ export function DealsTab() {
       const listPromise = getApiClient().getDeals({
         origin: queryOrigin || undefined,
         adults: queryAdults,
+        limit: 36,
       })
       void loadLikes()
       const list = await listPromise

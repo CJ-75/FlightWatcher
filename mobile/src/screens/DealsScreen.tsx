@@ -35,7 +35,7 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** Empty = browse ~30 deals; set origin to prioritize then fill. */
+  /** Empty = browse ~36 deals; set origin to prioritize then fill. */
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
   const [queryOrigin, setQueryOrigin] = useState('')
@@ -108,6 +108,7 @@ export function DealsScreen() {
         const listPromise = getApi().getDeals({
           origin: queryOrigin || undefined,
           adults: queryAdults,
+          limit: 36,
         })
         void refreshLikes()
         const list = await listPromise

@@ -114,6 +114,9 @@ async def list_deals(
     adults: Optional[int] = Query(None, ge=1, le=6),
     window: Optional[str] = Query(None, description="FRI_SUN | SAT_MON"),
     max_pp: Optional[float] = Query(None, ge=0, description="Budget max € / pers."),
+    limit: Optional[int] = Query(
+        36, ge=12, le=48, description="Taille du mur (défaut 36, max 48)"
+    ),
 ):
     """List deals. Cache-only when DEALS_PROVIDER=liteapi; community when DEALS_SOURCE=community."""
     try:
@@ -123,6 +126,7 @@ async def list_deals(
             adults=adults,
             window=window,
             max_pp=max_pp,
+            limit=limit,
         )
     except NotImplementedError as e:
         raise HTTPException(status_code=501, detail=str(e))
