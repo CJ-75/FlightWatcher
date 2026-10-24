@@ -159,6 +159,71 @@ def eligible_candidate(
     )
 
 
+def eligible_candidate_soft(
+    obs: Dict[str, Any],
+    baseline: Dict[str, Any],
+    *,
+    cfg: DealsConfig,
+    now: Optional[datetime] = None,
+    fresh_tau_h: float = 48.0,
+) -> bool:
+    """
+    Browse fill: under max flight € and ≤ ~median, fresher than 48h.
+    Keeps the grid full when hard 15% deals are scarce.
+    """
+    now = now or datetime.now(timezone.utc)
+    out_date = str(obs.get("out_date") or "")[:10]
+    dtd = days_to_departure(out_date, now=now)
+    if dtd is None or dtd < 3 or dtd > 120:
+        return False
+    nights = int(obs.get("nights") or 0)
+    if nights < 1 or nights > 9:
+        return False
+    if not arrival_hour_ok(obs.get("out_arr_local")):
+        return False
+    if not is_fresh_enough(
+        obs.get("observed_at"),
+        out_date,
+        tau_h=fresh_tau_h,
+        tau_short_h=fresh_tau_h,
+        now=now,
+    ):
+        return False
+    try:
+        price = float(obs.get("price_pp_eur") or 0)
+    except (TypeError, ValueError):
+        return False
+    if price <= 0 or price > float(cfg.max_flight_pp):
+        return False
+    med = baseline.get("median") or baseline.get("expected_pp_eur")
+    if not med or float(med) <= 0:
+        return price <= float(cfg.max_flight_pp)
+    return price <= float(med) * 1.05
+
+
+def _lookup_baseline(
+    baselines: Dict[Tuple[str, str, str, str], Dict[str, Any]],
+    *,
+    origin: str,
+    city_id: str,
+    trip_type: str,
+    horizon: str,
+) -> Optional[Dict[str, Any]]:
+    """Exact key, then OTHER, then any trip_type for same route/horizon."""
+    tt = trip_type or "OTHER"
+    hit = baselines.get((origin, city_id, tt, horizon))
+    if hit:
+        return hit
+    if tt != "OTHER":
+        hit = baselines.get((origin, city_id, "OTHER", horizon))
+        if hit:
+            return hit
+    for (o, c, _t, h), bl in baselines.items():
+        if o == origin and c == city_id and h == horizon:
+            return bl
+    return None
+
+
 def apply_diversity(
     scored: List[Dict[str, Any]],
     *,
@@ -204,7 +269,10 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
     """Select candidates from recent observations → upsert deals_active."""
     cfg = cfg or load_deals_config()
     now = datetime.now(timezone.utc)
-    since = (now - timedelta(hours=max(cfg.fresh_tau_h * 2, 12))).isoformat()
+    # Hard deals: 12h lookback; soft fill: 48h so browse stays populated
+    soft_hours = 48.0
+    since = (now - timedelta(hours=soft_hours)).isoformat()
+    browse_target = max(int(cfg.min_per_origin) * 3, 30)
 
     try:
         obs_res = (
@@ -241,8 +309,9 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
     except Exception:
         pass
 
-    # Best obs per (origin, city, out, ret)
+    # Best obs per (origin, city, out, ret) — hard deals first, then soft fill
     best: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+    soft_pool: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
     for obs in observations:
         origin = str(obs.get("origin_iata") or "").upper()
         city_id = str(obs.get("served_city_id") or "")
@@ -252,19 +321,38 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         hb = horizon_bucket(out_d, now=now)
         if not hb or not city_id:
             continue
-        bl = baselines.get((origin, city_id, str(obs.get("trip_type") or "OTHER"), hb))
+        bl = _lookup_baseline(
+            baselines,
+            origin=origin,
+            city_id=city_id,
+            trip_type=str(obs.get("trip_type") or "OTHER"),
+            horizon=hb,
+        )
         if not bl:
-            # soft baseline from single median missing → skip until D3 filled
-            continue
-        if not eligible_candidate(obs, bl, cfg=cfg, now=now):
             continue
         key = (origin, city_id, out_d, ret_d)
-        cand = {**obs, "_baseline": bl, "_dest": dest}
-        prev = best.get(key)
-        if prev is None:
+        if eligible_candidate(obs, bl, cfg=cfg, now=now):
+            cand = {**obs, "_baseline": bl, "_dest": dest, "_soft": False}
+            prev = best.get(key)
+            best[key] = cand if prev is None else prefer_observation(prev, cand)
+        elif eligible_candidate_soft(
+            obs, bl, cfg=cfg, now=now, fresh_tau_h=soft_hours
+        ):
+            cand = {**obs, "_baseline": bl, "_dest": dest, "_soft": True}
+            prev = soft_pool.get(key)
+            soft_pool[key] = cand if prev is None else prefer_observation(prev, cand)
+
+    # Fill browse target with soft deals not already hard-selected
+    if len(best) < browse_target:
+        for key, cand in sorted(
+            soft_pool.items(),
+            key=lambda kv: float(kv[1].get("price_pp_eur") or 9999),
+        ):
+            if key in best:
+                continue
             best[key] = cand
-        else:
-            best[key] = prefer_observation(prev, cand)
+            if len(best) >= browse_target * 2:
+                break
 
     scored: List[Dict[str, Any]] = []
     for (origin, city_id, out_d, ret_d), obs in best.items():
@@ -277,9 +365,10 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         pop = len(pop_map.get((origin, city_id), set()))
         vlevel = verification_level_for_provider(obs.get("provider"))
         # Cached deals never get a % badge (discount_pct stored null)
+        soft = bool(obs.get("_soft"))
         disc = (
             None
-            if vlevel == "cached"
+            if vlevel == "cached" or soft
             else discount_pct_vs_usual(price, bl, min_discount=cfg.min_discount)
         )
 
@@ -360,8 +449,9 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                     "median": bl.get("median"),
                     "p20": bl.get("p20"),
                     "reliable": bl.get("reliable"),
-                    "baseline_kind": bl.get("baseline_kind"),
+                    "baseline_kind": "estimated" if soft else bl.get("baseline_kind"),
                     "discount_pct": disc,
+                    "soft_fill": soft,
                 },
                 "hotel_top3": hotel_payload,
                 "deal_score": round(score, 4),
@@ -381,11 +471,14 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         by_origin.setdefault(row["origin_iata"], []).append(row)
 
     promoted = 0
+    soft_n = 0
     for origin, rows in by_origin.items():
-        kept = apply_diversity(rows)
-        # Cap to min_per_origin * 2 to leave room
-        kept = kept[: max(cfg.min_per_origin * 2, 24)]
+        kept = apply_diversity(rows, max_per_city=3, max_per_country=5)
+        # Cap to browse target per origin (was too tight → empty grid)
+        kept = kept[: max(cfg.min_per_origin * 2, browse_target)]
         for row in kept:
+            if (row.get("baseline_snapshot") or {}).get("soft_fill"):
+                soft_n += 1
             payload = {k: v for k, v in row.items() if k != "country_code"}
             try:
                 existing = (
@@ -412,4 +505,6 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         "candidates": len(best),
         "scored": len(scored),
         "promoted": promoted,
+        "soft_fill": soft_n,
+        "browse_target": browse_target,
     }
