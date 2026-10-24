@@ -120,7 +120,12 @@ def row_to_travel_deal(
         hotel_name = hotel.get("name") or hotel.get("hotel_name")
         hotel_stars = hotel.get("stars")
         # public total / adults if present
-        public = hotel.get("public_price") or hotel.get("total") or hotel.get("price")
+        public = (
+            hotel.get("public_hotel_price")
+            or hotel.get("public_price")
+            or hotel.get("total")
+            or hotel.get("price")
+        )
         if public is not None:
             try:
                 hotel_pp = round(float(public) / max(1, adults), 2)
@@ -338,6 +343,39 @@ def _fill_missing_hotel_photos(
     return filled
 
 
+def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dict[str, Any]:
+    """Attach cache hotel (+ photo) when hotel_top3 is empty / sans photo."""
+    hotels = row.get("hotel_top3") or []
+    if isinstance(hotels, list) and hotels and _hotel_photo(
+        hotels[0] if isinstance(hotels[0], dict) else None
+    ):
+        return row
+    try:
+        from deals.compose_hotel import compose_hotel
+
+        composed = compose_hotel(
+            supabase,
+            iata=str(row.get("dest_iata") or ""),
+            checkin=str(row.get("out_date") or "")[:10],
+            checkout=str(row.get("ret_date") or "")[:10],
+            adults=adults_n,
+            fetch_if_miss=False,
+        )
+        hotel = composed.get("hotel") if composed.get("status") == "ready" else None
+        if not isinstance(hotel, dict):
+            return row
+        photo = _hotel_photo(hotel)
+        if not photo and hotel.get("hotel_id"):
+            pmap = _photos_from_pool(supabase, [str(hotel["hotel_id"])])
+            photo = pmap.get(str(hotel["hotel_id"]))
+        if not photo:
+            return row
+        hotel = {**hotel, "photo": photo, "thumbnail": photo}
+        return {**row, "hotel_top3": [hotel]}
+    except Exception:
+        return row
+
+
 def _enrich_rows_to_deals(
     rows: List[Dict[str, Any]],
     *,
@@ -354,6 +392,9 @@ def _enrich_rows_to_deals(
         _normalize_carrier,
     )
     from city_names_fr import city_for_code
+
+    if supabase is not None:
+        rows = [_compose_hotel_onto_row(supabase, r, adults_n) for r in rows]
 
     # Backfill hotel photos for rows that only have hotel_id
     missing_ids: List[str] = []
@@ -398,20 +439,34 @@ def _enrich_rows_to_deals(
         d = row_to_travel_deal(enriched, adults=adults_n, baselines_fresh=fresh)
         if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
             continue
+        if not _deal_has_hotel_photo(d):
+            continue
         flags = dict(d.get("flags") or {})
         flags["match_origin"] = match_origin
-        flags["has_hotel"] = bool(d.get("hotel") or flags.get("has_hotel"))
+        flags["has_hotel"] = True
         d["flags"] = flags
         deals.append(d)
     return deals
 
 
+def _deal_has_hotel_photo(d: Dict[str, Any]) -> bool:
+    """Deals tab: only show packs with a real hotel photo (no city stock)."""
+    if _hotel_photo(d.get("hotel") if isinstance(d.get("hotel"), dict) else None):
+        return True
+    img = d.get("image_url")
+    return isinstance(img, str) and bool(img.strip())
+
+
+def _only_hotel_photo_deals(deals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [d for d in deals if _deal_has_hotel_photo(d)]
+
+
 def _prefer_hotel_deals(deals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Hotel packs first, then by deal_score."""
+    """Hotel-with-photo first, then by deal_score."""
     return sorted(
         deals,
         key=lambda d: (
-            0 if (d.get("flags") or {}).get("has_hotel") or d.get("hotel") else 1,
+            0 if _deal_has_hotel_photo(d) else 1,
             -(float(d.get("deal_score") or 0)),
         ),
     )
@@ -426,12 +481,12 @@ def list_community_deals(
     limit: int = 30,
 ) -> List[Dict[str, Any]]:
     """
-    Browse: ~30 deals with hotels preferred (no empty grid).
+    Browse: deals with hotel photo only (no city stock, no flight-only cards).
     Search (origin set): matching deals first, then fill with other origins.
     """
     adults_n = int(adults or 2)
     target = max(12, min(int(limit or 30), 48))
-    cache_key = f"{origin or ''}|{adults_n}|{max_pp}|{target}"
+    cache_key = f"hp1|{origin or ''}|{adults_n}|{max_pp}|{target}"
     now = time.monotonic()
     with _list_cache_lock:
         hit = _list_cache.get(cache_key)
@@ -511,7 +566,7 @@ def list_community_deals(
         max_share=cfg.cached_max_share,
         cached_enabled=cached_on,
     )
-    out = out[:target]
+    out = _only_hotel_photo_deals(out)[:target]
     with _list_cache_lock:
         _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])
         if len(_list_cache) > 64:
@@ -543,6 +598,7 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
 
         origin_iata = str(row.get("origin_iata") or "")
         dest_iata = str(row.get("dest_iata") or "")
+        row = _compose_hotel_onto_row(supabase, row, adults_n=2)
         row = {
             **row,
             "_baggage": lookup_baggage(supabase, carrier, prefer_seed=True),
@@ -556,6 +612,7 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
                 ),
             ),
         }
-        return row_to_travel_deal(row, baselines_fresh=fresh)
+        deal = row_to_travel_deal(row, baselines_fresh=fresh)
+        return deal if _deal_has_hotel_photo(deal) else None
     except Exception:
         return None

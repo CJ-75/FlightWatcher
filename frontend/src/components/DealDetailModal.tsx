@@ -162,10 +162,17 @@ export function DealDetailModal({
   const age = verifiedLabel
     ? null
     : formatFetchedAt(deal.fetched_at, language === 'en' ? 'en-GB' : 'fr-FR')
-  // Hero = hôtel sélectionné (évite la même image ville pour plusieurs deals)
+  // Hero = photo hôtel uniquement (pas d'image ville)
+  const hotelPhoto = (
+    selected?.photo ||
+    deal.hotel?.photo ||
+    deal.image_url ||
+    ''
+  ).trim()
+  if (!hotelPhoto) return null
   const imageUrl = resolveTripImageUrl({
     city: deal.city,
-    imageUrl: selected?.photo || deal.hotel?.photo || deal.image_url,
+    imageUrl: hotelPhoto,
   })
   const hotelThumb = selected?.photo || deal.hotel?.photo || null
   const flightUrl = deal.flight?.booking_url || ''

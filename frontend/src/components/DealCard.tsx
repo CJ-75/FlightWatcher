@@ -52,10 +52,10 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   const { t, language } = useI18n()
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
-  const imageUrl = resolveTripImageUrl({
-    city: deal.city,
-    imageUrl: deal.hotel?.photo || deal.image_url,
-  })
+  const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
+  // Pas de fallback image ville : sans photo hôtel on n'affiche pas le deal
+  if (!hotelPhoto) return null
+  const imageUrl = resolveTripImageUrl({ city: deal.city, imageUrl: hotelPhoto })
   const badges = dealBadgeLabels(deal)
   const adults = dealAdults(deal)
   const fees = deal.price_breakdown?.excluded_fees ?? 0

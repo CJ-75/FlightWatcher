@@ -102,7 +102,10 @@ export function DealsScreen() {
         })
         void refreshLikes()
         const list = await listPromise
-        setDeals(Array.isArray(list) ? list : [])
+        const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
+          (d) => Boolean(d.hotel?.photo || (d.image_url && String(d.image_url).trim())),
+        )
+        setDeals(withHotelPhoto)
         lastFetchAtRef.current = Date.now()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les deals')

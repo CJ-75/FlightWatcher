@@ -98,7 +98,11 @@ export function DealsTab() {
       })
       void loadLikes()
       const list = await listPromise
-      setDeals(Array.isArray(list) ? list : [])
+      // Deals = hôtel photo only (no city stock fallback)
+      const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
+        (d) => Boolean(d.hotel?.photo || (d.image_url && String(d.image_url).trim())),
+      )
+      setDeals(withHotelPhoto)
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
       setDeals([])

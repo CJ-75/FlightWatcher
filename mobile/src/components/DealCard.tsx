@@ -36,9 +36,11 @@ function formatDate(dateStr: string) {
 
 export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const [failed, setFailed] = useState(false)
+  const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
+  if (!hotelPhoto) return null
   const imageUrl = resolveTripImageUrl({
     city: deal.city,
-    imageUrl: deal.hotel?.photo || deal.image_url,
+    imageUrl: hotelPhoto,
   })
   const badges = dealBadgeLabels(deal)
   const adults = dealAdults(deal)

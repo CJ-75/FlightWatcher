@@ -372,8 +372,9 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             else discount_pct_vs_usual(price, bl, min_discount=cfg.min_discount)
         )
 
-        # Hotel optional (cache only — no live LiteAPI in promote hot path)
+        # Hotel with photo required for Deals display (cache only — no live LiteAPI)
         hotel_payload = None
+        city_name = None
         try:
             composed = compose_hotel(
                 supabase,
@@ -383,11 +384,37 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 adults=2,
                 fetch_if_miss=False,
             )
-            if composed.get("status") == "ready" and composed.get("hotel"):
-                hotel_payload = [composed["hotel"]]
-                city_name = composed.get("city_name")
-            else:
-                city_name = composed.get("city_name")
+            city_name = composed.get("city_name")
+            hotel = composed.get("hotel") if composed.get("status") == "ready" else None
+            if isinstance(hotel, dict):
+                photo = (
+                    hotel.get("photo")
+                    or hotel.get("thumbnail")
+                    or hotel.get("main_photo")
+                )
+                if not photo and hotel.get("hotel_id"):
+                    try:
+                        pr = (
+                            supabase.table("hotel_pool")
+                            .select("main_photo,thumbnail")
+                            .eq("hotel_id", str(hotel["hotel_id"]))
+                            .limit(1)
+                            .execute()
+                        )
+                        if pr.data:
+                            photo = pr.data[0].get("main_photo") or pr.data[0].get(
+                                "thumbnail"
+                            )
+                            if photo:
+                                hotel = {
+                                    **hotel,
+                                    "photo": photo,
+                                    "thumbnail": photo,
+                                }
+                    except Exception:
+                        pass
+                if photo:
+                    hotel_payload = [{**hotel, "photo": photo}]
         except Exception:
             city_name = None
             hotel_payload = None

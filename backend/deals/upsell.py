@@ -143,6 +143,20 @@ def _top_public(top: Any) -> Optional[Dict[str, Any]]:
     }
 
 
+def _rates_row_to_lookup(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not _is_fresh(row.get("expires_at")):
+        return None
+    offer = _top_public(row.get("top"))
+    if not offer:
+        return None
+    return {
+        "offer": offer,
+        "fetched_at": row.get("fetched_at"),
+        "expires_at": row.get("expires_at"),
+        "source": "rates_cache",
+    }
+
+
 def read_rates_cache(
     supabase: Any,
     *,
@@ -163,18 +177,33 @@ def read_rates_cache(
     rows = r.data or []
     if not rows:
         return None
-    row = rows[0]
-    if not _is_fresh(row.get("expires_at")):
+    return _rates_row_to_lookup(rows[0])
+
+
+def read_rates_cache_by_dates(
+    supabase: Any,
+    *,
+    destination_id: str,
+    checkin: date,
+    checkout: date,
+    adults: int,
+) -> Optional[Dict[str, Any]]:
+    """Fallback when deal_windows row is missing for these exact dates."""
+    r = (
+        supabase.table("hotel_rates_cache")
+        .select("top,status,expires_at,fetched_at")
+        .eq("destination_id", destination_id)
+        .eq("checkin", checkin.isoformat())
+        .eq("checkout", checkout.isoformat())
+        .eq("adults", adults)
+        .eq("status", "ok")
+        .limit(1)
+        .execute()
+    )
+    rows = r.data or []
+    if not rows:
         return None
-    offer = _top_public(row.get("top"))
-    if not offer:
-        return None
-    return {
-        "offer": offer,
-        "fetched_at": row.get("fetched_at"),
-        "expires_at": row.get("expires_at"),
-        "source": "rates_cache",
-    }
+    return _rates_row_to_lookup(rows[0])
 
 
 def read_upsell_cache(
@@ -288,6 +317,39 @@ def lookup_upsell(
                 "fetched_at": cached.get("fetched_at"),
                 "expires_at": cached.get("expires_at"),
             }
+
+    # Soft-fill / odd dates: rates keyed by checkin/checkout without deal_windows
+    by_dates = read_rates_cache_by_dates(
+        supabase,
+        destination_id=dest["id"],
+        checkin=cin,
+        checkout=cout,
+        adults=adults,
+    )
+    if by_dates:
+        offer = by_dates["offer"]
+        public = float(offer["public_hotel_price"])
+        hotel_pp = hotel_pp_from_public(public, participants=participants)
+        return {
+            **base,
+            "status": "ready",
+            "mode": "rates_by_dates",
+            "destination_id": dest["id"],
+            "destination_slug": dest.get("slug"),
+            "city": dest.get("city_name"),
+            "window_id": window["id"] if window else None,
+            "window_kind": window.get("kind") if window else None,
+            "adults_lookup": adults,
+            "rooms": rooms,
+            "hotel_pp": hotel_pp,
+            "hotel_public_total_one_room": public,
+            "hotel": offer,
+            "hotel_name": offer.get("name"),
+            "hotel_id": offer.get("hotel_id"),
+            "source": by_dates["source"],
+            "fetched_at": by_dates.get("fetched_at"),
+            "expires_at": by_dates.get("expires_at"),
+        }
 
     ondemand = read_upsell_cache(
         supabase,
