@@ -8,6 +8,7 @@ import {
 } from '@flightwatcher/shared';
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
+import { HotelUpsellLine } from './HotelUpsellLine';
 
 type CardAction = {
   label: string;
@@ -23,6 +24,8 @@ interface DestinationCardProps {
   primaryAction?: CardAction;
   secondaryAction?: CardAction;
   isFavorite?: boolean;
+  /** Passengers / planner members — drives hotel occupancy (rooms of 2). */
+  passengers?: number;
 }
 
 const springConfig = {
@@ -57,6 +60,7 @@ export function DestinationCard({
   primaryAction,
   secondaryAction,
   isFavorite = false,
+  passengers = 2,
 }: DestinationCardProps) {
   const { t } = useI18n();
 
@@ -208,6 +212,12 @@ export function DestinationCard({
               {Math.round(trip.prix_total)} €
             </p>
             <p className="text-xs sm:text-sm text-muted font-medium mt-1">{t('card.total')}</p>
+            <HotelUpsellLine
+              iata={trip.destination_code}
+              outboundIso={trip.aller?.departureTime}
+              returnIso={trip.retour?.departureTime}
+              participants={passengers}
+            />
           </div>
           {typeof trip.discount_percent === 'number' && trip.discount_percent > 20 ? (
             <span className="shrink-0 bg-primary-50 text-primary-700 text-xs sm:text-sm font-bold px-2.5 py-1.5 rounded-full">

@@ -18,6 +18,7 @@ import {
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { HeartIcon } from './HeartIcon'
+import { HotelUpsellLine } from './HotelUpsellLine'
 
 type CardAction = {
   label: string
@@ -168,6 +169,12 @@ export function DestinationCard({
                 ? `par pers. · ${Math.round(trip.prix_total * passengers)}€ pour ${passengers}`
                 : 'par personne · A/R'}
             </Text>
+            <HotelUpsellLine
+              iata={trip.destination_code}
+              outboundIso={trip.aller?.departureTime}
+              returnIso={trip.retour?.departureTime}
+              participants={passengers}
+            />
           </View>
           {typeof trip.discount_percent === 'number' && trip.discount_percent > 20 ? (
             <View style={styles.discount}>

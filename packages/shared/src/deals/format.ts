@@ -4,6 +4,13 @@ export function dealAdults(deal: TravelDeal): number {
   return Math.max(1, deal.adults ?? 2)
 }
 
+/** YYYY-MM-DD from ISO flight timestamp. */
+export function dateFromFlightIso(iso?: string | null): string | null {
+  if (!iso) return null
+  const m = String(iso).match(/^(\d{4}-\d{2}-\d{2})/)
+  return m ? m[1] : null
+}
+
 /** Recompute price_pp when switching hotel from alt_hotels (cache only). */
 export function pricePpWithHotel(
   deal: TravelDeal,

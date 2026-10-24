@@ -1023,6 +1023,7 @@ function Dashboard() {
                     >
                       <DestinationCard
                         trip={trip}
+                        passengers={lastSearchInfo?.passengers || currentRequest?.passengers || 1}
                         onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
                         onBook={() => {
                           setBookingTrip(trip)

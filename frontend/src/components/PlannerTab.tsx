@@ -2005,6 +2005,10 @@ function TripDetailView({
           <div className="max-w-md">
             <DestinationCard
               trip={accepted.trip_data}
+              passengers={Math.max(
+                trip.passengers || 1,
+                (trip.members || []).length || 1,
+              )}
               onSaveFavorite={() => undefined}
               onBook={() => setBookingTrip(accepted.trip_data)}
             />
@@ -2063,6 +2067,10 @@ function TripDetailView({
               <ProposalCard
                 key={p.id}
                 proposal={p}
+                passengers={Math.max(
+                  trip.passengers || 1,
+                  (trip.members || []).length || 1,
+                )}
                 isOrganizer={!!isOrganizer}
                 busy={acting === p.id}
                 onAccept={() => void accept(p.id)}
@@ -2372,6 +2380,7 @@ function PriceWatchBanner({
 
 function ProposalCard({
   proposal,
+  passengers,
   isOrganizer,
   busy,
   onAccept,
@@ -2379,6 +2388,7 @@ function ProposalCard({
   t,
 }: {
   proposal: TripProposal
+  passengers: number
   isOrganizer: boolean
   busy: boolean
   onAccept: () => void
@@ -2388,6 +2398,7 @@ function ProposalCard({
   return (
     <DestinationCard
       trip={proposal.trip_data}
+      passengers={passengers}
       onSaveFavorite={() => undefined}
       primaryAction={
         isOrganizer

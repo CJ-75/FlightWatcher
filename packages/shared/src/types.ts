@@ -395,6 +395,55 @@ export interface DealCalendarParams {
   window?: DealWindowKind
 }
 
+/** L9 — hotel upsell on Search / Planner flight cards. */
+export type HotelUpsellStatus =
+  | 'ready'
+  | 'miss'
+  | 'pending'
+  | 'unavailable'
+  | 'rate_limited'
+
+export interface HotelUpsellLookupItem {
+  iata: string
+  checkin: string
+  checkout: string
+  participants?: number
+}
+
+export interface HotelUpsellResult {
+  iata: string
+  checkin?: string | null
+  checkout?: string | null
+  participants: number
+  status: HotelUpsellStatus | string
+  mode?: 'canonical' | 'ondemand' | string
+  hotel_pp?: number
+  hotel_public_total_one_room?: number
+  hotel_name?: string | null
+  hotel_id?: string | null
+  city?: string | null
+  destination_slug?: string | null
+  window_id?: string | null
+  window_kind?: string | null
+  rooms?: number
+  adults_lookup?: number
+  job_id?: string | null
+  reason?: string
+  source?: string
+  fetched_at?: string | null
+  expires_at?: string | null
+}
+
+export interface HotelUpsellJob {
+  id: string
+  status: string
+  done?: boolean
+  hotel_pp?: number
+  hotel_name?: string | null
+  hotel_id?: string | null
+  error?: string
+}
+
 export type HotelBookingStatus =
   | 'draft'
   | 'prebooked'

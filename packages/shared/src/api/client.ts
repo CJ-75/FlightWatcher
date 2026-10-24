@@ -24,6 +24,9 @@ import type {
   HotelBookingBookRequest,
   HotelBookingPrebookRequest,
   HotelBookingPrebookResponse,
+  HotelUpsellJob,
+  HotelUpsellLookupItem,
+  HotelUpsellResult,
   TripProposal,
   TripMember,
   TripResponse,
@@ -218,6 +221,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (params.window) q.set('window', params.window)
       return request<DealCalendarResponse>(`/api/deals/calendar?${q.toString()}`)
     },
+
+    lookupHotelUpsell: (items: HotelUpsellLookupItem[]) =>
+      request<{ results: HotelUpsellResult[] }>('/api/deals/hotel-upsell/lookup', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      }),
+
+    fetchHotelUpsell: (body: HotelUpsellLookupItem) =>
+      request<HotelUpsellResult>('/api/deals/hotel-upsell/fetch', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    getHotelUpsellJob: (jobId: string) =>
+      request<HotelUpsellJob>(
+        `/api/deals/hotel-upsell/jobs/${encodeURIComponent(jobId)}`,
+      ),
 
     revalidateDeal: (dealKey: string, body: DealRevalidateRequest = {}) =>
       request<DealRevalidateResponse>(

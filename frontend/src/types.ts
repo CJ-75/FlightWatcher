@@ -24,6 +24,7 @@ export type {
   DealCalendarCell,
   DealCalendarResponse,
   DealRevalidateResponse,
+  HotelUpsellResult,
   HotelBooking,
   PlannedTrip,
   PlannedTripDetail,
