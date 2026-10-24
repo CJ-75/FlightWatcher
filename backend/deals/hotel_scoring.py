@@ -237,11 +237,13 @@ def build_candidates(
     adults: int,
     late_arrival: bool = False,
     weights: Optional[Dict[str, float]] = None,
-    top_n: int = 3,
+    top_n: int = 12,
 ) -> List[Dict[str, Any]]:
     """
     Best rate per hotel, then top N hotels by score.
     Each candidate includes fields stored in hotel_rates_cache.top.
+    Keep ≥8–12 so confort-tier filter still leaves several options
+    (with top_n=3 the median cut almost always left only 2).
     """
     hotels = extract_hotels_from_rates(rates_payload)
     all_offers: List[Dict[str, Any]] = []

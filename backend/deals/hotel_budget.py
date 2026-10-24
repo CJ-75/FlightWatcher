@@ -187,7 +187,9 @@ def filter_hotels_for_city(
 
     cap = tier_night_cap(night_prices, tier)
     filtered = prepared
-    if cap is not None:
+    # Need a real distribution before cutting: with ≤4 scored hotels the
+    # median/confort cap almost always drops the list to 2.
+    if cap is not None and len(prepared) >= 6:
         filtered = [h for h in prepared if float(h["night_price"]) <= cap + 1e-6]
 
     # If tier empties the list (tiny pool), fall back to all with photos

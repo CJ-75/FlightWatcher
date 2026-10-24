@@ -285,7 +285,7 @@ def refresh_one_combo(
             adults=adults,
             late_arrival=late,
             weights=cfg.score_weights,
-            top_n=3,
+            top_n=12,
         )
         if not cands:
             logger.info("no_rates_fallback_geo key=%s", key)
@@ -306,7 +306,7 @@ def refresh_one_combo(
                     adults=adults,
                     late_arrival=late,
                     weights=cfg.score_weights,
-                    top_n=3,
+                    top_n=12,
                 )
                 # If still empty because hotels not in pool, build loose map from offers
                 if not cands and fb:
@@ -335,7 +335,7 @@ def refresh_one_combo(
                             adults=adults,
                             late_arrival=late,
                             weights=cfg.score_weights,
-                            top_n=3,
+                            top_n=12,
                         )
             except Exception as fe:
                 logger.warning("fallback_geo_failed key=%s: %s", key, fe)

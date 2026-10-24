@@ -399,7 +399,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 top if isinstance(top, list) else [],
                 flight_pp=price,
                 adults=2,
-                top_n=3,
+                top_n=12,
                 require_photo=True,
                 checkin=out_d,
                 checkout=ret_d,
