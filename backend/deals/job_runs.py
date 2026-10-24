@@ -38,6 +38,36 @@ def record_job_run(
         logger.warning("deals_job_runs insert failed (%s): %s", job_name, e)
 
 
+def scans_done_today(supabase, job_name: str = "seed-scan") -> int:
+    """Sum `summary.scans` for successful runs of job_name since UTC midnight."""
+    if not supabase:
+        return 0
+    try:
+        today = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        res = (
+            supabase.table("deals_job_runs")
+            .select("summary")
+            .eq("job_name", job_name)
+            .eq("status", "ok")
+            .gte("finished_at", today.isoformat())
+            .limit(50)
+            .execute()
+        )
+        total = 0
+        for row in res.data or []:
+            summary = row.get("summary") or {}
+            try:
+                total += int(summary.get("scans") or 0)
+            except (TypeError, ValueError):
+                pass
+        return total
+    except Exception as e:
+        logger.debug("scans_done_today: %s", e)
+        return 0
+
+
 def last_successful_run_at(supabase, job_name: str) -> Optional[datetime]:
     if not supabase:
         return None

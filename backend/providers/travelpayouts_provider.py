@@ -284,6 +284,13 @@ class TravelpayoutsProvider:
         if not travelpayouts_enabled():
             return [], 0
 
+        from providers.throttle import is_circuit_open, wait_provider_slot
+
+        if is_circuit_open("travelpayouts"):
+            print("⏸ [travelpayouts] circuit open — skip")
+            return [], 0
+        wait_provider_slot("travelpayouts")
+
         origin = (params.aeroport_depart or "").strip().upper()
         if len(origin) != 3:
             return [], 0

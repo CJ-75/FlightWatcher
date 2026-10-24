@@ -13,7 +13,53 @@ from ryanair import Ryanair
 from api_models import FlightResponse, TripResponse
 from city_names_fr import destination_full_fr
 from providers.base import SearchParams
+from providers.throttle import (
+    is_circuit_open,
+    record_provider_error,
+    record_provider_ok,
+    wait_provider_slot,
+)
 from supabase_deps import SUPABASE_AVAILABLE, record_price_history
+
+_ryanair_patched = False
+
+
+def _patch_ryanair_no_403_retry() -> None:
+    """Avoid 5× backoff on 403/429 — trip circuit and fail fast."""
+    global _ryanair_patched
+    if _ryanair_patched:
+        return
+    try:
+        import requests
+        from ryanair.ryanair import Ryanair as RyanairCls
+    except Exception:
+        return
+
+    def _retryable_query(self, url, params=None):
+        wait_provider_slot("ryanair")
+        if is_circuit_open("ryanair"):
+            raise RuntimeError("ryanair circuit open")
+        self._num_queries += 1
+        response = self.session.get(url, params=params, timeout=25)
+        status = getattr(response, "status_code", None)
+        if status in (403, 429):
+            record_provider_error("ryanair", status)
+            response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code and int(code) >= 500:
+                record_provider_error("ryanair", code)
+            raise
+        record_provider_ok("ryanair")
+        return response.json()
+
+    RyanairCls._retryable_query = _retryable_query
+    _ryanair_patched = True
+
+
+_patch_ryanair_no_403_retry()
 
 
 def _localize_flight(flight: FlightResponse) -> FlightResponse:
@@ -40,6 +86,10 @@ class RyanairProvider:
     name = "ryanair"
 
     def search_roundtrips(self, params: SearchParams) -> Tuple[List[TripResponse], int]:
+        if is_circuit_open("ryanair"):
+            print("⏸ [ryanair] circuit open — skip")
+            return [], 0
+
         api = Ryanair(currency="EUR")
         resultats: List[TripResponse] = []
         pax = _clamp_passengers(params.passengers)
@@ -62,6 +112,9 @@ class RyanairProvider:
         tous_vols_aller = []
 
         for date_config in dates_depart:
+            if is_circuit_open("ryanair"):
+                print("⏸ [ryanair] circuit open mid-scan — abort")
+                break
             date_obj = datetime.fromisoformat(date_config.date).date()
             try:
                 vols = api.get_cheapest_flights(
@@ -94,7 +147,10 @@ class RyanairProvider:
                             continue
                         tous_vols_aller.append(vol)
             except Exception as e:
+                msg = str(e)
                 print(f"  [ryanair] Erreur date {date_config.date}: {e}")
+                if "403" in msg or "429" in msg or "circuit open" in msg:
+                    break
                 continue
 
         print(f"  ✓ [ryanair] {len(tous_vols_aller)} vol(s) aller")
@@ -118,7 +174,11 @@ class RyanairProvider:
             meilleur_retour = None
             meilleur_prix_total = float("inf")
 
+            if is_circuit_open("ryanair"):
+                break
             for date_retour_config in dates_retour:
+                if is_circuit_open("ryanair"):
+                    break
                 date_retour_obj = datetime.fromisoformat(date_retour_config.date).date()
                 try:
                     vols_retour = api.get_cheapest_flights(

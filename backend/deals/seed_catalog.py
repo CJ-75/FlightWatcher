@@ -244,6 +244,21 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
     origins = _origins(cfg)
     budget = cfg.seed_scan_budget_per_day
 
+    from deals.job_runs import scans_done_today
+    from providers.throttle import is_circuit_open, seed_cell_pause
+
+    already = scans_done_today(supabase, "seed-scan")
+    remaining = max(0, budget - already)
+    if remaining <= 0:
+        return {
+            "ok": True,
+            "scans": 0,
+            "budget": budget,
+            "already_today": already,
+            "skipped": "daily_budget_exhausted",
+            "dry_run": dry_run,
+        }
+
     try:
         cat = (
             supabase.table("seed_catalog_cities")
@@ -260,12 +275,13 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
     scans_done = 0
     skipped_organic = 0
     errors = 0
+    aborted_circuit = False
 
     from api_models import DateAvecHoraire
     from providers.orchestrator import search_roundtrips
 
     for entry in entries:
-        if scans_done >= budget:
+        if scans_done >= remaining:
             break
         city = entry.get("served_cities") or {}
         if isinstance(city, list):
@@ -276,10 +292,13 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
         city_id = entry.get("served_city_id")
 
         for origin in origins:
-            if scans_done >= budget:
+            if scans_done >= remaining:
                 break
             for out_d, ret_d in date_pairs:
-                if scans_done >= budget:
+                if scans_done >= remaining:
+                    break
+                if is_circuit_open("ryanair") and is_circuit_open("travelpayouts"):
+                    aborted_circuit = True
                     break
                 # Skip if fresh organic exists
                 try:
@@ -328,15 +347,27 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
                             trips, source="seed_batch", sync=True
                         )
                     scans_done += 1
+                    seed_cell_pause()
                 except Exception as e:
                     errors += 1
                     logger.warning("seed_scan %s→%s %s: %s", origin, dest_iata, out_d, e)
+                    seed_cell_pause()
+                    if is_circuit_open("ryanair") and errors >= 5:
+                        aborted_circuit = True
+                        break
+            if aborted_circuit:
+                break
+        if aborted_circuit:
+            break
 
     return {
         "ok": True,
         "scans": scans_done,
         "budget": budget,
+        "already_today": already,
+        "remaining_cap": remaining,
         "skipped_organic": skipped_organic,
         "errors": errors,
+        "aborted_circuit": aborted_circuit,
         "dry_run": dry_run,
     }

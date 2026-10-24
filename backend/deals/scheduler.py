@@ -57,18 +57,20 @@ def _loop() -> None:
     from deals.revalidate_community import revalidate_deals
     from deals.seed_catalog import build_seed_catalog, seed_scan
 
+    now0 = time.time()
+    # Do NOT fire heavy provider jobs immediately on boot (was causing request storms).
     last: Dict[str, float] = {
-        "promote-deals": 0.0,
-        "revalidate-deals": 0.0,
-        "refresh-baselines": 0.0,
-        "seed-scan": 0.0,
-        "build-seed-catalog": 0.0,
-        "cached-kill-switch": 0.0,
+        "promote-deals": now0 - PROMOTE_EVERY_S + 90,  # ~1.5 min
+        "revalidate-deals": now0,  # wait full REVALIDATE_EVERY_S
+        "refresh-baselines": now0 - BASELINES_EVERY_S + 10 * 60,
+        "seed-scan": now0,  # wait full SEED_SCAN_EVERY_S
+        "build-seed-catalog": now0,
+        "cached-kill-switch": now0 - KILL_SWITCH_EVERY_S + 20 * 60,
     }
-    # Stagger: run promote soon after start
-    last["promote-deals"] = time.time() - PROMOTE_EVERY_S + 60
 
-    logger.info("deals scheduler loop started")
+    logger.info(
+        "deals scheduler loop started (seed/revalidate deferred; promote in ~90s)"
+    )
     while not _stop.is_set():
         now = time.time()
         try:

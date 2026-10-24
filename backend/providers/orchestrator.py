@@ -8,7 +8,25 @@ from typing import List, Optional, Tuple
 from api_models import DateAvecHoraire, TripResponse
 from providers.base import SearchParams
 from providers.ryanair_provider import RyanairProvider
+from providers.throttle import is_circuit_open
 from providers.travelpayouts_provider import TravelpayoutsProvider, travelpayouts_enabled
+
+
+def _active_providers() -> list:
+    providers = []
+    if is_circuit_open("ryanair"):
+        print("⏸ orchestrator: ryanair circuit open — skip")
+    else:
+        providers.append(RyanairProvider())
+    if travelpayouts_enabled() and not is_circuit_open("travelpayouts"):
+        providers.append(TravelpayoutsProvider())
+    if not providers:
+        # Prefer TP if available when Ryanair is cooling down
+        if travelpayouts_enabled():
+            providers.append(TravelpayoutsProvider())
+        else:
+            providers.append(RyanairProvider())
+    return providers
 
 
 def parse_origins(aeroport_depart: str) -> List[str]:
@@ -146,9 +164,7 @@ def search_roundtrips(
     direct: bool = False,
 ) -> Tuple[List[TripResponse], int]:
     origins = parse_origins(aeroport_depart)
-    providers = [RyanairProvider()]
-    if travelpayouts_enabled():
-        providers.append(TravelpayoutsProvider())
+    providers = _active_providers()
 
     # Single origin — keep previous behaviour
     if len(origins) == 1:

@@ -42,14 +42,19 @@ def revalidate_deals(
 
     from api_models import DateAvecHoraire
     from providers.orchestrator import search_roundtrips
+    from providers.throttle import is_circuit_open, seed_cell_pause
 
     checked = 0
     expired = 0
     updated = 0
     price_up = 0
+    aborted_circuit = False
 
     for deal in deals:
         if checked >= budget:
+            break
+        if is_circuit_open("ryanair") and is_circuit_open("travelpayouts"):
+            aborted_circuit = True
             break
         origin = deal.get("origin_iata")
         dest = deal.get("dest_iata")
@@ -138,6 +143,8 @@ def revalidate_deals(
             updated += 1
         except Exception as e:
             logger.warning("revalidate %s: %s", deal.get("deal_key"), e)
+        finally:
+            seed_cell_pause()
 
     return {
         "ok": True,
@@ -146,4 +153,5 @@ def revalidate_deals(
         "expired": expired,
         "price_up": price_up,
         "budget": budget,
+        "aborted_circuit": aborted_circuit,
     }
