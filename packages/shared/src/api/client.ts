@@ -204,6 +204,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     getDeals: (params?: DealsListParams) => {
       const q = new URLSearchParams()
       if (params?.origin) q.set('origin', params.origin)
+      if (params?.destination) q.set('destination', params.destination)
       if (params?.adults != null) q.set('adults', String(params.adults))
       if (params?.window) q.set('window', params.window)
       if (params?.max_pp != null) q.set('max_pp', String(params.max_pp))

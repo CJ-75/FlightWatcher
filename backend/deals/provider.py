@@ -26,6 +26,7 @@ class DealProvider(ABC):
         self,
         *,
         origin: Optional[str] = None,
+        destination: Optional[str] = None,
         adults: Optional[int] = None,
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
@@ -48,6 +49,7 @@ class MockDealProvider(DealProvider):
         self,
         *,
         origin: Optional[str] = None,
+        destination: Optional[str] = None,
         adults: Optional[int] = None,
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
@@ -57,6 +59,18 @@ class MockDealProvider(DealProvider):
         if origin:
             origin_u = origin.strip().upper()
             deals = [d for d in deals if (d.get("departure_airport") or "").upper() == origin_u]
+        if destination:
+            dest_u = {
+                p.strip().upper()
+                for p in destination.replace(";", ",").split(",")
+                if len(p.strip()) == 3
+            }
+            if dest_u:
+                deals = [
+                    d
+                    for d in deals
+                    if (d.get("destination") or "").upper() in dest_u
+                ]
         if max_pp is not None:
             deals = [d for d in deals if float(d.get("price_per_person") or 0) <= float(max_pp)]
         cap = max(1, min(int(limit or 36), 48))
@@ -312,6 +326,7 @@ class LiteApiDealProvider(DealProvider):
         self,
         *,
         origin: Optional[str] = None,
+        destination: Optional[str] = None,
         adults: Optional[int] = None,
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
@@ -331,6 +346,7 @@ class LiteApiDealProvider(DealProvider):
                 community = list_community_deals(
                     supabase,
                     origin=origin,
+                    destination=destination,
                     adults=adults,
                     max_pp=max_pp,
                     limit=int(limit or 36),

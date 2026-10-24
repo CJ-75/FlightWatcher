@@ -41,9 +41,11 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** Empty = browse ~36 deals; set origin to prioritize then fill. */
+  /** Arrival city first; origin optional for flight priority. */
+  const [destination, setDestination] = useState('')
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
+  const [queryDestination, setQueryDestination] = useState('')
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -99,13 +101,14 @@ export function DealsScreen() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      setQueryDestination(destination)
       setQueryOrigin(origin)
       setQueryAdults(adults)
     }, 280)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [origin, adults])
+  }, [destination, origin, adults])
 
   const load = useCallback(
     async (opts?: { refresh?: boolean; force?: boolean }) => {
@@ -125,6 +128,7 @@ export function DealsScreen() {
         }
         const listPromise = getApi().getDeals({
           origin: queryOrigin || undefined,
+          destination: queryDestination || undefined,
           adults: queryAdults,
           limit: 36,
         })
@@ -143,14 +147,14 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, queryOrigin, queryAdults, deals.length, uiEnabled],
+    [refreshLikes, queryOrigin, queryDestination, queryAdults, deals.length, uiEnabled],
   )
 
   // Filter changes → always refetch
   useEffect(() => {
     void load({ force: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* only
-  }, [queryOrigin, queryAdults])
+  }, [queryOrigin, queryDestination, queryAdults])
 
   // Tab focus → refetch only if stale (skip first mount: filter effect owns it)
   useFocusEffect(
@@ -161,22 +165,31 @@ export function DealsScreen() {
   )
 
   const filterSummary = [
+    destination ? `→ ${destination.split(',')[0]}` : null,
+    origin ? `de ${origin.split(',')[0]}` : null,
     adults !== 2 ? `${adults} ad.` : null,
     sort === 'price_asc' ? 'Prix ↑' : sort === 'price_desc' ? 'Prix ↓' : null,
   ]
     .filter(Boolean)
     .join(' · ')
 
-  const matchedDeals = useMemo(
-    () =>
-      queryOrigin ? deals.filter((d) => d.flags?.match_origin !== false) : deals,
-    [deals, queryOrigin],
-  )
-  const fillerDeals = useMemo(
-    () =>
-      queryOrigin ? deals.filter((d) => d.flags?.match_origin === false) : [],
-    [deals, queryOrigin],
-  )
+  const hasWallFilter = Boolean(queryOrigin || queryDestination)
+  const matchedDeals = useMemo(() => {
+    if (!hasWallFilter) return deals
+    return deals.filter((d) => {
+      if (queryOrigin && d.flags?.match_origin === false) return false
+      if (queryDestination && d.flags?.match_destination === false) return false
+      return true
+    })
+  }, [deals, queryOrigin, queryDestination, hasWallFilter])
+  const fillerDeals = useMemo(() => {
+    if (!hasWallFilter) return []
+    return deals.filter((d) => {
+      if (queryOrigin && d.flags?.match_origin === false) return true
+      if (queryDestination && d.flags?.match_destination === false) return true
+      return false
+    })
+  }, [deals, queryOrigin, queryDestination, hasWallFilter])
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
     const dir = sort === 'price_asc' ? 1 : -1
@@ -247,9 +260,7 @@ export function DealsScreen() {
                   <View style={styles.filterToggleText}>
                     <Text style={styles.filterToggleTitle}>Affiner</Text>
                     <Text style={styles.filterToggleHint} numberOfLines={1}>
-                      {origin
-                        ? `${origin.split(',')[0]}${adults !== 2 ? ` · ${adults} ad.` : ''}`
-                        : filterSummary || 'Toutes origines · 2 voyageurs'}
+                      {filterSummary || 'Toutes villes · 2 voyageurs'}
                     </Text>
                   </View>
                   <Text
@@ -265,10 +276,29 @@ export function DealsScreen() {
                 {filtersOpen ? (
                   <View style={styles.filterBody}>
                     <View style={styles.originRow}>
+                      <Text style={styles.label}>Ville d’arrivée</Text>
+                      {destination ? (
+                        <Pressable onPress={() => setDestination('')} hitSlop={8}>
+                          <Text style={styles.clearOrigin}>Toutes les villes</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <CityAirportPicker
+                      airports={airports}
+                      value={destination}
+                      onChange={setDestination}
+                    />
+                    <Text style={styles.originHint}>
+                      Filtre le mur et les hôtels sur cette ville.
+                    </Text>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.originRow}>
                       <Text style={styles.label}>Départ</Text>
                       {origin ? (
                         <Pressable onPress={() => setOrigin('')} hitSlop={8}>
-                          <Text style={styles.clearOrigin}>Toutes les origines</Text>
+                          <Text style={styles.clearOrigin}>Tous les départs</Text>
                         </Pressable>
                       ) : null}
                     </View>
@@ -277,11 +307,9 @@ export function DealsScreen() {
                       value={origin}
                       onChange={setOrigin}
                     />
-                    {!origin ? (
-                      <Text style={styles.originHint}>
-                        Laisse vide pour toutes les origines, ou choisis une ville.
-                      </Text>
-                    ) : null}
+                    <Text style={styles.originHint}>
+                      Optionnel — priorise les vols depuis cette ville.
+                    </Text>
 
                     <View style={styles.divider} />
 
@@ -383,6 +411,9 @@ export function DealsScreen() {
                           'Search',
                           {
                             origin: origin.trim().toUpperCase(),
+                            destination: destination.trim()
+                              ? destination.trim().toUpperCase()
+                              : undefined,
                             adults,
                             outbound: out,
                             inbound: ret,

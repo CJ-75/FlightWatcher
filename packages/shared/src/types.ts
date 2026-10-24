@@ -224,6 +224,8 @@ export interface TravelDealFlags {
   verification_level?: 'live' | 'cached' | string
   /** True when deal matches the origin filter; false = filler to keep the grid full. */
   match_origin?: boolean
+  /** True when deal arrival IATA is in the selected destination city */
+  match_destination?: boolean
   price_pax_note?: string | null
 }
 
@@ -431,6 +433,8 @@ export interface LikedDeal {
 
 export interface DealsListParams {
   origin?: string
+  /** Arrival city IATA(s); backend expands via served_city */
+  destination?: string
   adults?: number
   window?: DealWindowKind
   max_pp?: number

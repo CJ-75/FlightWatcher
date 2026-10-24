@@ -36,10 +36,12 @@ export function DealsTab() {
   const [selected, setSelected] = useState<TravelDeal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
-  /** Empty = browse ~36 deals with hotels; set origin to prioritize matches. */
+  /** Arrival city first (hotel axis); origin optional for flight priority. */
+  const [destination, setDestination] = useState('')
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
+  const [queryDestination, setQueryDestination] = useState('')
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -74,18 +76,19 @@ export function DealsTab() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      setQueryDestination(destination)
       setQueryOrigin(origin)
       setQueryAdults(adults)
     }, 280)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [origin, adults])
+  }, [destination, origin, adults])
 
   const goSearch = (opts?: { destination?: string; city?: string }) => {
     openSearchFromDeals({
       origin: origin || undefined,
-      destination: opts?.destination,
+      destination: opts?.destination || destination || undefined,
       city: opts?.city,
       adults,
     })
@@ -98,7 +101,7 @@ export function DealsTab() {
 
   const runDatedSearch = () => {
     if (!origin?.trim()) {
-      setToast('Choisis une origine pour lancer la recherche')
+      setToast('Choisis un départ pour lancer la recherche')
       return
     }
     if (
@@ -113,6 +116,7 @@ export function DealsTab() {
     const dates_retour = activeDates.dates_retour.map(fullDay)
     openSearchFromDeals({
       origin: origin.trim(),
+      destination: destination.trim() || undefined,
       adults,
       dates_depart,
       dates_retour,
@@ -142,6 +146,7 @@ export function DealsTab() {
     try {
       const listPromise = getApiClient().getDeals({
         origin: queryOrigin || undefined,
+        destination: queryDestination || undefined,
         adults: queryAdults,
         limit: 36,
       })
@@ -158,7 +163,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, queryOrigin, queryAdults])
+  }, [t, loadLikes, queryOrigin, queryDestination, queryAdults])
 
   useEffect(() => {
     void load()
@@ -226,7 +231,8 @@ export function DealsTab() {
 
   const filterLabel = useMemo(() => {
     const parts: string[] = []
-    if (origin) parts.push(origin.split(',')[0] || origin)
+    if (destination) parts.push(`→ ${destination.split(',')[0] || destination}`)
+    if (origin) parts.push(`de ${origin.split(',')[0] || origin}`)
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
     const out = activeDates.dates_depart[0]?.date
@@ -241,20 +247,28 @@ export function DealsTab() {
     if (sort === 'price_asc') parts.push(t('deals.sortPriceAsc'))
     else if (sort === 'price_desc') parts.push(t('deals.sortPriceDesc'))
     return parts.join(' · ')
-  }, [origin, adults, activeDates, sort, t])
+  }, [destination, origin, adults, activeDates, sort, t])
 
-  const matchedDeals = useMemo(
-    () =>
-      queryOrigin ? deals.filter((d) => d.flags?.match_origin !== false) : deals,
-    [deals, queryOrigin],
-  )
+  const hasWallFilter = Boolean(queryOrigin || queryDestination)
+
+  const matchedDeals = useMemo(() => {
+    if (!hasWallFilter) return deals
+    return deals.filter((d) => {
+      if (queryOrigin && d.flags?.match_origin === false) return false
+      if (queryDestination && d.flags?.match_destination === false) return false
+      return true
+    })
+  }, [deals, queryOrigin, queryDestination, hasWallFilter])
 
   /** Always separate — never mix into price sort (credibility). */
-  const fillerDeals = useMemo(
-    () =>
-      queryOrigin ? deals.filter((d) => d.flags?.match_origin === false) : [],
-    [deals, queryOrigin],
-  )
+  const fillerDeals = useMemo(() => {
+    if (!hasWallFilter) return []
+    return deals.filter((d) => {
+      if (queryOrigin && d.flags?.match_origin === false) return true
+      if (queryDestination && d.flags?.match_destination === false) return true
+      return false
+    })
+  }, [deals, queryOrigin, queryDestination, hasWallFilter])
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
@@ -289,7 +303,7 @@ export function DealsTab() {
           <div className="min-w-0">
             <p className="text-sm font-bold text-ink">Affiner</p>
             <p className="text-xs text-muted truncate mt-0.5">
-              {filterLabel || 'Toutes origines · 2 voyageurs'}
+              {filterLabel || 'Toutes villes · 2 voyageurs'}
             </p>
           </div>
           <span
@@ -311,6 +325,27 @@ export function DealsTab() {
             <div className="pt-4 mb-4 sm:mb-5">
               <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
                 <label className="text-base sm:text-lg font-bold text-slate-900 block">
+                  {t('deals.filterDestination')}
+                </label>
+                {destination ? (
+                  <button
+                    type="button"
+                    onClick={() => setDestination('')}
+                    className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
+                  >
+                    {t('deals.clearDestination')}
+                  </button>
+                ) : null}
+              </div>
+              <CityAirportSelect value={destination} onChange={setDestination} />
+              <p className="text-xs text-slate-500 mt-2">
+                {t('deals.filterDestinationHint')}
+              </p>
+            </div>
+
+            <div className="mb-4 sm:mb-5">
+              <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
+                <label className="text-base sm:text-lg font-bold text-slate-900 block">
                   {t('deals.filterOrigin')}
                 </label>
                 {origin ? (
@@ -319,17 +354,14 @@ export function DealsTab() {
                     onClick={() => setOrigin('')}
                     className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
                   >
-                    Toutes les origines
+                    {t('deals.clearOrigin')}
                   </button>
                 ) : null}
               </div>
               <CityAirportSelect value={origin} onChange={setOrigin} />
-              {!origin ? (
-                <p className="text-xs text-slate-500 mt-2">
-                  Laisse vide pour voir toutes les origines, ou choisis une ville de départ.
-                </p>
-              ) : null}
+              <p className="text-xs text-slate-500 mt-2">{t('deals.filterOriginHint')}</p>
             </div>
+
             <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
 
             <div className="mt-4 pt-4 border-t border-line">
@@ -469,7 +501,15 @@ export function DealsTab() {
         <div className="app-card p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.emptyTitle')}</p>
           <p className="text-sm text-muted mb-4">
-            {origin ? t('deals.emptyBody', { origin }) : t('deals.emptyBodyAll')}
+            {destination || origin
+              ? t('deals.emptyBody', {
+                  origin: [destination && `→ ${destination.split(',')[0]}`, origin && `de ${origin.split(',')[0]}`]
+                    .filter(Boolean)
+                    .join(' ')
+                    || origin
+                    || destination,
+                })
+              : t('deals.emptyBodyAll')}
           </p>
           <button
             type="button"
@@ -497,9 +537,15 @@ export function DealsTab() {
           </motion.div>
           {fillerDeals.length > 0 ? (
             <div>
-              <p className="text-sm font-bold text-ink mb-1">Depuis d’autres aéroports</p>
+              <p className="text-sm font-bold text-ink mb-1">
+                {queryDestination && !queryOrigin
+                  ? 'Autres villes d’arrivée'
+                  : queryOrigin && !queryDestination
+                    ? 'Depuis d’autres aéroports'
+                    : 'Autres correspondances'}
+              </p>
               <p className="text-xs text-muted mb-4">
-                Hors de ton aéroport de départ — triés à part
+                Hors de ton filtre — triés à part
               </p>
               <motion.div
                 layout

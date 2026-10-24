@@ -111,6 +111,10 @@ async def list_deals(
         None,
         description="IATA départ (un ou plusieurs: BVA ou CDG,ORY,BVA)",
     ),
+    destination: Optional[str] = Query(
+        None,
+        description="IATA arrivée / ville (ex. CIA ou FCO,CIA — expand served_city)",
+    ),
     adults: Optional[int] = Query(None, ge=1, le=6),
     window: Optional[str] = Query(None, description="FRI_SUN | SAT_MON"),
     max_pp: Optional[float] = Query(None, ge=0, description="Budget max € / pers."),
@@ -123,6 +127,7 @@ async def list_deals(
         provider = get_deal_provider()
         return provider.list_deals(
             origin=origin,
+            destination=destination,
             adults=adults,
             window=window,
             max_pp=max_pp,

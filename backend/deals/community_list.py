@@ -348,6 +348,40 @@ def _parse_origin_codes(origin: Optional[str]) -> List[str]:
     return out
 
 
+def _expand_destination_iatas(supabase, destination: Optional[str]) -> List[str]:
+    """
+    Arrival city selection → all IATAs of that served city.
+    'CIA' or 'FCO,CIA' → Rome airports so wall matches hotel city-axis.
+    """
+    codes = _parse_origin_codes(destination)
+    if not codes or not supabase:
+        return codes
+    expanded: List[str] = []
+    seen_cities: set = set()
+    try:
+        from deals.city_mapping import (
+            iatas_for_served_city,
+            resolve_hotel_destination,
+        )
+    except Exception:
+        return codes
+
+    for code in codes:
+        resolved = resolve_hotel_destination(supabase, iata=code)
+        scid = (resolved or {}).get("served_city_id")
+        if scid and scid not in seen_cities:
+            seen_cities.add(scid)
+            for iata in iatas_for_served_city(supabase, str(scid)):
+                if iata not in expanded:
+                    expanded.append(iata)
+        if code not in expanded:
+            expanded.append(code)
+        primary = (resolved or {}).get("primary_iata")
+        if primary and primary not in expanded:
+            expanded.append(str(primary).upper())
+    return expanded or codes
+
+
 def _row_has_hotel(row: Dict[str, Any]) -> bool:
     hotels = row.get("hotel_top3")
     return bool(isinstance(hotels, list) and len(hotels) > 0)
@@ -685,6 +719,7 @@ def list_community_deals(
     supabase,
     *,
     origin: Optional[str] = None,
+    destination: Optional[str] = None,
     adults: Optional[int] = None,
     max_pp: Optional[float] = None,
     limit: int = 36,
@@ -693,6 +728,10 @@ def list_community_deals(
     Browse: deals with hotel photo only (no city stock, no flight-only cards).
     Read path is cache-only enrichment — hotel composition happens in jobs.
     Default ~36 for choice; hard cap 48 (single wall, no pagination yet).
+
+    Filters (optional):
+      origin — departure IATA(s)
+      destination — arrival city IATA(s), expanded via served_city
     """
     import logging
 
@@ -702,14 +741,18 @@ def list_community_deals(
     target = max(12, min(int(limit or 36), 48))
     with _list_cache_lock:
         epoch = _list_cache_epoch
-    cache_key = f"hp2|{epoch}|{origin or ''}|{adults_n}|{max_pp}|{target}"
+    cache_key = (
+        f"hp3|{epoch}|{origin or ''}|{destination or ''}|"
+        f"{adults_n}|{max_pp}|{target}"
+    )
     now = time.monotonic()
     with _list_cache_lock:
         hit = _list_cache.get(cache_key)
         if hit and now - hit[0] < _LIST_CACHE_TTL_S:
             log.info(
-                "list_community_deals cache_hit origin=%s n=%s ms=%.0f",
+                "list_community_deals cache_hit origin=%s dest=%s n=%s ms=%.0f",
                 origin,
+                destination,
                 len(hit[1]),
                 (time.monotonic() - t0) * 1000,
             )
@@ -730,92 +773,93 @@ def list_community_deals(
         )
     )
 
-    codes = _parse_origin_codes(origin)
+    origin_codes = _parse_origin_codes(origin)
+    dest_codes = _expand_destination_iatas(supabase, destination)
+    origin_set = set(origin_codes)
+    dest_set = set(dest_codes)
     # Single fetch large enough for match + fillers; one enrich pass
     fetch_n = max(target * 3, 40)
 
-    if codes:
-        code_set = set(codes)
-        all_rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
-        all_rows.sort(
-            key=lambda r: (
-                0 if (r.get("origin_iata") or "").upper() in code_set else 1,
-                0 if _row_has_hotel(r) else 1,
-                -(float(r.get("deal_score") or 0)),
-            )
+    all_rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
+
+    def _row_match_origin(r: Dict[str, Any]) -> bool:
+        if not origin_set:
+            return True
+        return (r.get("origin_iata") or "").upper() in origin_set
+
+    def _row_match_dest(r: Dict[str, Any]) -> bool:
+        if not dest_set:
+            return True
+        return (r.get("dest_iata") or "").upper() in dest_set
+
+    def _priority(r: Dict[str, Any]) -> tuple:
+        mo = _row_match_origin(r)
+        md = _row_match_dest(r)
+        # Both filters → prefer full match, then dest (city-axis), then origin
+        if origin_set and dest_set:
+            tier = 0 if (mo and md) else (1 if md else (2 if mo else 3))
+        elif dest_set:
+            tier = 0 if md else 1
+        elif origin_set:
+            tier = 0 if mo else 1
+        else:
+            tier = 0
+        return (
+            tier,
+            0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
+            0 if _row_has_hotel(r) else 1,
+            -(float(r.get("deal_score") or 0)),
         )
-        matched_rows = [
-            r
-            for r in all_rows
-            if (r.get("origin_iata") or "").upper() in code_set
-        ]
-        filler_rows = [
-            r
-            for r in all_rows
-            if (r.get("origin_iata") or "").upper() not in code_set
-        ]
-        # Prefer photo-ready rows first for faster wall
-        matched_rows.sort(
-            key=lambda r: (
-                0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
-                -(float(r.get("deal_score") or 0)),
-            )
+
+    all_rows.sort(key=_priority)
+    enriched = _enrich_rows_to_deals(
+        all_rows[:fetch_n],
+        adults_n=adults_n,
+        fresh=fresh,
+        max_pp=max_pp,
+        match_origin=True,
+        supabase=supabase,
+    )
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for d in enriched:
+        key = str(d.get("deal_key") or d.get("id"))
+        if key in seen:
+            continue
+        oi = str(d.get("origin_iata") or d.get("departure_airport") or "").upper()
+        di = str(d.get("destination") or d.get("dest_iata") or "").upper()
+        # flight nested dest
+        if not di:
+            flight = d.get("flight") or {}
+            di = str(flight.get("destination_iata") or "").upper()
+        flags = dict(d.get("flags") or {})
+        flags["match_origin"] = (not origin_set) or (oi in origin_set)
+        flags["match_destination"] = (not dest_set) or (di in dest_set)
+        d["flags"] = flags
+        seen.add(key)
+        out.append(d)
+
+    out = _prefer_hotel_deals(out)
+
+    def _deal_priority(d: Dict[str, Any]) -> tuple:
+        flags = d.get("flags") or {}
+        mo = bool(flags.get("match_origin", True))
+        md = bool(flags.get("match_destination", True))
+        if origin_set and dest_set:
+            tier = 0 if (mo and md) else (1 if md else (2 if mo else 3))
+        elif dest_set:
+            tier = 0 if md else 1
+        elif origin_set:
+            tier = 0 if mo else 1
+        else:
+            tier = 0
+        return (
+            tier,
+            0 if _deal_has_hotel_photo(d) else 1,
+            -(float(d.get("deal_score") or 0)),
         )
-        filler_rows.sort(
-            key=lambda r: (
-                0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
-                -(float(r.get("deal_score") or 0)),
-            )
-        )
-        # One enrich for matched + enough fillers
-        combo = matched_rows[: fetch_n] + filler_rows[: max(0, fetch_n - len(matched_rows))]
-        enriched = _enrich_rows_to_deals(
-            combo,
-            adults_n=adults_n,
-            fresh=fresh,
-            max_pp=max_pp,
-            match_origin=True,
-            supabase=supabase,
-        )
-        # Fix match_origin flags after combined enrich
-        out: List[Dict[str, Any]] = []
-        seen = set()
-        for d in enriched:
-            key = str(d.get("deal_key") or d.get("id"))
-            if key in seen:
-                continue
-            oi = str(d.get("origin_iata") or d.get("departure_airport") or "").upper()
-            flags = dict(d.get("flags") or {})
-            flags["match_origin"] = oi in code_set
-            d["flags"] = flags
-            seen.add(key)
-            out.append(d)
-        out = _prefer_hotel_deals(out)
-        # Stable: matched first then fillers
-        out.sort(
-            key=lambda d: (
-                0 if (d.get("flags") or {}).get("match_origin") else 1,
-                0 if _deal_has_hotel_photo(d) else 1,
-                -(float(d.get("deal_score") or 0)),
-            )
-        )
-    else:
-        rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
-        rows.sort(
-            key=lambda r: (
-                0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
-                -(float(r.get("deal_score") or 0)),
-            )
-        )
-        out = _enrich_rows_to_deals(
-            rows,
-            adults_n=adults_n,
-            fresh=fresh,
-            max_pp=max_pp,
-            match_origin=True,
-            supabase=supabase,
-        )
-        out = _prefer_hotel_deals(out)
+
+    out.sort(key=_deal_priority)
 
     out = apply_cached_share_cap(
         out,
@@ -831,15 +875,17 @@ def list_community_deals(
                 _list_cache.pop(k, None)
     elapsed_ms = (time.monotonic() - t0) * 1000
     log.info(
-        "list_community_deals origin=%s n=%s ms=%.0f",
+        "list_community_deals origin=%s dest=%s n=%s ms=%.0f",
         origin,
+        destination,
         len(out),
         elapsed_ms,
     )
     if elapsed_ms > 300:
         log.warning(
-            "list_community_deals SLOW origin=%s ms=%.0f (target p95 < 300)",
+            "list_community_deals SLOW origin=%s dest=%s ms=%.0f (target p95 < 300)",
             origin,
+            destination,
             elapsed_ms,
         )
     return out
