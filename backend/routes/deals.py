@@ -578,6 +578,80 @@ async def job_archive_trip_drafts(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/jobs/cached-kill-switch")
+async def job_cached_kill_switch(authorization: Optional[str] = Header(None)):
+    """Lot C4: auto-disable cached deals if honesty KPIs fail (7d)."""
+    require_cron(authorization)
+    try:
+        from deals.click_checks import run_cached_kill_switch
+
+        return run_cached_kill_switch(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class FlightClickRequest(BaseModel):
+    deal_key: str
+    verification_level: str = "live"
+    displayed_pp: Optional[float] = None
+    checked_pp: Optional[float] = None
+    outcome: str = "unknown"
+    source: str = "deals"
+    draft_token: Optional[str] = None
+    partner: Optional[str] = None
+
+
+class FlightClickFeedbackRequest(BaseModel):
+    feedback: str  # same | higher | gone
+    check_id: Optional[str] = None
+    draft_token: Optional[str] = None
+    deal_key: Optional[str] = None
+
+
+@router.post("/api/deals/flight-click")
+async def flight_click(body: FlightClickRequest):
+    """Lot C2: record outbound flight click (+ optional price check)."""
+    try:
+        from deals.click_checks import record_flight_click
+
+        return record_flight_click(
+            _svc(),
+            deal_key=body.deal_key,
+            verification_level=body.verification_level,
+            displayed_pp=body.displayed_pp,
+            checked_pp=body.checked_pp,
+            outcome=body.outcome,
+            source=body.source,
+            draft_token=body.draft_token,
+            partner=body.partner,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/flight-click/feedback")
+async def flight_click_feedback(body: FlightClickFeedbackRequest):
+    """Lot C3: user tap after partner tab — same / higher / gone (cached)."""
+    try:
+        from deals.click_checks import record_user_feedback
+
+        return record_user_feedback(
+            _svc(),
+            check_id=body.check_id,
+            draft_token=body.draft_token,
+            deal_key=body.deal_key,
+            feedback=body.feedback,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class ComposeHotelRequest(BaseModel):
     checkin: str
     checkout: str

@@ -23,6 +23,7 @@ REVALIDATE_EVERY_S = 90 * 60  # ~1h30 mid; v3 also has 3h — use 90m average
 BASELINES_EVERY_S = 24 * 60 * 60
 SEED_SCAN_EVERY_S = 6 * 60 * 60  # several times/day within daily budget
 SEED_CATALOG_EVERY_S = 7 * 24 * 60 * 60
+KILL_SWITCH_EVERY_S = 24 * 60 * 60
 
 
 def _svc():
@@ -50,6 +51,7 @@ def _safe_job(name: str, fn: Callable[[], Dict[str, Any]]) -> None:
 
 def _loop() -> None:
     from deals.baselines import refresh_route_baselines
+    from deals.click_checks import run_cached_kill_switch
     from deals.liteapi_config import load_deals_config
     from deals.promote import promote_deals
     from deals.revalidate_community import revalidate_deals
@@ -61,6 +63,7 @@ def _loop() -> None:
         "refresh-baselines": 0.0,
         "seed-scan": 0.0,
         "build-seed-catalog": 0.0,
+        "cached-kill-switch": 0.0,
     }
     # Stagger: run promote soon after start
     last["promote-deals"] = time.time() - PROMOTE_EVERY_S + 60
@@ -99,6 +102,13 @@ def _loop() -> None:
                 _safe_job(
                     "build-seed-catalog",
                     lambda: build_seed_catalog(sb, cfg=cfg),
+                )
+
+            if now - last["cached-kill-switch"] >= KILL_SWITCH_EVERY_S:
+                last["cached-kill-switch"] = now
+                _safe_job(
+                    "cached-kill-switch",
+                    lambda: run_cached_kill_switch(sb, cfg=cfg),
                 )
         except Exception as e:
             logger.exception("scheduler tick error: %s", e)

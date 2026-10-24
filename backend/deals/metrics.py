@@ -247,6 +247,7 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         snapshot["ssp"] = _ssp_missing_share(supabase)
         snapshot["community"] = _community_stats(supabase)
         snapshot["baseline_guard"] = _baseline_guard_stats(supabase, cfg)
+        snapshot["cached_kill"] = _cached_kill_stats(supabase, cfg)
 
     verdict = go_no_go(cfg, snapshot)
     return {
@@ -258,10 +259,37 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         "booking_enabled": cfg.booking_enabled,
         "seed_scan_budget_per_day": cfg.seed_scan_budget_per_day,
         "scheduler_enabled": cfg.scheduler_enabled,
+        "cached_enabled_env": cfg.cached_enabled,
         "process": process,
         "caches": snapshot,
         "go_no_go": verdict,
     }
+
+
+def _cached_kill_stats(supabase: Any, cfg: Any) -> Dict[str, Any]:
+    try:
+        from deals.click_checks import (
+            FLAG_CACHED,
+            get_runtime_flag,
+            is_cached_deals_enabled,
+        )
+
+        enabled = is_cached_deals_enabled(
+            supabase, env_default=getattr(cfg, "cached_enabled", True)
+        )
+        flag = get_runtime_flag(supabase, FLAG_CACHED)
+        # Dry evaluate without writing — reuse evaluate via run with care:
+        # only report status, don't call kill here
+        return {
+            "cached_enabled_effective": enabled,
+            "runtime_flag": flag,
+            "note": (
+                "Travelpayouts prices_for_dates: no found_at in current mapping "
+                "— DEALS_CACHED_MAX_AGE_H unused"
+            ),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 def _baseline_guard_stats(supabase: Any, cfg: Any) -> Dict[str, Any]:

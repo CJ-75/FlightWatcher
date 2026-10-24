@@ -15,6 +15,7 @@ from deals.baselines import (
 )
 from deals.compose_hotel import compose_hotel
 from deals.liteapi_config import DealsConfig, load_deals_config
+from deals.verification import prefer_observation, verification_level_for_provider
 
 logger = logging.getLogger("deals.promote")
 
@@ -258,10 +259,12 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         if not eligible_candidate(obs, bl, cfg=cfg, now=now):
             continue
         key = (origin, city_id, out_d, ret_d)
+        cand = {**obs, "_baseline": bl, "_dest": dest}
         prev = best.get(key)
-        price = float(obs.get("price_pp_eur") or 9999)
-        if prev is None or price < float(prev.get("price_pp_eur") or 9999):
-            best[key] = {**obs, "_baseline": bl, "_dest": dest}
+        if prev is None:
+            best[key] = cand
+        else:
+            best[key] = prefer_observation(prev, cand)
 
     scored: List[Dict[str, Any]] = []
     for (origin, city_id, out_d, ret_d), obs in best.items():
@@ -272,7 +275,13 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         dtd = days_to_departure(out_d, now=now) or 30
         tau = cfg.fresh_tau_short_h if dtd <= 7 else cfg.fresh_tau_h
         pop = len(pop_map.get((origin, city_id), set()))
-        disc = discount_pct_vs_usual(price, bl, min_discount=cfg.min_discount)
+        vlevel = verification_level_for_provider(obs.get("provider"))
+        # Cached deals never get a % badge (discount_pct stored null)
+        disc = (
+            None
+            if vlevel == "cached"
+            else discount_pct_vs_usual(price, bl, min_discount=cfg.min_discount)
+        )
 
         # Hotel optional (cache only — no live LiteAPI in promote hot path)
         hotel_payload = None
@@ -335,6 +344,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 "ret_date": ret_d,
                 "nights": int(obs.get("nights") or 1),
                 "trip_type": obs.get("trip_type") or "WEEKEND",
+                "verification_level": vlevel,
                 "flight_snapshot": {
                     "price_pp_eur": price,
                     "provider": obs.get("provider"),
@@ -344,6 +354,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                     "out_dep_local": obs.get("out_dep_local"),
                     "ret_dep_local": obs.get("ret_dep_local"),
                     "city_name": city_name,
+                    "verification_level": vlevel,
                 },
                 "baseline_snapshot": {
                     "median": bl.get("median"),

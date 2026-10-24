@@ -186,6 +186,8 @@ export interface TravelDealFlags {
   source_mix?: string
   /** Human freshness — e.g. « Prix vérifié aujourd'hui » (no technical scan age). */
   verified_label?: string | null
+  /** Lot C: live (Ryanair) | cached (Travelpayouts). */
+  verification_level?: 'live' | 'cached' | string
 }
 
 export interface TravelDealBadgeMeta {

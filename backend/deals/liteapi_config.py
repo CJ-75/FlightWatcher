@@ -156,6 +156,12 @@ class DealsConfig:
     legacy_fallback_enabled: bool
     calendar_enabled: bool
     min_discount: float
+    # v3.1 Lot C
+    cached_enabled: bool
+    cached_max_share: float
+    cached_max_age_h: float
+    kill_min_clicks: int
+    kill_threshold: float
 
     @property
     def is_liteapi(self) -> bool:
@@ -240,6 +246,11 @@ def load_deals_config() -> DealsConfig:
         legacy_fallback_enabled=_env_bool("DEALS_LEGACY_FALLBACK_ENABLED", False),
         calendar_enabled=_env_bool("DEALS_CALENDAR_ENABLED", False),
         min_discount=min(0.9, max(0.0, _env_float("DEALS_MIN_DISCOUNT", 0.15))),
+        cached_enabled=_env_bool("DEALS_CACHED_ENABLED", True),
+        cached_max_share=min(1.0, max(0.0, _env_float("DEALS_CACHED_MAX_SHARE", 0.30))),
+        cached_max_age_h=_env_float("DEALS_CACHED_MAX_AGE_H", 48.0),
+        kill_min_clicks=max(1, _env_int("DEALS_KILL_MIN_CLICKS", 30)),
+        kill_threshold=min(1.0, max(0.0, _env_float("DEALS_KILL_THRESHOLD", 0.25))),
     )
 
 
@@ -307,4 +318,6 @@ def deals_config_public_dict(cfg: Optional[DealsConfig] = None) -> Dict[str, Any
         "baseline_max_age_h": cfg.baseline_max_age_h,
         "legacy_fallback_enabled": cfg.legacy_fallback_enabled,
         "calendar_enabled": cfg.calendar_enabled,
+        "cached_enabled": cfg.cached_enabled,
+        "cached_max_share": cfg.cached_max_share,
     }

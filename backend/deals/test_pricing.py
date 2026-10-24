@@ -135,6 +135,11 @@ class TestConfigGuards(unittest.TestCase):
             legacy_fallback_enabled=False,
             calendar_enabled=False,
             min_discount=0.15,
+            cached_enabled=True,
+            cached_max_share=0.30,
+            cached_max_age_h=48,
+            kill_min_clicks=30,
+            kill_threshold=0.25,
         )
         with self.assertRaises(LiteApiConfigError):
             validate_liteapi_keys(cfg)

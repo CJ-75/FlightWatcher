@@ -13,6 +13,16 @@ function formatDate(dateStr?: string | null) {
   })
 }
 
+function partnerLabel(provider?: string, bookingUrl?: string): string {
+  const p = (provider || '').toLowerCase()
+  if (p === 'ryanair') return 'Réserver sur Ryanair'
+  if (p === 'travelpayouts' || p === 'aviasales') return 'Réserver via Aviasales'
+  if (bookingUrl && /aviasales|travelpayouts/i.test(bookingUrl)) {
+    return 'Réserver via Aviasales'
+  }
+  return 'Continuer vers le vol'
+}
+
 /**
  * Booking-oriented « Mon voyage » (not Planner).
  * ① Vol (lien externe) ② Hôtel (in-app) — invite optionnelle.
@@ -23,6 +33,9 @@ export default function MyTrip() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [claiming, setClaiming] = useState(false)
+  const [showPriceAsk, setShowPriceAsk] = useState(false)
+  const [feedbackSent, setFeedbackSent] = useState(false)
+  const [checkId, setCheckId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!token) return
@@ -49,6 +62,55 @@ export default function MyTrip() {
   const flightUrl = flight.booking_url || payload.booking_url || ''
   const city = draft?.city_name || payload.city || '—'
   const price = payload.price_per_person
+  const vlevel =
+    flight.verification_level ||
+    payload.flags?.verification_level ||
+    payload.verification_level ||
+    'live'
+  const isCached = vlevel === 'cached'
+  const cta = partnerLabel(flight.provider, flightUrl)
+
+  const onFlightClick = async () => {
+    if (!draft?.deal_key && !payload.deal_key) {
+      return
+    }
+    try {
+      const res = await getApiClient().recordFlightClick({
+        deal_key: String(draft?.deal_key || payload.deal_key),
+        verification_level: vlevel,
+        displayed_pp:
+          flight.price_pp != null
+            ? Number(flight.price_pp)
+            : price != null
+              ? Number(price)
+              : null,
+        source: 'deals',
+        draft_token: token,
+        partner: flight.provider || null,
+        outcome: 'unknown',
+      })
+      if (res?.check?.id) setCheckId(String(res.check.id))
+      if (isCached) setShowPriceAsk(true)
+    } catch {
+      if (isCached) setShowPriceAsk(true)
+    }
+  }
+
+  const sendFeedback = async (feedback: 'same' | 'higher' | 'gone') => {
+    try {
+      await getApiClient().flightClickFeedback({
+        feedback,
+        check_id: checkId,
+        draft_token: token,
+        deal_key: draft?.deal_key || payload.deal_key,
+      })
+      setFeedbackSent(true)
+      setShowPriceAsk(false)
+    } catch {
+      setFeedbackSent(true)
+      setShowPriceAsk(false)
+    }
+  }
 
   const onClaim = async () => {
     if (!token) return
@@ -105,27 +167,67 @@ export default function MyTrip() {
               dès {Math.round(Number(price))} € / pers.
             </p>
           ) : null}
+          {isCached ? (
+            <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
+              Prix repéré récemment · à confirmer chez le partenaire
+            </p>
+          ) : null}
         </div>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
           <h2 className="font-bold text-slate-900">1. Réserver le vol</h2>
           <p className="text-sm text-slate-600">
-            Ouverture chez la compagnie. Deux réservations distinctes (vol + hôtel).
+            Deux réservations distinctes (vol + hôtel). Le lien ouvre le partenaire ci-dessous.
           </p>
           {flightUrl ? (
             <a
               href={flightUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => void onFlightClick()}
               className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl"
             >
-              Continuer vers le vol
+              {cta}
             </a>
           ) : (
             <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
               Lien vol indisponible pour l’instant — réessaie dans un instant.
             </p>
           )}
+
+          {showPriceAsk && isCached && !feedbackSent ? (
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-2">
+              <p className="text-sm font-medium text-slate-800">
+                Le prix était-il le même ?
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void sendFeedback('same')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
+                >
+                  Oui
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void sendFeedback('higher')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
+                >
+                  Plus cher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void sendFeedback('gone')}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
+                >
+                  Plus disponible
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {feedbackSent ? (
+            <p className="text-xs text-slate-500">Merci — ça nous aide à rester honnêtes.</p>
+          ) : null}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">

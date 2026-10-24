@@ -263,6 +263,32 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify({}) },
       ),
 
+    recordFlightClick: (body: {
+      deal_key: string
+      verification_level?: string
+      displayed_pp?: number | null
+      checked_pp?: number | null
+      outcome?: string
+      source?: string
+      draft_token?: string | null
+      partner?: string | null
+    }) =>
+      request<{ ok: boolean; check?: { id?: string } }>('/api/deals/flight-click', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    flightClickFeedback: (body: {
+      feedback: string
+      check_id?: string | null
+      draft_token?: string | null
+      deal_key?: string | null
+    }) =>
+      request<{ ok: boolean }>('/api/deals/flight-click/feedback', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
     prebookHotel: (body: HotelBookingPrebookRequest) =>
       request<HotelBookingPrebookResponse>('/api/hotel-bookings/prebook', {
         method: 'POST',

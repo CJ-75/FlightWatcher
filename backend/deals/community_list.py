@@ -57,6 +57,11 @@ def row_to_travel_deal(
     baselines_fresh: bool = True,
 ) -> Dict[str, Any]:
     from deals.baseline_guard import soften_badge_if_stale
+    from deals.verification import (
+        LEVEL_CACHED,
+        LEVEL_LIVE,
+        badge_for_deal_level,
+    )
 
     flight = row.get("flight_snapshot") or {}
     baseline = row.get("baseline_snapshot") or {}
@@ -64,9 +69,17 @@ def row_to_travel_deal(
     hotel = hotels[0] if hotels else None
     price_flight = float(flight.get("price_pp_eur") or 0)
     city = flight.get("city_name") or row.get("dest_iata") or ""
-    badge = soften_badge_if_stale(
-        badge_for_baseline(baseline), baselines_fresh=baselines_fresh
+    vlevel = (
+        row.get("verification_level")
+        or flight.get("verification_level")
+        or LEVEL_LIVE
     )
+    raw_badge = badge_for_baseline(baseline)
+    if vlevel == LEVEL_CACHED:
+        badge = badge_for_deal_level(raw_badge, verification_level=LEVEL_CACHED)
+    else:
+        badge = soften_badge_if_stale(raw_badge, baselines_fresh=baselines_fresh)
+        badge = badge_for_deal_level(badge, verification_level=LEVEL_LIVE)
 
     hotel_pp = None
     hotel_name = None
@@ -119,6 +132,7 @@ def row_to_travel_deal(
             "direct": flight.get("direct", True),
             "out_dep_local": flight.get("out_dep_local"),
             "ret_dep_local": flight.get("ret_dep_local"),
+            "verification_level": vlevel,
         },
         "hotel": hotel,
         "alt_hotels": hotels[1:3] if hotels else [],
@@ -130,8 +144,10 @@ def row_to_travel_deal(
         "flags": {
             "has_hotel": bool(hotel),
             "source_mix": row.get("source_mix"),
-            "verified_label": verified,
+            "verified_label": verified if vlevel != LEVEL_CACHED else None,
+            "verification_level": vlevel,
         },
+        "verification_level": vlevel,
         "deal_score": row.get("deal_score"),
         "fetched_at": row.get("last_verified_at"),
         "served_city_id": row.get("served_city_id"),
@@ -195,15 +211,26 @@ def list_community_deals(
         return []
     adults_n = int(adults or 2)
     fresh = _baselines_fresh_flag(supabase)
+    from deals.click_checks import is_cached_deals_enabled
+    from deals.liteapi_config import load_deals_config
+    from deals.verification import apply_cached_share_cap
+
+    cfg = load_deals_config()
+    cached_on = is_cached_deals_enabled(
+        supabase, env_default=cfg.cached_enabled
+    )
     deals = []
     for row in res.data or []:
         d = row_to_travel_deal(row, adults=adults_n, baselines_fresh=fresh)
         if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
             continue
         deals.append(d)
-        if len(deals) >= limit:
-            break
-    return deals
+    deals = apply_cached_share_cap(
+        deals,
+        max_share=cfg.cached_max_share,
+        cached_enabled=cached_on,
+    )
+    return deals[:limit]
 
 
 def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
