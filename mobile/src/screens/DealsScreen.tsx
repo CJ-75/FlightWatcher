@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -11,15 +11,20 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { TravelDeal } from '@flightwatcher/shared'
+import type { Airport, TravelDeal } from '@flightwatcher/shared'
+import {
+  encodeAirportCodes,
+  findCityGroupByCodes,
+  groupAirportsByCity,
+  normalizeAirports,
+} from '@flightwatcher/shared'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
+import { CityAirportPicker } from '../components/CityAirportPicker'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
-
-const ORIGINS = ['', 'BVA', 'ORY', 'CDG', 'MRS'] as const
 
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
@@ -29,46 +34,70 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [origin, setOrigin] = useState('')
+  const [origin, setOrigin] = useState('BVA')
   const [adults, setAdults] = useState(2)
+  const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
+  const expandedDefaultRef = useRef(false)
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true)
-    else setLoading(true)
-    setError(null)
-    try {
-      try {
-        const cfgRes = await fetch(`${apiBase}/api/config`)
-        if (cfgRes.ok) {
-          const cfg = await cfgRes.json()
-          setUiEnabled(cfg?.ui_enabled !== false)
-          setReadonlyBanner(
-            Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false,
-          )
-          if (cfg?.ui_enabled === false) {
-            setDeals([])
-            return
+  useEffect(() => {
+    getApi()
+      .getAirports()
+      .then((raw) => {
+        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+        setAirports(list)
+        if (!expandedDefaultRef.current && list.length) {
+          expandedDefaultRef.current = true
+          const groups = groupAirportsByCity(list)
+          const paris = findCityGroupByCodes(groups, ['BVA', 'CDG', 'ORY'])
+          if (paris && paris.airports.length > 1) {
+            const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+            if (encoded) setOrigin(encoded)
           }
         }
-      } catch {
-        /* ignore */
-      }
-      const list = await getApi().getDeals({
-        origin: origin || undefined,
-        adults,
       })
-      setDeals(Array.isArray(list) ? list : [])
-      await refreshLikes()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Impossible de charger les deals')
-      setDeals([])
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [refreshLikes, origin, adults])
+      .catch(() => undefined)
+  }, [])
+
+  const load = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true)
+      else setLoading(true)
+      setError(null)
+      try {
+        try {
+          const cfgRes = await fetch(`${apiBase}/api/config`)
+          if (cfgRes.ok) {
+            const cfg = await cfgRes.json()
+            setUiEnabled(cfg?.ui_enabled !== false)
+            setReadonlyBanner(
+              Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false,
+            )
+            if (cfg?.ui_enabled === false) {
+              setDeals([])
+              return
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        const list = await getApi().getDeals({
+          origin: origin || undefined,
+          adults,
+        })
+        setDeals(Array.isArray(list) ? list : [])
+        await refreshLikes()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Impossible de charger les deals')
+        setDeals([])
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    },
+    [refreshLikes, origin, adults],
+  )
 
   useFocusEffect(
     useCallback(() => {
@@ -89,6 +118,7 @@ export function DealsScreen() {
         <FlatList
           data={deals}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
             paddingTop: insets.top + 12,
@@ -104,7 +134,9 @@ export function DealsScreen() {
           ListHeaderComponent={
             <View style={styles.header}>
               <Text style={styles.title}>Deals</Text>
-              <Text style={styles.subtitle}>Week-ends vol + hôtel, prêts à partir</Text>
+              <Text style={styles.subtitle}>
+                Bonnes affaires vol + hôtel depuis ton aéroport
+              </Text>
               {!uiEnabled ? (
                 <Text style={styles.subtitle}>Onglet deals désactivé (calibration).</Text>
               ) : null}
@@ -113,21 +145,15 @@ export function DealsScreen() {
                   Lecture seule — réservation hôtel fermée.
                 </Text>
               ) : null}
+
+              <Text style={styles.fieldLabel}>Départ</Text>
+              <CityAirportPicker
+                airports={airports}
+                value={origin}
+                onChange={setOrigin}
+              />
+
               <View style={styles.chips}>
-                {ORIGINS.map((o) => {
-                  const active = origin === o
-                  return (
-                    <Pressable
-                      key={o || 'all'}
-                      onPress={() => setOrigin(o)}
-                      style={[styles.chip, active && styles.chipActive]}
-                    >
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                        {o || 'Tous'}
-                      </Text>
-                    </Pressable>
-                  )
-                })}
                 <Pressable
                   onPress={() => setAdults((a) => (a === 1 ? 2 : 1))}
                   style={[styles.chip, adults === 1 && styles.chipActive]}
@@ -155,7 +181,8 @@ export function DealsScreen() {
                 <>
                   <Text style={styles.emptyTitle}>Aucun deal pour l’instant</Text>
                   <Text style={styles.emptyBody}>
-                    Reviens bientôt — de nouveaux week-ends vol + hôtel arrivent.
+                    Pas encore de bonne affaire depuis cet aéroport. Essaie une autre
+                    ville ou lance une recherche.
                   </Text>
                 </>
               )}
@@ -207,11 +234,19 @@ const styles = StyleSheet.create({
     color: colors.muted,
     includeFontPadding: false,
   },
+  fieldLabel: {
+    marginTop: 16,
+    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
+    includeFontPadding: false,
+  },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 14,
+    marginTop: 12,
   },
   chip: {
     paddingHorizontal: 12,

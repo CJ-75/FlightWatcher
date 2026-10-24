@@ -154,6 +154,21 @@ def _baselines_fresh_flag(supabase) -> bool:
         return True
 
 
+def _parse_origin_codes(origin: Optional[str]) -> List[str]:
+    """Accept 'BVA' or 'CDG,ORY,BVA' (city multi-airport)."""
+    if not origin:
+        return []
+    import re
+
+    parts = re.split(r"[,;|/\s]+", origin.strip().upper())
+    out: List[str] = []
+    for p in parts:
+        code = p.strip()
+        if len(code) == 3 and code.isalpha() and code not in out:
+            out.append(code)
+    return out
+
+
 def list_community_deals(
     supabase,
     *,
@@ -167,10 +182,13 @@ def list_community_deals(
         .select("*")
         .eq("status", "active")
         .order("deal_score", desc=True)
-        .limit(limit)
+        .limit(limit * 2 if origin else limit)
     )
-    if origin:
-        q = q.eq("origin_iata", origin.strip().upper())
+    codes = _parse_origin_codes(origin)
+    if len(codes) == 1:
+        q = q.eq("origin_iata", codes[0])
+    elif len(codes) > 1:
+        q = q.in_("origin_iata", codes)
     try:
         res = q.execute()
     except Exception:
@@ -183,6 +201,8 @@ def list_community_deals(
         if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
             continue
         deals.append(d)
+        if len(deals) >= limit:
+            break
     return deals
 
 

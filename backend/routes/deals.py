@@ -107,12 +107,15 @@ async def deals_metrics(authorization: Optional[str] = Header(None)):
 
 @router.get("/api/deals")
 async def list_deals(
-    origin: Optional[str] = Query(None, description="IATA départ"),
+    origin: Optional[str] = Query(
+        None,
+        description="IATA départ (un ou plusieurs: BVA ou CDG,ORY,BVA)",
+    ),
     adults: Optional[int] = Query(None, ge=1, le=6),
     window: Optional[str] = Query(None, description="FRI_SUN | SAT_MON"),
     max_pp: Optional[float] = Query(None, ge=0, description="Budget max € / pers."),
 ):
-    """List weekend vol+hôtel deals. Cache-only when DEALS_PROVIDER=liteapi (L5)."""
+    """List deals. Cache-only when DEALS_PROVIDER=liteapi; community when DEALS_SOURCE=community."""
     try:
         provider = get_deal_provider()
         return provider.list_deals(

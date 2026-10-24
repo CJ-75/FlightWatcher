@@ -273,8 +273,18 @@ def pick_flight_for_origin(
     if not ok:
         return None
     if origin:
-        o = origin.strip().upper()
-        matched = [f for f in ok if (f.get("origin_iata") or "").upper() == o]
+        import re
+
+        codes = {
+            p.strip().upper()
+            for p in re.split(r"[,;|/\s]+", origin.strip())
+            if len(p.strip()) == 3
+        }
+        matched = [
+            f
+            for f in ok
+            if (f.get("origin_iata") or "").upper() in codes
+        ]
         if not matched:
             return None
         return min(matched, key=lambda f: float(f["price_pp"]))
