@@ -573,6 +573,13 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             except Exception as e:
                 logger.warning("promote upsert %s: %s", row.get("deal_key"), e)
 
+    try:
+        from deals.community_list import invalidate_list_cache
+
+        invalidate_list_cache()
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "candidates": len(best),

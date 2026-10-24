@@ -10,10 +10,41 @@ from typing import Any, Dict, List, Optional, Tuple
 
 _list_cache_lock = threading.Lock()
 _list_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
-_LIST_CACHE_TTL_S = 45.0
+# 8 min — deals only change on promote/materialize; invalidate_list_cache() bumps epoch
+_LIST_CACHE_TTL_S = 480.0
+_list_cache_epoch = 0
 _flag_cache_lock = threading.Lock()
 _flag_cache: Dict[str, Tuple[float, Any]] = {}
 _FLAG_CACHE_TTL_S = 60.0
+
+
+def invalidate_list_cache() -> None:
+    """Call after promote / materialize / rates so clients see fresh wall."""
+    global _list_cache_epoch
+    with _list_cache_lock:
+        _list_cache.clear()
+        _list_cache_epoch += 1
+
+
+def _hotel_top3_has_photo(hotels: Any) -> bool:
+    if not isinstance(hotels, list) or not hotels:
+        return False
+    h0 = hotels[0] if isinstance(hotels[0], dict) else None
+    return bool(_hotel_photo(h0))
+
+
+def _hotel_top3_ready(hotels: Any) -> bool:
+    """Photo + bookable price → no list-time compose needed."""
+    if not _hotel_top3_has_photo(hotels):
+        return False
+    h0 = hotels[0]
+    for k in ("public_hotel_price", "public_price"):
+        try:
+            if float(h0.get(k) or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
 
 
 def _verified_today_label(last_verified_at: Any) -> Optional[str]:
@@ -425,60 +456,43 @@ def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 3) -> Lis
     return out
 
 
-def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dict[str, Any]:
-    """Attach cache hotel (+ photo) when hotel_top3 is empty / sans photo."""
-    hotels = row.get("hotel_top3") or []
-    if isinstance(hotels, list) and hotels and _hotel_photo(
-        hotels[0] if isinstance(hotels[0], dict) else None
-    ):
-        return row
-    try:
-        from deals.compose_hotel import compose_hotel
+def _batch_fill_missing_hotels(
+    supabase, rows: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """
+    Last-resort list fill when materialize lagged: batch pool by dest (no compose).
+    Rows that already have a photo are left untouched.
+    """
+    if not supabase or not rows:
+        return rows
+    need_iatas: List[str] = []
+    for r in rows:
+        if _hotel_top3_has_photo(r.get("hotel_top3")):
+            continue
+        iata = str(r.get("dest_iata") or "").upper()
+        if len(iata) == 3:
+            need_iatas.append(iata)
+    if not need_iatas:
+        return rows
 
-        flight = row.get("flight_snapshot") or {}
-        try:
-            flight_pp = float(flight.get("price_pp_eur") or 0) or None
-        except (TypeError, ValueError):
-            flight_pp = None
-        composed = compose_hotel(
-            supabase,
-            iata=str(row.get("dest_iata") or ""),
-            checkin=str(row.get("out_date") or "")[:10],
-            checkout=str(row.get("ret_date") or "")[:10],
-            adults=adults_n,
-            fetch_if_miss=False,
-            flight_pp=flight_pp,
-        )
-        from deals.hotel_budget import filter_hotels_for_flight
+    from deals.materialize_wall import batch_load_destinations, batch_pool_by_dest
 
-        options = composed.get("options") or []
-        hotel = composed.get("hotel") if composed.get("status") == "ready" else None
-        if hotel and isinstance(hotel, dict) and hotel not in options:
-            options = [hotel] + list(options)
-        ranked = filter_hotels_for_flight(
-            options,
-            flight_pp=flight_pp,
-            adults=adults_n,
-            top_n=3,
-            require_photo=True,
-            checkin=str(row.get("out_date") or "")[:10],
-            checkout=str(row.get("ret_date") or "")[:10],
-        )
-        if ranked:
-            return {**row, "hotel_top3": ranked}
-        # Rates miss / expired: keep wall alive with pool photos
-        pool = _pool_hotels_with_photos(supabase, str(row.get("dest_iata") or ""))
+    dest_map = batch_load_destinations(supabase, need_iatas)
+    dest_ids = [str(d["id"]) for d in dest_map.values()]
+    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=3)
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        if _hotel_top3_has_photo(r.get("hotel_top3")):
+            out.append(r)
+            continue
+        iata = str(r.get("dest_iata") or "").upper()
+        dest = dest_map.get(iata)
+        pool = pools.get(str(dest["id"])) if dest else None
         if pool:
-            return {**row, "hotel_top3": pool}
-        return row
-    except Exception:
-        try:
-            pool = _pool_hotels_with_photos(supabase, str(row.get("dest_iata") or ""))
-            if pool:
-                return {**row, "hotel_top3": pool}
-        except Exception:
-            pass
-        return row
+            out.append({**r, "hotel_top3": pool})
+        else:
+            out.append(r)
+    return out
 
 
 def _enrich_rows_to_deals(
@@ -490,6 +504,10 @@ def _enrich_rows_to_deals(
     match_origin: bool,
     supabase=None,
 ) -> List[Dict[str, Any]]:
+    """
+    Read path only: no per-row compose_hotel / rates lookup.
+    Materialize (jobs) owns hotel_top3; here we only overlay pool photos + soft pool fill.
+    """
     from deals.airport_display import distances_for_iatas, enrich_route_labels
     from deals.baggage import (
         DEFAULT_BAGGAGE,
@@ -499,9 +517,9 @@ def _enrich_rows_to_deals(
     from city_names_fr import city_for_code
 
     if supabase is not None:
-        rows = [_compose_hotel_onto_row(supabase, r, adults_n) for r in rows]
+        rows = _batch_fill_missing_hotels(supabase, rows)
 
-    # v3.3 Lot A: card photo = hotel_pool for every hotel_id (not rates TTL)
+    # Card photo SoT = hotel_pool (batch)
     all_ids: List[str] = []
     for r in rows:
         for h in r.get("hotel_top3") or []:
@@ -512,7 +530,7 @@ def _enrich_rows_to_deals(
     photo_map = _photos_from_pool(supabase, all_ids) if (all_ids and supabase) else {}
     rows = _overlay_pool_photos_on_rows(rows, photo_map)
 
-    # Re-rank / drop hotels over 2.5× flight_pp
+    # Re-rank / drop hotels over 2.5× flight_pp (CPU only — no I/O)
     from deals.hotel_budget import filter_hotels_for_flight
 
     capped_rows: List[Dict[str, Any]] = []
@@ -536,7 +554,6 @@ def _enrich_rows_to_deals(
             if ranked:
                 capped_rows.append({**r, "hotel_top3": ranked})
             else:
-                # Keep pool/photo fills (no live rate yet) so browse isn't empty
                 kept = [
                     h
                     for h in hotels
@@ -618,19 +635,31 @@ def list_community_deals(
     origin: Optional[str] = None,
     adults: Optional[int] = None,
     max_pp: Optional[float] = None,
-    limit: int = 30,
+    limit: int = 20,
 ) -> List[Dict[str, Any]]:
     """
     Browse: deals with hotel photo only (no city stock, no flight-only cards).
-    Search (origin set): matching deals first, then fill with other origins.
+    Read path is cache-only enrichment — hotel composition happens in jobs.
     """
+    import logging
+
+    log = logging.getLogger("deals.community_list")
+    t0 = time.monotonic()
     adults_n = int(adults or 2)
-    target = max(12, min(int(limit or 30), 48))
-    cache_key = f"hp1|{origin or ''}|{adults_n}|{max_pp}|{target}"
+    target = max(12, min(int(limit or 20), 48))
+    with _list_cache_lock:
+        epoch = _list_cache_epoch
+    cache_key = f"hp2|{epoch}|{origin or ''}|{adults_n}|{max_pp}|{target}"
     now = time.monotonic()
     with _list_cache_lock:
         hit = _list_cache.get(cache_key)
         if hit and now - hit[0] < _LIST_CACHE_TTL_S:
+            log.info(
+                "list_community_deals cache_hit origin=%s n=%s ms=%.0f",
+                origin,
+                len(hit[1]),
+                (time.monotonic() - t0) * 1000,
+            )
             return [dict(d) for d in hit[1]]
 
     fresh = _baselines_fresh_flag(supabase)
@@ -649,48 +678,82 @@ def list_community_deals(
     )
 
     codes = _parse_origin_codes(origin)
-    fetch_n = max(target * 2, 60)
+    # Single fetch large enough for match + fillers; one enrich pass
+    fetch_n = max(target * 3, 40)
 
     if codes:
-        matched_rows = _fetch_active_rows(supabase, codes=codes, limit=fetch_n)
-        # Prefer rows that already have hotel_top3
-        matched_rows.sort(key=lambda r: (0 if _row_has_hotel(r) else 1, -(float(r.get("deal_score") or 0))))
-        matched = _enrich_rows_to_deals(
-            matched_rows,
+        code_set = set(codes)
+        all_rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
+        all_rows.sort(
+            key=lambda r: (
+                0 if (r.get("origin_iata") or "").upper() in code_set else 1,
+                0 if _row_has_hotel(r) else 1,
+                -(float(r.get("deal_score") or 0)),
+            )
+        )
+        matched_rows = [
+            r
+            for r in all_rows
+            if (r.get("origin_iata") or "").upper() in code_set
+        ]
+        filler_rows = [
+            r
+            for r in all_rows
+            if (r.get("origin_iata") or "").upper() not in code_set
+        ]
+        # Prefer photo-ready rows first for faster wall
+        matched_rows.sort(
+            key=lambda r: (
+                0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
+                -(float(r.get("deal_score") or 0)),
+            )
+        )
+        filler_rows.sort(
+            key=lambda r: (
+                0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
+                -(float(r.get("deal_score") or 0)),
+            )
+        )
+        # One enrich for matched + enough fillers
+        combo = matched_rows[: fetch_n] + filler_rows[: max(0, fetch_n - len(matched_rows))]
+        enriched = _enrich_rows_to_deals(
+            combo,
             adults_n=adults_n,
             fresh=fresh,
             max_pp=max_pp,
             match_origin=True,
             supabase=supabase,
         )
-        matched = _prefer_hotel_deals(matched)
-        out = list(matched)
-        seen = {str(d.get("deal_key") or d.get("id")) for d in out}
-
-        if len(out) < target:
-            filler_rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
-            filler_rows.sort(
-                key=lambda r: (0 if _row_has_hotel(r) else 1, -(float(r.get("deal_score") or 0)))
+        # Fix match_origin flags after combined enrich
+        out: List[Dict[str, Any]] = []
+        seen = set()
+        for d in enriched:
+            key = str(d.get("deal_key") or d.get("id"))
+            if key in seen:
+                continue
+            oi = str(d.get("origin_iata") or d.get("departure_airport") or "").upper()
+            flags = dict(d.get("flags") or {})
+            flags["match_origin"] = oi in code_set
+            d["flags"] = flags
+            seen.add(key)
+            out.append(d)
+        out = _prefer_hotel_deals(out)
+        # Stable: matched first then fillers
+        out.sort(
+            key=lambda d: (
+                0 if (d.get("flags") or {}).get("match_origin") else 1,
+                0 if _deal_has_hotel_photo(d) else 1,
+                -(float(d.get("deal_score") or 0)),
             )
-            fillers = _enrich_rows_to_deals(
-                filler_rows,
-                adults_n=adults_n,
-                fresh=fresh,
-                max_pp=max_pp,
-                match_origin=False,
-                supabase=supabase,
-            )
-            for d in _prefer_hotel_deals(fillers):
-                key = str(d.get("deal_key") or d.get("id"))
-                if key in seen:
-                    continue
-                out.append(d)
-                seen.add(key)
-                if len(out) >= target:
-                    break
+        )
     else:
         rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
-        rows.sort(key=lambda r: (0 if _row_has_hotel(r) else 1, -(float(r.get("deal_score") or 0))))
+        rows.sort(
+            key=lambda r: (
+                0 if _hotel_top3_has_photo(r.get("hotel_top3")) else 1,
+                -(float(r.get("deal_score") or 0)),
+            )
+        )
         out = _enrich_rows_to_deals(
             rows,
             adults_n=adults_n,
@@ -713,6 +776,19 @@ def list_community_deals(
             items = sorted(_list_cache.items(), key=lambda kv: kv[1][0])
             for k, _ in items[:32]:
                 _list_cache.pop(k, None)
+    elapsed_ms = (time.monotonic() - t0) * 1000
+    log.info(
+        "list_community_deals origin=%s n=%s ms=%.0f",
+        origin,
+        len(out),
+        elapsed_ms,
+    )
+    if elapsed_ms > 300:
+        log.warning(
+            "list_community_deals SLOW origin=%s ms=%.0f (target p95 < 300)",
+            origin,
+            elapsed_ms,
+        )
     return out
 
 
@@ -728,31 +804,14 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         if not res.data:
             return None
         fresh = _baselines_fresh_flag(supabase)
-        row = res.data[0]
-        flight = row.get("flight_snapshot") or {}
-        city = flight.get("city_name") or row.get("dest_iata") or ""
-        carrier = flight.get("carrier") or flight.get("airline") or flight.get("provider")
-        from deals.airport_display import distance_for_iata, enrich_route_labels
-        from deals.baggage import lookup_baggage
-        from city_names_fr import city_for_code
-
-        origin_iata = str(row.get("origin_iata") or "")
-        dest_iata = str(row.get("dest_iata") or "")
-        row = _compose_hotel_onto_row(supabase, row, adults_n=2)
-        row = {
-            **row,
-            "_baggage": lookup_baggage(supabase, carrier, prefer_seed=True),
-            "_route_labels": enrich_route_labels(
-                origin_iata=origin_iata,
-                dest_iata=dest_iata,
-                city_name=str(city),
-                origin_city=city_for_code(origin_iata, ""),
-                distance_km=distance_for_iata(
-                    supabase, dest_iata, prefer_seed=True
-                ),
-            ),
-        }
-        deal = row_to_travel_deal(row, baselines_fresh=fresh)
-        return deal if _deal_has_hotel_photo(deal) else None
+        rows = _enrich_rows_to_deals(
+            [res.data[0]],
+            adults_n=2,
+            fresh=fresh,
+            max_pp=None,
+            match_origin=True,
+            supabase=supabase,
+        )
+        return rows[0] if rows else None
     except Exception:
         return None

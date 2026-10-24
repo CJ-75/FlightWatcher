@@ -106,15 +106,15 @@ def _loop() -> None:
             if now - last["promote-deals"] >= PROMOTE_EVERY_S:
                 last["promote-deals"] = now
 
-                def _promote_then_rates():
+                def _promote_then_rates_then_wall():
+                    from deals.community_list import invalidate_list_cache
+                    from deals.job_runs import record_job_run
+                    from deals.materialize_wall import materialize_deals_wall
                     from deals.refresh_deal_rates import refresh_deal_rates
 
                     out = promote_deals(sb, cfg=cfg) or {}
                     try:
                         out["refresh_deal_rates"] = refresh_deal_rates(sb, cfg=cfg)
-                        # Record chained job for health lag
-                        from deals.job_runs import record_job_run
-
                         record_job_run(
                             sb,
                             "refresh-deal-rates",
@@ -123,9 +123,20 @@ def _loop() -> None:
                         )
                     except Exception as e:
                         out["refresh_deal_rates_error"] = str(e)
+                    try:
+                        out["materialize_wall"] = materialize_deals_wall(sb)
+                        record_job_run(
+                            sb,
+                            "materialize-wall",
+                            status="ok",
+                            summary=out.get("materialize_wall") or {},
+                        )
+                    except Exception as e:
+                        out["materialize_wall_error"] = str(e)
+                    invalidate_list_cache()
                     return out
 
-                _safe_job("promote-deals", _promote_then_rates)
+                _safe_job("promote-deals", _promote_then_rates_then_wall)
 
             if now - last["revalidate-deals"] >= REVALIDATE_EVERY_S:
                 last["revalidate-deals"] = now

@@ -463,9 +463,11 @@ async def job_refresh_baselines(authorization: Optional[str] = Header(None)):
 
 @router.post("/api/deals/jobs/promote-deals")
 async def job_promote_deals(authorization: Optional[str] = Header(None)):
-    """D4: promote observations → deals_active (+ v3.3 chain refresh-deal-rates)."""
+    """D4: promote → refresh-deal-rates → materialize wall (read path stays cheap)."""
     require_cron(authorization)
     try:
+        from deals.community_list import invalidate_list_cache
+        from deals.materialize_wall import materialize_deals_wall
         from deals.promote import promote_deals
         from deals.refresh_deal_rates import refresh_deal_rates
 
@@ -475,6 +477,11 @@ async def job_promote_deals(authorization: Optional[str] = Header(None)):
             summary["refresh_deal_rates"] = refresh_deal_rates(sb)
         except Exception as e:
             summary["refresh_deal_rates_error"] = str(e)
+        try:
+            summary["materialize_wall"] = materialize_deals_wall(sb)
+        except Exception as e:
+            summary["materialize_wall_error"] = str(e)
+        invalidate_list_cache()
         return summary
     except HTTPException:
         raise
@@ -487,12 +494,38 @@ async def job_refresh_deal_rates(
     authorization: Optional[str] = Header(None),
     force: bool = Query(False, description="Ignorer TTL / is_due"),
 ):
-    """v3.3 Lot B: rates for deals_active real dates (FREE windows)."""
+    """v3.3 Lot B: rates for deals_active real dates (FREE windows) + materialize."""
     require_cron(authorization)
     try:
+        from deals.community_list import invalidate_list_cache
+        from deals.materialize_wall import materialize_deals_wall
         from deals.refresh_deal_rates import refresh_deal_rates
 
-        return refresh_deal_rates(_svc(), force=force)
+        sb = _svc()
+        summary = refresh_deal_rates(sb, force=force) or {}
+        try:
+            summary["materialize_wall"] = materialize_deals_wall(sb, force=force)
+        except Exception as e:
+            summary["materialize_wall_error"] = str(e)
+        invalidate_list_cache()
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/materialize-wall")
+async def job_materialize_wall(
+    authorization: Optional[str] = Header(None),
+    force: bool = Query(False),
+):
+    """Write hotel_top3 onto deals_active from rates/pool (no LiteAPI)."""
+    require_cron(authorization)
+    try:
+        from deals.materialize_wall import materialize_deals_wall
+
+        return materialize_deals_wall(_svc(), force=force)
     except HTTPException:
         raise
     except Exception as e:
