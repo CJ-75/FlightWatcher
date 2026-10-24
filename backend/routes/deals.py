@@ -131,39 +131,12 @@ async def list_deals(
 
 
 @router.get("/api/deals/calendar")
-async def get_calendar(
-    origin: str = Query(..., min_length=3, max_length=3, description="IATA départ"),
-    slug: Optional[str] = Query(None, description="Slug destination"),
-    destination_id: Optional[str] = Query(None),
-    iata: Optional[str] = Query(None, description="IATA arrivée (ex. LIS)"),
-    adults: int = Query(2, ge=1, le=6),
-    window: str = Query("FRI_SUN", description="FRI_SUN | SAT_MON"),
-):
-    """
-    Heatmap « meilleur week-end » — lecture cache uniquement (job min-rates, TTL 12 h).
-    """
-    if not slug and not destination_id and not iata:
-        raise HTTPException(status_code=400, detail="slug, destination_id ou iata requis")
-    try:
-        from deals.calendar import get_deal_calendar
-
-        supabase = _svc()
-        data = get_deal_calendar(
-            supabase,
-            destination_slug=slug,
-            destination_id=destination_id,
-            iata_arrival=iata,
-            origin=origin.upper(),
-            adults=adults,
-            window_kind=window,
-        )
-        if data is None:
-            raise HTTPException(status_code=404, detail="Destination introuvable")
-        return data
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def get_calendar():
+    """Retired — use community deals browse + Search combo wizard."""
+    raise HTTPException(
+        status_code=410,
+        detail="Calendrier deals retiré — utilise l’onglet Deals ou Search",
+    )
 
 
 @router.get("/api/liked-deals")
@@ -355,32 +328,10 @@ async def job_bootstrap_hotel_pools(
 
 
 @router.post("/api/deals/jobs/refresh-deal-flights")
-async def job_refresh_deal_flights(
-    authorization: Optional[str] = Header(None),
-    slug: Optional[str] = Query(None, description="Limiter à une destination (slug)"),
-    origin: Optional[str] = Query(None, description="Limiter à une origine IATA"),
-):
-    """
-    Upsert fenêtres canoniques + remplit deal_flight_cache (scan + rattachement §7).
-    Pas d'appel LiteAPI. Protégé par CRON_SECRET.
-    """
+async def job_refresh_deal_flights(authorization: Optional[str] = Header(None)):
+    """Retired with deal_flight_cache — community uses deals_active + Search live."""
     require_cron(authorization)
-    try:
-        from deals.flight_cache import refresh_deal_flights
-        from deals.liteapi_config import load_deals_config
-
-        cfg = load_deals_config()
-        supabase = _svc()
-        slugs = [slug] if slug else None
-        origins = [origin.strip().upper()] if origin else None
-        summary = refresh_deal_flights(
-            supabase, cfg=cfg, origins=origins, slugs=slugs
-        )
-        return summary
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=410, detail="Job deal_flight_cache retiré")
 
 
 @router.post("/api/deals/jobs/refresh-hotel-rates")
@@ -442,36 +393,10 @@ async def job_check_price_alerts(
 
 
 @router.post("/api/deals/jobs/refresh-deal-calendar")
-async def job_refresh_deal_calendar(
-    authorization: Optional[str] = Header(None),
-    slug: Optional[str] = Query(None, description="Limiter à une destination (slug)"),
-    origin: Optional[str] = Query(None, description="Limiter à une origine IATA"),
-    force: bool = Query(False, description="Ignorer TTL 12 h"),
-):
-    """
-    Calendrier min-rates (8 week-ends) + jointure vols. Cache 12 h. CRON_SECRET.
-    """
+async def job_refresh_deal_calendar(authorization: Optional[str] = Header(None)):
+    """Retired with deal_calendar_cache."""
     require_cron(authorization)
-    try:
-        from deals.calendar import refresh_deal_calendar
-        from deals.liteapi_config import load_deals_config
-
-        cfg = load_deals_config()
-        if not cfg.api_key:
-            raise HTTPException(
-                status_code=503,
-                detail="Clé LiteAPI manquante (LITEAPI_API_KEY_SANDBOX ou _PROD)",
-            )
-        supabase = _svc()
-        slugs = [slug] if slug else None
-        origins = [origin.strip().upper()] if origin else None
-        return refresh_deal_calendar(
-            supabase, cfg=cfg, slugs=slugs, origins=origins, force=force
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raise HTTPException(status_code=410, detail="Job calendrier deals retiré")
 
 
 # ——— Deals v3 community jobs ———

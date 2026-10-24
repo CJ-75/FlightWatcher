@@ -143,14 +143,36 @@ def _top_public(top: Any) -> Optional[Dict[str, Any]]:
     }
 
 
+def _normalize_top_list(top: Any) -> List[Dict[str, Any]]:
+    if not isinstance(top, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in top:
+        if not isinstance(item, dict):
+            continue
+        offer = _top_public([item])
+        if offer:
+            out.append(
+                {
+                    **offer,
+                    "rating": item.get("rating") if item.get("rating") is not None else offer.get("rating"),
+                    "review_count": item.get("review_count"),
+                    "score": item.get("score"),
+                }
+            )
+    return out
+
+
 def _rates_row_to_lookup(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not _is_fresh(row.get("expires_at")):
         return None
-    offer = _top_public(row.get("top"))
+    top_list = _normalize_top_list(row.get("top"))
+    offer = top_list[0] if top_list else _top_public(row.get("top"))
     if not offer:
         return None
     return {
         "offer": offer,
+        "top": top_list or [offer],
         "fetched_at": row.get("fetched_at"),
         "expires_at": row.get("expires_at"),
         "source": "rates_cache",
@@ -214,46 +236,54 @@ def read_upsell_cache(
     checkout: date,
     adults: int,
 ) -> Optional[Dict[str, Any]]:
-    r = (
-        supabase.table("hotel_upsell_cache")
-        .select("*")
-        .eq("destination_id", destination_id)
-        .eq("checkin", checkin.isoformat())
-        .eq("checkout", checkout.isoformat())
-        .eq("adults", adults)
-        .limit(1)
-        .execute()
+    """hotel_upsell_cache retired — use rates_cache + in-memory jobs."""
+    return None
+
+
+def _ready_with_options(
+    base: Dict[str, Any],
+    *,
+    offer: Dict[str, Any],
+    top: Optional[List[Dict[str, Any]]],
+    flight_pp: Optional[float],
+    participants: int,
+    extras: Dict[str, Any],
+) -> Dict[str, Any]:
+    from deals.hotel_budget import filter_hotels_for_flight, hotel_pp_of
+
+    candidates = list(top or [])
+    if offer and offer not in candidates:
+        candidates = [offer] + [c for c in candidates if c.get("hotel_id") != offer.get("hotel_id")]
+    options = filter_hotels_for_flight(
+        candidates,
+        flight_pp=flight_pp,
+        adults=participants,
+        top_n=8,
+        require_photo=True,
     )
-    rows = r.data or []
-    if not rows:
-        return None
-    row = rows[0]
-    if not _is_fresh(row.get("expires_at")):
-        return None
-    status = row.get("status") or "pending"
-    if status == "pending":
-        return {
-            "status": "pending",
-            "job_id": None,
-            "source": "upsell_cache",
-            "expires_at": row.get("expires_at"),
-        }
-    if status != "ok":
-        return {
-            "status": status,
-            "source": "upsell_cache",
-            "expires_at": row.get("expires_at"),
-        }
-    offer = row.get("offer") if isinstance(row.get("offer"), dict) else None
-    if not offer or not offer.get("public_hotel_price"):
-        return {"status": "no_rates", "source": "upsell_cache"}
-    return {
-        "status": "ready",
-        "offer": offer,
-        "fetched_at": row.get("fetched_at"),
-        "expires_at": row.get("expires_at"),
-        "source": "upsell_cache",
+    primary = options[0] if options else None
+    public = float((primary or offer).get("public_hotel_price") or 0)
+    hotel_pp = hotel_pp_of(primary or offer, adults=participants)
+    if hotel_pp is None and public > 0:
+        hotel_pp = hotel_pp_from_public(public, participants=participants)
+    out = {
+        **base,
+        **extras,
+        "status": "ready" if primary else "miss",
+        "hotel_pp": hotel_pp,
+        "hotel_public_total_one_room": public if primary else None,
+        "hotel": primary,
+        "hotel_name": (primary or {}).get("name"),
+        "hotel_id": (primary or {}).get("hotel_id"),
+        "options": options,
+        "max_hotel_pp": None,
     }
+    from deals.hotel_budget import max_hotel_pp
+
+    out["max_hotel_pp"] = max_hotel_pp(flight_pp)
+    if not primary:
+        out["reason"] = "no_hotel_in_flight_budget"
+    return out
 
 
 def lookup_upsell(
@@ -263,10 +293,12 @@ def lookup_upsell(
     checkin: str,
     checkout: str,
     participants: int = 2,
+    flight_pp: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Cache-only lookup. Never calls LiteAPI.
     status: ready | miss | pending | unavailable
+    When flight_pp set, options filtered to hotel_pp <= 2.5× flight_pp, ranked by rating.
     """
     cin = _parse_ymd(checkin)
     cout = _parse_ymd(checkout)
@@ -275,6 +307,7 @@ def lookup_upsell(
         "checkin": checkin[:10] if checkin else None,
         "checkout": checkout[:10] if checkout else None,
         "participants": max(1, int(participants or 1)),
+        "flight_pp": float(flight_pp) if flight_pp is not None else None,
     }
     if not cin or not cout or cout <= cin:
         return {**base, "status": "unavailable", "reason": "bad_dates"}
@@ -294,29 +327,26 @@ def lookup_upsell(
             adults=adults,
         )
         if cached:
-            offer = cached["offer"]
-            public = float(offer["public_hotel_price"])
-            hotel_pp = hotel_pp_from_public(public, participants=participants)
-            return {
-                **base,
-                "status": "ready",
-                "mode": "canonical",
-                "destination_id": dest["id"],
-                "destination_slug": dest.get("slug"),
-                "city": dest.get("city_name"),
-                "window_id": window["id"],
-                "window_kind": window.get("kind"),
-                "adults_lookup": adults,
-                "rooms": rooms,
-                "hotel_pp": hotel_pp,
-                "hotel_public_total_one_room": public,
-                "hotel": offer,
-                "hotel_name": offer.get("name"),
-                "hotel_id": offer.get("hotel_id"),
-                "source": cached["source"],
-                "fetched_at": cached.get("fetched_at"),
-                "expires_at": cached.get("expires_at"),
-            }
+            return _ready_with_options(
+                base,
+                offer=cached["offer"],
+                top=cached.get("top"),
+                flight_pp=flight_pp,
+                participants=participants,
+                extras={
+                    "mode": "canonical",
+                    "destination_id": dest["id"],
+                    "destination_slug": dest.get("slug"),
+                    "city": dest.get("city_name"),
+                    "window_id": window["id"],
+                    "window_kind": window.get("kind"),
+                    "adults_lookup": adults,
+                    "rooms": rooms,
+                    "source": cached["source"],
+                    "fetched_at": cached.get("fetched_at"),
+                    "expires_at": cached.get("expires_at"),
+                },
+            )
 
     # Soft-fill / odd dates: rates keyed by checkin/checkout without deal_windows
     by_dates = read_rates_cache_by_dates(
@@ -327,29 +357,26 @@ def lookup_upsell(
         adults=adults,
     )
     if by_dates:
-        offer = by_dates["offer"]
-        public = float(offer["public_hotel_price"])
-        hotel_pp = hotel_pp_from_public(public, participants=participants)
-        return {
-            **base,
-            "status": "ready",
-            "mode": "rates_by_dates",
-            "destination_id": dest["id"],
-            "destination_slug": dest.get("slug"),
-            "city": dest.get("city_name"),
-            "window_id": window["id"] if window else None,
-            "window_kind": window.get("kind") if window else None,
-            "adults_lookup": adults,
-            "rooms": rooms,
-            "hotel_pp": hotel_pp,
-            "hotel_public_total_one_room": public,
-            "hotel": offer,
-            "hotel_name": offer.get("name"),
-            "hotel_id": offer.get("hotel_id"),
-            "source": by_dates["source"],
-            "fetched_at": by_dates.get("fetched_at"),
-            "expires_at": by_dates.get("expires_at"),
-        }
+        return _ready_with_options(
+            base,
+            offer=by_dates["offer"],
+            top=by_dates.get("top"),
+            flight_pp=flight_pp,
+            participants=participants,
+            extras={
+                "mode": "rates_by_dates",
+                "destination_id": dest["id"],
+                "destination_slug": dest.get("slug"),
+                "city": dest.get("city_name"),
+                "window_id": window["id"] if window else None,
+                "window_kind": window.get("kind") if window else None,
+                "adults_lookup": adults,
+                "rooms": rooms,
+                "source": by_dates["source"],
+                "fetched_at": by_dates.get("fetched_at"),
+                "expires_at": by_dates.get("expires_at"),
+            },
+        )
 
     ondemand = read_upsell_cache(
         supabase,
@@ -360,35 +387,27 @@ def lookup_upsell(
     )
     if ondemand and ondemand.get("status") == "ready":
         offer = ondemand["offer"]
-        public = float(offer["public_hotel_price"])
-        hotel_pp = hotel_pp_from_public(public, participants=participants)
-        hotel_card = {
-            **offer,
-            "id": str(offer.get("hotel_id") or offer.get("id") or ""),
-            "photo": offer.get("photo")
-            or offer.get("thumbnail")
-            or offer.get("main_photo"),
-        }
-        return {
-            **base,
-            "status": "ready",
-            "mode": "ondemand",
-            "destination_id": dest["id"],
-            "destination_slug": dest.get("slug"),
-            "city": dest.get("city_name"),
-            "window_id": window["id"] if window else None,
-            "window_kind": window.get("kind") if window else None,
-            "adults_lookup": adults,
-            "rooms": rooms,
-            "hotel_pp": hotel_pp,
-            "hotel_public_total_one_room": public,
-            "hotel": hotel_card,
-            "hotel_name": offer.get("name"),
-            "hotel_id": offer.get("hotel_id"),
-            "source": ondemand["source"],
-            "fetched_at": ondemand.get("fetched_at"),
-            "expires_at": ondemand.get("expires_at"),
-        }
+        top_od = ondemand.get("top") or [offer]
+        return _ready_with_options(
+            base,
+            offer=offer,
+            top=top_od if isinstance(top_od, list) else [offer],
+            flight_pp=flight_pp,
+            participants=participants,
+            extras={
+                "mode": "ondemand",
+                "destination_id": dest["id"],
+                "destination_slug": dest.get("slug"),
+                "city": dest.get("city_name"),
+                "window_id": window["id"] if window else None,
+                "window_kind": window.get("kind") if window else None,
+                "adults_lookup": adults,
+                "rooms": rooms,
+                "source": ondemand["source"],
+                "fetched_at": ondemand.get("fetched_at"),
+                "expires_at": ondemand.get("expires_at"),
+            },
+        )
     if ondemand and ondemand.get("status") == "pending":
         return {
             **base,
@@ -449,23 +468,8 @@ def _mark_upsell_row(
     offer: Optional[Dict[str, Any]] = None,
     error: Optional[str] = None,
 ) -> None:
-    now = _now()
-    expires = now + UPSELL_TTL
-    row = {
-        "destination_id": destination_id,
-        "checkin": checkin.isoformat(),
-        "checkout": checkout.isoformat(),
-        "adults": adults,
-        "status": status,
-        "offer": offer,
-        "error": error,
-        "fetched_at": now.isoformat() if status != "pending" else None,
-        "expires_at": expires.isoformat(),
-    }
-    supabase.table("hotel_upsell_cache").upsert(
-        row,
-        on_conflict="destination_id,checkin,checkout,adults",
-    ).execute()
+    """No-op: hotel_upsell_cache dropped (jobs stay in-memory)."""
+    return None
 
 
 def _run_fetch_job(
@@ -475,6 +479,7 @@ def _run_fetch_job(
     checkin: date,
     checkout: date,
     adults: int,
+    flight_pp: Optional[float] = None,
 ) -> None:
     with _jobs_lock:
         job = _jobs.get(job_id) or {}
@@ -549,7 +554,7 @@ def _run_fetch_job(
             adults=adults,
             late_arrival=False,
             weights=cfg.score_weights,
-            top_n=1,
+            top_n=12,
         )
         if not cands:
             _mark_upsell_row(
@@ -568,44 +573,43 @@ def _run_fetch_job(
                 }
             return
 
-        top = cands[0]
-        photo = top.get("photo") or top.get("thumbnail") or top.get("main_photo")
-        offer = {
-            "hotel_id": top.get("hotel_id"),
-            "id": str(top.get("hotel_id") or ""),
-            "name": top.get("name"),
-            "public_hotel_price": top.get("public_hotel_price"),
-            "board": top.get("board"),
-            "stars": top.get("stars"),
-            "rating": top.get("rating"),
-            "distance_m": top.get("distance_m"),
-            "photo": photo,
-            "thumbnail": top.get("thumbnail") or photo,
-            "excluded_fees": top.get("excluded_fees") or 0,
-            "refundable": bool(top.get("refundable")),
-        }
+        participants = int((_jobs.get(job_id) or {}).get("participants") or adults)
+        job_flight_pp = flight_pp
+        if job_flight_pp is None:
+            try:
+                job_flight_pp = (_jobs.get(job_id) or {}).get("flight_pp")
+            except Exception:
+                job_flight_pp = None
+        from deals.hotel_budget import filter_hotels_for_flight, max_hotel_pp
+
+        options = filter_hotels_for_flight(
+            cands,
+            flight_pp=job_flight_pp,
+            adults=participants,
+            top_n=8,
+            require_photo=True,
+        )
+        # Persist full candidate list for later filter by different flight_pp
+        offer = options[0] if options else None
         _mark_upsell_row(
             supabase,
             destination_id=destination_id,
             checkin=checkin,
             checkout=checkout,
             adults=adults,
-            status="ok",
+            status="ok" if offer else "no_rates",
             offer=offer,
-        )
-        participants = int((_jobs.get(job_id) or {}).get("participants") or adults)
-        hotel_pp = hotel_pp_from_public(
-            float(offer["public_hotel_price"] or 0),
-            participants=participants,
         )
         with _jobs_lock:
             _jobs[job_id] = {
                 **(_jobs.get(job_id) or {}),
-                "status": "ready",
+                "status": "ready" if options else "no_rates",
                 "done": True,
-                "hotel_pp": hotel_pp,
-                "hotel_name": offer.get("name"),
-                "hotel_id": offer.get("hotel_id"),
+                "hotel_pp": (options[0].get("hotel_pp") if options else None),
+                "hotel_name": (options[0].get("name") if options else None),
+                "hotel_id": (options[0].get("hotel_id") if options else None),
+                "options": options,
+                "max_hotel_pp": max_hotel_pp(job_flight_pp),
             }
     except Exception as e:
         logger.warning("upsell_fetch_fail job=%s: %s", job_id, e)
@@ -641,6 +645,7 @@ def start_upsell_fetch(
     checkout: str,
     participants: int = 2,
     rate_bucket: str = "anon",
+    flight_pp: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Start async on-demand fetch if needed. Idempotent when pending/fresh."""
     looked = lookup_upsell(
@@ -649,6 +654,7 @@ def start_upsell_fetch(
         checkin=checkin,
         checkout=checkout,
         participants=participants,
+        flight_pp=flight_pp,
     )
     if looked.get("status") == "ready":
         return {**looked, "job_id": None}
@@ -703,6 +709,7 @@ def start_upsell_fetch(
             "participants": max(1, int(participants or 1)),
             "adults_lookup": adults,
             "destination_id": dest_id,
+            "flight_pp": float(flight_pp) if flight_pp is not None else None,
         }
 
     _executor.submit(
@@ -712,6 +719,7 @@ def start_upsell_fetch(
         checkin=cin,
         checkout=cout,
         adults=adults,
+        flight_pp=float(flight_pp) if flight_pp is not None else None,
     )
     return {
         **looked,
@@ -734,6 +742,11 @@ def batch_lookup(
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for item in items[:40]:
+        fp = item.get("flight_pp")
+        try:
+            flight_pp = float(fp) if fp is not None else None
+        except (TypeError, ValueError):
+            flight_pp = None
         out.append(
             lookup_upsell(
                 supabase,
@@ -741,6 +754,7 @@ def batch_lookup(
                 checkin=str(item.get("checkin") or ""),
                 checkout=str(item.get("checkout") or ""),
                 participants=int(item.get("participants") or 2),
+                flight_pp=flight_pp,
             )
         )
     return out

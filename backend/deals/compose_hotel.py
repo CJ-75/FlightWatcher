@@ -61,6 +61,7 @@ def compose_hotel(
     adults: int = 2,
     fetch_if_miss: bool = False,
     rate_bucket: str = "compose",
+    flight_pp: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Compose hotel for city/dates.
@@ -111,6 +112,7 @@ def compose_hotel(
         checkin=checkin,
         checkout=checkout,
         participants=participants,
+        flight_pp=flight_pp,
     )
     status = looked.get("status") or "miss"
     hotel = looked.get("hotel")
@@ -120,6 +122,8 @@ def compose_hotel(
         "status": status,
         "hotel": hotel,
         "hotel_pp": looked.get("hotel_pp"),
+        "options": looked.get("options") or ([hotel] if hotel else []),
+        "max_hotel_pp": looked.get("max_hotel_pp"),
         "served_city_id": served.get("served_city_id") if served else dest.get("id"),
         "destination_id": dest.get("id"),
         "distance_m_to_center": None,

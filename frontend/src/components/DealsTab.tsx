@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import type { DealWindowKind, TravelDeal } from '../types'
+import type { TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
-import { DealWeekendCalendar } from './DealWeekendCalendar'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
@@ -31,9 +30,7 @@ export function DealsTab() {
   /** Empty = browse ~30 deals with hotels; set origin to prioritize matches. */
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
-  const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [readonlyBanner, setReadonlyBanner] = useState(false)
-  const [calendarEnabled, setCalendarEnabled] = useState(false)
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -43,12 +40,7 @@ export function DealsTab() {
     void fetch('/api/config')
       .then((r) => r.json())
       .then((cfg) => {
-        const kinds = Array.isArray(cfg?.window_kinds)
-          ? (cfg.window_kinds as DealWindowKind[])
-          : (['FRI_SUN'] as DealWindowKind[])
-        setWindowKinds(kinds.length ? kinds : ['FRI_SUN'])
         setReadonlyBanner(Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false)
-        setCalendarEnabled(Boolean(cfg?.calendar_enabled))
       })
       .catch(() => undefined)
   }, [])
@@ -183,10 +175,6 @@ export function DealsTab() {
     return parts.join(' · ')
   }, [origin, adults])
 
-  const calendarDeal = deals.find((d) => d.destination) || null
-  const calendarWindow: DealWindowKind =
-    windowKinds.includes('FRI_SUN') ? 'FRI_SUN' : windowKinds[0] || 'FRI_SUN'
-
   const matchedDeals = useMemo(
     () =>
       queryOrigin
@@ -275,16 +263,6 @@ export function DealsTab() {
           {deals.length} offre{deals.length > 1 ? 's' : ''}
           {filterLabel ? ` · ${filterLabel}` : ''}
         </p>
-      ) : null}
-
-      {calendarEnabled && origin && calendarDeal?.destination ? (
-        <DealWeekendCalendar
-          iata={calendarDeal.destination}
-          cityName={calendarDeal.city}
-          origin={origin}
-          adults={adults}
-          windowKind={calendarWindow}
-        />
       ) : null}
 
       {loading ? (

@@ -43,6 +43,23 @@ export default function MyTrip() {
   const [consent, setConsent] = useState(false)
   const [emailSending, setEmailSending] = useState(false)
   const [emailMsg, setEmailMsg] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [showLoginGate, setShowLoginGate] = useState(false)
+  const [tripMode, setTripMode] = useState<'duo' | 'groupe'>('duo')
+
+  useEffect(() => {
+    void getCurrentUser().then((u) => setUserId(u?.id ?? null))
+  }, [])
+
+  const requireLogin = () => {
+    if (userId) return true
+    setShowLoginGate(true)
+    return false
+  }
+
+  const goLogin = () => {
+    window.location.href = `/login?next=${encodeURIComponent(`/trip/${token}`)}`
+  }
 
   const load = useCallback(async () => {
     if (!token) return
@@ -89,6 +106,7 @@ export default function MyTrip() {
         : '/'
 
   const onFlightClick = async () => {
+    if (!requireLogin()) return
     setFlightClicked(true)
     if (!draft?.deal_key && !payload.deal_key) {
       return
@@ -116,7 +134,7 @@ export default function MyTrip() {
   }
 
   const onFlightBooked = async () => {
-    if (!token) return
+    if (!token || !requireLogin()) return
     setMarkingBooked(true)
     try {
       const row = await getApiClient().markMyTripFlightBooked(token)
@@ -249,15 +267,17 @@ export default function MyTrip() {
             Deux réservations distinctes (vol + hôtel). Le lien ouvre le partenaire ci-dessous.
           </p>
           {flightUrl ? (
-            <a
-              href={flightUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => void onFlightClick()}
+            <button
+              type="button"
+              onClick={() => {
+                if (!requireLogin()) return
+                void onFlightClick()
+                window.open(flightUrl, '_blank', 'noopener,noreferrer')
+              }}
               className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl"
             >
               {cta}
-            </a>
+            </button>
           ) : (
             <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
               Lien vol indisponible pour l’instant — réessaie dans un instant.
@@ -335,13 +355,17 @@ export default function MyTrip() {
               ) : (
                 <p className="text-sm text-slate-600">Choisir un hôtel pour ces dates.</p>
               )}
-              {draft.deal_key ? (
-                <Link
-                  to={hotelHref}
+              {draft.deal_key || hotel ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!requireLogin()) return
+                    window.location.href = hotelHref
+                  }}
                   className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl"
                 >
                   Réserver l’hôtel
-                </Link>
+                </button>
               ) : null}
             </>
           )}
@@ -382,18 +406,48 @@ export default function MyTrip() {
           {emailMsg ? <p className="text-xs text-slate-600">{emailMsg}</p> : null}
         </section>
 
-        <section className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 space-y-2">
-          <h2 className="font-bold text-slate-800">Inviter des amis</h2>
+        <section className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 space-y-3">
+          <h2 className="font-bold text-slate-800">Suivi du combo</h2>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setTripMode('duo')}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold border-2 ${
+                tripMode === 'duo'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-line text-muted'
+              }`}
+            >
+              Duo / couple
+            </button>
+            <button
+              type="button"
+              onClick={() => setTripMode('groupe')}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold border-2 ${
+                tripMode === 'groupe'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-line text-muted'
+              }`}
+            >
+              Groupe
+            </button>
+          </div>
           <p className="text-sm text-slate-600">
-            Optionnel — pour un trip à plusieurs, connecte-toi puis ouvre le Planner.
+            {tripMode === 'duo'
+              ? 'Suivi à deux des étapes vol → hôtel. Pas de vote — juste le combo partagé.'
+              : 'Besoin du feu vert du groupe : invite des membres dans le Planner (l’organisateur valide).'}
           </p>
           <button
             type="button"
             onClick={() => void onClaim()}
             disabled={claiming}
-            className="text-sm font-bold text-primary-600 underline disabled:opacity-50"
+            className="w-full rounded-xl bg-slate-900 text-white font-bold py-3 disabled:opacity-50"
           >
-            {claiming ? '…' : 'Sauvegarder / inviter (connexion)'}
+            {claiming
+              ? '…'
+              : tripMode === 'duo'
+                ? 'Sauvegarder mon voyage (connexion)'
+                : 'Ouvrir le Planner groupe (connexion)'}
           </button>
         </section>
 
@@ -401,6 +455,32 @@ export default function MyTrip() {
           ← Retour
         </Link>
       </div>
+
+      {showLoginGate ? (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/45 backdrop-blur-[2px] p-4">
+          <div className="bg-white rounded-3xl shadow-lift border border-line max-w-sm w-full p-6 text-center">
+            <h3 className="text-xl font-black text-ink">Connecte-toi pour continuer</h3>
+            <p className="text-sm text-muted mt-2">
+              Tu peux consulter ce brouillon librement. Pour réserver, marquer le vol ou
+              inviter, une connexion est nécessaire.
+            </p>
+            <button
+              type="button"
+              onClick={goLogin}
+              className="mt-5 w-full rounded-2xl bg-primary-500 text-white font-bold py-3.5"
+            >
+              Se connecter
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowLoginGate(false)}
+              className="mt-2 w-full text-sm font-medium text-muted py-2"
+            >
+              Plus tard
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

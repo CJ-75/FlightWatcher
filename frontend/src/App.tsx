@@ -26,7 +26,7 @@ import { PassengerStepper } from './components/PassengerStepper'
 import type { LikedDeal, TravelDeal } from './types'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
-import { BookingSas } from './components/BookingSas'
+import { TripComboWizard } from './components/TripComboWizard'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Calendar } from './components/Calendar'
 import { SaveSearchModal } from './components/SaveSearchModal'
@@ -1138,9 +1138,9 @@ function Dashboard() {
         />
       )}
 
-      {/* Booking SAS Modal */}
+      {/* Search → combo wizard (vol + hôtel → Mon voyage) */}
       {bookingTrip && (
-        <BookingSas
+        <TripComboWizard
           trip={bookingTrip}
           passengers={lastSearchInfo?.passengers || currentRequest?.passengers || 1}
           onClose={() => setBookingTrip(null)}
@@ -1148,7 +1148,6 @@ function Dashboard() {
             handleSimpleSaveFavorite(bookingTrip)
             setBookingTrip(null)
           }}
-          searchEventId={currentSearchEventId}
         />
       )}
 

@@ -459,6 +459,25 @@ export interface HotelUpsellLookupItem {
   checkin: string
   checkout: string
   participants?: number
+  /** Flight price per person — caps hotel options at 2.5× */
+  flight_pp?: number
+}
+
+/** Hotel option for Search combo wizard / Deals. */
+export interface HotelUpsellOption {
+  id?: string
+  hotel_id?: string
+  name?: string
+  stars?: number
+  rating?: number
+  review_count?: number
+  photo?: string
+  thumbnail?: string
+  board?: string
+  hotel_pp?: number
+  public_hotel_price?: number
+  distance_m?: number
+  refundable?: boolean
 }
 
 export interface HotelUpsellResult {
@@ -472,6 +491,10 @@ export interface HotelUpsellResult {
   hotel_public_total_one_room?: number
   hotel_name?: string | null
   hotel_id?: string | null
+  hotel?: HotelUpsellOption | null
+  options?: HotelUpsellOption[]
+  max_hotel_pp?: number | null
+  flight_pp?: number | null
   city?: string | null
   destination_slug?: string | null
   window_id?: string | null
@@ -492,6 +515,8 @@ export interface HotelUpsellJob {
   hotel_pp?: number
   hotel_name?: string | null
   hotel_id?: string | null
+  options?: HotelUpsellOption[]
+  max_hotel_pp?: number | null
   error?: string
 }
 

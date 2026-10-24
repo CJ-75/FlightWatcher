@@ -353,6 +353,11 @@ def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dic
     try:
         from deals.compose_hotel import compose_hotel
 
+        flight = row.get("flight_snapshot") or {}
+        try:
+            flight_pp = float(flight.get("price_pp_eur") or 0) or None
+        except (TypeError, ValueError):
+            flight_pp = None
         composed = compose_hotel(
             supabase,
             iata=str(row.get("dest_iata") or ""),
@@ -360,18 +365,24 @@ def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dic
             checkout=str(row.get("ret_date") or "")[:10],
             adults=adults_n,
             fetch_if_miss=False,
+            flight_pp=flight_pp,
         )
+        from deals.hotel_budget import filter_hotels_for_flight
+
+        options = composed.get("options") or []
         hotel = composed.get("hotel") if composed.get("status") == "ready" else None
-        if not isinstance(hotel, dict):
+        if hotel and isinstance(hotel, dict) and hotel not in options:
+            options = [hotel] + list(options)
+        ranked = filter_hotels_for_flight(
+            options,
+            flight_pp=flight_pp,
+            adults=adults_n,
+            top_n=3,
+            require_photo=True,
+        )
+        if not ranked:
             return row
-        photo = _hotel_photo(hotel)
-        if not photo and hotel.get("hotel_id"):
-            pmap = _photos_from_pool(supabase, [str(hotel["hotel_id"])])
-            photo = pmap.get(str(hotel["hotel_id"]))
-        if not photo:
-            return row
-        hotel = {**hotel, "photo": photo, "thumbnail": photo}
-        return {**row, "hotel_top3": [hotel]}
+        return {**row, "hotel_top3": ranked}
     except Exception:
         return row
 
@@ -406,6 +417,26 @@ def _enrich_rows_to_deals(
                     missing_ids.append(str(hid))
     photo_map = _photos_from_pool(supabase, missing_ids) if missing_ids else {}
     rows = _fill_missing_hotel_photos(rows, photo_map)
+
+    # Re-rank / drop hotels over 2.5× flight_pp
+    from deals.hotel_budget import filter_hotels_for_flight
+
+    capped_rows: List[Dict[str, Any]] = []
+    for r in rows:
+        flight = r.get("flight_snapshot") or {}
+        try:
+            fpp = float(flight.get("price_pp_eur") or 0) or None
+        except (TypeError, ValueError):
+            fpp = None
+        hotels = r.get("hotel_top3") or []
+        if isinstance(hotels, list) and hotels:
+            ranked = filter_hotels_for_flight(
+                hotels, flight_pp=fpp, adults=adults_n, top_n=3, require_photo=True
+            )
+            capped_rows.append({**r, "hotel_top3": ranked} if ranked else {**r, "hotel_top3": []})
+        else:
+            capped_rows.append(r)
+    rows = capped_rows
 
     dests = [str(r.get("dest_iata") or "") for r in rows]
     carriers = []

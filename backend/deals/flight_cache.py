@@ -261,17 +261,8 @@ def has_valid_roundtrip(
     window_id: str,
     max_pp: float,
 ) -> bool:
-    """Used by L4 hotel rates refresh: any origin with ok flight under budget."""
-    result = (
-        supabase.table("deal_flight_cache")
-        .select("price_pp,status,expires_at")
-        .eq("destination_id", destination_id)
-        .eq("window_id", window_id)
-        .eq("status", "ok")
-        .not_.is_("price_pp", "null")
-        .lte("price_pp", max_pp)
-        .gt("expires_at", datetime.now(timezone.utc).isoformat())
-        .limit(1)
-        .execute()
-    )
-    return bool(result.data)
+    """
+    Used by hotel rates refresh.
+    deal_flight_cache retired — allow rates (community flights live in deals_active).
+    """
+    return True

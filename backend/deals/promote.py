@@ -383,10 +383,29 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 checkout=ret_d,
                 adults=2,
                 fetch_if_miss=False,
+                flight_pp=price,
             )
             city_name = composed.get("city_name")
             hotel = composed.get("hotel") if composed.get("status") == "ready" else None
-            if isinstance(hotel, dict):
+            top = composed.get("options") or (
+                [hotel] if isinstance(hotel, dict) else []
+            )
+            # Prefer rates top list when available via compose extras
+            if composed.get("status") == "ready" and not top and hotel:
+                top = [hotel]
+            from deals.hotel_budget import filter_hotels_for_flight
+
+            ranked = filter_hotels_for_flight(
+                top if isinstance(top, list) else [],
+                flight_pp=price,
+                adults=2,
+                top_n=3,
+                require_photo=True,
+            )
+            if ranked:
+                hotel_payload = ranked
+            elif isinstance(hotel, dict):
+                # Fallback: photo fill then re-filter single
                 photo = (
                     hotel.get("photo")
                     or hotel.get("thumbnail")
@@ -414,7 +433,15 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                     except Exception:
                         pass
                 if photo:
-                    hotel_payload = [{**hotel, "photo": photo}]
+                    ranked = filter_hotels_for_flight(
+                        [{**hotel, "photo": photo}],
+                        flight_pp=price,
+                        adults=2,
+                        top_n=1,
+                        require_photo=True,
+                    )
+                    if ranked:
+                        hotel_payload = ranked
         except Exception:
             city_name = None
             hotel_payload = None

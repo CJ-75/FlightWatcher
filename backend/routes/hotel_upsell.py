@@ -41,6 +41,7 @@ class UpsellItem(BaseModel):
     checkin: str
     checkout: str
     participants: int = Field(2, ge=1, le=6)
+    flight_pp: Optional[float] = Field(None, ge=0)
 
 
 class UpsellLookupRequest(BaseModel):
@@ -52,6 +53,7 @@ class UpsellFetchRequest(BaseModel):
     checkin: str
     checkout: str
     participants: int = Field(2, ge=1, le=6)
+    flight_pp: Optional[float] = Field(None, ge=0)
 
 
 @router.post("/api/deals/hotel-upsell/lookup")
@@ -90,6 +92,7 @@ async def upsell_fetch(body: UpsellFetchRequest, request: Request):
             checkout=body.checkout,
             participants=body.participants,
             rate_bucket=_bucket(request),
+            flight_pp=body.flight_pp,
         )
         if result.get("status") == "rate_limited":
             raise HTTPException(status_code=429, detail="Trop de demandes hôtel — réessaie plus tard")
