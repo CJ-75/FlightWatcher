@@ -19,6 +19,8 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
 
+const ORIGINS = ['', 'BVA', 'ORY', 'CDG', 'MRS'] as const
+
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -27,13 +29,17 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [origin, setOrigin] = useState('')
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
     setError(null)
     try {
-      const list = await getApi().getDeals()
+      const list = await getApi().getDeals({
+        origin: origin || undefined,
+        adults: 2,
+      })
       setDeals(Array.isArray(list) ? list : [])
       await refreshLikes()
     } catch (e) {
@@ -43,7 +49,7 @@ export function DealsScreen() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [refreshLikes])
+  }, [refreshLikes, origin])
 
   useFocusEffect(
     useCallback(() => {
@@ -80,6 +86,22 @@ export function DealsScreen() {
             <View style={styles.header}>
               <Text style={styles.title}>Deals</Text>
               <Text style={styles.subtitle}>Week-ends vol + hôtel, prêts à partir</Text>
+              <View style={styles.chips}>
+                {ORIGINS.map((o) => {
+                  const active = origin === o
+                  return (
+                    <Pressable
+                      key={o || 'all'}
+                      onPress={() => setOrigin(o)}
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                        {o || 'Tous'}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
             </View>
           }
           ListEmptyComponent={
@@ -97,7 +119,9 @@ export function DealsScreen() {
               ) : (
                 <>
                   <Text style={styles.emptyTitle}>Aucun deal pour l’instant</Text>
-                  <Text style={styles.emptyBody}>Reviens bientôt — on prépare de nouveaux packs.</Text>
+                  <Text style={styles.emptyBody}>
+                    Reviens bientôt — de nouveaux week-ends vol + hôtel arrivent.
+                  </Text>
                 </>
               )}
             </View>
@@ -147,6 +171,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     includeFontPadding: false,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 14,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
+  },
+  chipTextActive: {
+    color: colors.white,
   },
   emptyCard: {
     backgroundColor: colors.white,

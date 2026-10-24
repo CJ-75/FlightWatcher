@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import type { TravelDeal } from '../types'
+import type { DealWindowKind, TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
+
+const ORIGIN_OPTIONS = ['', 'BVA', 'ORY', 'CDG', 'MRS', 'NCE', 'LYS', 'TLS'] as const
+const BUDGET_OPTIONS = [0, 200, 250, 300, 350, 450] as const
 
 export function DealsTab() {
   const { t } = useI18n()
@@ -16,6 +19,10 @@ export function DealsTab() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<TravelDeal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  const [origin, setOrigin] = useState('')
+  const [maxPp, setMaxPp] = useState(0)
+  const [windowKind, setWindowKind] = useState<'' | DealWindowKind>('')
 
   const loadLikes = useCallback(async () => {
     try {
@@ -35,7 +42,12 @@ export function DealsTab() {
     setLoading(true)
     setError(null)
     try {
-      const list = await getApiClient().getDeals()
+      const list = await getApiClient().getDeals({
+        origin: origin || undefined,
+        window: windowKind || undefined,
+        max_pp: maxPp > 0 ? maxPp : undefined,
+        adults: 2,
+      })
       setDeals(Array.isArray(list) ? list : [])
       await loadLikes()
     } catch (e) {
@@ -44,7 +56,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes])
+  }, [t, loadLikes, origin, windowKind, maxPp])
 
   useEffect(() => {
     void load()
@@ -84,6 +96,14 @@ export function DealsTab() {
     }
   }
 
+  const filterLabel = useMemo(() => {
+    const parts: string[] = []
+    if (origin) parts.push(origin)
+    if (maxPp > 0) parts.push(`≤ ${maxPp} €`)
+    if (windowKind) parts.push(windowKind === 'FRI_SUN' ? 'ven→dim' : 'sam→lun')
+    return parts.join(' · ')
+  }, [origin, maxPp, windowKind])
+
   return (
     <div className="w-full">
       <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
@@ -97,8 +117,54 @@ export function DealsTab() {
         {!loading && !error && deals.length > 0 ? (
           <p className="text-sm font-semibold text-muted shrink-0">
             {deals.length} offre{deals.length > 1 ? 's' : ''}
+            {filterLabel ? ` · ${filterLabel}` : ''}
           </p>
         ) : null}
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-3 items-end">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+          {t('deals.filterOrigin')}
+          <select
+            value={origin}
+            onChange={(e) => setOrigin(e.target.value)}
+            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[7rem]"
+          >
+            <option value="">{t('deals.filterAll')}</option>
+            {ORIGIN_OPTIONS.filter(Boolean).map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+          {t('deals.filterBudget')}
+          <select
+            value={maxPp}
+            onChange={(e) => setMaxPp(Number(e.target.value))}
+            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[8rem]"
+          >
+            <option value={0}>{t('deals.filterAll')}</option>
+            {BUDGET_OPTIONS.filter((b) => b > 0).map((b) => (
+              <option key={b} value={b}>
+                {b} €
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+          {t('deals.filterWindow')}
+          <select
+            value={windowKind}
+            onChange={(e) => setWindowKind(e.target.value as '' | DealWindowKind)}
+            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[8rem]"
+          >
+            <option value="">{t('deals.filterAll')}</option>
+            <option value="FRI_SUN">Ven → Dim</option>
+            <option value="SAT_MON">Sam → Lun</option>
+          </select>
+        </label>
       </div>
 
       {loading ? (

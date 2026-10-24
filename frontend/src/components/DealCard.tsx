@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { resolveTripImageUrl } from '@flightwatcher/shared'
+import {
+  dealBadgeLabels,
+  dealAdults,
+  formatFetchedAt,
+  resolveTripImageUrl,
+} from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 
@@ -44,13 +49,18 @@ function HeartSvg({ filled }: { filled: boolean }) {
 }
 
 export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
   const imageUrl = resolveTripImageUrl({
     city: deal.city,
-    imageUrl: deal.image_url,
+    imageUrl: deal.hotel?.photo || deal.image_url,
   })
+  const badges = dealBadgeLabels(deal)
+  const adults = dealAdults(deal)
+  const fees = deal.price_breakdown?.excluded_fees ?? 0
+  const age = formatFetchedAt(deal.fetched_at, language === 'en' ? 'en-GB' : 'fr-FR')
+  const total2 = Math.round(deal.price_per_person * Math.min(2, adults))
 
   return (
     <motion.article
@@ -139,7 +149,14 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
             <p className="text-3xl font-extrabold text-primary-500 tracking-tight leading-none">
               {Math.round(deal.price_per_person)} €
             </p>
-            <p className="text-xs text-muted font-medium mt-1">par pers. · {deal.nights} nuit{deal.nights > 1 ? 's' : ''}</p>
+            <p className="text-xs text-muted font-medium mt-1">
+              {t('deals.perPersonHint', { nights: deal.nights, adults })}
+            </p>
+            {adults >= 2 ? (
+              <p className="text-[11px] text-muted mt-0.5">
+                {t('deals.totalForTwo', { total: total2 })}
+              </p>
+            ) : null}
           </div>
           <span className="shrink-0 rounded-xl bg-primary-50 text-primary-700 text-[11px] font-bold px-2.5 py-2 text-right leading-snug">
             {formatDate(deal.dates.outbound)}
@@ -148,35 +165,53 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           </span>
         </div>
 
+        {badges.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {badges.map((b) => (
+              <span
+                key={b}
+                className="rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-semibold text-ink-soft"
+              >
+                {b}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         <div className="min-w-0">
           <h3 className="font-bold text-ink text-sm sm:text-base leading-snug line-clamp-2">
             {deal.title}
           </h3>
-          {deal.hotel_name ? (
+          {deal.hotel_name || deal.hotel?.name ? (
             <p className="text-muted text-sm mt-1 truncate">
-              {deal.hotel_stars ? `${'★'.repeat(Math.min(5, deal.hotel_stars))} ` : ''}
-              {deal.hotel_name}
+              {(deal.hotel_stars || deal.hotel?.stars)
+                ? `${'★'.repeat(Math.min(5, Math.round(Number(deal.hotel_stars || deal.hotel?.stars))))} `
+                : ''}
+              {deal.hotel_name || deal.hotel?.name}
+            </p>
+          ) : null}
+          {deal.hotel?.rating != null ? (
+            <p className="text-[11px] text-muted mt-0.5">
+              {t('deals.reviews', {
+                rating: Number(deal.hotel.rating).toFixed(1),
+                count: deal.hotel.review_count ?? '—',
+              })}
+              {deal.hotel.distance_m != null
+                ? ` · ${t('deals.distance', { km: (deal.hotel.distance_m / 1000).toFixed(1) })}`
+                : ''}
             </p>
           ) : null}
         </div>
 
-        {(deal.board || (deal.highlights && deal.highlights.length > 0)) && (
-          <div className="flex flex-wrap gap-1.5">
-            {deal.board ? (
-              <span className="rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-semibold text-ink-soft">
-                {deal.board}
-              </span>
-            ) : null}
-            {(deal.highlights || []).slice(0, 2).map((h) => (
-              <span
-                key={h}
-                className="rounded-full border border-line bg-canvas px-2.5 py-1 text-[11px] font-semibold text-ink-soft truncate max-w-[10rem]"
-              >
-                {h}
-              </span>
-            ))}
-          </div>
-        )}
+        {fees > 0 ? (
+          <p className="text-[11px] text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 font-medium">
+            {t('deals.taxOnSite', { fees: Math.round(fees) })}
+          </p>
+        ) : null}
+
+        {age ? (
+          <p className="text-[11px] text-muted">{t('deals.priceAge', { age })}</p>
+        ) : null}
 
         <div className="mt-auto pt-1">
           <button

@@ -83,7 +83,7 @@ def _not_expired(expires_at: Any, *, now: Optional[datetime] = None) -> bool:
 
 def _hotel_card(h: Dict[str, Any]) -> Dict[str, Any]:
     board = (h.get("board") or "").upper()
-    return {
+    card: Dict[str, Any] = {
         "id": str(h.get("hotel_id") or h.get("id") or ""),
         "name": h.get("name"),
         "stars": h.get("stars"),
@@ -95,6 +95,12 @@ def _hotel_card(h: Dict[str, Any]) -> Dict[str, Any]:
         "refundable": bool(h.get("refundable")),
         "cancel_deadline": h.get("cancel_deadline"),
     }
+    # Needed by UI « changer d'hôtel » to recompute price_pp from cache
+    if h.get("public_hotel_price") is not None:
+        card["public_hotel_price"] = h.get("public_hotel_price")
+    if h.get("excluded_fees") is not None:
+        card["excluded_fees"] = h.get("excluded_fees")
+    return card
 
 
 def _flight_card(flight_row: Dict[str, Any], flight_json: Dict[str, Any]) -> Dict[str, Any]:

@@ -166,6 +166,9 @@ export interface TravelDealHotel {
   board?: string
   refundable?: boolean
   cancel_deadline?: string | null
+  /** Present on cache candidates for in-UI hotel switch. */
+  public_hotel_price?: number
+  excluded_fees?: number
 }
 
 export interface TravelDealPriceBreakdown {

@@ -9,7 +9,12 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
-import { resolveTripImageUrl } from '@flightwatcher/shared'
+import {
+  dealAdults,
+  dealBadgeLabels,
+  formatFetchedAt,
+  resolveTripImageUrl,
+} from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
@@ -31,7 +36,14 @@ function formatDate(dateStr: string) {
 
 export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const [failed, setFailed] = useState(false)
-  const imageUrl = resolveTripImageUrl({ city: deal.city, imageUrl: deal.image_url })
+  const imageUrl = resolveTripImageUrl({
+    city: deal.city,
+    imageUrl: deal.hotel?.photo || deal.image_url,
+  })
+  const badges = dealBadgeLabels(deal)
+  const adults = dealAdults(deal)
+  const fees = deal.price_breakdown?.excluded_fees ?? 0
+  const age = formatFetchedAt(deal.fetched_at)
 
   return (
     <Pressable
@@ -79,33 +91,52 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             {deal.city}
           </Text>
           <Text style={styles.route} numberOfLines={1}>
-            {deal.departure_airport} → {deal.city} · {deal.nights} nuit{deal.nights > 1 ? 's' : ''}
+            {deal.departure_airport} → {deal.city} · {deal.nights} nuit
+            {deal.nights > 1 ? 's' : ''}
           </Text>
         </View>
       </View>
 
       <View style={styles.body}>
         <View style={styles.priceRow}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.price}>{Math.round(deal.price_per_person)} €</Text>
-            <Text style={styles.priceHint}>par personne · pack</Text>
+            <Text style={styles.priceHint}>
+              / pers. · base {adults} ad. · {deal.nights} nuit{deal.nights > 1 ? 's' : ''}
+            </Text>
           </View>
           <View style={styles.metaChip}>
-            <Text style={styles.metaChipText} numberOfLines={1}>
+            <Text style={styles.metaChipText} numberOfLines={2}>
               {formatDate(deal.dates.outbound)} → {formatDate(deal.dates.inbound)}
             </Text>
           </View>
         </View>
 
+        {badges.length > 0 ? (
+          <View style={styles.badges}>
+            {badges.map((b) => (
+              <View key={b} style={styles.badgeChip}>
+                <Text style={styles.badgeChipText}>{b}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <Text style={styles.title} numberOfLines={2}>
           {deal.title}
         </Text>
-        {deal.hotel_name ? (
+        {deal.hotel_name || deal.hotel?.name ? (
           <Text style={styles.hotel} numberOfLines={1}>
-            {deal.hotel_stars ? `${'★'.repeat(Math.min(5, deal.hotel_stars))} ` : ''}
-            {deal.hotel_name}
+            {(deal.hotel_stars || deal.hotel?.stars)
+              ? `${'★'.repeat(Math.min(5, Math.round(Number(deal.hotel_stars || deal.hotel?.stars))))} `
+              : ''}
+            {deal.hotel_name || deal.hotel?.name}
           </Text>
         ) : null}
+        {fees > 0 ? (
+          <Text style={styles.tax}>+ {Math.round(fees)} € taxe sur place</Text>
+        ) : null}
+        {age ? <Text style={styles.age}>Prix constaté {age}</Text> : null}
       </View>
     </Pressable>
   )
@@ -179,7 +210,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   price: { ...type.price, fontSize: 30 },
   priceHint: { ...type.caption, marginTop: 2 },
@@ -195,6 +226,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 11,
   },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  badgeChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  badgeChipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: colors.inkSoft,
+  },
   title: {
     fontFamily: fonts.bold,
     fontSize: 16,
@@ -206,5 +251,17 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
     color: colors.muted,
+  },
+  tax: {
+    marginTop: 6,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: '#92400e',
+  },
+  age: {
+    marginTop: 4,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.faint,
   },
 })

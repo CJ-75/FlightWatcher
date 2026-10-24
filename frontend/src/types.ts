@@ -16,6 +16,7 @@ export type {
   SavedFavorite,
   ApiConfig,
   TravelDeal,
+  TravelDealHotel,
   LikedDeal,
   DealProviderId,
   DealsListParams,

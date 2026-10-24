@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { TravelDeal } from '@flightwatcher/shared'
+import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
+import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { HeartIcon } from '../components/HeartIcon'
 import { useLikedDeals } from '../hooks/useLikedDeals'
@@ -26,18 +27,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DealDetail'>
 const width = Dimensions.get('window').width
 
 function formatDate(dateStr: string) {
-  const date = new Date(dateStr + 'T12:00:00')
-  return date.toLocaleDateString('fr-FR', {
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('fr-FR', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
   })
-}
-
-const PROVIDER_LABEL: Record<string, string> = {
-  mock: 'Offre partenaire',
-  expedia: 'Expedia',
-  lastminute: 'lastminute.com',
 }
 
 export function DealDetailScreen({ route }: Props) {
@@ -48,6 +42,7 @@ export function DealDetailScreen({ route }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const [hotelId, setHotelId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -56,7 +51,10 @@ export function DealDetailScreen({ route }: Props) {
       setError(null)
       try {
         const d = await getApi().getDeal(dealId)
-        if (!cancelled) setDeal(d)
+        if (!cancelled) {
+          setDeal(d)
+          setHotelId(d.hotel?.id || null)
+        }
         await refreshLikes()
       } catch (e) {
         if (!cancelled) {
@@ -72,10 +70,35 @@ export function DealDetailScreen({ route }: Props) {
     }
   }, [dealId, refreshLikes])
 
-  const openOffer = async () => {
-    if (!deal?.booking_url) return
-    await Linking.openURL(deal.booking_url)
-  }
+  const hotelOptions = useMemo(() => {
+    if (!deal) return [] as TravelDealHotel[]
+    const primary = deal.hotel
+      ? [deal.hotel]
+      : deal.hotel_name
+        ? [
+            {
+              id: 'primary',
+              name: deal.hotel_name,
+              stars: deal.hotel_stars,
+              board: deal.board,
+              public_hotel_price: deal.price_breakdown?.hotel_public_total,
+              excluded_fees: deal.price_breakdown?.excluded_fees,
+              photo: deal.image_url,
+            } as TravelDealHotel,
+          ]
+        : []
+    const seen = new Set<string>()
+    const out: TravelDealHotel[] = []
+    for (const h of [...primary, ...(deal.alt_hotels || [])]) {
+      if (!h?.id || seen.has(h.id)) continue
+      seen.add(h.id)
+      out.push(h)
+    }
+    return out
+  }, [deal])
+
+  const selected =
+    hotelOptions.find((h) => h.id === (hotelId || hotelOptions[0]?.id)) || hotelOptions[0]
 
   if (loading) {
     return (
@@ -95,19 +118,30 @@ export function DealDetailScreen({ route }: Props) {
     )
   }
 
-  const partner = PROVIDER_LABEL[deal.provider] || 'Partenaire'
+  const adults = dealAdults(deal)
+  const hotelTotal =
+    selected?.public_hotel_price ?? deal.price_breakdown?.hotel_public_total ?? 0
+  const pricePp = selected ? pricePpWithHotel(deal, hotelTotal) : deal.price_per_person
+  const fees = selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
+  const flightUrl = deal.flight?.booking_url || ''
+  const hasPartnerUrl = Boolean(deal.booking_url)
+
+  const openUrl = async (url: string) => {
+    if (!url) return
+    await Linking.openURL(url)
+  }
 
   return (
     <View style={styles.root}>
       <ScreenBackground />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
       >
         <View style={styles.hero}>
           {!failed ? (
             <Image
-              source={{ uri: deal.image_url }}
+              source={{ uri: selected?.photo || deal.image_url }}
               style={styles.heroImage}
               onError={() => setFailed(true)}
             />
@@ -124,8 +158,6 @@ export function DealDetailScreen({ route }: Props) {
             onPress={() => void toggleLike(deal)}
             hitSlop={10}
             style={[styles.likeBtn, { top: Math.max(insets.top, 12) + 8 }]}
-            accessibilityRole="button"
-            accessibilityLabel={isLiked(deal.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
           >
             <HeartIcon
               size={22}
@@ -145,13 +177,23 @@ export function DealDetailScreen({ route }: Props) {
         </View>
 
         <View style={styles.content}>
-          <View style={styles.priceBlock}>
-            <Text style={styles.price}>{Math.round(deal.price_per_person)} €</Text>
-            <Text style={styles.priceHint}>par personne · {deal.nights} nuit{deal.nights > 1 ? 's' : ''}</Text>
-          </View>
+          <Text style={styles.price}>{Math.round(pricePp)} €</Text>
+          <Text style={styles.priceHint}>
+            / pers. · {deal.nights} nuits · base {adults} adultes
+          </Text>
+          {fees > 0 ? (
+            <Text style={styles.tax}>+ {Math.round(fees)} € taxe de séjour sur place</Text>
+          ) : null}
 
           <Text style={styles.title}>{deal.title}</Text>
           <Text style={styles.description}>{deal.description}</Text>
+
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              Deux réservations distinctes : vol via la compagnie / partenaire, hôtel via
+              FlightWatcher.
+            </Text>
+          </View>
 
           <View style={[styles.infoCard, shadow.soft]}>
             <InfoRow label="Départ" value={deal.departure_airport} />
@@ -159,16 +201,58 @@ export function DealDetailScreen({ route }: Props) {
               label="Dates"
               value={`${formatDate(deal.dates.outbound)} → ${formatDate(deal.dates.inbound)}`}
             />
-            {deal.hotel_name ? (
+            {deal.flight ? (
               <InfoRow
-                label="Hôtel"
-                value={`${deal.hotel_name}${deal.hotel_stars ? ` · ${deal.hotel_stars}★` : ''}`}
+                label="Vol / pers."
+                value={`${Math.round(deal.flight.price_pp)} €${deal.flight.direct ? ' · Direct' : ''}`}
               />
             ) : null}
-            {deal.board ? <InfoRow label="Pension" value={deal.board} last /> : null}
           </View>
 
-          {deal.highlights.length > 0 ? (
+          {hotelOptions.length > 1 ? (
+            <View style={styles.switchBlock}>
+              <Text style={styles.sectionLabel}>Changer d’hôtel</Text>
+              {hotelOptions.map((h) => {
+                const active = h.id === selected?.id
+                const hPp = pricePpWithHotel(deal, h.public_hotel_price ?? hotelTotal)
+                return (
+                  <Pressable
+                    key={h.id}
+                    onPress={() => setHotelId(h.id)}
+                    style={[styles.hotelOption, active && styles.hotelOptionActive]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.hotelOptionName} numberOfLines={1}>
+                        {h.name}
+                      </Text>
+                      <Text style={styles.hotelOptionMeta} numberOfLines={1}>
+                        {[h.board, h.refundable ? 'Annul. OK' : null, h.rating != null ? `${h.rating}/10` : null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </Text>
+                    </View>
+                    <Text style={styles.hotelOptionPrice}>{Math.round(hPp)} €</Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+          ) : null}
+
+          <View style={[styles.infoCard, shadow.soft]}>
+            <InfoRow
+              label="Hôtel"
+              value={`${selected?.name || deal.hotel_name || '—'}${
+                selected?.stars || deal.hotel_stars
+                  ? ` · ${selected?.stars || deal.hotel_stars}★`
+                  : ''
+              }`}
+            />
+            {(selected?.board || deal.board) ? (
+              <InfoRow label="Pension" value={String(selected?.board || deal.board)} last />
+            ) : null}
+          </View>
+
+          {deal.highlights?.length ? (
             <View style={styles.highlights}>
               <Text style={styles.sectionLabel}>Inclus</Text>
               {deal.highlights.map((h) => (
@@ -179,20 +263,32 @@ export function DealDetailScreen({ route }: Props) {
               ))}
             </View>
           ) : null}
-
-          <Text style={styles.partnerNote}>
-            Offre via {partner}. Les prix et disponibilités sont confirmés sur le site partenaire.
-          </Text>
         </View>
       </ScrollView>
 
       <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }, shadow.lift]}>
-        <Pressable
-          onPress={() => void openOffer()}
-          style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
-        >
-          <Text style={styles.ctaText}>Voir l’offre</Text>
-        </Pressable>
+        {hasPartnerUrl ? (
+          <Pressable
+            onPress={() => void openUrl(deal.booking_url)}
+            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.ctaText}>Voir l’offre</Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.cta, styles.ctaDisabled]}>
+            <Text style={[styles.ctaText, { color: colors.muted }]}>
+              Réserver l’hôtel (bientôt)
+            </Text>
+          </View>
+        )}
+        {flightUrl ? (
+          <Pressable
+            onPress={() => void openUrl(flightUrl)}
+            style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.ctaSecondaryText}>Réserver le vol</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   )
@@ -234,10 +330,7 @@ const styles = StyleSheet.create({
   },
   hero: { height: heroH, backgroundColor: colors.line },
   heroImage: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  heroFade: {
-    ...StyleSheet.absoluteFill,
-    top: '40%',
-  },
+  heroFade: { ...StyleSheet.absoluteFill, top: '40%' },
   likeBtn: {
     position: 'absolute',
     right: 16,
@@ -249,17 +342,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
   },
-  fallbackCity: {
-    color: colors.white,
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-  },
-  heroCaption: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 20,
-  },
+  fallbackCity: { color: colors.white, fontFamily: fonts.extrabold, fontSize: 32 },
+  heroCaption: { position: 'absolute', left: 20, right: 20, bottom: 20 },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.accent,
@@ -268,11 +352,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     marginBottom: 8,
   },
-  badgeText: {
-    color: colors.white,
-    fontFamily: fonts.bold,
-    fontSize: 12,
-  },
+  badgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: 12 },
   city: {
     color: colors.white,
     fontFamily: fonts.extrabold,
@@ -285,18 +365,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
-  content: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  priceBlock: { marginBottom: spacing.md },
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   price: { ...type.price, fontSize: 36 },
   priceHint: { ...type.caption, marginTop: 2 },
+  tax: {
+    marginTop: 8,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: '#92400e',
+  },
   title: {
     fontFamily: fonts.bold,
     fontSize: 22,
     color: colors.ink,
     letterSpacing: -0.4,
+    marginTop: 16,
     marginBottom: 8,
   },
   description: {
@@ -304,7 +387,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: colors.inkSoft,
+    marginBottom: spacing.md,
+  },
+  notice: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    padding: 12,
     marginBottom: spacing.xl,
+  },
+  noticeText: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.primaryInk,
   },
   infoCard: {
     backgroundColor: colors.white,
@@ -314,9 +409,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
-  infoRow: {
-    paddingVertical: 14,
-  },
+  infoRow: { paddingVertical: 14 },
   infoRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
@@ -329,12 +422,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
-  infoValue: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.ink,
-  },
-  highlights: { marginBottom: spacing.xl },
+  infoValue: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink },
+  switchBlock: { marginBottom: spacing.xl },
   sectionLabel: {
     fontFamily: fonts.bold,
     fontSize: 13,
@@ -343,30 +432,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginBottom: 10,
   },
-  highlightRow: {
+  hotelOption: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 6,
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    padding: 12,
+    marginBottom: 8,
   },
-  bullet: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.primary,
-    lineHeight: 22,
+  hotelOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
+  hotelOptionName: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  hotelOptionMeta: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
+  hotelOptionPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
+  highlights: { marginBottom: spacing.xl },
+  highlightRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  bullet: { fontFamily: fonts.bold, fontSize: 16, color: colors.primary, lineHeight: 22 },
   highlightText: {
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 15,
     color: colors.ink,
     lineHeight: 22,
-  },
-  partnerNote: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    lineHeight: 18,
-    color: colors.faint,
-    marginBottom: 8,
   },
   ctaBar: {
     position: 'absolute',
@@ -376,6 +468,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     paddingHorizontal: spacing.xl,
     paddingTop: 12,
+    gap: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.line,
   },
@@ -386,8 +479,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ctaText: {
-    ...type.button,
-    color: colors.white,
+  ctaDisabled: { backgroundColor: colors.line },
+  ctaText: { ...type.button, color: colors.white },
+  ctaSecondary: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
   },
+  ctaSecondaryText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
 })
