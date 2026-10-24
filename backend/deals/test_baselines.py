@@ -7,12 +7,13 @@ from datetime import datetime, timedelta, timezone
 from deals.baselines import (
     build_baselines_from_rows,
     compute_baseline_stats,
+    dedupe_observations_for_baselines,
     discount_pct_vs_usual,
     horizon_bucket,
     is_good_price,
 )
 from deals.community_list import badge_for_baseline
-from deals.promote import apply_diversity, deal_score, is_fresh_enough
+from deals.promote import apply_diversity, deal_score, eligible_candidate, is_fresh_enough
 
 
 class TestHorizon(unittest.TestCase):
@@ -39,6 +40,7 @@ class TestBaselineStats(unittest.TestCase):
         bl = {"reliable": True, "p20": 70, "median": 100, "baseline_kind": "observed"}
         self.assertTrue(is_good_price(65, bl))
         self.assertTrue(is_good_price(70, bl))
+        self.assertTrue(is_good_price(75, bl))  # = 0.75×median and ≥15% off
         self.assertFalse(is_good_price(90, bl))
         self.assertFalse(is_good_price(200, bl, max_flight_pp=120))
 
@@ -63,12 +65,16 @@ class TestBuildBaselines(unittest.TestCase):
         now = datetime(2026, 10, 24, tzinfo=timezone.utc)
         rows = []
         for i in range(35):
+            out_d = (now + timedelta(days=10 + (i % 10))).date().isoformat()
             rows.append(
                 {
                     "origin_iata": "BVA",
                     "served_city_id": "city-1",
                     "trip_type": "WEEKEND",
-                    "out_date": (now + timedelta(days=10 + (i % 10))).date().isoformat(),
+                    "out_date": out_d,
+                    "ret_date": (
+                        now + timedelta(days=12 + (i % 10))
+                    ).date().isoformat(),
                     "price_pp_eur": 60 + i,
                     "observed_at": (now - timedelta(days=i % 20)).isoformat(),
                 }
@@ -76,6 +82,100 @@ class TestBuildBaselines(unittest.TestCase):
         out = build_baselines_from_rows(rows, now=now)
         self.assertGreaterEqual(len(out), 1)
         self.assertEqual(out[0]["origin_iata"], "BVA")
+
+
+class TestLotB(unittest.TestCase):
+    """B1 dedupe + B2 min 15% discount."""
+
+    def test_dedupe_50_same_day_does_not_move_median(self):
+        now = datetime(2026, 10, 24, 15, 0, tzinfo=timezone.utc)
+        # Keep all out_dates in horizon le14 (≤14d) so one baseline bucket
+        rows = []
+        for i in range(12):
+            out_d = (now + timedelta(days=3 + i)).date().isoformat()  # 3..14
+            ret_d = (now + timedelta(days=5 + i)).date().isoformat()
+            rows.append(
+                {
+                    "origin_iata": "BVA",
+                    "served_city_id": "city-1",
+                    "trip_type": "WEEKEND",
+                    "out_date": out_d,
+                    "ret_date": ret_d,
+                    "price_pp_eur": 100.0,
+                    # Distinct observation days (noon) — not colliding with cheap batch
+                    "observed_at": (now - timedelta(days=i + 2)).isoformat(),
+                }
+            )
+        # Unique trip dates not in the 12 above (out day+2)
+        cheap_out = (now + timedelta(days=2)).date().isoformat()
+        cheap_ret = (now + timedelta(days=4)).date().isoformat()
+        same_day = now.isoformat()  # all 50 share this observation day
+        for _ in range(50):
+            rows.append(
+                {
+                    "origin_iata": "BVA",
+                    "served_city_id": "city-1",
+                    "trip_type": "WEEKEND",
+                    "out_date": cheap_out,
+                    "ret_date": cheap_ret,
+                    "price_pp_eur": 40.0,
+                    "observed_at": same_day,
+                }
+            )
+        deduped = dedupe_observations_for_baselines(rows, now=now)
+        # 12 + 1 cheap (not 50)
+        self.assertEqual(len(deduped), 13)
+
+        # Without dedupe: 50×40 + 12×100 → median dragged down hard
+        raw_prices = [float(r["price_pp_eur"]) for r in rows]
+        raw_median = compute_baseline_stats(raw_prices, 13)["median"]
+        self.assertLess(raw_median, 50.0)
+
+        baselines = build_baselines_from_rows(rows, now=now)
+        self.assertEqual(len(baselines), 1)
+        # With dedupe: 12×100 + 1×40 → median stays near 100
+        self.assertGreaterEqual(baselines[0]["median"], 90.0)
+        self.assertEqual(baselines[0]["n_obs"], 13)
+
+    def test_10_percent_under_median_never_promoted(self):
+        bl = {
+            "reliable": True,
+            "p20": 95,
+            "median": 100,
+            "baseline_kind": "observed",
+        }
+        # Old v3 band alone: 90 ≤ p20(95) → would pass; min_discount blocks
+        self.assertFalse(is_good_price(90, bl, min_discount=0.15))
+        self.assertIsNone(discount_pct_vs_usual(90, bl, min_discount=0.15))
+
+        # Still a real deal at −20%
+        self.assertTrue(is_good_price(80, bl, min_discount=0.15))
+
+    def test_eligible_candidate_respects_min_discount(self):
+        now = datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
+        bl = {
+            "reliable": True,
+            "p20": 95,
+            "median": 100,
+            "baseline_kind": "observed",
+        }
+        obs = {
+            "price_pp_eur": 90,
+            "out_date": "2026-11-20",
+            "nights": 2,
+            "observed_at": (now - timedelta(hours=1)).isoformat(),
+            "out_arr_local": "2026-11-20T10:00:00",
+        }
+        # Build a minimal cfg-like with min_discount
+        class _Cfg:
+            max_flight_pp = 120.0
+            min_discount = 0.15
+            fresh_tau_h = 6.0
+            fresh_tau_short_h = 3.0
+
+        self.assertFalse(eligible_candidate(obs, bl, cfg=_Cfg(), now=now))
+        obs2 = {**obs, "price_pp_eur": 80}
+        self.assertTrue(eligible_candidate(obs2, bl, cfg=_Cfg(), now=now))
 
 
 class TestPromoteHelpers(unittest.TestCase):

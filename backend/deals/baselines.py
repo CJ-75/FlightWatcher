@@ -77,7 +77,12 @@ def is_good_price(
     baseline: Dict[str, Any],
     *,
     max_flight_pp: float = 120.0,
+    min_discount: float = 0.15,
 ) -> bool:
+    """
+    Lot B2: v3 band (≤ p20 OR ≤ 0.75×median) AND ≥ min_discount under median.
+    Estimated baselines keep v3-only rule (≤ 0.65×expected).
+    """
     if price_pp <= 0 or price_pp > max_flight_pp:
         return False
     kind = baseline.get("baseline_kind") or "observed"
@@ -86,21 +91,33 @@ def is_good_price(
         if not expected:
             return False
         return price_pp <= 0.65 * float(expected)
-    if not baseline.get("reliable"):
-        # Soft path: still allow vs median if present
-        median = baseline.get("median")
-        if median:
-            return price_pp <= 0.75 * float(median)
-        return False
-    p20 = baseline.get("p20")
+
     median = baseline.get("median")
+    if not median or float(median) <= 0:
+        return False
+    med = float(median)
+    # Absolute minimum gap vs usual price (default 15%)
+    md = max(0.0, min(0.9, float(min_discount)))
+    if price_pp > (1.0 - md) * med:
+        return False
+
+    if not baseline.get("reliable"):
+        # Soft path: still require min_discount (above) + ≤ 0.75×median
+        return price_pp <= 0.75 * med
+
+    p20 = baseline.get("p20")
     ok_p20 = p20 is not None and price_pp <= float(p20)
-    ok_med = median is not None and price_pp <= 0.75 * float(median)
+    ok_med = price_pp <= 0.75 * med
     return bool(ok_p20 or ok_med)
 
 
-def discount_pct_vs_usual(price_pp: float, baseline: Dict[str, Any]) -> Optional[float]:
-    """Honest flight-only discount vs 30d median. None if estimated / unreliable."""
+def discount_pct_vs_usual(
+    price_pp: float,
+    baseline: Dict[str, Any],
+    *,
+    min_discount: float = 0.15,
+) -> Optional[float]:
+    """Honest flight-only discount vs 30d median. None if estimated / unreliable / below min."""
     if (baseline.get("baseline_kind") or "observed") == "estimated":
         return None
     if not baseline.get("reliable"):
@@ -109,9 +126,57 @@ def discount_pct_vs_usual(price_pp: float, baseline: Dict[str, Any]) -> Optional
     if not median or float(median) <= 0 or price_pp <= 0:
         return None
     pct = (float(median) - float(price_pp)) / float(median) * 100.0
-    if pct < 5:
+    min_pct = max(0.0, float(min_discount)) * 100.0
+    if pct < min_pct:
         return None
     return round(pct, 1)
+
+
+def _obs_day(observed_at: Any, *, fallback: datetime) -> str:
+    try:
+        if isinstance(observed_at, str):
+            obs_dt = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        elif isinstance(observed_at, datetime):
+            obs_dt = observed_at
+        else:
+            obs_dt = fallback
+        if obs_dt.tzinfo is None:
+            obs_dt = obs_dt.replace(tzinfo=timezone.utc)
+        return obs_dt.astimezone(timezone.utc).strftime("%Y-%m-%d")
+    except Exception:
+        return fallback.strftime("%Y-%m-%d")
+
+
+def dedupe_observations_for_baselines(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Lot B1: one observation per
+    (origin, served_city, out_date, ret_date, observation calendar day) — cheapest.
+    """
+    now = now or datetime.now(timezone.utc)
+    best: Dict[Tuple[str, str, str, str, str], Dict[str, Any]] = {}
+    for r in rows:
+        origin = (r.get("origin_iata") or "").upper()
+        city_id = str(r.get("served_city_id") or "")
+        out_date = str(r.get("out_date") or "")[:10]
+        ret_date = str(r.get("ret_date") or "")[:10]
+        if not origin or not city_id or not out_date:
+            continue
+        try:
+            price_f = float(r.get("price_pp_eur"))
+        except (TypeError, ValueError):
+            continue
+        if price_f <= 0:
+            continue
+        day = _obs_day(r.get("observed_at"), fallback=now)
+        key = (origin, city_id, out_date, ret_date or out_date, day)
+        prev = best.get(key)
+        if prev is None or price_f < float(prev.get("price_pp_eur") or 1e9):
+            best[key] = r
+    return list(best.values())
 
 
 def build_baselines_from_rows(
@@ -122,12 +187,14 @@ def build_baselines_from_rows(
     """
     Group observations → baseline rows.
     Key: (origin, served_city_id, trip_type, horizon_bucket)
+    Dedupes (B1) before percentiles.
     """
     now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(days=30)
+    deduped = dedupe_observations_for_baselines(rows, now=now)
     buckets: Dict[Tuple[str, str, str, str], List[Dict[str, Any]]] = defaultdict(list)
 
-    for r in rows:
+    for r in deduped:
         observed = r.get("observed_at")
         try:
             if isinstance(observed, str):
@@ -185,7 +252,8 @@ def refresh_route_baselines(supabase, *, cfg=None) -> Dict[str, Any]:
         res = (
             supabase.table("price_observations")
             .select(
-                "origin_iata, served_city_id, trip_type, out_date, price_pp_eur, observed_at"
+                "origin_iata, served_city_id, trip_type, out_date, ret_date, "
+                "price_pp_eur, observed_at"
             )
             .gte("observed_at", since)
             .not_.is_("served_city_id", "null")
@@ -197,6 +265,7 @@ def refresh_route_baselines(supabase, *, cfg=None) -> Dict[str, Any]:
         logger.error("load observations for baselines: %s", e)
         return {"ok": False, "error": str(e)}
 
+    deduped = dedupe_observations_for_baselines(rows)
     baselines = build_baselines_from_rows(rows)
     upserted = 0
     for b in baselines:
@@ -208,4 +277,9 @@ def refresh_route_baselines(supabase, *, cfg=None) -> Dict[str, Any]:
             upserted += 1
         except Exception as e:
             logger.warning("baseline upsert: %s", e)
-    return {"ok": True, "rows_in": len(rows), "baselines": upserted}
+    return {
+        "ok": True,
+        "rows_in": len(rows),
+        "rows_deduped": len(deduped),
+        "baselines": upserted,
+    }

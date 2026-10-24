@@ -150,7 +150,12 @@ def eligible_candidate(
         price = float(obs.get("price_pp_eur") or 0)
     except (TypeError, ValueError):
         return False
-    return is_good_price(price, baseline, max_flight_pp=cfg.max_flight_pp)
+    return is_good_price(
+        price,
+        baseline,
+        max_flight_pp=cfg.max_flight_pp,
+        min_discount=cfg.min_discount,
+    )
 
 
 def apply_diversity(
@@ -267,7 +272,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         dtd = days_to_departure(out_d, now=now) or 30
         tau = cfg.fresh_tau_short_h if dtd <= 7 else cfg.fresh_tau_h
         pop = len(pop_map.get((origin, city_id), set()))
-        disc = discount_pct_vs_usual(price, bl)
+        disc = discount_pct_vs_usual(price, bl, min_discount=cfg.min_discount)
 
         # Hotel optional (cache only — no live LiteAPI in promote hot path)
         hotel_payload = None
