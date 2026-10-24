@@ -36,6 +36,7 @@ export function DealsTab() {
   const [calendarEnabled, setCalendarEnabled] = useState(false)
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -209,37 +210,61 @@ export function DealsTab() {
         ) : null}
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={springConfig}
-        className="w-full app-card p-4 sm:p-6 md:p-8 mb-6 sm:mb-8"
-      >
-        <div className="mb-4 sm:mb-5">
-          <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
-            <label className="text-base sm:text-lg font-bold text-slate-900 block">
-              {t('deals.filterOrigin')}
-            </label>
-            {origin ? (
-              <button
-                type="button"
-                onClick={() => setOrigin('')}
-                className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
-              >
-                Toutes les origines
-              </button>
-            ) : null}
-          </div>
-          <CityAirportSelect value={origin} onChange={setOrigin} />
-          {!origin ? (
-            <p className="text-xs text-slate-500 mt-2">
-              Laisse vide pour voir toutes les origines, ou choisis une ville de départ.
+      <div className="w-full app-card mb-5 sm:mb-6 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5 text-left hover:bg-canvas/60 transition-colors"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-ink">Affiner</p>
+            <p className="text-xs text-muted truncate mt-0.5">
+              {filterLabel || 'Toutes origines · 2 voyageurs'}
             </p>
-          ) : null}
-        </div>
-
-        <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
-      </motion.div>
+          </div>
+          <span
+            className={`shrink-0 text-muted text-lg leading-none transition-transform ${
+              filtersOpen ? 'rotate-180' : ''
+            }`}
+            aria-hidden
+          >
+            ▾
+          </span>
+        </button>
+        {filtersOpen ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            transition={springConfig}
+            className="px-4 pb-4 sm:px-5 sm:pb-5 border-t border-line"
+          >
+            <div className="pt-4 mb-4 sm:mb-5">
+              <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
+                <label className="text-base sm:text-lg font-bold text-slate-900 block">
+                  {t('deals.filterOrigin')}
+                </label>
+                {origin ? (
+                  <button
+                    type="button"
+                    onClick={() => setOrigin('')}
+                    className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
+                  >
+                    Toutes les origines
+                  </button>
+                ) : null}
+              </div>
+              <CityAirportSelect value={origin} onChange={setOrigin} />
+              {!origin ? (
+                <p className="text-xs text-slate-500 mt-2">
+                  Laisse vide pour voir toutes les origines, ou choisis une ville de départ.
+                </p>
+              ) : null}
+            </div>
+            <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
+          </motion.div>
+        ) : null}
+      </div>
 
       {!loading && !error && deals.length > 0 ? (
         <p className="text-sm font-semibold text-muted mb-4">

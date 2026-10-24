@@ -37,6 +37,7 @@ export function DealsScreen() {
   const [adults, setAdults] = useState(2)
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
@@ -188,28 +189,56 @@ export function DealsScreen() {
               ) : null}
 
               <View style={[styles.card, shadow.soft]}>
-                <View style={styles.originRow}>
-                  <Text style={styles.label}>Départ</Text>
-                  {origin ? (
-                    <Pressable onPress={() => setOrigin('')} hitSlop={8}>
-                      <Text style={styles.clearOrigin}>Toutes les origines</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-                <CityAirportPicker
-                  airports={airports}
-                  value={origin}
-                  onChange={setOrigin}
-                />
-                {!origin ? (
-                  <Text style={styles.originHint}>
-                    Laisse vide pour toutes les origines, ou choisis une ville.
+                <Pressable
+                  onPress={() => setFiltersOpen((o) => !o)}
+                  style={styles.filterToggle}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: filtersOpen }}
+                >
+                  <View style={styles.filterToggleText}>
+                    <Text style={styles.filterToggleTitle}>Affiner</Text>
+                    <Text style={styles.filterToggleHint} numberOfLines={1}>
+                      {origin
+                        ? `${origin.split(',')[0]}${adults !== 2 ? ` · ${adults} ad.` : ''}`
+                        : filterSummary || 'Toutes origines · 2 voyageurs'}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.filterChevron,
+                      filtersOpen && styles.filterChevronOpen,
+                    ]}
+                  >
+                    ▾
                   </Text>
+                </Pressable>
+
+                {filtersOpen ? (
+                  <View style={styles.filterBody}>
+                    <View style={styles.originRow}>
+                      <Text style={styles.label}>Départ</Text>
+                      {origin ? (
+                        <Pressable onPress={() => setOrigin('')} hitSlop={8}>
+                          <Text style={styles.clearOrigin}>Toutes les origines</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <CityAirportPicker
+                      airports={airports}
+                      value={origin}
+                      onChange={setOrigin}
+                    />
+                    {!origin ? (
+                      <Text style={styles.originHint}>
+                        Laisse vide pour toutes les origines, ou choisis une ville.
+                      </Text>
+                    ) : null}
+
+                    <View style={styles.divider} />
+
+                    <PassengerStepper value={adults} onChange={setAdults} />
+                  </View>
                 ) : null}
-
-                <View style={styles.divider} />
-
-                <PassengerStepper value={adults} onChange={setAdults} />
               </View>
 
               {!loading && !error && deals.length > 0 ? (
@@ -318,10 +347,49 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    padding: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  filterToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  filterToggleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  filterToggleTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  filterToggleHint: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  filterChevron: {
+    fontSize: 16,
+    color: colors.muted,
+    transform: [{ rotate: '0deg' }],
+  },
+  filterChevronOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
+  filterBody: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    paddingTop: 14,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
