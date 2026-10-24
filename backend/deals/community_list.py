@@ -475,11 +475,29 @@ def _batch_fill_missing_hotels(
     if not need_iatas:
         return rows
 
-    from deals.materialize_wall import batch_load_destinations, batch_pool_by_dest
+    from deals.materialize_wall import (
+        batch_load_destinations,
+        batch_pool_by_dest,
+        pick_diverse_hotels,
+        primary_hotel_id,
+    )
 
     dest_map = batch_load_destinations(supabase, need_iatas)
     dest_ids = [str(d["id"]) for d in dest_map.values()]
-    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=3)
+    pools = batch_pool_by_dest(supabase, dest_ids, limit_per_dest=24)
+    used_by_dest: Dict[str, set] = {}
+    # Hotels already on cards in this response
+    for r in rows:
+        if not _hotel_top3_has_photo(r.get("hotel_top3")):
+            continue
+        iata = str(r.get("dest_iata") or "").upper()
+        dest = dest_map.get(iata)
+        if not dest:
+            continue
+        prim = primary_hotel_id(r.get("hotel_top3"))
+        if prim:
+            used_by_dest.setdefault(str(dest["id"]), set()).add(prim)
+
     out: List[Dict[str, Any]] = []
     for r in rows:
         if _hotel_top3_has_photo(r.get("hotel_top3")):
@@ -487,11 +505,25 @@ def _batch_fill_missing_hotels(
             continue
         iata = str(r.get("dest_iata") or "").upper()
         dest = dest_map.get(iata)
-        pool = pools.get(str(dest["id"])) if dest else None
-        if pool:
-            out.append({**r, "hotel_top3": pool})
-        else:
+        if not dest:
             out.append(r)
+            continue
+        did = str(dest["id"])
+        used = used_by_dest.setdefault(did, set())
+        pool = pools.get(did) or []
+        picked = pick_diverse_hotels(pool, used_ids=used, top_n=1)
+        if not picked:
+            out.append(r)
+            continue
+        prim = primary_hotel_id(picked)
+        if prim:
+            used.add(prim)
+        alts = pick_diverse_hotels(
+            [h for h in pool if primary_hotel_id([h]) != prim],
+            used_ids=used,
+            top_n=2,
+        )
+        out.append({**r, "hotel_top3": picked + alts})
     return out
 
 

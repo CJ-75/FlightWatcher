@@ -8,7 +8,7 @@ from deals.community_list import (
     _hotel_top3_ready,
     invalidate_list_cache,
 )
-from deals.materialize_wall import hotel_top3_ready
+from deals.materialize_wall import hotel_top3_ready, pick_diverse_hotels
 
 
 class TestReady(unittest.TestCase):
@@ -45,6 +45,23 @@ class TestInvalidate(unittest.TestCase):
         with cl._list_cache_lock:
             self.assertEqual(len(cl._list_cache), 0)
             self.assertGreaterEqual(cl._list_cache_epoch, 1)
+
+
+class TestDiversePool(unittest.TestCase):
+    def test_skips_already_used_primary(self):
+        pool = [
+            {"hotel_id": "A", "photo": "https://x/a.jpg"},
+            {"hotel_id": "B", "photo": "https://x/b.jpg"},
+            {"hotel_id": "C", "photo": "https://x/c.jpg"},
+        ]
+        used = {"A"}
+        picked = pick_diverse_hotels(pool, used_ids=used, top_n=1)
+        self.assertEqual(picked[0]["hotel_id"], "B")
+
+    def test_fallback_when_exhausted(self):
+        pool = [{"hotel_id": "A", "photo": "https://x/a.jpg"}]
+        picked = pick_diverse_hotels(pool, used_ids={"A"}, top_n=1)
+        self.assertEqual(picked[0]["hotel_id"], "A")
 
 
 if __name__ == "__main__":
