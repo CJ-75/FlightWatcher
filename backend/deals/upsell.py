@@ -80,6 +80,35 @@ def _is_fresh(expires_at: Any) -> bool:
         return False
 
 
+def _rates_still_usable(row: Dict[str, Any], *, grace_hours: float = 72.0) -> bool:
+    """
+    Browse continuity: serve ok rates a bit after expires_at so the wall
+    doesn't go empty when the refresh job lags (TTL can be hours).
+    """
+    if _is_fresh(row.get("expires_at")):
+        return True
+    if (row.get("status") or "") != "ok":
+        return False
+    top = row.get("top")
+    if not isinstance(top, list) or not top:
+        return False
+    # Prefer fetched_at; else expires_at as anchor
+    anchor = row.get("fetched_at") or row.get("expires_at")
+    if not anchor:
+        return False
+    try:
+        dt = datetime.fromisoformat(str(anchor).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        age_h = (_now() - dt).total_seconds() / 3600.0
+        # If anchored on expires_at, allow grace past expiry; if fetched_at, cap total age
+        if row.get("fetched_at"):
+            return age_h <= max(grace_hours, 48.0)
+        return age_h <= grace_hours
+    except ValueError:
+        return False
+
+
 def find_destination_by_iata(supabase: Any, iata: str) -> Optional[Dict[str, Any]]:
     iata = (iata or "").strip().upper()
     if not iata:
@@ -164,18 +193,19 @@ def _normalize_top_list(top: Any) -> List[Dict[str, Any]]:
 
 
 def _rates_row_to_lookup(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    if not _is_fresh(row.get("expires_at")):
+    if not _rates_still_usable(row):
         return None
     top_list = _normalize_top_list(row.get("top"))
     offer = top_list[0] if top_list else _top_public(row.get("top"))
     if not offer:
         return None
+    stale = not _is_fresh(row.get("expires_at"))
     return {
         "offer": offer,
         "top": top_list or [offer],
         "fetched_at": row.get("fetched_at"),
         "expires_at": row.get("expires_at"),
-        "source": "rates_cache",
+        "source": "rates_cache_stale" if stale else "rates_cache",
     }
 
 

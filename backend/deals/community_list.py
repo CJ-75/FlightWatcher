@@ -371,6 +371,59 @@ def _fill_missing_hotel_photos(
     return filled
 
 
+def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 3) -> List[Dict[str, Any]]:
+    """Last-resort browse fill: hotel_pool rows that already have a photo."""
+    if not supabase or not dest_iata:
+        return []
+    try:
+        from deals.upsell import find_destination_by_iata
+
+        dest = find_destination_by_iata(supabase, dest_iata)
+        if not dest:
+            return []
+        res = (
+            supabase.table("hotel_pool")
+            .select(
+                "hotel_id,name,stars,rating,review_count,distance_m,"
+                "main_photo,thumbnail,board"
+            )
+            .eq("destination_id", dest["id"])
+            .order("pool_rank")
+            .limit(12)
+            .execute()
+        )
+    except Exception:
+        return []
+    out: List[Dict[str, Any]] = []
+    for h in res.data or []:
+        if not isinstance(h, dict):
+            continue
+        photo = (h.get("main_photo") or h.get("thumbnail") or "").strip()
+        if not photo:
+            continue
+        hid = h.get("hotel_id")
+        out.append(
+            {
+                "id": str(hid) if hid is not None else "",
+                "hotel_id": hid,
+                "name": h.get("name"),
+                "stars": h.get("stars"),
+                "rating": h.get("rating"),
+                "review_count": h.get("review_count"),
+                "distance_m": h.get("distance_m"),
+                "board": h.get("board"),
+                "photo": photo,
+                "thumbnail": photo,
+                # No live rate — flight-led pack; hôtel price filled on revalidate
+                "public_hotel_price": None,
+                "pool_fill": True,
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dict[str, Any]:
     """Attach cache hotel (+ photo) when hotel_top3 is empty / sans photo."""
     hotels = row.get("hotel_top3") or []
@@ -410,10 +463,20 @@ def _compose_hotel_onto_row(supabase, row: Dict[str, Any], adults_n: int) -> Dic
             checkin=str(row.get("out_date") or "")[:10],
             checkout=str(row.get("ret_date") or "")[:10],
         )
-        if not ranked:
-            return row
-        return {**row, "hotel_top3": ranked}
+        if ranked:
+            return {**row, "hotel_top3": ranked}
+        # Rates miss / expired: keep wall alive with pool photos
+        pool = _pool_hotels_with_photos(supabase, str(row.get("dest_iata") or ""))
+        if pool:
+            return {**row, "hotel_top3": pool}
+        return row
     except Exception:
+        try:
+            pool = _pool_hotels_with_photos(supabase, str(row.get("dest_iata") or ""))
+            if pool:
+                return {**row, "hotel_top3": pool}
+        except Exception:
+            pass
         return row
 
 
@@ -469,7 +532,16 @@ def _enrich_rows_to_deals(
                 checkin=str(r.get("out_date") or "")[:10],
                 checkout=str(r.get("ret_date") or "")[:10],
             )
-            capped_rows.append({**r, "hotel_top3": ranked} if ranked else {**r, "hotel_top3": []})
+            if ranked:
+                capped_rows.append({**r, "hotel_top3": ranked})
+            else:
+                # Keep pool/photo fills (no live rate yet) so browse isn't empty
+                kept = [
+                    h
+                    for h in hotels
+                    if isinstance(h, dict) and _hotel_photo(h)
+                ][:3]
+                capped_rows.append({**r, "hotel_top3": kept})
         else:
             capped_rows.append(r)
     rows = capped_rows
