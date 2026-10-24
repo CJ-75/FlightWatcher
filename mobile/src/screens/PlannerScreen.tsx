@@ -335,7 +335,7 @@ export function PlannerScreen() {
         onCreated={(id) => {
           setShowCreate(false)
           void load()
-          navigation.navigate('TripDetail', { tripId: id })
+          navigation.navigate('TripDetail', { tripId: id, autoScan: true })
         }}
       />
     </View>

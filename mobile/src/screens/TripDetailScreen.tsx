@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -55,6 +55,8 @@ export function TripDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { viewUser, isGuest } = useAuth()
   const tripId = route.params.tripId
+  const autoScan = Boolean(route.params.autoScan)
+  const autoScanStarted = useRef(false)
 
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -93,7 +95,7 @@ export function TripDetailScreen() {
 
   const isOrganizer = !!viewUser && trip?.organizer_id === viewUser.id
 
-  const scan = async () => {
+  const scan = useCallback(async () => {
     setScanning(true)
     setError(null)
     // Clear previous pending proposals immediately (Search parity)
@@ -114,7 +116,7 @@ export function TripDetailScreen() {
         navigation.setOptions({ title: updated.name || 'Voyage' })
       } else {
         const scanRes = await getApi().scanPlannedTrip(tripId)
-        // Affiche immédiatement les propositions persistées, puis resync
+        // Affiche immédiatement les propositions persistées, puis resync bg
         setTrip((prev) =>
           prev
             ? {
@@ -125,7 +127,7 @@ export function TripDetailScreen() {
               }
             : prev,
         )
-        await load()
+        void load()
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan échoué')
@@ -133,7 +135,16 @@ export function TripDetailScreen() {
     } finally {
       setScanning(false)
     }
-  }
+  }, [tripId, isGuest, load, navigation])
+
+  // Création → scan immédiat (ne pas attendre le getTrip)
+  useEffect(() => {
+    if (!autoScan || autoScanStarted.current) return
+    autoScanStarted.current = true
+    setScanning(true)
+    navigation.setParams({ autoScan: undefined })
+    void scan()
+  }, [autoScan, scan, navigation])
 
   const accept = async (id: string) => {
     setActing(id)
@@ -295,9 +306,14 @@ export function TripDetailScreen() {
 
   if (loading && !trip) {
     return (
-      <View style={[styles.centered, { paddingTop: insets.top }]}>
+      <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
         <ScreenBackground />
         <ActivityIndicator size="large" color={colors.primary} />
+        {scanning || autoScan ? (
+          <Text style={[styles.errorText, { marginTop: 16, color: colors.ink }]}>
+            Scan en cours…
+          </Text>
+        ) : null}
       </View>
     )
   }

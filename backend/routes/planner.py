@@ -385,12 +385,13 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
     else:
         incluses = None
 
+    # limite_allers=18 : premier passage rapide (Search-like), top 10 suffit au mur
     resultats, num_requetes = scanner_vols_api(
         aeroport_depart=trip["departure_airport"],
         dates_depart=dates_depart,
         dates_retour=dates_retour,
         budget_max=int(trip.get("budget_max") or 200),
-        limite_allers=30,
+        limite_allers=18,
         destinations_exclues=[],
         destinations_incluses=incluses,
         record_prices=True,
@@ -449,12 +450,13 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
     cheapest_found = None
     if not inserted:
         try:
+            # Diagnostic léger (budget trop bas ?) — ne pas doubler le coût d’un inspire
             diag, n_diag = scanner_vols_api(
                 aeroport_depart=trip["departure_airport"],
                 dates_depart=dates_depart,
                 dates_retour=dates_retour,
                 budget_max=max(budget_max * 4, 800),
-                limite_allers=8,
+                limite_allers=5,
                 destinations_exclues=[],
                 destinations_incluses=incluses,
                 record_prices=False,

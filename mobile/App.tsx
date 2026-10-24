@@ -77,6 +77,8 @@ export type RootStackParamList = {
   }
   TripDetail: {
     tripId: string
+    /** Création → lancer le scan immédiatement */
+    autoScan?: boolean
   }
   Security: undefined
   Bookings: undefined

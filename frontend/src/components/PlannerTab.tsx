@@ -1653,7 +1653,8 @@ function TripDetailView({
             }
           : prev,
       )
-      await load()
+      // Resync en arrière-plan — ne pas bloquer l’UI (Search parity)
+      void load()
       if (proposals.length === 0) {
         const budget = scanRes.budget_max ?? trip?.budget_max ?? 150
         const cheapest = scanRes.cheapest_found
@@ -1715,11 +1716,13 @@ function TripDetailView({
     }
   }
 
+  // Création → scan immédiat (ne pas attendre le getTrip / isOrganizer)
   useEffect(() => {
-    if (!autoScan || !trip || !isOrganizer || loading || autoScanStarted.current) return
+    if (!autoScan || autoScanStarted.current) return
     autoScanStarted.current = true
+    setScanning(true)
     void scan().finally(() => onAutoScanDone?.())
-  }, [autoScan, trip, isOrganizer, loading, scan, onAutoScanDone])
+  }, [autoScan, scan, onAutoScanDone])
 
   const setPriceWatch = async (enabled: boolean) => {
     if (!trip) return
@@ -1860,6 +1863,20 @@ function TripDetailView({
   }
 
   if (loading && !trip) {
+    if (scanning || autoScan) {
+      return (
+        <div className="w-full space-y-6">
+          <button type="button" onClick={onBack} className="text-sm font-bold text-primary-600">
+            ← {t('nav.planner')}
+          </button>
+          <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-5 py-12 text-center">
+            <div className="mx-auto mb-3 w-9 h-9 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+            <p className="font-bold text-slate-900">{t('planner.scan.auto')}</p>
+            <p className="text-sm text-slate-500 mt-1">On lance le scan tout de suite…</p>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex justify-center py-20">
         <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
