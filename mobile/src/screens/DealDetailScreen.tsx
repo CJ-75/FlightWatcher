@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
-  Image,
   ScrollView,
   StyleSheet,
   Pressable,
@@ -10,14 +9,14 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import * as WebBrowser from 'expo-web-browser'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
-import { dealAdults, pricePpWithHotel, resolveTripImageUrl } from '@flightwatcher/shared'
+import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { HeartIcon } from '../components/HeartIcon'
+import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
@@ -42,7 +41,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [deal, setDeal] = useState<TravelDeal | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [startingTrip, setStartingTrip] = useState(false)
 
@@ -127,6 +125,16 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const fees = selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
+  const hotelPhoto = (
+    selected?.photo ||
+    deal.hotel?.photo ||
+    deal.image_url ||
+    ''
+  ).trim()
+  const seedPhotos = [
+    ...(selected?.photos || deal.hotel?.photos || []),
+    hotelPhoto,
+  ].filter((u, i, arr) => u && arr.indexOf(u) === i)
 
   const openUrl = async (url: string) => {
     if (!url) return
@@ -184,48 +192,39 @@ export function DealDetailScreen({ route, navigation }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
       >
-        <View style={styles.hero}>
-          {!failed ? (
-            <Image
-              source={{
-                uri: resolveTripImageUrl({
-                  city: deal.city,
-                  imageUrl: selected?.photo || deal.hotel?.photo || deal.image_url,
-                }),
-              }}
-              style={styles.heroImage}
-              onError={() => setFailed(true)}
-            />
-          ) : (
-            <LinearGradient colors={[colors.primary, colors.primaryDeep]} style={styles.heroImage}>
-              <Text style={styles.fallbackCity}>{deal.city}</Text>
-            </LinearGradient>
-          )}
-          <LinearGradient
-            colors={['transparent', 'rgba(12,18,34,0.75)']}
-            style={styles.heroFade}
-          />
-          <Pressable
-            onPress={() => void toggleLike(deal)}
-            hitSlop={10}
-            style={[styles.likeBtn, { top: Math.max(insets.top, 12) + 8 }]}
-          >
-            <HeartIcon
-              size={22}
-              filled={isLiked(deal.id)}
-              color={isLiked(deal.id) ? colors.primary : colors.ink}
-            />
-          </Pressable>
-          <View style={styles.heroCaption}>
-            {deal.badge ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{deal.badge}</Text>
-              </View>
-            ) : null}
-            <Text style={styles.city}>{deal.city}</Text>
-            <Text style={styles.country}>{deal.country}</Text>
-          </View>
-        </View>
+        <HotelPhotoGallery
+          hotelId={selected?.id || deal.hotel?.id}
+          seedPhoto={hotelPhoto}
+          seedPhotos={seedPhotos}
+          alt={selected?.name || deal.hotel_name || deal.city}
+          hotelName={selected?.name || deal.hotel_name}
+          cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
+          height={heroH}
+          topRight={
+            <Pressable
+              onPress={() => void toggleLike(deal)}
+              hitSlop={10}
+              style={[styles.likeBtn, { marginTop: Math.max(insets.top, 12) + 8 }]}
+            >
+              <HeartIcon
+                size={22}
+                filled={isLiked(deal.id)}
+                color={isLiked(deal.id) ? colors.primary : colors.ink}
+              />
+            </Pressable>
+          }
+          bottomLeft={
+            <View>
+              {deal.badge ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{deal.badge}</Text>
+                </View>
+              ) : null}
+              <Text style={styles.city}>{deal.city}</Text>
+              <Text style={styles.country}>{deal.country}</Text>
+            </View>
+          }
+        />
 
         <View style={styles.content}>
           <Text style={styles.price}>{Math.round(pricePp)} €</Text>
@@ -433,22 +432,14 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
-  hero: { height: heroH, backgroundColor: colors.line },
-  heroImage: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
-  heroFade: { ...StyleSheet.absoluteFill, top: '40%' },
   likeBtn: {
-    position: 'absolute',
-    right: 16,
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2,
   },
-  fallbackCity: { color: colors.white, fontFamily: fonts.extrabold, fontSize: 32 },
-  heroCaption: { position: 'absolute', left: 20, right: 20, bottom: 20 },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.accent,

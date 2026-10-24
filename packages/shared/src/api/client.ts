@@ -25,6 +25,7 @@ import type {
   HotelBookingBookRequest,
   HotelBookingPrebookRequest,
   HotelBookingPrebookResponse,
+  HotelGalleryResponse,
   HotelUpsellJob,
   HotelUpsellLookupItem,
   HotelUpsellResult,
@@ -211,6 +212,16 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
+
+    getHotelGallery: (hotelId: string, opts?: { language?: string; fallback?: string }) => {
+      const q = new URLSearchParams()
+      if (opts?.language) q.set('language', opts.language)
+      if (opts?.fallback) q.set('fallback', opts.fallback)
+      const qs = q.toString()
+      return request<HotelGalleryResponse>(
+        `/api/deals/hotels/${encodeURIComponent(hotelId)}/gallery${qs ? `?${qs}` : ''}`,
+      )
+    },
 
     getDealCalendar: (params: DealCalendarParams) => {
       const q = new URLSearchParams()

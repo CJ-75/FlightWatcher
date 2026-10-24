@@ -769,6 +769,36 @@ async def my_trip_flight_booked(draft_token: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/deals/hotels/{hotel_id}/gallery")
+async def get_hotel_gallery(
+    hotel_id: str,
+    language: Optional[str] = Query("fr"),
+    fallback: Optional[str] = Query(None, description="Photo déjà connue (seed)"),
+):
+    """LiteAPI hotelImages gallery for Deals lightbox (cached 6h)."""
+    try:
+        from deals.hotel_gallery import get_hotel_gallery as fetch_gallery
+
+        hid = (hotel_id or "").strip()
+        if not hid or hid == "primary":
+            raise HTTPException(status_code=400, detail="hotel_id requis")
+        supabase = None
+        try:
+            supabase = _svc()
+        except HTTPException:
+            supabase = None
+        return fetch_gallery(
+            supabase,
+            hid,
+            language=(language or "fr")[:5],
+            fallback_photo=(fallback or "").strip() or None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
     """Get a single deal by id or deal_key."""

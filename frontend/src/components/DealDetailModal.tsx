@@ -5,13 +5,13 @@ import {
   dealAdults,
   formatFetchedAt,
   pricePpWithHotel,
-  resolveTripImageUrl,
 } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { getApiClient } from '../utils/apiClient'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
 import { DealComplianceNotice } from './DealComplianceNotice'
+import { HotelPhotoGallery } from './HotelPhotoGallery'
 
 interface DealDetailModalProps {
   deal: TravelDeal | null
@@ -170,11 +170,10 @@ export function DealDetailModal({
     ''
   ).trim()
   if (!hotelPhoto) return null
-  const imageUrl = resolveTripImageUrl({
-    city: deal.city,
-    imageUrl: hotelPhoto,
-  })
-  const hotelThumb = selected?.photo || deal.hotel?.photo || null
+  const seedPhotos = [
+    ...(selected?.photos || deal.hotel?.photos || []),
+    hotelPhoto,
+  ].filter((u, i, arr) => u && arr.indexOf(u) === i)
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
 
@@ -246,103 +245,121 @@ export function DealDetailModal({
           initial={{ y: 40, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 40, opacity: 0 }}
-          className="app-dialog-panel app-dialog-xl max-h-[92vh] overflow-y-auto"
+          className="app-dialog-panel app-dialog-2xl max-h-[94vh] overflow-y-auto overscroll-contain"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
-          <div className="relative h-52 sm:h-64">
-            <img
-              src={imageUrl}
-              alt={selected?.name || deal.hotel_name || deal.city}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent" />
-            <div className="absolute top-3 right-3 flex gap-2">
-              {onToggleLike ? (
+          <HotelPhotoGallery
+            hotelId={selected?.id || deal.hotel?.id}
+            seedPhoto={hotelPhoto}
+            seedPhotos={seedPhotos}
+            alt={selected?.name || deal.hotel_name || deal.city}
+            hotelName={selected?.name || deal.hotel_name}
+            cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
+            language={language === 'en' ? 'en' : 'fr'}
+            topRight={
+              <>
+                {onToggleLike ? (
+                  <button
+                    type="button"
+                    onClick={onToggleLike}
+                    aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    className={`w-9 h-9 rounded-full shadow flex items-center justify-center ${
+                      liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-600'
+                    }`}
+                  >
+                    <HeartSvg filled={!!liked} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={onToggleLike}
-                  aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                  className={`w-9 h-9 rounded-full shadow flex items-center justify-center ${
-                    liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-600'
-                  }`}
+                  onClick={onClose}
+                  className="w-9 h-9 rounded-full bg-white/95 text-slate-800 font-bold shadow"
                 >
-                  <HeartSvg filled={!!liked} />
+                  ×
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-9 h-9 rounded-full bg-white/95 text-slate-800 font-bold shadow"
-              >
-                ×
-              </button>
-            </div>
-            <div className="absolute bottom-3 left-4 right-4">
+              </>
+            }
+            bottomLeft={
+              <div className="sm:hidden">
+                {deal.badge ? (
+                  <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">
+                    {deal.badge}
+                  </span>
+                ) : null}
+                <h2 className="text-white text-2xl font-black drop-shadow">{deal.city}</h2>
+                <p className="text-white/85 text-sm drop-shadow">{deal.country}</p>
+              </div>
+            }
+          />
+
+          <div className="p-5 sm:p-6 space-y-5">
+            <div className="hidden sm:block">
               {deal.badge ? (
                 <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">
                   {deal.badge}
                 </span>
               ) : null}
-              <h2 className="text-white text-2xl font-black">{deal.city}</h2>
-              <p className="text-white/85 text-sm">{deal.country}</p>
-            </div>
-          </div>
-
-          <div className="p-5 sm:p-6 space-y-5">
-            <div>
-              <p className="text-3xl font-black text-primary-500">
-                {Math.round(pricePp)} €
-              </p>
-              <p className="text-sm text-slate-500">
-                {t('deals.perPersonHint', { nights: deal.nights, adults })}
-              </p>
-              {deal.price_pax_note ? (
-                <p className="text-xs text-amber-800 mt-0.5">{deal.price_pax_note}</p>
-              ) : adults >= 2 ? (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {t('deals.totalForTwo', { total: Math.round(pricePp * 2) })}
-                </p>
-              ) : null}
-              {fees > 0 ? (
-                <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 font-medium mt-2 inline-block">
-                  {t('deals.taxOnSite', { fees: Math.round(fees) })}
-                </p>
-              ) : null}
-              {verifiedLabel ? (
-                <p className="text-xs text-emerald-700 mt-1 font-medium">{verifiedLabel}</p>
-              ) : age ? (
-                <p className="text-xs text-slate-400 mt-1">{t('deals.priceAge', { age })}</p>
-              ) : null}
-              {deal.badge_meta?.tooltip ? (
-                <p className="text-xs text-slate-500 mt-1" title={deal.badge_meta.tooltip}>
-                  {deal.badge}
-                </p>
-              ) : null}
-              {deal.baggage_line || deal.route_hint ? (
-                <div className="mt-2 text-xs text-slate-600 space-y-0.5">
-                  {deal.baggage_line ? <p>{deal.baggage_line}</p> : null}
-                  {deal.route_hint ? <p className="text-slate-500">{deal.route_hint}</p> : null}
-                </div>
-              ) : null}
+              <h2 className="text-2xl sm:text-3xl font-black text-ink tracking-tight">{deal.city}</h2>
+              <p className="text-slate-500 text-sm">{deal.country}</p>
             </div>
 
-            {hotelThumb ? (
-              <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
-                <img
-                  src={hotelThumb}
-                  alt={selected?.name || deal.hotel_name || 'Hôtel'}
-                  className="w-16 h-16 rounded-lg object-cover"
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900 truncate">
-                    {selected?.name || deal.hotel_name || 'Hôtel'}
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-3xl font-black text-primary-500">
+                  {Math.round(pricePp)} €
+                </p>
+                <p className="text-sm text-slate-500">
+                  {t('deals.perPersonHint', { nights: deal.nights, adults })}
+                </p>
+                {deal.price_pax_note ? (
+                  <p className="text-xs text-amber-800 mt-0.5">{deal.price_pax_note}</p>
+                ) : adults >= 2 ? (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {t('deals.totalForTwo', { total: Math.round(pricePp * 2) })}
                   </p>
-                  {selected?.distance_m != null || deal.hotel?.distance_m != null ? (
-                    <p className="text-xs text-slate-500">
-                      à {Math.round(Number(selected?.distance_m ?? deal.hotel?.distance_m))} m du
-                      centre
-                    </p>
-                  ) : null}
-                </div>
+                ) : null}
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-slate-900 truncate max-w-[220px]">
+                  {selected?.stars
+                    ? `${'★'.repeat(Math.min(5, Math.round(Number(selected.stars))))} `
+                    : ''}
+                  {selected?.name || deal.hotel_name || 'Hôtel'}
+                </p>
+                {selected?.distance_m != null || deal.hotel?.distance_m != null ? (
+                  <p className="text-xs text-slate-500">
+                    à {Math.round(Number(selected?.distance_m ?? deal.hotel?.distance_m))} m du
+                    centre
+                  </p>
+                ) : null}
+                {selected?.rating != null ? (
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {Number(selected.rating).toFixed(1)}/10
+                    {selected.review_count != null ? ` · ${selected.review_count} avis` : ''}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {fees > 0 ? (
+              <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 font-medium inline-block">
+                {t('deals.taxOnSite', { fees: Math.round(fees) })}
+              </p>
+            ) : null}
+            {verifiedLabel ? (
+              <p className="text-xs text-emerald-700 font-medium">{verifiedLabel}</p>
+            ) : age ? (
+              <p className="text-xs text-slate-400">{t('deals.priceAge', { age })}</p>
+            ) : null}
+            {deal.badge_meta?.tooltip ? (
+              <p className="text-xs text-slate-500" title={deal.badge_meta.tooltip}>
+                {deal.badge}
+              </p>
+            ) : null}
+            {deal.baggage_line || deal.route_hint ? (
+              <div className="text-xs text-slate-600 space-y-0.5">
+                {deal.baggage_line ? <p>{deal.baggage_line}</p> : null}
+                {deal.route_hint ? <p className="text-slate-500">{deal.route_hint}</p> : null}
               </div>
             ) : null}
 
@@ -414,19 +431,27 @@ export function DealDetailModal({
                     const active = h.id === (selected?.id || '')
                     const hTotal = h.public_hotel_price ?? 0
                     const hPp = pricePpWithHotel(deal, hTotal || hotelTotal)
+                    const thumb = h.photo || h.photos?.[0]
                     return (
                       <button
                         key={h.id}
                         type="button"
                         onClick={() => setHotelId(h.id)}
-                        className={`text-left rounded-xl border px-3 py-3 transition-colors ${
+                        className={`text-left rounded-xl border px-2.5 py-2.5 transition-colors ${
                           active
                             ? 'border-primary-400 bg-primary-50'
                             : 'border-slate-100 bg-white hover:border-primary-200'
                         }`}
                       >
-                        <div className="flex justify-between gap-2">
-                          <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt=""
+                              className="w-14 h-14 rounded-lg object-cover shrink-0"
+                            />
+                          ) : null}
+                          <div className="min-w-0 flex-1">
                             <p className="font-semibold text-sm text-slate-900 truncate">
                               {h.stars ? `${'★'.repeat(Math.min(5, Math.round(Number(h.stars))))} ` : ''}
                               {h.name || 'Hôtel'}
@@ -511,15 +536,7 @@ export function DealDetailModal({
               cancelDeadline={selected?.cancel_deadline || deal.hotel?.cancel_deadline}
             />
 
-            <div className="flex flex-col gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => void startMyTrip()}
-                disabled={startingTrip}
-                className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors disabled:opacity-60"
-              >
-                {startingTrip ? '…' : 'Continuer ce voyage'}
-              </button>
+            <div className="flex flex-col gap-2 pt-1 pb-20 sm:pb-2">
               {onOtherDates ? (
                 <button
                   type="button"
@@ -550,6 +567,30 @@ export function DealDetailModal({
                 </a>
               ) : null}
             </div>
+          </div>
+
+          {/* Sticky booking bar — travel-site pattern */}
+          <div
+            className="sticky bottom-0 z-20 border-t border-line bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6 flex items-center gap-3"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-black text-primary-500 leading-none">
+                {Math.round(pricePp)} €
+                <span className="text-xs font-semibold text-slate-500 ml-1">/ pers.</span>
+              </p>
+              <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {selected?.name || deal.hotel_name || deal.city}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void startMyTrip()}
+              disabled={startingTrip}
+              className="shrink-0 bg-primary-500 hover:bg-primary-600 text-white font-bold px-5 py-3 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
+            >
+              {startingTrip ? '…' : 'Continuer'}
+            </button>
           </div>
         </motion.div>
       </motion.div>

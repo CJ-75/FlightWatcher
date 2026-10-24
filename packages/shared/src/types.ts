@@ -168,12 +168,30 @@ export interface TravelDealHotel {
   review_count?: number
   distance_m?: number
   photo?: string
+  /** Optional preloaded gallery URLs (lightbox may still fetch full set). */
+  photos?: string[]
   board?: string
   refundable?: boolean
   cancel_deadline?: string | null
   /** Present on cache candidates for in-UI hotel switch. */
   public_hotel_price?: number
   excluded_fees?: number
+}
+
+export interface HotelGalleryPhoto {
+  url: string
+  thumb?: string
+  caption?: string | null
+  order?: number
+  default?: boolean
+}
+
+export interface HotelGalleryResponse {
+  hotel_id: string
+  name?: string | null
+  description?: string | null
+  photos: HotelGalleryPhoto[]
+  count?: number
 }
 
 export interface TravelDealPriceBreakdown {

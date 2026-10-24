@@ -186,6 +186,26 @@ class LiteApiClient:
     def list_facilities(self) -> Any:
         return self._request("GET", self.cfg.search_base, "/data/facilities")
 
+    def get_hotel_details(
+        self,
+        hotel_id: str,
+        *,
+        language: str = "fr",
+        timeout: Optional[float] = None,
+    ) -> Any:
+        """GET /data/hotel — static content incl. hotelImages gallery."""
+        return self._request(
+            "GET",
+            self.cfg.search_base,
+            "/data/hotel",
+            params={
+                "hotelId": hotel_id,
+                "language": language or "fr",
+            },
+            timeout=float(timeout or min(8.0, self.cfg.timeout_s)),
+            retry=False,
+        )
+
     # --- Rates ---
 
     def hotels_rates(self, body: Dict[str, Any], *, timeout: Optional[float] = None) -> Any:
