@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   hero: { height: heroH, backgroundColor: colors.line },
   heroImage: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
   heroFade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     top: '40%',
   },
   likeBtn: {

@@ -273,6 +273,35 @@ async def job_bootstrap_hotel_pools(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/jobs/refresh-deal-flights")
+async def job_refresh_deal_flights(
+    authorization: Optional[str] = Header(None),
+    slug: Optional[str] = Query(None, description="Limiter à une destination (slug)"),
+    origin: Optional[str] = Query(None, description="Limiter à une origine IATA"),
+):
+    """
+    Upsert fenêtres canoniques + remplit deal_flight_cache (scan + rattachement §7).
+    Pas d'appel LiteAPI. Protégé par CRON_SECRET.
+    """
+    require_cron(authorization)
+    try:
+        from deals.flight_cache import refresh_deal_flights
+        from deals.liteapi_config import load_deals_config
+
+        cfg = load_deals_config()
+        supabase = _svc()
+        slugs = [slug] if slug else None
+        origins = [origin.strip().upper()] if origin else None
+        summary = refresh_deal_flights(
+            supabase, cfg=cfg, origins=origins, slugs=slugs
+        )
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
     """Get a single deal by id or deal_key."""

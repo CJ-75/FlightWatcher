@@ -118,7 +118,7 @@ export function FavoritesScreen() {
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      <FlatList
+      <FlatList<SavedFavorite | LikedDeal>
         style={styles.list}
         contentContainerStyle={{
           paddingHorizontal: spacing.xl,

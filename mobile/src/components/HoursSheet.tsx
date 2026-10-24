@@ -336,7 +336,7 @@ export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(12,18,34,0.45)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(12,18,34,0.45)' },
   sheet: {
     backgroundColor: colors.white,
     borderTopLeftRadius: 24,
