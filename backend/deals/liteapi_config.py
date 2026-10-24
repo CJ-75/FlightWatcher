@@ -234,7 +234,8 @@ def load_deals_config() -> DealsConfig:
         fresh_tau_short_h=_env_float("DEALS_FRESH_TAU_SHORT_H", 3.0),
         revalidate_budget_per_hour=max(1, _env_int("DEALS_REVALIDATE_BUDGET_PER_HOUR", 10)),
         seed_catalog_size=max(5, _env_int("SEED_CATALOG_SIZE", 25)),
-        seed_scan_budget_per_day=max(1, _env_int("SEED_SCAN_BUDGET_PER_DAY", 10)),
+        # v3.2: TP-only seed — higher default than Ryanair-era 10/day
+        seed_scan_budget_per_day=max(1, _env_int("SEED_SCAN_BUDGET_PER_DAY", 80)),
         seed_min_budget_share=min(1.0, max(0.0, _env_float("SEED_MIN_BUDGET_SHARE", 0.2))),
         obs_retention_days=max(7, _env_int("OBS_RETENTION_DAYS", 90)),
         observations_enabled=_env_bool("DEALS_OBSERVATIONS_ENABLED", True),

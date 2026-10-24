@@ -3,28 +3,42 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from api_models import DateAvecHoraire, TripResponse
 from providers.base import SearchParams
+from providers.ryanair_budget import PURPOSE_ORGANIC
 from providers.ryanair_provider import RyanairProvider
 from providers.throttle import is_circuit_open
 from providers.travelpayouts_provider import TravelpayoutsProvider, travelpayouts_enabled
 
 
-def _active_providers() -> list:
+def _active_providers(only: Optional[Sequence[str]] = None) -> list:
+    """
+    Build provider list. `only` restricts to named providers
+    (e.g. seed: ["travelpayouts"]).
+    """
+    allowed = {p.strip().lower() for p in only} if only else None
+
+    def want(name: str) -> bool:
+        return allowed is None or name in allowed
+
     providers = []
-    if is_circuit_open("ryanair"):
-        print("⏸ orchestrator: ryanair circuit open — skip")
-    else:
-        providers.append(RyanairProvider())
-    if travelpayouts_enabled() and not is_circuit_open("travelpayouts"):
-        providers.append(TravelpayoutsProvider())
-    if not providers:
-        # Prefer TP if available when Ryanair is cooling down
-        if travelpayouts_enabled():
-            providers.append(TravelpayoutsProvider())
+    if want("ryanair"):
+        if is_circuit_open("ryanair"):
+            print("⏸ orchestrator: ryanair circuit open — skip")
         else:
+            providers.append(RyanairProvider())
+    if want("travelpayouts") and travelpayouts_enabled() and not is_circuit_open(
+        "travelpayouts"
+    ):
+        providers.append(TravelpayoutsProvider())
+
+    if not providers:
+        # Prefer TP if available when Ryanair is cooling down / filtered out
+        if want("travelpayouts") and travelpayouts_enabled():
+            providers.append(TravelpayoutsProvider())
+        elif want("ryanair"):
             providers.append(RyanairProvider())
     return providers
 
@@ -119,6 +133,7 @@ def _search_one_origin(
     record_prices: bool,
     passengers: int,
     direct: bool,
+    ryanair_purpose: Optional[str],
 ) -> Tuple[List[TripResponse], int]:
     params = SearchParams(
         aeroport_depart=origin,
@@ -131,6 +146,7 @@ def _search_one_origin(
         passengers=passengers,
         direct=direct,
         record_prices=record_prices,
+        ryanair_purpose=ryanair_purpose or PURPOSE_ORGANIC,
     )
     batches: List[List[TripResponse]] = []
     total_queries = 0
@@ -162,15 +178,24 @@ def search_roundtrips(
     record_prices: bool = True,
     passengers: int = 1,
     direct: bool = False,
+    providers: Optional[Sequence[str]] = None,
+    ryanair_purpose: Optional[str] = None,
 ) -> Tuple[List[TripResponse], int]:
+    """
+    Multi-provider round-trip search.
+
+    providers: optional allow-list, e.g. ["travelpayouts"] for seed (v3.2).
+    ryanair_purpose: hourly budget priority (click > revalidate > organic > promote).
+    """
     origins = parse_origins(aeroport_depart)
-    providers = _active_providers()
+    active = _active_providers(only=providers)
+    purpose = ryanair_purpose or PURPOSE_ORGANIC
 
     # Single origin — keep previous behaviour
     if len(origins) == 1:
         trips, nq = _search_one_origin(
             origins[0],
-            providers,
+            active,
             dates_depart,
             dates_retour,
             budget_max,
@@ -180,6 +205,7 @@ def search_roundtrips(
             record_prices,
             passengers,
             direct,
+            purpose,
         )
         cap = max(limite_allers or 50, 30)
         capped = trips[: cap * 2]
@@ -196,7 +222,7 @@ def search_roundtrips(
             pool.submit(
                 _search_one_origin,
                 origin,
-                providers,
+                active,
                 dates_depart,
                 dates_retour,
                 budget_max,
@@ -206,6 +232,7 @@ def search_roundtrips(
                 record_prices,
                 passengers,
                 direct,
+                purpose,
             ): origin
             for origin in origins
         }

@@ -269,8 +269,26 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         "process": process,
         "caches": snapshot,
         "launch": snapshot.get("launch"),
+        "ryanair": _ryanair_ops_snapshot(),
         "go_no_go": verdict,
     }
+
+
+def _ryanair_ops_snapshot() -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    try:
+        from providers.ryanair_budget import status_snapshot
+
+        out["budget"] = status_snapshot()
+    except Exception as e:
+        out["budget"] = {"error": str(e)}
+    try:
+        from providers.ryanair_cache import stats
+
+        out["cache"] = stats()
+    except Exception as e:
+        out["cache"] = {"error": str(e)}
+    return out
 
 
 def _cached_kill_stats(supabase: Any, cfg: Any) -> Dict[str, Any]:

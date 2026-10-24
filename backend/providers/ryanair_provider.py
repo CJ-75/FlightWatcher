@@ -13,6 +13,8 @@ from ryanair import Ryanair
 from api_models import FlightResponse, TripResponse
 from city_names_fr import destination_full_fr
 from providers.base import SearchParams
+from providers.ryanair_budget import PURPOSE_ORGANIC, try_acquire
+from providers import ryanair_cache
 from providers.throttle import (
     is_circuit_open,
     record_provider_error,
@@ -20,6 +22,22 @@ from providers.throttle import (
     wait_provider_slot,
 )
 from supabase_deps import SUPABASE_AVAILABLE, record_price_history
+
+
+def _cache_key(params: SearchParams) -> str:
+    outs = ",".join(sorted(str(d.date)[:10] for d in (params.dates_depart or [])))
+    rets = ",".join(sorted(str(d.date)[:10] for d in (params.dates_retour or [])))
+    dests = ",".join(
+        sorted((params.destinations_incluses or []) or ["*"])
+    )
+    return ryanair_cache.make_key(
+        origin=params.aeroport_depart or "",
+        dest=dests,
+        out_date=outs,
+        ret_date=rets,
+        passengers=params.passengers or 1,
+        budget=int(params.budget_max or 0),
+    )
 
 _ryanair_patched = False
 
@@ -88,6 +106,18 @@ class RyanairProvider:
     def search_roundtrips(self, params: SearchParams) -> Tuple[List[TripResponse], int]:
         if is_circuit_open("ryanair"):
             print("⏸ [ryanair] circuit open — skip")
+            return [], 0
+
+        key = _cache_key(params)
+        cached = ryanair_cache.get(key)
+        if cached is not None:
+            trips, nq = cached
+            print(f"💾 [ryanair] cache hit ({len(trips)} trips)")
+            return list(trips), int(nq)
+
+        purpose = (params.ryanair_purpose or PURPOSE_ORGANIC).lower()
+        if not try_acquire(purpose):
+            print(f"⏸ [ryanair] budget deny purpose={purpose}")
             return [], 0
 
         api = Ryanair(currency="EUR")
@@ -260,4 +290,6 @@ class RyanairProvider:
             except Exception as e:
                 print(f"⚠️ Erreur price_history ryanair: {e}")
 
-        return resultats, api.num_queries
+        nq = api.num_queries
+        ryanair_cache.set(key, (list(resultats), nq))
+        return resultats, nq

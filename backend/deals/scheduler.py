@@ -2,6 +2,7 @@
 Lot A — in-process community deals scheduler (no external cron required).
 
 Enabled with DEALS_SCHEDULER_ENABLED=true. Starts on FastAPI startup.
+v3.2: single-runner lock via deals_job_runs status=running.
 """
 from __future__ import annotations
 
@@ -36,16 +37,38 @@ def _svc():
 
 
 def _safe_job(name: str, fn: Callable[[], Dict[str, Any]]) -> None:
+    from deals.job_lock import release_job_lock, try_acquire_job_lock
     from deals.job_runs import record_job_run
 
     sb = _svc()
     started = datetime.now(timezone.utc)
+    lock_id = try_acquire_job_lock(sb, name)
+    if lock_id is None:
+        record_job_run(
+            sb,
+            name,
+            status="skipped",
+            summary={"reason": "lock_held"},
+            started_at=started,
+        )
+        logger.info("scheduler job skipped (lock) %s", name)
+        return
+
+    unlocked = str(lock_id).startswith(("local-", "fallback-"))
     try:
         summary = fn() or {}
-        record_job_run(sb, name, status="ok", summary=summary, started_at=started)
+        if unlocked:
+            record_job_run(sb, name, status="ok", summary=summary, started_at=started)
+        else:
+            release_job_lock(sb, lock_id, status="ok", summary=summary)
         logger.info("scheduler job ok %s %s", name, summary)
     except Exception as e:
-        record_job_run(sb, name, status="error", error=str(e), started_at=started)
+        if unlocked:
+            record_job_run(
+                sb, name, status="error", error=str(e), started_at=started
+            )
+        else:
+            release_job_lock(sb, lock_id, status="error", error=str(e))
         logger.exception("scheduler job failed %s: %s", name, e)
 
 

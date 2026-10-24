@@ -196,6 +196,12 @@ def send_draft_email(
     if not row:
         return {"ok": False, "error": "not_found"}
 
+    from deals.email_rate_limit import check_and_record
+
+    limited = check_and_record(email_n, draft_token)
+    if limited:
+        return {"ok": False, "error": limited}
+
     from email_notify import send_my_trip_link
 
     city = row.get("city_name") or (row.get("payload") or {}).get("city") or "week-end"

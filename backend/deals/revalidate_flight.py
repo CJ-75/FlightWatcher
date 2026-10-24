@@ -70,6 +70,7 @@ def revalidate_flight_for_passengers(
 
     from api_models import DateAvecHoraire
     from providers.orchestrator import search_roundtrips
+    from providers.ryanair_budget import PURPOSE_CLICK
 
     try:
         trips, _ = search_roundtrips(
@@ -82,6 +83,7 @@ def revalidate_flight_for_passengers(
             record_prices=False,
             passengers=adults,
             direct=True,
+            ryanair_purpose=PURPOSE_CLICK,
         )
         match = [
             t

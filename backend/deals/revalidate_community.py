@@ -86,6 +86,8 @@ def revalidate_deals(
 
         checked += 1
         try:
+            from providers.ryanair_budget import PURPOSE_REVALIDATE
+
             trips, _ = search_roundtrips(
                 aeroport_depart=origin,
                 dates_depart=[DateAvecHoraire(date=out_d)],
@@ -96,6 +98,7 @@ def revalidate_deals(
                 record_prices=False,
                 passengers=1,
                 direct=False,
+                ryanair_purpose=PURPOSE_REVALIDATE,
             )
             match = [
                 t

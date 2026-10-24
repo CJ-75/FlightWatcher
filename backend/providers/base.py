@@ -19,6 +19,8 @@ class SearchParams:
     passengers: int = 1
     direct: bool = False
     record_prices: bool = True
+    # v3.2 — Ryanair hourly budget purpose (click|revalidate|organic|promote)
+    ryanair_purpose: Optional[str] = None
 
 
 class FlightProvider(Protocol):

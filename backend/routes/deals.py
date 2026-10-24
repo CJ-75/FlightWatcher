@@ -814,6 +814,12 @@ async def email_my_trip(draft_token: str, body: MyTripEmailRequest):
                 code = 404
             elif err == "email_not_sent":
                 code = 502
+            elif err in (
+                "email_rate_limited",
+                "draft_rate_limited",
+                "global_email_rate_limited",
+            ):
+                code = 429
             raise HTTPException(status_code=code, detail=err)
         return result
     except HTTPException:

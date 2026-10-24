@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS deals_job_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'ok',  -- ok | error | skipped
+    status TEXT NOT NULL DEFAULT 'ok',  -- ok | error | skipped | running (v3.2 lock)
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     finished_at TIMESTAMPTZ,
     summary JSONB NOT NULL DEFAULT '{}'::jsonb,

@@ -6,15 +6,12 @@ import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { DealWeekendCalendar } from './DealWeekendCalendar'
-import { BudgetSlider } from './BudgetSlider'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
 
-const BUDGET_MIN = 120
-const BUDGET_MAX = 450
 const springConfig = {
   type: 'spring' as const,
   stiffness: 300,
@@ -32,9 +29,6 @@ export function DealsTab() {
   const [toast, setToast] = useState<string | null>(null)
 
   const [origin, setOrigin] = useState('')
-  const [budgetUnlimited, setBudgetUnlimited] = useState(true)
-  const [maxPp, setMaxPp] = useState(300)
-  const [windowKind, setWindowKind] = useState<'' | DealWindowKind>('')
   const [adults, setAdults] = useState(2)
   const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [readonlyBanner, setReadonlyBanner] = useState(false)
@@ -83,8 +77,6 @@ export function DealsTab() {
     try {
       const list = await getApiClient().getDeals({
         origin: origin || undefined,
-        window: windowKind || undefined,
-        max_pp: budgetUnlimited ? undefined : maxPp,
         adults,
       })
       setDeals(Array.isArray(list) ? list : [])
@@ -95,7 +87,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, origin, windowKind, maxPp, adults, budgetUnlimited])
+  }, [t, loadLikes, origin, adults])
 
   useEffect(() => {
     void load()
@@ -164,24 +156,14 @@ export function DealsTab() {
   const filterLabel = useMemo(() => {
     const parts: string[] = []
     if (origin) parts.push(origin.split(',')[0] || origin)
-    if (!budgetUnlimited) parts.push(`≤ ${maxPp} €`)
-    if (windowKind) parts.push(windowKind === 'FRI_SUN' ? 'ven→dim' : 'sam→lun')
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
     return parts.join(' · ')
-  }, [origin, maxPp, windowKind, adults, budgetUnlimited])
+  }, [origin, adults])
 
   const calendarDeal = deals.find((d) => d.destination) || null
-
-  const windowChips: { key: '' | DealWindowKind; label: string }[] = [
-    { key: '', label: t('deals.filterAll') },
-    ...(windowKinds.includes('FRI_SUN')
-      ? [{ key: 'FRI_SUN' as const, label: 'Ven → Dim' }]
-      : []),
-    ...(windowKinds.includes('SAT_MON')
-      ? [{ key: 'SAT_MON' as const, label: 'Sam → Lun' }]
-      : []),
-  ]
+  const calendarWindow: DealWindowKind =
+    windowKinds.includes('FRI_SUN') ? 'FRI_SUN' : windowKinds[0] || 'FRI_SUN'
 
   return (
     <div className="w-full">
@@ -204,36 +186,6 @@ export function DealsTab() {
         transition={springConfig}
         className="w-full app-card p-4 sm:p-6 md:p-8 mb-6 sm:mb-8"
       >
-        <BudgetSlider
-          value={maxPp}
-          min={BUDGET_MIN}
-          max={BUDGET_MAX}
-          label={t('deals.filterBudget')}
-          hint="Prix max vol + hôtel / personne"
-          displayValue={budgetUnlimited ? 'Sans limite' : undefined}
-          onChange={(v) => {
-            setBudgetUnlimited(false)
-            setMaxPp(v)
-          }}
-        />
-        <div className="flex flex-wrap gap-2 -mt-4 mb-6 sm:mb-8">
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setBudgetUnlimited(true)}
-            className={`rounded-full px-4 py-2 text-xs sm:text-sm font-semibold transition-all min-h-[40px] ${
-              budgetUnlimited
-                ? 'bg-primary-500 text-white shadow-soft'
-                : 'bg-canvas text-ink-soft border border-line hover:bg-primary-50 hover:text-primary-700'
-            }`}
-          >
-            Sans limite
-          </motion.button>
-        </div>
-
-        <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
-
         <div className="mb-4 sm:mb-5">
           <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
             <label className="text-base sm:text-lg font-bold text-slate-900 block">
@@ -257,42 +209,7 @@ export function DealsTab() {
           ) : null}
         </div>
 
-        <div className="mb-1">
-          <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
-            {t('deals.filterWindow')}
-          </label>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            {windowChips.map((chip) => {
-              const isActive = windowKind === chip.key
-              return (
-                <motion.button
-                  key={chip.key || 'all'}
-                  type="button"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  transition={springConfig}
-                  onClick={() => setWindowKind(chip.key)}
-                  className={`rounded-full px-3 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[40px] sm:min-h-[44px] flex items-center justify-center relative whitespace-nowrap ${
-                    isActive
-                      ? 'bg-primary-500 text-white shadow-soft'
-                      : 'bg-canvas text-ink-soft hover:bg-primary-50 hover:text-primary-700 border border-line'
-                  }`}
-                >
-                  {isActive && chip.key ? (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-accent-500 rounded-full flex items-center justify-center text-white text-[8px] sm:text-xs font-bold"
-                    >
-                      ✓
-                    </motion.span>
-                  ) : null}
-                  <span className="truncate">{chip.label}</span>
-                </motion.button>
-              )
-            })}
-          </div>
-        </div>
+        <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
       </motion.div>
 
       {!loading && !error && deals.length > 0 ? (
@@ -308,7 +225,7 @@ export function DealsTab() {
           cityName={calendarDeal.city}
           origin={origin}
           adults={adults}
-          windowKind={windowKind || 'FRI_SUN'}
+          windowKind={calendarWindow}
         />
       ) : null}
 
@@ -379,21 +296,16 @@ export function DealsTab() {
           onToggleLike={() => void toggleLike(selected)}
           onClose={() => setSelected(null)}
           onOtherDates={() => {
+            setSelected(null)
             goSearch({
-              destination: selected.destination || selected.flight?.destination_iata,
+              destination: selected.destination,
               city: selected.city,
             })
-            setSelected(null)
           }}
         />
       ) : null}
 
-      <Toast
-        message={toast || ''}
-        type="info"
-        isVisible={!!toast}
-        onClose={() => setToast(null)}
-      />
+      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
     </div>
   )
 }

@@ -303,7 +303,8 @@ def _week_stays(n: int = 2) -> List[Tuple[str, str]]:
 def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = False) -> Dict[str, Any]:
     """
     Scan seed catalog × FR origins into price_observations (source=seed_batch).
-    Respects SEED_SCAN_BUDGET_PER_DAY; skips cells with fresh organic obs (<12h).
+    v3.2: Travelpayouts only (no Ryanair). Respects SEED_SCAN_BUDGET_PER_DAY;
+    skips cells with fresh organic obs (<12h).
     """
     cfg = cfg or load_deals_config()
     origins = ordered_seed_origins(cfg)
@@ -363,7 +364,8 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
             for out_d, ret_d in date_pairs:
                 if scans_done >= remaining:
                     break
-                if is_circuit_open("ryanair") and is_circuit_open("travelpayouts"):
+                # v3.2: seed is Travelpayouts-only (no Ryanair)
+                if is_circuit_open("travelpayouts"):
                     aborted_circuit = True
                     break
                 # Skip if fresh organic exists
@@ -410,6 +412,7 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
                         record_prices=False,  # we write seed_batch ourselves
                         passengers=1,
                         direct=True,
+                        providers=["travelpayouts"],
                     )
                     # Filter to dest
                     trips = [
@@ -427,7 +430,7 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
                     errors += 1
                     logger.warning("seed_scan %s→%s %s: %s", origin, dest_iata, out_d, e)
                     seed_cell_pause()
-                    if is_circuit_open("ryanair") and errors >= 5:
+                    if is_circuit_open("travelpayouts") and errors >= 5:
                         aborted_circuit = True
                         break
             if aborted_circuit:
@@ -454,6 +457,7 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
         "skipped_organic": skipped_organic,
         "errors": errors,
         "aborted_circuit": aborted_circuit,
+        "providers": ["travelpayouts"],
         "origins_order": origins,
         "date_pairs": len(date_pairs),
         "avg_cell_gap_h": avg_gap,
