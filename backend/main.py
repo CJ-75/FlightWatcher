@@ -80,6 +80,12 @@ def _warn_community_bootstrap() -> None:
 async def _lifespan(app: FastAPI):
     _warn_community_bootstrap()
     try:
+        from scan_log import log_path, slog
+
+        slog(f"Scan provider log file: {log_path()}")
+    except Exception:
+        pass
+    try:
         from deals.scheduler import start_deals_scheduler
 
         if start_deals_scheduler():

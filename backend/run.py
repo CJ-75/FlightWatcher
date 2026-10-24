@@ -30,17 +30,40 @@ if __name__ == "__main__":
     
     # Démarrer le serveur
     try:
+        # Windows + reload = process enfant dont les prints n'apparaissent souvent PAS
+        # dans le terminal Cursor. Défaut: pas de reload. Opt-in: UVICORN_RELOAD=1
+        default_reload = "0" if platform.system() == "Windows" else "1"
+        use_reload = (os.getenv("UVICORN_RELOAD") or default_reload).strip() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        try:
+            from scan_log import log_path
+
+            scan_log = log_path()
+        except Exception:
+            scan_log = "backend/logs/scan.log"
+
         print("🚀 Démarrage du serveur FastAPI...", flush=True)
         print("📡 Serveur accessible sur http://localhost:8000", flush=True)
         print("📚 Documentation API: http://localhost:8000/docs", flush=True)
+        print(f"📋 Scan/provider logs -> {scan_log}", flush=True)
+        print(
+            f"   reload={'ON' if use_reload else 'OFF'} "
+            f"(UVICORN_RELOAD=1 pour auto-reload)",
+            flush=True,
+        )
         print("\n💡 Appuyez sur Ctrl+C pour arrêter le serveur\n", flush=True)
-        
+
         uvicorn.run(
             "main:app",
             host="0.0.0.0",
             port=8000,
-            reload=True,
-            log_level="info"
+            reload=use_reload,
+            log_level="info",
+            access_log=True,
         )
     except KeyboardInterrupt:
         print("\n\n🛑 Arrêt du serveur en cours...")

@@ -31,3 +31,5 @@ Thumbs.db
 backend/.env
 frontend/.env
 mobile/.env
+
+backend/logs/*.log

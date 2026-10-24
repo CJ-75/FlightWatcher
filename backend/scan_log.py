@@ -1,26 +1,49 @@
-"""Verbose scan / inspire terminal logs (always flushed to the backend terminal)."""
+"""Verbose scan / inspire logs — file + console (Windows-safe)."""
 from __future__ import annotations
 
 import logging
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional, Sequence
 
-# Uvicorn shows this logger in the same terminal as INFO: lines
+_LOG_DIR = Path(__file__).resolve().parent / "logs"
+_LOG_FILE = _LOG_DIR / "scan.log"
+
+# Uvicorn / Cursor often miss child-process prints under reload on Windows.
+# Always mirror to this file — open it or: Get-Content -Wait backend/logs/scan.log
 _logger = logging.getLogger("flightwatcher.scan")
-if not _logger.handlers:
-    _handler = logging.StreamHandler(sys.stderr)
-    _handler.setFormatter(logging.Formatter("%(message)s"))
-    _logger.addHandler(_handler)
-    _logger.setLevel(logging.INFO)
-    _logger.propagate = False
+_logger.setLevel(logging.INFO)
+_logger.propagate = True  # let uvicorn root handlers show it when possible
+if not any(isinstance(h, logging.FileHandler) for h in _logger.handlers):
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(_LOG_FILE, encoding="utf-8")
+        fh.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+        _logger.addHandler(fh)
+    except Exception:
+        pass
+if not any(isinstance(h, logging.StreamHandler) for h in _logger.handlers):
+    sh = logging.StreamHandler(sys.stderr)
+    sh.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(sh)
+
+
+def log_path() -> str:
+    return str(_LOG_FILE)
 
 
 def slog(msg: str = "", *args: Any) -> None:
-    """Print one line to the backend terminal immediately (stdout + stderr + logger)."""
+    """One line to scan.log + stderr + stdout (best-effort)."""
     if args:
         text = msg % args if "%" in msg else " ".join([msg, *[str(a) for a in args]])
     else:
         text = str(msg)
+
+    try:
+        _logger.info(text)
+    except Exception:
+        pass
 
     def _safe_write(stream) -> None:
         try:
@@ -32,15 +55,21 @@ def slog(msg: str = "", *args: Any) -> None:
         except Exception:
             pass
 
-    _safe_write(sys.stdout)
     _safe_write(sys.stderr)
+    _safe_write(sys.stdout)
     try:
         sys.stdout.flush()
         sys.stderr.flush()
     except Exception:
         pass
+
+    # Direct append — survives missing logger handlers / reload quirks
     try:
-        _logger.info(text)
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        with open(_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{ts} {text}\n")
+            f.flush()
     except Exception:
         pass
 
@@ -76,7 +105,7 @@ def slog_provider_results(
     elapsed_s: float = 0.0,
     pending_names: Optional[Sequence[str]] = None,
 ) -> None:
-    """ASCII summary — visible even on Windows CP1252 consoles."""
+    """Ryanair vs Travelpayouts summary (ASCII — Windows CP1252 safe)."""
     ry = counts.get("ryanair")
     tp = counts.get("travelpayouts")
     slog("")
@@ -98,4 +127,5 @@ def slog_provider_results(
     if pending_names:
         slog(f"  still running : {', '.join(pending_names)}")
     slog("-" * 56)
+    slog(f"  (log file: {log_path()})")
     slog("")
