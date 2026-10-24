@@ -320,25 +320,25 @@ export function DealDetailModal({
             language={language === 'en' ? 'en' : 'fr'}
             topRight={
               <>
-                {onToggleLike ? (
-                  <button
-                    type="button"
-                    onClick={onToggleLike}
-                    aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                    className={`w-9 h-9 rounded-full shadow flex items-center justify-center ${
-                      liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-600'
-                    }`}
-                  >
-                    <HeartSvg filled={!!liked} />
-                  </button>
-                ) : null}
+              {onToggleLike ? (
                 <button
                   type="button"
-                  onClick={onClose}
-                  className="w-9 h-9 rounded-full bg-white/95 text-slate-800 font-bold shadow"
+                  onClick={onToggleLike}
+                  aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                  className={`w-9 h-9 rounded-full shadow flex items-center justify-center ${
+                    liked ? 'bg-white text-primary-500' : 'bg-white/95 text-slate-600'
+                  }`}
                 >
-                  ×
+                  <HeartSvg filled={!!liked} />
                 </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-9 h-9 rounded-full bg-white/95 text-slate-800 font-bold shadow"
+              >
+                ×
+              </button>
               </>
             }
             bottomLeft={
@@ -350,7 +350,7 @@ export function DealDetailModal({
                 ) : null}
                 <h2 className="text-white text-2xl font-black drop-shadow">{deal.city}</h2>
                 <p className="text-white/85 text-sm drop-shadow">{deal.country}</p>
-              </div>
+            </div>
             }
           />
 
@@ -358,11 +358,11 @@ export function DealDetailModal({
             {/* 1. Decision header */}
             <header className="space-y-3">
               <div className="hidden sm:block">
-                {deal.badge ? (
-                  <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">
-                    {deal.badge}
-                  </span>
-                ) : null}
+              {deal.badge ? (
+                <span className="inline-block bg-accent-500 text-white text-xs font-bold px-3 py-1 rounded-full mb-2">
+                  {deal.badge}
+                </span>
+              ) : null}
                 <h2 className="text-2xl sm:text-[1.75rem] font-black text-ink tracking-tight leading-tight">
                   {deal.city}
                   <span className="text-slate-400 font-bold text-lg sm:text-xl"> · {deal.country}</span>
@@ -398,8 +398,8 @@ export function DealDetailModal({
                   <p className="text-[11px] text-primary-700/80 mt-1 font-medium line-clamp-2 max-w-[9rem] sm:max-w-none">
                     depuis {deal.origin_airport_label || deal.departure_airport || '—'}
                   </p>
-                </div>
-              </div>
+            </div>
+          </div>
 
               {/* Quick decision facts */}
               <div className="flex flex-wrap gap-1.5 pt-1">
@@ -489,7 +489,7 @@ export function DealDetailModal({
                 {deal.route_hint ? (
                   <p className="text-[11px] text-slate-400 mt-1">{deal.route_hint}</p>
                 ) : null}
-              </div>
+            </div>
 
               <div className="rounded-2xl border border-line bg-white p-4">
                 <div className="flex items-center justify-between gap-2 mb-3">
@@ -652,9 +652,9 @@ export function DealDetailModal({
                   >
                     <span className="text-primary-500 font-black shrink-0">✓</span>
                     <span className="leading-snug">{h}</span>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
             ) : null}
 
             <DealComplianceNotice
@@ -697,10 +697,10 @@ export function DealDetailModal({
                   </button>
                 ) : null
               ) : hasPartnerUrl ? (
-                <a
-                  href={deal.booking_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+            <a
+              href={deal.booking_url}
+              target="_blank"
+              rel="noopener noreferrer"
                   className="block w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl transition-colors"
                 >
                   {t('deals.viewOffer')}
