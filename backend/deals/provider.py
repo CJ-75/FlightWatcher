@@ -328,7 +328,9 @@ class LiteApiDealProvider(DealProvider):
                 )
                 if community:
                     return community
-                # Socle: fall back to legacy weekend catalogue while seed fills
+                if not cfg.legacy_fallback_enabled:
+                    return []
+                # Dev-only socle when flag true
             return load_caches_and_assemble(
                 supabase,
                 origin=origin,

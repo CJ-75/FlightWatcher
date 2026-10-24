@@ -130,6 +130,11 @@ class TestConfigGuards(unittest.TestCase):
             obs_retention_days=90,
             observations_enabled=True,
             community_score_weights={},
+            scheduler_enabled=False,
+            baseline_max_age_h=36,
+            legacy_fallback_enabled=False,
+            calendar_enabled=False,
+            min_discount=0.15,
         )
         with self.assertRaises(LiteApiConfigError):
             validate_liteapi_keys(cfg)

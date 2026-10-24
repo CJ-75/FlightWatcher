@@ -246,6 +246,7 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         snapshot["booking_funnel"] = _booking_funnel(supabase)
         snapshot["ssp"] = _ssp_missing_share(supabase)
         snapshot["community"] = _community_stats(supabase)
+        snapshot["baseline_guard"] = _baseline_guard_stats(supabase, cfg)
 
     verdict = go_no_go(cfg, snapshot)
     return {
@@ -256,10 +257,29 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         "ui_enabled": cfg.ui_enabled,
         "booking_enabled": cfg.booking_enabled,
         "seed_scan_budget_per_day": cfg.seed_scan_budget_per_day,
+        "scheduler_enabled": cfg.scheduler_enabled,
         "process": process,
         "caches": snapshot,
         "go_no_go": verdict,
     }
+
+
+def _baseline_guard_stats(supabase: Any, cfg: Any) -> Dict[str, Any]:
+    try:
+        from deals.baseline_guard import baselines_freshness
+
+        fresh, last, reason = baselines_freshness(
+            supabase, max_age_h=getattr(cfg, "baseline_max_age_h", 36.0)
+        )
+        return {
+            "fresh": fresh,
+            "last_ok_at": last.isoformat() if last else None,
+            "reason": reason,
+            "max_age_h": getattr(cfg, "baseline_max_age_h", 36.0),
+            "percent_badges_allowed": fresh,
+        }
+    except Exception as e:
+        return {"fresh": None, "error": str(e)}
 
 
 def _community_stats(supabase: Any) -> Dict[str, Any]:

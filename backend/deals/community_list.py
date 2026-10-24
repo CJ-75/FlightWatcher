@@ -50,14 +50,23 @@ def badge_for_baseline(baseline: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def row_to_travel_deal(row: Dict[str, Any], *, adults: int = 2) -> Dict[str, Any]:
+def row_to_travel_deal(
+    row: Dict[str, Any],
+    *,
+    adults: int = 2,
+    baselines_fresh: bool = True,
+) -> Dict[str, Any]:
+    from deals.baseline_guard import soften_badge_if_stale
+
     flight = row.get("flight_snapshot") or {}
     baseline = row.get("baseline_snapshot") or {}
     hotels = row.get("hotel_top3") or []
     hotel = hotels[0] if hotels else None
     price_flight = float(flight.get("price_pp_eur") or 0)
     city = flight.get("city_name") or row.get("dest_iata") or ""
-    badge = badge_for_baseline(baseline)
+    badge = soften_badge_if_stale(
+        badge_for_baseline(baseline), baselines_fresh=baselines_fresh
+    )
 
     hotel_pp = None
     hotel_name = None
@@ -129,6 +138,22 @@ def row_to_travel_deal(row: Dict[str, Any], *, adults: int = 2) -> Dict[str, Any
     }
 
 
+def _baselines_fresh_flag(supabase) -> bool:
+    try:
+        from deals.baseline_guard import baselines_freshness, log_stale_alert
+        from deals.liteapi_config import load_deals_config
+
+        cfg = load_deals_config()
+        fresh, last, reason = baselines_freshness(
+            supabase, max_age_h=cfg.baseline_max_age_h
+        )
+        if not fresh:
+            log_stale_alert(last, reason)
+        return fresh
+    except Exception:
+        return True
+
+
 def list_community_deals(
     supabase,
     *,
@@ -151,9 +176,10 @@ def list_community_deals(
     except Exception:
         return []
     adults_n = int(adults or 2)
+    fresh = _baselines_fresh_flag(supabase)
     deals = []
     for row in res.data or []:
-        d = row_to_travel_deal(row, adults=adults_n)
+        d = row_to_travel_deal(row, adults=adults_n, baselines_fresh=fresh)
         if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
             continue
         deals.append(d)
@@ -171,6 +197,7 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         )
         if not res.data:
             return None
-        return row_to_travel_deal(res.data[0])
+        fresh = _baselines_fresh_flag(supabase)
+        return row_to_travel_deal(res.data[0], baselines_fresh=fresh)
     except Exception:
         return None

@@ -150,6 +150,12 @@ class DealsConfig:
     obs_retention_days: int
     observations_enabled: bool
     community_score_weights: Dict[str, float]
+    # v3.1 Lot A (+ early flags for E)
+    scheduler_enabled: bool
+    baseline_max_age_h: float
+    legacy_fallback_enabled: bool
+    calendar_enabled: bool
+    min_discount: float
 
     @property
     def is_liteapi(self) -> bool:
@@ -229,6 +235,11 @@ def load_deals_config() -> DealsConfig:
         community_score_weights=_parse_community_score_weights(
             _env("DEALS_COMMUNITY_SCORE_WEIGHTS")
         ),
+        scheduler_enabled=_env_bool("DEALS_SCHEDULER_ENABLED", False),
+        baseline_max_age_h=_env_float("DEALS_BASELINE_MAX_AGE_H", 36.0),
+        legacy_fallback_enabled=_env_bool("DEALS_LEGACY_FALLBACK_ENABLED", False),
+        calendar_enabled=_env_bool("DEALS_CALENDAR_ENABLED", False),
+        min_discount=min(0.9, max(0.0, _env_float("DEALS_MIN_DISCOUNT", 0.15))),
     )
 
 
@@ -292,4 +303,8 @@ def deals_config_public_dict(cfg: Optional[DealsConfig] = None) -> Dict[str, Any
         "min_per_origin": cfg.min_per_origin,
         "seed_catalog_size": cfg.seed_catalog_size,
         "seed_scan_budget_per_day": cfg.seed_scan_budget_per_day,
+        "scheduler_enabled": cfg.scheduler_enabled,
+        "baseline_max_age_h": cfg.baseline_max_age_h,
+        "legacy_fallback_enabled": cfg.legacy_fallback_enabled,
+        "calendar_enabled": cfg.calendar_enabled,
     }
