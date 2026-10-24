@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import sys
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "ryanair-py"))
 
@@ -17,6 +19,7 @@ from providers.ryanair_budget import PURPOSE_ORGANIC, try_acquire
 from providers import ryanair_cache
 from providers.throttle import (
     is_circuit_open,
+    is_fast_search_path,
     record_provider_error,
     record_provider_ok,
     wait_provider_slot,
@@ -208,19 +211,24 @@ class RyanairProvider:
             vols_aller_optimises.values(), key=lambda v: v.price
         )[:limite_allers]
 
-        for vol_aller in vols_aller_filtres:
+        # Parallel return legs on fast Search path (seed stays serial / gentler)
+        workers_hint = 6 if is_fast_search_path() else 1
+        workers = min(workers_hint, max(1, len(vols_aller_filtres)))
+
+        def _best_return(vol_aller) -> Optional[TripResponse]:
+            if is_circuit_open("ryanair"):
+                return None
+            # Own client per worker — Session is not thread-safe
+            local_api = api if workers <= 1 else Ryanair(currency="EUR")
             destination_code = vol_aller.destination
             meilleur_retour = None
             meilleur_prix_total = float("inf")
-
-            if is_circuit_open("ryanair"):
-                break
             for date_retour_config in dates_retour:
                 if is_circuit_open("ryanair"):
                     break
                 date_retour_obj = datetime.fromisoformat(date_retour_config.date).date()
                 try:
-                    vols_retour = api.get_cheapest_flights(
+                    vols_retour = local_api.get_cheapest_flights(
                         airport=destination_code,
                         date_from=date_retour_obj,
                         date_to=date_retour_obj,
@@ -253,51 +261,72 @@ class RyanairProvider:
                 except Exception:
                     continue
 
-            if meilleur_retour:
-                aller_pp = round(vol_aller.price / pax, 2)
-                retour_pp = round(meilleur_retour.price / pax, 2)
-                resultats.append(
-                    TripResponse(
-                        aller=_localize_flight(
-                            FlightResponse(
-                                flightNumber=vol_aller.flightNumber,
-                                origin=vol_aller.origin,
-                                originFull=vol_aller.originFull,
-                                destination=vol_aller.destination,
-                                destinationFull=vol_aller.destinationFull,
-                                departureTime=vol_aller.departureTime.isoformat(),
-                                price=aller_pp,
-                                currency=vol_aller.currency,
-                            )
-                        ),
-                        retour=_localize_flight(
-                            FlightResponse(
-                                flightNumber=meilleur_retour.flightNumber,
-                                origin=meilleur_retour.origin,
-                                originFull=meilleur_retour.originFull,
-                                destination=meilleur_retour.destination,
-                                destinationFull=meilleur_retour.destinationFull,
-                                departureTime=meilleur_retour.departureTime.isoformat(),
-                                price=retour_pp,
-                                currency=meilleur_retour.currency,
-                            )
-                        ),
-                        prix_total=round(aller_pp + retour_pp, 2),
-                        destination_code=destination_code,
-                        provider="ryanair",
-                        airline="FR",
-                        transfers=0,
-                        booking_url=None,
+            if not meilleur_retour:
+                return None
+            aller_pp = round(vol_aller.price / pax, 2)
+            retour_pp = round(meilleur_retour.price / pax, 2)
+            return TripResponse(
+                aller=_localize_flight(
+                    FlightResponse(
+                        flightNumber=vol_aller.flightNumber,
+                        origin=vol_aller.origin,
+                        originFull=vol_aller.originFull,
+                        destination=vol_aller.destination,
+                        destinationFull=vol_aller.destinationFull,
+                        departureTime=vol_aller.departureTime.isoformat(),
+                        price=aller_pp,
+                        currency=vol_aller.currency,
                     )
-                )
+                ),
+                retour=_localize_flight(
+                    FlightResponse(
+                        flightNumber=meilleur_retour.flightNumber,
+                        origin=meilleur_retour.origin,
+                        originFull=meilleur_retour.originFull,
+                        destination=meilleur_retour.destination,
+                        destinationFull=meilleur_retour.destinationFull,
+                        departureTime=meilleur_retour.departureTime.isoformat(),
+                        price=retour_pp,
+                        currency=meilleur_retour.currency,
+                    )
+                ),
+                prix_total=round(aller_pp + retour_pp, 2),
+                destination_code=destination_code,
+                provider="ryanair",
+                airline="FR",
+                transfers=0,
+                booking_url=None,
+            )
 
-        slog(f"  ✓ [ryanair] {len(resultats)} A/R")
+        if workers == 1:
+            for vol_aller in vols_aller_filtres:
+                trip = _best_return(vol_aller)
+                if trip:
+                    resultats.append(trip)
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futs = [pool.submit(_best_return, v) for v in vols_aller_filtres]
+                for fut in as_completed(futs):
+                    try:
+                        trip = fut.result()
+                        if trip:
+                            resultats.append(trip)
+                    except Exception:
+                        continue
+
+        resultats.sort(key=lambda t: t.prix_total)
+        slog(f"  ✓ [ryanair] {len(resultats)} A/R (workers={workers})")
 
         if params.record_prices and resultats and SUPABASE_AVAILABLE:
-            try:
-                record_price_history([trip.model_dump() for trip in resultats])
-            except Exception as e:
-                slog(f"⚠️ Erreur price_history ryanair: {e}")
+            payload = [trip.model_dump() for trip in resultats]
+
+            def _bg_history() -> None:
+                try:
+                    record_price_history(payload)
+                except Exception as e:
+                    slog(f"⚠️ Erreur price_history ryanair: {e}")
+
+            threading.Thread(target=_bg_history, daemon=True, name="fw-ryanair-hist").start()
 
         nq = api.num_queries
         ryanair_cache.set(key, (list(resultats), nq))

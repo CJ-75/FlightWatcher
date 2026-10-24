@@ -347,31 +347,53 @@ class TravelpayoutsProvider:
             f"direct={direct}, budget={budget_max}€, pax={pax})..."
         )
 
-        trips: List[TripResponse] = []
-        queries = 0
+        jobs: List[Tuple[Optional[str], str, str]] = []
         for dest in dest_targets[:40]:
             for dep_day, ret_day in uniq_pairs:
-                rows, nq = _fetch_prices(
-                    origin=origin,
-                    destination=dest,
-                    departure_at=dep_day,
-                    return_at=ret_day,
+                jobs.append((dest, dep_day, ret_day))
+
+        trips: List[TripResponse] = []
+        queries = 0
+
+        def _one(job: Tuple[Optional[str], str, str]) -> Tuple[List[TripResponse], int]:
+            dest, dep_day, ret_day = job
+            rows, nq = _fetch_prices(
+                origin=origin,
+                destination=dest,
+                departure_at=dep_day,
+                return_at=ret_day,
+                direct=direct,
+                limit=limite,
+            )
+            out: List[TripResponse] = []
+            for offer in rows:
+                trip = _offer_to_trip(
+                    offer,
+                    budget_max=budget_max,
+                    dates_depart_by_day=dates_depart_by_day,
+                    dates_retour_by_day=dates_retour_by_day,
+                    destinations_exclues=destinations_exclues,
+                    destinations_incluses=destinations_incluses,
                     direct=direct,
-                    limit=limite,
                 )
-                queries += nq
-                for offer in rows:
-                    trip = _offer_to_trip(
-                        offer,
-                        budget_max=budget_max,
-                        dates_depart_by_day=dates_depart_by_day,
-                        dates_retour_by_day=dates_retour_by_day,
-                        destinations_exclues=destinations_exclues,
-                        destinations_incluses=destinations_incluses,
-                        direct=direct,
-                    )
-                    if trip:
-                        trips.append(trip)
+                if trip:
+                    out.append(trip)
+            return out, nq
+
+        # Parallel date-pair fetches (TP is independent of Ryanair throttle)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from providers.throttle import is_fast_search_path
+
+        workers = min(8 if is_fast_search_path() else 3, max(1, len(jobs)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(_one, j) for j in jobs]
+            for fut in as_completed(futs):
+                try:
+                    batch, nq = fut.result()
+                    trips.extend(batch)
+                    queries += nq
+                except Exception as e:
+                    slog(f"  [travelpayouts] pair error: {e}")
 
         # Best offer per destination (cheapest)
         by_dest: Dict[str, TripResponse] = {}
@@ -381,5 +403,7 @@ class TravelpayoutsProvider:
                 by_dest[t.destination_code] = t
 
         resultats = sorted(by_dest.values(), key=lambda t: t.prix_total)[:limite]
-        slog(f"  ✓ [travelpayouts] {len(resultats)} A/R ({queries} req)")
+        slog(
+            f"  ✓ [travelpayouts] {len(resultats)} A/R ({queries} req, workers={workers})"
+        )
         return resultats, queries

@@ -213,7 +213,8 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
                 dates_depart=dates_depart,
                 dates_retour=dates_retour,
                 budget_max=request.budget,
-                limite_allers=request.limite_allers or 30,
+                # 18 dests max: enough variety, fewer Ryanair return legs
+                limite_allers=request.limite_allers or 18,
                 destinations_exclues=request.destinations_exclues or [],
                 destinations_incluses=None,
                 record_prices=True,

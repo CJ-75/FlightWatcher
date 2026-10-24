@@ -1,7 +1,9 @@
 """
-Global provider call throttle + circuit breaker (403/429).
+Per-provider throttle + circuit breaker (403/429).
 
-Stops seed/revalidate from hammering Ryanair/Travelpayouts in a tight loop.
+Ryanair and Travelpayouts must NOT share one global slot — otherwise Search
+serializes both and feels hung. Seed/revalidate keep a slower gap; organic
+Search uses SEARCH_PROVIDER_MIN_INTERVAL_S (fast path).
 """
 from __future__ import annotations
 
@@ -9,16 +11,54 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterator, Optional
 
 logger = logging.getLogger("providers.throttle")
 
 _lock = threading.Lock()
-_last_call_at = 0.0
+_last_call_at: dict[str, float] = {}
 _circuits: dict[str, dict] = {}  # name -> {open_until, fails, last_status}
+# Process-wide depth so ThreadPool workers inherit the fast Search path
+_fast_depth = 0
 
 
-def _min_interval_s() -> float:
+def is_fast_search_path() -> bool:
+    return _fast_depth > 0
+
+
+@contextmanager
+def fast_search_path(enabled: bool = True) -> Iterator[None]:
+    """Organic inspire/scan: tighter gaps (visible to all worker threads)."""
+    global _fast_depth
+    if not enabled:
+        yield
+        return
+    with _lock:
+        _fast_depth += 1
+    try:
+        yield
+    finally:
+        with _lock:
+            _fast_depth = max(0, _fast_depth - 1)
+
+
+def _min_interval_s(provider: str = "") -> float:
+    name = (provider or "").lower()
+    # Per-provider override wins
+    specific_key = f"PROVIDER_{name.upper()}_MIN_INTERVAL_S" if name else ""
+    if specific_key:
+        raw = os.getenv(specific_key)
+        if raw not in (None, ""):
+            try:
+                return max(0.0, float(raw))
+            except (TypeError, ValueError):
+                pass
+    if is_fast_search_path():
+        try:
+            return max(0.0, float(os.getenv("SEARCH_PROVIDER_MIN_INTERVAL_S", "0.15")))
+        except (TypeError, ValueError):
+            return 0.15
     try:
         return max(0.0, float(os.getenv("PROVIDER_MIN_INTERVAL_S", "1.0")))
     except (TypeError, ValueError):
@@ -47,19 +87,18 @@ def _seed_pause_s() -> float:
 
 
 def wait_provider_slot(provider: str = "") -> None:
-    """Serialize outbound provider HTTP with a minimum gap.
-
-    Sleep happens *outside* the lock so parallel searches / circuit checks
-    are not blocked for the whole gap (was causing Search to look hung).
-    """
-    global _last_call_at
-    gap = _min_interval_s()
+    """Per-provider min gap. Sleep outside the lock so other providers stay free."""
+    name = (provider or "default").lower()
+    gap = _min_interval_s(name)
+    if gap <= 0:
+        return
     while True:
         with _lock:
             now = time.monotonic()
-            wait = (_last_call_at + gap) - now
+            last = float(_last_call_at.get(name) or 0.0)
+            wait = (last + gap) - now
             if wait <= 0:
-                _last_call_at = now
+                _last_call_at[name] = now
                 return
         time.sleep(min(wait, gap))
 
@@ -127,6 +166,7 @@ def record_provider_error(provider: str, status: Optional[int] = None) -> None:
 def reset_circuits() -> None:
     with _lock:
         _circuits.clear()
+        _last_call_at.clear()
 
 
 def status_snapshot() -> dict:

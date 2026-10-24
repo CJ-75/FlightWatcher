@@ -1,15 +1,23 @@
-"""Run Ryanair + Travelpayouts in parallel and merge results."""
+"""Run Ryanair + Travelpayouts in parallel and merge results.
+
+Always both providers when enabled. Soft deadline: return as soon as we have
+enough coverage — don't wait for the slowest provider forever. Late results
+still finish in background (cache warm for next search).
+"""
 from __future__ import annotations
 
+import os
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, Future, wait, FIRST_COMPLETED
 from typing import List, Optional, Sequence, Tuple
 
 from api_models import DateAvecHoraire, TripResponse
 from providers.base import SearchParams
 from providers.ryanair_budget import PURPOSE_ORGANIC
 from providers.ryanair_provider import RyanairProvider
-from providers.throttle import is_circuit_open
+from providers.throttle import fast_search_path, is_circuit_open
 from providers.travelpayouts_provider import TravelpayoutsProvider, travelpayouts_enabled
 
 
@@ -125,6 +133,120 @@ def merge_trips(batches: List[List[TripResponse]]) -> List[TripResponse]:
     return merged
 
 
+def _merge_deadline_s() -> float:
+    try:
+        return max(3.0, float(os.getenv("SEARCH_MERGE_DEADLINE_S", "8")))
+    except (TypeError, ValueError):
+        return 8.0
+
+
+def _merge_grace_s() -> float:
+    """After first provider returns, wait this long for the second."""
+    try:
+        return max(0.0, float(os.getenv("SEARCH_MERGE_GRACE_S", "2.5")))
+    except (TypeError, ValueError):
+        return 2.5
+
+
+def _drain_late(fut: Future, name: str) -> None:
+    """Let a late provider finish for cache — never block the HTTP response."""
+    from scan_log import slog
+
+    try:
+        trips, nq = fut.result()
+        slog(f"⏱ late [{name}] finished: {len(trips or [])} trips, {nq} req (cache warm)")
+    except Exception as e:
+        slog(f"⏱ late [{name}] error: {e}")
+
+
+def _race_providers(
+    providers: list,
+    params: SearchParams,
+    *,
+    deadline_s: float,
+    grace_s: float,
+) -> Tuple[List[TripResponse], int]:
+    """
+    Always start all providers. Return when:
+    - all finished, or
+    - wall deadline hit and we have ≥1 batch, or
+    - first batch landed and grace elapsed (second still running → background).
+    """
+    from scan_log import slog
+
+    if not providers:
+        return [], 0
+    if len(providers) == 1:
+        return providers[0].search_roundtrips(params)
+
+    batches: List[List[TripResponse]] = []
+    total_queries = 0
+    providers_done: set[str] = set()
+    start = time.monotonic()
+    first_done_at: Optional[float] = None
+
+    with ThreadPoolExecutor(max_workers=len(providers)) as pool:
+        futures: dict[Future, str] = {
+            pool.submit(p.search_roundtrips, params): p.name for p in providers
+        }
+        pending = set(futures.keys())
+
+        while pending:
+            elapsed = time.monotonic() - start
+            remaining = deadline_s - elapsed
+            if remaining <= 0 and batches:
+                slog(
+                    f"⏱ merge deadline {deadline_s:.1f}s — "
+                    f"return with {len(providers_done)}/{len(providers)} providers"
+                )
+                break
+            if remaining <= 0 and not batches:
+                # nothing yet — keep a tiny bit of hope
+                remaining = 0.5
+
+            if first_done_at is not None and batches:
+                grace_left = grace_s - (time.monotonic() - first_done_at)
+                if grace_left <= 0:
+                    slog(
+                        f"⏱ merge grace {grace_s:.1f}s after first provider — "
+                        f"return ({', '.join(sorted(providers_done)) or '?'})"
+                    )
+                    break
+                timeout = min(remaining, grace_left, 0.35)
+            else:
+                timeout = min(max(remaining, 0.05), 0.5)
+
+            done, pending = wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
+            for fut in done:
+                name = futures[fut]
+                try:
+                    trips, nq = fut.result()
+                    batches.append(trips or [])
+                    total_queries += int(nq or 0)
+                    providers_done.add(name)
+                    slog(f"✅ provider {name}: {len(trips or [])} trips, {nq} req")
+                    if first_done_at is None:
+                        first_done_at = time.monotonic()
+                except Exception as e:
+                    slog(f"❌ provider {name} failed: {e}")
+                    providers_done.add(name)
+                    if first_done_at is None:
+                        first_done_at = time.monotonic()
+
+        # Late providers → background (cache); don't cancel mid-HTTP
+        for fut in pending:
+            name = futures[fut]
+            threading.Thread(
+                target=_drain_late,
+                args=(fut, name),
+                daemon=True,
+                name=f"fw-late-{name}",
+            ).start()
+            slog(f"⏳ provider {name} continues in background")
+
+    return merge_trips(batches), total_queries
+
+
 def _search_one_origin(
     origin: str,
     providers: list,
@@ -138,6 +260,9 @@ def _search_one_origin(
     passengers: int,
     direct: bool,
     ryanair_purpose: Optional[str],
+    *,
+    deadline_s: Optional[float] = None,
+    grace_s: Optional[float] = None,
 ) -> Tuple[List[TripResponse], int]:
     params = SearchParams(
         aeroport_depart=origin,
@@ -152,27 +277,12 @@ def _search_one_origin(
         record_prices=record_prices,
         ryanair_purpose=ryanair_purpose or PURPOSE_ORGANIC,
     )
-    batches: List[List[TripResponse]] = []
-    total_queries = 0
-    if len(providers) == 1:
-        return providers[0].search_roundtrips(params)
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = {pool.submit(p.search_roundtrips, params): p.name for p in providers}
-        for fut in as_completed(futures):
-            name = futures[fut]
-            try:
-                trips, nq = fut.result()
-                batches.append(trips)
-                total_queries += nq
-                from scan_log import slog
-
-                slog(f"✅ provider {name} @{origin}: {len(trips)} trips, {nq} req")
-            except Exception as e:
-                from scan_log import slog
-
-                slog(f"❌ provider {name} @{origin} failed: {e}")
-    return merge_trips(batches), total_queries
+    return _race_providers(
+        providers,
+        params,
+        deadline_s=deadline_s if deadline_s is not None else _merge_deadline_s(),
+        grace_s=grace_s if grace_s is not None else _merge_grace_s(),
+    )
 
 
 def search_roundtrips(
@@ -192,75 +302,108 @@ def search_roundtrips(
     """
     Multi-provider round-trip search.
 
-    providers: optional allow-list, e.g. ["travelpayouts"] for seed (v3.2).
-    ryanair_purpose: hourly budget priority (click > revalidate > organic > promote).
+    Always Ryanair + Travelpayouts when enabled. Soft merge deadline so Search
+    never waits on the slowest provider.
     """
     origins = parse_origins(aeroport_depart)
     active = _active_providers(only=providers)
     purpose = ryanair_purpose or PURPOSE_ORGANIC
+    # Organic / click search → fast throttle; seed/revalidate keep slow gap
+    use_fast = purpose in (PURPOSE_ORGANIC, "organic", "click", "user", "")
 
-    # Single origin — keep previous behaviour
-    if len(origins) == 1:
-        trips, nq = _search_one_origin(
-            origins[0],
-            active,
-            dates_depart,
-            dates_retour,
-            budget_max,
-            limite_allers,
-            destinations_exclues,
-            destinations_incluses,
-            record_prices,
-            passengers,
-            direct,
-            purpose,
-        )
-        cap = max(limite_allers or 50, 30)
-        capped = trips[: cap * 2]
-        _maybe_record_observations(capped, record_prices=record_prices)
-        return capped, nq
+    deadline = _merge_deadline_s()
+    grace = _merge_grace_s()
 
-    # Multi-origin city aggregation (e.g. Paris = CDG,ORY,BVA)
-    from scan_log import slog
-
-    slog(f"📥 multi-origin scan: {','.join(origins)}")
-    batches: List[List[TripResponse]] = []
-    total_queries = 0
-    workers = min(len(origins), 4)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(
-                _search_one_origin,
-                origin,
+    with fast_search_path(use_fast):
+        # Single origin
+        if len(origins) == 1:
+            trips, nq = _search_one_origin(
+                origins[0],
                 active,
                 dates_depart,
                 dates_retour,
                 budget_max,
-                max(20, (limite_allers or 50) // len(origins)),
+                limite_allers,
                 destinations_exclues,
                 destinations_incluses,
                 record_prices,
                 passengers,
                 direct,
                 purpose,
-            ): origin
-            for origin in origins
-        }
-        for fut in as_completed(futures):
-            origin = futures[fut]
-            try:
-                trips, nq = fut.result()
-                batches.append(trips)
-                total_queries += nq
-                slog(f"✅ origin {origin}: {len(trips)} trips")
-            except Exception as e:
-                slog(f"❌ origin {origin} failed: {e}")
+                deadline_s=deadline,
+                grace_s=grace,
+            )
+            cap = max(limite_allers or 50, 30)
+            capped = trips[: cap * 2]
+            _maybe_record_observations(capped, record_prices=record_prices)
+            return capped, nq
 
-    merged = merge_trips(batches)
-    cap = max(limite_allers or 50, 30) * max(1, len(origins))
-    capped = merged[:cap]
-    _maybe_record_observations(capped, record_prices=record_prices)
-    return capped, total_queries
+        # Multi-origin city aggregation (e.g. Paris = CDG,ORY,BVA)
+        from scan_log import slog
+
+        slog(f"📥 multi-origin scan: {','.join(origins)}")
+        batches: List[List[TripResponse]] = []
+        total_queries = 0
+        # Share one wall clock across origins so Paris ≠ 3× deadline
+        workers = min(len(origins), 4)
+        per_origin_limit = max(12, (limite_allers or 50) // len(origins))
+        start = time.monotonic()
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(
+                    _search_one_origin,
+                    origin,
+                    active,
+                    dates_depart,
+                    dates_retour,
+                    budget_max,
+                    per_origin_limit,
+                    destinations_exclues,
+                    destinations_incluses,
+                    record_prices,
+                    passengers,
+                    direct,
+                    purpose,
+                    # nested race gets remaining budget
+                    deadline_s=max(2.0, deadline - (time.monotonic() - start)),
+                    grace_s=grace,
+                ): origin
+                for origin in origins
+            }
+            pending = set(futures.keys())
+            while pending:
+                left = deadline - (time.monotonic() - start)
+                if left <= 0 and batches:
+                    slog(f"⏱ multi-origin deadline — {len(batches)} origin batch(es)")
+                    break
+                done, pending = wait(
+                    pending,
+                    timeout=min(max(left, 0.1), 0.5),
+                    return_when=FIRST_COMPLETED,
+                )
+                for fut in done:
+                    origin = futures[fut]
+                    try:
+                        trips, nq = fut.result()
+                        batches.append(trips)
+                        total_queries += nq
+                        slog(f"✅ origin {origin}: {len(trips)} trips")
+                    except Exception as e:
+                        slog(f"❌ origin {origin} failed: {e}")
+            for fut in pending:
+                origin = futures[fut]
+                threading.Thread(
+                    target=_drain_late,
+                    args=(fut, f"origin:{origin}"),
+                    daemon=True,
+                ).start()
+
+        merged = merge_trips(batches)
+        cap = max(limite_allers or 50, 30) * max(1, len(origins))
+        capped = merged[:cap]
+        _maybe_record_observations(capped, record_prices=record_prices)
+        return capped, total_queries
 
 
 def _maybe_record_observations(
