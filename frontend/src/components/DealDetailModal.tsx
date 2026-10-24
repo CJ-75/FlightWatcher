@@ -21,6 +21,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   mock: 'Offre partenaire',
   expedia: 'Expedia',
   lastminute: 'lastminute.com',
+  liteapi: 'Vol + hôtel',
 }
 
 function HeartSvg({ filled }: { filled: boolean }) {

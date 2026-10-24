@@ -79,7 +79,7 @@ export function DealsScreen() {
           ListHeaderComponent={
             <View style={styles.header}>
               <Text style={styles.title}>Deals</Text>
-              <Text style={styles.subtitle}>Packs weekend vol + hôtel, prêts à partir</Text>
+              <Text style={styles.subtitle}>Week-ends vol + hôtel, prêts à partir</Text>
             </View>
           }
           ListEmptyComponent={

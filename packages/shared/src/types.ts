@@ -115,17 +115,70 @@ export interface SavedFavorite {
   archived?: boolean
 }
 
+export type DealProviderId = 'mock' | 'expedia' | 'lastminute' | 'liteapi'
+
 export interface ApiConfig {
   available: boolean
   supabase_url?: string
   supabase_anon_key?: string
+  deals_provider?: DealProviderId | string
+  liteapi_env?: string | null
+  currency?: string
+  window_kinds?: string[]
+  occupancies?: number[]
+  weekends_ahead?: number
+  budget_flight_pp?: number
+  budget_pack_pp?: number
+  excluded_fees_display?: string
+  flight_cta_timing?: string
+  payment_public_key?: string | null
 }
 
-export type DealProviderId = 'mock' | 'expedia' | 'lastminute'
+export type DealWindowKind = 'FRI_SUN' | 'SAT_MON'
 
 export interface TravelDealDates {
   outbound: string
   inbound: string
+}
+
+/** Stable key: `{origin}-{dest}-{window_id}-{adults}` */
+export type DealKey = string
+
+export interface TravelDealFlight {
+  price_pp: number
+  outbound_local?: string
+  inbound_local?: string
+  direct?: boolean
+  airline?: string
+  booking_url?: string
+  origin_iata?: string
+  destination_iata?: string
+}
+
+export interface TravelDealHotel {
+  id: string
+  name?: string
+  stars?: number
+  rating?: number
+  review_count?: number
+  distance_m?: number
+  photo?: string
+  board?: string
+  refundable?: boolean
+  cancel_deadline?: string | null
+}
+
+export interface TravelDealPriceBreakdown {
+  flight_pp: number
+  hotel_public_total: number
+  /** Taxes payable on site — shown separately (not folded into price_pp). */
+  excluded_fees: number
+}
+
+export interface TravelDealFlags {
+  late_arrival?: boolean
+  late_departure?: boolean
+  breakfast?: boolean
 }
 
 export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'
@@ -242,7 +295,10 @@ export interface InvitePreview {
   invite_token: string
 }
 
-/** Weekend pack (flight + hotel) for Deals tab. */
+/**
+ * Weekend « vol + hôtel » for Deals tab.
+ * Legacy flat fields kept for mock / liked snapshots; LiteAPI fills nested ones.
+ */
 export interface TravelDeal {
   id: string
   title: string
@@ -260,14 +316,39 @@ export interface TravelDeal {
   highlights: string[]
   description: string
   provider: DealProviderId
+  /** Hotel booking CTA when in-app; otherwise partner / redirect URL. */
   booking_url: string
   badge?: string
+  /** Stable key for likes, alerts, revalidate. */
+  deal_key?: DealKey
+  origin_iata?: string
+  destination?: string
+  window_kind?: DealWindowKind
+  window_id?: string
+  adults?: number
+  flight?: TravelDealFlight
+  hotel?: TravelDealHotel
+  price_breakdown?: TravelDealPriceBreakdown
+  ssp_source?: string | null
+  flags?: TravelDealFlags
+  /** Alternate hotels from cache top-3 (without #1). */
+  alt_hotels?: TravelDealHotel[]
+  fetched_at?: string
 }
 
 /** Persisted like of a TravelDeal for a user. */
 export interface LikedDeal {
   id: string
   deal_id: string
+  /** Stable key when available (LiteAPI). */
+  deal_key?: string | null
   deal: TravelDeal
   created_at: string
+}
+
+export interface DealsListParams {
+  origin?: string
+  adults?: number
+  window?: DealWindowKind
+  max_pp?: number
 }

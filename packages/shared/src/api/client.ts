@@ -15,6 +15,7 @@ import type {
   SavedFavorite,
   SavedSearch,
   TravelDeal,
+  DealsListParams,
   TripProposal,
   TripMember,
   TripResponse,
@@ -187,7 +188,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
     supabaseStatus: () =>
       request<{ available: boolean }>('/api/supabase/status'),
 
-    getDeals: () => request<TravelDeal[]>('/api/deals'),
+    getDeals: (params?: DealsListParams) => {
+      const q = new URLSearchParams()
+      if (params?.origin) q.set('origin', params.origin)
+      if (params?.adults != null) q.set('adults', String(params.adults))
+      if (params?.window) q.set('window', params.window)
+      if (params?.max_pp != null) q.set('max_pp', String(params.max_pp))
+      const qs = q.toString()
+      return request<TravelDeal[]>(`/api/deals${qs ? `?${qs}` : ''}`)
+    },
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
 

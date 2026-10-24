@@ -1,10 +1,12 @@
-"""Deal providers — mock today, Expedia / Lastminute later."""
+"""Deal providers — mock today, LiteAPI (cache join) when DEALS_PROVIDER=liteapi."""
 from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
 from datetime import date, timedelta
 from typing import List, Optional
+
+from deals.liteapi_config import load_deals_config
 
 
 def _next_weekend_pair(weeks_ahead: int = 1) -> tuple[str, str]:
@@ -20,7 +22,14 @@ def _next_weekend_pair(weeks_ahead: int = 1) -> tuple[str, str]:
 
 class DealProvider(ABC):
     @abstractmethod
-    def list_deals(self) -> List[dict]:
+    def list_deals(
+        self,
+        *,
+        origin: Optional[str] = None,
+        adults: Optional[int] = None,
+        window: Optional[str] = None,
+        max_pp: Optional[float] = None,
+    ) -> List[dict]:
         raise NotImplementedError
 
     @abstractmethod
@@ -29,17 +38,30 @@ class DealProvider(ABC):
 
 
 class MockDealProvider(DealProvider):
-    """Curated weekend packs for UI development."""
+    """Curated weekend vol+hôtel offers for UI development."""
 
     def __init__(self) -> None:
         self._deals = self._build_seed()
 
-    def list_deals(self) -> List[dict]:
-        return list(self._deals)
+    def list_deals(
+        self,
+        *,
+        origin: Optional[str] = None,
+        adults: Optional[int] = None,
+        window: Optional[str] = None,
+        max_pp: Optional[float] = None,
+    ) -> List[dict]:
+        deals = list(self._deals)
+        if origin:
+            origin_u = origin.strip().upper()
+            deals = [d for d in deals if (d.get("departure_airport") or "").upper() == origin_u]
+        if max_pp is not None:
+            deals = [d for d in deals if float(d.get("price_per_person") or 0) <= float(max_pp)]
+        return deals
 
     def get_deal(self, deal_id: str) -> Optional[dict]:
         for deal in self._deals:
-            if deal["id"] == deal_id:
+            if deal["id"] == deal_id or deal.get("deal_key") == deal_id:
                 return deal
         return None
 
@@ -51,7 +73,8 @@ class MockDealProvider(DealProvider):
         return [
             {
                 "id": "mock-lisbonne-w1",
-                "title": "Weekend à Lisbonne",
+                "deal_key": "BVA-LIS-mock-w1-2",
+                "title": "Week-end à Lisbonne",
                 "city": "Lisbonne",
                 "country": "Portugal",
                 "image_url": "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80&auto=format&fit=crop",
@@ -59,21 +82,25 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "BVA",
+                "origin_iata": "BVA",
                 "dates": {"outbound": w1_out, "inbound": w1_in},
                 "hotel_name": "Hotel Lisboa Central",
                 "hotel_stars": 3,
                 "board": "Petit-déjeuner",
-                "highlights": ["Vol A/R inclus", "Hôtel centre-ville", "Tram 28 à 5 min"],
+                "highlights": ["Vol A/R", "Hôtel centre-ville", "Tram 28 à 5 min"],
                 "description": (
                     "Deux nuits à Lisbonne avec vol depuis Beauvais. "
-                    "Idéal pour flâner dans l’Alfama et goûter les pastéis de nata."
+                    "Idéal pour flâner dans l’Alfama et goûter les pastéis de nata. "
+                    "Deux réservations distinctes : vol via la compagnie, hôtel via FlightWatcher."
                 ),
                 "provider": "mock",
                 "booking_url": "https://www.expedia.fr/Lisbon.d178307.Destination-Travel-Guides",
                 "badge": "Week-end",
+                "adults": 2,
             },
             {
                 "id": "mock-barcelone-w1",
+                "deal_key": "BVA-BCN-mock-w1-2",
                 "title": "Escapade Barcelone",
                 "city": "Barcelone",
                 "country": "Espagne",
@@ -82,21 +109,25 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "BVA",
+                "origin_iata": "BVA",
                 "dates": {"outbound": w1_out, "inbound": w1_in},
                 "hotel_name": "Hostal Barcelona Gothic",
                 "hotel_stars": 3,
                 "board": "Chambre seule",
-                "highlights": ["Vol A/R inclus", "Quartier gothique", "Plage à 20 min"],
+                "highlights": ["Vol A/R", "Quartier gothique", "Plage à 20 min"],
                 "description": (
                     "Week-end tapas et architecture moderniste. "
-                    "Hôtel cosy près de la Rambla, vol aller-retour inclus."
+                    "Hôtel cosy près de la Rambla, vol aller-retour inclus. "
+                    "Deux réservations distinctes."
                 ),
                 "provider": "mock",
                 "booking_url": "https://www.expedia.fr/Barcelona.d178238.Destination-Travel-Guides",
                 "badge": "Week-end",
+                "adults": 2,
             },
             {
                 "id": "mock-rome-w2",
+                "deal_key": "BVA-CIA-mock-w2-2",
                 "title": "Rome express",
                 "city": "Rome",
                 "country": "Italie",
@@ -105,21 +136,24 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "BVA",
+                "origin_iata": "BVA",
                 "dates": {"outbound": w2_out, "inbound": w2_in},
                 "hotel_name": "Hotel Trastevere View",
                 "hotel_stars": 4,
                 "board": "Petit-déjeuner",
-                "highlights": ["Vol A/R inclus", "Vue sur le Tibre", "Colisée à 25 min"],
+                "highlights": ["Vol A/R", "Vue sur le Tibre", "Colisée à 25 min"],
                 "description": (
                     "Deux jours pour voir la Ville éternelle sans se presser. "
-                    "Pack vol + hôtel 4★ avec petit-déjeuner."
+                    "Vol + hôtel 4★ avec petit-déjeuner. Deux réservations distinctes."
                 ),
                 "provider": "mock",
                 "booking_url": "https://www.expedia.fr/Rome.d179899.Destination-Travel-Guides",
                 "badge": "Week-end",
+                "adults": 2,
             },
             {
                 "id": "mock-porto-w2",
+                "deal_key": "MRS-OPO-mock-w2-2",
                 "title": "Porto & porto",
                 "city": "Porto",
                 "country": "Portugal",
@@ -128,6 +162,7 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "MRS",
+                "origin_iata": "MRS",
                 "dates": {"outbound": w2_out, "inbound": w2_in},
                 "hotel_name": "Casa Ribeira",
                 "hotel_stars": 3,
@@ -140,9 +175,11 @@ class MockDealProvider(DealProvider):
                 "provider": "mock",
                 "booking_url": "https://www.lastminute.com/vacances/portugal/porto",
                 "badge": "Week-end",
+                "adults": 2,
             },
             {
                 "id": "mock-budapest-w2",
+                "deal_key": "BVA-BUD-mock-w2-2",
                 "title": "Budapest thermal",
                 "city": "Budapest",
                 "country": "Hongrie",
@@ -151,11 +188,12 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "BVA",
+                "origin_iata": "BVA",
                 "dates": {"outbound": w2_out, "inbound": w2_in},
                 "hotel_name": "Danube Spa Hotel",
                 "hotel_stars": 4,
                 "board": "Petit-déjeuner",
-                "highlights": ["Vol A/R inclus", "Accès spa", "Vue Danube"],
+                "highlights": ["Vol A/R", "Accès spa", "Vue Danube"],
                 "description": (
                     "Bains thermaux et ruin bars : le combo parfait pour un week-end "
                     "détente à petit prix."
@@ -163,9 +201,11 @@ class MockDealProvider(DealProvider):
                 "provider": "mock",
                 "booking_url": "https://www.expedia.fr/Budapest.d178279.Destination-Travel-Guides",
                 "badge": "Bon plan",
+                "adults": 2,
             },
             {
                 "id": "mock-marrakech-w3",
+                "deal_key": "ORY-RAK-mock-w3-2",
                 "title": "Marrakech soleil",
                 "city": "Marrakech",
                 "country": "Maroc",
@@ -174,11 +214,15 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 3,
                 "departure_airport": "ORY",
-                "dates": {"outbound": w3_out, "inbound": (date.fromisoformat(w3_out) + timedelta(days=3)).isoformat()},
+                "origin_iata": "ORY",
+                "dates": {
+                    "outbound": w3_out,
+                    "inbound": (date.fromisoformat(w3_out) + timedelta(days=3)).isoformat(),
+                },
                 "hotel_name": "Riad Atlas Medina",
                 "hotel_stars": 4,
                 "board": "Petit-déjeuner",
-                "highlights": ["3 nuits", "Riad médina", "Vol inclus"],
+                "highlights": ["3 nuits", "Riad médina", "Vol A/R"],
                 "description": (
                     "Trois nuits dans un riad au cœur de la médina. "
                     "Souks, place Jemaa el-Fna et rooftop au coucher du soleil."
@@ -186,9 +230,11 @@ class MockDealProvider(DealProvider):
                 "provider": "mock",
                 "booking_url": "https://www.lastminute.com/vacances/maroc/marrakech",
                 "badge": "Week-end+",
+                "adults": 2,
             },
             {
                 "id": "mock-dublin-w3",
+                "deal_key": "BVA-DUB-mock-w3-2",
                 "title": "Dublin pub crawl",
                 "city": "Dublin",
                 "country": "Irlande",
@@ -197,11 +243,12 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "BVA",
+                "origin_iata": "BVA",
                 "dates": {"outbound": w3_out, "inbound": w3_in},
                 "hotel_name": "Temple Bar Inn",
                 "hotel_stars": 3,
                 "board": "Chambre seule",
-                "highlights": ["Vol A/R inclus", "Temple Bar", "Guinness Storehouse proche"],
+                "highlights": ["Vol A/R", "Temple Bar", "Guinness Storehouse proche"],
                 "description": (
                     "Week-end irlandais classique : pubs, musique live et Guinness. "
                     "Hôtel dans le quartier animé de Temple Bar."
@@ -209,9 +256,11 @@ class MockDealProvider(DealProvider):
                 "provider": "mock",
                 "booking_url": "https://www.expedia.fr/Dublin.d178286.Destination-Travel-Guides",
                 "badge": "Week-end",
+                "adults": 2,
             },
             {
                 "id": "mock-cracovie-w3",
+                "deal_key": "BVA-KRK-mock-w3-2",
                 "title": "Cracovie old town",
                 "city": "Cracovie",
                 "country": "Pologne",
@@ -220,11 +269,12 @@ class MockDealProvider(DealProvider):
                 "currency": "EUR",
                 "nights": 2,
                 "departure_airport": "BVA",
+                "origin_iata": "BVA",
                 "dates": {"outbound": w3_out, "inbound": w3_in},
                 "hotel_name": "Hotel Stare Miasto",
                 "hotel_stars": 3,
                 "board": "Petit-déjeuner",
-                "highlights": ["Prix doux", "Vieille ville", "Vol A/R inclus"],
+                "highlights": ["Prix doux", "Vieille ville", "Vol A/R"],
                 "description": (
                     "L’un des week-ends les plus abordables d’Europe centrale. "
                     "Place du Marché, châteaux et pierogi à volonté."
@@ -232,14 +282,36 @@ class MockDealProvider(DealProvider):
                 "provider": "mock",
                 "booking_url": "https://www.lastminute.com/vacances/pologne/cracovie",
                 "badge": "Bon plan",
+                "adults": 2,
             },
         ]
+
+
+class LiteApiDealProvider(DealProvider):
+    """
+    Assembles TravelDeal from hotel_rates_cache × deal_flight_cache.
+    L1 stub: returns [] until L5 wires the join (never calls LiteAPI on list).
+    """
+
+    def list_deals(
+        self,
+        *,
+        origin: Optional[str] = None,
+        adults: Optional[int] = None,
+        window: Optional[str] = None,
+        max_pp: Optional[float] = None,
+    ) -> List[dict]:
+        # L5 will implement cache join. Keep sync path free of LiteAPI calls.
+        return []
+
+    def get_deal(self, deal_id: str) -> Optional[dict]:
+        return None
 
 
 class ExpediaDealProvider(DealProvider):
     """Placeholder — wire Rapid API when credentials are available."""
 
-    def list_deals(self) -> List[dict]:
+    def list_deals(self, **kwargs) -> List[dict]:
         raise NotImplementedError("Expedia provider not configured")
 
     def get_deal(self, deal_id: str) -> Optional[dict]:
@@ -249,7 +321,7 @@ class ExpediaDealProvider(DealProvider):
 class LastminuteDealProvider(DealProvider):
     """Placeholder — wire partner API when credentials are available."""
 
-    def list_deals(self) -> List[dict]:
+    def list_deals(self, **kwargs) -> List[dict]:
         raise NotImplementedError("Lastminute provider not configured")
 
     def get_deal(self, deal_id: str) -> Optional[dict]:
@@ -259,13 +331,21 @@ class LastminuteDealProvider(DealProvider):
 _provider: Optional[DealProvider] = None
 
 
+def reset_deal_provider() -> None:
+    """Test helper."""
+    global _provider
+    _provider = None
+
+
 def get_deal_provider() -> DealProvider:
     global _provider
     if _provider is not None:
         return _provider
 
-    name = (os.getenv("DEALS_PROVIDER") or "mock").strip().lower()
-    if name == "expedia":
+    name = (os.getenv("DEALS_PROVIDER") or load_deals_config().provider or "mock").strip().lower()
+    if name == "liteapi":
+        _provider = LiteApiDealProvider()
+    elif name == "expedia":
         _provider = ExpediaDealProvider()
     elif name == "lastminute":
         _provider = LastminuteDealProvider()

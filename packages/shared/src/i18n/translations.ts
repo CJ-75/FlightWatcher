@@ -37,7 +37,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'alerts.guest.mock.interval': 'Toutes les 15 min',
     'alerts.guest.mock.status': 'En surveillance',
 
-    'deals.subtitle': 'Packs weekend vol + hôtel, prêts à partir',
+    'deals.subtitle': 'Week-ends vol + hôtel, prêts à partir',
     'deals.loading': 'Chargement des deals…',
     'deals.errorTitle': 'Oups',
     'deals.retry': 'Réessayer',
@@ -359,7 +359,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'alerts.guest.mock.interval': 'Every 15 min',
     'alerts.guest.mock.status': 'Watching',
 
-    'deals.subtitle': 'Weekend flight + hotel packs, ready to go',
+    'deals.subtitle': 'Weekend flight + hotel deals, ready to go',
     'deals.loading': 'Loading deals…',
     'deals.errorTitle': 'Oops',
     'deals.retry': 'Retry',

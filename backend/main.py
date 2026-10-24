@@ -25,6 +25,17 @@ print(f"   SUPABASE_ANON_KEY: {'✅ Définie' if supabase_key_check else '❌ Ma
 
 from supabase_deps import ADMIN_ROUTES_AVAILABLE, admin_router
 from routes import include_all_routers
+from deals.liteapi_config import LiteApiConfigError, assert_deals_config_ok, load_deals_config
+
+# Deals / LiteAPI guards (no-op when DEALS_PROVIDER=mock)
+try:
+    _deals_cfg = assert_deals_config_ok(load_deals_config())
+    print(f"✅ Deals provider: {_deals_cfg.provider}" + (
+        f" (LiteAPI {_deals_cfg.liteapi_env})" if _deals_cfg.is_liteapi else ""
+    ))
+except LiteApiConfigError as e:
+    print(f"❌ Configuration Deals/LiteAPI invalide: {e}")
+    raise
 
 app = FastAPI(title="Ryanair Flight Scanner API")
 

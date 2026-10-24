@@ -18,6 +18,8 @@ export type {
   TravelDeal,
   LikedDeal,
   DealProviderId,
+  DealsListParams,
+  DealWindowKind,
   PlannedTrip,
   PlannedTripDetail,
   TripProposal,

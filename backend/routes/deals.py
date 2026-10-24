@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from deals.provider import get_deal_provider
@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 class LikeDealRequest(BaseModel):
-    """Snapshot of the deal at like time."""
+    """Snapshot of the deal at like time (legacy + LiteAPI fields)."""
     id: str
     title: str
     city: str
@@ -38,6 +38,19 @@ class LikeDealRequest(BaseModel):
     provider: str = "mock"
     booking_url: str = ""
     badge: Optional[str] = None
+    deal_key: Optional[str] = None
+    origin_iata: Optional[str] = None
+    destination: Optional[str] = None
+    window_kind: Optional[str] = None
+    window_id: Optional[str] = None
+    adults: Optional[int] = None
+    flight: Optional[Dict[str, Any]] = None
+    hotel: Optional[Dict[str, Any]] = None
+    price_breakdown: Optional[Dict[str, Any]] = None
+    ssp_source: Optional[str] = None
+    flags: Optional[Dict[str, Any]] = None
+    alt_hotels: Optional[List[Dict[str, Any]]] = None
+    fetched_at: Optional[str] = None
 
 
 def _require_user(request: Request) -> str:
@@ -63,17 +76,28 @@ def _row_to_liked(row: dict) -> dict:
     return {
         "id": row["id"],
         "deal_id": row["deal_id"],
+        "deal_key": row.get("deal_key") or (deal.get("deal_key") if isinstance(deal, dict) else None),
         "deal": deal,
         "created_at": row.get("created_at"),
     }
 
 
 @router.get("/api/deals")
-async def list_deals():
-    """List weekend travel packs (mock or partner provider)."""
+async def list_deals(
+    origin: Optional[str] = Query(None, description="IATA départ"),
+    adults: Optional[int] = Query(None, ge=1, le=6),
+    window: Optional[str] = Query(None, description="FRI_SUN | SAT_MON"),
+    max_pp: Optional[float] = Query(None, ge=0, description="Budget max € / pers."),
+):
+    """List weekend vol+hôtel deals. Cache-only when DEALS_PROVIDER=liteapi (L5)."""
     try:
         provider = get_deal_provider()
-        return provider.list_deals()
+        return provider.list_deals(
+            origin=origin,
+            adults=adults,
+            window=window,
+            max_pp=max_pp,
+        )
     except NotImplementedError as e:
         raise HTTPException(status_code=501, detail=str(e))
     except Exception as e:
@@ -144,13 +168,18 @@ async def like_deal(body: LikeDealRequest, request: Request):
             return _row_to_liked(existing.data[0])
 
         deal_data = body.model_dump()
+        row = {
+            "user_id": user_id,
+            "deal_id": deal_id,
+            "deal_data": deal_data,
+        }
+        deal_key = (body.deal_key or "").strip() or None
+        if deal_key:
+            row["deal_key"] = deal_key
+
         result = (
             supabase.table("liked_deals")
-            .insert({
-                "user_id": user_id,
-                "deal_id": deal_id,
-                "deal_data": deal_data,
-            })
+            .insert(row)
             .execute()
         )
         if not result.data:
@@ -159,7 +188,25 @@ async def like_deal(body: LikeDealRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur liked_deals: {str(e)}")
+        # Column deal_key may not exist yet — retry without it
+        msg = str(e)
+        if "deal_key" in msg.lower():
+            try:
+                supabase = _svc()
+                result = (
+                    supabase.table("liked_deals")
+                    .insert({
+                        "user_id": user_id,
+                        "deal_id": deal_id,
+                        "deal_data": body.model_dump(),
+                    })
+                    .execute()
+                )
+                if result.data:
+                    return _row_to_liked(result.data[0])
+            except Exception as e2:
+                raise HTTPException(status_code=500, detail=f"Erreur liked_deals: {str(e2)}")
+        raise HTTPException(status_code=500, detail=f"Erreur liked_deals: {msg}")
 
 
 @router.delete("/api/liked-deals/{deal_id}")
@@ -181,7 +228,7 @@ async def unlike_deal(deal_id: str, request: Request):
 
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
-    """Get a single deal by id."""
+    """Get a single deal by id or deal_key."""
     try:
         provider = get_deal_provider()
         deal = provider.get_deal(deal_id)
