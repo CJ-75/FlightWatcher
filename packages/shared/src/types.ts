@@ -115,7 +115,7 @@ export interface SavedFavorite {
   archived?: boolean
 }
 
-export type DealProviderId = 'mock' | 'expedia' | 'lastminute' | 'liteapi'
+export type DealProviderId = 'mock' | 'expedia' | 'lastminute' | 'liteapi' | 'community'
 
 export interface ApiConfig {
   available: boolean
@@ -182,6 +182,34 @@ export interface TravelDealFlags {
   late_arrival?: boolean
   late_departure?: boolean
   breakfast?: boolean
+  has_hotel?: boolean
+  source_mix?: string
+  /** Human freshness — e.g. « Prix vérifié aujourd'hui » (no technical scan age). */
+  verified_label?: string | null
+}
+
+export interface TravelDealBadgeMeta {
+  label: string
+  discount_pct?: number | null
+  scope?: 'flight' | 'pack'
+  tooltip?: string
+}
+
+export interface MyTripDraft {
+  id: string
+  draft_token: string
+  status: string
+  payload?: Record<string, unknown>
+  expires_at?: string
+  deal_key?: string | null
+  origin_iata?: string | null
+  dest_iata?: string | null
+  city_name?: string | null
+  out_date?: string | null
+  ret_date?: string | null
+  adults?: number
+  hotel?: unknown
+  invite_available?: boolean
 }
 
 export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'
@@ -322,6 +350,8 @@ export interface TravelDeal {
   /** Hotel booking CTA when in-app; otherwise partner / redirect URL. */
   booking_url: string
   badge?: string
+  /** Honest market badge (flight-only % vs usual). */
+  badge_meta?: TravelDealBadgeMeta
   /** Stable key for likes, alerts, revalidate. */
   deal_key?: DealKey
   origin_iata?: string

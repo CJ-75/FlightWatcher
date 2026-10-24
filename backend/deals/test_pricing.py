@@ -117,6 +117,19 @@ class TestConfigGuards(unittest.TestCase):
             flight_cta_timing="after_hotel",
             ui_enabled=True,
             booking_enabled=True,
+            deals_source="legacy_catalog",
+            max_flight_pp=120,
+            min_per_origin=12,
+            nearby_origins_km=100,
+            fresh_tau_h=6,
+            fresh_tau_short_h=3,
+            revalidate_budget_per_hour=200,
+            seed_catalog_size=25,
+            seed_scan_budget_per_day=300,
+            seed_min_budget_share=0.2,
+            obs_retention_days=90,
+            observations_enabled=True,
+            community_score_weights={},
         )
         with self.assertRaises(LiteApiConfigError):
             validate_liteapi_keys(cfg)

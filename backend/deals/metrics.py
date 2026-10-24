@@ -245,15 +245,47 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         snapshot["deal_flight_cache"] = _cache_status_counts(supabase, "deal_flight_cache")
         snapshot["booking_funnel"] = _booking_funnel(supabase)
         snapshot["ssp"] = _ssp_missing_share(supabase)
+        snapshot["community"] = _community_stats(supabase)
 
     verdict = go_no_go(cfg, snapshot)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "provider": cfg.provider,
         "liteapi_env": cfg.liteapi_env if cfg.is_liteapi else None,
+        "deals_source": cfg.deals_source,
         "ui_enabled": cfg.ui_enabled,
         "booking_enabled": cfg.booking_enabled,
+        "seed_scan_budget_per_day": cfg.seed_scan_budget_per_day,
         "process": process,
         "caches": snapshot,
         "go_no_go": verdict,
     }
+
+
+def _community_stats(supabase: Any) -> Dict[str, Any]:
+    """D7: organic_share + active deals coverage."""
+    out: Dict[str, Any] = {
+        "active": 0,
+        "organic": 0,
+        "seed": 0,
+        "organic_share": None,
+    }
+    try:
+        res = (
+            supabase.table("deals_active")
+            .select("source_mix")
+            .eq("status", "active")
+            .limit(5000)
+            .execute()
+        )
+        rows = res.data or []
+        out["active"] = len(rows)
+        organic = sum(1 for r in rows if (r.get("source_mix") or "") in ("organic", "mixed"))
+        seed = sum(1 for r in rows if r.get("source_mix") == "seed")
+        out["organic"] = organic
+        out["seed"] = seed
+        if rows:
+            out["organic_share"] = round(organic / len(rows), 3)
+    except Exception:
+        pass
+    return out

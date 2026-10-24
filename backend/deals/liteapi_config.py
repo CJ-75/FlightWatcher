@@ -84,6 +84,31 @@ def _parse_score_weights(raw: str) -> Dict[str, float]:
     return defaults
 
 
+def _parse_community_score_weights(raw: str) -> Dict[str, float]:
+    defaults = {
+        "disc": 1.0,
+        "fresh": 0.4,
+        "pop": 0.2,
+        "qual": 0.2,
+        "hotel": 0.15,
+    }
+    if not raw:
+        return defaults
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            merged = dict(defaults)
+            for k, v in data.items():
+                try:
+                    merged[str(k)] = float(v)
+                except (TypeError, ValueError):
+                    continue
+            return merged
+    except json.JSONDecodeError:
+        pass
+    return defaults
+
+
 @dataclass(frozen=True)
 class DealsConfig:
     provider: str
@@ -111,10 +136,28 @@ class DealsConfig:
     # L11: hide Deals tab / block in-app hotel booking (prod read-only phase)
     ui_enabled: bool
     booking_enabled: bool
+    # v3 community deals
+    deals_source: str  # community | legacy_catalog
+    max_flight_pp: float
+    min_per_origin: int
+    nearby_origins_km: float
+    fresh_tau_h: float
+    fresh_tau_short_h: float
+    revalidate_budget_per_hour: int
+    seed_catalog_size: int
+    seed_scan_budget_per_day: int
+    seed_min_budget_share: float
+    obs_retention_days: int
+    observations_enabled: bool
+    community_score_weights: Dict[str, float]
 
     @property
     def is_liteapi(self) -> bool:
         return self.provider == "liteapi"
+
+    @property
+    def is_community(self) -> bool:
+        return self.deals_source == "community"
 
     @property
     def is_sandbox(self) -> bool:
@@ -144,6 +187,9 @@ def load_deals_config() -> DealsConfig:
 
     kinds = tuple(_parse_list(_env("DEALS_WINDOW_KINDS", "FRI_SUN")) or ["FRI_SUN"])
     occupancies = tuple(_parse_occupancies(_env("DEALS_OCCUPANCIES", "2")))
+    deals_source = (_env("DEALS_SOURCE", "legacy_catalog") or "legacy_catalog").lower()
+    if deals_source not in ("community", "legacy_catalog"):
+        deals_source = "legacy_catalog"
 
     return DealsConfig(
         provider=provider,
@@ -168,6 +214,21 @@ def load_deals_config() -> DealsConfig:
         flight_cta_timing=_env("DEALS_FLIGHT_CTA_TIMING", "after_hotel") or "after_hotel",
         ui_enabled=_env_bool("DEALS_UI_ENABLED", True),
         booking_enabled=_env_bool("DEALS_BOOKING_ENABLED", True),
+        deals_source=deals_source,
+        max_flight_pp=_env_float("DEALS_MAX_FLIGHT_PP", 120.0),
+        min_per_origin=max(1, _env_int("DEALS_MIN_PER_ORIGIN", 12)),
+        nearby_origins_km=_env_float("DEALS_NEARBY_ORIGINS_KM", 100.0),
+        fresh_tau_h=_env_float("DEALS_FRESH_TAU_H", 6.0),
+        fresh_tau_short_h=_env_float("DEALS_FRESH_TAU_SHORT_H", 3.0),
+        revalidate_budget_per_hour=max(1, _env_int("DEALS_REVALIDATE_BUDGET_PER_HOUR", 200)),
+        seed_catalog_size=max(5, _env_int("SEED_CATALOG_SIZE", 25)),
+        seed_scan_budget_per_day=max(10, _env_int("SEED_SCAN_BUDGET_PER_DAY", 300)),
+        seed_min_budget_share=min(1.0, max(0.0, _env_float("SEED_MIN_BUDGET_SHARE", 0.2))),
+        obs_retention_days=max(7, _env_int("OBS_RETENTION_DAYS", 90)),
+        observations_enabled=_env_bool("DEALS_OBSERVATIONS_ENABLED", True),
+        community_score_weights=_parse_community_score_weights(
+            _env("DEALS_COMMUNITY_SCORE_WEIGHTS")
+        ),
     )
 
 
@@ -226,4 +287,9 @@ def deals_config_public_dict(cfg: Optional[DealsConfig] = None) -> Dict[str, Any
         "booking_enabled": cfg.booking_enabled,
         "prod_readonly": cfg.is_prod_readonly,
         "payment_public_key": cfg.payment_public_key if cfg.is_liteapi else None,
+        "deals_source": cfg.deals_source,
+        "max_flight_pp": cfg.max_flight_pp,
+        "min_per_origin": cfg.min_per_origin,
+        "seed_catalog_size": cfg.seed_catalog_size,
+        "seed_scan_budget_per_day": cfg.seed_scan_budget_per_day,
     }

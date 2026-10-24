@@ -471,6 +471,211 @@ async def job_refresh_deal_calendar(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ——— Deals v3 community jobs ———
+
+
+@router.post("/api/deals/jobs/seed-city-mapping")
+async def job_seed_city_mapping(authorization: Optional[str] = Header(None)):
+    """D0: upsert served_cities + airport_city_mapping from CITY_FR_BY_IATA."""
+    require_cron(authorization)
+    try:
+        from deals.city_mapping import upsert_city_mapping
+
+        return upsert_city_mapping(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/build-seed-catalog")
+async def job_build_seed_catalog(authorization: Optional[str] = Header(None)):
+    """D2: auto-generate top seed cities (no manual list)."""
+    require_cron(authorization)
+    try:
+        from deals.seed_catalog import build_seed_catalog
+
+        return build_seed_catalog(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/seed-scan")
+async def job_seed_scan(
+    authorization: Optional[str] = Header(None),
+    dry_run: bool = Query(False),
+):
+    """D2: scan seed catalog into price_observations (budget/day)."""
+    require_cron(authorization)
+    try:
+        from deals.seed_catalog import seed_scan
+
+        return seed_scan(_svc(), dry_run=dry_run)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/refresh-baselines")
+async def job_refresh_baselines(authorization: Optional[str] = Header(None)):
+    """D3: recompute route_price_baselines (30d)."""
+    require_cron(authorization)
+    try:
+        from deals.baselines import refresh_route_baselines
+
+        return refresh_route_baselines(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/promote-deals")
+async def job_promote_deals(authorization: Optional[str] = Header(None)):
+    """D4: promote observations → deals_active (+ optional hotel)."""
+    require_cron(authorization)
+    try:
+        from deals.promote import promote_deals
+
+        return promote_deals(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/revalidate-deals")
+async def job_revalidate_deals(authorization: Optional[str] = Header(None)):
+    """D5: background flight revalidation for deals_active."""
+    require_cron(authorization)
+    try:
+        from deals.revalidate_community import revalidate_deals
+
+        return revalidate_deals(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/archive-trip-drafts")
+async def job_archive_trip_drafts(authorization: Optional[str] = Header(None)):
+    """Archive expired anonymous Mon voyage drafts."""
+    require_cron(authorization)
+    try:
+        from deals.my_trips import archive_expired_drafts
+
+        return archive_expired_drafts(_svc())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ComposeHotelRequest(BaseModel):
+    checkin: str
+    checkout: str
+    iata: Optional[str] = None
+    city: Optional[str] = None
+    adults: int = Field(2, ge=1, le=6)
+    fetch: bool = False
+
+
+@router.post("/api/deals/compose-hotel")
+async def compose_hotel_endpoint(body: ComposeHotelRequest):
+    """D0/L13: city name first, hotel details when ready."""
+    try:
+        from deals.compose_hotel import compose_hotel
+
+        return compose_hotel(
+            _svc(),
+            checkin=body.checkin,
+            checkout=body.checkout,
+            iata=body.iata,
+            city=body.city,
+            adults=body.adults,
+            fetch_if_miss=body.fetch,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MyTripDraftRequest(BaseModel):
+    deal_key: Optional[str] = None
+    origin_iata: Optional[str] = None
+    departure_airport: Optional[str] = None
+    destination: Optional[str] = None
+    city: Optional[str] = None
+    dates: Dict[str, Any] = Field(default_factory=dict)
+    adults: int = Field(2, ge=1, le=6)
+    flight: Optional[Dict[str, Any]] = None
+    hotel: Optional[Dict[str, Any]] = None
+    price_per_person: Optional[float] = None
+    payload: Optional[Dict[str, Any]] = None
+
+
+@router.post("/api/deals/my-trip")
+@optional_auth
+async def create_my_trip(body: MyTripDraftRequest, request: Request):
+    """
+    Create anonymous « Mon voyage » draft (booking-oriented).
+    Auth optional — claim later to save / invite / pay.
+    """
+    try:
+        from deals.my_trips import create_draft
+
+        user_id = get_user_id_from_token(request)
+        payload = body.payload or body.model_dump(exclude={"payload"})
+        draft = create_draft(
+            _svc(),
+            payload=payload,
+            user_id=user_id,
+            deal_key=body.deal_key,
+        )
+        return draft
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/deals/my-trip/{draft_token}")
+async def get_my_trip(draft_token: str):
+    try:
+        from deals.my_trips import get_draft
+
+        row = get_draft(_svc(), draft_token)
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable ou expiré")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/my-trip/{draft_token}/claim")
+async def claim_my_trip(draft_token: str, request: Request):
+    """Attach draft to logged-in user (save / invite / pay)."""
+    user_id = _require_user(request)
+    try:
+        from deals.my_trips import claim_draft
+
+        row = claim_draft(_svc(), draft_token, user_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
     """Get a single deal by id or deal_key."""

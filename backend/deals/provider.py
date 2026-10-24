@@ -313,11 +313,22 @@ class LiteApiDealProvider(DealProvider):
         max_pp: Optional[float] = None,
     ) -> List[dict]:
         from deals.deal_assemble import load_caches_and_assemble
+        from deals.liteapi_config import load_deals_config
 
         supabase = self._supabase()
         if not supabase:
             return []
+        cfg = load_deals_config()
         try:
+            if cfg.is_community:
+                from deals.community_list import list_community_deals
+
+                community = list_community_deals(
+                    supabase, origin=origin, adults=adults, max_pp=max_pp
+                )
+                if community:
+                    return community
+                # Socle: fall back to legacy weekend catalogue while seed fills
             return load_caches_and_assemble(
                 supabase,
                 origin=origin,
@@ -331,11 +342,19 @@ class LiteApiDealProvider(DealProvider):
 
     def get_deal(self, deal_id: str) -> Optional[dict]:
         from deals.deal_assemble import get_deal_from_caches
+        from deals.liteapi_config import load_deals_config
 
         supabase = self._supabase()
         if not supabase:
             return None
+        cfg = load_deals_config()
         try:
+            if cfg.is_community:
+                from deals.community_list import get_community_deal
+
+                deal = get_community_deal(supabase, deal_id)
+                if deal:
+                    return deal
             return get_deal_from_caches(supabase, deal_id)
         except Exception as e:
             print(f"⚠️ LiteApiDealProvider.get_deal: {e}")

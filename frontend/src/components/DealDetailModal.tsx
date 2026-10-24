@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   dealAdults,
@@ -8,6 +9,7 @@ import {
 } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel } from '../types'
 import { useI18n } from '../contexts/I18nContext'
+import { getApiClient } from '../utils/apiClient'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
 import { DealComplianceNotice } from './DealComplianceNotice'
 
@@ -67,6 +69,8 @@ export function DealDetailModal({
   onNeedLogin,
 }: DealDetailModalProps) {
   const { t, language } = useI18n()
+  const navigate = useNavigate()
+  const [startingTrip, setStartingTrip] = useState(false)
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [checkout, setCheckout] = useState(false)
   const [bookingEnabled, setBookingEnabled] = useState(true)
@@ -134,13 +138,44 @@ export function DealDetailModal({
     : deal.price_per_person
   const fees =
     selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
-  const age = formatFetchedAt(deal.fetched_at, language === 'en' ? 'en-GB' : 'fr-FR')
+  const verifiedLabel = deal.flags?.verified_label
+  const age = verifiedLabel
+    ? null
+    : formatFetchedAt(deal.fetched_at, language === 'en' ? 'en-GB' : 'fr-FR')
+  // City image dominant — hotel photo is vignette, not hero
   const imageUrl = resolveTripImageUrl({
     city: deal.city,
-    imageUrl: selected?.photo || deal.image_url,
+    imageUrl: deal.image_url,
   })
+  const hotelThumb = selected?.photo || deal.hotel?.photo || null
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
+
+  const startMyTrip = async () => {
+    setStartingTrip(true)
+    try {
+      const draft = await getApiClient().createMyTrip({
+        deal_key: deal.deal_key || deal.id,
+        origin_iata: deal.origin_iata || deal.departure_airport,
+        departure_airport: deal.departure_airport,
+        destination: deal.destination,
+        city: deal.city,
+        dates: deal.dates,
+        adults,
+        flight: deal.flight,
+        hotel: selected || deal.hotel,
+        price_per_person: pricePp,
+        booking_url: flightUrl || deal.booking_url,
+      })
+      onClose()
+      navigate(`/trip/${draft.draft_token}`)
+    } catch {
+      // Fallback: open flight URL if draft fails
+      if (flightUrl) window.open(flightUrl, '_blank', 'noopener,noreferrer')
+    } finally {
+      setStartingTrip(false)
+    }
+  }
 
   return (
     <AnimatePresence>
@@ -215,10 +250,38 @@ export function DealDetailModal({
                   {t('deals.taxOnSite', { fees: Math.round(fees) })}
                 </p>
               ) : null}
-              {age ? (
+              {verifiedLabel ? (
+                <p className="text-xs text-emerald-700 mt-1 font-medium">{verifiedLabel}</p>
+              ) : age ? (
                 <p className="text-xs text-slate-400 mt-1">{t('deals.priceAge', { age })}</p>
               ) : null}
+              {deal.badge_meta?.tooltip ? (
+                <p className="text-xs text-slate-500 mt-1" title={deal.badge_meta.tooltip}>
+                  {deal.badge}
+                </p>
+              ) : null}
             </div>
+
+            {hotelThumb ? (
+              <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+                <img
+                  src={hotelThumb}
+                  alt={selected?.name || deal.hotel_name || 'Hôtel'}
+                  className="w-16 h-16 rounded-lg object-cover"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900 truncate">
+                    {selected?.name || deal.hotel_name || 'Hôtel'}
+                  </p>
+                  {selected?.distance_m != null || deal.hotel?.distance_m != null ? (
+                    <p className="text-xs text-slate-500">
+                      à {Math.round(Number(selected?.distance_m ?? deal.hotel?.distance_m))} m du
+                      centre
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             <h3 className="text-xl font-bold text-slate-900">{deal.title}</h3>
             <p className="text-slate-600 text-sm leading-relaxed">{deal.description}</p>
@@ -380,50 +443,32 @@ export function DealDetailModal({
             />
 
             <div className="flex flex-col gap-2 pt-1">
-              {deal.provider === 'liteapi' || deal.deal_key ? (
+              <button
+                type="button"
+                onClick={() => void startMyTrip()}
+                disabled={startingTrip}
+                className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors disabled:opacity-60"
+              >
+                {startingTrip ? '…' : 'Continuer ce voyage'}
+              </button>
+              {deal.provider === 'liteapi' || (deal.deal_key && deal.hotel) ? (
                 bookingEnabled ? (
                   <button
                     type="button"
                     onClick={() => setCheckout(true)}
-                    className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors"
+                    className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl transition-colors"
                   >
-                    Réserver l’hôtel
+                    Réserver l’hôtel seul
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full text-center bg-slate-200 text-slate-500 font-bold py-3.5 rounded-xl cursor-not-allowed"
-                  >
-                    {t('deals.bookingDisabled')}
-                  </button>
-                )
+                ) : null
               ) : hasPartnerUrl ? (
                 <a
                   href={deal.booking_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors"
-                >
-                  {t('deals.viewOffer')}
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="w-full text-center bg-slate-200 text-slate-500 font-bold py-3.5 rounded-xl cursor-not-allowed"
-                >
-                  {t('deals.bookHotelSoon')}
-                </button>
-              )}
-              {flightUrl ? (
-                <a
-                  href={flightUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="block w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl transition-colors"
                 >
-                  {t('deals.bookFlight')}
+                  {t('deals.viewOffer')}
                 </a>
               ) : null}
             </div>

@@ -166,7 +166,9 @@ def search_roundtrips(
             direct,
         )
         cap = max(limite_allers or 50, 30)
-        return trips[: cap * 2], nq
+        capped = trips[: cap * 2]
+        _maybe_record_observations(capped, record_prices=record_prices)
+        return capped, nq
 
     # Multi-origin city aggregation (e.g. Paris = CDG,ORY,BVA)
     print(f"📥 multi-origin scan: {','.join(origins)}")
@@ -203,4 +205,25 @@ def search_roundtrips(
 
     merged = merge_trips(batches)
     cap = max(limite_allers or 50, 30) * max(1, len(origins))
-    return merged[:cap], total_queries
+    capped = merged[:cap]
+    _maybe_record_observations(capped, record_prices=record_prices)
+    return capped, total_queries
+
+
+def _maybe_record_observations(
+    trips: List[TripResponse],
+    *,
+    record_prices: bool,
+    source: str = "organic_search",
+) -> None:
+    """D1: async market observations (Ryanair + Travelpayouts). Never blocks."""
+    if not record_prices or not trips:
+        return
+    try:
+        from deals.observations import schedule_observations_from_search
+
+        schedule_observations_from_search(
+            trips, record_prices=record_prices, source=source
+        )
+    except Exception as e:
+        print(f"⚠️ price_observations skip: {e}")

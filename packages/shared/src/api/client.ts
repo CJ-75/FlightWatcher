@@ -20,6 +20,7 @@ import type {
   DealCalendarResponse,
   DealRevalidateRequest,
   DealRevalidateResponse,
+  MyTripDraft,
   HotelBooking,
   HotelBookingBookRequest,
   HotelBookingPrebookRequest,
@@ -243,6 +244,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<DealRevalidateResponse>(
         `/api/deals/${encodeURIComponent(dealKey)}/revalidate`,
         { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    createMyTrip: (body: Record<string, unknown>) =>
+      request<MyTripDraft>('/api/deals/my-trip', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    getMyTrip: (draftToken: string) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}`,
+      ),
+
+    claimMyTrip: (draftToken: string) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/claim`,
+        { method: 'POST', body: JSON.stringify({}) },
       ),
 
     prebookHotel: (body: HotelBookingPrebookRequest) =>
