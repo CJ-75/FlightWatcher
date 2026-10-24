@@ -122,3 +122,101 @@ def archive_expired_drafts(supabase) -> Dict[str, Any]:
     except Exception as e:
         logger.warning("archive drafts: %s", e)
         return {"archived": 0, "error": str(e)}
+
+
+def _merge_payload(row: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(row.get("payload") or {})
+    payload.update(patch)
+    return payload
+
+
+def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
+    """Lot F — step ① done → unlock hotel at flight dates."""
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return None
+    now = _now().isoformat()
+    payload = _merge_payload(
+        row,
+        {
+            "flight_booked": True,
+            "flight_booked_at": now,
+        },
+    )
+    update: Dict[str, Any] = {
+        "payload": payload,
+        "updated_at": now,
+        "flight_booked_at": now,
+    }
+    try:
+        res = (
+            supabase.table("my_trip_drafts")
+            .update(update)
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (res.data or [{**row, **update}])[0]
+    except Exception as e:
+        # Column may be missing before Lot F SQL — payload only
+        logger.warning("mark_flight_booked columns: %s", e)
+        res = (
+            supabase.table("my_trip_drafts")
+            .update({"payload": payload, "updated_at": now})
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (res.data or [{**row, "payload": payload}])[0]
+
+
+def send_draft_email(
+    supabase,
+    draft_token: str,
+    *,
+    email: str,
+    consent: bool,
+) -> Dict[str, Any]:
+    """Lot F — email trip link only if consent. No account creation."""
+    if not consent:
+        return {"ok": False, "error": "consent_required"}
+    email_n = (email or "").strip().lower()
+    if "@" not in email_n or "." not in email_n.split("@")[-1]:
+        return {"ok": False, "error": "invalid_email"}
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return {"ok": False, "error": "not_found"}
+
+    from email_notify import send_my_trip_link
+
+    city = row.get("city_name") or (row.get("payload") or {}).get("city") or "week-end"
+    sent = send_my_trip_link(
+        email=email_n,
+        city=str(city),
+        draft_token=draft_token,
+        out_date=str(row.get("out_date") or "")[:10] or None,
+        ret_date=str(row.get("ret_date") or "")[:10] or None,
+    )
+    if not sent:
+        return {"ok": False, "error": "email_not_sent"}
+
+    now = _now().isoformat()
+    payload = _merge_payload(
+        row,
+        {
+            "share_email": email_n,
+            "share_email_sent_at": now,
+            "share_email_consent": True,
+        },
+    )
+    update: Dict[str, Any] = {
+        "payload": payload,
+        "updated_at": now,
+        "share_email": email_n,
+    }
+    try:
+        supabase.table("my_trip_drafts").update(update).eq("id", row["id"]).execute()
+    except Exception as e:
+        logger.warning("share_email column: %s", e)
+        supabase.table("my_trip_drafts").update(
+            {"payload": payload, "updated_at": now}
+        ).eq("id", row["id"]).execute()
+    return {"ok": True, "email": email_n}

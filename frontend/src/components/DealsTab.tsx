@@ -93,6 +93,32 @@ export function DealsTab() {
     void load()
   }, [load])
 
+  // Lot F — deep link from Mon voyage hôtel CTA (?deal=&book_hotel=1)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const dealKey = params.get('deal')
+      if (!dealKey || deals.length === 0) return
+      const found = deals.find((d) => d.id === dealKey || d.deal_key === dealKey)
+      if (found) {
+        setSelected(found)
+        if (params.get('book_hotel') === '1') {
+          sessionStorage.setItem(
+            'fw_book_hotel',
+            JSON.stringify({
+              deal_key: dealKey,
+              checkin: params.get('checkin'),
+              checkout: params.get('checkout'),
+            }),
+          )
+        }
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [deals])
+
   const toggleLike = async (deal: TravelDeal) => {
     const user = await getCurrentUser()
     if (!user) {

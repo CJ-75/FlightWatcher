@@ -217,6 +217,9 @@ export interface MyTripDraft {
   adults?: number
   hotel?: unknown
   invite_available?: boolean
+  /** Lot F */
+  flight_booked_at?: string | null
+  share_email?: string | null
 }
 
 export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'

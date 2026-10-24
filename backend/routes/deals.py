@@ -790,6 +790,54 @@ async def claim_my_trip(draft_token: str, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class MyTripEmailRequest(BaseModel):
+    email: str
+    consent: bool = False
+
+
+@router.post("/api/deals/my-trip/{draft_token}/email")
+async def email_my_trip(draft_token: str, body: MyTripEmailRequest):
+    """Lot F — send /trip/:token via Resend (consent required, no account)."""
+    try:
+        from deals.my_trips import send_draft_email
+
+        result = send_draft_email(
+            _svc(),
+            draft_token,
+            email=body.email,
+            consent=bool(body.consent),
+        )
+        if not result.get("ok"):
+            err = result.get("error") or "failed"
+            code = 400
+            if err == "not_found":
+                code = 404
+            elif err == "email_not_sent":
+                code = 502
+            raise HTTPException(status_code=code, detail=err)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/my-trip/{draft_token}/flight-booked")
+async def my_trip_flight_booked(draft_token: str):
+    """Lot F — « J'ai réservé mon vol ✓ » unlocks hotel step."""
+    try:
+        from deals.my_trips import mark_flight_booked
+
+        row = mark_flight_booked(_svc(), draft_token)
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
     """Get a single deal by id or deal_key."""

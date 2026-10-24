@@ -20,7 +20,8 @@ function partnerLabel(provider?: string, bookingUrl?: string): string {
   if (bookingUrl && /aviasales|travelpayouts/i.test(bookingUrl)) {
     return 'Réserver via Aviasales'
   }
-  return 'Continuer vers le vol'
+  if (bookingUrl && /ryanair\.com/i.test(bookingUrl)) return 'Réserver sur Ryanair'
+  return 'Continuer vers le partenaire'
 }
 
 /**
@@ -36,6 +37,12 @@ export default function MyTrip() {
   const [showPriceAsk, setShowPriceAsk] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
   const [checkId, setCheckId] = useState<string | null>(null)
+  const [flightClicked, setFlightClicked] = useState(false)
+  const [markingBooked, setMarkingBooked] = useState(false)
+  const [email, setEmail] = useState('')
+  const [consent, setConsent] = useState(false)
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailMsg, setEmailMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!token) return
@@ -69,8 +76,20 @@ export default function MyTrip() {
     'live'
   const isCached = vlevel === 'cached'
   const cta = partnerLabel(flight.provider, flightUrl)
+  const flightBooked = Boolean(
+    draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
+  )
+  const outDate = draft?.out_date || payload.dates?.outbound
+  const retDate = draft?.ret_date || payload.dates?.inbound
+  const hotelHref =
+    draft?.deal_key && outDate && retDate
+      ? `/?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1&checkin=${encodeURIComponent(String(outDate).slice(0, 10))}&checkout=${encodeURIComponent(String(retDate).slice(0, 10))}`
+      : draft?.deal_key
+        ? `/?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1`
+        : '/'
 
   const onFlightClick = async () => {
+    setFlightClicked(true)
     if (!draft?.deal_key && !payload.deal_key) {
       return
     }
@@ -96,6 +115,20 @@ export default function MyTrip() {
     }
   }
 
+  const onFlightBooked = async () => {
+    if (!token) return
+    setMarkingBooked(true)
+    try {
+      const row = await getApiClient().markMyTripFlightBooked(token)
+      setDraft(row)
+      if (isCached) setShowPriceAsk(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible d’enregistrer')
+    } finally {
+      setMarkingBooked(false)
+    }
+  }
+
   const sendFeedback = async (feedback: 'same' | 'higher' | 'gone') => {
     try {
       await getApiClient().flightClickFeedback({
@@ -109,6 +142,25 @@ export default function MyTrip() {
     } catch {
       setFeedbackSent(true)
       setShowPriceAsk(false)
+    }
+  }
+
+  const onSendEmail = async () => {
+    if (!token) return
+    setEmailSending(true)
+    setEmailMsg(null)
+    try {
+      await getApiClient().emailMyTrip(token, { email, consent })
+      setEmailMsg('Email envoyé — vérifie ta boîte de réception.')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Envoi impossible'
+      setEmailMsg(
+        msg.includes('email_not_sent')
+          ? 'Envoi indisponible (Resend non configuré).'
+          : msg,
+      )
+    } finally {
+      setEmailSending(false)
     }
   }
 
@@ -158,8 +210,7 @@ export default function MyTrip() {
           </p>
           <h1 className="text-3xl font-black text-slate-900">{city}</h1>
           <p className="text-slate-600 mt-1">
-            {formatDate(draft.out_date || payload.dates?.outbound)} →{' '}
-            {formatDate(draft.ret_date || payload.dates?.inbound)}
+            {formatDate(outDate)} → {formatDate(retDate)}
             {draft.adults ? ` · ${draft.adults} pers.` : null}
           </p>
           {price != null ? (
@@ -186,7 +237,14 @@ export default function MyTrip() {
         </div>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
-          <h2 className="font-bold text-slate-900">1. Réserver le vol</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-slate-900">1. Réserver le vol</h2>
+            {flightBooked ? (
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
+                Réservé ✓
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm text-slate-600">
             Deux réservations distinctes (vol + hôtel). Le lien ouvre le partenaire ci-dessous.
           </p>
@@ -205,6 +263,17 @@ export default function MyTrip() {
               Lien vol indisponible pour l’instant — réessaie dans un instant.
             </p>
           )}
+
+          {(flightClicked || flightBooked) && !flightBooked ? (
+            <button
+              type="button"
+              onClick={() => void onFlightBooked()}
+              disabled={markingBooked}
+              className="w-full text-center border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold py-3 rounded-xl disabled:opacity-60"
+            >
+              {markingBooked ? '…' : 'J’ai réservé mon vol ✓'}
+            </button>
+          ) : null}
 
           {showPriceAsk && isCached && !feedbackSent ? (
             <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-2">
@@ -241,21 +310,76 @@ export default function MyTrip() {
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+        <section
+          className={`rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm ${
+            flightBooked ? '' : 'opacity-60'
+          }`}
+        >
           <h2 className="font-bold text-slate-900">2. Réserver l’hôtel</h2>
-          {hotel && typeof hotel === 'object' && (hotel as any).name ? (
-            <p className="text-sm text-slate-700 font-medium">{(hotel as any).name}</p>
+          {!flightBooked ? (
+            <p className="text-sm text-slate-600">
+              Confirme d’abord « J’ai réservé mon vol ✓ » pour débloquer l’hôtel aux dates du
+              vol
+              {outDate && retDate
+                ? ` (${formatDate(outDate)} → ${formatDate(retDate)})`
+                : ''}
+              .
+            </p>
           ) : (
-            <p className="text-sm text-slate-600">Ajouter un hôtel depuis le deal.</p>
+            <>
+              <p className="text-sm text-slate-600">
+                Dates du vol : {formatDate(outDate)} → {formatDate(retDate)}
+              </p>
+              {hotel && typeof hotel === 'object' && (hotel as any).name ? (
+                <p className="text-sm text-slate-700 font-medium">{(hotel as any).name}</p>
+              ) : (
+                <p className="text-sm text-slate-600">Choisir un hôtel pour ces dates.</p>
+              )}
+              {draft.deal_key ? (
+                <Link
+                  to={hotelHref}
+                  className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl"
+                >
+                  Réserver l’hôtel
+                </Link>
+              ) : null}
+            </>
           )}
-          {draft.deal_key ? (
-            <Link
-              to={`/?deal=${encodeURIComponent(draft.deal_key)}`}
-              className="block w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl"
-            >
-              Voir l’offre hôtel
-            </Link>
-          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+          <h2 className="font-bold text-slate-900">Recevoir ce voyage par email</h2>
+          <p className="text-sm text-slate-600">
+            Sans créer de compte — on t’envoie uniquement le lien de ce voyage.
+          </p>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="toi@email.com"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            autoComplete="email"
+          />
+          <label className="flex items-start gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              J’accepte de recevoir ce lien par email. Aucune autre utilisation de mon adresse.
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={!consent || !email.trim() || emailSending}
+            onClick={() => void onSendEmail()}
+            className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl disabled:opacity-50"
+          >
+            {emailSending ? 'Envoi…' : 'Envoyer le lien'}
+          </button>
+          {emailMsg ? <p className="text-xs text-slate-600">{emailMsg}</p> : null}
         </section>
 
         <section className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 space-y-2">

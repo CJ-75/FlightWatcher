@@ -118,6 +118,37 @@ def notify_trip_under_budget(
     return send_email(recipients, subject, html)
 
 
+def send_my_trip_link(
+    *,
+    email: str,
+    city: str,
+    draft_token: str,
+    out_date: Optional[str] = None,
+    ret_date: Optional[str] = None,
+) -> bool:
+    """Lot F — anonymous trip link only (no account). Explicit consent required by caller."""
+    link = f"{WEB_APP_URL}/trip/{draft_token}"
+    dates = ""
+    if out_date and ret_date:
+        dates = f"<p>Dates : <strong>{out_date}</strong> → <strong>{ret_date}</strong></p>"
+    subject = f"Ton voyage {city or 'FlightWatcher'} — lien de suivi"
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
+      <h2 style="margin:0 0 12px;color:#E85A28">Mon voyage</h2>
+      <p>Voici le lien pour retrouver ton voyage
+         <strong>{city or 'week-end'}</strong> (sans créer de compte) :</p>
+      {dates}
+      <p><a href="{link}" style="display:inline-block;background:#FF6B35;color:#fff;
+         text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
+         Ouvrir mon voyage</a></p>
+      <p style="font-size:13px;color:#64748b">Ce lien est personnel. Ton email n’est utilisé
+         que pour t’envoyer ce message.</p>
+      <p style="font-size:12px;color:#94a3b8">FlightWatcher</p>
+    </div>
+    """
+    return send_email([email], subject, html)
+
+
 def notify_deal_price_drop(
     *,
     email: str,

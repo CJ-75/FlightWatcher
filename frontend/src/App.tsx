@@ -385,6 +385,18 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
   }, [])
 
+  // Lot F — deep link hôtel depuis Mon voyage
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('deal')) {
+        setActiveTab('deals')
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   // Lot E — Deals → Search prérempli (origine / voyageurs ; dest en toast)
   useEffect(() => {
     const applyPrefill = (prefill: SearchPrefill | null) => {

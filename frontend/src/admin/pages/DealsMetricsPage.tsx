@@ -169,6 +169,22 @@ export function DealsMetricsPage() {
                 {JSON.stringify(data.process?.calls_by_endpoint || {}, null, 2)}
               </pre>
             </div>
+            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4 lg:col-span-2">
+              <p className="text-sm font-semibold mb-2">Clics sortants vol (7 j)</p>
+              <p className="text-2xl font-bold text-white mb-2">
+                {String((data.caches as any)?.community?.outbound_clicks_7d ?? 0)}
+              </p>
+              <pre className="text-xs text-gray-400 overflow-auto">
+                {JSON.stringify(
+                  (data.caches as any)?.community?.outbound_by_partner || {},
+                  null,
+                  2,
+                )}
+              </pre>
+              <p className="text-xs text-gray-500 mt-2">
+                {(data.caches as any)?.community?.affiliate_note || ''}
+              </p>
+            </div>
           </div>
         </>
       ) : null}

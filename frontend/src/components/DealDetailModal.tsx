@@ -85,6 +85,23 @@ export function DealDetailModal({
       .catch(() => undefined)
   }, [])
 
+  // Lot F — open hotel checkout when arriving from Mon voyage
+  useEffect(() => {
+    if (!deal) return
+    try {
+      const raw = sessionStorage.getItem('fw_book_hotel')
+      if (!raw) return
+      const data = JSON.parse(raw) as { deal_key?: string }
+      const key = deal.deal_key || deal.id
+      if (data.deal_key && data.deal_key === key) {
+        sessionStorage.removeItem('fw_book_hotel')
+        setCheckout(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [deal])
+
   const hotelOptions = useMemo(() => {
     if (!deal) return [] as TravelDealHotel[]
     const primary = deal.hotel

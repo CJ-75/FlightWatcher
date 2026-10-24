@@ -311,12 +311,18 @@ def _baseline_guard_stats(supabase: Any, cfg: Any) -> Dict[str, Any]:
 
 
 def _community_stats(supabase: Any) -> Dict[str, Any]:
-    """D7: organic_share + active deals coverage."""
+    """D7: organic_share + active deals coverage + Lot F outbound clicks."""
     out: Dict[str, Any] = {
         "active": 0,
         "organic": 0,
         "seed": 0,
         "organic_share": None,
+        "outbound_clicks_7d": 0,
+        "outbound_by_partner": {},
+        "affiliate_note": (
+            "Travelpayouts: pas de webhook conversion branché — "
+            "clics enregistrés dans click_price_checks uniquement"
+        ),
     }
     try:
         res = (
@@ -334,6 +340,24 @@ def _community_stats(supabase: Any) -> Dict[str, Any]:
         out["seed"] = seed
         if rows:
             out["organic_share"] = round(organic / len(rows), 3)
+    except Exception:
+        pass
+    try:
+        since = datetime.now(timezone.utc).timestamp() - 7 * 86400
+        since_iso = datetime.fromtimestamp(since, tz=timezone.utc).isoformat()
+        clicks = (
+            supabase.table("click_price_checks")
+            .select("partner,source,clicked_at")
+            .gte("clicked_at", since_iso)
+            .limit(2000)
+            .execute()
+        )
+        by_partner: Dict[str, int] = {}
+        for row in clicks.data or []:
+            p = str(row.get("partner") or "unknown").lower()
+            by_partner[p] = by_partner.get(p, 0) + 1
+        out["outbound_clicks_7d"] = len(clicks.data or [])
+        out["outbound_by_partner"] = by_partner
     except Exception:
         pass
     return out

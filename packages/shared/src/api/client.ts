@@ -263,6 +263,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify({}) },
       ),
 
+    emailMyTrip: (draftToken: string, body: { email: string; consent: boolean }) =>
+      request<{ ok: boolean; email?: string; error?: string }>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/email`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    markMyTripFlightBooked: (draftToken: string) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/flight-booked`,
+        { method: 'POST', body: JSON.stringify({}) },
+      ),
+
     recordFlightClick: (body: {
       deal_key: string
       verification_level?: string

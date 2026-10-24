@@ -11,11 +11,12 @@ import {
   Dimensions,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import * as WebBrowser from 'expo-web-browser'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
 import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
-import { getApi } from '../lib/client'
+import { getApi, getWebOrigin } from '../lib/client'
 import { HeartIcon } from '../components/HeartIcon'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -43,6 +44,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
   const [hotelId, setHotelId] = useState<string | null>(null)
+  const [startingTrip, setStartingTrip] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -143,6 +145,36 @@ export function DealDetailScreen({ route, navigation }: Props) {
       }
     }
     if (url) await openUrl(url)
+  }
+
+  const startMyTrip = async () => {
+    setStartingTrip(true)
+    try {
+      const draft = await getApi().createMyTrip({
+        deal_key: deal.deal_key || deal.id,
+        origin_iata: deal.origin_iata || deal.departure_airport,
+        departure_airport: deal.origin_airport_label || deal.departure_airport,
+        destination: deal.destination,
+        city: deal.city,
+        dates: deal.dates,
+        adults,
+        flight: deal.flight,
+        hotel: selected || deal.hotel,
+        price_per_person: pricePp,
+        booking_url: flightUrl || deal.booking_url,
+        baggage_line: deal.baggage_line,
+        route_hint: deal.route_hint,
+        price_pax_note: deal.price_pax_note,
+      })
+      const url = `${getWebOrigin()}/trip/${draft.draft_token}`
+      await WebBrowser.openBrowserAsync(url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+      })
+    } catch {
+      if (flightUrl) await openUrl(flightUrl)
+    } finally {
+      setStartingTrip(false)
+    }
   }
 
   return (
@@ -296,6 +328,15 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
       <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }, shadow.lift]}>
         <Pressable
+          onPress={() => void startMyTrip()}
+          disabled={startingTrip}
+          style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }, startingTrip && { opacity: 0.6 }]}
+        >
+          <Text style={styles.ctaText}>
+            {startingTrip ? '…' : 'Continuer ce voyage'}
+          </Text>
+        </Pressable>
+        <Pressable
           onPress={() => {
             navigation.navigate(
               'Main' as never,
@@ -322,9 +363,9 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 hotelId: selected?.id || deal.hotel?.id,
               })
             }
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
           >
-            <Text style={styles.ctaText}>Réserver l’hôtel</Text>
+            <Text style={styles.ctaSecondaryText}>Réserver l’hôtel seul</Text>
           </Pressable>
         ) : hasPartnerUrl ? (
           <Pressable
