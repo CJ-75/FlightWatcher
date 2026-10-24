@@ -1,10 +1,16 @@
-/** Lot E — open Search tab with origin / destination / pax from Deals. */
+/** Lot E — open Search tab with origin / destination / pax / dates from Deals. */
 
 export type SearchPrefill = {
   origin?: string
   destination?: string
   city?: string
   adults?: number
+  /** YYYY-MM-DD — aller */
+  outbound?: string
+  /** YYYY-MM-DD — retour */
+  inbound?: string
+  /** If true with outbound+inbound+origin → run inspire immediately */
+  autoSearch?: boolean
 }
 
 export const SEARCH_PREFILL_KEY = 'fw_search_prefill'

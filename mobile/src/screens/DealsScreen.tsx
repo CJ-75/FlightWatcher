@@ -7,16 +7,19 @@ import {
   RefreshControl,
   ActivityIndicator,
   Pressable,
+  Alert,
 } from 'react-native'
+import type { MainTabParamList } from '../../App'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, TravelDeal } from '@flightwatcher/shared'
-import { normalizeAirports } from '@flightwatcher/shared'
+import { normalizeAirports, type FlexibleDates } from '@flightwatcher/shared'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { PassengerStepper } from '../components/PassengerStepper'
+import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
@@ -39,6 +42,11 @@ export function DealsScreen() {
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
+  const [dateModalOpen, setDateModalOpen] = useState(false)
+  const [flexDates, setFlexDates] = useState<FlexibleDates>({
+    dates_depart: [],
+    dates_retour: [],
+  })
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
@@ -261,6 +269,61 @@ export function DealsScreen() {
                     <PassengerStepper value={adults} onChange={setAdults} />
 
                     <View style={styles.divider} />
+                    <Text style={styles.label}>Dates (recherche live)</Text>
+                    <Text style={styles.originHint}>
+                      Aller + retour → vraie recherche vols (pas le mur Deals).
+                    </Text>
+                    <Pressable
+                      onPress={() => setDateModalOpen(true)}
+                      style={styles.datesBtn}
+                    >
+                      <Text style={styles.datesBtnText}>
+                        {flexDates.dates_depart[0]?.date &&
+                        flexDates.dates_retour[0]?.date
+                          ? `${flexDates.dates_depart[0].date} → ${flexDates.dates_retour[0].date}`
+                          : 'Choisir aller / retour'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        const out = flexDates.dates_depart[0]?.date
+                        const ret = flexDates.dates_retour[0]?.date
+                        if (!origin.trim()) {
+                          Alert.alert('Origine', 'Choisis une ville / aéroport de départ')
+                          return
+                        }
+                        if (!out || !ret || ret <= out) {
+                          Alert.alert(
+                            'Dates',
+                            'Indique une date aller et une date retour (retour après l’aller)',
+                          )
+                          setDateModalOpen(true)
+                          return
+                        }
+                        ;(navigation as { navigate: (a: string, b?: object) => void }).navigate(
+                          'Search',
+                          {
+                            origin: origin.trim().toUpperCase(),
+                            adults,
+                            outbound: out,
+                            inbound: ret,
+                            autoSearch: true,
+                          } satisfies NonNullable<MainTabParamList['Search']>,
+                        )
+                      }}
+                      style={[
+                        styles.searchBtn,
+                        !(
+                          origin.trim() &&
+                          flexDates.dates_depart[0]?.date &&
+                          flexDates.dates_retour[0]?.date
+                        ) && styles.searchBtnDisabled,
+                      ]}
+                    >
+                      <Text style={styles.searchBtnText}>Lancer la recherche</Text>
+                    </Pressable>
+
+                    <View style={styles.divider} />
                     <Text style={styles.label}>Trier</Text>
                     <View style={styles.sortRow}>
                       {(
@@ -389,6 +452,13 @@ export function DealsScreen() {
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      <FlexibleDatesModal
+        visible={dateModalOpen}
+        value={flexDates}
+        onChange={setFlexDates}
+        onClose={() => setDateModalOpen(false)}
+      />
     </View>
   )
 }
@@ -500,6 +570,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     lineHeight: 16,
+  },
+  datesBtn: {
+    marginTop: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  datesBtnText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  searchBtn: {
+    marginTop: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  searchBtnDisabled: {
+    backgroundColor: colors.line,
+  },
+  searchBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.white,
   },
   count: {
     fontFamily: fonts.semibold,

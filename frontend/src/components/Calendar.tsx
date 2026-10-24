@@ -25,9 +25,20 @@ const monthNames = [
 // Jours de la semaine avec lundi en premier (1=lundi, 7=dimanche)
 const dayNames = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
+type CalendarPlacement = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight?: number;
+};
+
 export function Calendar({ value, onChange, minDate, maxDate, className = '' }: CalendarProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState<CalendarPlacement>({
+    top: 0,
+    left: 0,
+    width: 320,
+  });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   
@@ -46,134 +57,88 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
     }
   }, [value]);
 
-  // Calculer la position du calendrier à chaque fois qu'il s'ouvre ou que le mois change
+  // Placer le calendrier entièrement dans la viewport (mesuré, pas d’estimation fixe)
   useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const updatePosition = () => {
-        if (!triggerRef.current) return;
-        
-        const rect = triggerRef.current.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const isMobile = viewportWidth < 640; // sm breakpoint
-        const calendarHeight = 400; // estimation
-        
-        // getBoundingClientRect() donne les coordonnées relatives à la viewport
-        // Comme le calendrier est en position: fixed, on utilise directement ces coordonnées
-        let left: number;
-        let top: number;
-        let calendarWidth: number;
-        
-        // LOGIQUE SÉPARÉE : Mobile vs Desktop
-        if (isMobile) {
-          // MOBILE : Centrer horizontalement (estimation initiale, sera recalculée après rendu)
-          calendarWidth = Math.min(viewportWidth * 0.95, 320);
-          left = (viewportWidth - calendarWidth) / 2;
+    if (!isOpen) return;
+
+    const MARGIN = 12;
+    const GAP = 8;
+
+    const updatePosition = () => {
+      if (!triggerRef.current) return;
+
+      const rect = triggerRef.current.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const isMobile = vw < 640;
+      const measured = calendarRef.current;
+      const naturalH = measured?.scrollHeight || measured?.offsetHeight || 440;
+      const naturalW = measured?.offsetWidth;
+      const maxAvailH = Math.max(200, vh - MARGIN * 2);
+
+      let width = isMobile
+        ? Math.min(vw * 0.95, 320)
+        : Math.max(rect.width, 280);
+      if (naturalW && isMobile) width = Math.min(naturalW, vw - MARGIN * 2);
+
+      let left = isMobile ? (vw - width) / 2 : rect.left;
+      left = Math.min(Math.max(left, MARGIN), Math.max(MARGIN, vw - width - MARGIN));
+
+      const spaceBelow = vh - rect.bottom - MARGIN;
+      const spaceAbove = rect.top - MARGIN;
+      let top: number;
+      let maxHeight: number | undefined;
+
+      if (naturalH + GAP <= spaceBelow) {
+        top = rect.bottom + GAP;
+      } else if (naturalH + GAP <= spaceAbove) {
+        top = rect.top - naturalH - GAP;
+      } else {
+        // Ne tient ni au-dessus ni en dessous → ancré dans la fenêtre
+        maxHeight = maxAvailH;
+        const usedH = Math.min(naturalH, maxAvailH);
+        if (spaceBelow >= spaceAbove && spaceBelow >= 160) {
+          top = rect.bottom + GAP;
+          maxHeight = Math.max(160, vh - top - MARGIN);
+        } else if (spaceAbove >= 160) {
+          maxHeight = Math.max(160, spaceAbove - GAP);
+          top = rect.top - Math.min(naturalH, maxHeight) - GAP;
         } else {
-          // DESKTOP : Utiliser la largeur du trigger (le champ de date) pour le calendrier
-          calendarWidth = rect.width;
-          left = rect.left;
-          
-          // Ajuster si le calendrier dépasse à droite
-          if (left + calendarWidth > viewportWidth - 16) {
-            left = viewportWidth - calendarWidth - 16;
-          }
-          
-          // S'assurer que le calendrier ne dépasse pas à gauche
-          if (left < 16) {
-            left = 16;
-          }
+          // Centrer verticalement dans la viewport
+          top = Math.max(MARGIN, (vh - usedH) / 2);
+          maxHeight = maxAvailH;
         }
-        
-        // Calculer l'espace disponible en bas et en haut (relatif à la viewport)
-        const spaceBelow = viewportHeight - rect.bottom;
-        const spaceAbove = rect.top;
-        
-        // Décider si afficher en bas ou en haut du trigger
-        if (spaceBelow >= calendarHeight + 8) {
-          // Assez d'espace en bas : afficher en dessous
-          top = rect.bottom + 8;
-        } else if (spaceAbove >= calendarHeight + 8) {
-          // Pas assez d'espace en bas mais assez en haut : afficher au-dessus
-          top = rect.top - calendarHeight - 8;
-        } else {
-          // Pas assez d'espace ni en haut ni en bas : afficher dans la viewport
-          if (spaceAbove > spaceBelow) {
-            // Plus d'espace en haut : afficher en haut de la viewport
-            top = 16;
-          } else {
-            // Plus d'espace en bas : afficher en bas de la viewport
-            top = viewportHeight - calendarHeight - 16;
-          }
-        }
-        
-        // S'assurer que le calendrier reste visible dans la viewport
-        // Si le calendrier dépasse en bas de la viewport, le remonter
-        if (top + calendarHeight > viewportHeight - 16) {
-          top = viewportHeight - calendarHeight - 16;
-        }
-        
-        // Si le calendrier dépasse en haut de la viewport, le descendre
-        if (top < 16) {
-          top = 16;
-        }
-        
-        setPosition({ top, left });
-      };
-      
-      // Calculer la position immédiatement
-      updatePosition();
-      
-      // Sur mobile, recalculer après un court délai pour obtenir la largeur réelle du calendrier
-      if (window.innerWidth < 640) {
-        const recalculateOnMobile = () => {
-          if (calendarRef.current && triggerRef.current) {
-            const actualWidth = calendarRef.current.offsetWidth;
-            const viewportWidth = window.innerWidth;
-            const rect = triggerRef.current.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const calendarHeight = 400;
-            
-            let top = position.top;
-            const spaceBelow = viewportHeight - rect.bottom;
-            const spaceAbove = rect.top;
-            
-            if (spaceBelow >= calendarHeight + 8) {
-              top = rect.bottom + 8;
-            } else if (spaceAbove >= calendarHeight + 8) {
-              top = rect.top - calendarHeight - 8;
-            } else {
-              if (spaceAbove > spaceBelow) {
-                top = 16;
-              } else {
-                top = viewportHeight - calendarHeight - 16;
-              }
-            }
-            
-            if (top + calendarHeight > viewportHeight - 16) {
-              top = viewportHeight - calendarHeight - 16;
-            }
-            if (top < 16) {
-              top = 16;
-            }
-            
-            const left = (viewportWidth - actualWidth) / 2;
-            setPosition({ top, left });
-          }
-        };
-        
-        setTimeout(recalculateOnMobile, 50);
       }
-      
-      // Réécouter les événements de scroll et resize pour recalculer la position
-      window.addEventListener('scroll', updatePosition, true);
-      window.addEventListener('resize', updatePosition);
-      
-      return () => {
-        window.removeEventListener('scroll', updatePosition, true);
-        window.removeEventListener('resize', updatePosition);
-      };
-    }
+
+      const usedH = maxHeight ? Math.min(naturalH, maxHeight) : naturalH;
+      if (top + usedH > vh - MARGIN) {
+        top = Math.max(MARGIN, vh - MARGIN - usedH);
+      }
+      if (top < MARGIN) top = MARGIN;
+      // Si toujours trop haut pour la fenêtre, forcer le scroll interne
+      if (top + naturalH > vh - MARGIN && !maxHeight) {
+        maxHeight = vh - top - MARGIN;
+      }
+
+      setPosition({ top, left, width, maxHeight });
+    };
+
+    updatePosition();
+    // Après paint : dimensions réelles du popup
+    const raf = requestAnimationFrame(() => {
+      updatePosition();
+      requestAnimationFrame(updatePosition);
+    });
+    const t = window.setTimeout(updatePosition, 60);
+
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
   }, [isOpen, currentMonth]);
 
   const selectedDate = value ? new Date(value + 'T00:00:00') : null;
@@ -311,7 +276,7 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                 className="fixed inset-0 bg-black/20 md:bg-transparent z-[9998]"
               />
               
-              {/* Calendar */}
+              {/* Calendar — toujours contenu dans la viewport */}
               <motion.div
                 ref={calendarRef}
                 initial={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -321,12 +286,14 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   position: 'fixed',
-                  top: `${position.top}px`,
-                  left: `${position.left}px`,
-                  width: window.innerWidth < 640 ? 'auto' : `${triggerRef.current?.offsetWidth || 320}px`,
-                  zIndex: 9999
+                  top: position.top,
+                  left: position.left,
+                  width: position.width,
+                  maxHeight: position.maxHeight,
+                  overflowY: position.maxHeight ? 'auto' : undefined,
+                  zIndex: 9999,
                 }}
-                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 p-3 sm:p-4 min-w-[280px] sm:min-w-[320px] max-w-[95vw] sm:max-w-none"
+                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 p-3 sm:p-4 min-w-[280px] max-w-[calc(100vw-24px)]"
               >
               {/* Header avec navigation */}
               <div className="flex items-center justify-between mb-4">

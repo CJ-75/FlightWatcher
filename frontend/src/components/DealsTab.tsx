@@ -35,6 +35,8 @@ export function DealsTab() {
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
+  const [outDate, setOutDate] = useState('')
+  const [retDate, setRetDate] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -64,6 +66,30 @@ export function DealsTab() {
       destination: opts?.destination,
       city: opts?.city,
       adults,
+    })
+  }
+
+  const datesReady =
+    Boolean(origin?.trim()) &&
+    Boolean(outDate) &&
+    Boolean(retDate) &&
+    retDate > outDate
+
+  const runDatedSearch = () => {
+    if (!datesReady) {
+      setToast(
+        !origin?.trim()
+          ? 'Choisis une origine pour lancer la recherche'
+          : 'Indique une date aller et une date retour (retour après l’aller)',
+      )
+      return
+    }
+    openSearchFromDeals({
+      origin: origin.trim(),
+      adults,
+      outbound: outDate,
+      inbound: retDate,
+      autoSearch: true,
     })
   }
 
@@ -173,10 +199,13 @@ export function DealsTab() {
     if (origin) parts.push(origin.split(',')[0] || origin)
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
+    if (outDate && retDate) {
+      parts.push(`${outDate.slice(5)} → ${retDate.slice(5)}`)
+    }
     if (sort === 'price_asc') parts.push(t('deals.sortPriceAsc'))
     else if (sort === 'price_desc') parts.push(t('deals.sortPriceDesc'))
     return parts.join(' · ')
-  }, [origin, adults, sort, t])
+  }, [origin, adults, outDate, retDate, sort, t])
 
   const matchedDeals = useMemo(
     () =>
@@ -266,6 +295,57 @@ export function DealsTab() {
               ) : null}
             </div>
             <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
+
+            <div className="mt-4 pt-4 border-t border-line">
+              <label className="text-base sm:text-lg font-bold text-slate-900 block mb-2">
+                Dates (recherche live)
+              </label>
+              <p className="text-xs text-muted mb-3">
+                Choisis aller + retour : on lance une vraie recherche vols (pas le mur Deals).
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-muted block mb-1">
+                    Aller
+                  </label>
+                  <input
+                    type="date"
+                    value={outDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setOutDate(v)
+                      if (retDate && v && retDate <= v) setRetDate('')
+                    }}
+                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-primary-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-muted block mb-1">
+                    Retour
+                  </label>
+                  <input
+                    type="date"
+                    value={retDate}
+                    min={outDate || new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setRetDate(e.target.value)}
+                    className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink focus:outline-none focus:ring-2 focus:ring-primary-200"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={runDatedSearch}
+                disabled={!datesReady}
+                className={`mt-3 w-full sm:w-auto rounded-full px-5 py-2.5 text-sm font-bold transition-colors ${
+                  datesReady
+                    ? 'bg-primary-500 text-white hover:bg-primary-600'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                Lancer la recherche
+              </button>
+            </div>
 
             <div className="mt-4 pt-4 border-t border-line">
               <label className="text-base sm:text-lg font-bold text-slate-900 block mb-2">

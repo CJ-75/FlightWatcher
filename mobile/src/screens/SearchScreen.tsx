@@ -80,18 +80,7 @@ export function SearchScreen() {
   const [loadingDest, setLoadingDest] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0])
-
-  // Lot E — prefill from Deals « autres dates » / empty CTA
-  useEffect(() => {
-    const p = route.params
-    if (!p) return
-    if (p.origin) setAirport(String(p.origin).toUpperCase())
-    if (p.adults && p.adults >= 1) setPassengers(Math.min(6, p.adults))
-  }, [route.params])
   const [error, setError] = useState<string | null>(null)
-  const expandedDefaultRef = useRef(false)
-  const scrollRef = useRef<ScrollView>(null)
-
   const [showFlexible, setShowFlexible] = useState(false)
   const [showExclude, setShowExclude] = useState(false)
   const [showHoursList, setShowHoursList] = useState(false)
@@ -99,6 +88,47 @@ export function SearchScreen() {
     type: 'depart' | 'retour'
     index: number
   } | null>(null)
+  const expandedDefaultRef = useRef(false)
+  const autoSearchPendingRef = useRef(false)
+  const scrollRef = useRef<ScrollView>(null)
+
+  // Lot E / Affiner — prefill origin · pax · dates (+ auto inspire)
+  useEffect(() => {
+    const p = route.params
+    if (!p) return
+    let consumed = false
+    if (p.origin) {
+      setAirport(String(p.origin).toUpperCase())
+      expandedDefaultRef.current = true
+      consumed = true
+    }
+    if (p.adults && p.adults >= 1) {
+      setPassengers(Math.min(6, p.adults))
+      consumed = true
+    }
+    const out = p.outbound?.slice(0, 10)
+    const ret = p.inbound?.slice(0, 10)
+    if (out && ret && ret > out) {
+      setPreset('flexible')
+      setFlexibleDates({
+        dates_depart: [{ date: out, heure_min: '06:00', heure_max: '23:59' }],
+        dates_retour: [{ date: ret, heure_min: '06:00', heure_max: '23:59' }],
+      })
+      if (p.autoSearch) autoSearchPendingRef.current = true
+      consumed = true
+    }
+    if (consumed) {
+      ;(navigation as { setParams: (p: MainTabParamList['Search']) => void }).setParams({
+        origin: undefined,
+        adults: undefined,
+        destination: undefined,
+        city: undefined,
+        outbound: undefined,
+        inbound: undefined,
+        autoSearch: undefined,
+      })
+    }
+  }, [route.params, navigation])
 
   useEffect(() => {
     getApi()
@@ -290,6 +320,27 @@ export function SearchScreen() {
       setLoading(false)
     }
   }
+
+  // Affiner → auto inspire once origin + dates hydrated and airports loaded
+  useEffect(() => {
+    if (!autoSearchPendingRef.current) return
+    if (!airports.length) return
+    if (!airport.trim()) return
+    if (
+      flexibleDates.dates_depart.length === 0 ||
+      flexibleDates.dates_retour.length === 0
+    ) {
+      return
+    }
+    if (!isValidAirportSelection(airport, airports)) return
+    autoSearchPendingRef.current = false
+    const t = setTimeout(() => {
+      void onSearch()
+    }, 280)
+    return () => clearTimeout(t)
+    // onSearch intentionally omitted — run once after Affiner hydrate
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [airport, flexibleDates, airports, passengers])
 
   if (loading) {
     return (

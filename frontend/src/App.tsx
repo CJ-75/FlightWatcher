@@ -117,6 +117,7 @@ function Dashboard() {
     dates_retour: DateAvecHoraire[]
     budget: number
     passengers: number
+    autoSearch?: boolean
   } | null>(null)
   const isLoadingFromStorage = useRef(false)
   const loadingSavedSearchRef = useRef(false)
@@ -397,23 +398,64 @@ function Dashboard() {
     }
   }, [])
 
-  // Lot E — Deals → Search prérempli (origine / voyageurs ; dest en toast)
+  // Lot E / Affiner dates — Deals → Search prérempli (+ auto inspire si dates)
   useEffect(() => {
+    const day = (ymd: string): DateAvecHoraire => ({
+      date: ymd.slice(0, 10),
+      heure_min: '06:00',
+      heure_max: '23:59',
+    })
+
     const applyPrefill = (prefill: SearchPrefill | null) => {
       if (!prefill) return
-      if (prefill.origin) {
-        setAeroportDepart(String(prefill.origin).trim().toUpperCase())
-      }
-      if (prefill.adults && prefill.adults >= 1) {
-        setSearchPassengers(Math.min(6, Math.max(1, Number(prefill.adults))))
-        setSearchLoadToken((n) => n + 1)
-      }
-      const destLabel = prefill.city || prefill.destination
-      if (destLabel) {
+      const origin = prefill.origin
+        ? String(prefill.origin).trim().toUpperCase()
+        : ''
+      if (origin) setAeroportDepart(origin)
+
+      const pax =
+        prefill.adults && prefill.adults >= 1
+          ? Math.min(6, Math.max(1, Number(prefill.adults)))
+          : null
+      if (pax) setSearchPassengers(pax)
+
+      const out = prefill.outbound?.slice(0, 10)
+      const ret = prefill.inbound?.slice(0, 10)
+      const hasDates = Boolean(out && ret && ret > out)
+
+      if (hasDates && out && ret) {
+        const dates_depart = [day(out)]
+        const dates_retour = [day(ret)]
+        setSearchLoadToken((n) => {
+          const nextToken = n + 1
+          setDatesDepart(dates_depart)
+          setDatesRetour(dates_retour)
+          setSearchSeed({
+            token: nextToken,
+            airport: origin || aeroportDepart,
+            dates_depart,
+            dates_retour,
+            budget: budgetMax,
+            passengers: pax || searchPassengers,
+            autoSearch: Boolean(prefill.autoSearch && origin),
+          })
+          return nextToken
+        })
         setToastType('info')
         setToastMessage(
-          `Recherche pour ${destLabel} — choisis tes dates puis lance le scan.`,
+          prefill.autoSearch
+            ? `Recherche live ${out} → ${ret}…`
+            : `Dates ${out} → ${ret} prêtes — lance le scan.`,
         )
+      } else {
+        if (pax) setSearchLoadToken((n) => n + 1)
+        const destLabel = prefill.city || prefill.destination
+        if (destLabel) {
+          setToastType('info')
+          setToastMessage(
+            `Recherche pour ${destLabel} — choisis tes dates puis lance le scan.`,
+          )
+        }
       }
       setActiveTab('search')
     }
@@ -425,6 +467,8 @@ function Dashboard() {
     window.addEventListener(OPEN_SEARCH_EVENT, onOpen)
     applyPrefill(consumeSearchPrefill())
     return () => window.removeEventListener(OPEN_SEARCH_EVENT, onOpen)
+    // intentionally mount-only; setters are stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Recentrer la vue sur les résultats (pas le formulaire) dès qu'ils sont prêts
@@ -731,9 +775,11 @@ function Dashboard() {
     excludedDestinations: string[]
     direct?: boolean
   }) => {
+    setSearchSeed(null)
     setSimpleResults(results)
     setOriginFilter(null)
     setError(null)
+    shouldScrollToResults.current = true
     if (searchInfo) {
       setLastSearchInfo(searchInfo)
       // Construire et sauvegarder currentRequest pour permettre la sauvegarde
@@ -930,9 +976,18 @@ function Dashboard() {
                       searchSeed.dates_retour.length > 0)
                   )
                 }
+                autoSearchOnHydrate={
+                  !!(
+                    searchSeed &&
+                    searchSeed.token === searchLoadToken &&
+                    searchSeed.autoSearch &&
+                    searchSeed.dates_depart.length > 0 &&
+                    searchSeed.dates_retour.length > 0
+                  )
+                }
                 onHydrated={() => {
-                  // Garder les dates chargées, mais ne plus figer le formulaire
-                  setSearchSeed(null)
+                  // Garder les dates ; seed autoSearch nettoyé à la fin de inspire
+                  if (!searchSeed?.autoSearch) setSearchSeed(null)
                 }}
               />
 

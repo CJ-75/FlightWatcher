@@ -67,6 +67,8 @@ interface SimpleSearchProps {
   searchLoadToken?: number;
   /** Forcer le preset Flexible (Modifier une alerte avec dates explicites) */
   forceFlexible?: boolean;
+  /** Deals Affiner: run inspire once dates+airport are hydrated */
+  autoSearchOnHydrate?: boolean;
   /** Appelé une fois l’hydratation Modifier terminée */
   onHydrated?: () => void;
   /** Après une recherche : formulaire replié pour laisser la place aux résultats */
@@ -104,6 +106,7 @@ export function SimpleSearch({
   initialPassengers = 1,
   searchLoadToken = 0,
   forceFlexible = false,
+  autoSearchOnHydrate = false,
   onHydrated,
   collapseWhenResults = false,
 }: SimpleSearchProps) {
@@ -138,8 +141,14 @@ export function SimpleSearch({
   const datesSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const syncedSeedRef = useRef(false);
+  const autoSearchRanRef = useRef(false);
 
-  // Au mount après Modifier: scroller vers les dates puis débloquer l’édition
+  // Au mount après Modifier / Affiner dates: hydrater puis éventuellement lancer inspire
+  useEffect(() => {
+    syncedSeedRef.current = false
+    autoSearchRanRef.current = false
+  }, [searchLoadToken])
+
   useEffect(() => {
     if (syncedSeedRef.current) return
     if (!startFlexible || !hasParentDates) {
@@ -359,6 +368,31 @@ export function SimpleSearch({
       onLoading(false);
     }
   };
+
+  // Affiner dates → inspire automatique une fois hydraté
+  useEffect(() => {
+    if (!autoSearchOnHydrate || autoSearchRanRef.current) return;
+    if (!isValidAirportCode(selectedAirport)) return;
+    if (
+      flexibleDates.dates_depart.length === 0 ||
+      flexibleDates.dates_retour.length === 0
+    ) {
+      return;
+    }
+    autoSearchRanRef.current = true;
+    setDatePreset('flexible');
+    const tId = window.setTimeout(() => {
+      void handleSearch();
+    }, 280);
+    return () => clearTimeout(tId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    autoSearchOnHydrate,
+    searchLoadToken,
+    selectedAirport,
+    flexibleDates.dates_depart,
+    flexibleDates.dates_retour,
+  ]);
 
   if (isSearching) {
     return (

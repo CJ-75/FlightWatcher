@@ -42,7 +42,17 @@ export type SearchInfo = {
 }
 
 export type MainTabParamList = {
-  Search: { origin?: string; adults?: number; destination?: string; city?: string } | undefined
+  Search:
+    | {
+        origin?: string
+        adults?: number
+        destination?: string
+        city?: string
+        outbound?: string
+        inbound?: string
+        autoSearch?: boolean
+      }
+    | undefined
   Deals: undefined
   Planner: undefined
   Favorites: undefined
