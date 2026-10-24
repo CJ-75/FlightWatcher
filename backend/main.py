@@ -56,6 +56,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Inclure les routers pour drafts et hôtels
+try:
+    from drafts import router as drafts_router
+    from hotels import router as hotels_router
+    app.include_router(drafts_router)
+    app.include_router(hotels_router)
+    print("[OK] Routers drafts et hotels charges")
+except Exception as e:
+    print(f"[WARNING] Routers drafts/hotels non charges: {e}")
+
 class FlightResponse(BaseModel):
     flightNumber: str
     origin: str

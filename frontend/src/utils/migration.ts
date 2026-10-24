@@ -18,6 +18,8 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
   favoritesMigrated: number
   error?: string
 }> => {
+  const supabase = await getSupabaseClient()
+  
   if (!supabase) {
     return {
       success: false,
@@ -26,8 +28,6 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
       error: 'Supabase n\'est pas configuré'
     }
   }
-
-  const supabase = await getSupabaseClient()
   if (!supabase) {
     return {
       success: false,
@@ -164,6 +164,7 @@ export const migrateLocalStorageToSupabase = async (userId: string): Promise<{
  * Vérifie si la migration est nécessaire
  */
 export const needsMigration = async (userId: string): Promise<boolean> => {
+  const supabase = await getSupabaseClient()
   if (!supabase) return false
 
   try {

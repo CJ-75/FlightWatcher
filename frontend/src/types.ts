@@ -77,3 +77,109 @@ export interface InspireResponse {
   message: string;
 }
 
+// ==================== DRAFT TYPES ====================
+
+export interface DraftChecklist {
+  flight_booked?: boolean;
+  hotel_booked?: boolean;
+  activities_planned?: boolean;
+  transport_arranged?: boolean;
+}
+
+export interface DraftParticipant {
+  email: string;
+  name?: string;
+  status: 'invited' | 'accepted' | 'declined';
+  invited_at?: string;
+  invited_by?: string;
+}
+
+export interface TripDraft {
+  id: string;
+  token: string;
+  status: 'draft' | 'flight_booked' | 'hotel_booked' | 'complete' | 'expired';
+  flight_data: TripResponse;
+  departure_airport: string;
+  destination_code: string;
+  destination_name?: string;
+  outbound_date: string;
+  return_date: string;
+  flight_total_price: number;
+  hotel_data?: HotelResult;
+  hotel_price_per_night?: number;
+  hotel_total_price?: number;
+  participants: DraftParticipant[];
+  checklist: DraftChecklist;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  user_id?: string;
+  can_invite: boolean;
+}
+
+export interface CreateDraftRequest {
+  flight_data: TripResponse;
+  departure_airport: string;
+  destination_code: string;
+  destination_name?: string;
+  outbound_date: string;
+  return_date: string;
+}
+
+export interface UpdateDraftRequest {
+  hotel_data?: HotelResult;
+  hotel_price_per_night?: number;
+  hotel_total_price?: number;
+  checklist?: DraftChecklist;
+  notes?: string;
+  status?: TripDraft['status'];
+}
+
+// ==================== HOTEL TYPES ====================
+
+export interface HotelResult {
+  id: string;
+  name: string;
+  stars?: number;
+  rating: number;
+  review_count: number;
+  weighted_rating: number;
+  price_per_night: number;
+  total_price: number;
+  currency: string;
+  image_url?: string;
+  address?: string;
+  amenities: string[];
+  value_score: number;
+}
+
+export interface HotelSearchRequest {
+  city_code: string;
+  check_in: string;
+  check_out: string;
+  tier?: 'economique' | 'confort' | 'charme';
+  sort_by?: 'value' | 'rating' | 'price';
+}
+
+export interface HotelSearchResponse {
+  hotels: HotelResult[];
+  count: number;
+  tier: string;
+  tier_max_price: number;
+  city_median_price: number;
+  from_cache: boolean;
+  cache_expires_at?: string;
+}
+
+export interface PriceTiers {
+  economique: number;
+  confort: number;
+  charme: number;
+  counts: {
+    economique: number;
+    confort: number;
+    charme: number;
+  };
+  median_price: number;
+}
+
