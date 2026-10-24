@@ -290,8 +290,19 @@ class MockDealProvider(DealProvider):
 class LiteApiDealProvider(DealProvider):
     """
     Assembles TravelDeal from hotel_rates_cache × deal_flight_cache.
-    L1 stub: returns [] until L5 wires the join (never calls LiteAPI on list).
+    Sync path: Supabase reads only — never calls LiteAPI.
     """
+
+    def _supabase(self):
+        from supabase_deps import (
+            SUPABASE_AVAILABLE,
+            get_supabase_client,
+            get_supabase_service_client,
+        )
+
+        if not SUPABASE_AVAILABLE:
+            return None
+        return get_supabase_service_client() or get_supabase_client()
 
     def list_deals(
         self,
@@ -301,11 +312,35 @@ class LiteApiDealProvider(DealProvider):
         window: Optional[str] = None,
         max_pp: Optional[float] = None,
     ) -> List[dict]:
-        # L5 will implement cache join. Keep sync path free of LiteAPI calls.
-        return []
+        from deals.deal_assemble import load_caches_and_assemble
+
+        supabase = self._supabase()
+        if not supabase:
+            return []
+        try:
+            return load_caches_and_assemble(
+                supabase,
+                origin=origin,
+                adults=adults,
+                window=window,
+                max_pp=max_pp,
+            )
+        except Exception as e:
+            print(f"⚠️ LiteApiDealProvider.list_deals: {e}")
+            return []
 
     def get_deal(self, deal_id: str) -> Optional[dict]:
-        return None
+        from deals.deal_assemble import get_deal_from_caches
+
+        supabase = self._supabase()
+        if not supabase:
+            return None
+        try:
+            return get_deal_from_caches(supabase, deal_id)
+        except Exception as e:
+            print(f"⚠️ LiteApiDealProvider.get_deal: {e}")
+            return None
+
 
 
 class ExpediaDealProvider(DealProvider):
