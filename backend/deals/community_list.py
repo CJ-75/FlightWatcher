@@ -417,7 +417,7 @@ def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 3) -> Lis
             supabase.table("hotel_pool")
             .select(
                 "hotel_id,name,stars,rating,review_count,distance_m,"
-                "main_photo,thumbnail,board"
+                "main_photo,thumbnail"
             )
             .eq("destination_id", dest["id"])
             .order("pool_rank")
@@ -443,7 +443,7 @@ def _pool_hotels_with_photos(supabase, dest_iata: str, *, limit: int = 3) -> Lis
                 "rating": h.get("rating"),
                 "review_count": h.get("review_count"),
                 "distance_m": h.get("distance_m"),
-                "board": h.get("board"),
+                "board": None,
                 "photo": photo,
                 "thumbnail": photo,
                 # No live rate — flight-led pack; hôtel price filled on revalidate

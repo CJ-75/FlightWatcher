@@ -188,7 +188,7 @@ def batch_pool_by_dest(
                 supabase.table("hotel_pool")
                 .select(
                     "destination_id,hotel_id,name,stars,rating,review_count,"
-                    "distance_m,main_photo,thumbnail,board,pool_rank,raw"
+                    "distance_m,main_photo,thumbnail,pool_rank,raw"
                 )
                 .in_("destination_id", chunk)
                 .order("pool_rank")
@@ -214,7 +214,8 @@ def batch_pool_by_dest(
                         "rating": h.get("rating"),
                         "review_count": h.get("review_count"),
                         "distance_m": h.get("distance_m"),
-                        "board": h.get("board"),
+                        # board lives on rates offers, not hotel_pool
+                        "board": None,
                         "photo": photo,
                         "thumbnail": photo,
                         "main_photo": photo,
