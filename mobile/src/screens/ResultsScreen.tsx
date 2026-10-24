@@ -14,6 +14,7 @@ import {
   STORAGE_KEYS,
   cityDisplayNameFr,
   createAsyncKVStore,
+  dateFromFlightIso,
   formatDateFr,
   kvSetJson,
   parseAirportCodes,
@@ -75,6 +76,39 @@ export function ResultsScreen({ route }: Props) {
     const id = setTimeout(() => setToast(null), 2500)
     return () => clearTimeout(id)
   }, [toast])
+
+  // Après paint vols : warm cache hôtel (lookup only — pas de LiteAPI)
+  useEffect(() => {
+    if (!trips.length) return
+    const seen = new Set<string>()
+    const items: {
+      iata: string
+      checkin: string
+      checkout: string
+      participants: number
+      flight_pp: number
+    }[] = []
+    const pax = searchInfo?.passengers || 1
+    for (const t of trips) {
+      if (items.length >= 6) break
+      const iata = (t.destination_code || '').trim().toUpperCase()
+      const checkin = dateFromFlightIso(t.aller?.departureTime)
+      const checkout = dateFromFlightIso(t.retour?.departureTime)
+      if (!iata || !checkin || !checkout || checkout <= checkin) continue
+      const key = `${iata}|${checkin}|${checkout}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        iata,
+        checkin,
+        checkout,
+        participants: Math.max(1, pax),
+        flight_pp: Number(t.prix_total) || 0,
+      })
+    }
+    if (!items.length) return
+    void getApi().lookupHotelUpsell(items).catch(() => undefined)
+  }, [trips, searchInfo?.passengers])
 
   const isFavorite = (trip: EnrichedTripResponse) => favoriteKeys.has(tripFavoriteKey(trip))
 

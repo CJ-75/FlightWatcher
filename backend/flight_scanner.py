@@ -1,6 +1,7 @@
 """
 Flight scanning — orchestrates Ryanair + Travelpayouts providers.
 """
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 
@@ -191,19 +192,22 @@ def calculate_discount(current_price: float, avg_price: Optional[float]) -> floa
 
 
 def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> List[EnrichedTripResponse]:
-    """Enrichit les résultats de trips avec discount, images et flags"""
-    enriched = []
+    """Enrich trips with discount flags. Avg-price RPCs run in parallel — never serial."""
 
     origin_count = max(
         1,
         len([c for c in (departure_airport or "").replace(";", ",").split(",") if c.strip()]),
     )
     cap = min(len(trips), max(30, 20 * origin_count))
-    for trip in trips[:cap]:
+    slice_trips = trips[:cap]
+    if not slice_trips:
+        return []
+
+    def _one(trip: TripResponse) -> EnrichedTripResponse:
         origin = (trip.aller.origin or departure_airport or "").split(",")[0].strip().upper()
         avg_price = get_avg_price_last_month(origin or departure_airport, trip.destination_code)
         discount_percent = calculate_discount(trip.prix_total, avg_price)
-        enriched_trip = EnrichedTripResponse(
+        return EnrichedTripResponse(
             aller=_localize_flight(trip.aller),
             retour=_localize_flight(trip.retour),
             prix_total=trip.prix_total,
@@ -217,6 +221,30 @@ def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> Li
             image_url=None,
             avg_price_last_month=avg_price,
         )
-        enriched.append(enriched_trip)
 
-    return enriched
+    workers = min(12, len(slice_trips))
+    by_idx: dict[int, EnrichedTripResponse] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_one, t): i for i, t in enumerate(slice_trips)}
+        for fut in as_completed(futures):
+            i = futures[fut]
+            try:
+                by_idx[i] = fut.result()
+            except Exception as e:
+                trip = slice_trips[i]
+                print(f"⚠️ enrich trip {trip.destination_code}: {e}")
+                by_idx[i] = EnrichedTripResponse(
+                    aller=_localize_flight(trip.aller),
+                    retour=_localize_flight(trip.retour),
+                    prix_total=trip.prix_total,
+                    destination_code=trip.destination_code,
+                    provider=trip.provider or "ryanair",
+                    airline=trip.airline,
+                    transfers=trip.transfers,
+                    booking_url=trip.booking_url,
+                    discount_percent=None,
+                    is_good_deal=False,
+                    image_url=None,
+                    avg_price_last_month=None,
+                )
+    return [by_idx[i] for i in range(len(slice_trips)) if i in by_idx]

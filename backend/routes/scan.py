@@ -1,5 +1,7 @@
+import asyncio
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,6 +24,9 @@ from scan_log import slog, slog_banner, slog_dates
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, optional_auth
 
 router = APIRouter()
+
+# Dedicated pool so inspire/scan never stall the asyncio loop (hotels/other routes stay responsive)
+_SCAN_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fw-scan")
 
 
 def generate_cache_key(request: ScanRequest) -> str:
@@ -97,26 +102,33 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
             )
 
         slog("⏳ Scan live (Ryanair + Travelpayouts)…")
-        resultats, num_requetes = scanner_vols_api(
-            aeroport_depart=request.aeroport_depart or "BVA",
-            dates_depart=request.dates_depart,
-            dates_retour=request.dates_retour,
-            budget_max=request.budget_max or 200,
-            limite_allers=request.limite_allers or 50,
-            destinations_exclues=request.destinations_exclues or [],
-            destinations_incluses=request.destinations_incluses,
-            record_prices=True,
-            passengers=request.passengers or 1,
-            direct=bool(request.direct),
-        )
 
+        def _run_scan():
+            return scanner_vols_api(
+                aeroport_depart=request.aeroport_depart or "BVA",
+                dates_depart=request.dates_depart,
+                dates_retour=request.dates_retour,
+                budget_max=request.budget_max or 200,
+                limite_allers=request.limite_allers or 50,
+                destinations_exclues=request.destinations_exclues or [],
+                destinations_incluses=request.destinations_incluses,
+                record_prices=True,
+                passengers=request.passengers or 1,
+                direct=bool(request.direct),
+            )
+
+        loop = asyncio.get_running_loop()
+        resultats, num_requetes = await loop.run_in_executor(_SCAN_POOL, _run_scan)
+
+        # Cache write off the critical path — vols d’abord
         if SUPABASE_AVAILABLE and resultats:
-            try:
-                supabase_service = get_supabase_service_client()
-                if supabase_service:
+            def _write_cache() -> None:
+                try:
+                    supabase_service = get_supabase_service_client()
+                    if not supabase_service:
+                        return
                     expires_at = (datetime.now().timestamp() + 3600) * 1000
                     expires_at_iso = datetime.fromtimestamp(expires_at / 1000).isoformat()
-
                     cache_data = {
                         "cache_key": cache_key,
                         "departure_airport": request.aeroport_depart or "BVA",
@@ -127,14 +139,14 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
                         "expires_at": expires_at_iso,
                         "hit_count": 0,
                     }
-
-                    supabase_service.table("search_results_cache")\
-                        .upsert(cache_data, on_conflict="cache_key")\
-                        .execute()
-
+                    supabase_service.table("search_results_cache").upsert(
+                        cache_data, on_conflict="cache_key"
+                    ).execute()
                     slog(f"✅ Résultats mis en cache (clé: {cache_key[:8]}...)")
-            except Exception as e:
-                slog(f"⚠️ Erreur mise en cache: {e}")
+                except Exception as e:
+                    slog(f"⚠️ Erreur mise en cache: {e}")
+
+            loop.run_in_executor(_SCAN_POOL, _write_cache)
 
         slog(
             f"🏁 Scan terminé: {len(resultats)} voyage(s), "
@@ -193,21 +205,29 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
             raise HTTPException(status_code=400, detail="Impossible de générer les dates pour ce preset")
 
         slog("⏳ Scan live (Ryanair + Travelpayouts)…")
-        resultats, num_requetes = scanner_vols_api(
-            aeroport_depart=request.departure,
-            dates_depart=dates_depart,
-            dates_retour=dates_retour,
-            budget_max=request.budget,
-            limite_allers=request.limite_allers or 30,
-            destinations_exclues=request.destinations_exclues or [],
-            destinations_incluses=None,
-            record_prices=True,
-            passengers=request.passengers or 1,
-            direct=bool(request.direct),
-        )
 
-        enriched_results = enrich_trip_results(resultats, request.departure)
-        enriched_results.sort(key=lambda t: t.prix_total)
+        def _inspire_scan_and_enrich():
+            # Vols first — no hotel / LiteAPI on this path
+            trips, nq = scanner_vols_api(
+                aeroport_depart=request.departure,
+                dates_depart=dates_depart,
+                dates_retour=dates_retour,
+                budget_max=request.budget,
+                limite_allers=request.limite_allers or 30,
+                destinations_exclues=request.destinations_exclues or [],
+                destinations_incluses=None,
+                record_prices=True,
+                passengers=request.passengers or 1,
+                direct=bool(request.direct),
+            )
+            enriched = enrich_trip_results(trips, request.departure)
+            enriched.sort(key=lambda t: t.prix_total)
+            return enriched, nq
+
+        loop = asyncio.get_running_loop()
+        enriched_results, num_requetes = await loop.run_in_executor(
+            _SCAN_POOL, _inspire_scan_and_enrich
+        )
 
         slog(
             f"🏁 Inspire terminé: {len(enriched_results)} destination(s), "

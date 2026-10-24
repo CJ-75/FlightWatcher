@@ -40,6 +40,7 @@ import {
 } from './utils/searchPrefill'
 import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
+import { prefetchHotelCacheForTrips } from './utils/prefetchHotelCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import {
@@ -798,6 +799,8 @@ function Dashboard() {
     // Scroll after results + collapsed form paint (see effect below)
     if (results.length > 0) {
       shouldScrollToResults.current = true
+      // Hôtels en fond après paint vols — lookup cache only, jamais sur /inspire
+      prefetchHotelCacheForTrips(results, searchInfo?.passengers || 1)
     }
   }
 
