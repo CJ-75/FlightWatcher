@@ -69,6 +69,8 @@ interface SimpleSearchProps {
   forceFlexible?: boolean;
   /** Appelé une fois l’hydratation Modifier terminée */
   onHydrated?: () => void;
+  /** Après une recherche : formulaire replié pour laisser la place aux résultats */
+  collapseWhenResults?: boolean;
 }
 
 const springConfig = {
@@ -103,6 +105,7 @@ export function SimpleSearch({
   searchLoadToken = 0,
   forceFlexible = false,
   onHydrated,
+  collapseWhenResults = false,
 }: SimpleSearchProps) {
   const { t } = useI18n();
   const hasParentDates =
@@ -118,6 +121,11 @@ export function SimpleSearch({
     startFlexible ? 'flexible' : null,
   );
   const [isSearching, setIsSearching] = useState(false);
+  const [formOpen, setFormOpen] = useState(!collapseWhenResults);
+
+  useEffect(() => {
+    setFormOpen(!collapseWhenResults)
+  }, [collapseWhenResults]);
   const [presetDates, setPresetDates] = useState<{ dates_depart: DateAvecHoraire[]; dates_retour: DateAvecHoraire[] }>({
     dates_depart: flexibleDates.dates_depart,
     dates_retour: flexibleDates.dates_retour,
@@ -365,6 +373,46 @@ export function SimpleSearch({
     );
   }
 
+  const presetLabel =
+    datePreset === 'weekend'
+      ? t('search.preset.weekend')
+      : datePreset === 'next-weekend'
+        ? t('search.preset.nextWeekend')
+        : datePreset === 'next-week'
+          ? t('search.preset.nextWeek')
+          : datePreset === 'flexible'
+            ? t('search.preset.flexible')
+            : null
+  const summaryParts = [
+    selectedAirport || null,
+    `${budget}€/pers`,
+    passengers !== 1 ? `${passengers} voy.` : null,
+    presetLabel,
+  ].filter(Boolean)
+
+  if (collapseWhenResults && !formOpen) {
+    return (
+      <div className="w-full app-card overflow-hidden mb-2">
+        <button
+          type="button"
+          onClick={() => setFormOpen(true)}
+          aria-expanded={false}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5 text-left hover:bg-canvas/60 transition-colors"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-ink">Modifier la recherche</p>
+            <p className="text-xs text-muted truncate mt-0.5">
+              {summaryParts.join(' · ') || 'Afficher le formulaire'}
+            </p>
+          </div>
+          <span className="shrink-0 text-muted text-lg leading-none" aria-hidden>
+            ▾
+          </span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -372,6 +420,18 @@ export function SimpleSearch({
       transition={springConfig}
       className="w-full app-card p-4 sm:p-6 md:p-8"
     >
+      {collapseWhenResults ? (
+        <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5 -mt-1">
+          <p className="text-sm font-bold text-ink">Nouvelle recherche</p>
+          <button
+            type="button"
+            onClick={() => setFormOpen(false)}
+            className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
+          >
+            Replier
+          </button>
+        </div>
+      ) : null}
       <BudgetSlider value={budget} onChange={handleBudgetChange} />
 
       <PassengerStepper value={passengers} onChange={setPassengers} />

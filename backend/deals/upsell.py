@@ -124,13 +124,22 @@ def _top_public(top: Any) -> Optional[Dict[str, Any]]:
         return None
     if public <= 0:
         return None
+    hid = first.get("hotel_id") or first.get("id")
+    photo = first.get("photo") or first.get("thumbnail") or first.get("main_photo")
     return {
-        "hotel_id": first.get("hotel_id") or first.get("id"),
+        "hotel_id": hid,
+        "id": str(hid) if hid is not None else "",
         "name": first.get("name"),
         "public_hotel_price": public,
         "board": first.get("board") or first.get("board_name"),
         "stars": first.get("stars"),
         "rating": first.get("rating"),
+        "distance_m": first.get("distance_m"),
+        "photo": photo,
+        "thumbnail": first.get("thumbnail") or photo,
+        "main_photo": first.get("main_photo") or photo,
+        "refundable": bool(first.get("refundable")),
+        "excluded_fees": first.get("excluded_fees") or 0,
     }
 
 
@@ -256,7 +265,8 @@ def lookup_upsell(
             adults=adults,
         )
         if cached:
-            public = float(cached["offer"]["public_hotel_price"])
+            offer = cached["offer"]
+            public = float(offer["public_hotel_price"])
             hotel_pp = hotel_pp_from_public(public, participants=participants)
             return {
                 **base,
@@ -271,8 +281,9 @@ def lookup_upsell(
                 "rooms": rooms,
                 "hotel_pp": hotel_pp,
                 "hotel_public_total_one_room": public,
-                "hotel_name": cached["offer"].get("name"),
-                "hotel_id": cached["offer"].get("hotel_id"),
+                "hotel": offer,
+                "hotel_name": offer.get("name"),
+                "hotel_id": offer.get("hotel_id"),
                 "source": cached["source"],
                 "fetched_at": cached.get("fetched_at"),
                 "expires_at": cached.get("expires_at"),
@@ -289,6 +300,13 @@ def lookup_upsell(
         offer = ondemand["offer"]
         public = float(offer["public_hotel_price"])
         hotel_pp = hotel_pp_from_public(public, participants=participants)
+        hotel_card = {
+            **offer,
+            "id": str(offer.get("hotel_id") or offer.get("id") or ""),
+            "photo": offer.get("photo")
+            or offer.get("thumbnail")
+            or offer.get("main_photo"),
+        }
         return {
             **base,
             "status": "ready",
@@ -302,6 +320,7 @@ def lookup_upsell(
             "rooms": rooms,
             "hotel_pp": hotel_pp,
             "hotel_public_total_one_room": public,
+            "hotel": hotel_card,
             "hotel_name": offer.get("name"),
             "hotel_id": offer.get("hotel_id"),
             "source": ondemand["source"],
@@ -488,13 +507,20 @@ def _run_fetch_job(
             return
 
         top = cands[0]
+        photo = top.get("photo") or top.get("thumbnail") or top.get("main_photo")
         offer = {
             "hotel_id": top.get("hotel_id"),
+            "id": str(top.get("hotel_id") or ""),
             "name": top.get("name"),
             "public_hotel_price": top.get("public_hotel_price"),
             "board": top.get("board"),
             "stars": top.get("stars"),
             "rating": top.get("rating"),
+            "distance_m": top.get("distance_m"),
+            "photo": photo,
+            "thumbnail": top.get("thumbnail") or photo,
+            "excluded_fees": top.get("excluded_fees") or 0,
+            "refundable": bool(top.get("refundable")),
         }
         _mark_upsell_row(
             supabase,

@@ -5,6 +5,7 @@ import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import { bookingPartnerMeta, buildBookingUrl } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { colors, fonts, shadow } from '../theme'
+import { HotelUpsellLine } from './HotelUpsellLine'
 
 type Props = {
   trip: EnrichedTripResponse | null
@@ -91,6 +92,15 @@ export function BookingSheet({
           {trip.aller.origin} → {trip.destination_code}
         </Text>
 
+        <View style={styles.upsell}>
+          <HotelUpsellLine
+            iata={trip.destination_code}
+            outboundIso={trip.aller?.departureTime}
+            returnIso={trip.retour?.departureTime}
+            participants={passengers}
+          />
+        </View>
+
         <View style={styles.partner}>
           <Text style={styles.partnerEmoji}>✈️</Text>
           <View style={{ flex: 1 }}>
@@ -150,7 +160,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 14,
     color: colors.muted,
-    marginBottom: 18,
+    marginBottom: 10,
+  },
+  upsell: {
+    marginBottom: 14,
   },
   partner: {
     flexDirection: 'row',

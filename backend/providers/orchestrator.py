@@ -24,9 +24,11 @@ def _active_providers(only: Optional[Sequence[str]] = None) -> list:
         return allowed is None or name in allowed
 
     providers = []
+    from scan_log import slog
+
     if want("ryanair"):
         if is_circuit_open("ryanair"):
-            print("⏸ orchestrator: ryanair circuit open — skip")
+            slog("⏸ orchestrator: ryanair circuit open — skip")
         else:
             providers.append(RyanairProvider())
     if want("travelpayouts") and travelpayouts_enabled() and not is_circuit_open(
@@ -40,6 +42,8 @@ def _active_providers(only: Optional[Sequence[str]] = None) -> list:
             providers.append(TravelpayoutsProvider())
         elif want("ryanair"):
             providers.append(RyanairProvider())
+    names = [getattr(p, "name", "?") for p in providers]
+    slog(f"🔧 providers actifs: {', '.join(names) or '(aucun)'}")
     return providers
 
 
@@ -161,9 +165,13 @@ def _search_one_origin(
                 trips, nq = fut.result()
                 batches.append(trips)
                 total_queries += nq
-                print(f"✅ provider {name} @{origin}: {len(trips)} trips, {nq} req")
+                from scan_log import slog
+
+                slog(f"✅ provider {name} @{origin}: {len(trips)} trips, {nq} req")
             except Exception as e:
-                print(f"❌ provider {name} @{origin} failed: {e}")
+                from scan_log import slog
+
+                slog(f"❌ provider {name} @{origin} failed: {e}")
     return merge_trips(batches), total_queries
 
 
@@ -213,7 +221,9 @@ def search_roundtrips(
         return capped, nq
 
     # Multi-origin city aggregation (e.g. Paris = CDG,ORY,BVA)
-    print(f"📥 multi-origin scan: {','.join(origins)}")
+    from scan_log import slog
+
+    slog(f"📥 multi-origin scan: {','.join(origins)}")
     batches: List[List[TripResponse]] = []
     total_queries = 0
     workers = min(len(origins), 4)
@@ -242,9 +252,9 @@ def search_roundtrips(
                 trips, nq = fut.result()
                 batches.append(trips)
                 total_queries += nq
-                print(f"✅ origin {origin}: {len(trips)} trips")
+                slog(f"✅ origin {origin}: {len(trips)} trips")
             except Exception as e:
-                print(f"❌ origin {origin} failed: {e}")
+                slog(f"❌ origin {origin} failed: {e}")
 
     merged = merge_trips(batches)
     cap = max(limite_allers or 50, 30) * max(1, len(origins))
@@ -269,4 +279,6 @@ def _maybe_record_observations(
             trips, record_prices=record_prices, source=source
         )
     except Exception as e:
-        print(f"⚠️ price_observations skip: {e}")
+        from scan_log import slog
+
+        slog(f"⚠️ price_observations skip: {e}")

@@ -427,24 +427,27 @@ function Dashboard() {
     return () => window.removeEventListener(OPEN_SEARCH_EVENT, onOpen)
   }, [])
 
-  // Effet pour scroller vers les résultats quand ils sont affichés
+  // Recentrer la vue sur les résultats (pas le formulaire) dès qu'ils sont prêts
   useEffect(() => {
-    if (shouldScrollToResults.current && activeTab === 'search' && simpleResults.length > 0) {
-      // Attendre que le DOM soit complètement rendu et que les animations soient terminées
-      const scrollTimeout = setTimeout(() => {
-        if (resultsSectionRef.current) {
-          console.log('📍 Scroll vers les résultats');
-          // Utiliser requestAnimationFrame pour s'assurer que le scroll se fait après le rendu
-          requestAnimationFrame(() => {
-            resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            shouldScrollToResults.current = false; // Réinitialiser le flag
-          });
-        }
-      }, 600); // Délai plus long pour laisser le temps aux animations de se terminer
-      
-      return () => clearTimeout(scrollTimeout);
+    if (!shouldScrollToResults.current || activeTab !== 'search' || simpleResults.length === 0) {
+      return
     }
-  }, [activeTab, simpleResults.length]);
+    if (loading) return // wait until skeleton → results swap
+    let cancelled = false
+    const run = () => {
+      if (cancelled || !resultsSectionRef.current) return
+      resultsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      shouldScrollToResults.current = false
+    }
+    // Double rAF + short delay: form collapses, results mount, layout settles
+    const t = window.setTimeout(() => {
+      requestAnimationFrame(() => requestAnimationFrame(run))
+    }, 80)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [activeTab, simpleResults.length, loading])
 
   const handleSaveFavorite = async (trip: TripResponse) => {
     if (!currentRequest) {
@@ -746,12 +749,9 @@ function Dashboard() {
       }
       setCurrentRequest(request)
     }
-    
-    // Scroller vers la section des résultats après un court délai pour laisser le temps au DOM de se mettre à jour
+    // Scroll after results + collapsed form paint (see effect below)
     if (results.length > 0) {
-      setTimeout(() => {
-        resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 300)
+      shouldScrollToResults.current = true
     }
   }
 
@@ -921,6 +921,7 @@ function Dashboard() {
                 onBudgetChange={setBudgetMax}
                 initialPassengers={searchPassengers}
                 searchLoadToken={searchLoadToken}
+                collapseWhenResults={simpleResults.length > 0}
                 forceFlexible={
                   !!(
                     searchSeed &&

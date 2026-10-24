@@ -39,7 +39,15 @@ def scanner_vols_api(
     direct: bool = False,
 ) -> Tuple[List[TripResponse], int]:
     """Multi-provider round-trip search (Ryanair + Travelpayouts when configured)."""
-    return _search_roundtrips(
+    from scan_log import slog
+
+    slog(
+        f"📥 scanner_vols_api {aeroport_depart} | "
+        f"{len(dates_depart or [])} dép. / {len(dates_retour or [])} ret. | "
+        f"budget={budget_max}€ pax={passengers} direct={direct} "
+        f"limite={limite_allers}"
+    )
+    trips, nq = _search_roundtrips(
         aeroport_depart=aeroport_depart,
         dates_depart=dates_depart,
         dates_retour=dates_retour,
@@ -51,6 +59,8 @@ def scanner_vols_api(
         passengers=passengers,
         direct=direct,
     )
+    slog(f"📤 scanner_vols_api done → {len(trips)} trips, {nq} req")
+    return trips, nq
 
 
 def get_dates_from_preset(preset: str) -> Tuple[List[DateAvecHoraire], List[DateAvecHoraire]]:

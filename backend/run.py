@@ -14,6 +14,13 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
+    # Logs scan/inspire visibles immédiatement dans le terminal
+    os.environ.setdefault("PYTHONUNBUFFERED", "1")
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
     # Enregistrer le gestionnaire de signaux (fonctionne sur Unix/Linux/Mac)
     if platform.system() != "Windows":
         signal.signal(signal.SIGINT, signal_handler)
@@ -21,10 +28,10 @@ if __name__ == "__main__":
     
     # Démarrer le serveur
     try:
-        print("🚀 Démarrage du serveur FastAPI...")
-        print("📡 Serveur accessible sur http://localhost:8000")
-        print("📚 Documentation API: http://localhost:8000/docs")
-        print("\n💡 Appuyez sur Ctrl+C pour arrêter le serveur\n")
+        print("🚀 Démarrage du serveur FastAPI...", flush=True)
+        print("📡 Serveur accessible sur http://localhost:8000", flush=True)
+        print("📚 Documentation API: http://localhost:8000/docs", flush=True)
+        print("\n💡 Appuyez sur Ctrl+C pour arrêter le serveur\n", flush=True)
         
         uvicorn.run(
             "main:app",

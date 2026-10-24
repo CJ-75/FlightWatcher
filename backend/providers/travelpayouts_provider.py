@@ -124,14 +124,20 @@ def _fetch_prices(
                     pass
             payload = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as e:
-        print(f"⚠️ [travelpayouts] HTTP {e.code}: {e.read()[:200]!r}")
+        from scan_log import slog
+
+        slog(f"⚠️ [travelpayouts] HTTP {e.code}: {e.read()[:200]!r}")
         return [], 1
     except Exception as e:
-        print(f"⚠️ [travelpayouts] fetch error: {e}")
+        from scan_log import slog
+
+        slog(f"⚠️ [travelpayouts] fetch error: {e}")
         return [], 1
 
     if not payload.get("success"):
-        print(f"⚠️ [travelpayouts] unsuccessful: {payload.get('error')}")
+        from scan_log import slog
+
+        slog(f"⚠️ [travelpayouts] unsuccessful: {payload.get('error')}")
         return [], 1
 
     data = payload.get("data") or []
@@ -286,8 +292,10 @@ class TravelpayoutsProvider:
 
         from providers.throttle import is_circuit_open, wait_provider_slot
 
+        from scan_log import slog
+
         if is_circuit_open("travelpayouts"):
-            print("⏸ [travelpayouts] circuit open — skip")
+            slog("⏸ [travelpayouts] circuit open — skip")
             return [], 0
         wait_provider_slot("travelpayouts")
 
@@ -333,7 +341,7 @@ class TravelpayoutsProvider:
         else:
             dest_targets = [None]
 
-        print(
+        slog(
             f"📥 [travelpayouts] depuis {origin} "
             f"({len(uniq_pairs)} paires dates, dest={len(dest_targets)}, "
             f"direct={direct}, budget={budget_max}€, pax={pax})..."
@@ -373,5 +381,5 @@ class TravelpayoutsProvider:
                 by_dest[t.destination_code] = t
 
         resultats = sorted(by_dest.values(), key=lambda t: t.prix_total)[:limite]
-        print(f"  ✓ [travelpayouts] {len(resultats)} A/R ({queries} req)")
+        slog(f"  ✓ [travelpayouts] {len(resultats)} A/R ({queries} req)")
         return resultats, queries

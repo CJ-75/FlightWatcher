@@ -59,6 +59,28 @@ def badge_for_baseline(baseline: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _hotel_photo(h: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(h, dict):
+        return None
+    for key in ("photo", "thumbnail", "main_photo", "mainPhoto"):
+        val = h.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _normalize_hotel(h: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(h, dict):
+        return None
+    photo = _hotel_photo(h)
+    hid = h.get("id") or h.get("hotel_id") or ""
+    out = {**h, "id": str(hid), "hotel_id": h.get("hotel_id") or hid}
+    if photo:
+        out["photo"] = photo
+        out.setdefault("thumbnail", photo)
+    return out
+
+
 def row_to_travel_deal(
     row: Dict[str, Any],
     *,
@@ -74,7 +96,8 @@ def row_to_travel_deal(
 
     flight = row.get("flight_snapshot") or {}
     baseline = row.get("baseline_snapshot") or {}
-    hotels = row.get("hotel_top3") or []
+    raw_hotels = row.get("hotel_top3") or []
+    hotels = [h for h in (_normalize_hotel(x) for x in raw_hotels) if h]
     hotel = hotels[0] if hotels else None
     price_flight = float(flight.get("price_pp_eur") or 0)
     city = flight.get("city_name") or row.get("dest_iata") or ""
@@ -119,13 +142,16 @@ def row_to_travel_deal(
     if adults > 2:
         price_pax_note = "Prix pour 1–2 voyageurs"
 
+    hotel_image = _hotel_photo(hotel) or ""
+
     return {
         "id": row.get("deal_key"),
         "deal_key": row.get("deal_key"),
         "title": f"Week-end à {city}" if city else "Deal",
         "city": city,
         "country": "",
-        "image_url": "",  # city image resolved client-side
+        # Prefer hôtel photo so same-city deals don't share one city stock image
+        "image_url": hotel_image,
         "price_per_person": price_pp,
         "currency": "EUR",
         "nights": int(row.get("nights") or 2),
@@ -255,6 +281,63 @@ def _fetch_active_rows(
         return []
 
 
+def _photos_from_pool(supabase, hotel_ids: List[str]) -> Dict[str, str]:
+    """Fill missing hotel photos from hotel_pool.main_photo."""
+    ids = [str(i) for i in hotel_ids if i]
+    if not ids or not supabase:
+        return {}
+    out: Dict[str, str] = {}
+    try:
+        # chunk to stay under filter limits
+        for i in range(0, len(ids), 80):
+            chunk = ids[i : i + 80]
+            res = (
+                supabase.table("hotel_pool")
+                .select("hotel_id,main_photo,thumbnail")
+                .in_("hotel_id", chunk)
+                .execute()
+            )
+            for row in res.data or []:
+                hid = str(row.get("hotel_id") or "")
+                photo = (row.get("main_photo") or row.get("thumbnail") or "").strip()
+                if hid and photo and hid not in out:
+                    out[hid] = photo
+    except Exception:
+        return out
+    return out
+
+
+def _fill_missing_hotel_photos(
+    rows: List[Dict[str, Any]], photo_map: Dict[str, str]
+) -> List[Dict[str, Any]]:
+    if not photo_map:
+        return rows
+    filled: List[Dict[str, Any]] = []
+    for row in rows:
+        hotels = row.get("hotel_top3")
+        if not isinstance(hotels, list) or not hotels:
+            filled.append(row)
+            continue
+        new_hotels = []
+        changed = False
+        for h in hotels:
+            if not isinstance(h, dict):
+                new_hotels.append(h)
+                continue
+            if _hotel_photo(h):
+                new_hotels.append(h)
+                continue
+            hid = str(h.get("hotel_id") or h.get("id") or "")
+            photo = photo_map.get(hid)
+            if photo:
+                new_hotels.append({**h, "photo": photo, "thumbnail": photo})
+                changed = True
+            else:
+                new_hotels.append(h)
+        filled.append({**row, "hotel_top3": new_hotels} if changed else row)
+    return filled
+
+
 def _enrich_rows_to_deals(
     rows: List[Dict[str, Any]],
     *,
@@ -262,6 +345,7 @@ def _enrich_rows_to_deals(
     fresh: bool,
     max_pp: Optional[float],
     match_origin: bool,
+    supabase=None,
 ) -> List[Dict[str, Any]]:
     from deals.airport_display import distances_for_iatas, enrich_route_labels
     from deals.baggage import (
@@ -270,6 +354,17 @@ def _enrich_rows_to_deals(
         _normalize_carrier,
     )
     from city_names_fr import city_for_code
+
+    # Backfill hotel photos for rows that only have hotel_id
+    missing_ids: List[str] = []
+    for r in rows:
+        for h in r.get("hotel_top3") or []:
+            if isinstance(h, dict) and not _hotel_photo(h):
+                hid = h.get("hotel_id") or h.get("id")
+                if hid:
+                    missing_ids.append(str(hid))
+    photo_map = _photos_from_pool(supabase, missing_ids) if missing_ids else {}
+    rows = _fill_missing_hotel_photos(rows, photo_map)
 
     dests = [str(r.get("dest_iata") or "") for r in rows]
     carriers = []
@@ -371,6 +466,7 @@ def list_community_deals(
             fresh=fresh,
             max_pp=max_pp,
             match_origin=True,
+            supabase=supabase,
         )
         matched = _prefer_hotel_deals(matched)
         out = list(matched)
@@ -387,6 +483,7 @@ def list_community_deals(
                 fresh=fresh,
                 max_pp=max_pp,
                 match_origin=False,
+                supabase=supabase,
             )
             for d in _prefer_hotel_deals(fillers):
                 key = str(d.get("deal_key") or d.get("id"))
@@ -405,6 +502,7 @@ def list_community_deals(
             fresh=fresh,
             max_pp=max_pp,
             match_origin=True,
+            supabase=supabase,
         )
         out = _prefer_hotel_deals(out)
 

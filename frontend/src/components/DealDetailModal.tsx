@@ -115,7 +115,7 @@ export function DealDetailModal({
               board: deal.board,
               public_hotel_price: deal.price_breakdown?.hotel_public_total,
               excluded_fees: deal.price_breakdown?.excluded_fees,
-              photo: deal.image_url,
+              photo: deal.hotel?.photo || deal.image_url,
             } as TravelDealHotel,
           ]
         : []
@@ -162,10 +162,10 @@ export function DealDetailModal({
   const age = verifiedLabel
     ? null
     : formatFetchedAt(deal.fetched_at, language === 'en' ? 'en-GB' : 'fr-FR')
-  // City image dominant — hotel photo is vignette, not hero
+  // Hero = hôtel sélectionné (évite la même image ville pour plusieurs deals)
   const imageUrl = resolveTripImageUrl({
     city: deal.city,
-    imageUrl: deal.image_url,
+    imageUrl: selected?.photo || deal.hotel?.photo || deal.image_url,
   })
   const hotelThumb = selected?.photo || deal.hotel?.photo || null
   const flightUrl = deal.flight?.booking_url || ''
@@ -242,7 +242,11 @@ export function DealDetailModal({
           className="app-dialog-panel app-dialog-xl max-h-[92vh] overflow-y-auto"
         >
           <div className="relative h-52 sm:h-64">
-            <img src={imageUrl} alt={deal.city} className="w-full h-full object-cover" />
+            <img
+              src={imageUrl}
+              alt={selected?.name || deal.hotel_name || deal.city}
+              className="w-full h-full object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent" />
             <div className="absolute top-3 right-3 flex gap-2">
               {onToggleLike ? (

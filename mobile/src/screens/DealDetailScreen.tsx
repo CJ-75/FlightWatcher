@@ -15,7 +15,7 @@ import * as WebBrowser from 'expo-web-browser'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
-import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
+import { dealAdults, pricePpWithHotel, resolveTripImageUrl } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { HeartIcon } from '../components/HeartIcon'
 import { useLikedDeals } from '../hooks/useLikedDeals'
@@ -85,7 +85,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
               board: deal.board,
               public_hotel_price: deal.price_breakdown?.hotel_public_total,
               excluded_fees: deal.price_breakdown?.excluded_fees,
-              photo: deal.image_url,
+              photo: deal.hotel?.photo || deal.image_url,
             } as TravelDealHotel,
           ]
         : []
@@ -187,7 +187,12 @@ export function DealDetailScreen({ route, navigation }: Props) {
         <View style={styles.hero}>
           {!failed ? (
             <Image
-              source={{ uri: selected?.photo || deal.image_url }}
+              source={{
+                uri: resolveTripImageUrl({
+                  city: deal.city,
+                  imageUrl: selected?.photo || deal.hotel?.photo || deal.image_url,
+                }),
+              }}
               style={styles.heroImage}
               onError={() => setFailed(true)}
             />

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { EnrichedTripResponse } from '../types';
 import { getSessionId } from '../utils/session';
 import { bookingPartnerMeta, buildBookingUrl } from '@flightwatcher/shared';
+import { HotelUpsellLine } from './HotelUpsellLine';
 
 interface BookingSasProps {
   trip: EnrichedTripResponse;
@@ -174,6 +175,14 @@ export function BookingSas({
             {cityName} - {trip.prix_total.toFixed(0)}€ / pers.
             {passengers > 1 ? ` (${Math.round(trip.prix_total * passengers)}€ pour ${passengers})` : ''}
           </p>
+          <div className="mt-3 flex justify-center">
+            <HotelUpsellLine
+              iata={trip.destination_code}
+              outboundIso={trip.aller?.departureTime}
+              returnIso={trip.retour?.departureTime}
+              participants={passengers}
+            />
+          </div>
         </div>
 
         {!isRedirecting && selectedPartner && (

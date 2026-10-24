@@ -18,6 +18,7 @@ from flight_scanner import (
     get_dates_from_preset,
     enrich_trip_results,
 )
+from scan_log import slog, slog_banner, slog_dates
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, optional_auth
 
 router = APIRouter()
@@ -43,11 +44,18 @@ def generate_cache_key(request: ScanRequest) -> str:
 @optional_auth
 async def scan_flights(request: ScanRequest, http_request: Request = None):
     """Scan les vols avec paramètres personnalisés et cache"""
-    print(
-        f"🔍 POST /api/scan origin={request.aeroport_depart} "
-        f"budget={request.budget_max} pax={request.passengers}",
-        flush=True,
-    )
+    slog_banner("🔍 POST /api/scan — requête reçue")
+    slog(f"  origine     : {request.aeroport_depart or 'BVA'}")
+    slog(f"  budget      : {request.budget_max or 200} €/pers")
+    slog(f"  voyageurs   : {request.passengers or 1}")
+    slog(f"  directs     : {bool(request.direct)}")
+    slog(f"  limite_allers: {request.limite_allers or 50}")
+    slog_dates("départs", request.dates_depart)
+    slog_dates("retours", request.dates_retour)
+    if request.destinations_incluses:
+        slog(f"  inclus      : {request.destinations_incluses}")
+    if request.destinations_exclues:
+        slog(f"  exclus      : {request.destinations_exclues}")
     try:
         cache_key = generate_cache_key(request)
         cached_result = None
@@ -73,17 +81,22 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
                             .execute()
 
                         cached_result = cached["results"]
-                        print(f"✅ Résultats récupérés depuis le cache (hit #{cached.get('hit_count', 0) + 1})")
+                        slog(
+                            f"✅ Cache HIT (#{(cached.get('hit_count', 0) or 0) + 1}) "
+                            f"— {len(cached_result)} voyage(s), 0 requête provider"
+                        )
             except Exception as e:
-                print(f"⚠️ Erreur vérification cache: {e}")
+                slog(f"⚠️ Erreur vérification cache: {e}")
 
         if cached_result:
+            slog(f"🏁 Scan terminé (cache): {len(cached_result)} voyage(s)")
             return ScanResponse(
                 resultats=[TripResponse(**r) for r in cached_result],
                 nombre_requetes=0,
                 message=f"Scan terminé (cache): {len(cached_result)} voyage(s) trouvé(s)",
             )
 
+        slog("⏳ Scan live (Ryanair + Travelpayouts)…")
         resultats, num_requetes = scanner_vols_api(
             aeroport_depart=request.aeroport_depart or "BVA",
             dates_depart=request.dates_depart,
@@ -119,16 +132,21 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
                         .upsert(cache_data, on_conflict="cache_key")\
                         .execute()
 
-                    print(f"✅ Résultats mis en cache (clé: {cache_key[:8]}...)")
+                    slog(f"✅ Résultats mis en cache (clé: {cache_key[:8]}...)")
             except Exception as e:
-                print(f"⚠️ Erreur mise en cache: {e}")
+                slog(f"⚠️ Erreur mise en cache: {e}")
 
+        slog(
+            f"🏁 Scan terminé: {len(resultats)} voyage(s), "
+            f"{num_requetes} requête(s) provider"
+        )
         return ScanResponse(
             resultats=resultats,
             nombre_requetes=num_requetes,
             message=f"Scan terminé: {len(resultats)} voyage(s) trouvé(s)",
         )
     except Exception as e:
+        slog(f"❌ Scan erreur: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -136,12 +154,15 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
 @optional_auth
 async def inspire_trip(request: InspireRequest, http_request: Request = None):
     """Endpoint simplifié pour mode découverte avec enrichissement"""
-    print(
-        f"✨ POST /api/inspire origin={request.departure} "
-        f"preset={request.date_preset} budget={request.budget} "
-        f"pax={request.passengers}",
-        flush=True,
-    )
+    slog_banner("✨ POST /api/inspire — requête reçue")
+    slog(f"  origine     : {request.departure}")
+    slog(f"  preset      : {request.date_preset}")
+    slog(f"  budget      : {request.budget} €/pers")
+    slog(f"  voyageurs   : {request.passengers or 1}")
+    slog(f"  directs     : {bool(request.direct)}")
+    slog(f"  limite_allers: {request.limite_allers or 30}")
+    if request.destinations_exclues:
+        slog(f"  exclus      : {request.destinations_exclues}")
     try:
         if request.flexible_dates:
             dates_depart_raw = request.flexible_dates.get('dates_depart', [])
@@ -160,12 +181,18 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
                     dates_retour.append(DateAvecHoraire(**d))
                 else:
                     dates_retour.append(d)
+            slog("  dates       : flexible_dates (payload client)")
         else:
             dates_depart, dates_retour = get_dates_from_preset(request.date_preset)
+            slog(f"  dates       : générées depuis preset « {request.date_preset} »")
+
+        slog_dates("départs", dates_depart)
+        slog_dates("retours", dates_retour)
 
         if not dates_depart or not dates_retour:
             raise HTTPException(status_code=400, detail="Impossible de générer les dates pour ce preset")
 
+        slog("⏳ Scan live (Ryanair + Travelpayouts)…")
         resultats, num_requetes = scanner_vols_api(
             aeroport_depart=request.departure,
             dates_depart=dates_depart,
@@ -182,6 +209,18 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
         enriched_results = enrich_trip_results(resultats, request.departure)
         enriched_results.sort(key=lambda t: t.prix_total)
 
+        slog(
+            f"🏁 Inspire terminé: {len(enriched_results)} destination(s), "
+            f"{num_requetes} requête(s) provider"
+        )
+        if enriched_results:
+            top = enriched_results[:5]
+            for t in top:
+                slog(
+                    f"  · {t.destination_code or '?'} "
+                    f"{getattr(t, 'prix_total', '?')}€ "
+                    f"[{getattr(t, 'provider', '?')}]"
+                )
         return InspireResponse(
             resultats=enriched_results,
             nombre_requetes=num_requetes,
@@ -191,7 +230,10 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
                 f"{f' × {request.passengers or 1}' if (request.passengers or 1) > 1 else ''}"
             ),
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        slog(f"❌ Inspire erreur: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

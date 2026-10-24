@@ -104,20 +104,22 @@ class RyanairProvider:
     name = "ryanair"
 
     def search_roundtrips(self, params: SearchParams) -> Tuple[List[TripResponse], int]:
+        from scan_log import slog
+
         if is_circuit_open("ryanair"):
-            print("⏸ [ryanair] circuit open — skip")
+            slog("⏸ [ryanair] circuit open — skip")
             return [], 0
 
         key = _cache_key(params)
         cached = ryanair_cache.get(key)
         if cached is not None:
             trips, nq = cached
-            print(f"💾 [ryanair] cache hit ({len(trips)} trips)")
+            slog(f"💾 [ryanair] cache hit ({len(trips)} trips)")
             return list(trips), int(nq)
 
         purpose = (params.ryanair_purpose or PURPOSE_ORGANIC).lower()
         if not try_acquire(purpose):
-            print(f"⏸ [ryanair] budget deny purpose={purpose}")
+            slog(f"⏸ [ryanair] budget deny purpose={purpose}")
             return [], 0
 
         api = Ryanair(currency="EUR")
@@ -135,7 +137,7 @@ class RyanairProvider:
         if not dates_depart or not dates_retour:
             return [], 0
 
-        print(
+        slog(
             f"📥 [ryanair] vols aller depuis {aeroport_depart} "
             f"({pax} pax, budget {params.budget_max}€/pers → max {budget_total}€)..."
         )
@@ -143,7 +145,7 @@ class RyanairProvider:
 
         for date_config in dates_depart:
             if is_circuit_open("ryanair"):
-                print("⏸ [ryanair] circuit open mid-scan — abort")
+                slog("⏸ [ryanair] circuit open mid-scan — abort")
                 break
             date_obj = datetime.fromisoformat(date_config.date).date()
             try:
@@ -178,12 +180,12 @@ class RyanairProvider:
                         tous_vols_aller.append(vol)
             except Exception as e:
                 msg = str(e)
-                print(f"  [ryanair] Erreur date {date_config.date}: {e}")
+                slog(f"  [ryanair] Erreur date {date_config.date}: {e}")
                 if "403" in msg or "429" in msg or "circuit open" in msg:
                     break
                 continue
 
-        print(f"  ✓ [ryanair] {len(tous_vols_aller)} vol(s) aller")
+        slog(f"  ✓ [ryanair] {len(tous_vols_aller)} vol(s) aller")
 
         if not tous_vols_aller:
             return [], api.num_queries
@@ -282,13 +284,13 @@ class RyanairProvider:
                     )
                 )
 
-        print(f"  ✓ [ryanair] {len(resultats)} A/R")
+        slog(f"  ✓ [ryanair] {len(resultats)} A/R")
 
         if params.record_prices and resultats and SUPABASE_AVAILABLE:
             try:
                 record_price_history([trip.model_dump() for trip in resultats])
             except Exception as e:
-                print(f"⚠️ Erreur price_history ryanair: {e}")
+                slog(f"⚠️ Erreur price_history ryanair: {e}")
 
         nq = api.num_queries
         ryanair_cache.set(key, (list(resultats), nq))

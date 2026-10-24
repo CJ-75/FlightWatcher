@@ -82,7 +82,7 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
             )}
             <img
               src={imageUrl}
-              alt={deal.city}
+              alt={deal.hotel?.name || deal.hotel_name || deal.city}
               className={`absolute inset-0 h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.04] ${
                 imageLoaded ? 'opacity-100' : 'opacity-0'
               }`}
