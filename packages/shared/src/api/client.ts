@@ -289,6 +289,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: JSON.stringify(body),
       }),
 
+    revalidateDealFlight: (dealKey: string, adults: number) =>
+      request<{
+        ok: boolean
+        revalidated?: boolean
+        available?: boolean
+        displayed_pp?: number
+        checked_pp?: number | null
+        adults?: number
+        booking_url?: string | null
+        price_note?: string | null
+        delta_pct?: number | null
+        error?: string
+      }>(`/api/deals/${encodeURIComponent(dealKey)}/revalidate-flight`, {
+        method: 'POST',
+        body: JSON.stringify({ adults }),
+      }),
+
     prebookHotel: (body: HotelBookingPrebookRequest) =>
       request<HotelBookingPrebookResponse>('/api/hotel-bookings/prebook', {
         method: 'POST',

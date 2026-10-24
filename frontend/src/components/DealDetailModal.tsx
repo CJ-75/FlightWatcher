@@ -154,23 +154,47 @@ export function DealDetailModal({
   const startMyTrip = async () => {
     setStartingTrip(true)
     try {
+      let booking = flightUrl || deal.booking_url
+      let flightPp = deal.flight?.price_pp
+      let priceNote: string | null = deal.price_pax_note || null
+      const key = deal.deal_key || deal.id
+      if (adults > 2 && key) {
+        try {
+          const rv = await getApiClient().revalidateDealFlight(key, adults)
+          if (rv.booking_url) booking = rv.booking_url
+          if (rv.checked_pp != null) flightPp = rv.checked_pp
+          if (rv.price_note) priceNote = rv.price_note
+          else if (rv.available === false) priceNote = 'Vol à confirmer pour ce nombre de voyageurs'
+          else if (rv.delta_pct != null && Math.abs(rv.delta_pct) >= 3) {
+            priceNote = `Prix vérifié pour ${adults} voyageurs`
+          }
+        } catch {
+          /* keep displayed */
+        }
+      }
       const draft = await getApiClient().createMyTrip({
-        deal_key: deal.deal_key || deal.id,
+        deal_key: key,
         origin_iata: deal.origin_iata || deal.departure_airport,
-        departure_airport: deal.departure_airport,
+        departure_airport: deal.origin_airport_label || deal.departure_airport,
         destination: deal.destination,
         city: deal.city,
         dates: deal.dates,
         adults,
-        flight: deal.flight,
+        flight: {
+          ...deal.flight,
+          price_pp: flightPp ?? deal.flight?.price_pp,
+          booking_url: booking,
+        },
         hotel: selected || deal.hotel,
         price_per_person: pricePp,
-        booking_url: flightUrl || deal.booking_url,
+        booking_url: booking,
+        price_pax_note: priceNote,
+        baggage_line: deal.baggage_line,
+        route_hint: deal.route_hint,
       })
       onClose()
       navigate(`/trip/${draft.draft_token}`)
     } catch {
-      // Fallback: open flight URL if draft fails
       if (flightUrl) window.open(flightUrl, '_blank', 'noopener,noreferrer')
     } finally {
       setStartingTrip(false)
@@ -240,7 +264,9 @@ export function DealDetailModal({
               <p className="text-sm text-slate-500">
                 {t('deals.perPersonHint', { nights: deal.nights, adults })}
               </p>
-              {adults >= 2 ? (
+              {deal.price_pax_note ? (
+                <p className="text-xs text-amber-800 mt-0.5">{deal.price_pax_note}</p>
+              ) : adults >= 2 ? (
                 <p className="text-xs text-slate-400 mt-0.5">
                   {t('deals.totalForTwo', { total: Math.round(pricePp * 2) })}
                 </p>
@@ -259,6 +285,12 @@ export function DealDetailModal({
                 <p className="text-xs text-slate-500 mt-1" title={deal.badge_meta.tooltip}>
                   {deal.badge}
                 </p>
+              ) : null}
+              {deal.baggage_line || deal.route_hint ? (
+                <div className="mt-2 text-xs text-slate-600 space-y-0.5">
+                  {deal.baggage_line ? <p>{deal.baggage_line}</p> : null}
+                  {deal.route_hint ? <p className="text-slate-500">{deal.route_hint}</p> : null}
+                </div>
               ) : null}
             </div>
 
@@ -296,7 +328,13 @@ export function DealDetailModal({
                 {t('deals.flight')}
               </p>
               <div className="rounded-xl border border-slate-100 bg-slate-50 divide-y divide-slate-100">
-                <Row label="Départ" value={deal.departure_airport} />
+                <Row
+                  label="Départ"
+                  value={deal.origin_airport_label || deal.departure_airport || '—'}
+                />
+                {deal.arrival_airport_label ? (
+                  <Row label="Arrivée" value={deal.arrival_airport_label} />
+                ) : null}
                 <Row
                   label="Dates"
                   value={`${formatDate(deal.dates.outbound)} → ${formatDate(deal.dates.inbound)}`}

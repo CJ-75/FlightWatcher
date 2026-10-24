@@ -125,6 +125,8 @@ def run_bootstrap(
             ),
         }
 
+    from deals.airport_display import upsert_airport_distances
+    from deals.baggage import upsert_baggage_policies
     from deals.baselines import refresh_route_baselines
     from deals.city_mapping import upsert_city_mapping
     from deals.liteapi_config import load_deals_config
@@ -134,6 +136,8 @@ def run_bootstrap(
     cfg = load_deals_config()
     steps: List[tuple[str, Callable[[], Dict[str, Any]]]] = [
         ("seed-city-mapping", lambda: upsert_city_mapping(supabase)),
+        ("seed-baggage-policies", lambda: upsert_baggage_policies(supabase)),
+        ("seed-airport-distances", lambda: upsert_airport_distances(supabase)),
         ("build-seed-catalog", lambda: build_seed_catalog(supabase, cfg=cfg)),
         ("seed-scan", lambda: seed_scan(supabase, cfg=cfg)),
         ("refresh-baselines", lambda: refresh_route_baselines(supabase, cfg=cfg)),

@@ -167,10 +167,21 @@ export default function MyTrip() {
               dès {Math.round(Number(price))} € / pers.
             </p>
           ) : null}
+          {payload.price_pax_note ? (
+            <p className="text-xs text-amber-800 mt-1">{String(payload.price_pax_note)}</p>
+          ) : null}
           {isCached ? (
             <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
               Prix repéré récemment · à confirmer chez le partenaire
             </p>
+          ) : null}
+          {payload.baggage_line || payload.route_hint ? (
+            <div className="text-xs text-slate-600 mt-2 space-y-0.5">
+              {payload.baggage_line ? <p>{String(payload.baggage_line)}</p> : null}
+              {payload.route_hint ? (
+                <p className="text-slate-500">{String(payload.route_hint)}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
 

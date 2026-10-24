@@ -150,9 +150,14 @@ export interface TravelDealFlight {
   inbound_local?: string
   direct?: boolean
   airline?: string
+  carrier?: string
   booking_url?: string
   origin_iata?: string
   destination_iata?: string
+  verification_level?: string
+  out_dep_local?: string
+  ret_dep_local?: string
+  provider?: string
 }
 
 export interface TravelDealHotel {
@@ -369,6 +374,14 @@ export interface TravelDeal {
   /** Alternate hotels from cache top-3 (without #1). */
   alt_hotels?: TravelDealHotel[]
   fetched_at?: string
+  /** Lot D */
+  baggage_line?: string | null
+  route_hint?: string | null
+  origin_airport_label?: string | null
+  arrival_airport_label?: string | null
+  distance_label?: string | null
+  price_pax_note?: string | null
+  verification_level?: string
 }
 
 /** Persisted like of a TravelDeal for a user. */

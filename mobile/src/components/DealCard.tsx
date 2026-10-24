@@ -91,8 +91,8 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             {deal.city}
           </Text>
           <Text style={styles.route} numberOfLines={1}>
-            {deal.departure_airport} → {deal.city} · {deal.nights} nuit
-            {deal.nights > 1 ? 's' : ''}
+            {deal.origin_airport_label || deal.departure_airport} → {deal.city} ·{' '}
+            {deal.nights} nuit{deal.nights > 1 ? 's' : ''}
           </Text>
         </View>
       </View>
@@ -102,7 +102,9 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
           <View style={{ flex: 1 }}>
             <Text style={styles.price}>{Math.round(deal.price_per_person)} €</Text>
             <Text style={styles.priceHint}>
-              / pers. · base {adults} ad. · {deal.nights} nuit{deal.nights > 1 ? 's' : ''}
+              {deal.price_pax_note
+                ? deal.price_pax_note
+                : `/ pers. · base ${adults} ad. · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`}
             </Text>
           </View>
           <View style={styles.metaChip}>
@@ -119,6 +121,21 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
                 <Text style={styles.badgeChipText}>{b}</Text>
               </View>
             ))}
+          </View>
+        ) : null}
+
+        {deal.baggage_line || deal.route_hint ? (
+          <View style={styles.metaLines}>
+            {deal.baggage_line ? (
+              <Text style={styles.metaLine} numberOfLines={2}>
+                {deal.baggage_line}
+              </Text>
+            ) : null}
+            {deal.route_hint ? (
+              <Text style={styles.metaLineMuted} numberOfLines={2}>
+                {deal.route_hint}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -239,6 +256,19 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 11,
     color: colors.inkSoft,
+  },
+  metaLines: { marginBottom: 8, gap: 2 },
+  metaLine: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.inkSoft,
+    lineHeight: 15,
+  },
+  metaLineMuted: {
+    fontFamily: fonts.regular,
+    fontSize: 11,
+    color: colors.muted,
+    lineHeight: 15,
   },
   title: {
     fontFamily: fonts.bold,

@@ -138,7 +138,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           <p className="text-white text-xl font-extrabold tracking-tight truncate">{deal.city}</p>
           <p className="text-white/85 text-xs font-medium mt-0.5 truncate">
             {deal.country}
-            {deal.departure_airport ? ` · depuis ${deal.departure_airport}` : ''}
+            {deal.origin_airport_label || deal.departure_airport
+              ? ` · depuis ${deal.origin_airport_label || deal.departure_airport}`
+              : ''}
           </p>
         </div>
       </button>
@@ -152,7 +154,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
             <p className="text-xs text-muted font-medium mt-1">
               {t('deals.perPersonHint', { nights: deal.nights, adults })}
             </p>
-            {adults >= 2 ? (
+            {deal.price_pax_note ? (
+              <p className="text-[11px] text-muted mt-0.5">{deal.price_pax_note}</p>
+            ) : adults >= 2 ? (
               <p className="text-[11px] text-muted mt-0.5">
                 {t('deals.totalForTwo', { total: total2 })}
               </p>
@@ -175,6 +179,16 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
                 {b}
               </span>
             ))}
+          </div>
+        ) : null}
+
+        {deal.baggage_line || deal.route_hint || deal.distance_label ? (
+          <div className="flex flex-col gap-1 text-[11px] text-ink-soft leading-snug">
+            {deal.baggage_line ? <p>{deal.baggage_line}</p> : null}
+            {deal.route_hint ? <p className="text-muted">{deal.route_hint}</p> : null}
+            {!deal.route_hint && deal.distance_label ? (
+              <p className="text-muted">{deal.distance_label}</p>
+            ) : null}
           </div>
         ) : null}
 

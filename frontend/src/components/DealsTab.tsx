@@ -25,7 +25,8 @@ export function DealsTab() {
   const [maxPp, setMaxPp] = useState(0)
   const [windowKind, setWindowKind] = useState<'' | DealWindowKind>('')
   const [adults, setAdults] = useState(2)
-  const [occupancies, setOccupancies] = useState<number[]>([2])
+  /** Lot D3: always 1–6 (deals priced for 1–2; note + revalid when >2). */
+  const occupancies = [1, 2, 3, 4, 5, 6]
   const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [readonlyBanner, setReadonlyBanner] = useState(false)
 
@@ -33,11 +34,6 @@ export function DealsTab() {
     void fetch('/api/config')
       .then((r) => r.json())
       .then((cfg) => {
-        const occ = Array.isArray(cfg?.occupancies)
-          ? cfg.occupancies.map(Number).filter((n: number) => n >= 1)
-          : [2]
-        setOccupancies(occ.length ? occ : [2])
-        if (occ.length && !occ.includes(2)) setAdults(occ[0])
         const kinds = Array.isArray(cfg?.window_kinds)
           ? (cfg.window_kinds as DealWindowKind[])
           : (['FRI_SUN'] as DealWindowKind[])
@@ -202,22 +198,20 @@ export function DealsTab() {
             ) : null}
           </select>
         </label>
-        {occupancies.length > 1 ? (
-          <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-            Occupants
-            <select
-              value={adults}
-              onChange={(e) => setAdults(Number(e.target.value))}
-              className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[7rem]"
-            >
-              {occupancies.map((n) => (
-                <option key={n} value={n}>
-                  {n === 1 ? 'Solo (1)' : `${n} adultes`}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+          Voyageurs
+          <select
+            value={adults}
+            onChange={(e) => setAdults(Number(e.target.value))}
+            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[7rem]"
+          >
+            {occupancies.map((n) => (
+              <option key={n} value={n}>
+                {n === 1 ? 'Solo (1)' : `${n} adultes`}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {origin && calendarDeal?.destination ? (

@@ -652,6 +652,43 @@ async def flight_click_feedback(body: FlightClickFeedbackRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class RevalidateFlightRequest(BaseModel):
+    adults: int = Field(2, ge=1, le=6)
+
+
+@router.post("/api/deals/{deal_key}/revalidate-flight")
+async def revalidate_flight_endpoint(deal_key: str, body: RevalidateFlightRequest):
+    """Lot D3: live deal price check with N passengers."""
+    try:
+        from deals.revalidate_flight import revalidate_flight_for_passengers
+
+        return revalidate_flight_for_passengers(
+            _svc(), deal_key, adults=body.adults
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/seed-baggage-policies")
+async def job_seed_baggage(authorization: Optional[str] = Header(None)):
+    require_cron(authorization)
+    try:
+        from deals.airport_display import upsert_airport_distances
+        from deals.baggage import upsert_baggage_policies
+
+        sb = _svc()
+        return {
+            "baggage": upsert_baggage_policies(sb),
+            "distances": upsert_airport_distances(sb),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class ComposeHotelRequest(BaseModel):
     checkin: str
     checkout: str

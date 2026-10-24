@@ -153,15 +153,19 @@ export function DealsScreen() {
                 onChange={setOrigin}
               />
 
+              <Text style={styles.fieldLabel}>Voyageurs</Text>
               <View style={styles.chips}>
-                <Pressable
-                  onPress={() => setAdults((a) => (a === 1 ? 2 : 1))}
-                  style={[styles.chip, adults === 1 && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, adults === 1 && styles.chipTextActive]}>
-                    {adults === 1 ? 'Solo' : '2 ad.'}
-                  </Text>
-                </Pressable>
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <Pressable
+                    key={n}
+                    onPress={() => setAdults(n)}
+                    style={[styles.chip, adults === n && styles.chipActive]}
+                  >
+                    <Text style={[styles.chipText, adults === n && styles.chipTextActive]}>
+                      {n === 1 ? 'Solo' : `${n}`}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
             </View>
           }

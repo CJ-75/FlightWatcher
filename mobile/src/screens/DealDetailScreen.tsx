@@ -131,6 +131,20 @@ export function DealDetailScreen({ route, navigation }: Props) {
     await Linking.openURL(url)
   }
 
+  const openFlight = async () => {
+    let url = flightUrl
+    const key = deal.deal_key || deal.id
+    if (adults > 2 && key) {
+      try {
+        const rv = await getApi().revalidateDealFlight(key, adults)
+        if (rv.booking_url) url = rv.booking_url
+      } catch {
+        /* keep */
+      }
+    }
+    if (url) await openUrl(url)
+  }
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -179,10 +193,18 @@ export function DealDetailScreen({ route, navigation }: Props) {
         <View style={styles.content}>
           <Text style={styles.price}>{Math.round(pricePp)} €</Text>
           <Text style={styles.priceHint}>
-            / pers. · {deal.nights} nuits · base {adults} adultes
+            {deal.price_pax_note
+              ? deal.price_pax_note
+              : `/ pers. · ${deal.nights} nuits · base ${adults} adultes`}
           </Text>
           {fees > 0 ? (
             <Text style={styles.tax}>+ {Math.round(fees)} € taxe de séjour sur place</Text>
+          ) : null}
+          {deal.baggage_line ? (
+            <Text style={styles.baggage}>{deal.baggage_line}</Text>
+          ) : null}
+          {deal.route_hint ? (
+            <Text style={styles.routeHint}>{deal.route_hint}</Text>
           ) : null}
 
           <Text style={styles.title}>{deal.title}</Text>
@@ -196,7 +218,13 @@ export function DealDetailScreen({ route, navigation }: Props) {
           </View>
 
           <View style={[styles.infoCard, shadow.soft]}>
-            <InfoRow label="Départ" value={deal.departure_airport} />
+            <InfoRow
+              label="Départ"
+              value={deal.origin_airport_label || deal.departure_airport || '—'}
+            />
+            {deal.arrival_airport_label ? (
+              <InfoRow label="Arrivée" value={deal.arrival_airport_label} />
+            ) : null}
             <InfoRow
               label="Dates"
               value={`${formatDate(deal.dates.outbound)} → ${formatDate(deal.dates.inbound)}`}
@@ -295,7 +323,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
         )}
         {flightUrl ? (
           <Pressable
-            onPress={() => void openUrl(flightUrl)}
+            onPress={() => void openFlight()}
             style={({ pressed }) => [styles.ctaSecondary, pressed && { opacity: 0.9 }]}
           >
             <Text style={styles.ctaSecondaryText}>Réserver le vol</Text>
@@ -380,6 +408,20 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   price: { ...type.price, fontSize: 36 },
   priceHint: { ...type.caption, marginTop: 2 },
+  baggage: {
+    marginTop: 8,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.inkSoft,
+    lineHeight: 16,
+  },
+  routeHint: {
+    marginTop: 4,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 16,
+  },
   tax: {
     marginTop: 8,
     fontFamily: fonts.medium,

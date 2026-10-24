@@ -103,6 +103,13 @@ def row_to_travel_deal(
     ret_date = str(row.get("ret_date") or "")[:10]
     verified = _verified_today_label(row.get("last_verified_at"))
 
+    # Lot D — baggage + airport labels (enriched by list_community_deals)
+    baggage = row.get("_baggage") or {}
+    route = row.get("_route_labels") or {}
+    price_pax_note = None
+    if adults > 2:
+        price_pax_note = "Prix pour 1–2 voyageurs"
+
     return {
         "id": row.get("deal_key"),
         "deal_key": row.get("deal_key"),
@@ -124,15 +131,24 @@ def row_to_travel_deal(
         "badge": badge.get("label"),
         "badge_meta": badge,
         "adults": adults,
+        "baggage_line": baggage.get("line"),
+        "route_hint": route.get("route_hint"),
+        "origin_airport_label": route.get("origin_airport_label"),
+        "arrival_airport_label": route.get("arrival_airport_label"),
+        "distance_label": route.get("distance_label"),
+        "price_pax_note": price_pax_note,
         "flight": {
             "price_pp": price_flight,
             "provider": flight.get("provider"),
             "carrier": flight.get("carrier"),
+            "airline": flight.get("carrier"),
             "booking_url": flight.get("booking_url"),
             "direct": flight.get("direct", True),
             "out_dep_local": flight.get("out_dep_local"),
             "ret_dep_local": flight.get("ret_dep_local"),
             "verification_level": vlevel,
+            "origin_iata": row.get("origin_iata"),
+            "destination_iata": row.get("dest_iata"),
         },
         "hotel": hotel,
         "alt_hotels": hotels[1:3] if hotels else [],
@@ -146,6 +162,7 @@ def row_to_travel_deal(
             "source_mix": row.get("source_mix"),
             "verified_label": verified if vlevel != LEVEL_CACHED else None,
             "verification_level": vlevel,
+            "price_pax_note": price_pax_note,
         },
         "verification_level": vlevel,
         "deal_score": row.get("deal_score"),
@@ -219,8 +236,29 @@ def list_community_deals(
     cached_on = is_cached_deals_enabled(
         supabase, env_default=cfg.cached_enabled
     )
+    from deals.airport_display import distance_for_iata, enrich_route_labels
+    from deals.baggage import lookup_baggage
+    from city_names_fr import city_for_code
+
     deals = []
     for row in res.data or []:
+        flight = row.get("flight_snapshot") or {}
+        city = flight.get("city_name") or row.get("dest_iata") or ""
+        carrier = flight.get("carrier") or flight.get("airline") or flight.get("provider")
+        origin_iata = str(row.get("origin_iata") or "")
+        dest_iata = str(row.get("dest_iata") or "")
+        dist = distance_for_iata(supabase, dest_iata)
+        row = {
+            **row,
+            "_baggage": lookup_baggage(supabase, carrier),
+            "_route_labels": enrich_route_labels(
+                origin_iata=origin_iata,
+                dest_iata=dest_iata,
+                city_name=str(city),
+                origin_city=city_for_code(origin_iata, ""),
+                distance_km=dist,
+            ),
+        }
         d = row_to_travel_deal(row, adults=adults_n, baselines_fresh=fresh)
         if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
             continue
@@ -245,6 +283,27 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         if not res.data:
             return None
         fresh = _baselines_fresh_flag(supabase)
-        return row_to_travel_deal(res.data[0], baselines_fresh=fresh)
+        row = res.data[0]
+        flight = row.get("flight_snapshot") or {}
+        city = flight.get("city_name") or row.get("dest_iata") or ""
+        carrier = flight.get("carrier") or flight.get("airline") or flight.get("provider")
+        from deals.airport_display import distance_for_iata, enrich_route_labels
+        from deals.baggage import lookup_baggage
+        from city_names_fr import city_for_code
+
+        origin_iata = str(row.get("origin_iata") or "")
+        dest_iata = str(row.get("dest_iata") or "")
+        row = {
+            **row,
+            "_baggage": lookup_baggage(supabase, carrier),
+            "_route_labels": enrich_route_labels(
+                origin_iata=origin_iata,
+                dest_iata=dest_iata,
+                city_name=str(city),
+                origin_city=city_for_code(origin_iata, ""),
+                distance_km=distance_for_iata(supabase, dest_iata),
+            ),
+        }
+        return row_to_travel_deal(row, baselines_fresh=fresh)
     except Exception:
         return None
