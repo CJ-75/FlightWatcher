@@ -181,6 +181,10 @@ def hotel_passes_filters(
     if distance_m > radius_m:
         return None
 
+    from deals.pool_photos import extract_main_photo
+
+    photo = extract_main_photo(hotel)
+    thumb = hotel.get("thumbnail") or hotel.get("thumbnailUrl") or photo
     return {
         "hotel_id": hotel_id,
         "name": name or None,
@@ -193,8 +197,8 @@ def hotel_passes_filters(
         "distance_m": distance_m,
         "hotel_type": type_name or (str(type_id_int) if type_id_int is not None else None),
         "hotel_type_id": type_id_int,
-        "main_photo": hotel.get("main_photo") or hotel.get("mainPhoto"),
-        "thumbnail": hotel.get("thumbnail"),
+        "main_photo": photo,
+        "thumbnail": thumb if isinstance(thumb, str) else photo,
         "address": hotel.get("address"),
         "facility_ids": list(hotel.get("facilityIds") or hotel.get("facility_ids") or []),
         "raw": hotel,
@@ -433,12 +437,19 @@ def replace_pool_rows(
                 "hotel_type": h.get("hotel_type"),
                 "has_24h_reception": bool(h.get("has_24h_reception")),
                 "main_photo": h.get("main_photo"),
-                "thumbnail": h.get("thumbnail"),
+                "thumbnail": h.get("thumbnail") or h.get("main_photo"),
                 "address": h.get("address"),
+                # Keep enough raw for Lot A photo backfill (images + type meta)
                 "raw": {
                     "hotel_type_id": h.get("hotel_type_id"),
                     "facility_ids": h.get("facility_ids"),
                     "pool_score": h.get("pool_score"),
+                    "main_photo": h.get("main_photo"),
+                    "mainPhoto": h.get("main_photo"),
+                    "thumbnail": h.get("thumbnail"),
+                    "hotelImages": (h.get("raw") or {}).get("hotelImages")
+                    if isinstance(h.get("raw"), dict)
+                    else None,
                 },
                 "pool_rank": h.get("pool_rank") or 0,
                 "refreshed_at": now,

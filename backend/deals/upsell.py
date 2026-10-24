@@ -80,11 +80,25 @@ def _is_fresh(expires_at: Any) -> bool:
         return False
 
 
-def _rates_still_usable(row: Dict[str, Any], *, grace_hours: float = 72.0) -> bool:
+def _stale_grace_hours(default: float = 24.0) -> float:
+    """v3.3 Lot C: cap stale rates (was 72h — too wide)."""
+    import os
+
+    try:
+        return max(0.0, float(os.getenv("DEALS_RATES_STALE_GRACE_H", str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _rates_still_usable(
+    row: Dict[str, Any], *, grace_hours: Optional[float] = None
+) -> bool:
     """
     Browse continuity: serve ok rates a bit after expires_at so the wall
-    doesn't go empty when the refresh job lags (TTL can be hours).
+    doesn't go empty when the refresh job lags.
+    Beyond grace → miss (caller may show flight-only / indicative night).
     """
+    grace = _stale_grace_hours() if grace_hours is None else float(grace_hours)
     if _is_fresh(row.get("expires_at")):
         return True
     if (row.get("status") or "") != "ok":
@@ -92,19 +106,16 @@ def _rates_still_usable(row: Dict[str, Any], *, grace_hours: float = 72.0) -> bo
     top = row.get("top")
     if not isinstance(top, list) or not top:
         return False
-    # Prefer fetched_at; else expires_at as anchor
-    anchor = row.get("fetched_at") or row.get("expires_at")
-    if not anchor:
+    # Age since expiry (not since fetch) — honest 24h post-TTL window
+    exp = row.get("expires_at")
+    if not exp:
         return False
     try:
-        dt = datetime.fromisoformat(str(anchor).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(exp).replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        age_h = (_now() - dt).total_seconds() / 3600.0
-        # If anchored on expires_at, allow grace past expiry; if fetched_at, cap total age
-        if row.get("fetched_at"):
-            return age_h <= max(grace_hours, 48.0)
-        return age_h <= grace_hours
+        past_h = (_now() - dt).total_seconds() / 3600.0
+        return 0 <= past_h <= grace
     except ValueError:
         return False
 
@@ -507,10 +518,54 @@ def _mark_upsell_row(
     adults: int,
     status: str,
     offer: Optional[Dict[str, Any]] = None,
+    top: Optional[List[Dict[str, Any]]] = None,
     error: Optional[str] = None,
 ) -> None:
-    """No-op: hotel_upsell_cache dropped (jobs stay in-memory)."""
-    return None
+    """
+    v3.3: persist on-demand rates into hotel_rates_cache via FREE windows
+    (hotel_upsell_cache was dropped).
+    """
+    if not supabase:
+        return
+    try:
+        from deals.refresh_deal_rates import free_window
+        from deals.ttl import expires_at_for
+        from deals.windows import upsert_windows
+
+        w = free_window(checkin, checkout)
+        upsert_windows(supabase, [w])
+        top_list: List[Dict[str, Any]] = []
+        if isinstance(top, list) and top:
+            top_list = [x for x in top if isinstance(x, dict)]
+        elif isinstance(offer, dict):
+            top_list = [offer]
+        now = _now().isoformat()
+        # Map job status → rates cache status
+        cache_status = "ok" if status in ("ok", "ready") and top_list else (
+            "no_rates" if status in ("no_rates", "ok", "ready") else "error"
+        )
+        if status == "pending":
+            return  # don't clobber with empty pending rows
+        supabase.table("hotel_rates_cache").upsert(
+            {
+                "destination_id": destination_id,
+                "window_id": w["id"],
+                "checkin": checkin.isoformat(),
+                "checkout": checkout.isoformat(),
+                "adults": adults,
+                "top": top_list,
+                "pool_size_requested": len(top_list),
+                "hotels_returned": len(top_list),
+                "fetched_at": now,
+                "expires_at": expires_at_for(checkin.isoformat()).isoformat(),
+                "status": cache_status,
+            },
+            on_conflict="destination_id,window_id,adults",
+        ).execute()
+        if error and cache_status == "error":
+            logger.info("FREE rates error dest=%s: %s", destination_id, error)
+    except Exception as e:
+        logger.warning("persist FREE rates failed: %s", e)
 
 
 def _run_fetch_job(
@@ -643,6 +698,7 @@ def _run_fetch_job(
             adults=adults,
             status="ok" if offer else "no_rates",
             offer=offer,
+            top=options or cands[:8],
         )
         with _jobs_lock:
             _jobs[job_id] = {

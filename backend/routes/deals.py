@@ -463,12 +463,71 @@ async def job_refresh_baselines(authorization: Optional[str] = Header(None)):
 
 @router.post("/api/deals/jobs/promote-deals")
 async def job_promote_deals(authorization: Optional[str] = Header(None)):
-    """D4: promote observations → deals_active (+ optional hotel)."""
+    """D4: promote observations → deals_active (+ v3.3 chain refresh-deal-rates)."""
     require_cron(authorization)
     try:
         from deals.promote import promote_deals
+        from deals.refresh_deal_rates import refresh_deal_rates
 
-        return promote_deals(_svc())
+        sb = _svc()
+        summary = promote_deals(sb) or {}
+        try:
+            summary["refresh_deal_rates"] = refresh_deal_rates(sb)
+        except Exception as e:
+            summary["refresh_deal_rates_error"] = str(e)
+        return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/refresh-deal-rates")
+async def job_refresh_deal_rates(
+    authorization: Optional[str] = Header(None),
+    force: bool = Query(False, description="Ignorer TTL / is_due"),
+):
+    """v3.3 Lot B: rates for deals_active real dates (FREE windows)."""
+    require_cron(authorization)
+    try:
+        from deals.refresh_deal_rates import refresh_deal_rates
+
+        return refresh_deal_rates(_svc(), force=force)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/backfill-pool-photos")
+async def job_backfill_pool_photos(
+    authorization: Optional[str] = Header(None),
+    dry_run: bool = Query(False),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """v3.3 Lot A: fill hotel_pool.main_photo from raw when empty."""
+    require_cron(authorization)
+    try:
+        from deals.pool_photos import backfill_pool_photos
+
+        return backfill_pool_photos(_svc(), limit=limit, dry_run=dry_run)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/wall-health")
+async def job_wall_health(authorization: Optional[str] = Header(None)):
+    """v3.3 Lot D: evaluate invariants (+ optional email)."""
+    require_cron(authorization)
+    try:
+        from deals.health import collect_wall_health, maybe_send_health_email
+
+        sb = _svc()
+        health = collect_wall_health(sb)
+        health["email"] = maybe_send_health_email(sb, health)
+        return health
     except HTTPException:
         raise
     except Exception as e:

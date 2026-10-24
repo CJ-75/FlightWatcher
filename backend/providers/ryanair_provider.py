@@ -62,6 +62,13 @@ def _patch_ryanair_no_403_retry() -> None:
         status = getattr(response, "status_code", None)
         if status in (403, 429):
             record_provider_error("ryanair", status)
+            if status == 403:
+                try:
+                    from providers.ryanair_budget import record_forbidden
+
+                    record_forbidden()
+                except Exception:
+                    pass
             response.raise_for_status()
         try:
             response.raise_for_status()

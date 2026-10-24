@@ -246,6 +246,12 @@ def collect_deals_metrics(supabase: Optional[Any] = None) -> Dict[str, Any]:
         snapshot["booking_funnel"] = _booking_funnel(supabase)
         snapshot["ssp"] = _ssp_missing_share(supabase)
         snapshot["community"] = _community_stats(supabase)
+        try:
+            from deals.health import collect_wall_health
+
+            snapshot["wall_health"] = collect_wall_health(supabase)
+        except Exception as e:
+            snapshot["wall_health"] = {"ok": None, "error": str(e)}
         snapshot["baseline_guard"] = _baseline_guard_stats(supabase, cfg)
         snapshot["cached_kill"] = _cached_kill_stats(supabase, cfg)
         try:

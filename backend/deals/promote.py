@@ -450,6 +450,21 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             city_name = None
             hotel_payload = None
 
+        # v3.3 Lot A: card photo SoT = hotel_pool (not rates payload)
+        if hotel_payload and isinstance(hotel_payload, list):
+            try:
+                from deals.pool_photos import overlay_pool_photos, photos_map_from_pool
+
+                ids = [
+                    str(h.get("hotel_id") or h.get("id") or "")
+                    for h in hotel_payload
+                    if isinstance(h, dict)
+                ]
+                pmap = photos_map_from_pool(supabase, ids)
+                hotel_payload = overlay_pool_photos(hotel_payload, pmap)
+            except Exception:
+                pass
+
         # country from served_cities if needed
         country = ""
         try:

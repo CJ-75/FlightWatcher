@@ -338,9 +338,11 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
               <Text style={styles.price}>{Math.round(deal.price_per_person)} €</Text>
               <Text style={styles.priceHint} numberOfLines={2}>
                 / pers. · {deal.nights}n · {adults} ad.
-                {flightPp > 0 || hotelPp > 0
-                  ? `\nvol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
-                  : ''}
+                {deal.flags?.soft_fill || deal.flags?.hotel_bookable === false
+                  ? `\n${deal.flags?.price_label || 'Vol dès · hôtel à choisir'}`
+                  : flightPp > 0 || hotelPp > 0
+                    ? `\nvol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
+                    : ''}
               </Text>
             </View>
             <DealDateRange outbound={deal.dates.outbound} inbound={deal.dates.inbound} />

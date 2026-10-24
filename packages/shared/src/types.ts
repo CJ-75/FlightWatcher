@@ -196,9 +196,14 @@ export interface HotelGalleryResponse {
 
 export interface TravelDealPriceBreakdown {
   flight_pp: number
-  hotel_public_total: number
+  hotel_public_total?: number
+  hotel_pp?: number | null
+  total_pp?: number
   /** Taxes payable on site — shown separately (not folded into price_pp). */
-  excluded_fees: number
+  excluded_fees?: number
+  /** v3.3: false when photo-only / soft fill — do not treat as bookable stay total. */
+  hotel_bookable?: boolean
+  indicative_night_eur?: number | null
 }
 
 export interface TravelDealFlags {
@@ -206,6 +211,12 @@ export interface TravelDealFlags {
   late_departure?: boolean
   breakfast?: boolean
   has_hotel?: boolean
+  /** v3.3 Lot C — hotel has a usable rates price (not pool photo only). */
+  hotel_bookable?: boolean
+  soft_fill?: boolean
+  soft_fill_mode?: string | null
+  /** Honest label when stay total is flight-only. */
+  price_label?: string | null
   source_mix?: string
   /** Human freshness — e.g. « Prix vérifié aujourd'hui » (no technical scan age). */
   verified_label?: string | null

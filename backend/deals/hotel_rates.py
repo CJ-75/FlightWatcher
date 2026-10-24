@@ -189,6 +189,7 @@ def refresh_one_combo(
     adults: int,
     cfg: DealsConfig,
     force: bool = False,
+    require_flight: bool = True,
 ) -> Dict[str, Any]:
     dest_id = dest["id"]
     window_id = window["id"]
@@ -206,31 +207,35 @@ def refresh_one_combo(
     ):
         return {"key": key, "status": "skipped_fresh"}
 
-    from deals.flight_cache import has_valid_roundtrip
+    # v3.3 FREE windows (community deal dates): no deal_flight_cache gate
+    kind = str(window.get("kind") or "")
+    skip_flight = (not require_flight) or kind == "FREE"
+    if not skip_flight:
+        from deals.flight_cache import has_valid_roundtrip
 
-    if not has_valid_roundtrip(
-        supabase,
-        destination_id=dest_id,
-        window_id=window_id,
-        max_pp=cfg.budget_flight_pp,
-    ):
-        _upsert_rates_cache(
+        if not has_valid_roundtrip(
             supabase,
-            {
-                "destination_id": dest_id,
-                "window_id": window_id,
-                "checkin": window["checkin"],
-                "checkout": window["checkout"],
-                "adults": adults,
-                "top": [],
-                "pool_size_requested": 0,
-                "hotels_returned": 0,
-                "fetched_at": fetched,
-                "expires_at": expires,
-                "status": "skipped_no_flight",
-            },
-        )
-        return {"key": key, "status": "skipped_no_flight"}
+            destination_id=dest_id,
+            window_id=window_id,
+            max_pp=cfg.budget_flight_pp,
+        ):
+            _upsert_rates_cache(
+                supabase,
+                {
+                    "destination_id": dest_id,
+                    "window_id": window_id,
+                    "checkin": window["checkin"],
+                    "checkout": window["checkout"],
+                    "adults": adults,
+                    "top": [],
+                    "pool_size_requested": 0,
+                    "hotels_returned": 0,
+                    "fetched_at": fetched,
+                    "expires_at": expires,
+                    "status": "skipped_no_flight",
+                },
+            )
+            return {"key": key, "status": "skipped_no_flight"}
 
     pool = _load_pool(supabase, dest_id)
     if not pool:
@@ -254,9 +259,14 @@ def refresh_one_combo(
 
     hotel_ids = [str(h["hotel_id"]) for h in pool if h.get("hotel_id")]
     pool_map = _pool_by_id(pool)
-    late = _any_late_arrival(
-        supabase, destination_id=dest_id, window_id=window_id
-    )
+    late = False
+    if not skip_flight:
+        try:
+            late = _any_late_arrival(
+                supabase, destination_id=dest_id, window_id=window_id
+            )
+        except Exception:
+            late = False
     radius = int(dest.get("pool_radius_m") or 2000)
 
     try:

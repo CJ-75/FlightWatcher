@@ -105,7 +105,27 @@ def _loop() -> None:
 
             if now - last["promote-deals"] >= PROMOTE_EVERY_S:
                 last["promote-deals"] = now
-                _safe_job("promote-deals", lambda: promote_deals(sb, cfg=cfg))
+
+                def _promote_then_rates():
+                    from deals.refresh_deal_rates import refresh_deal_rates
+
+                    out = promote_deals(sb, cfg=cfg) or {}
+                    try:
+                        out["refresh_deal_rates"] = refresh_deal_rates(sb, cfg=cfg)
+                        # Record chained job for health lag
+                        from deals.job_runs import record_job_run
+
+                        record_job_run(
+                            sb,
+                            "refresh-deal-rates",
+                            status="ok",
+                            summary=out.get("refresh_deal_rates") or {},
+                        )
+                    except Exception as e:
+                        out["refresh_deal_rates_error"] = str(e)
+                    return out
+
+                _safe_job("promote-deals", _promote_then_rates)
 
             if now - last["revalidate-deals"] >= REVALIDATE_EVERY_S:
                 last["revalidate-deals"] = now

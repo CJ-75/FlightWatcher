@@ -48,6 +48,26 @@ type Launch = {
   error?: string
 }
 
+type WallCheck = {
+  id?: string
+  label?: string
+  ok?: boolean
+  value?: number | string | null
+  threshold?: string
+}
+
+type WallHealth = {
+  ok?: boolean | null
+  error?: string
+  active_deals?: number
+  fresh_hotel_rate_share?: number | null
+  baselines_age_h?: number | null
+  ryanair_403_share_1h?: number | null
+  photo_by_origin?: Record<string, number>
+  job_chain?: Record<string, { age_h?: number; max_age_h?: number } | undefined>
+  invariants?: { ok?: boolean; red_count?: number; checks?: WallCheck[] }
+}
+
 type Metrics = {
   generated_at?: string
   provider?: string
@@ -55,6 +75,7 @@ type Metrics = {
   ui_enabled?: boolean
   booking_enabled?: boolean
   launch?: Launch
+  wall_health?: WallHealth
   process?: {
     calls_total?: number
     latency_ms_p50?: number | null
@@ -129,6 +150,7 @@ export function DealsMetricsPage() {
 
   const gng = data?.go_no_go
   const launch = data?.launch
+  const wall = data?.wall_health
   const kill = launch?.kill_switch
   const rise = launch?.price_rise
   const ret = launch?.mon_voyage_return
@@ -146,7 +168,7 @@ export function DealsMetricsPage() {
       <div>
         <h1 className="text-2xl font-bold">Deals · métriques</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Lot G — mesure minimale lancement · {data?.generated_at || '—'}
+          Lot G + v3.3 santé mur · {data?.generated_at || '—'}
         </p>
       </div>
 
@@ -155,6 +177,57 @@ export function DealsMetricsPage() {
 
       {data ? (
         <>
+          {/* ——— v3.3 wall health ——— */}
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-white">Santé du mur (v3.3)</h2>
+              <span
+                className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                  wall?.ok
+                    ? 'bg-emerald-900/50 text-emerald-300'
+                    : wall?.ok === false
+                      ? 'bg-red-900/50 text-red-300'
+                      : 'bg-gray-800 text-gray-400'
+                }`}
+              >
+                {wall?.ok ? 'VERT' : wall?.ok === false ? 'ROUGE' : '—'}
+              </span>
+            </div>
+            {wall?.error ? (
+              <p className="text-sm text-red-300">{wall.error}</p>
+            ) : null}
+            <p className="text-xs text-gray-500">
+              Actifs {wall?.active_deals ?? '—'} · rates frais{' '}
+              {wall?.fresh_hotel_rate_share != null
+                ? `${Math.round(wall.fresh_hotel_rate_share * 100)}%`
+                : '—'}{' '}
+              · baselines {wall?.baselines_age_h != null ? `${wall.baselines_age_h.toFixed?.(1) ?? wall.baselines_age_h} h` : '—'}
+            </p>
+            <div className="rounded-xl border border-gray-700 bg-[#252836] divide-y divide-gray-800">
+              {(wall?.invariants?.checks || []).map((c) => (
+                <div
+                  key={c.id || c.label}
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+                >
+                  <span className="text-gray-300">{c.label}</span>
+                  <span
+                    className={
+                      c.ok ? 'text-emerald-300 font-semibold' : 'text-red-300 font-semibold'
+                    }
+                  >
+                    {String(c.value ?? '—')}
+                    <span className="text-gray-500 font-normal ml-2">
+                      ({c.threshold})
+                    </span>
+                  </span>
+                </div>
+              ))}
+              {(wall?.invariants?.checks || []).length === 0 ? (
+                <p className="px-4 py-3 text-gray-500 text-sm">Pas encore de checks</p>
+              ) : null}
+            </div>
+          </section>
+
           {/* ——— Lot G ——— */}
           <section className="space-y-4">
             <h2 className="text-lg font-bold text-white">Lancement (G)</h2>

@@ -136,27 +136,41 @@ def row_to_travel_deal(
         badge = soften_badge_if_stale(raw_badge, baselines_fresh=baselines_fresh)
         badge = badge_for_deal_level(badge, verification_level=LEVEL_LIVE)
 
+    import os
+
+    soft_fill_mode = (os.getenv("DEALS_SOFT_FILL_MODE", "flight_only") or "flight_only").lower()
     hotel_pp = None
     hotel_name = None
     hotel_stars = None
+    hotel_bookable = False
+    indicative_night = None
     if hotel and isinstance(hotel, dict):
         hotel_name = hotel.get("name") or hotel.get("hotel_name")
         hotel_stars = hotel.get("stars")
-        # public total / adults if present
+        # public total / adults if present — only bookable rates, not pool-only fillers
         public = (
             hotel.get("public_hotel_price")
             or hotel.get("public_price")
-            or hotel.get("total")
-            or hotel.get("price")
         )
         if public is not None:
             try:
                 hotel_pp = round(float(public) / max(1, adults), 2)
+                if hotel_pp > 0:
+                    hotel_bookable = True
             except (TypeError, ValueError):
                 hotel_pp = None
+        if not hotel_bookable and soft_fill_mode == "indicative_hotel_night":
+            # Optional indicative €/night from pool meta (never folded into total)
+            try:
+                night = hotel.get("indicative_night_eur") or hotel.get("from_night_eur")
+                if night is not None:
+                    indicative_night = round(float(night), 2)
+            except (TypeError, ValueError):
+                indicative_night = None
 
+    # v3.3 Lot C: never present flight-only as a stay total
     price_pp = price_flight
-    if hotel_pp is not None:
+    if hotel_bookable and hotel_pp is not None:
         price_pp = round(price_flight + hotel_pp, 2)
 
     out_date = str(row.get("out_date") or "")[:10]
@@ -222,11 +236,29 @@ def row_to_travel_deal(
         "alt_hotels": hotels[1:3] if hotels else [],
         "price_breakdown": {
             "flight_pp": price_flight,
-            "hotel_pp": hotel_pp,
+            "hotel_pp": hotel_pp if hotel_bookable else None,
             "total_pp": price_pp,
+            "hotel_bookable": hotel_bookable,
+            "indicative_night_eur": indicative_night,
         },
         "flags": {
             "has_hotel": bool(hotel),
+            "hotel_bookable": hotel_bookable,
+            "soft_fill": bool(hotel) and not hotel_bookable,
+            "soft_fill_mode": soft_fill_mode if (hotel and not hotel_bookable) else None,
+            "price_label": (
+                None
+                if hotel_bookable
+                else (
+                    "Vol dès · hôtel à choisir"
+                    if soft_fill_mode != "indicative_hotel_night"
+                    else (
+                        f"Vol · hôtels dès {int(indicative_night)} €/nuit"
+                        if indicative_night
+                        else "Vol dès · hôtel à choisir"
+                    )
+                )
+            ),
             "source_mix": row.get("source_mix"),
             "verified_label": verified if vlevel != LEVEL_CACHED else None,
             "verification_level": vlevel,
@@ -315,59 +347,28 @@ def _fetch_active_rows(
 
 
 def _photos_from_pool(supabase, hotel_ids: List[str]) -> Dict[str, str]:
-    """Fill missing hotel photos from hotel_pool.main_photo."""
-    ids = [str(i) for i in hotel_ids if i]
-    if not ids or not supabase:
-        return {}
-    out: Dict[str, str] = {}
-    try:
-        # chunk to stay under filter limits
-        for i in range(0, len(ids), 80):
-            chunk = ids[i : i + 80]
-            res = (
-                supabase.table("hotel_pool")
-                .select("hotel_id,main_photo,thumbnail")
-                .in_("hotel_id", chunk)
-                .execute()
-            )
-            for row in res.data or []:
-                hid = str(row.get("hotel_id") or "")
-                photo = (row.get("main_photo") or row.get("thumbnail") or "").strip()
-                if hid and photo and hid not in out:
-                    out[hid] = photo
-    except Exception:
-        return out
-    return out
+    """Card photo SoT: hotel_pool (v3.3 Lot A) — never hotel_rates_cache."""
+    from deals.pool_photos import photos_map_from_pool
+
+    return photos_map_from_pool(supabase, hotel_ids)
 
 
-def _fill_missing_hotel_photos(
+def _overlay_pool_photos_on_rows(
     rows: List[Dict[str, Any]], photo_map: Dict[str, str]
 ) -> List[Dict[str, Any]]:
+    """Prefer pool photos over rates-carried URLs so expired rates don't blank cards."""
     if not photo_map:
         return rows
+    from deals.pool_photos import overlay_pool_photos
+
     filled: List[Dict[str, Any]] = []
     for row in rows:
         hotels = row.get("hotel_top3")
         if not isinstance(hotels, list) or not hotels:
             filled.append(row)
             continue
-        new_hotels = []
-        changed = False
-        for h in hotels:
-            if not isinstance(h, dict):
-                new_hotels.append(h)
-                continue
-            if _hotel_photo(h):
-                new_hotels.append(h)
-                continue
-            hid = str(h.get("hotel_id") or h.get("id") or "")
-            photo = photo_map.get(hid)
-            if photo:
-                new_hotels.append({**h, "photo": photo, "thumbnail": photo})
-                changed = True
-            else:
-                new_hotels.append(h)
-        filled.append({**row, "hotel_top3": new_hotels} if changed else row)
+        new_hotels = overlay_pool_photos(hotels, photo_map)
+        filled.append({**row, "hotel_top3": new_hotels})
     return filled
 
 
@@ -500,16 +501,16 @@ def _enrich_rows_to_deals(
     if supabase is not None:
         rows = [_compose_hotel_onto_row(supabase, r, adults_n) for r in rows]
 
-    # Backfill hotel photos for rows that only have hotel_id
-    missing_ids: List[str] = []
+    # v3.3 Lot A: card photo = hotel_pool for every hotel_id (not rates TTL)
+    all_ids: List[str] = []
     for r in rows:
         for h in r.get("hotel_top3") or []:
-            if isinstance(h, dict) and not _hotel_photo(h):
+            if isinstance(h, dict):
                 hid = h.get("hotel_id") or h.get("id")
                 if hid:
-                    missing_ids.append(str(hid))
-    photo_map = _photos_from_pool(supabase, missing_ids) if missing_ids else {}
-    rows = _fill_missing_hotel_photos(rows, photo_map)
+                    all_ids.append(str(hid))
+    photo_map = _photos_from_pool(supabase, all_ids) if (all_ids and supabase) else {}
+    rows = _overlay_pool_photos_on_rows(rows, photo_map)
 
     # Re-rank / drop hotels over 2.5× flight_pp
     from deals.hotel_budget import filter_hotels_for_flight

@@ -32,6 +32,7 @@ PRIORITY = {
 _lock = threading.Lock()
 _calls: Deque[float] = deque()  # monotonic timestamps of successful acquires
 _denied: Dict[str, int] = {}
+_forbidden: Deque[float] = deque()  # 403 timestamps (v3.3 Lot F)
 
 
 def _hourly_budget() -> int:
@@ -94,15 +95,38 @@ def try_acquire(purpose: str) -> bool:
     return True
 
 
+def record_forbidden() -> None:
+    """Count a Ryanair HTTP 403 in the last-hour window (health invariant)."""
+    with _lock:
+        now = time.monotonic()
+        cutoff = now - 3600.0
+        while _forbidden and _forbidden[0] < cutoff:
+            _forbidden.popleft()
+        _forbidden.append(now)
+
+
+def get_stats() -> Dict[str, object]:
+    """Alias used by deals.health."""
+    return status_snapshot()
+
+
 def status_snapshot() -> Dict[str, object]:
     with _lock:
         now = time.monotonic()
         _prune(now)
+        cutoff = now - 3600.0
+        while _forbidden and _forbidden[0] < cutoff:
+            _forbidden.popleft()
+        used = len(_calls)
+        forbidden_n = len(_forbidden)
         return {
             "budget_per_hour": _hourly_budget(),
-            "used_last_hour": len(_calls),
-            "remaining": max(0, _hourly_budget() - len(_calls)),
+            "used_last_hour": used,
+            "calls_1h": used,
+            "remaining": max(0, _hourly_budget() - used),
             "denied_by_purpose": dict(_denied),
+            "forbidden_1h": forbidden_n,
+            "status_403": forbidden_n,
             "priority": dict(PRIORITY),
             "note": (
                 "No official Ryanair month calendar in ryanair-py "
@@ -115,3 +139,4 @@ def reset_for_tests() -> None:
     with _lock:
         _calls.clear()
         _denied.clear()
+        _forbidden.clear()

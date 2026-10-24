@@ -292,7 +292,11 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
               </p>
               <p className="text-[11px] text-muted font-medium mt-1.5 leading-snug">
                 / pers. · {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {adults} ad.
-                {flightPp > 0 || hotelPp > 0 ? (
+                {deal.flags?.soft_fill || deal.flags?.hotel_bookable === false ? (
+                  <span className="block sm:inline sm:before:content-['·_'] text-ink-soft">
+                    {deal.flags?.price_label || 'Vol dès · hôtel à choisir'}
+                  </span>
+                ) : flightPp > 0 || hotelPp > 0 ? (
                   <span className="block sm:inline sm:before:content-['·_'] text-ink-soft">
                     vol {flightPp || '—'} € + hôtel {hotelPp || '—'} €
                   </span>
