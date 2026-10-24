@@ -12,12 +12,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, TravelDeal } from '@flightwatcher/shared'
-import {
-  encodeAirportCodes,
-  findCityGroupByCodes,
-  groupAirportsByCity,
-  normalizeAirports,
-} from '@flightwatcher/shared'
+import { normalizeAirports } from '@flightwatcher/shared'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { CityAirportPicker } from '../components/CityAirportPicker'
@@ -27,6 +22,8 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
+const STALE_MS = 90_000
+
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -35,12 +32,17 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Empty = browse ~30 deals; set origin to prioritize then fill. */
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
+  const [queryOrigin, setQueryOrigin] = useState('')
+  const [queryAdults, setQueryAdults] = useState(2)
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
-  const expandedDefaultRef = useRef(false)
+  const configLoadedRef = useRef(false)
+  const lastFetchAtRef = useRef(0)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     getApi()
@@ -48,47 +50,59 @@ export function DealsScreen() {
       .then((raw) => {
         const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
         setAirports(list)
-        if (!expandedDefaultRef.current && list.length) {
-          expandedDefaultRef.current = true
-          const groups = groupAirportsByCity(list)
-          const paris = findCityGroupByCodes(groups, ['BVA', 'CDG', 'ORY'])
-          if (paris && paris.airports.length > 1) {
-            const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
-            if (encoded) setOrigin(encoded)
-          }
-        }
       })
       .catch(() => undefined)
+
+    // Config once (not on every deals load)
+    void fetch(`${apiBase}/api/config`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (!cfg) return
+        configLoadedRef.current = true
+        setUiEnabled(cfg?.ui_enabled !== false)
+        setReadonlyBanner(
+          Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false,
+        )
+      })
+      .catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, [])
 
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setQueryOrigin(origin)
+      setQueryAdults(adults)
+    }, 280)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [origin, adults])
+
   const load = useCallback(
-    async (isRefresh = false) => {
+    async (opts?: { refresh?: boolean; force?: boolean }) => {
+      const isRefresh = Boolean(opts?.refresh)
+      const force = Boolean(opts?.force)
+      if (!force && !isRefresh && lastFetchAtRef.current > 0) {
+        const age = Date.now() - lastFetchAtRef.current
+        if (age < STALE_MS) return
+      }
       if (isRefresh) setRefreshing(true)
-      else setLoading(true)
+      else if (deals.length === 0) setLoading(true)
       setError(null)
       try {
-        try {
-          const cfgRes = await fetch(`${apiBase}/api/config`)
-          if (cfgRes.ok) {
-            const cfg = await cfgRes.json()
-            setUiEnabled(cfg?.ui_enabled !== false)
-            setReadonlyBanner(
-              Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false,
-            )
-            if (cfg?.ui_enabled === false) {
-              setDeals([])
-              return
-            }
-          }
-        } catch {
-          /* ignore */
+        if (uiEnabled === false) {
+          setDeals([])
+          return
         }
-        const list = await getApi().getDeals({
-          origin: origin || undefined,
-          adults,
+        const listPromise = getApi().getDeals({
+          origin: queryOrigin || undefined,
+          adults: queryAdults,
         })
+        void refreshLikes()
+        const list = await listPromise
         setDeals(Array.isArray(list) ? list : [])
-        await refreshLikes()
+        lastFetchAtRef.current = Date.now()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les deals')
         setDeals([])
@@ -97,16 +111,38 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, origin, adults],
+    [refreshLikes, queryOrigin, queryAdults, deals.length, uiEnabled],
   )
 
+  // Filter changes → always refetch
+  useEffect(() => {
+    void load({ force: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- query* only
+  }, [queryOrigin, queryAdults])
+
+  // Tab focus → refetch only if stale (skip first mount: filter effect owns it)
   useFocusEffect(
     useCallback(() => {
+      if (lastFetchAtRef.current === 0) return
       void load()
     }, [load]),
   )
 
   const filterSummary = [adults !== 2 ? `${adults} ad.` : null].filter(Boolean).join(' · ')
+  const matchedDeals = queryOrigin
+    ? deals.filter((d) => d.flags?.match_origin !== false)
+    : deals
+  const fillerDeals = queryOrigin
+    ? deals.filter((d) => d.flags?.match_origin === false)
+    : []
+  const listData =
+    fillerDeals.length > 0
+      ? [
+          ...matchedDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
+          { kind: 'filler_header' as const },
+          ...fillerDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
+        ]
+      : matchedDeals.map((d) => ({ kind: 'deal' as const, deal: d }))
 
   return (
     <View style={styles.root}>
@@ -119,8 +155,10 @@ export function DealsScreen() {
         </View>
       ) : (
         <FlatList
-          data={deals}
-          keyExtractor={(item) => item.id}
+          data={listData}
+          keyExtractor={(item, i) =>
+            item.kind === 'filler_header' ? 'filler-header' : item.deal.id || String(i)
+          }
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
@@ -130,7 +168,7 @@ export function DealsScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => void load(true)}
+              onRefresh={() => void load({ refresh: true, force: true })}
               tintColor={colors.primary}
             />
           }
@@ -190,7 +228,10 @@ export function DealsScreen() {
                   <Text style={styles.emptyBody} numberOfLines={3}>
                     {error}
                   </Text>
-                  <Pressable onPress={() => void load()} style={styles.retryBtn}>
+                  <Pressable
+                    onPress={() => void load({ force: true })}
+                    style={styles.retryBtn}
+                  >
                     <Text style={styles.retryText}>Réessayer</Text>
                   </Pressable>
                 </>
@@ -214,14 +255,27 @@ export function DealsScreen() {
               )}
             </View>
           }
-          renderItem={({ item }) => (
-            <DealCard
-              deal={item}
-              liked={isLiked(item.id)}
-              onToggleLike={() => void toggleLike(item)}
-              onPress={() => navigation.navigate('DealDetail', { dealId: item.id })}
-            />
-          )}
+          renderItem={({ item }) => {
+            if (item.kind === 'filler_header') {
+              return (
+                <View style={styles.fillerHeader}>
+                  <Text style={styles.fillerTitle}>Aussi intéressants</Text>
+                  <Text style={styles.fillerSub}>
+                    Autres départs pour compléter ta sélection
+                  </Text>
+                </View>
+              )
+            }
+            const deal = item.deal
+            return (
+              <DealCard
+                deal={deal}
+                liked={isLiked(deal.id)}
+                onToggleLike={() => void toggleLike(deal)}
+                onPress={() => navigation.navigate('DealDetail', { dealId: deal.id })}
+              />
+            )
+          }}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -302,6 +356,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontFamily: fonts.semibold,
     fontSize: 13,
+    color: colors.muted,
+  },
+  fillerHeader: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  fillerTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  fillerSub: {
+    marginTop: 4,
+    fontFamily: fonts.medium,
+    fontSize: 12,
     color: colors.muted,
   },
   emptyCard: {

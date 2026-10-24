@@ -193,6 +193,9 @@ export interface TravelDealFlags {
   verified_label?: string | null
   /** Lot C: live (Ryanair) | cached (Travelpayouts). */
   verification_level?: 'live' | 'cached' | string
+  /** True when deal matches the origin filter; false = filler to keep the grid full. */
+  match_origin?: boolean
+  price_pax_note?: string | null
 }
 
 export interface TravelDealBadgeMeta {

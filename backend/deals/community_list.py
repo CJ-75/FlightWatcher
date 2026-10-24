@@ -3,8 +3,17 @@ Assemble community deals_active rows into TravelDeal-shaped dicts for the API.
 """
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+_list_cache_lock = threading.Lock()
+_list_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+_LIST_CACHE_TTL_S = 45.0
+_flag_cache_lock = threading.Lock()
+_flag_cache: Dict[str, Tuple[float, Any]] = {}
+_FLAG_CACHE_TTL_S = 60.0
 
 
 def _verified_today_label(last_verified_at: Any) -> Optional[str]:
@@ -171,20 +180,35 @@ def row_to_travel_deal(
     }
 
 
-def _baselines_fresh_flag(supabase) -> bool:
-    try:
-        from deals.baseline_guard import baselines_freshness, log_stale_alert
-        from deals.liteapi_config import load_deals_config
+def _cached_flag(key: str, compute) -> Any:
+    now = time.monotonic()
+    with _flag_cache_lock:
+        hit = _flag_cache.get(key)
+        if hit and now - hit[0] < _FLAG_CACHE_TTL_S:
+            return hit[1]
+    value = compute()
+    with _flag_cache_lock:
+        _flag_cache[key] = (now, value)
+    return value
 
-        cfg = load_deals_config()
-        fresh, last, reason = baselines_freshness(
-            supabase, max_age_h=cfg.baseline_max_age_h
-        )
-        if not fresh:
-            log_stale_alert(last, reason)
-        return fresh
-    except Exception:
-        return True
+
+def _baselines_fresh_flag(supabase) -> bool:
+    def _compute() -> bool:
+        try:
+            from deals.baseline_guard import baselines_freshness, log_stale_alert
+            from deals.liteapi_config import load_deals_config
+
+            cfg = load_deals_config()
+            fresh, last, reason = baselines_freshness(
+                supabase, max_age_h=cfg.baseline_max_age_h
+            )
+            if not fresh:
+                log_stale_alert(last, reason)
+            return fresh
+        except Exception:
+            return True
+
+    return bool(_cached_flag("baselines_fresh", _compute))
 
 
 def _parse_origin_codes(origin: Optional[str]) -> List[str]:
@@ -202,73 +226,201 @@ def _parse_origin_codes(origin: Optional[str]) -> List[str]:
     return out
 
 
-def list_community_deals(
+def _row_has_hotel(row: Dict[str, Any]) -> bool:
+    hotels = row.get("hotel_top3")
+    return bool(isinstance(hotels, list) and len(hotels) > 0)
+
+
+def _fetch_active_rows(
     supabase,
     *,
-    origin: Optional[str] = None,
-    adults: Optional[int] = None,
-    max_pp: Optional[float] = None,
-    limit: int = 40,
+    codes: Optional[List[str]] = None,
+    limit: int = 60,
 ) -> List[Dict[str, Any]]:
     q = (
         supabase.table("deals_active")
         .select("*")
         .eq("status", "active")
         .order("deal_score", desc=True)
-        .limit(limit * 2 if origin else limit)
+        .limit(limit)
     )
-    codes = _parse_origin_codes(origin)
-    if len(codes) == 1:
+    if codes and len(codes) == 1:
         q = q.eq("origin_iata", codes[0])
-    elif len(codes) > 1:
+    elif codes and len(codes) > 1:
         q = q.in_("origin_iata", codes)
     try:
         res = q.execute()
+        return list(res.data or [])
     except Exception:
         return []
+
+
+def _enrich_rows_to_deals(
+    rows: List[Dict[str, Any]],
+    *,
+    adults_n: int,
+    fresh: bool,
+    max_pp: Optional[float],
+    match_origin: bool,
+) -> List[Dict[str, Any]]:
+    from deals.airport_display import distances_for_iatas, enrich_route_labels
+    from deals.baggage import (
+        DEFAULT_BAGGAGE,
+        baggage_map_for_carriers,
+        _normalize_carrier,
+    )
+    from city_names_fr import city_for_code
+
+    dests = [str(r.get("dest_iata") or "") for r in rows]
+    carriers = []
+    for r in rows:
+        flight = r.get("flight_snapshot") or {}
+        carriers.append(
+            flight.get("carrier") or flight.get("airline") or flight.get("provider")
+        )
+    dist_map = distances_for_iatas(dests)
+    bag_map = baggage_map_for_carriers(carriers)
+
+    deals: List[Dict[str, Any]] = []
+    for row in rows:
+        flight = row.get("flight_snapshot") or {}
+        city = flight.get("city_name") or row.get("dest_iata") or ""
+        carrier = flight.get("carrier") or flight.get("airline") or flight.get("provider")
+        origin_iata = str(row.get("origin_iata") or "")
+        dest_iata = str(row.get("dest_iata") or "")
+        ckey = _normalize_carrier(carrier)
+        enriched = {
+            **row,
+            "_baggage": bag_map.get(ckey) or {**DEFAULT_BAGGAGE},
+            "_route_labels": enrich_route_labels(
+                origin_iata=origin_iata,
+                dest_iata=dest_iata,
+                city_name=str(city),
+                origin_city=city_for_code(origin_iata, ""),
+                distance_km=dist_map.get(dest_iata.upper()),
+            ),
+        }
+        d = row_to_travel_deal(enriched, adults=adults_n, baselines_fresh=fresh)
+        if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
+            continue
+        flags = dict(d.get("flags") or {})
+        flags["match_origin"] = match_origin
+        flags["has_hotel"] = bool(d.get("hotel") or flags.get("has_hotel"))
+        d["flags"] = flags
+        deals.append(d)
+    return deals
+
+
+def _prefer_hotel_deals(deals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Hotel packs first, then by deal_score."""
+    return sorted(
+        deals,
+        key=lambda d: (
+            0 if (d.get("flags") or {}).get("has_hotel") or d.get("hotel") else 1,
+            -(float(d.get("deal_score") or 0)),
+        ),
+    )
+
+
+def list_community_deals(
+    supabase,
+    *,
+    origin: Optional[str] = None,
+    adults: Optional[int] = None,
+    max_pp: Optional[float] = None,
+    limit: int = 30,
+) -> List[Dict[str, Any]]:
+    """
+    Browse: ~30 deals with hotels preferred (no empty grid).
+    Search (origin set): matching deals first, then fill with other origins.
+    """
     adults_n = int(adults or 2)
+    target = max(12, min(int(limit or 30), 48))
+    cache_key = f"{origin or ''}|{adults_n}|{max_pp}|{target}"
+    now = time.monotonic()
+    with _list_cache_lock:
+        hit = _list_cache.get(cache_key)
+        if hit and now - hit[0] < _LIST_CACHE_TTL_S:
+            return [dict(d) for d in hit[1]]
+
     fresh = _baselines_fresh_flag(supabase)
     from deals.click_checks import is_cached_deals_enabled
     from deals.liteapi_config import load_deals_config
     from deals.verification import apply_cached_share_cap
 
     cfg = load_deals_config()
-    cached_on = is_cached_deals_enabled(
-        supabase, env_default=cfg.cached_enabled
-    )
-    from deals.airport_display import distance_for_iata, enrich_route_labels
-    from deals.baggage import lookup_baggage
-    from city_names_fr import city_for_code
-
-    deals = []
-    for row in res.data or []:
-        flight = row.get("flight_snapshot") or {}
-        city = flight.get("city_name") or row.get("dest_iata") or ""
-        carrier = flight.get("carrier") or flight.get("airline") or flight.get("provider")
-        origin_iata = str(row.get("origin_iata") or "")
-        dest_iata = str(row.get("dest_iata") or "")
-        dist = distance_for_iata(supabase, dest_iata)
-        row = {
-            **row,
-            "_baggage": lookup_baggage(supabase, carrier),
-            "_route_labels": enrich_route_labels(
-                origin_iata=origin_iata,
-                dest_iata=dest_iata,
-                city_name=str(city),
-                origin_city=city_for_code(origin_iata, ""),
-                distance_km=dist,
+    cached_on = bool(
+        _cached_flag(
+            "cached_deals_enabled",
+            lambda: is_cached_deals_enabled(
+                supabase, env_default=cfg.cached_enabled
             ),
-        }
-        d = row_to_travel_deal(row, adults=adults_n, baselines_fresh=fresh)
-        if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
-            continue
-        deals.append(d)
-    deals = apply_cached_share_cap(
-        deals,
+        )
+    )
+
+    codes = _parse_origin_codes(origin)
+    fetch_n = max(target * 2, 60)
+
+    if codes:
+        matched_rows = _fetch_active_rows(supabase, codes=codes, limit=fetch_n)
+        # Prefer rows that already have hotel_top3
+        matched_rows.sort(key=lambda r: (0 if _row_has_hotel(r) else 1, -(float(r.get("deal_score") or 0))))
+        matched = _enrich_rows_to_deals(
+            matched_rows,
+            adults_n=adults_n,
+            fresh=fresh,
+            max_pp=max_pp,
+            match_origin=True,
+        )
+        matched = _prefer_hotel_deals(matched)
+        out = list(matched)
+        seen = {str(d.get("deal_key") or d.get("id")) for d in out}
+
+        if len(out) < target:
+            filler_rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
+            filler_rows.sort(
+                key=lambda r: (0 if _row_has_hotel(r) else 1, -(float(r.get("deal_score") or 0)))
+            )
+            fillers = _enrich_rows_to_deals(
+                filler_rows,
+                adults_n=adults_n,
+                fresh=fresh,
+                max_pp=max_pp,
+                match_origin=False,
+            )
+            for d in _prefer_hotel_deals(fillers):
+                key = str(d.get("deal_key") or d.get("id"))
+                if key in seen:
+                    continue
+                out.append(d)
+                seen.add(key)
+                if len(out) >= target:
+                    break
+    else:
+        rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
+        rows.sort(key=lambda r: (0 if _row_has_hotel(r) else 1, -(float(r.get("deal_score") or 0))))
+        out = _enrich_rows_to_deals(
+            rows,
+            adults_n=adults_n,
+            fresh=fresh,
+            max_pp=max_pp,
+            match_origin=True,
+        )
+        out = _prefer_hotel_deals(out)
+
+    out = apply_cached_share_cap(
+        out,
         max_share=cfg.cached_max_share,
         cached_enabled=cached_on,
     )
-    return deals[:limit]
+    out = out[:target]
+    with _list_cache_lock:
+        _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])
+        if len(_list_cache) > 64:
+            items = sorted(_list_cache.items(), key=lambda kv: kv[1][0])
+            for k, _ in items[:32]:
+                _list_cache.pop(k, None)
+    return out
 
 
 def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
@@ -295,13 +447,15 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         dest_iata = str(row.get("dest_iata") or "")
         row = {
             **row,
-            "_baggage": lookup_baggage(supabase, carrier),
+            "_baggage": lookup_baggage(supabase, carrier, prefer_seed=True),
             "_route_labels": enrich_route_labels(
                 origin_iata=origin_iata,
                 dest_iata=dest_iata,
                 city_name=str(city),
                 origin_city=city_for_code(origin_iata, ""),
-                distance_km=distance_for_iata(supabase, dest_iata),
+                distance_km=distance_for_iata(
+                    supabase, dest_iata, prefer_seed=True
+                ),
             ),
         }
         return row_to_travel_deal(row, baselines_fresh=fresh)

@@ -173,13 +173,27 @@ def upsert_baggage_policies(supabase) -> Dict[str, Any]:
     return {"ok": True, "upserted": n, "updated_at": now}
 
 
+def _baggage_from_seed(code: str) -> Optional[Dict[str, Any]]:
+    for row in BAGGAGE_SEED:
+        if row["carrier_code"] == code:
+            return {**row, "line": format_baggage_line(row)}
+    return None
+
+
 def lookup_baggage(
     supabase,
     carrier: Optional[str],
+    *,
+    prefer_seed: bool = True,
 ) -> Dict[str, Any]:
     code = _normalize_carrier(carrier)
     if not code:
         return {**DEFAULT_BAGGAGE}
+    # Fast path for list: seed covers Ryanair / easyJet / … without PostgREST
+    if prefer_seed:
+        seeded = _baggage_from_seed(code)
+        if seeded:
+            return seeded
     try:
         res = (
             supabase.table("carrier_baggage_policy")
@@ -189,7 +203,6 @@ def lookup_baggage(
             .execute()
         )
         if not res.data:
-            # try full name key
             res = (
                 supabase.table("carrier_baggage_policy")
                 .select("*")
@@ -209,11 +222,18 @@ def lookup_baggage(
             }
     except Exception as e:
         logger.debug("lookup_baggage: %s", e)
-    # In-memory fallback from seed (DB not seeded yet)
-    for row in BAGGAGE_SEED:
-        if row["carrier_code"] == code:
-            return {
-                **row,
-                "line": format_baggage_line(row),
-            }
+    seeded = _baggage_from_seed(code)
+    if seeded:
+        return seeded
     return {**DEFAULT_BAGGAGE}
+
+
+def baggage_map_for_carriers(carriers: List[Optional[str]]) -> Dict[str, Dict[str, Any]]:
+    """Batch seed lookups for list enrichment (no DB)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    for raw in carriers or []:
+        code = _normalize_carrier(raw)
+        if not code or code in out:
+            continue
+        out[code] = _baggage_from_seed(code) or {**DEFAULT_BAGGAGE}
+    return out

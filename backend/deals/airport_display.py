@@ -124,11 +124,16 @@ def upsert_airport_distances(supabase) -> Dict[str, Any]:
     return {"ok": True, "updated": n}
 
 
-def distance_for_iata(supabase, iata: str) -> Optional[float]:
+def distance_for_iata(supabase, iata: str, *, prefer_seed: bool = True) -> Optional[float]:
+    """
+    Km airport → city centre. Seed first on list path (prefer_seed=True) to
+    avoid one Supabase round-trip per deal row.
+    """
     code = (iata or "").strip().upper()
-    if code in DISTANCE_KM_SEED:
-        # Prefer DB if set
-        pass
+    if not code:
+        return None
+    if prefer_seed and code in DISTANCE_KM_SEED:
+        return DISTANCE_KM_SEED[code]
     try:
         res = (
             supabase.table("airport_city_mapping")
@@ -142,3 +147,14 @@ def distance_for_iata(supabase, iata: str) -> Optional[float]:
     except Exception:
         pass
     return DISTANCE_KM_SEED.get(code)
+
+
+def distances_for_iatas(iatas: list) -> Dict[str, Optional[float]]:
+    """Batch resolve from seed only (list enrichment)."""
+    out: Dict[str, Optional[float]] = {}
+    for raw in iatas or []:
+        code = (raw or "").strip().upper()
+        if not code or code in out:
+            continue
+        out[code] = DISTANCE_KM_SEED.get(code)
+    return out

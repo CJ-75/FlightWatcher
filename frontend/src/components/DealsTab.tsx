@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { DealWindowKind, TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
@@ -28,11 +28,15 @@ export function DealsTab() {
   const [selected, setSelected] = useState<TravelDeal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  /** Empty = browse ~30 deals with hotels; set origin to prioritize matches. */
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
   const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [readonlyBanner, setReadonlyBanner] = useState(false)
   const [calendarEnabled, setCalendarEnabled] = useState(false)
+  const [queryOrigin, setQueryOrigin] = useState('')
+  const [queryAdults, setQueryAdults] = useState(2)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     void fetch('/api/config')
@@ -47,6 +51,18 @@ export function DealsTab() {
       })
       .catch(() => undefined)
   }, [])
+
+  // Debounce filter → query (avoids reload on every stepper tick)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setQueryOrigin(origin)
+      setQueryAdults(adults)
+    }, 280)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [origin, adults])
 
   const goSearch = (opts?: { destination?: string; city?: string }) => {
     openSearchFromDeals({
@@ -75,19 +91,20 @@ export function DealsTab() {
     setLoading(true)
     setError(null)
     try {
-      const list = await getApiClient().getDeals({
-        origin: origin || undefined,
-        adults,
+      const listPromise = getApiClient().getDeals({
+        origin: queryOrigin || undefined,
+        adults: queryAdults,
       })
+      void loadLikes()
+      const list = await listPromise
       setDeals(Array.isArray(list) ? list : [])
-      await loadLikes()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
       setDeals([])
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, origin, adults])
+  }, [t, loadLikes, queryOrigin, queryAdults])
 
   useEffect(() => {
     void load()
@@ -164,6 +181,18 @@ export function DealsTab() {
   const calendarDeal = deals.find((d) => d.destination) || null
   const calendarWindow: DealWindowKind =
     windowKinds.includes('FRI_SUN') ? 'FRI_SUN' : windowKinds[0] || 'FRI_SUN'
+
+  const matchedDeals = useMemo(
+    () =>
+      queryOrigin
+        ? deals.filter((d) => d.flags?.match_origin !== false)
+        : deals,
+    [deals, queryOrigin],
+  )
+  const fillerDeals = useMemo(
+    () => (queryOrigin ? deals.filter((d) => d.flags?.match_origin === false) : []),
+    [deals, queryOrigin],
+  )
 
   return (
     <div className="w-full">
@@ -273,20 +302,44 @@ export function DealsTab() {
           </button>
         </div>
       ) : (
-        <motion.div
-          layout
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
-        >
-          {deals.map((deal) => (
-            <DealCard
-              key={deal.id}
-              deal={deal}
-              liked={likedIds.has(deal.id)}
-              onToggleLike={() => void toggleLike(deal)}
-              onClick={() => setSelected(deal)}
-            />
-          ))}
-        </motion.div>
+        <div className="space-y-8">
+          <motion.div
+            layout
+            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
+          >
+            {matchedDeals.map((deal) => (
+              <DealCard
+                key={deal.id}
+                deal={deal}
+                liked={likedIds.has(deal.id)}
+                onToggleLike={() => void toggleLike(deal)}
+                onClick={() => setSelected(deal)}
+              />
+            ))}
+          </motion.div>
+          {fillerDeals.length > 0 ? (
+            <div>
+              <p className="text-sm font-bold text-ink mb-1">Aussi intéressants</p>
+              <p className="text-xs text-muted mb-4">
+                Autres départs pour compléter ta sélection
+              </p>
+              <motion.div
+                layout
+                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
+              >
+                {fillerDeals.map((deal) => (
+                  <DealCard
+                    key={deal.id}
+                    deal={deal}
+                    liked={likedIds.has(deal.id)}
+                    onToggleLike={() => void toggleLike(deal)}
+                    onClick={() => setSelected(deal)}
+                  />
+                ))}
+              </motion.div>
+            </div>
+          ) : null}
+        </div>
       )}
 
       {selected ? (
