@@ -35,6 +35,10 @@ export function ProfileScreen() {
     navigation.dispatch(CommonActions.navigate({ name: 'Security' }))
   }
 
+  const openBookings = () => {
+    navigation.dispatch(CommonActions.navigate({ name: 'Bookings' }))
+  }
+
   // Logged-out landing (real guest landings) for preview / no user
   if (!viewUser) {
     return (
@@ -132,19 +136,32 @@ export function ProfileScreen() {
         </View>
 
         {!isGuest ? (
-          <Pressable
-            onPress={openSecurity}
-            style={({ pressed }) => [
-              styles.securityRow,
-              shadow.soft,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.securityRowLabel}>
-              {translate('fr', 'auth.security.title')}
-            </Text>
-            <Text style={styles.securityRowChevron}>›</Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={openBookings}
+              style={({ pressed }) => [
+                styles.securityRow,
+                shadow.soft,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.securityRowLabel}>Mes réservations</Text>
+              <Text style={styles.securityRowChevron}>›</Text>
+            </Pressable>
+            <Pressable
+              onPress={openSecurity}
+              style={({ pressed }) => [
+                styles.securityRow,
+                shadow.soft,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.securityRowLabel}>
+                {translate('fr', 'auth.security.title')}
+              </Text>
+              <Text style={styles.securityRowChevron}>›</Text>
+            </Pressable>
+          </>
         ) : null}
 
         <View style={[styles.infoCard, shadow.soft]}>

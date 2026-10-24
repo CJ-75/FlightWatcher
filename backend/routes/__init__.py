@@ -1,6 +1,17 @@
 from fastapi import FastAPI
 
-from routes import analytics, auth_password, deals, meta, persistence, planner, ref, scan, user
+from routes import (
+    analytics,
+    auth_password,
+    deals,
+    hotel_bookings,
+    meta,
+    persistence,
+    planner,
+    ref,
+    scan,
+    user,
+)
 
 
 def include_all_routers(app: FastAPI) -> None:
@@ -11,5 +22,6 @@ def include_all_routers(app: FastAPI) -> None:
     app.include_router(user.router)
     app.include_router(analytics.router)
     app.include_router(deals.router)
+    app.include_router(hotel_bookings.router)
     app.include_router(planner.router)
     app.include_router(auth_password.router)

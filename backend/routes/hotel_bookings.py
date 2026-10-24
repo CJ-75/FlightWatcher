@@ -1,0 +1,338 @@
+"""In-app hotel bookings via LiteAPI (prebook → pay → book)."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
+
+from deals.liteapi_client import LiteApiClient, LiteApiError
+from deals.liteapi_config import load_deals_config
+from deals.revalidate import revalidate_deal
+from supabase_deps import (
+    SUPABASE_AVAILABLE,
+    get_supabase_client,
+    get_supabase_service_client,
+    get_user_id_from_token,
+    optional_auth,
+)
+
+router = APIRouter()
+
+
+def _require_user(request: Request) -> str:
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    return user_id
+
+
+def _svc():
+    if not SUPABASE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Supabase n'est pas configuré")
+    client = get_supabase_service_client() or get_supabase_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Client Supabase indisponible")
+    return client
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class RevalidateRequest(BaseModel):
+    hotel_id: Optional[str] = None
+    displayed_price_pp: Optional[float] = None
+
+
+class GuestInput(BaseModel):
+    firstName: str
+    lastName: str
+    email: Optional[str] = None
+    occupancyNumber: int = 1
+
+
+class HolderInput(BaseModel):
+    firstName: str
+    lastName: str
+    email: str
+
+
+class PrebookRequest(BaseModel):
+    deal_key: str
+    offer_id: str
+    hotel_id: str
+    displayed_price: float
+    charged_price: Optional[float] = None
+    margin_pct_used: Optional[float] = None
+    ssp_at_booking: Optional[float] = None
+    deal_snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+class BookRequest(BaseModel):
+    holder: HolderInput
+    guests: List[GuestInput] = Field(default_factory=list)
+    payment_status: str = "succeeded"  # succeeded | requires_capture
+
+
+@router.post("/api/deals/{deal_key}/revalidate")
+@optional_auth
+async def revalidate(deal_key: str, body: RevalidateRequest, request: Request):
+    """Live revalidation + SSP margin calage. Calls LiteAPI."""
+    _ = request  # auth optional for browse; booking requires auth later
+    cfg = load_deals_config()
+    if not cfg.api_key:
+        raise HTTPException(status_code=503, detail="LiteAPI non configuré")
+    try:
+        supabase = _svc()
+        result = revalidate_deal(
+            supabase,
+            deal_key,
+            hotel_id=body.hotel_id,
+            displayed_price_pp=body.displayed_price_pp,
+            cfg=cfg,
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=409 if result.get("reason") == "unavailable" else 404,
+                detail=result,
+            )
+        return result
+    except HTTPException:
+        raise
+    except LiteApiError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/hotel-bookings/prebook")
+@optional_auth
+async def prebook(body: PrebookRequest, request: Request):
+    """
+    LiteAPI prebook with usePaymentSdk=true.
+    Persists prebook_id + transaction_id immediately.
+    """
+    user_id = _require_user(request)
+    cfg = load_deals_config()
+    if not cfg.api_key:
+        raise HTTPException(status_code=503, detail="LiteAPI non configuré")
+    if not body.offer_id:
+        raise HTTPException(status_code=400, detail="offer_id requis")
+
+    supabase = _svc()
+    client = LiteApiClient(cfg=cfg)
+    try:
+        raw = client.prebook(body.offer_id, use_payment_sdk=True)
+    except LiteApiError as e:
+        raise HTTPException(status_code=502, detail=f"Prebook échoué: {e}")
+    finally:
+        client.close()
+
+    data = raw.get("data") if isinstance(raw, dict) else None
+    if not isinstance(data, dict):
+        data = raw if isinstance(raw, dict) else {}
+
+    prebook_id = data.get("prebookId") or data.get("prebook_id")
+    transaction_id = data.get("transactionId") or data.get("transaction_id")
+    secret_key = data.get("secretKey") or data.get("secret_key")
+    if not prebook_id or not transaction_id:
+        raise HTTPException(
+            status_code=502,
+            detail="Réponse prebook incomplète (prebookId/transactionId manquants)",
+        )
+
+    row = {
+        "user_id": user_id,
+        "deal_key": body.deal_key,
+        "deal_snapshot": body.deal_snapshot or {},
+        "hotel_id": body.hotel_id,
+        "offer_id": body.offer_id,
+        "prebook_id": str(prebook_id),
+        "transaction_id": str(transaction_id),
+        "displayed_price": body.displayed_price,
+        "charged_price": body.charged_price or body.displayed_price,
+        "margin_pct_used": body.margin_pct_used,
+        "ssp_at_booking": body.ssp_at_booking,
+        "status": "prebooked",
+        "raw_prebook": raw,
+        "updated_at": _now(),
+    }
+    result = supabase.table("hotel_bookings").insert(row).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Impossible d'enregistrer le prebook")
+    booking = result.data[0]
+
+    return {
+        "booking_id": booking["id"],
+        "prebook_id": booking["prebook_id"],
+        "transaction_id": booking["transaction_id"],
+        "secret_key": secret_key,
+        "payment_public_key": cfg.payment_public_key or None,
+        "liteapi_env": cfg.liteapi_env,
+        "status": booking["status"],
+        "charged_price": booking.get("charged_price"),
+        "currency": cfg.currency,
+    }
+
+
+@router.post("/api/hotel-bookings/{booking_id}/book")
+@optional_auth
+async def book(booking_id: str, body: BookRequest, request: Request):
+    """Call after payment succeeded / requires_capture. Never if payment failed."""
+    user_id = _require_user(request)
+    if body.payment_status not in ("succeeded", "requires_capture"):
+        raise HTTPException(
+            status_code=400,
+            detail="Paiement non finalisé — book refusé",
+        )
+
+    supabase = _svc()
+    existing = (
+        supabase.table("hotel_bookings")
+        .select("*")
+        .eq("id", booking_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Réservation introuvable")
+    booking = existing.data[0]
+    if booking.get("status") in ("confirmed", "booking_pending"):
+        return _public_booking(booking)
+
+    prebook_id = booking.get("prebook_id")
+    transaction_id = booking.get("transaction_id")
+    if not prebook_id or not transaction_id:
+        raise HTTPException(status_code=400, detail="Prebook manquant")
+
+    guests = [g.model_dump() for g in body.guests] or [
+        {
+            "firstName": body.holder.firstName,
+            "lastName": body.holder.lastName,
+            "email": body.holder.email,
+            "occupancyNumber": 1,
+        }
+    ]
+
+    cfg = load_deals_config()
+    client = LiteApiClient(cfg=cfg)
+    try:
+        supabase.table("hotel_bookings").update(
+            {"status": "booking_pending", "updated_at": _now()}
+        ).eq("id", booking_id).execute()
+
+        raw = client.book(
+            {
+                "prebookId": prebook_id,
+                "holder": body.holder.model_dump(),
+                "guests": guests,
+                "payment": {
+                    "method": "TRANSACTION_ID",
+                    "transactionId": transaction_id,
+                },
+            }
+        )
+    except LiteApiError as e:
+        supabase.table("hotel_bookings").update(
+            {"status": "failed", "updated_at": _now(), "raw_book": {"error": str(e)}}
+        ).eq("id", booking_id).execute()
+        raise HTTPException(status_code=502, detail=f"Book échoué: {e}")
+    finally:
+        client.close()
+
+    data = raw.get("data") if isinstance(raw, dict) else None
+    if not isinstance(data, dict):
+        data = raw if isinstance(raw, dict) else {}
+
+    liteapi_booking_id = (
+        data.get("bookingId")
+        or data.get("booking_id")
+        or data.get("id")
+    )
+    confirmation = (
+        data.get("hotelConfirmationCode")
+        or data.get("confirmationCode")
+        or data.get("confirmation_code")
+    )
+    status_raw = str(data.get("status") or data.get("bookingStatus") or "").lower()
+    if status_raw in ("confirmed", "booked", "success"):
+        status = "confirmed"
+    elif "pending" in status_raw or "process" in status_raw:
+        status = "booking_pending"
+    else:
+        status = "confirmed" if liteapi_booking_id else "booking_pending"
+
+    updated = (
+        supabase.table("hotel_bookings")
+        .update(
+            {
+                "status": status,
+                "liteapi_booking_id": str(liteapi_booking_id) if liteapi_booking_id else None,
+                "confirmation_code": str(confirmation) if confirmation else None,
+                "raw_book": raw,
+                "updated_at": _now(),
+            }
+        )
+        .eq("id", booking_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    row = (updated.data or [booking])[0]
+    return _public_booking(row)
+
+
+@router.get("/api/hotel-bookings")
+@optional_auth
+async def list_bookings(request: Request):
+    user_id = _require_user(request)
+    supabase = _svc()
+    result = (
+        supabase.table("hotel_bookings")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [_public_booking(r) for r in (result.data or [])]
+
+
+@router.get("/api/hotel-bookings/{booking_id}")
+@optional_auth
+async def get_booking(booking_id: str, request: Request):
+    user_id = _require_user(request)
+    supabase = _svc()
+    result = (
+        supabase.table("hotel_bookings")
+        .select("*")
+        .eq("id", booking_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Réservation introuvable")
+    return _public_booking(result.data[0])
+
+
+def _public_booking(row: dict) -> dict:
+    snap = row.get("deal_snapshot") or {}
+    return {
+        "id": row["id"],
+        "deal_key": row.get("deal_key"),
+        "hotel_id": row.get("hotel_id"),
+        "status": row.get("status"),
+        "displayed_price": row.get("displayed_price"),
+        "charged_price": row.get("charged_price"),
+        "confirmation_code": row.get("confirmation_code"),
+        "liteapi_booking_id": row.get("liteapi_booking_id"),
+        "prebook_id": row.get("prebook_id"),
+        "city": snap.get("city"),
+        "hotel_name": (snap.get("hotel") or {}).get("name") or snap.get("hotel_name"),
+        "dates": snap.get("dates"),
+        "deal_snapshot": snap,
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }

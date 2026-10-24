@@ -355,3 +355,103 @@ export interface DealsListParams {
   window?: DealWindowKind
   max_pp?: number
 }
+
+export type HotelBookingStatus =
+  | 'draft'
+  | 'prebooked'
+  | 'payment_pending'
+  | 'payment_succeeded'
+  | 'booking_pending'
+  | 'confirmed'
+  | 'failed'
+  | 'cancelled'
+
+export type RevalidateAction = 'silent' | 'confirm' | 'fallback'
+
+export interface DealRevalidateRequest {
+  hotel_id?: string
+  displayed_price_pp?: number
+}
+
+export interface DealRevalidateResponse {
+  ok: boolean
+  action?: RevalidateAction
+  deal_key?: string
+  hotel_id?: string
+  hotel_name?: string
+  hotel_switched?: boolean
+  offer_id?: string
+  board?: string
+  refundable?: boolean
+  cancel_deadline?: string | null
+  displayed_price_pp?: number
+  revalidated_price_pp?: number
+  flight_pp?: number
+  public_hotel_price?: number
+  excluded_fees?: number
+  ssp_total?: number | null
+  retail_total?: number | null
+  margin_pct_used?: number | null
+  ssp_source?: string | null
+  checkin?: string
+  checkout?: string
+  adults?: number
+  currency?: string
+  payment_public_key?: string | null
+  deal_snapshot?: TravelDeal
+  reason?: string
+  detail?: string
+  tried_hotels?: string[]
+}
+
+export interface HotelBookingPrebookRequest {
+  deal_key: string
+  offer_id: string
+  hotel_id: string
+  displayed_price: number
+  charged_price?: number
+  margin_pct_used?: number | null
+  ssp_at_booking?: number | null
+  deal_snapshot?: TravelDeal | Record<string, unknown>
+}
+
+export interface HotelBookingPrebookResponse {
+  booking_id: string
+  prebook_id: string
+  transaction_id: string
+  secret_key?: string | null
+  payment_public_key?: string | null
+  liteapi_env?: string
+  status: HotelBookingStatus | string
+  charged_price?: number
+  currency?: string
+}
+
+export interface HotelBookingBookRequest {
+  holder: { firstName: string; lastName: string; email: string }
+  guests?: Array<{
+    firstName: string
+    lastName: string
+    email?: string
+    occupancyNumber?: number
+  }>
+  payment_status: 'succeeded' | 'requires_capture'
+}
+
+export interface HotelBooking {
+  id: string
+  deal_key?: string | null
+  hotel_id?: string | null
+  status: HotelBookingStatus | string
+  displayed_price?: number | null
+  charged_price?: number | null
+  confirmation_code?: string | null
+  liteapi_booking_id?: string | null
+  prebook_id?: string | null
+  city?: string
+  hotel_name?: string
+  dates?: TravelDealDates
+  deal_snapshot?: TravelDeal | Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+}

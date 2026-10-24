@@ -1,0 +1,399 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import type {
+  DealRevalidateResponse,
+  HotelBooking,
+  TravelDeal,
+} from '../types'
+import { getApiClient } from '../utils/apiClient'
+import { getCurrentUser } from '../lib/supabase'
+import { useI18n } from '../contexts/I18nContext'
+
+type Step = 'revalidate' | 'confirm' | 'guests' | 'pay' | 'pending' | 'done' | 'error'
+
+interface Props {
+  deal: TravelDeal
+  hotelId?: string
+  onClose: () => void
+  onNeedLogin: () => void
+}
+
+declare global {
+  interface Window {
+    LiteAPIPayment?: {
+      init: (opts: Record<string, unknown>) => { mount?: (el: HTMLElement) => void }
+    }
+  }
+}
+
+function loadPaymentScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.LiteAPIPayment) {
+      resolve()
+      return
+    }
+    const existing = document.querySelector('script[data-liteapi-payment]')
+    if (existing) {
+      existing.addEventListener('load', () => resolve())
+      existing.addEventListener('error', () => reject(new Error('payment script')))
+      return
+    }
+    const s = document.createElement('script')
+    s.src = 'https://payment-wrapper.liteapi.travel/v1.0/payment-wrapper.js'
+    s.async = true
+    s.dataset.liteapiPayment = '1'
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+    document.body.appendChild(s)
+  })
+}
+
+export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props) {
+  const { t } = useI18n()
+  const [step, setStep] = useState<Step>('revalidate')
+  const [error, setError] = useState<string | null>(null)
+  const [reval, setReval] = useState<DealRevalidateResponse | null>(null)
+  const [bookingId, setBookingId] = useState<string | null>(null)
+  const [prebookMeta, setPrebookMeta] = useState<{
+    secret_key?: string | null
+    payment_public_key?: string | null
+    liteapi_env?: string
+    charged_price?: number
+  } | null>(null)
+  const [booking, setBooking] = useState<HotelBooking | null>(null)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const payRef = useRef<HTMLDivElement>(null)
+  const dealKey = deal.deal_key || deal.id
+
+  const runRevalidate = useCallback(async () => {
+    setStep('revalidate')
+    setError(null)
+    try {
+      const user = await getCurrentUser()
+      if (!user) {
+        onNeedLogin()
+        onClose()
+        return
+      }
+      const res = await getApiClient().revalidateDeal(dealKey, {
+        hotel_id: hotelId || deal.hotel?.id,
+        displayed_price_pp: deal.price_per_person,
+      })
+      setReval(res)
+      if (res.action === 'confirm') setStep('confirm')
+      else if (res.action === 'fallback' && res.hotel_switched) setStep('confirm')
+      else setStep('guests')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+      setStep('error')
+    }
+  }, [deal, dealKey, hotelId, onClose, onNeedLogin, t])
+
+  useEffect(() => {
+    void runRevalidate()
+  }, [runRevalidate])
+
+  const doPrebook = async () => {
+    if (!reval?.offer_id || !reval.hotel_id) {
+      setError('Offre invalide')
+      setStep('error')
+      return
+    }
+    setError(null)
+    try {
+      const price = reval.revalidated_price_pp ?? deal.price_per_person
+      const hotelCharge =
+        reval.public_hotel_price ??
+        (deal.price_breakdown?.hotel_public_total || price)
+      const pb = await getApiClient().prebookHotel({
+        deal_key: dealKey,
+        offer_id: reval.offer_id,
+        hotel_id: reval.hotel_id,
+        displayed_price: hotelCharge,
+        charged_price: hotelCharge,
+        margin_pct_used: reval.margin_pct_used,
+        ssp_at_booking: reval.ssp_total,
+        deal_snapshot: (reval.deal_snapshot || deal) as TravelDeal,
+      })
+      setBookingId(pb.booking_id)
+      setPrebookMeta({
+        secret_key: pb.secret_key,
+        payment_public_key: pb.payment_public_key,
+        liteapi_env: pb.liteapi_env,
+        charged_price: pb.charged_price,
+      })
+      setStep('pay')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+      setStep('error')
+    }
+  }
+
+  useEffect(() => {
+    if (step !== 'pay' || !prebookMeta?.secret_key || !prebookMeta.payment_public_key) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        await loadPaymentScript()
+        if (cancelled || !payRef.current || !window.LiteAPIPayment) return
+        payRef.current.innerHTML = ''
+        const widget = window.LiteAPIPayment.init({
+          publicKey: prebookMeta.payment_public_key,
+          secretKey: prebookMeta.secret_key,
+          appearance: { theme: 'stripe' },
+          onSuccess: async () => {
+            await finalizeBook('succeeded')
+          },
+        })
+        widget.mount?.(payRef.current)
+      } catch {
+        // SDK optional — sandbox fallback button remains
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [step, prebookMeta])
+
+  const finalizeBook = async (payment_status: 'succeeded' | 'requires_capture') => {
+    if (!bookingId) return
+    setStep('pending')
+    setError(null)
+    try {
+      const guests = [
+        {
+          firstName,
+          lastName,
+          email,
+          occupancyNumber: 1,
+        },
+      ]
+      if ((reval?.adults || 2) >= 2) {
+        guests.push({
+          firstName: firstName || 'Guest',
+          lastName: lastName || '2',
+          email,
+          occupancyNumber: 1,
+        })
+      }
+      const b = await getApiClient().bookHotel(bookingId, {
+        holder: { firstName, lastName, email },
+        guests,
+        payment_status,
+      })
+      setBooking(b)
+      if (b.status === 'booking_pending') {
+        // poll once
+        await new Promise((r) => setTimeout(r, 1500))
+        const again = await getApiClient().getHotelBooking(bookingId)
+        setBooking(again)
+      }
+      setStep('done')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+      setStep('error')
+    }
+  }
+
+  const price =
+    reval?.revalidated_price_pp ?? deal.price_per_person
+  const fees = reval?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
+
+  return (
+    <AnimatePresence>
+      <motion.div className="app-dialog-root" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <button type="button" className="app-dialog-backdrop" aria-label="Fermer" onClick={onClose} />
+        <motion.div
+          initial={{ y: 40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="app-dialog-panel app-dialog-xl max-h-[92vh] overflow-y-auto"
+        >
+          <div className="p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Réservation hôtel
+                </p>
+                <h2 className="text-xl font-black text-slate-900">{deal.city}</h2>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-9 h-9 rounded-full bg-slate-100 font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            {step === 'revalidate' ? (
+              <p className="text-sm text-slate-600">Vérification du prix en cours…</p>
+            ) : null}
+
+            {step === 'confirm' && reval ? (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-700 font-medium">
+                  Le prix a changé : {Math.round(reval.displayed_price_pp || 0)} € →{' '}
+                  {Math.round(reval.revalidated_price_pp || 0)} € / pers.
+                </p>
+                {reval.hotel_switched ? (
+                  <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+                    Hôtel mis à jour : {reval.hotel_name}
+                  </p>
+                ) : null}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep('guests')}
+                    className="flex-1 bg-primary-500 text-white font-bold py-3 rounded-xl"
+                  >
+                    Continuer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="flex-1 border border-line font-bold py-3 rounded-xl"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {step === 'guests' ? (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">
+                  Total affiché : <strong>{Math.round(price)} € / pers.</strong>
+                  {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
+                </p>
+                <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+                  Deux réservations distinctes. L’hôtel reste dû selon ses conditions si le vol
+                  est modifié ou annulé.
+                </p>
+                {reval?.cancel_deadline ? (
+                  <p className="text-xs text-slate-500">
+                    Annulation hôtel (GMT) : {reval.cancel_deadline}
+                  </p>
+                ) : null}
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <input
+                    className="rounded-xl border border-line px-3 py-2.5 text-sm"
+                    placeholder="Prénom"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                  <input
+                    className="rounded-xl border border-line px-3 py-2.5 text-sm"
+                    placeholder="Nom"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+                <input
+                  className="w-full rounded-xl border border-line px-3 py-2.5 text-sm"
+                  placeholder="Email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <button
+                  type="button"
+                  disabled={!firstName || !lastName || !email}
+                  onClick={() => void doPrebook()}
+                  className="w-full bg-primary-500 disabled:bg-slate-200 text-white font-bold py-3.5 rounded-xl"
+                >
+                  Continuer vers le paiement
+                </button>
+              </div>
+            ) : null}
+
+            {step === 'pay' ? (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">
+                  Paiement hôtel :{' '}
+                  <strong>
+                    {Math.round(prebookMeta?.charged_price || reval?.public_hotel_price || 0)} €
+                  </strong>
+                </p>
+                <div ref={payRef} className="min-h-[120px] rounded-xl border border-line p-3" />
+                {prebookMeta?.liteapi_env === 'sandbox' ? (
+                  <button
+                    type="button"
+                    onClick={() => void finalizeBook('succeeded')}
+                    className="w-full border border-dashed border-primary-300 text-primary-700 font-bold py-3 rounded-xl"
+                  >
+                    Simuler paiement réussi (sandbox)
+                  </button>
+                ) : null}
+                {!prebookMeta?.payment_public_key ? (
+                  <p className="text-xs text-amber-800">
+                    Clé publique paiement manquante — utilisez le mode sandbox ou configurez
+                    LITEAPI_PAYMENT_PUBLIC_KEY_*.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {step === 'pending' ? (
+              <p className="text-sm text-slate-600">Confirmation en cours…</p>
+            ) : null}
+
+            {step === 'done' && booking ? (
+              <div className="space-y-3">
+                <p className="text-lg font-bold text-ink">Réservation enregistrée</p>
+                <p className="text-sm text-slate-600">Statut : {booking.status}</p>
+                {booking.confirmation_code ? (
+                  <p className="text-sm">
+                    Code : <strong>{booking.confirmation_code}</strong>
+                  </p>
+                ) : null}
+                {deal.flight?.booking_url ? (
+                  <a
+                    href={deal.flight.booking_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-center border border-line font-bold py-3 rounded-xl"
+                  >
+                    Réserver le vol maintenant
+                  </a>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Pensez à réserver le vol identifié ({Math.round(deal.flight?.price_pp || 0)} € /
+                    pers.).
+                  </p>
+                )}
+                <a
+                  href="/bookings"
+                  className="block text-center border border-line font-bold py-3 rounded-xl hover:bg-slate-50"
+                >
+                  Mes réservations
+                </a>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full bg-primary-500 text-white font-bold py-3 rounded-xl"
+                >
+                  Fermer
+                </button>
+              </div>
+            ) : null}
+
+            {step === 'error' ? (
+              <div className="space-y-3">
+                <p className="text-sm text-red-600">{error || 'Erreur'}</p>
+                <button
+                  type="button"
+                  onClick={() => void runRevalidate()}
+                  className="w-full border border-line font-bold py-3 rounded-xl"
+                >
+                  Réessayer
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}

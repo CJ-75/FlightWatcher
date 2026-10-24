@@ -34,7 +34,7 @@ function formatDate(dateStr: string) {
   })
 }
 
-export function DealDetailScreen({ route }: Props) {
+export function DealDetailScreen({ route, navigation }: Props) {
   const { dealId } = route.params
   const insets = useSafeAreaInsets()
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
@@ -267,7 +267,19 @@ export function DealDetailScreen({ route }: Props) {
       </ScrollView>
 
       <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }, shadow.lift]}>
-        {hasPartnerUrl ? (
+        {deal.provider === 'liteapi' || deal.deal_key ? (
+          <Pressable
+            onPress={() =>
+              navigation.navigate('DealCheckout', {
+                dealId: deal.id,
+                hotelId: selected?.id || deal.hotel?.id,
+              })
+            }
+            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.ctaText}>Réserver l’hôtel</Text>
+          </Pressable>
+        ) : hasPartnerUrl ? (
           <Pressable
             onPress={() => void openUrl(deal.booking_url)}
             style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}

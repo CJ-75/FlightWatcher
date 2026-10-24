@@ -23,6 +23,8 @@ import { PlannerScreen } from './src/screens/PlannerScreen'
 import { TripDetailScreen } from './src/screens/TripDetailScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
+import { BookingsScreen } from './src/screens/BookingsScreen'
+import { DealCheckoutScreen } from './src/screens/DealCheckoutScreen'
 import { SecurityScreen } from './src/screens/SecurityScreen'
 import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
@@ -54,6 +56,8 @@ export type RootStackParamList = {
     tripId: string
   }
   Security: undefined
+  Bookings: undefined
+  DealCheckout: { dealId: string; hotelId?: string }
 }
 
 export type MainTabParamList = {
@@ -211,6 +215,28 @@ function RootNavigator() {
             options={{
               headerShown: true,
               title: 'Sécurité',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
+          />
+          <Stack.Screen
+            name="Bookings"
+            component={BookingsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="DealCheckout"
+            component={DealCheckoutScreen}
+            options={{
+              headerShown: true,
+              title: 'Réservation hôtel',
               headerStyle: { backgroundColor: colors.canvas },
               headerTintColor: colors.primary,
               headerTitleStyle: {

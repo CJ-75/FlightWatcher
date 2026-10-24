@@ -8,12 +8,14 @@ import {
 } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel } from '../types'
 import { useI18n } from '../contexts/I18nContext'
+import { DealCheckoutFlow } from './DealCheckoutFlow'
 
 interface DealDetailModalProps {
   deal: TravelDeal | null
   onClose: () => void
   liked?: boolean
   onToggleLike?: () => void
+  onNeedLogin?: () => void
 }
 
 function formatDate(dateStr: string) {
@@ -56,9 +58,16 @@ function HeartSvg({ filled }: { filled: boolean }) {
   )
 }
 
-export function DealDetailModal({ deal, onClose, liked, onToggleLike }: DealDetailModalProps) {
+export function DealDetailModal({
+  deal,
+  onClose,
+  liked,
+  onToggleLike,
+  onNeedLogin,
+}: DealDetailModalProps) {
   const { t, language } = useI18n()
   const [hotelId, setHotelId] = useState<string | null>(null)
+  const [checkout, setCheckout] = useState(false)
 
   const hotelOptions = useMemo(() => {
     if (!deal) return [] as TravelDealHotel[]
@@ -89,6 +98,20 @@ export function DealDetailModal({ deal, onClose, liked, onToggleLike }: DealDeta
   }, [deal])
 
   if (!deal) return null
+
+  if (checkout) {
+    return (
+      <DealCheckoutFlow
+        deal={deal}
+        hotelId={hotelId || deal.hotel?.id}
+        onClose={() => {
+          setCheckout(false)
+          onClose()
+        }}
+        onNeedLogin={() => onNeedLogin?.()}
+      />
+    )
+  }
 
   const selected =
     hotelOptions.find((h) => h.id === (hotelId || hotelOptions[0]?.id)) || hotelOptions[0]
@@ -344,7 +367,15 @@ export function DealDetailModal({ deal, onClose, liked, onToggleLike }: DealDeta
             ) : null}
 
             <div className="flex flex-col gap-2 pt-1">
-              {hasPartnerUrl ? (
+              {deal.provider === 'liteapi' || deal.deal_key ? (
+                <button
+                  type="button"
+                  onClick={() => setCheckout(true)}
+                  className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl transition-colors"
+                >
+                  Réserver l’hôtel
+                </button>
+              ) : hasPartnerUrl ? (
                 <a
                   href={deal.booking_url}
                   target="_blank"

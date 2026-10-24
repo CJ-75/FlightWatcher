@@ -16,6 +16,12 @@ import type {
   SavedSearch,
   TravelDeal,
   DealsListParams,
+  DealRevalidateRequest,
+  DealRevalidateResponse,
+  HotelBooking,
+  HotelBookingBookRequest,
+  HotelBookingPrebookRequest,
+  HotelBookingPrebookResponse,
   TripProposal,
   TripMember,
   TripResponse,
@@ -199,6 +205,29 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
+
+    revalidateDeal: (dealKey: string, body: DealRevalidateRequest = {}) =>
+      request<DealRevalidateResponse>(
+        `/api/deals/${encodeURIComponent(dealKey)}/revalidate`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    prebookHotel: (body: HotelBookingPrebookRequest) =>
+      request<HotelBookingPrebookResponse>('/api/hotel-bookings/prebook', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    bookHotel: (bookingId: string, body: HotelBookingBookRequest) =>
+      request<HotelBooking>(
+        `/api/hotel-bookings/${encodeURIComponent(bookingId)}/book`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    listHotelBookings: () => request<HotelBooking[]>('/api/hotel-bookings'),
+
+    getHotelBooking: (id: string) =>
+      request<HotelBooking>(`/api/hotel-bookings/${encodeURIComponent(id)}`),
 
     getLikedDeals: () => request<LikedDeal[]>('/api/liked-deals'),
     getLikedDealIds: () => request<string[]>('/api/liked-deals/ids'),
