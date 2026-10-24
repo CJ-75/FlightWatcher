@@ -11,7 +11,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport, TravelDeal } from '@flightwatcher/shared'
+import type { Airport, DealWindowKind, TravelDeal } from '@flightwatcher/shared'
 import {
   encodeAirportCodes,
   findCityGroupByCodes,
@@ -21,10 +21,15 @@ import {
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { CityAirportPicker } from '../components/CityAirportPicker'
+import { BudgetSlider } from '../components/BudgetSlider'
+import { PassengerStepper } from '../components/PassengerStepper'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
-import { colors, fonts, shadow, spacing } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
+
+const BUDGET_MIN = 120
+const BUDGET_MAX = 450
 
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
@@ -34,8 +39,12 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [origin, setOrigin] = useState('BVA')
+  const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
+  const [budgetUnlimited, setBudgetUnlimited] = useState(true)
+  const [maxPp, setMaxPp] = useState(300)
+  const [windowKind, setWindowKind] = useState<'' | DealWindowKind>('')
+  const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
@@ -74,6 +83,10 @@ export function DealsScreen() {
             setReadonlyBanner(
               Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false,
             )
+            const kinds = Array.isArray(cfg?.window_kinds)
+              ? (cfg.window_kinds as DealWindowKind[])
+              : (['FRI_SUN'] as DealWindowKind[])
+            setWindowKinds(kinds.length ? kinds : ['FRI_SUN'])
             if (cfg?.ui_enabled === false) {
               setDeals([])
               return
@@ -85,6 +98,8 @@ export function DealsScreen() {
         const list = await getApi().getDeals({
           origin: origin || undefined,
           adults,
+          window: windowKind || undefined,
+          max_pp: budgetUnlimited ? undefined : maxPp,
         })
         setDeals(Array.isArray(list) ? list : [])
         await refreshLikes()
@@ -96,7 +111,7 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, origin, adults],
+    [refreshLikes, origin, adults, windowKind, maxPp, budgetUnlimited],
   )
 
   useFocusEffect(
@@ -104,6 +119,24 @@ export function DealsScreen() {
       void load()
     }, [load]),
   )
+
+  const windowChips: { key: '' | DealWindowKind; label: string; hint: string }[] = [
+    { key: '', label: 'Tous', hint: 'Toutes dates' },
+    ...(windowKinds.includes('FRI_SUN')
+      ? [{ key: 'FRI_SUN' as const, label: 'Ven → Dim', hint: 'Week-end' }]
+      : []),
+    ...(windowKinds.includes('SAT_MON')
+      ? [{ key: 'SAT_MON' as const, label: 'Sam → Lun', hint: 'Pont' }]
+      : []),
+  ]
+
+  const filterSummary = [
+    !budgetUnlimited ? `≤ ${maxPp}€` : null,
+    windowKind === 'FRI_SUN' ? 'ven→dim' : windowKind === 'SAT_MON' ? 'sam→lun' : null,
+    adults !== 2 ? `${adults} ad.` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <View style={styles.root}>
@@ -146,27 +179,96 @@ export function DealsScreen() {
                 </Text>
               ) : null}
 
-              <Text style={styles.fieldLabel}>Départ</Text>
-              <CityAirportPicker
-                airports={airports}
-                value={origin}
-                onChange={setOrigin}
-              />
+              <View style={[styles.card, shadow.soft]}>
+                <BudgetSlider
+                  value={maxPp}
+                  min={BUDGET_MIN}
+                  max={BUDGET_MAX}
+                  step={10}
+                  hint="Budget max / personne"
+                  subHint="vol + hôtel"
+                  displayValue={budgetUnlimited ? 'Sans limite' : undefined}
+                  onChange={(v) => {
+                    setBudgetUnlimited(false)
+                    setMaxPp(v)
+                  }}
+                />
 
-              <Text style={styles.fieldLabel}>Voyageurs</Text>
-              <View style={styles.chips}>
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <Pressable
-                    key={n}
-                    onPress={() => setAdults(n)}
-                    style={[styles.chip, adults === n && styles.chipActive]}
+                <Pressable
+                  onPress={() => setBudgetUnlimited(true)}
+                  style={[styles.limitChip, budgetUnlimited && styles.limitChipActive]}
+                >
+                  <Text
+                    style={[
+                      styles.limitChipText,
+                      budgetUnlimited && styles.limitChipTextActive,
+                    ]}
                   >
-                    <Text style={[styles.chipText, adults === n && styles.chipTextActive]}>
-                      {n === 1 ? 'Solo' : `${n}`}
-                    </Text>
-                  </Pressable>
-                ))}
+                    Sans limite
+                  </Text>
+                </Pressable>
+
+                <View style={styles.divider} />
+
+                <PassengerStepper value={adults} onChange={setAdults} />
+
+                <View style={styles.divider} />
+
+                <View style={styles.originRow}>
+                  <Text style={styles.label}>Départ</Text>
+                  {origin ? (
+                    <Pressable onPress={() => setOrigin('')} hitSlop={8}>
+                      <Text style={styles.clearOrigin}>Toutes les origines</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                <CityAirportPicker
+                  airports={airports}
+                  value={origin}
+                  onChange={setOrigin}
+                />
+                {!origin ? (
+                  <Text style={styles.originHint}>
+                    Laisse vide pour toutes les origines, ou choisis une ville.
+                  </Text>
+                ) : null}
+
+                <View style={styles.divider} />
+
+                <Text style={styles.label}>Quand</Text>
+                <View style={styles.presetRow}>
+                  {windowChips.map((p) => {
+                    const active = windowKind === p.key
+                    return (
+                      <Pressable
+                        key={p.key || 'all'}
+                        onPress={() => setWindowKind(p.key)}
+                        style={[styles.presetCard, active && styles.presetCardActive]}
+                      >
+                        <Text
+                          style={[styles.presetLabel, active && styles.presetLabelActive]}
+                          numberOfLines={1}
+                        >
+                          {p.label}
+                        </Text>
+                        <Text
+                          style={[styles.presetHint, active && styles.presetHintActive]}
+                          numberOfLines={1}
+                        >
+                          {p.hint}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
               </View>
+
+              {!loading && !error && deals.length > 0 ? (
+                <Text style={styles.count}>
+                  {deals.length} offre{deals.length > 1 ? 's' : ''}
+                  {filterSummary ? ` · ${filterSummary}` : ''}
+                </Text>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
@@ -186,7 +288,7 @@ export function DealsScreen() {
                   <Text style={styles.emptyTitle}>Aucun deal pour l’instant</Text>
                   <Text style={styles.emptyBody}>
                     {origin
-                      ? `Pas encore de bonne affaire depuis ${origin}. Essaie un aéroport proche ou lance une recherche.`
+                      ? `Pas encore de bonne affaire depuis cet aéroport. Essaie une autre ville ou lance une recherche.`
                       : 'Pas encore de bonne affaire. Choisis un aéroport ou lance une recherche.'}
                   </Text>
                   <Pressable
@@ -231,7 +333,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   header: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   title: {
     fontFamily: fonts.extrabold,
@@ -242,44 +344,115 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 6,
+    marginBottom: 14,
     fontFamily: fonts.medium,
     fontSize: 14,
     color: colors.muted,
     includeFontPadding: false,
   },
-  fieldLabel: {
-    marginTop: 16,
-    marginBottom: 8,
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.inkSoft,
-    includeFontPadding: false,
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    marginBottom: spacing.md,
   },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+    marginVertical: 14,
+  },
+  limitChip: {
+    alignSelf: 'flex-start',
     marginTop: 12,
-  },
-  chip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: colors.white,
+    backgroundColor: colors.canvas,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
-  chipActive: {
+  limitChipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  chipText: {
+  limitChipText: {
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.inkSoft,
   },
-  chipTextActive: {
+  limitChipTextActive: {
     color: colors.white,
+  },
+  originRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  label: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  clearOrigin: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.primary,
+  },
+  originHint: {
+    marginTop: 8,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 16,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  presetCard: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 96,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    backgroundColor: colors.canvas,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  presetCardActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  presetLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  presetLabelActive: {
+    color: colors.white,
+  },
+  presetHint: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.muted,
+  },
+  presetHintActive: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+  count: {
+    marginTop: 4,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.muted,
   },
   emptyCard: {
     backgroundColor: colors.white,

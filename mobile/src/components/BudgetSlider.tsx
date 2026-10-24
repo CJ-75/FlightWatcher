@@ -16,13 +16,26 @@ type Props = {
   min?: number
   max?: number
   step?: number
+  /** Override Search wording (e.g. Deals). */
+  hint?: string
+  subHint?: string
+  displayValue?: string
 }
 
 function snap(n: number, step: number) {
   return Math.round(n / step) * step
 }
 
-export function BudgetSlider({ value, onChange, min = 20, max = 1000, step = 10 }: Props) {
+export function BudgetSlider({
+  value,
+  onChange,
+  min = 20,
+  max = 1000,
+  step = 10,
+  hint = 'Budget max / personne',
+  subHint = 'aller-retour',
+  displayValue,
+}: Props) {
   const [width, setWidth] = useState(0)
   const widthRef = useRef(0)
   const pageXRef = useRef(0)
@@ -82,9 +95,9 @@ export function BudgetSlider({ value, onChange, min = 20, max = 1000, step = 10 
           <Text style={styles.stepText}>−</Text>
         </Pressable>
         <View style={styles.valueBlock}>
-          <Text style={styles.hint}>Budget max / personne</Text>
-          <Text style={styles.value}>{value}€</Text>
-          <Text style={styles.subHint}>aller-retour</Text>
+          <Text style={styles.hint}>{hint}</Text>
+          <Text style={styles.value}>{displayValue ?? `${value}€`}</Text>
+          <Text style={styles.subHint}>{subHint}</Text>
         </View>
         <Pressable onPress={() => bump(step)} hitSlop={8} style={styles.stepBtn}>
           <Text style={styles.stepText}>+</Text>

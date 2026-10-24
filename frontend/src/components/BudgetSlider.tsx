@@ -6,9 +6,22 @@ interface BudgetSliderProps {
   onChange: (value: number) => void;
   min?: number;
   max?: number;
+  /** Override Search wording (e.g. Deals max / pers.). */
+  label?: string;
+  hint?: string;
+  /** Custom value display, e.g. "Sans limite". */
+  displayValue?: string;
 }
 
-export function BudgetSlider({ value, onChange, min = 20, max = 1000 }: BudgetSliderProps) {
+export function BudgetSlider({
+  value,
+  onChange,
+  min = 20,
+  max = 1000,
+  label,
+  hint,
+  displayValue,
+}: BudgetSliderProps) {
   const { t } = useI18n();
   const springConfig = {
     type: "spring" as const,
@@ -20,16 +33,16 @@ export function BudgetSlider({ value, onChange, min = 20, max = 1000 }: BudgetSl
   return (
     <div className="mb-8">
       <label className="text-base sm:text-lg font-bold text-slate-900 mb-1 block">
-        {t('search.budget')}
+        {label || t('search.budget')}
       </label>
-      <p className="text-sm text-slate-500 mb-3 sm:mb-4">{t('search.budget.total')}</p>
+      <p className="text-sm text-slate-500 mb-3 sm:mb-4">{hint || t('search.budget.total')}</p>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={springConfig}
         className="text-2xl sm:text-3xl md:text-4xl font-black text-primary-500 mb-2"
       >
-        {value}€
+        {displayValue ?? `${value}€`}
       </motion.div>
       <div className="relative">
         <input

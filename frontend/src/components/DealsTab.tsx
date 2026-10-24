@@ -6,12 +6,21 @@ import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { DealWeekendCalendar } from './DealWeekendCalendar'
+import { BudgetSlider } from './BudgetSlider'
+import { PassengerStepper } from './PassengerStepper'
+import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
 
-const ORIGIN_OPTIONS = ['', 'BVA', 'ORY', 'CDG', 'MRS', 'NCE', 'LYS', 'TLS'] as const
-const BUDGET_OPTIONS = [0, 200, 250, 300, 350, 450] as const
+const BUDGET_MIN = 120
+const BUDGET_MAX = 450
+const springConfig = {
+  type: 'spring' as const,
+  stiffness: 300,
+  damping: 20,
+  mass: 0.5,
+}
 
 export function DealsTab() {
   const { t } = useI18n()
@@ -23,11 +32,10 @@ export function DealsTab() {
   const [toast, setToast] = useState<string | null>(null)
 
   const [origin, setOrigin] = useState('')
-  const [maxPp, setMaxPp] = useState(0)
+  const [budgetUnlimited, setBudgetUnlimited] = useState(true)
+  const [maxPp, setMaxPp] = useState(300)
   const [windowKind, setWindowKind] = useState<'' | DealWindowKind>('')
   const [adults, setAdults] = useState(2)
-  /** Lot D3: always 1–6 (deals priced for 1–2; note + revalid when >2). */
-  const occupancies = [1, 2, 3, 4, 5, 6]
   const [windowKinds, setWindowKinds] = useState<DealWindowKind[]>(['FRI_SUN'])
   const [readonlyBanner, setReadonlyBanner] = useState(false)
   const [calendarEnabled, setCalendarEnabled] = useState(false)
@@ -76,7 +84,7 @@ export function DealsTab() {
       const list = await getApiClient().getDeals({
         origin: origin || undefined,
         window: windowKind || undefined,
-        max_pp: maxPp > 0 ? maxPp : undefined,
+        max_pp: budgetUnlimited ? undefined : maxPp,
         adults,
       })
       setDeals(Array.isArray(list) ? list : [])
@@ -87,7 +95,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, origin, windowKind, maxPp, adults])
+  }, [t, loadLikes, origin, windowKind, maxPp, adults, budgetUnlimited])
 
   useEffect(() => {
     void load()
@@ -155,102 +163,144 @@ export function DealsTab() {
 
   const filterLabel = useMemo(() => {
     const parts: string[] = []
-    if (origin) parts.push(origin)
-    if (maxPp > 0) parts.push(`≤ ${maxPp} €`)
+    if (origin) parts.push(origin.split(',')[0] || origin)
+    if (!budgetUnlimited) parts.push(`≤ ${maxPp} €`)
     if (windowKind) parts.push(windowKind === 'FRI_SUN' ? 'ven→dim' : 'sam→lun')
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
     return parts.join(' · ')
-  }, [origin, maxPp, windowKind, adults])
+  }, [origin, maxPp, windowKind, adults, budgetUnlimited])
 
   const calendarDeal = deals.find((d) => d.destination) || null
 
+  const windowChips: { key: '' | DealWindowKind; label: string }[] = [
+    { key: '', label: t('deals.filterAll') },
+    ...(windowKinds.includes('FRI_SUN')
+      ? [{ key: 'FRI_SUN' as const, label: 'Ven → Dim' }]
+      : []),
+    ...(windowKinds.includes('SAT_MON')
+      ? [{ key: 'SAT_MON' as const, label: 'Sam → Lun' }]
+      : []),
+  ]
+
   return (
     <div className="w-full">
-      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <p className="app-kicker mb-1.5">Deals</p>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-            {t('nav.deals')}
-          </h2>
-          <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitle')}</p>
-          <p className="text-xs text-muted mt-1.5 max-w-xl">{t('deals.alertHint')}</p>
-          {readonlyBanner ? (
-            <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
-              {t('deals.readonlyBanner')}
-            </p>
-          ) : null}
-        </div>
-        {!loading && !error && deals.length > 0 ? (
-          <p className="text-sm font-semibold text-muted shrink-0">
-            {deals.length} offre{deals.length > 1 ? 's' : ''}
-            {filterLabel ? ` · ${filterLabel}` : ''}
+      <div className="mb-5 sm:mb-6">
+        <p className="app-kicker mb-1.5">Deals</p>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+          {t('nav.deals')}
+        </h2>
+        <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitle')}</p>
+        {readonlyBanner ? (
+          <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
+            {t('deals.readonlyBanner')}
           </p>
         ) : null}
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-3 items-end">
-        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-          {t('deals.filterOrigin')}
-          <select
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[7rem]"
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={springConfig}
+        className="w-full app-card p-4 sm:p-6 md:p-8 mb-6 sm:mb-8"
+      >
+        <BudgetSlider
+          value={maxPp}
+          min={BUDGET_MIN}
+          max={BUDGET_MAX}
+          label={t('deals.filterBudget')}
+          hint="Prix max vol + hôtel / personne"
+          displayValue={budgetUnlimited ? 'Sans limite' : undefined}
+          onChange={(v) => {
+            setBudgetUnlimited(false)
+            setMaxPp(v)
+          }}
+        />
+        <div className="flex flex-wrap gap-2 -mt-4 mb-6 sm:mb-8">
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => setBudgetUnlimited(true)}
+            className={`rounded-full px-4 py-2 text-xs sm:text-sm font-semibold transition-all min-h-[40px] ${
+              budgetUnlimited
+                ? 'bg-primary-500 text-white shadow-soft'
+                : 'bg-canvas text-ink-soft border border-line hover:bg-primary-50 hover:text-primary-700'
+            }`}
           >
-            <option value="">{t('deals.filterAll')}</option>
-            {ORIGIN_OPTIONS.filter(Boolean).map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-          {t('deals.filterBudget')}
-          <select
-            value={maxPp}
-            onChange={(e) => setMaxPp(Number(e.target.value))}
-            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[8rem]"
-          >
-            <option value={0}>{t('deals.filterAll')}</option>
-            {BUDGET_OPTIONS.filter((b) => b > 0).map((b) => (
-              <option key={b} value={b}>
-                {b} €
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-          {t('deals.filterWindow')}
-          <select
-            value={windowKind}
-            onChange={(e) => setWindowKind(e.target.value as '' | DealWindowKind)}
-            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[8rem]"
-          >
-            <option value="">{t('deals.filterAll')}</option>
-            {windowKinds.includes('FRI_SUN') ? (
-              <option value="FRI_SUN">Ven → Dim</option>
+            Sans limite
+          </motion.button>
+        </div>
+
+        <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
+
+        <div className="mb-4 sm:mb-5">
+          <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
+            <label className="text-base sm:text-lg font-bold text-slate-900 block">
+              {t('deals.filterOrigin')}
+            </label>
+            {origin ? (
+              <button
+                type="button"
+                onClick={() => setOrigin('')}
+                className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
+              >
+                Toutes les origines
+              </button>
             ) : null}
-            {windowKinds.includes('SAT_MON') ? (
-              <option value="SAT_MON">Sam → Lun</option>
-            ) : null}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-          Voyageurs
-          <select
-            value={adults}
-            onChange={(e) => setAdults(Number(e.target.value))}
-            className="rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink min-w-[7rem]"
-          >
-            {occupancies.map((n) => (
-              <option key={n} value={n}>
-                {n === 1 ? 'Solo (1)' : `${n} adultes`}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+          </div>
+          <CityAirportSelect value={origin} onChange={setOrigin} />
+          {!origin ? (
+            <p className="text-xs text-slate-500 mt-2">
+              Laisse vide pour voir toutes les origines, ou choisis une ville de départ.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mb-1">
+          <label className="text-base sm:text-lg font-bold text-slate-900 mb-3 sm:mb-4 block">
+            {t('deals.filterWindow')}
+          </label>
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            {windowChips.map((chip) => {
+              const isActive = windowKind === chip.key
+              return (
+                <motion.button
+                  key={chip.key || 'all'}
+                  type="button"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={springConfig}
+                  onClick={() => setWindowKind(chip.key)}
+                  className={`rounded-full px-3 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold cursor-pointer transition-all min-h-[40px] sm:min-h-[44px] flex items-center justify-center relative whitespace-nowrap ${
+                    isActive
+                      ? 'bg-primary-500 text-white shadow-soft'
+                      : 'bg-canvas text-ink-soft hover:bg-primary-50 hover:text-primary-700 border border-line'
+                  }`}
+                >
+                  {isActive && chip.key ? (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-accent-500 rounded-full flex items-center justify-center text-white text-[8px] sm:text-xs font-bold"
+                    >
+                      ✓
+                    </motion.span>
+                  ) : null}
+                  <span className="truncate">{chip.label}</span>
+                </motion.button>
+              )
+            })}
+          </div>
+        </div>
+      </motion.div>
+
+      {!loading && !error && deals.length > 0 ? (
+        <p className="text-sm font-semibold text-muted mb-4">
+          {deals.length} offre{deals.length > 1 ? 's' : ''}
+          {filterLabel ? ` · ${filterLabel}` : ''}
+        </p>
+      ) : null}
 
       {calendarEnabled && origin && calendarDeal?.destination ? (
         <DealWeekendCalendar
@@ -280,7 +330,7 @@ export function DealsTab() {
           ))}
         </div>
       ) : error ? (
-        <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center max-w-md mx-auto">
+        <div className="app-card p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.errorTitle')}</p>
           <p className="text-sm text-muted mb-4 line-clamp-3">{error}</p>
           <button
@@ -292,12 +342,10 @@ export function DealsTab() {
           </button>
         </div>
       ) : deals.length === 0 ? (
-        <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center max-w-md mx-auto">
+        <div className="app-card p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.emptyTitle')}</p>
           <p className="text-sm text-muted mb-4">
-            {origin
-              ? t('deals.emptyBody', { origin })
-              : t('deals.emptyBodyAll')}
+            {origin ? t('deals.emptyBody', { origin }) : t('deals.emptyBodyAll')}
           </p>
           <button
             type="button"
