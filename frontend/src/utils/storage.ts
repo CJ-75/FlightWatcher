@@ -156,6 +156,7 @@ export const saveSearch = async (search: Omit<SavedSearch, 'id' | 'createdAt'>):
 
 export const getSavedSearches = async (): Promise<SavedSearch[]> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -199,6 +200,7 @@ export const getSavedSearches = async (): Promise<SavedSearch[]> => {
 
 export const deleteSearch = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -226,6 +228,7 @@ export const deleteSearch = async (id: string): Promise<void> => {
 
 export const updateSearchLastUsed = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -268,6 +271,7 @@ export const updateSearchAutoCheck = async (
   intervalSeconds?: number
 ): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -309,6 +313,7 @@ export const updateSearchLastCheckResults = async (
   results: TripResponse[]
 ): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -349,6 +354,7 @@ export const getActiveAutoChecks = async (): Promise<SavedSearch[]> => {
 // Favoris
 export const saveFavorite = async (trip: TripResponse, searchRequest: ScanRequest): Promise<SavedFavorite> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -407,6 +413,7 @@ export const saveFavorite = async (trip: TripResponse, searchRequest: ScanReques
 
 export const getFavorites = async (): Promise<SavedFavorite[]> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -445,6 +452,7 @@ export const getFavorites = async (): Promise<SavedFavorite[]> => {
 
 export const deleteFavorite = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -482,6 +490,7 @@ export const isFavorite = async (trip: TripResponse): Promise<boolean> => {
 
 export const updateFavoriteStatus = async (id: string, isStillValid: boolean): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {
@@ -518,6 +527,7 @@ export const updateFavoriteStatus = async (id: string, isStillValid: boolean): P
 
 export const toggleFavoriteArchived = async (id: string): Promise<void> => {
   const user = await getCurrentUser()
+  const supabase = await getSupabaseClient()
   
   if (supabase && user) {
     try {

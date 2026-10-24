@@ -17,6 +17,7 @@ import { SimpleSearch } from './components/SimpleSearch'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { LoadingSpinner } from './components/LoadingSpinner'
+import { TripWizard } from './components/TripWizard'
 import { motion } from 'framer-motion'
 
 type Tab = 'search' | 'saved'
@@ -30,6 +31,10 @@ function Dashboard() {
   const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
   const [airports, setAirports] = useState<Airport[]>([])
+  
+  // Wizard state
+  const [showWizard, setShowWizard] = useState(false)
+  const [selectedTripForWizard, setSelectedTripForWizard] = useState<EnrichedTripResponse | null>(null)
   
   // États pour les paramètres de recherche
   const [aeroportDepart, setAeroportDepart] = useState('BVA')
@@ -451,7 +456,8 @@ function Dashboard() {
                             trip={trip}
                             onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
                             onBook={() => {
-                              window.open('https://www.ryanair.com', '_blank')
+                              setSelectedTripForWizard(trip)
+                              setShowWizard(true)
                             }}
                           />
                         </motion.div>
@@ -478,6 +484,21 @@ function Dashboard() {
           budget={rouletteBudget}
           onClose={() => setShowRoulette(false)}
           onSaveFavorite={handleSimpleSaveFavorite}
+        />
+      )}
+
+      {/* Trip Wizard Modal */}
+      {showWizard && selectedTripForWizard && (
+        <TripWizard
+          trip={selectedTripForWizard}
+          departureAirport={aeroportDepart}
+          onClose={() => {
+            setShowWizard(false)
+            setSelectedTripForWizard(null)
+          }}
+          onComplete={(draft) => {
+            console.log('Voyage créé:', draft)
+          }}
         />
       )}
     </div>
