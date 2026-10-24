@@ -49,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
     summary = refresh_hotel_rates(
         supabase, cfg=cfg, slugs=slugs, force=args.force
     )
+    try:
+        from deals.price_alerts import run_price_alerts
+
+        summary["price_alerts"] = run_price_alerts(supabase)
+    except Exception as e:
+        summary["price_alerts_error"] = str(e)
     print(json.dumps(summary, indent=2, default=str))
     return 0 if summary.get("errors", 0) == 0 else 2
 

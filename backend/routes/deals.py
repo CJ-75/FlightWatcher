@@ -221,7 +221,21 @@ async def like_deal(body: LikeDealRequest, request: Request):
         )
         if not result.data:
             raise HTTPException(status_code=500, detail="Erreur lors du like")
-        return _row_to_liked(result.data[0])
+        liked = _row_to_liked(result.data[0])
+        # L10: auto-enable price alert when deal_key present
+        if deal_key:
+            try:
+                from deals.price_alerts import upsert_alert_for_like
+
+                upsert_alert_for_like(
+                    supabase,
+                    user_id=user_id,
+                    deal_key=deal_key,
+                    price_pp=float(body.price_per_person or 0),
+                )
+            except Exception:
+                pass
+        return liked
     except HTTPException:
         raise
     except Exception as e:
@@ -253,6 +267,12 @@ async def unlike_deal(deal_id: str, request: Request):
     user_id = _require_user(request)
     try:
         supabase = _svc()
+        try:
+            from deals.price_alerts import delete_alert_for_unlike
+
+            delete_alert_for_unlike(supabase, user_id=user_id, deal_id=deal_id)
+        except Exception:
+            pass
         supabase.table("liked_deals").delete().eq("user_id", user_id).eq(
             "deal_id", deal_id
         ).execute()
@@ -364,7 +384,32 @@ async def job_refresh_hotel_rates(
         summary = refresh_hotel_rates(
             supabase, cfg=cfg, slugs=slugs, force=force
         )
+        # L10: after rates refresh, check liked-deal price drops
+        try:
+            from deals.price_alerts import run_price_alerts
+
+            summary["price_alerts"] = run_price_alerts(supabase)
+        except Exception as e:
+            summary["price_alerts_error"] = str(e)
         return summary
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/deals/jobs/check-price-alerts")
+async def job_check_price_alerts(
+    authorization: Optional[str] = Header(None),
+    dry_run: bool = Query(False, description="Ne pas envoyer / maj baselines"),
+):
+    """Compare liked deals vs cache ; email si baisse ≥ seuil (défaut 8 %). CRON_SECRET."""
+    require_cron(authorization)
+    try:
+        from deals.price_alerts import run_price_alerts
+
+        supabase = _svc()
+        return run_price_alerts(supabase, dry_run=dry_run)
     except HTTPException:
         raise
     except Exception as e:

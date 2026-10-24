@@ -116,3 +116,30 @@ def notify_trip_under_budget(
     </div>
     """
     return send_email(recipients, subject, html)
+
+
+def notify_deal_price_drop(
+    *,
+    email: str,
+    city: str,
+    deal_key: str,
+    old_pp: float,
+    new_pp: float,
+    drop_pct: float,
+) -> bool:
+    link = f"{WEB_APP_URL}/?tab=deals"
+    subject = f"Prix en baisse — week-end {city} (−{drop_pct:.0f}%)"
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
+      <h2 style="margin:0 0 12px;color:#E85A28">Alerte prix deal</h2>
+      <p>Le deal vol + hôtel <strong>{city}</strong> que tu as liké est passé de
+         <strong>{old_pp:.0f}€</strong> à <strong>{new_pp:.0f}€</strong> / pers.
+         (−{drop_pct:.0f}%).</p>
+      <p><a href="{link}" style="display:inline-block;background:#FF6B35;color:#fff;
+         text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
+         Voir les deals</a></p>
+      <p style="font-size:12px;color:#94a3b8">Réf. {deal_key}</p>
+      <p style="font-size:12px;color:#64748b">FlightWatcher — 1 alerte max / 24 h par deal</p>
+    </div>
+    """
+    return send_email([email], subject, html)

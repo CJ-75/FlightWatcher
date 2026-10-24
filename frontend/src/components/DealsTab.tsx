@@ -138,6 +138,7 @@ export function DealsTab() {
             {t('nav.deals')}
           </h2>
           <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitle')}</p>
+          <p className="text-xs text-muted mt-1.5 max-w-xl">{t('deals.alertHint')}</p>
         </div>
         {!loading && !error && deals.length > 0 ? (
           <p className="text-sm font-semibold text-muted shrink-0">
