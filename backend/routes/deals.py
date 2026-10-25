@@ -1067,6 +1067,37 @@ async def my_trip_flight_booked(draft_token: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class MyTripHotelBookedBody(BaseModel):
+    booking_id: Optional[str] = None
+    confirmation_code: Optional[str] = None
+    holder_email: Optional[str] = None
+
+
+@router.post("/api/deals/my-trip/{draft_token}/hotel-booked")
+async def my_trip_hotel_booked(
+    draft_token: str, body: Optional[MyTripHotelBookedBody] = None
+):
+    """Lot D — guest hotel payment done (no account required)."""
+    try:
+        from deals.my_trips import mark_hotel_booked
+
+        b = body or MyTripHotelBookedBody()
+        row = mark_hotel_booked(
+            _svc(),
+            draft_token,
+            booking_id=b.booking_id,
+            confirmation_code=b.confirmation_code,
+            holder_email=b.holder_email,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/hotels/{hotel_id}/gallery")
 async def get_hotel_gallery(
     hotel_id: str,

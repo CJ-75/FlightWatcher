@@ -68,12 +68,51 @@ class PrebookRequest(BaseModel):
     margin_pct_used: Optional[float] = None
     ssp_at_booking: Optional[float] = None
     deal_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    # Lot D: anonymous MyTrip — required when no JWT
+    draft_token: Optional[str] = None
 
 
 class BookRequest(BaseModel):
     holder: HolderInput
     guests: List[GuestInput] = Field(default_factory=list)
     payment_status: str = "succeeded"  # succeeded | requires_capture
+    draft_token: Optional[str] = None
+
+
+def _resolve_booking_actor(request: Request, draft_token: Optional[str]) -> Dict[str, Optional[str]]:
+    """JWT user and/or valid my_trip draft_token. At least one required."""
+    user_id = get_user_id_from_token(request)
+    token = (draft_token or "").strip() or None
+    if user_id:
+        return {"user_id": user_id, "draft_token": token}
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentification ou voyage requis")
+    from deals.my_trips import get_draft
+
+    row = get_draft(_svc(), token)
+    if not row:
+        raise HTTPException(status_code=401, detail="Voyage introuvable ou expiré")
+    return {"user_id": None, "draft_token": token}
+
+
+def _fetch_booking_for_actor(
+    supabase,
+    booking_id: str,
+    *,
+    user_id: Optional[str],
+    draft_token: Optional[str],
+):
+    q = supabase.table("hotel_bookings").select("*").eq("id", booking_id)
+    if user_id:
+        q = q.eq("user_id", user_id)
+    elif draft_token:
+        q = q.eq("draft_token", draft_token)
+    else:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    result = q.limit(1).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Réservation introuvable")
+    return result.data[0]
 
 
 @router.post("/api/deals/{deal_key}/revalidate")
@@ -113,8 +152,9 @@ async def prebook(body: PrebookRequest, request: Request):
     """
     LiteAPI prebook with usePaymentSdk=true.
     Persists prebook_id + transaction_id immediately.
+    Auth: JWT user OR valid my_trip draft_token (Lot D guest).
     """
-    user_id = _require_user(request)
+    actor = _resolve_booking_actor(request, body.draft_token)
     cfg = load_deals_config()
     if not cfg.booking_enabled:
         raise HTTPException(
@@ -149,7 +189,8 @@ async def prebook(body: PrebookRequest, request: Request):
         )
 
     row = {
-        "user_id": user_id,
+        "user_id": actor["user_id"],
+        "draft_token": actor["draft_token"],
         "deal_key": body.deal_key,
         "deal_snapshot": body.deal_snapshot or {},
         "hotel_id": body.hotel_id,
@@ -164,7 +205,18 @@ async def prebook(body: PrebookRequest, request: Request):
         "raw_prebook": raw,
         "updated_at": _now(),
     }
-    result = supabase.table("hotel_bookings").insert(row).execute()
+    try:
+        result = supabase.table("hotel_bookings").insert(row).execute()
+    except Exception as e:
+        # Column draft_token missing before Lot D SQL — retry without it if logged in
+        if actor["user_id"] and "draft_token" in str(e).lower():
+            row.pop("draft_token", None)
+            result = supabase.table("hotel_bookings").insert(row).execute()
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Impossible d'enregistrer le prebook (appliquez apply_mytrip_guest_hotel_booking_migration.sql)",
+            ) from e
     if not result.data:
         raise HTTPException(status_code=500, detail="Impossible d'enregistrer le prebook")
     booking = result.data[0]
@@ -186,7 +238,7 @@ async def prebook(body: PrebookRequest, request: Request):
 @optional_auth
 async def book(booking_id: str, body: BookRequest, request: Request):
     """Call after payment succeeded / requires_capture. Never if payment failed."""
-    user_id = _require_user(request)
+    actor = _resolve_booking_actor(request, body.draft_token)
     if body.payment_status not in ("succeeded", "requires_capture"):
         raise HTTPException(
             status_code=400,
@@ -194,17 +246,12 @@ async def book(booking_id: str, body: BookRequest, request: Request):
         )
 
     supabase = _svc()
-    existing = (
-        supabase.table("hotel_bookings")
-        .select("*")
-        .eq("id", booking_id)
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
+    booking = _fetch_booking_for_actor(
+        supabase,
+        booking_id,
+        user_id=actor["user_id"],
+        draft_token=actor["draft_token"],
     )
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Réservation introuvable")
-    booking = existing.data[0]
     if booking.get("status") in ("confirmed", "booking_pending"):
         return _public_booking(booking)
 
@@ -270,7 +317,7 @@ async def book(booking_id: str, body: BookRequest, request: Request):
     else:
         status = "confirmed" if liteapi_booking_id else "booking_pending"
 
-    updated = (
+    upd = (
         supabase.table("hotel_bookings")
         .update(
             {
@@ -282,9 +329,12 @@ async def book(booking_id: str, body: BookRequest, request: Request):
             }
         )
         .eq("id", booking_id)
-        .eq("user_id", user_id)
-        .execute()
     )
+    if actor["user_id"]:
+        upd = upd.eq("user_id", actor["user_id"])
+    elif actor["draft_token"]:
+        upd = upd.eq("draft_token", actor["draft_token"])
+    updated = upd.execute()
     row = (updated.data or [booking])[0]
     return _public_booking(row)
 
@@ -306,20 +356,20 @@ async def list_bookings(request: Request):
 
 @router.get("/api/hotel-bookings/{booking_id}")
 @optional_auth
-async def get_booking(booking_id: str, request: Request):
-    user_id = _require_user(request)
+async def get_booking(
+    booking_id: str,
+    request: Request,
+    draft_token: Optional[str] = None,
+):
+    actor = _resolve_booking_actor(request, draft_token)
     supabase = _svc()
-    result = (
-        supabase.table("hotel_bookings")
-        .select("*")
-        .eq("id", booking_id)
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
+    booking = _fetch_booking_for_actor(
+        supabase,
+        booking_id,
+        user_id=actor["user_id"],
+        draft_token=actor["draft_token"],
     )
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Réservation introuvable")
-    return _public_booking(result.data[0])
+    return _public_booking(booking)
 
 
 def _public_booking(row: dict) -> dict:

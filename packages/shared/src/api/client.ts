@@ -344,6 +344,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify({}) },
       ),
 
+    markMyTripHotelBooked: (
+      draftToken: string,
+      body?: {
+        booking_id?: string | null
+        confirmation_code?: string | null
+        holder_email?: string | null
+      },
+    ) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/hotel-booked`,
+        { method: 'POST', body: JSON.stringify(body || {}) },
+      ),
+
     recordFlightClick: (body: {
       deal_key: string
       verification_level?: string
@@ -401,8 +414,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
     listHotelBookings: () => request<HotelBooking[]>('/api/hotel-bookings'),
 
-    getHotelBooking: (id: string) =>
-      request<HotelBooking>(`/api/hotel-bookings/${encodeURIComponent(id)}`),
+    getHotelBooking: (id: string, opts?: { draft_token?: string | null }) => {
+      const q =
+        opts?.draft_token != null && opts.draft_token !== ''
+          ? `?draft_token=${encodeURIComponent(opts.draft_token)}`
+          : ''
+      return request<HotelBooking>(
+        `/api/hotel-bookings/${encodeURIComponent(id)}${q}`,
+      )
+    },
 
     getLikedDeals: () => request<LikedDeal[]>('/api/liked-deals'),
     getLikedDealIds: () => request<string[]>('/api/liked-deals/ids'),

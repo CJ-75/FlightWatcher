@@ -255,6 +255,8 @@ export interface MyTripDraft {
   invite_available?: boolean
   /** Lot F */
   flight_booked_at?: string | null
+  /** Lot D */
+  hotel_booked_at?: string | null
   share_email?: string | null
 }
 
@@ -680,6 +682,8 @@ export interface HotelBookingPrebookRequest {
   margin_pct_used?: number | null
   ssp_at_booking?: number | null
   deal_snapshot?: TravelDeal | Record<string, unknown>
+  /** Lot D guest checkout — required when not logged in */
+  draft_token?: string | null
 }
 
 export interface HotelBookingPrebookResponse {
@@ -703,6 +707,7 @@ export interface HotelBookingBookRequest {
     occupancyNumber?: number
   }>
   payment_status: 'succeeded' | 'requires_capture'
+  draft_token?: string | null
 }
 
 export interface HotelBooking {

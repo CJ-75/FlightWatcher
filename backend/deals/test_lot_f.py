@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from deals.my_trips import mark_flight_booked, send_draft_email
+from deals.my_trips import mark_flight_booked, mark_hotel_booked, send_draft_email
 
 
 class TestLotF(unittest.TestCase):
@@ -38,6 +38,28 @@ class TestLotF(unittest.TestCase):
             out = mark_flight_booked(sb, "tok")
         self.assertIsNotNone(out)
         # update called with flight_booked in payload
+        self.assertTrue(sb.table.return_value.update.called)
+
+    def test_mark_hotel_booked(self):
+        sb = MagicMock()
+        row = {
+            "id": "1",
+            "draft_token": "tok",
+            "status": "draft",
+            "payload": {"city": "Rome"},
+        }
+        sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{**row, "hotel_booked_at": "2026-10-25T12:00:00+00:00"}]
+        )
+        with patch("deals.my_trips.get_draft", return_value=row):
+            out = mark_hotel_booked(
+                sb,
+                "tok",
+                booking_id="hb1",
+                confirmation_code="ABC123",
+                holder_email="a@b.com",
+            )
+        self.assertIsNotNone(out)
         self.assertTrue(sb.table.return_value.update.called)
 
 

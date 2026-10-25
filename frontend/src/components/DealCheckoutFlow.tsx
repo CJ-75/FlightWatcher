@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import type {
   DealRevalidateResponse,
@@ -16,7 +17,13 @@ interface Props {
   deal: TravelDeal
   hotelId?: string
   onClose: () => void
-  onNeedLogin: () => void
+  /** Required when not using draftToken guest path */
+  onNeedLogin?: () => void
+  /** Lot D — guest MyTrip: skip login, pass to prebook/book */
+  draftToken?: string | null
+  onBooked?: (booking: HotelBooking) => void
+  /** Compact récap dates / hotel total for MyTrip */
+  hotelTotalHint?: number | null
 }
 
 declare global {
@@ -49,8 +56,17 @@ function loadPaymentScript(): Promise<void> {
   })
 }
 
-export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props) {
+export function DealCheckoutFlow({
+  deal,
+  hotelId,
+  onClose,
+  onNeedLogin,
+  draftToken,
+  onBooked,
+  hotelTotalHint,
+}: Props) {
   const { t } = useI18n()
+  const guestMode = Boolean(draftToken)
   const [step, setStep] = useState<Step>('revalidate')
   const [error, setError] = useState<string | null>(null)
   const [reval, setReval] = useState<DealRevalidateResponse | null>(null)
@@ -65,6 +81,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
+  const [showAccountCta, setShowAccountCta] = useState(false)
   const payRef = useRef<HTMLDivElement>(null)
   const dealKey = deal.deal_key || deal.id
 
@@ -72,11 +89,13 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
     setStep('revalidate')
     setError(null)
     try {
-      const user = await getCurrentUser()
-      if (!user) {
-        onNeedLogin()
-        onClose()
-        return
+      if (!guestMode) {
+        const user = await getCurrentUser()
+        if (!user) {
+          onNeedLogin?.()
+          onClose()
+          return
+        }
       }
       const res = await getApiClient().revalidateDeal(dealKey, {
         hotel_id: hotelId || deal.hotel?.id,
@@ -90,7 +109,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
       setError(e instanceof Error ? e.message : t('app.error'))
       setStep('error')
     }
-  }, [deal, dealKey, hotelId, onClose, onNeedLogin, t])
+  }, [deal, dealKey, guestMode, hotelId, onClose, onNeedLogin, t])
 
   useEffect(() => {
     void runRevalidate()
@@ -117,6 +136,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
         margin_pct_used: reval.margin_pct_used,
         ssp_at_booking: reval.ssp_total,
         deal_snapshot: (reval.deal_snapshot || deal) as TravelDeal,
+        draft_token: draftToken || undefined,
       })
       setBookingId(pb.booking_id)
       setPrebookMeta({
@@ -156,6 +176,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- finalizeBook closed over latest state via pay step
   }, [step, prebookMeta])
 
   const finalizeBook = async (payment_status: 'succeeded' | 'requires_capture') => {
@@ -171,7 +192,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
           occupancyNumber: 1,
         },
       ]
-      if ((reval?.adults || 2) >= 2) {
+      if ((reval?.adults || deal.adults || 2) >= 2) {
         guests.push({
           firstName: firstName || 'Guest',
           lastName: lastName || '2',
@@ -183,14 +204,31 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
         holder: { firstName, lastName, email },
         guests,
         payment_status,
+        draft_token: draftToken || undefined,
       })
-      setBooking(b)
+      let final = b
       if (b.status === 'booking_pending') {
-        // poll once
         await new Promise((r) => setTimeout(r, 1500))
-        const again = await getApiClient().getHotelBooking(bookingId)
-        setBooking(again)
+        final = await getApiClient().getHotelBooking(bookingId, {
+          draft_token: draftToken || undefined,
+        })
       }
+      setBooking(final)
+
+      if (draftToken) {
+        try {
+          await getApiClient().markMyTripHotelBooked(draftToken, {
+            booking_id: final.id,
+            confirmation_code: final.confirmation_code,
+            holder_email: email,
+          })
+        } catch {
+          /* draft mark best-effort — booking already succeeded */
+        }
+      }
+
+      onBooked?.(final)
+      setShowAccountCta(guestMode)
       setStep('done')
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -198,9 +236,16 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
     }
   }
 
-  const price =
-    reval?.revalidated_price_pp ?? deal.price_per_person
+  const price = reval?.revalidated_price_pp ?? deal.price_per_person
   const fees = reval?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
+  const hotelName =
+    reval?.hotel_name || deal.hotel?.name || deal.hotel_name || 'Hôtel'
+  const dates = deal.dates
+  const hotelTotal =
+    hotelTotalHint ??
+    reval?.public_hotel_price ??
+    deal.price_breakdown?.hotel_public_total ??
+    null
 
   return (
     <AnimatePresence>
@@ -228,6 +273,27 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
               </button>
             </div>
 
+            {/* Compact récap */}
+            <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 space-y-0.5">
+              <p className="font-bold text-slate-900">{hotelName}</p>
+              {dates?.outbound && dates?.inbound ? (
+                <p className="text-xs text-slate-600">
+                  {dates.outbound} → {dates.inbound}
+                  {deal.nights ? ` · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''}` : ''}
+                </p>
+              ) : null}
+              {hotelTotal != null ? (
+                <p className="text-xs font-semibold text-slate-800">
+                  {Math.round(Number(hotelTotal))} € hôtel
+                </p>
+              ) : null}
+              {reval?.cancel_deadline || deal.hotel?.refundable === false ? (
+                <DealComplianceNotice cancelDeadline={reval?.cancel_deadline} />
+              ) : deal.hotel?.refundable === true ? (
+                <p className="text-xs text-emerald-700 font-semibold">Annulation gratuite</p>
+              ) : null}
+            </div>
+
             {step === 'revalidate' ? (
               <p className="text-sm text-slate-600">Vérification du prix en cours…</p>
             ) : null}
@@ -247,14 +313,14 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
                   <button
                     type="button"
                     onClick={() => setStep('guests')}
-                    className="flex-1 bg-primary-500 text-white font-bold py-3 rounded-xl"
+                    className="flex-1 bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
                   >
                     Continuer
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="flex-1 border border-line font-bold py-3 rounded-xl"
+                    className="flex-1 border border-line font-bold py-3 rounded-xl min-h-[48px]"
                   >
                     Annuler
                   </button>
@@ -265,28 +331,35 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
             {step === 'guests' ? (
               <div className="space-y-4">
                 <p className="text-sm text-slate-600">
-                  Total affiché : <strong>{Math.round(price)} € / pers.</strong>
+                  Titulaire de la réservation
                   {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
                 </p>
-                <DealComplianceNotice cancelDeadline={reval?.cancel_deadline} />
+                {!guestMode ? (
+                  <p className="text-sm text-slate-600">
+                    Total affiché : <strong>{Math.round(price)} € / pers.</strong>
+                  </p>
+                ) : null}
                 <div className="grid sm:grid-cols-2 gap-3">
                   <input
-                    className="rounded-xl border border-line px-3 py-2.5 text-sm"
+                    className="rounded-xl border border-line px-3 py-2.5 text-sm min-h-[44px]"
                     placeholder="Prénom"
+                    autoComplete="given-name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                   />
                   <input
-                    className="rounded-xl border border-line px-3 py-2.5 text-sm"
+                    className="rounded-xl border border-line px-3 py-2.5 text-sm min-h-[44px]"
                     placeholder="Nom"
+                    autoComplete="family-name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
                 <input
-                  className="w-full rounded-xl border border-line px-3 py-2.5 text-sm"
-                  placeholder="Email"
+                  className="w-full rounded-xl border border-line px-3 py-2.5 text-sm min-h-[44px]"
+                  placeholder="Email (confirmation)"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -294,10 +367,15 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
                   type="button"
                   disabled={!firstName || !lastName || !email}
                   onClick={() => void doPrebook()}
-                  className="w-full bg-primary-500 disabled:bg-slate-200 text-white font-bold py-3.5 rounded-xl"
+                  className="w-full bg-primary-500 disabled:bg-slate-200 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
                 >
                   Continuer vers le paiement
                 </button>
+                {guestMode ? (
+                  <p className="text-xs text-slate-500 text-center">
+                    Aucun compte requis pour payer.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
@@ -314,7 +392,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
                   <button
                     type="button"
                     onClick={() => void finalizeBook('succeeded')}
-                    className="w-full border border-dashed border-primary-300 text-primary-700 font-bold py-3 rounded-xl"
+                    className="w-full border border-dashed border-primary-300 text-primary-700 font-bold py-3 rounded-xl min-h-[48px]"
                   >
                     Simuler paiement réussi (sandbox)
                   </button>
@@ -334,38 +412,58 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
 
             {step === 'done' && booking ? (
               <div className="space-y-3">
-                <p className="text-lg font-bold text-ink">Réservation enregistrée</p>
-                <p className="text-sm text-slate-600">Statut : {booking.status}</p>
+                <p className="text-lg font-bold text-ink">Hôtel réservé ✓</p>
                 {booking.confirmation_code ? (
                   <p className="text-sm">
-                    Code : <strong>{booking.confirmation_code}</strong>
+                    N° de réservation : <strong>{booking.confirmation_code}</strong>
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-600">Statut : {booking.status}</p>
+                )}
+                {email ? (
+                  <p className="text-sm text-slate-600">
+                    Confirmation envoyée à <strong>{email}</strong>
                   </p>
                 ) : null}
-                {deal.flight?.booking_url ? (
+
+                {showAccountCta ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+                    <p className="text-sm font-semibold text-slate-800">
+                      Retrouve ce voyage sur tous tes appareils
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Optionnel — tu peux refuser sans conséquence.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Link
+                        to={`/login?email=${encodeURIComponent(email)}`}
+                        className="flex-1 text-center bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[44px]"
+                      >
+                        Créer un compte
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountCta(false)}
+                        className="flex-1 text-center border border-line font-semibold py-3 rounded-xl min-h-[44px] text-sm"
+                      >
+                        Non merci
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!guestMode ? (
                   <a
-                    href={deal.flight.booking_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-center border border-line font-bold py-3 rounded-xl"
+                    href="/bookings"
+                    className="block text-center border border-line font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px]"
                   >
-                    Réserver le vol maintenant
+                    Mes réservations
                   </a>
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    Pensez à réserver le vol identifié ({Math.round(deal.flight?.price_pp || 0)} € /
-                    pers.).
-                  </p>
-                )}
-                <a
-                  href="/bookings"
-                  className="block text-center border border-line font-bold py-3 rounded-xl hover:bg-slate-50"
-                >
-                  Mes réservations
-                </a>
+                ) : null}
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full bg-primary-500 text-white font-bold py-3 rounded-xl"
+                  className="w-full bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
                 >
                   Fermer
                 </button>
@@ -378,7 +476,7 @@ export function DealCheckoutFlow({ deal, hotelId, onClose, onNeedLogin }: Props)
                 <button
                   type="button"
                   onClick={() => void runRevalidate()}
-                  className="w-full border border-line font-bold py-3 rounded-xl"
+                  className="w-full border border-line font-bold py-3 rounded-xl min-h-[48px]"
                 >
                   Réessayer
                 </button>

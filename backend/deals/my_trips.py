@@ -218,6 +218,54 @@ def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
         return (res.data or [{**row, "payload": payload}])[0]
 
 
+def mark_hotel_booked(
+    supabase,
+    draft_token: str,
+    *,
+    booking_id: Optional[str] = None,
+    confirmation_code: Optional[str] = None,
+    holder_email: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Lot D — guest hotel payment succeeded → step ② Réservé ✓."""
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return None
+    now = _now().isoformat()
+    extra: Dict[str, Any] = {
+        "hotel_booked": True,
+        "hotel_booked_at": now,
+    }
+    if booking_id:
+        extra["hotel_booking_id"] = str(booking_id)
+    if confirmation_code:
+        extra["hotel_confirmation_code"] = str(confirmation_code)
+    if holder_email:
+        extra["hotel_holder_email"] = str(holder_email).strip().lower()
+    payload = _merge_payload(row, extra)
+    update: Dict[str, Any] = {
+        "payload": payload,
+        "updated_at": now,
+        "hotel_booked_at": now,
+    }
+    try:
+        res = (
+            supabase.table("my_trip_drafts")
+            .update(update)
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (res.data or [{**row, **update}])[0]
+    except Exception as e:
+        logger.warning("mark_hotel_booked columns: %s", e)
+        res = (
+            supabase.table("my_trip_drafts")
+            .update({"payload": payload, "updated_at": now})
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (res.data or [{**row, "payload": payload}])[0]
+
+
 def send_draft_email(
     supabase,
     draft_token: str,

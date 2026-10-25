@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import type { MyTripDraft } from '@flightwatcher/shared'
+import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
   airportDisplayNameFr,
   boardLabelFr,
@@ -10,6 +10,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
 import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
+import { DealCheckoutFlow } from '../components/DealCheckoutFlow'
 
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '—'
@@ -54,8 +55,8 @@ async function shareTrip(city: string, url: string) {
 }
 
 /**
- * Lot A–C — conversion-first Mon voyage:
- * party price, 2-col layout, carrier booking + tab return (§4).
+ * Lot A–D — conversion-first Mon voyage:
+ * party price, layout, carrier CTA, guest hotel checkout (§5).
  */
 export default function MyTrip() {
   const { token } = useParams<{ token: string }>()
@@ -73,9 +74,12 @@ export default function MyTrip() {
   const [shareHint, setShareHint] = useState<string | null>(null)
   const [askFlightBooked, setAskFlightBooked] = useState(false)
   const [copyDone, setCopyDone] = useState(false)
+  const [checkoutDeal, setCheckoutDeal] = useState<TravelDeal | null>(null)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
   const hotelSectionRef = useRef<HTMLElement | null>(null)
+  const autoBookHotel = useRef(searchParams.get('book_hotel') === '1')
 
   const load = useCallback(async () => {
     if (!token) return
@@ -239,7 +243,15 @@ export default function MyTrip() {
   const flightBooked = Boolean(
     draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
   )
-  const hotelBooked = Boolean(payload.hotel_booked || payload.hotel_booked_at)
+  const hotelBooked = Boolean(
+    draft?.hotel_booked_at || payload.hotel_booked || payload.hotel_booked_at,
+  )
+  const hotelConfirmation =
+    payload.hotel_confirmation_code != null
+      ? String(payload.hotel_confirmation_code)
+      : null
+  const hotelHolderEmail =
+    payload.hotel_holder_email != null ? String(payload.hotel_holder_email) : null
   const vlevel =
     flight.verification_level ||
     payload.flags?.verification_level ||
@@ -250,13 +262,6 @@ export default function MyTrip() {
   const board = boardLabelFr(hotelObj?.board || payload.board)
   const wantsCompose =
     composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
-
-  const hotelHref =
-    draft?.deal_key && outDate && retDate
-      ? `/deals?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1&checkin=${encodeURIComponent(String(outDate).slice(0, 10))}&checkout=${encodeURIComponent(String(retDate).slice(0, 10))}`
-      : draft?.deal_key
-        ? `/deals?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1`
-        : '/deals'
 
   const backHref = searchParams.get('from') === 'recherche' ? '/recherche' : '/deals'
   const backLabel =
@@ -372,14 +377,156 @@ export default function MyTrip() {
     }
   }
 
+  const buildDealFromDraft = useCallback((): TravelDeal | null => {
+    if (!draft) return null
+    const key = String(draft.deal_key || payload.deal_key || '')
+    if (!key) return null
+    const hotel = hotelObj
+      ? {
+          id: String(hotelObj.id || 'hotel'),
+          name: hotelObj.name ? String(hotelObj.name) : undefined,
+          stars: hotelObj.stars != null ? Number(hotelObj.stars) : undefined,
+          rating: hotelObj.rating != null ? Number(hotelObj.rating) : undefined,
+          review_count:
+            hotelObj.review_count != null ? Number(hotelObj.review_count) : undefined,
+          distance_m:
+            hotelObj.distance_m != null ? Number(hotelObj.distance_m) : undefined,
+          photo: hotelPhoto ? String(hotelPhoto) : undefined,
+          board: hotelObj.board != null ? String(hotelObj.board) : undefined,
+          refundable:
+            typeof hotelObj.refundable === 'boolean' ? hotelObj.refundable : undefined,
+          cancel_deadline: hotelObj.cancel_deadline
+            ? String(hotelObj.cancel_deadline)
+            : null,
+          public_hotel_price:
+            hotelObj.public_hotel_price != null
+              ? Number(hotelObj.public_hotel_price)
+              : party.hotelTotal || undefined,
+        }
+      : undefined
+    return {
+      id: key,
+      deal_key: key,
+      title: `Week-end à ${city}`,
+      city: String(city),
+      country: '',
+      image_url: hotelPhoto ? String(hotelPhoto) : '',
+      price_per_person: party.perPerson || Number(payload.price_per_person) || 0,
+      currency: 'EUR',
+      nights: nights || 0,
+      departure_airport: originIata || '',
+      dates: {
+        outbound: String(outDate || '').slice(0, 10),
+        inbound: String(retDate || '').slice(0, 10),
+      },
+      hotel_name: hotel?.name,
+      hotel_stars: hotel?.stars,
+      board: hotel?.board,
+      highlights: [],
+      description: '',
+      provider: 'liteapi',
+      booking_url: '',
+      adults,
+      origin_iata: originIata || undefined,
+      destination: destIata || undefined,
+      flight: {
+        price_pp: party.flightPp,
+        outbound_local: outDep ? String(outDep) : undefined,
+        inbound_local: retDep ? String(retDep) : undefined,
+        airline: flight.airline || flight.carrier,
+        booking_url: flight.booking_url || payload.booking_url,
+        origin_iata: originIata || undefined,
+        destination_iata: destIata || undefined,
+        direct: flight.direct,
+        provider: flight.provider,
+      },
+      hotel,
+      price_breakdown: {
+        flight_pp: party.flightPp,
+        hotel_public_total: party.hotelTotal,
+        total_pp: party.perPerson,
+        excluded_fees: party.cityTax ?? undefined,
+      },
+    } as TravelDeal
+  }, [
+    adults,
+    city,
+    destIata,
+    draft,
+    flight,
+    hotelObj,
+    hotelPhoto,
+    nights,
+    originIata,
+    outDate,
+    outDep,
+    party,
+    payload,
+    retDate,
+    retDep,
+  ])
+
+  const openHotelCheckout = useCallback(async () => {
+    if (!draft || hotelBooked) return
+    setCheckoutLoading(true)
+    setError(null)
+    try {
+      let deal: TravelDeal | null = null
+      const key = String(draft.deal_key || payload.deal_key || '')
+      if (key) {
+        try {
+          deal = await getApiClient().getDeal(key)
+        } catch {
+          deal = null
+        }
+      }
+      if (!deal) deal = buildDealFromDraft()
+      if (!deal) {
+        setError('Impossible d’ouvrir la réservation hôtel')
+        return
+      }
+      // Prefer draft hotel id when user switched hotel
+      if (hotelObj?.id && deal.hotel) {
+        deal = {
+          ...deal,
+          hotel: {
+            ...deal.hotel,
+            id: String(hotelObj.id),
+            name: hotelObj.name ? String(hotelObj.name) : deal.hotel.name,
+            public_hotel_price:
+              hotelObj.public_hotel_price != null
+                ? Number(hotelObj.public_hotel_price)
+                : deal.hotel.public_hotel_price,
+          },
+        }
+      }
+      setCheckoutDeal(deal)
+      const next = new URLSearchParams(searchParams)
+      next.delete('book_hotel')
+      setSearchParams(next, { replace: true })
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }, [
+    buildDealFromDraft,
+    draft,
+    hotelBooked,
+    hotelObj,
+    payload.deal_key,
+    searchParams,
+    setSearchParams,
+  ])
+
+  useEffect(() => {
+    if (!autoBookHotel.current || !draft || hotelBooked || loading) return
+    autoBookHotel.current = false
+    void openHotelCheckout()
+  }, [draft, hotelBooked, loading, openHotelCheckout])
+
   /** Unique next action for sticky / bottom bar (§5). */
   const nextAction = useMemo(() => {
     if (flightBooked && hotelBooked) {
-      return {
-        kind: 'done' as const,
-        label: 'Voir ma réservation',
-        href: hotelHref,
-      }
+      return { kind: 'done' as const, label: 'Voir ma réservation' }
     }
     if (flightBooked) {
       return {
@@ -388,7 +535,6 @@ export default function MyTrip() {
           party.hotelTotal > 0
             ? `Réserver mon hôtel · ${party.hotelTotal} €`
             : 'Réserver mon hôtel',
-        href: hotelHref,
       }
     }
     return {
@@ -396,7 +542,7 @@ export default function MyTrip() {
       label: 'Réserver mon vol',
       href: flightUrl,
     }
-  }, [flightBooked, flightUrl, hotelBooked, hotelHref, party.hotelTotal])
+  }, [flightBooked, flightUrl, hotelBooked, party.hotelTotal])
 
   if (loading) {
     return (
@@ -507,12 +653,48 @@ export default function MyTrip() {
         </a>
       )
     }
+    if (nextAction.kind === 'hotel') {
+      return (
+        <button
+          type="button"
+          disabled={checkoutLoading}
+          onClick={() => void openHotelCheckout()}
+          className={cls}
+        >
+          {checkoutLoading ? '…' : nextAction.label}
+        </button>
+      )
+    }
     return (
-      <Link to={nextAction.href} className={cls}>
+      <button
+        type="button"
+        onClick={() => hotelSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+        className={cls}
+      >
         {nextAction.label}
-      </Link>
+      </button>
     )
   }
+
+  const cancelLabel = (() => {
+    if (hotelObj?.refundable === false) return 'Non remboursable'
+    const deadline = hotelObj?.cancel_deadline
+    if (hotelObj?.refundable === true && deadline) {
+      try {
+        const d = new Date(String(deadline))
+        if (Number.isFinite(d.getTime())) {
+          return `Annulation gratuite jusqu’au ${d.toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'short',
+          })}`
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+    if (hotelObj?.refundable === true) return 'Annulation gratuite'
+    return null
+  })()
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white pb-28 lg:pb-10">
@@ -788,11 +970,15 @@ export default function MyTrip() {
                         À {Math.round(Number(hotelObj.distance_m) / 100) / 10} km du centre
                       </p>
                     ) : null}
-                    {hotelObj.refundable === false ? (
-                      <p className="text-xs font-semibold text-slate-700">Non remboursable</p>
-                    ) : hotelObj.refundable === true ? (
-                      <p className="text-xs font-semibold text-emerald-700">
-                        Annulation gratuite
+                    {cancelLabel ? (
+                      <p
+                        className={`text-xs font-semibold ${
+                          hotelObj.refundable === false
+                            ? 'text-slate-700'
+                            : 'text-emerald-700'
+                        }`}
+                      >
+                        {cancelLabel}
                       </p>
                     ) : null}
                   </div>
@@ -801,36 +987,59 @@ export default function MyTrip() {
                 <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2 lg:flex-col">
-                {(draft.deal_key || hotelObj) && (
-                  <Link
-                    to={hotelHref}
-                    className="flex-1 text-center border border-primary-200 bg-white hover:bg-primary-50 text-primary-700 font-bold py-3.5 rounded-xl min-h-[48px] lg:hidden"
-                  >
-                    Réserver l’hôtel
-                    {party.hotelTotal > 0 ? ` · ${party.hotelTotal} €` : ''}
-                  </Link>
-                )}
-                {!wantsCompose ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setComposeOpen(true)
-                      const next = new URLSearchParams(searchParams)
-                      next.set('compose', '1')
-                      setSearchParams(next, { replace: true })
-                    }}
-                    className="sm:w-auto px-4 text-center text-sm font-semibold text-slate-600 underline-offset-2 hover:underline py-2 min-h-[44px]"
-                  >
-                    Changer d’hôtel
-                  </button>
-                ) : null}
-              </div>
-              {hotelObj?.refundable === false && !flightBooked ? (
-                <p className="text-xs text-slate-500">
-                  Conseil : réserve ton vol d’abord, son prix bouge plus vite.
-                </p>
-              ) : null}
+              {hotelBooked ? (
+                <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-3 text-sm space-y-1">
+                  <p className="font-bold text-emerald-900">Hôtel réservé ✓</p>
+                  {hotelConfirmation ? (
+                    <p className="text-slate-700">
+                      N° : <strong>{hotelConfirmation}</strong>
+                    </p>
+                  ) : null}
+                  {hotelHolderEmail ? (
+                    <p className="text-slate-600 text-xs">
+                      Confirmation envoyée à {hotelHolderEmail}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-2">
+                    {(draft.deal_key || hotelObj) && (
+                      <button
+                        type="button"
+                        disabled={checkoutLoading}
+                        onClick={() => void openHotelCheckout()}
+                        className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px] lg:bg-white lg:text-primary-700 lg:border lg:border-primary-200 lg:hover:bg-primary-50 disabled:opacity-60"
+                      >
+                        {checkoutLoading
+                          ? '…'
+                          : `Réserver l’hôtel${
+                              party.hotelTotal > 0 ? ` · ${party.hotelTotal} €` : ''
+                            }`}
+                      </button>
+                    )}
+                    {!wantsCompose ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setComposeOpen(true)
+                          const next = new URLSearchParams(searchParams)
+                          next.set('compose', '1')
+                          setSearchParams(next, { replace: true })
+                        }}
+                        className="text-center text-sm font-semibold text-slate-600 underline-offset-2 hover:underline py-2 min-h-[44px]"
+                      >
+                        Changer d’hôtel
+                      </button>
+                    ) : null}
+                  </div>
+                  {hotelObj?.refundable === false && !flightBooked ? (
+                    <p className="text-xs text-slate-500">
+                      Conseil : réserve ton vol d’abord, son prix bouge plus vite.
+                    </p>
+                  ) : null}
+                </>
+              )}
             </section>
 
             <aside className="rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-sm text-slate-600 leading-relaxed">
@@ -882,6 +1091,19 @@ export default function MyTrip() {
           </div>
         </div>
       </div>
+
+      {checkoutDeal && token ? (
+        <DealCheckoutFlow
+          deal={checkoutDeal}
+          hotelId={hotelObj?.id ? String(hotelObj.id) : checkoutDeal.hotel?.id}
+          draftToken={token}
+          hotelTotalHint={party.hotelTotal}
+          onClose={() => setCheckoutDeal(null)}
+          onBooked={() => {
+            void load()
+          }}
+        />
+      ) : null}
     </div>
   )
 }
