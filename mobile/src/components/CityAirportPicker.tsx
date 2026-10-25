@@ -189,7 +189,13 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                 {selectedGroup?.city || label}
               </Text>
               <Text style={styles.triggerSub} numberOfLines={1}>
-                {selectedCodes.length ? selectedCodes.join(' · ') : 'Ville ou code IATA'}
+                {!selectedCodes.length
+                  ? 'Ville ou code IATA'
+                  : selectedGroup &&
+                      selectedCodes.length === selectedGroup.airports.length &&
+                      selectedCodes.length > 1
+                    ? `Tous les aéroports · ${selectedCodes.join(' · ')}`
+                    : selectedCodes.join(' · ')}
               </Text>
             </>
           )}

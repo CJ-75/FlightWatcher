@@ -62,7 +62,8 @@ export function SearchScreen() {
   const { height: windowH } = useWindowDimensions()
   const compact = windowH < 780
 
-  const [airport, setAirport] = useState('BVA')
+  /** Empty until airports load → default Paris (ville), never lone BVA. */
+  const [airport, setAirport] = useState('')
   const [budget, setBudget] = useState(150)
   const [passengers, setPassengers] = useState(1)
   const [directOnly, setDirectOnly] = useState(false)
@@ -88,7 +89,9 @@ export function SearchScreen() {
     type: 'depart' | 'retour'
     index: number
   } | null>(null)
-  const expandedDefaultRef = useRef(false)
+  const defaultedOriginRef = useRef(false)
+  /** Prefill from Affiner — expand to city once catalog is ready. */
+  const pendingOriginRef = useRef<string | null>(null)
   const autoSearchPendingRef = useRef(false)
   const scrollRef = useRef<ScrollView>(null)
 
@@ -98,8 +101,8 @@ export function SearchScreen() {
     if (!p) return
     let consumed = false
     if (p.origin) {
-      setAirport(String(p.origin).toUpperCase())
-      expandedDefaultRef.current = true
+      pendingOriginRef.current = String(p.origin).toUpperCase()
+      defaultedOriginRef.current = false // re-apply city expansion once catalog ready
       consumed = true
     }
     if (p.adults && p.adults >= 1) {
@@ -134,21 +137,47 @@ export function SearchScreen() {
     getApi()
       .getAirports()
       .then((raw) => {
-        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
-        setAirports(list)
-        // First load: BVA → all Paris airports (CDG, ORY, BVA…)
-        if (!expandedDefaultRef.current && list.length) {
-          expandedDefaultRef.current = true
-          const groups = groupAirportsByCity(list)
-          const paris = findCityGroupByCodes(groups, ['BVA', 'CDG', 'ORY'])
-          if (paris && paris.airports.length > 1) {
-            const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
-            if (encoded) setAirport(encoded)
-          }
-        }
+        setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] }))
       })
       .catch(() => undefined)
   }, [])
+
+  // City-first origin: Paris metro by default; Affiner BVA → all Paris airports
+  useEffect(() => {
+    if (!airports.length) return
+    const pending = pendingOriginRef.current
+    if (defaultedOriginRef.current && !pending) return
+    defaultedOriginRef.current = true
+
+    const groups = groupAirportsByCity(airports)
+    const expandToCity = (encoded: string) => {
+      const codes = parseAirportCodes(encoded)
+      if (!codes.length) return encoded
+      const group = findCityGroupByCodes(groups, codes)
+      if (!group || group.airports.length <= 1) return encoded
+      return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
+    }
+
+    if (pending) {
+      pendingOriginRef.current = null
+      setAirport(expandToCity(pending))
+      return
+    }
+
+    const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
+    if (paris) {
+      const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+      if (encoded) {
+        setAirport(encoded)
+        return
+      }
+    }
+    const fallback = findCityGroupByCodes(groups, ['CDG', 'ORY', 'BVA'])
+    if (fallback) {
+      const encoded = encodeAirportCodes(fallback.airports.map((a) => a.code))
+      if (encoded) setAirport(encoded)
+    }
+  }, [airports, route.params])
 
   useEffect(() => {
     if (preset !== 'flexible') setPresetDates(generateDatesFromPreset(preset))
