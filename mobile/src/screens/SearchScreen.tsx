@@ -29,13 +29,13 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   isValidAirportSelection,
-  normalizeAirports,
   normalizeDestinations,
   parseAirportCodes,
   translate,
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
+import { getCachedAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import type { MainTabParamList, RootStackParamList } from '../../App'
 import { CityAirportPicker } from '../components/CityAirportPicker'
@@ -134,11 +134,8 @@ export function SearchScreen() {
   }, [route.params, navigation])
 
   useEffect(() => {
-    getApi()
-      .getAirports()
-      .then((raw) => {
-        setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] }))
-      })
+    getCachedAirports()
+      .then(setAirports)
       .catch(() => undefined)
   }, [])
 

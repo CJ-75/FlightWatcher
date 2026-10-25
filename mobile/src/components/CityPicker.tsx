@@ -16,6 +16,7 @@ import {
   cityImageUrl,
   findCityGroupByKey,
   groupAirportsByCity,
+  resolvePopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow } from '../theme'
@@ -45,16 +46,21 @@ export function CityPicker({
     [groups, valueKey],
   )
 
+  const popularGroups = useMemo(
+    () => resolvePopularCityGroups(groups, airports),
+    [groups, airports],
+  )
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return groups
+    if (!q) return popularGroups
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
         g.country.toLowerCase().includes(q) ||
         g.airports.some((a) => a.code.toLowerCase().includes(q)),
     )
-  }, [groups, query])
+  }, [groups, popularGroups, query])
 
   useEffect(() => {
     if (!open) setQuery('')

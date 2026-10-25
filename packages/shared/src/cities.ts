@@ -50,6 +50,34 @@ export function resolvePopularAirports(airports: Airport[]): Airport[] {
   )
 }
 
+/**
+ * Popular city groups for instant picker open (deduped, order of POPULAR_AIRPORT_CODES).
+ * Full catalog only when the user types.
+ */
+export function resolvePopularCityGroups(
+  groups: CityAirportGroup[],
+  airports: Airport[],
+): CityAirportGroup[] {
+  if (!groups.length) return []
+  const byCode = new Map<string, CityAirportGroup>()
+  for (const g of groups) {
+    for (const a of g.airports) {
+      byCode.set(a.code.toUpperCase(), g)
+    }
+  }
+  const seen = new Set<string>()
+  const out: CityAirportGroup[] = []
+  for (const code of POPULAR_AIRPORT_CODES) {
+    const g = byCode.get(code)
+    if (!g || seen.has(g.key)) continue
+    seen.add(g.key)
+    out.push(g)
+  }
+  // Fallback if catalog misses popular codes
+  if (!out.length) return groups.slice(0, 12)
+  return out
+}
+
 function normalizeCityKey(city: string): string {
   return city
     .normalize('NFD')

@@ -19,10 +19,10 @@ import {
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
-  normalizeAirports,
   parseAirportCodes,
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getCachedAirports } from '../lib/airportsCache'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { OccasionIcon } from '../components/OccasionIcon'
@@ -71,10 +71,8 @@ export function DealsScreen() {
   }, [])
 
   useEffect(() => {
-    getApi()
-      .getAirports()
-      .then(async (raw) => {
-        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+    getCachedAirports()
+      .then(async (list) => {
         setAirports(list)
         if (originHydratedRef.current) return
         originHydratedRef.current = true

@@ -29,12 +29,12 @@ import {
   formatDateFr,
   generateDatesFromPreset,
   groupAirportsByCity,
-  normalizeAirports,
   normalizeDestinations,
   parseAirportCodes,
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
+import { getCachedAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
@@ -86,9 +86,8 @@ export function PlannerScreen() {
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
 
   React.useEffect(() => {
-    getApi()
-      .getAirports()
-      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+    getCachedAirports()
+      .then(setAirports)
       .catch(() => undefined)
   }, [])
 
@@ -495,9 +494,8 @@ function CreateTripModal({
 
   React.useEffect(() => {
     if (!visible) return
-    getApi()
-      .getAirports()
-      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+    getCachedAirports()
+      .then(setAirports)
       .catch(() => undefined)
   }, [visible])
 

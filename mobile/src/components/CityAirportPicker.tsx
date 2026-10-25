@@ -19,6 +19,7 @@ import {
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
+  resolvePopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
@@ -64,9 +65,15 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     return () => clearInterval(id)
   }, [showPlaceholder])
 
+  // Empty query = popular hubs only (instant). Typing = full catalog filter.
+  const popularGroups = useMemo(
+    () => resolvePopularCityGroups(groups, airports),
+    [groups, airports],
+  )
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return groups
+    if (!q) return popularGroups
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
@@ -77,7 +84,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             a.name.toLowerCase().includes(q),
         ),
     )
-  }, [groups, query])
+  }, [groups, popularGroups, query])
 
   const exactAirport = useMemo(() => {
     const q = query.trim().toUpperCase()
@@ -269,7 +276,9 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             </Pressable>
           </View>
           <Text style={styles.sheetHint}>
-            Choisis une ville — tous ses aéroports sont inclus (tu pourras affiner ensuite).
+            {query.trim()
+              ? 'Résultats de recherche'
+              : 'Villes fréquentes — tape pour chercher partout'}
           </Text>
           <TextInput
             value={query}
@@ -306,11 +315,18 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             data={filtered}
             keyExtractor={(g) => g.key}
             keyboardShouldPersistTaps="handled"
+            initialNumToRender={16}
+            maxToRenderPerBatch={16}
+            windowSize={7}
             renderItem={({ item }) => renderCity(item)}
             ListEmptyComponent={
               exactAirport ? null : (
                 <Text style={styles.empty}>
-                  {query.trim() ? 'Aucune ville trouvée' : 'Chargement des villes…'}
+                  {query.trim()
+                    ? 'Aucune ville trouvée'
+                    : airports.length
+                      ? 'Aucune ville populaire'
+                      : 'Chargement…'}
                 </Text>
               )
             }

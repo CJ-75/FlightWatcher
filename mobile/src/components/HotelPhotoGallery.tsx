@@ -225,7 +225,7 @@ export function HotelPhotoGallery({
 
       {closeGuard ? (
         <Modal visible transparent animationType="none" onRequestClose={() => setCloseGuard(false)}>
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setCloseGuard(false)} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCloseGuard(false)} />
         </Modal>
       ) : null}
 

@@ -8,6 +8,7 @@ import {
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
+  resolvePopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
@@ -72,22 +73,27 @@ export function CityAirportSelect({ value, onChange }: Props) {
     return () => window.clearInterval(id)
   }, [showAnimatedPlaceholder])
 
+  const popularGroups = useMemo(
+    () => resolvePopularCityGroups(groups, airports),
+    [groups, airports],
+  )
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = !q
-      ? groups
-      : groups.filter(
-          (g) =>
-            g.city.toLowerCase().includes(q) ||
-            g.country.toLowerCase().includes(q) ||
-            g.airports.some(
-              (a) =>
-                a.code.toLowerCase().includes(q) ||
-                a.name.toLowerCase().includes(q),
-            ),
-        )
-    return list.slice(0, 40)
-  }, [groups, query])
+    if (!q) return popularGroups
+    return groups
+      .filter(
+        (g) =>
+          g.city.toLowerCase().includes(q) ||
+          g.country.toLowerCase().includes(q) ||
+          g.airports.some(
+            (a) =>
+              a.code.toLowerCase().includes(q) ||
+              a.name.toLowerCase().includes(q),
+          ),
+      )
+      .slice(0, 40)
+  }, [groups, popularGroups, query])
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {

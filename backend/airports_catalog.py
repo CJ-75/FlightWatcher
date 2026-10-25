@@ -125,9 +125,9 @@ def _load_tp_dumps() -> Tuple[List[dict], Dict[str, dict]]:
         _CACHE["airports"] = airports
         _CACHE["cities"] = cities
         _CACHE["at"] = now
-        print(f"  ✓ Travelpayouts dump: {len(airports)} airports, {len(cities)} cities")
+        print(f"  OK Travelpayouts dump: {len(airports)} airports, {len(cities)} cities")
     except Exception as e:
-        print(f"⚠️ Travelpayouts airports dump: {e}")
+        print(f"Travelpayouts airports dump: {e}")
         if _CACHE["airports"] is None:
             _CACHE["airports"] = []
         if _CACHE["cities"] is None:
@@ -220,7 +220,7 @@ def common_airports_from_travelpayouts(
         )
         seen.add(code)
 
-    print(f"  ✓ Catalogue commun: {len(out)} aéroport(s)")
+    print(f"  OK Catalogue commun: {len(out)} aeroport(s)")
     return out
 
 

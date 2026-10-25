@@ -104,6 +104,15 @@ function MainTabs() {
   const insets = useSafeAreaInsets()
   const tabClearance = FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
 
+  // Prefetch airports only (do NOT mount Deals eagerly — freezes cold start)
+  React.useEffect(() => {
+    void import('./src/lib/airportsCache')
+      .then(({ getCachedAirports }) => getCachedAirports())
+      .catch((e) => {
+        if (__DEV__) console.warn('[airports] prefetch failed', e)
+      })
+  }, [])
+
   return (
     <Tab.Navigator
       tabBar={(props) => <FloatingTabBar {...props} />}
@@ -133,11 +142,10 @@ function MainTabs() {
         component={SearchScreen}
         options={{ title: 'Recherche', headerShown: false }}
       />
-      {/* Mount at app start so wall is warm when user opens the tab */}
       <Tab.Screen
         name="Deals"
         component={DealsScreen}
-        options={{ title: 'Deals', headerShown: false, lazy: false }}
+        options={{ title: 'Deals', headerShown: false }}
       />
       <Tab.Screen
         name="Planner"
