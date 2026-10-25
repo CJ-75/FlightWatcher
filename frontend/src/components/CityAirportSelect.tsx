@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Airport } from '../types'
 import {
-  airportChipLabelFr,
   airportSelectionLabel,
   encodeAirportCodes,
   findCityGroupByCodes,
@@ -238,7 +237,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
                       ✓
                     </span>
                   </span>
-                  {airportChipLabelFr(a.code, selectedGroup.city)}
+                  {a.code}
                 </motion.button>
               )
             })}

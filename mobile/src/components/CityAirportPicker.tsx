@@ -12,7 +12,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
 import {
-  airportChipLabelFr,
   airportDisplayNameFr,
   airportSelectionLabel,
   encodeAirportCodes,
@@ -140,10 +139,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     if (!selectedCodes.length) return 'Choisis une ville'
     if (!selectedGroup) return airportSelectionLabel(value, groups) || 'Départ'
     if (allSelected && selectedCodes.length > 1) return 'Tous les aéroports'
-    if (selectedCodes.length === 1) {
-      return airportChipLabelFr(selectedCodes[0], selectedGroup.city)
-    }
-    return `${selectedCodes.length} aéroports sélectionnés`
+    return selectedCodes.join(' · ')
   })()
 
   const renderCity = (group: CityAirportGroup) => {
@@ -237,7 +233,6 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           <View style={styles.subRow}>
             {selectedGroup.airports.map((a) => {
               const on = selectedCodes.includes(a.code)
-              const chip = airportChipLabelFr(a.code, selectedGroup.city)
               return (
                 <Pressable
                   key={a.code}
@@ -252,7 +247,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                     {on ? <Text style={styles.tickMark}>✓</Text> : null}
                   </View>
                   <Text style={[styles.subChipText, on && styles.subChipTextOn]}>
-                    {chip}
+                    {a.code}
                   </Text>
                 </Pressable>
               )
@@ -302,7 +297,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
               </View>
               <View style={styles.rowBody}>
                 <Text style={styles.rowCity} numberOfLines={1}>
-                  Uniquement {airportChipLabelFr(exactAirport.code, exactAirport.city)}
+                  Uniquement {exactAirport.code}
                 </Text>
                 <Text style={styles.rowMeta} numberOfLines={1}>
                   {airportDisplayNameFr(exactAirport.code, exactAirport.name)}
