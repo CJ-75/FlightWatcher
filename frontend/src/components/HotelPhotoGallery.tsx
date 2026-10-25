@@ -73,10 +73,13 @@ export function HotelPhotoGallery({
   })
   const [loading, setLoading] = useState(false)
   const [lightbox, setLightbox] = useState<number | null>(null)
+  /** Blocks ghost taps after close (mobile: × lands on deal close underneath). */
+  const [closeGuard, setCloseGuard] = useState(false)
   const [mobileIdx, setMobileIdx] = useState(0)
   const thumbStripRef = useRef<HTMLDivElement>(null)
   const mobileScrollerRef = useRef<HTMLDivElement>(null)
   const touchX = useRef<number | null>(null)
+  const guardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const seedKey = (seedPhotos || []).join('|')
 
@@ -119,12 +122,25 @@ export function HotelPhotoGallery({
     }
   }, [hotelId, seedPhoto, language, seedKey])
 
+  useEffect(
+    () => () => {
+      if (guardTimerRef.current) clearTimeout(guardTimerRef.current)
+    },
+    [],
+  )
+
   const openAt = useCallback((idx: number) => {
     if (!photos.length) return
     setLightbox(Math.max(0, Math.min(idx, photos.length - 1)))
   }, [photos.length])
 
-  const closeLightbox = useCallback(() => setLightbox(null), [])
+  const closeLightbox = useCallback(() => {
+    setLightbox(null)
+    // Absorb the trailing click/tap so it doesn't hit deal × / backdrop
+    setCloseGuard(true)
+    if (guardTimerRef.current) clearTimeout(guardTimerRef.current)
+    guardTimerRef.current = setTimeout(() => setCloseGuard(false), 420)
+  }, [])
 
   const go = useCallback(
     (delta: number) => {
@@ -331,6 +347,22 @@ export function HotelPhotoGallery({
         </button>
       </div>
 
+      {/* Absorb ghost tap after close (same corner as deal × on mobile) */}
+      {closeGuard ? (
+        <div
+          className="fixed inset-0 z-[85]"
+          aria-hidden
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+          }}
+        />
+      ) : null}
+
       {/* Fullscreen lightbox — mobile-first */}
       <AnimatePresence>
         {lightbox != null ? (
@@ -347,6 +379,8 @@ export function HotelPhotoGallery({
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
             }}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 px-3 sm:px-6 py-2.5 text-white shrink-0">
               <div className="min-w-0 flex-1">
@@ -361,7 +395,15 @@ export function HotelPhotoGallery({
                 </span>
                 <button
                   type="button"
-                  onClick={closeLightbox}
+                  onPointerDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    closeLightbox()
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
                   className="w-11 h-11 rounded-full bg-white/15 active:bg-white/25 text-white text-2xl font-bold transition-colors flex items-center justify-center"
                   aria-label="Fermer la galerie"
                 >

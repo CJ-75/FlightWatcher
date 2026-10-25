@@ -139,10 +139,14 @@ export function DealDetailScreen({ route, navigation }: Props) {
     deal.image_url ||
     ''
   ).trim()
-  const seedPhotos = [
-    ...(selected?.photos || deal.hotel?.photos || []),
-    hotelPhoto,
-  ].filter((u, i, arr) => u && arr.indexOf(u) === i)
+  const seedPhotos = useMemo(
+    () =>
+      [
+        ...(selected?.photos || deal.hotel?.photos || []),
+        hotelPhoto,
+      ].filter((u, i, arr) => u && arr.indexOf(u) === i),
+    [selected?.photos, deal.hotel?.photos, hotelPhoto],
+  )
 
   const openUrl = async (url: string) => {
     if (!url) return

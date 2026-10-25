@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -62,26 +62,33 @@ export function HotelPhotoGallery({
   const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList>(null)
   const lightboxRef = useRef<FlatList>(null)
+  const loadedKeyRef = useRef<string | null>(null)
+  const guardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [photos, setPhotos] = useState<HotelGalleryPhoto[]>(() =>
     toPhotos([...(seedPhotos || []), seedPhoto]),
   )
   const [index, setIndex] = useState(0)
   const [lightbox, setLightbox] = useState<number | null>(null)
+  const [closeGuard, setCloseGuard] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const seedKey = useMemo(
-    () => [...(seedPhotos || []), seedPhoto || ''].join('|'),
-    [seedPhotos, seedPhoto],
-  )
+  const seedKey = [...(seedPhotos || []), seedPhoto || ''].join('|')
 
   useEffect(() => {
     const seeds = toPhotos([...(seedPhotos || []), seedPhoto])
+    const hid = (hotelId || '').trim()
+    const key = `${hid}|${seedKey}`
+
+    // Skip reset/refetch when parent re-renders with same hotel (e.g. Modal close)
+    if (loadedKeyRef.current === key) return
+
     setPhotos(seeds)
     setIndex(0)
-    setLightbox(null)
 
-    const hid = (hotelId || '').trim()
-    if (!hid || hid === 'primary') return
+    if (!hid || hid === 'primary') {
+      loadedKeyRef.current = key
+      return
+    }
 
     let cancelled = false
     setLoading(true)
@@ -95,9 +102,11 @@ export function HotelPhotoGallery({
         const next = (res.photos || []).filter((p) => p?.url)
         if (next.length) setPhotos(next)
         else if (seeds.length) setPhotos(seeds)
+        loadedKeyRef.current = key
       })
       .catch(() => {
         if (!cancelled && seeds.length) setPhotos(seeds)
+        if (!cancelled) loadedKeyRef.current = key
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -108,11 +117,25 @@ export function HotelPhotoGallery({
     }
   }, [hotelId, seedPhoto, seedKey])
 
+  useEffect(
+    () => () => {
+      if (guardTimerRef.current) clearTimeout(guardTimerRef.current)
+    },
+    [],
+  )
+
   const onMomentum = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x
     const i = Math.round(x / SCREEN_W)
     setIndex(Math.max(0, Math.min(i, photos.length - 1)))
   }, [photos.length])
+
+  const closeLightbox = useCallback(() => {
+    setLightbox(null)
+    setCloseGuard(true)
+    if (guardTimerRef.current) clearTimeout(guardTimerRef.current)
+    guardTimerRef.current = setTimeout(() => setCloseGuard(false), 420)
+  }, [])
 
   const openLightbox = (i: number) => {
     setLightbox(i)
@@ -200,11 +223,17 @@ export function HotelPhotoGallery({
         ) : null}
       </View>
 
+      {closeGuard ? (
+        <Modal visible transparent animationType="none" onRequestClose={() => setCloseGuard(false)}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setCloseGuard(false)} />
+        </Modal>
+      ) : null}
+
       <Modal
         visible={lightbox != null}
         animationType="fade"
         presentationStyle="fullScreen"
-        onRequestClose={() => setLightbox(null)}
+        onRequestClose={closeLightbox}
         statusBarTranslucent
       >
         <View style={[styles.lightbox, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -224,7 +253,7 @@ export function HotelPhotoGallery({
               {(lightbox ?? 0) + 1} / {count}
             </Text>
             <Pressable
-              onPress={() => setLightbox(null)}
+              onPress={closeLightbox}
               style={styles.closeBtn}
               hitSlop={12}
             >

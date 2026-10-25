@@ -264,10 +264,14 @@ export function DealDetailModal({
     ''
   ).trim()
   if (!hotelPhoto) return null
-  const seedPhotos = [
-    ...(selected?.photos || deal.hotel?.photos || []),
-    hotelPhoto,
-  ].filter((u, i, arr) => u && arr.indexOf(u) === i)
+  const seedPhotos = useMemo(
+    () =>
+      [
+        ...(selected?.photos || deal.hotel?.photos || []),
+        hotelPhoto,
+      ].filter((u, i, arr) => u && arr.indexOf(u) === i),
+    [selected?.photos, deal.hotel?.photos, hotelPhoto],
+  )
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
 
