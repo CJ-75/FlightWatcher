@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   airportSelectionLabel,
+  dedupeDealsByHotelTitle,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -382,23 +383,30 @@ export function DealsTab() {
     return list
   }, [deals, queryOrigin, queryDestination, hasWallFilter])
 
+  const gridDeals = useMemo(() => {
+    const sorted =
+      sort === 'recommended'
+        ? matchedDeals
+        : [...matchedDeals].sort((a, b) => {
+            const dir = sort === 'price_asc' ? 1 : -1
+            return dir * ((a.price_per_person || 0) - (b.price_per_person || 0))
+          })
+    // One hotel title per page — same hotel / different flight → keep best first
+    return dedupeDealsByHotelTitle(sorted)
+  }, [sort, matchedDeals])
+
   /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
-    return deals.filter((d) => {
+    const raw = deals.filter((d) => {
       if (queryOrigin && d.flags?.match_origin === false) return true
       if (queryDestination && d.flags?.match_destination === false) return true
       return false
     })
-  }, [deals, queryOrigin, queryDestination, hasWallFilter])
-
-  const gridDeals = useMemo(() => {
-    if (sort === 'recommended') return matchedDeals
-    const dir = sort === 'price_asc' ? 1 : -1
-    return [...matchedDeals].sort(
-      (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
-    )
-  }, [sort, matchedDeals])
+    const occupied = new Set<string>()
+    dedupeDealsByHotelTitle(gridDeals, occupied)
+    return dedupeDealsByHotelTitle(raw, occupied)
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, gridDeals])
 
   const durationTabs: { id: DurationTab; label: string }[] = [
     { id: 'weekend', label: t('deals.durationWeekend') },

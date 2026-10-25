@@ -171,3 +171,39 @@ export function hotelPublicTotal(hotel: TravelDealHotel & { public_hotel_price?:
   }
   return 0
 }
+
+/** Normalized hotel title for wall uniqueness (accents/case/spaces ignored). */
+export function hotelTitleKey(deal: TravelDeal): string | null {
+  const raw = (deal.hotel_name || deal.hotel?.name || '').trim()
+  if (!raw) return null
+  const key = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!key || key === 'hotel') return null
+  return key
+}
+
+/**
+ * One card per hotel title on the wall. Keeps first occurrence (caller should
+ * sort first). Same hotel + different flight → keep the better deal only.
+ * Optional `occupied` shares keys across main grid + filler sections.
+ */
+export function dedupeDealsByHotelTitle<T extends TravelDeal>(
+  deals: T[],
+  occupied?: Set<string>,
+): T[] {
+  const seen = occupied ?? new Set<string>()
+  const out: T[] = []
+  for (const deal of deals) {
+    const byTitle = hotelTitleKey(deal)
+    const byId = (deal.hotel?.id || '').trim().toLowerCase()
+    const keys = [byTitle, byId ? `id:${byId}` : null].filter(Boolean) as string[]
+    if (keys.some((k) => seen.has(k))) continue
+    for (const k of keys) seen.add(k)
+    out.push(deal)
+  }
+  return out
+}
