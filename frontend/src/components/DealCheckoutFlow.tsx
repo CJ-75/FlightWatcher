@@ -22,6 +22,9 @@ interface Props {
   /** Lot D — guest MyTrip: skip login, pass to prebook/book */
   draftToken?: string | null
   onBooked?: (booking: HotelBooking) => void
+  /** Lot E — hotel no longer available at these dates */
+  onUnavailable?: () => void
+  onAccountCta?: () => void
   /** Compact récap dates / hotel total for MyTrip */
   hotelTotalHint?: number | null
 }
@@ -63,6 +66,8 @@ export function DealCheckoutFlow({
   onNeedLogin,
   draftToken,
   onBooked,
+  onUnavailable,
+  onAccountCta,
   hotelTotalHint,
 }: Props) {
   const { t } = useI18n()
@@ -106,10 +111,12 @@ export function DealCheckoutFlow({
       else if (res.action === 'fallback' && res.hotel_switched) setStep('confirm')
       else setStep('guests')
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
+      const msg = e instanceof Error ? e.message : t('app.error')
+      setError(msg)
+      if (/indisponible|unavailable|409/i.test(msg)) onUnavailable?.()
       setStep('error')
     }
-  }, [deal, dealKey, guestMode, hotelId, onClose, onNeedLogin, t])
+  }, [deal, dealKey, guestMode, hotelId, onClose, onNeedLogin, onUnavailable, t])
 
   useEffect(() => {
     void runRevalidate()
@@ -147,7 +154,11 @@ export function DealCheckoutFlow({
       })
       setStep('pay')
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
+      const msg = e instanceof Error ? e.message : t('app.error')
+      setError(msg)
+      if (/indisponible|unavailable|409/i.test(msg)) {
+        onUnavailable?.()
+      }
       setStep('error')
     }
   }
@@ -231,7 +242,9 @@ export function DealCheckoutFlow({
       setShowAccountCta(guestMode)
       setStep('done')
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
+      const msg = e instanceof Error ? e.message : t('app.error')
+      setError(msg)
+      // Keep holder fields — retry payment without re-typing
       setStep('error')
     }
   }
@@ -437,6 +450,7 @@ export function DealCheckoutFlow({
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Link
                         to={`/login?email=${encodeURIComponent(email)}`}
+                        onClick={() => onAccountCta?.()}
                         className="flex-1 text-center bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[44px]"
                       >
                         Créer un compte
@@ -475,7 +489,17 @@ export function DealCheckoutFlow({
                 <p className="text-sm text-red-600">{error || 'Erreur'}</p>
                 <button
                   type="button"
-                  onClick={() => void runRevalidate()}
+                  onClick={() => {
+                    if (firstName && lastName && email && bookingId) {
+                      setStep('pay')
+                      return
+                    }
+                    if (firstName && lastName && email) {
+                      setStep('guests')
+                      return
+                    }
+                    void runRevalidate()
+                  }}
                   className="w-full border border-line font-bold py-3 rounded-xl min-h-[48px]"
                 >
                   Réessayer

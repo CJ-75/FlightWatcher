@@ -279,6 +279,9 @@ def collect_launch_metrics(supabase, *, cfg=None) -> Dict[str, Any]:
         clicks, drafts_by_token, days=7, window_h=24.0
     )
 
+    # Lot E — Mon voyage conversion funnel (7d)
+    out["my_trip_funnel"] = collect_my_trip_funnel(supabase, days=7)
+
     # Active deals by origin
     try:
         res = (
@@ -295,3 +298,49 @@ def collect_launch_metrics(supabase, *, cfg=None) -> Dict[str, Any]:
         out["deals_by_origin"] = {"error": str(e), "origins": [], "total_active": 0}
 
     return out
+
+
+FUNNEL_STEPS = (
+    "view",
+    "company_click",
+    "flight_booked_yes",
+    "flight_booked_no",
+    "hotel_checkout_open",
+    "hotel_paid",
+    "account_cta",
+)
+
+
+def collect_my_trip_funnel(supabase, *, days: int = 7) -> Dict[str, Any]:
+    """Count my_trip_events by type over N days."""
+    since = (_now() - timedelta(days=days)).isoformat()
+    counts = {k: 0 for k in FUNNEL_STEPS}
+    try:
+        res = (
+            supabase.table("my_trip_events")
+            .select("event, draft_token, created_at")
+            .gte("created_at", since)
+            .limit(5000)
+            .execute()
+        )
+        rows = res.data or []
+    except Exception as e:
+        return {"days": days, "error": str(e), "counts": counts, "unique_drafts": 0}
+
+    drafts = set()
+    for r in rows:
+        ev = (r.get("event") or "").strip().lower()
+        if ev in counts:
+            counts[ev] += 1
+        tok = (r.get("draft_token") or "").strip()
+        if tok:
+            drafts.add(tok)
+
+    views = counts.get("view") or 0
+    paid = counts.get("hotel_paid") or 0
+    return {
+        "days": days,
+        "counts": counts,
+        "unique_drafts": len(drafts),
+        "view_to_paid_pct": round(100.0 * paid / views, 1) if views else None,
+    }

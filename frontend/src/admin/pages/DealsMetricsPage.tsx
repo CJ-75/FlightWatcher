@@ -40,6 +40,13 @@ type Launch = {
     window_h?: number
     days?: number
   }
+  my_trip_funnel?: {
+    days?: number
+    counts?: Record<string, number>
+    unique_drafts?: number
+    view_to_paid_pct?: number | null
+    error?: string
+  }
   deals_by_origin?: {
     total_active?: number
     origins?: OriginRow[]
@@ -154,6 +161,7 @@ export function DealsMetricsPage() {
   const kill = launch?.kill_switch
   const rise = launch?.price_rise
   const ret = launch?.mon_voyage_return
+  const funnel = launch?.my_trip_funnel
   const byOrigin = launch?.deals_by_origin
   const verdict = !gng
     ? '—'
@@ -271,6 +279,50 @@ export function DealsMetricsPage() {
               </p>
               <p className="text-xs text-gray-500">
                 Compte : « J’ai réservé ✓ », feedback prix, ou rechargement de la page trip.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-gray-700 bg-[#252836] p-4 space-y-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold text-gray-300">
+                  2b. Entonnoir Mon voyage (Lot E)
+                </p>
+                <p className="text-sm text-gray-400">
+                  {funnel?.days ?? 7} j · {funnel?.unique_drafts ?? 0} voyages
+                </p>
+              </div>
+              {funnel?.error ? (
+                <p className="text-sm text-amber-300">
+                  {funnel.error} — appliquez apply_mytrip_events_lot_e_migration.sql
+                </p>
+              ) : null}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {(
+                  [
+                    ['view', 'Vues'],
+                    ['company_click', 'Clic compagnie'],
+                    ['flight_booked_yes', 'Vol réservé'],
+                    ['hotel_checkout_open', 'Checkout hôtel'],
+                    ['hotel_paid', 'Hôtel payé'],
+                    ['account_cta', 'CTA compte'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div
+                    key={key}
+                    className="rounded-lg bg-gray-900/60 border border-gray-800 px-3 py-2"
+                  >
+                    <p className="text-[11px] text-gray-500 uppercase tracking-wide">
+                      {label}
+                    </p>
+                    <p className="text-xl font-black text-white tabular-nums">
+                      {funnel?.counts?.[key] ?? 0}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">
+                Vue → payé :{' '}
+                {funnel?.view_to_paid_pct != null ? `${funnel.view_to_paid_pct} %` : '—'}
               </p>
             </div>
 

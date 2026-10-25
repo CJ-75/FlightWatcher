@@ -218,6 +218,51 @@ def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
         return (res.data or [{**row, "payload": payload}])[0]
 
 
+ALLOWED_TRIP_EVENTS = frozenset(
+    {
+        "view",
+        "company_click",
+        "flight_booked_yes",
+        "flight_booked_no",
+        "hotel_checkout_open",
+        "hotel_paid",
+        "account_cta",
+    }
+)
+
+
+def record_trip_event(
+    supabase,
+    draft_token: str,
+    event: str,
+    *,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Lot E — conversion funnel event (no auth; token is the proof)."""
+    token = (draft_token or "").strip()
+    ev = (event or "").strip().lower()
+    if not token:
+        return {"ok": False, "error": "missing_token"}
+    if ev not in ALLOWED_TRIP_EVENTS:
+        return {"ok": False, "error": "invalid_event"}
+    row = get_draft(supabase, token)
+    if not row:
+        return {"ok": False, "error": "not_found"}
+    payload = {
+        "draft_token": token,
+        "event": ev,
+        "meta": meta or {},
+        "created_at": _now().isoformat(),
+    }
+    try:
+        res = supabase.table("my_trip_events").insert(payload).execute()
+        data = (res.data or [payload])[0]
+        return {"ok": True, "event": data}
+    except Exception as e:
+        logger.warning("record_trip_event: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
 def mark_hotel_booked(
     supabase,
     draft_token: str,

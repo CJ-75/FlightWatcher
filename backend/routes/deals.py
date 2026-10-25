@@ -1055,11 +1055,12 @@ async def email_my_trip(draft_token: str, body: MyTripEmailRequest):
 async def my_trip_flight_booked(draft_token: str):
     """Lot F — « J'ai réservé mon vol ✓ » unlocks hotel step."""
     try:
-        from deals.my_trips import mark_flight_booked
+        from deals.my_trips import mark_flight_booked, record_trip_event
 
         row = mark_flight_booked(_svc(), draft_token)
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable")
+        record_trip_event(_svc(), draft_token, "flight_booked_yes")
         return row
     except HTTPException:
         raise
@@ -1079,7 +1080,7 @@ async def my_trip_hotel_booked(
 ):
     """Lot D — guest hotel payment done (no account required)."""
     try:
-        from deals.my_trips import mark_hotel_booked
+        from deals.my_trips import mark_hotel_booked, record_trip_event
 
         b = body or MyTripHotelBookedBody()
         row = mark_hotel_booked(
@@ -1091,7 +1092,41 @@ async def my_trip_hotel_booked(
         )
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable")
+        record_trip_event(
+            _svc(),
+            draft_token,
+            "hotel_paid",
+            meta={
+                "booking_id": b.booking_id,
+                "confirmation_code": b.confirmation_code,
+            },
+        )
         return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MyTripEventBody(BaseModel):
+    event: str
+    meta: Optional[Dict[str, Any]] = None
+
+
+@router.post("/api/deals/my-trip/{draft_token}/event")
+async def my_trip_event(draft_token: str, body: MyTripEventBody):
+    """Lot E — funnel event (view, company_click, flight_booked_*, …)."""
+    try:
+        from deals.my_trips import record_trip_event
+
+        result = record_trip_event(
+            _svc(), draft_token, body.event, meta=body.meta or {}
+        )
+        if not result.get("ok"):
+            err = result.get("error") or "error"
+            code = 404 if err == "not_found" else 400
+            raise HTTPException(status_code=code, detail=err)
+        return result
     except HTTPException:
         raise
     except Exception as e:

@@ -357,6 +357,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify(body || {}) },
       ),
 
+    trackMyTripEvent: (
+      draftToken: string,
+      event: string,
+      meta?: Record<string, unknown>,
+    ) =>
+      request<{ ok: boolean; error?: string }>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/event`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ event, meta: meta || {} }),
+        },
+      ),
+
     recordFlightClick: (body: {
       deal_key: string
       verification_level?: string

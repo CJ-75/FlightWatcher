@@ -76,10 +76,27 @@ export default function MyTrip() {
   const [copyDone, setCopyDone] = useState(false)
   const [checkoutDeal, setCheckoutDeal] = useState<TravelDeal | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [priceChange, setPriceChange] = useState<{ from: number; to: number } | null>(
+    null,
+  )
+  const [flightUnavailable, setFlightUnavailable] = useState(false)
+  const [hotelUnavailable, setHotelUnavailable] = useState(false)
+  const [switchingHotel, setSwitchingHotel] = useState(false)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
   const hotelSectionRef = useRef<HTMLElement | null>(null)
   const autoBookHotel = useRef(searchParams.get('book_hotel') === '1')
+  const trackedView = useRef(false)
+
+  const track = useCallback(
+    (event: string, meta?: Record<string, unknown>) => {
+      if (!token) return
+      void getApiClient()
+        .trackMyTripEvent(token, event, meta)
+        .catch(() => undefined)
+    },
+    [token],
+  )
 
   const load = useCallback(async () => {
     if (!token) return
@@ -88,6 +105,12 @@ export default function MyTrip() {
     try {
       const row = await getApiClient().getMyTrip(token)
       setDraft(row)
+      if (!trackedView.current) {
+        trackedView.current = true
+        void getApiClient()
+          .trackMyTripEvent(token, 'view')
+          .catch(() => undefined)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Voyage introuvable')
       setDraft(null)
@@ -277,6 +300,7 @@ export default function MyTrip() {
   const onFlightClick = async () => {
     leftForFlight.current = true
     leftForFlightAt.current = Date.now()
+    track('company_click', { airline: airlineName, site: carrier.siteLabel })
     if (!draft?.deal_key && !payload.deal_key) return
     try {
       const res = await getApiClient().recordFlightClick({
@@ -320,6 +344,7 @@ export default function MyTrip() {
   const onFlightNotYet = () => {
     setAskFlightBooked(false)
     leftForFlight.current = false
+    track('flight_booked_no')
   }
 
   useEffect(() => {
@@ -470,6 +495,7 @@ export default function MyTrip() {
     if (!draft || hotelBooked) return
     setCheckoutLoading(true)
     setError(null)
+    setHotelUnavailable(false)
     try {
       let deal: TravelDeal | null = null
       const key = String(draft.deal_key || payload.deal_key || '')
@@ -500,6 +526,7 @@ export default function MyTrip() {
           },
         }
       }
+      track('hotel_checkout_open', { deal_key: key || null })
       setCheckoutDeal(deal)
       const next = new URLSearchParams(searchParams)
       next.delete('book_hotel')
@@ -515,7 +542,69 @@ export default function MyTrip() {
     payload.deal_key,
     searchParams,
     setSearchParams,
+    track,
   ])
+
+  /** Soft revalidate on load — price change / flight gone (§7). */
+  useEffect(() => {
+    if (!draft?.deal_key || loading) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await getApiClient().revalidateDealFlight(
+          String(draft.deal_key),
+          adults,
+        )
+        if (cancelled || !res?.ok) return
+        if (res.available === false) {
+          setFlightUnavailable(true)
+          return
+        }
+        const displayed = Number(res.displayed_pp)
+        const checked = Number(res.checked_pp)
+        if (
+          Number.isFinite(displayed) &&
+          Number.isFinite(checked) &&
+          Math.abs(checked - displayed) >= 1
+        ) {
+          const fromTotal = Math.round(displayed) * adults + party.hotelTotal
+          const toTotal = Math.round(checked) * adults + party.hotelTotal
+          setPriceChange({ from: fromTotal, to: toTotal })
+        }
+      } catch {
+        /* soft fail */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [adults, draft?.deal_key, loading, party.hotelTotal])
+
+  const altHotels = useMemo(() => {
+    const raw = payload.alt_hotels
+    if (!Array.isArray(raw)) return [] as Record<string, any>[]
+    return raw.filter((h) => h && typeof h === 'object').slice(0, 2)
+  }, [payload.alt_hotels])
+
+  const pickAltHotel = async (hotel: Record<string, any>) => {
+    if (!token || !hotel?.id) return
+    setSwitchingHotel(true)
+    try {
+      const row = await getApiClient().updateMyTripHotel(token, {
+        hotel: {
+          id: String(hotel.id),
+          name: hotel.name,
+          public_hotel_price: hotel.public_hotel_price,
+        },
+      })
+      setDraft(row)
+      setHotelUnavailable(false)
+    } catch {
+      setHotelUnavailable(true)
+    } finally {
+      setSwitchingHotel(false)
+    }
+  }
 
   useEffect(() => {
     if (!autoBookHotel.current || !draft || hotelBooked || loading) return
@@ -754,13 +843,21 @@ export default function MyTrip() {
       <div className="max-w-[1080px] mx-auto px-4 py-8">
         <div className="mb-6 lg:mb-8">
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-            Ton week-end à {city}
+            {flightBooked && hotelBooked
+              ? `Ton voyage à ${city} est prêt`
+              : `Ton week-end à ${city}`}
           </h1>
           <p className="text-slate-600 mt-1.5">
             {formatDate(outDate)} → {formatDate(retDate)}
             {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
             {` · ${travelersLabel}`}
           </p>
+          {priceChange ? (
+            <p className="mt-3 text-sm font-medium text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+              Le prix a changé depuis ta recherche : {priceChange.from} € →{' '}
+              {priceChange.to} €
+            </p>
+          ) : null}
         </div>
 
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
@@ -790,6 +887,22 @@ export default function MyTrip() {
                 )}
               </div>
 
+              {flightUnavailable && !flightBooked ? (
+                <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-sm text-amber-950 space-y-2">
+                  <p className="font-semibold">Ce vol n’apparaît plus au même prix</p>
+                  <p className="text-xs text-amber-900/80">
+                    Vérifie sur le site de la compagnie — le lien ci-dessous reste
+                    disponible.
+                  </p>
+                  <Link
+                    to="/deals"
+                    className="inline-block text-xs font-bold text-primary-700 underline-offset-2 hover:underline"
+                  >
+                    Voir d’autres dates
+                  </Link>
+                </div>
+              ) : null}
+
               {flightBooked ? (
                 <p className="text-sm text-slate-700">
                   <span className="font-bold text-slate-900">
@@ -798,6 +911,8 @@ export default function MyTrip() {
                   {' · '}
                   {formatDate(outDate)} → {formatDate(retDate)}
                   {stopsLabel ? ` · ${stopsLabel}` : ''}
+                  {outTime ? ` · ${outTime}` : ''}
+                  {retTime ? ` / ${retTime}` : ''}
                 </p>
               ) : (
                 <>
@@ -987,6 +1102,55 @@ export default function MyTrip() {
                 <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
               )}
 
+              {hotelUnavailable && !hotelBooked ? (
+                <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-3 space-y-3">
+                  <p className="text-sm font-semibold text-amber-950">
+                    Cet hôtel n’est plus disponible à ces dates
+                  </p>
+                  {altHotels.length > 0 ? (
+                    <div className="space-y-2">
+                      {altHotels.map((h) => {
+                        const hid = String(h.id || h.hotel_id || '')
+                        const price =
+                          h.public_hotel_price != null
+                            ? Math.round(Number(h.public_hotel_price))
+                            : null
+                        return (
+                          <button
+                            key={hid}
+                            type="button"
+                            disabled={switchingHotel || !hid}
+                            onClick={() => void pickAltHotel(h)}
+                            className="w-full text-left rounded-xl border border-slate-200 bg-white px-3 py-2.5 hover:border-primary-300 disabled:opacity-60"
+                          >
+                            <p className="text-sm font-bold text-slate-900 truncate">
+                              {String(h.name || 'Hôtel')}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              {price != null ? `${price} €` : 'Prix à confirmer'}
+                              {h.stars != null ? ` · ${h.stars}★` : ''}
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComposeOpen(true)
+                        const next = new URLSearchParams(searchParams)
+                        next.set('compose', '1')
+                        setSearchParams(next, { replace: true })
+                      }}
+                      className="text-sm font-bold text-primary-700 underline-offset-2 hover:underline"
+                    >
+                      Choisir un autre hôtel
+                    </button>
+                  )}
+                </div>
+              ) : null}
+
               {hotelBooked ? (
                 <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-3 text-sm space-y-1">
                   <p className="font-bold text-emerald-900">Hôtel réservé ✓</p>
@@ -1001,7 +1165,7 @@ export default function MyTrip() {
                     </p>
                   ) : null}
                 </div>
-              ) : (
+              ) : !hotelUnavailable ? (
                 <>
                   <div className="flex flex-col gap-2">
                     {(draft.deal_key || hotelObj) && (
@@ -1039,7 +1203,7 @@ export default function MyTrip() {
                     </p>
                   ) : null}
                 </>
-              )}
+              ) : null}
             </section>
 
             <aside className="rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-sm text-slate-600 leading-relaxed">
@@ -1099,6 +1263,11 @@ export default function MyTrip() {
           draftToken={token}
           hotelTotalHint={party.hotelTotal}
           onClose={() => setCheckoutDeal(null)}
+          onUnavailable={() => {
+            setCheckoutDeal(null)
+            setHotelUnavailable(true)
+          }}
+          onAccountCta={() => track('account_cta')}
           onBooked={() => {
             void load()
           }}
