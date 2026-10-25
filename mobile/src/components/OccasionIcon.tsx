@@ -1,6 +1,5 @@
 import React from 'react'
-import { View } from 'react-native'
-import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
+import { Text, View } from 'react-native'
 import { resolveOccasionIconId, type OccasionIconId } from '@flightwatcher/shared'
 import { colors } from '../theme'
 
@@ -11,6 +10,10 @@ type Props = {
   color?: string
 }
 
+/**
+ * Lightweight occasion glyphs — no @expo/vector-icons (missing in this Expo app).
+ * Same resolveOccasionIconId mapping as web SVG OccasionIcon.
+ */
 export function OccasionIcon({
   icon,
   slug,
@@ -19,52 +22,62 @@ export function OccasionIcon({
 }: Props) {
   const id = resolveOccasionIconId(icon, slug)
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <VectorIcon id={id} size={size} color={color} />
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Text
+        style={{
+          fontSize: Math.round(size * 0.92),
+          lineHeight: size,
+          color,
+          textAlign: 'center',
+        }}
+      >
+        {glyphFor(id)}
+      </Text>
     </View>
   )
 }
 
-function VectorIcon({
-  id,
-  size,
-  color,
-}: {
-  id: OccasionIconId
-  size: number
-  color: string
-}) {
+function glyphFor(id: OccasionIconId): string {
   switch (id) {
     case 'briefcase':
-      return <Feather name="briefcase" size={size} color={color} />
+      return '💼'
     case 'calendar':
-      return <Feather name="calendar" size={size} color={color} />
+      return '📅'
     case 'clock':
-      return <Feather name="clock" size={size} color={color} />
+      return '⏱'
     case 'heart':
-      return <Feather name="heart" size={size} color={color} />
+      return '♥'
     case 'gift':
-      return <Feather name="gift" size={size} color={color} />
+      return '🎁'
     case 'euro':
-      return <MaterialCommunityIcons name="currency-eur" size={size} color={color} />
+      return '€'
     case 'compass':
-      return <Feather name="compass" size={size} color={color} />
+      return '🧭'
     case 'sun':
-      return <Feather name="sun" size={size} color={color} />
+      return '☀'
     case 'thermometer':
-      return <Feather name="thermometer" size={size} color={color} />
+      return '🌡'
     case 'luggage':
-      return <MaterialCommunityIcons name="bag-suitcase-outline" size={size} color={color} />
+      return '🧳'
     case 'tree':
-      return <MaterialCommunityIcons name="pine-tree" size={size} color={color} />
+      return '🎄'
     case 'bridge':
-      return <MaterialCommunityIcons name="bridge" size={size} color={color} />
+      return '🌉'
     case 'champagne':
-      return <MaterialCommunityIcons name="glass-flute" size={size} color={color} />
+      return '🥂'
     case 'moon':
-      return <Feather name="moon" size={size} color={color} />
+      return '🌙'
     case 'sparkles':
     default:
-      return <Ionicons name="sparkles-outline" size={size} color={color} />
+      return '✨'
   }
 }

@@ -18,6 +18,10 @@ _flag_cache_lock = threading.Lock()
 _flag_cache: Dict[str, Tuple[float, Any]] = {}
 _FLAG_CACHE_TTL_S = 60.0
 
+# Hard floor — a wall under 30 feels empty / broken (audit)
+WALL_MIN_DEALS = 30
+WALL_MAX_DEALS = 48
+
 
 def invalidate_list_cache() -> None:
     """Call after promote / materialize / rates so clients see fresh wall."""
@@ -459,7 +463,12 @@ def _is_weekend_outbound(out_date: str, window_kind: Optional[str] = None) -> bo
     return d.weekday() in (4, 5, 6)
 
 
-def _deal_matches_duration(deal: Dict[str, Any], duration: Optional[str]) -> bool:
+def _deal_matches_duration(
+    deal: Dict[str, Any],
+    duration: Optional[str],
+    *,
+    strict_weekend: bool = True,
+) -> bool:
     """Client duration tabs: weekend | short | week."""
     tab = (duration or "").strip().lower() or None
     if not tab:
@@ -469,12 +478,51 @@ def _deal_matches_duration(deal: Dict[str, Any], duration: Optional[str]) -> boo
     out = str(dates.get("outbound") or "")[:10]
     wk = deal.get("window_kind")
     if tab == "weekend":
-        return 1 <= nights <= 3 and _is_weekend_outbound(out, wk if isinstance(wk, str) else None)
+        if not (1 <= nights <= 3):
+            return False
+        if not strict_weekend:
+            return True
+        return _is_weekend_outbound(out, wk if isinstance(wk, str) else None)
     if tab == "short":
         return 4 <= nights <= 5
     if tab == "week":
         return 6 <= nights <= 9
     return True
+
+
+def _apply_duration_with_floor(
+    deals: List[Dict[str, Any]],
+    duration: Optional[str],
+    *,
+    min_deals: int = WALL_MIN_DEALS,
+) -> List[Dict[str, Any]]:
+    """
+    Prefer true weekend (Fri/Sat/Sun). If pool < min_deals, backfill other
+    1–3 night stays so the wall never looks broken.
+    """
+    tab = (duration or "").strip().lower() or None
+    if not tab:
+        return list(deals)
+    preferred = [d for d in deals if _deal_matches_duration(d, tab, strict_weekend=True)]
+    if len(preferred) >= min_deals or tab != "weekend":
+        # short/week: no backfill across night bands
+        if tab != "weekend":
+            return preferred
+        if len(preferred) >= min_deals:
+            return preferred
+    # Weekend backfill: keep preferred first, then other short stays
+    seen = {str(d.get("deal_key") or d.get("id")) for d in preferred}
+    for d in deals:
+        if len(preferred) >= min_deals:
+            break
+        if not _deal_matches_duration(d, "weekend", strict_weekend=False):
+            continue
+        key = str(d.get("deal_key") or d.get("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        preferred.append(d)
+    return preferred
 
 
 def _photos_from_pool(supabase, hotel_ids: List[str]) -> Dict[str, str]:
@@ -791,7 +839,7 @@ def diversify_wall_deals(
     max_per_city: int = MAX_PER_CITY,
     max_per_country: int = MAX_PER_COUNTRY,
 ) -> List[Dict[str, Any]]:
-    """Strict wall variety: ≤2 cards / city, ≤3 / country (order preserved)."""
+    """Strict wall variety: ≤max_per_city / city, ≤max_per_country / country."""
     city_n: Dict[str, int] = {}
     country_n: Dict[str, int] = {}
     out: List[Dict[str, Any]] = []
@@ -808,6 +856,37 @@ def diversify_wall_deals(
         if country:
             country_n[country] = country_n.get(country, 0) + 1
     return out
+
+
+def diversify_wall_min(
+    deals: List[Dict[str, Any]],
+    *,
+    target: int,
+    min_deals: int = WALL_MIN_DEALS,
+) -> List[Dict[str, Any]]:
+    """
+    Diversify then relax city/country caps until we hit min_deals (or exhaust pool).
+    Prefer variety, but never ship a thin wall when inventory exists.
+    """
+    want = max(int(min_deals), int(target))
+    # Progressive relaxation: (city, country)
+    caps = [
+        (2, 3),
+        (3, 4),
+        (4, 5),
+        (6, 8),
+        (99, 99),
+    ]
+    best: List[Dict[str, Any]] = []
+    for city_cap, country_cap in caps:
+        best = diversify_wall_deals(
+            deals, max_per_city=city_cap, max_per_country=country_cap
+        )
+        if len(best) >= min(want, len(deals)):
+            break
+        if len(best) >= min_deals:
+            break
+    return best[:want]
 
 
 def compute_human_title(deal: Dict[str, Any]) -> Optional[str]:
@@ -1109,7 +1188,8 @@ def list_community_deals(
     log = logging.getLogger("deals.community_list")
     t0 = time.monotonic()
     adults_n = int(adults or 2)
-    target = max(12, min(int(limit or 36), 48))
+    # Never aim below WALL_MIN_DEALS — thin walls are banned
+    target = max(WALL_MIN_DEALS, min(int(limit or 36), WALL_MAX_DEALS))
     occasion_slug = (occasion or "").strip().lower() or None
     duration_tab = (duration or "").strip().lower() or None
     if duration_tab not in ("weekend", "short", "week"):
@@ -1117,9 +1197,9 @@ def list_community_deals(
     with _list_cache_lock:
         epoch = _list_cache_epoch
     cache_key = (
-        f"hp3|{epoch}|{origin or ''}|{destination or ''}|"
+        f"hp4|{epoch}|{origin or ''}|{destination or ''}|"
         f"{adults_n}|{max_pp}|{occasion_slug or ''}|{duration_tab or ''}|"
-        f"{target}"
+        f"{target}|min{WALL_MIN_DEALS}"
     )
     now = time.monotonic()
     with _list_cache_lock:
@@ -1153,8 +1233,8 @@ def list_community_deals(
     dest_codes = _expand_destination_iatas(supabase, destination)
     origin_set = set(origin_codes)
     dest_set = set(dest_codes)
-    # Single fetch large enough for match + fillers; one enrich pass
-    fetch_n = max(target * 3, 40)
+    # Oversample: duration + diversify shrink the pool — aim well above floor
+    fetch_n = max(target * 5, 120)
 
     all_rows = _fetch_active_rows(
         supabase, codes=None, limit=fetch_n, occasion=occasion_slug
@@ -1252,8 +1332,8 @@ def list_community_deals(
             if occasion_slug in [str(t).lower() for t in (d.get("occasion_tags") or [])]
         ]
     if duration_tab:
-        out = [d for d in out if _deal_matches_duration(d, duration_tab)]
-    out = diversify_wall_deals(out)[:target]
+        out = _apply_duration_with_floor(out, duration_tab, min_deals=WALL_MIN_DEALS)
+    out = diversify_wall_min(out, target=target, min_deals=WALL_MIN_DEALS)
     with _list_cache_lock:
         _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])
         if len(_list_cache) > 64:

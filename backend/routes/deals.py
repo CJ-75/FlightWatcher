@@ -127,7 +127,10 @@ async def list_deals(
         description="weekend | short | week — weekend = Fri/Sat/Sun depart + 1–3 nights",
     ),
     limit: Optional[int] = Query(
-        36, ge=12, le=48, description="Taille du mur (défaut 36, max 48)"
+        36,
+        ge=30,
+        le=48,
+        description="Taille du mur (min 30, défaut 36, max 48) — mur <30 interdit",
     ),
 ):
     """List deals. Cache-only when DEALS_PROVIDER=liteapi; community when DEALS_SOURCE=community."""

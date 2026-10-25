@@ -47,25 +47,6 @@ function writeStoredOrigin(value: string) {
   }
 }
 
-function isWeekendOutbound(deal: { dates?: { outbound?: string }; window_kind?: string | null }): boolean {
-  const wk = String(deal.window_kind || '').toUpperCase()
-  if (wk === 'FRI_SUN' || wk === 'SAT_MON') return true
-  const out = String(deal.dates?.outbound || '').slice(0, 10)
-  if (out.length < 10) return false
-  const day = new Date(`${out}T12:00:00`).getDay() // 0=Sun … 5=Fri 6=Sat
-  return day === 0 || day === 5 || day === 6
-}
-
-function dealMatchesDuration(
-  deal: { nights?: number; dates?: { outbound?: string }; window_kind?: string | null },
-  tab: DurationTab,
-): boolean {
-  const n = Number(deal.nights) || 0
-  if (tab === 'weekend') return n >= 1 && n <= 3 && isWeekendOutbound(deal)
-  if (tab === 'short') return n >= 4 && n <= 5
-  return n >= 6 && n <= 9
-}
-
 function shortOriginLabel(encoded: string, airports: Airport[]): string {
   if (!encoded) return ''
   const groups = groupAirportsByCity(airports)
@@ -324,6 +305,8 @@ export function DealsTab() {
 
   const hasWallFilter = Boolean(queryOrigin || queryDestination)
 
+  // Duration is applied server-side (with ≥30 floor + weekend backfill).
+  // Do not re-strip midweek fillers here — that would recreate a thin wall.
   const matchedDeals = useMemo(() => {
     let list = deals
     if (hasWallFilter) {
@@ -333,21 +316,18 @@ export function DealsTab() {
         return true
       })
     }
-    list = list.filter((d) => dealMatchesDuration(d, durationTab))
     return list
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
+  }, [deals, queryOrigin, queryDestination, hasWallFilter])
 
   /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
-    return deals
-      .filter((d) => {
-        if (queryOrigin && d.flags?.match_origin === false) return true
-        if (queryDestination && d.flags?.match_destination === false) return true
-        return false
-      })
-      .filter((d) => dealMatchesDuration(d, durationTab))
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
+    return deals.filter((d) => {
+      if (queryOrigin && d.flags?.match_origin === false) return true
+      if (queryDestination && d.flags?.match_destination === false) return true
+      return false
+    })
+  }, [deals, queryOrigin, queryDestination, hasWallFilter])
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
