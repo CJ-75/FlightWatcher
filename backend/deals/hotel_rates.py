@@ -53,17 +53,21 @@ def is_due(
 def _any_late_arrival(
     supabase: Any, *, destination_id: str, window_id: str
 ) -> bool:
-    result = (
-        supabase.table("deal_flight_cache")
-        .select("late_arrival")
-        .eq("destination_id", destination_id)
-        .eq("window_id", window_id)
-        .eq("status", "ok")
-        .eq("late_arrival", True)
-        .limit(1)
-        .execute()
-    )
-    return bool(result.data)
+    # deal_flight_cache retired — no late-arrival gate from that table
+    try:
+        result = (
+            supabase.table("deal_flight_cache")
+            .select("late_arrival")
+            .eq("destination_id", destination_id)
+            .eq("window_id", window_id)
+            .eq("status", "ok")
+            .eq("late_arrival", True)
+            .limit(1)
+            .execute()
+        )
+        return bool(result.data)
+    except Exception:
+        return False
 
 
 def _load_pool(supabase: Any, destination_id: str) -> List[Dict[str, Any]]:

@@ -125,6 +125,12 @@ class TestDealKey(unittest.TestCase):
         self.assertEqual(parsed["window_id"], "2026-11-06-2026-11-08")
         self.assertEqual(parsed["adults"], 2)
 
+    def test_looks_community_deal_key(self):
+        from deals.deal_assemble import _looks_community_deal_key
+
+        self.assertTrue(_looks_community_deal_key("BVA-BGY-2026-11-06-2026-11-08-a2"))
+        self.assertFalse(_looks_community_deal_key("BVA-LIS-2026-W44-FRI_SUN-2"))
+
 
 class TestAssembleOne(unittest.TestCase):
     def test_price_pp(self):

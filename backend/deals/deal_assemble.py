@@ -404,18 +404,25 @@ def load_caches_and_assemble(
         .eq("adults", adults_n)
         .execute()
     )
-    flights = (
-        supabase.table("deal_flight_cache")
-        .select("*")
-        .eq("status", "ok")
-        .execute()
-    )
+    # deal_flight_cache dropped (apply_drop_legacy_deals_caches.sql) — community
+    # flights live in deals_active; keep empty list for legacy assemble path.
+    flight_rows: List[Dict[str, Any]] = []
+    try:
+        flights = (
+            supabase.table("deal_flight_cache")
+            .select("*")
+            .eq("status", "ok")
+            .execute()
+        )
+        flight_rows = list(flights.data or [])
+    except Exception as e:
+        logger.debug("deal_flight_cache skip (retired?): %s", e)
 
     return assemble_deals_from_caches(
         destinations=list(dests.data or []),
         windows=list(wins.data or []),
         rates_rows=list(rates.data or []),
-        flight_rows=list(flights.data or []),
+        flight_rows=flight_rows,
         origin=origin,
         adults=adults_n,
         window_kind=window,
@@ -428,32 +435,50 @@ def get_deal_from_caches(
     supabase: Any,
     deal_key: str,
 ) -> Optional[Dict[str, Any]]:
+    # Community first: keys like BVA-BGY-…-a2 live on deals_active only
+    try:
+        from deals.community_list import get_community_deal
+        from deals.liteapi_config import load_deals_config
+
+        if load_deals_config().is_community or _looks_community_deal_key(deal_key):
+            deal = get_community_deal(supabase, deal_key)
+            if deal:
+                return deal
+    except Exception as e:
+        logger.debug("get_community_deal: %s", e)
+
     parsed = parse_deal_key(deal_key)
     if parsed:
-        deals = load_caches_and_assemble(
-            supabase,
-            origin=parsed["origin"],
-            adults=parsed["adults"],
-        )
-        for d in deals:
-            if d.get("deal_key") == deal_key or d.get("id") == deal_key:
-                return d
-        # Broader: same dest/window/adults any origin then filter
-        all_deals = load_caches_and_assemble(
-            supabase,
-            origin=None,
-            adults=parsed["adults"],
-        )
-        for d in all_deals:
-            if d.get("deal_key") == deal_key or d.get("id") == deal_key:
-                return d
-    # Community wall: exact deal_key on deals_active (dates + aN suffix)
+        try:
+            deals = load_caches_and_assemble(
+                supabase,
+                origin=parsed["origin"],
+                adults=parsed["adults"],
+            )
+            for d in deals:
+                if d.get("deal_key") == deal_key or d.get("id") == deal_key:
+                    return d
+            all_deals = load_caches_and_assemble(
+                supabase,
+                origin=None,
+                adults=parsed["adults"],
+            )
+            for d in all_deals:
+                if d.get("deal_key") == deal_key or d.get("id") == deal_key:
+                    return d
+        except Exception as e:
+            logger.warning("load_caches_and_assemble: %s", e)
+
+    # Last resort exact key on deals_active
     try:
         from deals.community_list import get_community_deal
 
-        deal = get_community_deal(supabase, deal_key)
-        if deal:
-            return deal
+        return get_community_deal(supabase, deal_key)
     except Exception:
-        pass
-    return None
+        return None
+
+
+def _looks_community_deal_key(deal_key: str) -> bool:
+    """True for promote keys ending in -aN (vs assemble …-N)."""
+    tail = (deal_key or "").rsplit("-", 1)[-1]
+    return len(tail) >= 2 and tail[0] in ("a", "A") and tail[1:].isdigit()
