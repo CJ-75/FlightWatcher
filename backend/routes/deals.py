@@ -129,8 +129,8 @@ async def list_deals(
     limit: Optional[int] = Query(
         36,
         ge=30,
-        le=48,
-        description="Taille du mur (min 30, défaut 36, max 48) — mur <30 interdit",
+        le=120,
+        description="Taille du mur (min 30, défaut 36, max 120) — mur <30 interdit",
     ),
 ):
     """List deals. Cache-only when DEALS_PROVIDER=liteapi; community when DEALS_SOURCE=community."""
