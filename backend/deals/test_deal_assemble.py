@@ -116,6 +116,15 @@ class TestDealKey(unittest.TestCase):
         self.assertEqual(parsed["window_id"], "2026-W44-FRI_SUN")
         self.assertEqual(parsed["adults"], 2)
 
+    def test_community_aN_suffix(self):
+        key = "BVA-BGY-2026-11-06-2026-11-08-a2"
+        parsed = parse_deal_key(key)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["origin"], "BVA")
+        self.assertEqual(parsed["dest_iata"], "BGY")
+        self.assertEqual(parsed["window_id"], "2026-11-06-2026-11-08")
+        self.assertEqual(parsed["adults"], 2)
+
 
 class TestAssembleOne(unittest.TestCase):
     def test_price_pp(self):

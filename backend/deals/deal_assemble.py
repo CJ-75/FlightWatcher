@@ -45,20 +45,28 @@ def make_deal_key(origin: str, dest_iata: str, window_id: str, adults: int) -> s
 
 def parse_deal_key(deal_key: str) -> Optional[Dict[str, Any]]:
     """
-    Format: ORIGIN-DEST-WINDOW_ID-ADULTS
-    window_id itself contains dashes (e.g. 2026-W42-FRI_SUN).
+    Formats:
+    - Assemble: ORIGIN-DEST-WINDOW_ID-ADULTS  (e.g. BVA-LIS-2026-W44-FRI_SUN-2)
+    - Community: ORIGIN-DEST-OUT-RET-aN       (e.g. BVA-BGY-2026-11-06-2026-11-08-a2)
+    window_id / date range may contain dashes.
     """
     parts = (deal_key or "").strip().split("-")
     if len(parts) < 4:
         return None
+    adult_raw = parts[-1]
+    adults: Optional[int] = None
     try:
-        adults = int(parts[-1])
+        adults = int(adult_raw)
     except ValueError:
-        return None
+        # Community promote suffix: a2, a4, …
+        if len(adult_raw) >= 2 and adult_raw[0] in ("a", "A") and adult_raw[1:].isdigit():
+            adults = int(adult_raw[1:])
+        else:
+            return None
     origin = parts[0].upper()
     dest = parts[1].upper()
     window_id = "-".join(parts[2:-1])
-    if len(origin) != 3 or len(dest) != 3 or not window_id:
+    if len(origin) != 3 or len(dest) != 3 or not window_id or adults is None:
         return None
     return {
         "origin": origin,
@@ -421,23 +429,31 @@ def get_deal_from_caches(
     deal_key: str,
 ) -> Optional[Dict[str, Any]]:
     parsed = parse_deal_key(deal_key)
-    if not parsed:
-        return None
-    deals = load_caches_and_assemble(
-        supabase,
-        origin=parsed["origin"],
-        adults=parsed["adults"],
-    )
-    for d in deals:
-        if d.get("deal_key") == deal_key or d.get("id") == deal_key:
-            return d
-    # Broader: same dest/window/adults any origin then filter
-    all_deals = load_caches_and_assemble(
-        supabase,
-        origin=None,
-        adults=parsed["adults"],
-    )
-    for d in all_deals:
-        if d.get("deal_key") == deal_key or d.get("id") == deal_key:
-            return d
+    if parsed:
+        deals = load_caches_and_assemble(
+            supabase,
+            origin=parsed["origin"],
+            adults=parsed["adults"],
+        )
+        for d in deals:
+            if d.get("deal_key") == deal_key or d.get("id") == deal_key:
+                return d
+        # Broader: same dest/window/adults any origin then filter
+        all_deals = load_caches_and_assemble(
+            supabase,
+            origin=None,
+            adults=parsed["adults"],
+        )
+        for d in all_deals:
+            if d.get("deal_key") == deal_key or d.get("id") == deal_key:
+                return d
+    # Community wall: exact deal_key on deals_active (dates + aN suffix)
+    try:
+        from deals.community_list import get_community_deal
+
+        deal = get_community_deal(supabase, deal_key)
+        if deal:
+            return deal
+    except Exception:
+        pass
     return None
