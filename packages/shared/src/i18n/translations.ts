@@ -74,13 +74,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.bookFlight': 'Réserver le vol',
     'deals.bookHotelSoon': 'Réserver l’hôtel (bientôt)',
     'deals.filterOrigin': 'Départ',
-    'deals.filterDestination': 'Ville d’arrivée',
-    'deals.filterDestinationHint':
-      'Filtre le mur et les hôtels sur cette ville (tous aéroports).',
-    'deals.filterOriginHint':
-      'Optionnel — priorise les vols depuis cette ville / aéroport.',
-    'deals.clearDestination': 'Toutes les villes',
-    'deals.clearOrigin': 'Tous les départs',
+    'deals.filterDestination': 'Arrivée',
+    'deals.filterRouteHint':
+      'Optionnels — filtrent le mur (arrivée = ville / hôtels).',
+    'deals.clearDestination': 'Effacer',
+    'deals.clearOrigin': 'Effacer',
     'deals.filterBudget': 'Budget max / pers.',
     'deals.filterWindow': 'Week-end',
     'deals.filterAll': 'Tous',
@@ -438,13 +436,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.bookFlight': 'Book flight',
     'deals.bookHotelSoon': 'Book hotel (coming soon)',
     'deals.filterOrigin': 'From',
-    'deals.filterDestination': 'Arrival city',
-    'deals.filterDestinationHint':
-      'Filters the wall and hotels for this city (all airports).',
-    'deals.filterOriginHint':
-      'Optional — prioritise flights from this city / airport.',
-    'deals.clearDestination': 'All cities',
-    'deals.clearOrigin': 'All departures',
+    'deals.filterDestination': 'To',
+    'deals.filterRouteHint':
+      'Optional — filter the wall (arrival = city / hotels).',
+    'deals.clearDestination': 'Clear',
+    'deals.clearOrigin': 'Clear',
     'deals.filterBudget': 'Max budget / pers.',
     'deals.filterWindow': 'Weekend',
     'deals.filterAll': 'All',

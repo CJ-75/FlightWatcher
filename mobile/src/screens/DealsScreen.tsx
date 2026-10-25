@@ -7,25 +7,16 @@ import {
   RefreshControl,
   ActivityIndicator,
   Pressable,
-  Alert,
 } from 'react-native'
-import type { MainTabParamList } from '../../App'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, TravelDeal } from '@flightwatcher/shared'
-import {
-  formatDateFr,
-  generateDatesFromPreset,
-  normalizeAirports,
-  type DatePresetId,
-  type FlexibleDates,
-} from '@flightwatcher/shared'
+import { normalizeAirports } from '@flightwatcher/shared'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { PassengerStepper } from '../components/PassengerStepper'
-import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
@@ -50,24 +41,7 @@ export function DealsScreen() {
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
-  const [dateModalOpen, setDateModalOpen] = useState(false)
-  const [datePreset, setDatePreset] = useState<DatePresetId>('next-weekend')
-  const [presetDates, setPresetDates] = useState<FlexibleDates>(() =>
-    generateDatesFromPreset('next-weekend'),
-  )
-  const [flexDates, setFlexDates] = useState<FlexibleDates>({
-    dates_depart: [],
-    dates_retour: [],
-  })
   const [airports, setAirports] = useState<Airport[]>([])
-
-  const activeDates = datePreset === 'flexible' ? flexDates : presetDates
-
-  useEffect(() => {
-    if (datePreset !== 'flexible') {
-      setPresetDates(generateDatesFromPreset(datePreset))
-    }
-  }, [datePreset])
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
   const configLoadedRef = useRef(false)
@@ -164,14 +138,16 @@ export function DealsScreen() {
     }, [load]),
   )
 
-  const filterSummary = [
-    destination ? `→ ${destination.split(',')[0]}` : null,
-    origin ? `de ${origin.split(',')[0]}` : null,
-    adults !== 2 ? `${adults} ad.` : null,
-    sort === 'price_asc' ? 'Prix ↑' : sort === 'price_desc' ? 'Prix ↓' : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const filterSummary = (() => {
+    const from = origin ? origin.split(',')[0] : null
+    const to = destination ? destination.split(',')[0] : null
+    const parts: string[] = []
+    if (from && to) parts.push(`${from} → ${to}`)
+    else if (from) parts.push(`de ${from}`)
+    else if (to) parts.push(`→ ${to}`)
+    if (adults !== 2) parts.push(`${adults} ad.`)
+    return parts.join(' · ')
+  })()
 
   const hasWallFilter = Boolean(queryOrigin || queryDestination)
   const matchedDeals = useMemo(() => {
@@ -260,7 +236,7 @@ export function DealsScreen() {
                   <View style={styles.filterToggleText}>
                     <Text style={styles.filterToggleTitle}>Affiner</Text>
                     <Text style={styles.filterToggleHint} numberOfLines={1}>
-                      {filterSummary || 'Toutes villes · 2 voyageurs'}
+                      {filterSummary || 'Tous trajets · 2 voyageurs'}
                     </Text>
                   </View>
                   <Text
@@ -275,193 +251,48 @@ export function DealsScreen() {
 
                 {filtersOpen ? (
                   <View style={styles.filterBody}>
-                    <View style={styles.originRow}>
-                      <Text style={styles.label}>Ville d’arrivée</Text>
-                      {destination ? (
-                        <Pressable onPress={() => setDestination('')} hitSlop={8}>
-                          <Text style={styles.clearOrigin}>Toutes les villes</Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                    <CityAirportPicker
-                      airports={airports}
-                      value={destination}
-                      onChange={setDestination}
-                    />
-                    <Text style={styles.originHint}>
-                      Filtre le mur et les hôtels sur cette ville.
-                    </Text>
+                    <View style={styles.routePair}>
+                      <View style={styles.routeField}>
+                        <View style={styles.originRow}>
+                          <Text style={styles.label}>Départ</Text>
+                          {origin ? (
+                            <Pressable onPress={() => setOrigin('')} hitSlop={8}>
+                              <Text style={styles.clearOrigin}>Effacer</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                        <CityAirportPicker
+                          airports={airports}
+                          value={origin}
+                          onChange={setOrigin}
+                        />
+                      </View>
 
-                    <View style={styles.divider} />
+                      <Text style={styles.routeArrow}>↓</Text>
 
-                    <View style={styles.originRow}>
-                      <Text style={styles.label}>Départ</Text>
-                      {origin ? (
-                        <Pressable onPress={() => setOrigin('')} hitSlop={8}>
-                          <Text style={styles.clearOrigin}>Tous les départs</Text>
-                        </Pressable>
-                      ) : null}
+                      <View style={styles.routeField}>
+                        <View style={styles.originRow}>
+                          <Text style={styles.label}>Arrivée</Text>
+                          {destination ? (
+                            <Pressable onPress={() => setDestination('')} hitSlop={8}>
+                              <Text style={styles.clearOrigin}>Effacer</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                        <CityAirportPicker
+                          airports={airports}
+                          value={destination}
+                          onChange={setDestination}
+                        />
+                      </View>
                     </View>
-                    <CityAirportPicker
-                      airports={airports}
-                      value={origin}
-                      onChange={setOrigin}
-                    />
                     <Text style={styles.originHint}>
-                      Optionnel — priorise les vols depuis cette ville.
+                      Optionnels — filtrent le mur (arrivée = ville / hôtels).
                     </Text>
 
                     <View style={styles.divider} />
 
                     <PassengerStepper value={adults} onChange={setAdults} />
-
-                    <View style={styles.divider} />
-                    <Text style={styles.label}>Quand ?</Text>
-                    <Text style={styles.originHint}>
-                      Même UI que Search — recherche vols live (pas le mur).
-                    </Text>
-                    <View style={styles.presetRow}>
-                      {(
-                        [
-                          {
-                            id: 'next-weekend' as const,
-                            label: 'Weekend prochain',
-                            hint: 'Sam → Dim',
-                          },
-                          {
-                            id: 'flexible' as const,
-                            label: 'Dates libres',
-                            hint: 'Je choisis',
-                          },
-                        ] as const
-                      ).map((p) => {
-                        const active = datePreset === p.id
-                        return (
-                          <Pressable
-                            key={p.id}
-                            onPress={() => {
-                              setDatePreset(p.id)
-                              if (p.id === 'flexible') setDateModalOpen(true)
-                            }}
-                            style={[styles.presetCard, active && styles.presetCardActive]}
-                          >
-                            <Text
-                              style={[
-                                styles.presetLabel,
-                                active && styles.presetLabelActive,
-                              ]}
-                            >
-                              {p.label}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.presetHint,
-                                active && styles.presetHintActive,
-                              ]}
-                            >
-                              {p.hint}
-                            </Text>
-                          </Pressable>
-                        )
-                      })}
-                    </View>
-                    <Pressable
-                      onPress={() => {
-                        setDatePreset('flexible')
-                        setDateModalOpen(true)
-                      }}
-                      style={styles.datesBtn}
-                    >
-                      <Text style={styles.datesBtnText}>
-                        {(() => {
-                          const out = activeDates.dates_depart[0]?.date
-                          const ret =
-                            activeDates.dates_retour[
-                              activeDates.dates_retour.length - 1
-                            ]?.date
-                          if (!out || !ret) return 'Choisir aller / retour'
-                          if (datePreset === 'flexible') {
-                            return `${activeDates.dates_depart.length} aller · ${activeDates.dates_retour.length} retour`
-                          }
-                          return `${formatDateFr(out)} → ${formatDateFr(ret)}`
-                        })()}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => {
-                        const out = activeDates.dates_depart[0]?.date
-                        const ret =
-                          activeDates.dates_retour[
-                            activeDates.dates_retour.length - 1
-                          ]?.date
-                        if (!origin.trim()) {
-                          Alert.alert('Origine', 'Choisis une ville / aéroport de départ')
-                          return
-                        }
-                        if (!out || !ret || ret <= out) {
-                          Alert.alert(
-                            'Dates',
-                            'Indique une date aller et une date retour (retour après l’aller)',
-                          )
-                          setDatePreset('flexible')
-                          setDateModalOpen(true)
-                          return
-                        }
-                        ;(navigation as { navigate: (a: string, b?: object) => void }).navigate(
-                          'Search',
-                          {
-                            origin: origin.trim().toUpperCase(),
-                            destination: destination.trim()
-                              ? destination.trim().toUpperCase()
-                              : undefined,
-                            adults,
-                            outbound: out,
-                            inbound: ret,
-                            autoSearch: true,
-                          } satisfies NonNullable<MainTabParamList['Search']>,
-                        )
-                      }}
-                      style={[
-                        styles.searchBtn,
-                        !(
-                          origin.trim() &&
-                          activeDates.dates_depart[0]?.date &&
-                          activeDates.dates_retour[0]?.date
-                        ) && styles.searchBtnDisabled,
-                      ]}
-                    >
-                      <Text style={styles.searchBtnText}>Lancer la recherche</Text>
-                    </Pressable>
-
-                    <View style={styles.divider} />
-                    <Text style={styles.label}>Trier</Text>
-                    <View style={styles.sortRow}>
-                      {(
-                        [
-                          ['recommended', 'Recommandés'],
-                          ['price_asc', 'Prix ↑'],
-                          ['price_desc', 'Prix ↓'],
-                        ] as const
-                      ).map(([id, label]) => (
-                        <Pressable
-                          key={id}
-                          onPress={() => setSort(id)}
-                          style={[
-                            styles.sortChip,
-                            sort === id && styles.sortChipActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.sortChipText,
-                              sort === id && styles.sortChipTextActive,
-                            ]}
-                          >
-                            {label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
                   </View>
                 ) : null}
               </View>
@@ -563,15 +394,6 @@ export function DealsScreen() {
         />
       )}
 
-      <FlexibleDatesModal
-        visible={dateModalOpen}
-        value={datePreset === 'flexible' ? flexDates : presetDates}
-        onChange={(v) => {
-          setDatePreset('flexible')
-          setFlexDates(v)
-        }}
-        onClose={() => setDateModalOpen(false)}
-      />
     </View>
   )
 }
@@ -665,10 +487,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+    minHeight: 20,
   },
   label: {
     fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
     includeFontPadding: false,
   },
@@ -677,75 +500,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.primary,
   },
+  routePair: {
+    gap: 4,
+  },
+  routeField: {},
+  routeArrow: {
+    alignSelf: 'center',
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.muted,
+    paddingVertical: 2,
+  },
   originHint: {
-    marginTop: 8,
+    marginTop: 10,
     fontFamily: fonts.regular,
     fontSize: 12,
     color: colors.muted,
     lineHeight: 16,
-  },
-  presetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  presetCard: {
-    flexGrow: 1,
-    minWidth: '42%',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  presetCardActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  presetLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.ink,
-  },
-  presetLabelActive: { color: colors.white },
-  presetHint: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.muted,
-  },
-  presetHintActive: { color: 'rgba(255,255,255,0.85)' },
-  datesBtn: {
-    marginTop: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  datesBtnText: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.ink,
-  },
-  searchBtn: {
-    marginTop: 12,
-    backgroundColor: colors.primary,
-    borderRadius: radius.full,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  searchBtnDisabled: {
-    backgroundColor: colors.line,
-  },
-  searchBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.white,
   },
   count: {
     fontFamily: fonts.semibold,

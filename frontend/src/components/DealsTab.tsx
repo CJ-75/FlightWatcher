@@ -1,24 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { formatDateFr, generateDatesFromPreset } from '@flightwatcher/shared'
-import type { DateAvecHoraire, TravelDeal } from '../types'
+import type { TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
-import { DatePresets, type DatePreset } from './DatePresets'
-import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
-
-const fullDay = (d: DateAvecHoraire): DateAvecHoraire => ({
-  date: d.date.slice(0, 10),
-  heure_min: d.heure_min || '06:00',
-  heure_max: d.heure_max || '23:59',
-})
 
 const springConfig = {
   type: 'spring' as const,
@@ -46,22 +37,7 @@ export function DealsTab() {
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
-  const [datePreset, setDatePreset] = useState<DatePreset | null>('next-weekend')
-  const [flexibleDates, setFlexibleDates] = useState<{
-    dates_depart: DateAvecHoraire[]
-    dates_retour: DateAvecHoraire[]
-  }>({ dates_depart: [], dates_retour: [] })
-  const [presetDates, setPresetDates] = useState(() => {
-    const d = generateDatesFromPreset('next-weekend')
-    return {
-      dates_depart: d.dates_depart.map(fullDay),
-      dates_retour: d.dates_retour.map(fullDay),
-    }
-  })
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const activeDates =
-    datePreset === 'flexible' ? flexibleDates : presetDates
 
   useEffect(() => {
     void fetch('/api/config')
@@ -91,38 +67,6 @@ export function DealsTab() {
       destination: opts?.destination || destination || undefined,
       city: opts?.city,
       adults,
-    })
-  }
-
-  const datesReady =
-    Boolean(origin?.trim()) &&
-    activeDates.dates_depart.length > 0 &&
-    activeDates.dates_retour.length > 0
-
-  const runDatedSearch = () => {
-    if (!origin?.trim()) {
-      setToast('Choisis un départ pour lancer la recherche')
-      return
-    }
-    if (
-      activeDates.dates_depart.length === 0 ||
-      activeDates.dates_retour.length === 0
-    ) {
-      setToast('Choisis des dates aller et retour (comme dans Search)')
-      if (datePreset !== 'flexible') setDatePreset('flexible')
-      return
-    }
-    const dates_depart = activeDates.dates_depart.map(fullDay)
-    const dates_retour = activeDates.dates_retour.map(fullDay)
-    openSearchFromDeals({
-      origin: origin.trim(),
-      destination: destination.trim() || undefined,
-      adults,
-      dates_depart,
-      dates_retour,
-      outbound: dates_depart[0]?.date,
-      inbound: dates_retour[dates_retour.length - 1]?.date,
-      autoSearch: true,
     })
   }
 
@@ -230,24 +174,16 @@ export function DealsTab() {
   }
 
   const filterLabel = useMemo(() => {
+    const from = origin ? origin.split(',')[0] || origin : null
+    const to = destination ? destination.split(',')[0] || destination : null
     const parts: string[] = []
-    if (destination) parts.push(`→ ${destination.split(',')[0] || destination}`)
-    if (origin) parts.push(`de ${origin.split(',')[0] || origin}`)
+    if (from && to) parts.push(`${from} → ${to}`)
+    else if (from) parts.push(`de ${from}`)
+    else if (to) parts.push(`→ ${to}`)
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
-    const out = activeDates.dates_depart[0]?.date
-    const ret = activeDates.dates_retour[activeDates.dates_retour.length - 1]?.date
-    if (out && ret) {
-      parts.push(
-        activeDates.dates_depart.length + activeDates.dates_retour.length > 2
-          ? `${activeDates.dates_depart.length} aller · ${activeDates.dates_retour.length} retour`
-          : `${out.slice(5)} → ${ret.slice(5)}`,
-      )
-    }
-    if (sort === 'price_asc') parts.push(t('deals.sortPriceAsc'))
-    else if (sort === 'price_desc') parts.push(t('deals.sortPriceDesc'))
     return parts.join(' · ')
-  }, [destination, origin, adults, activeDates, sort, t])
+  }, [destination, origin, adults])
 
   const hasWallFilter = Boolean(queryOrigin || queryDestination)
 
@@ -303,7 +239,7 @@ export function DealsTab() {
           <div className="min-w-0">
             <p className="text-sm font-bold text-ink">Affiner</p>
             <p className="text-xs text-muted truncate mt-0.5">
-              {filterLabel || 'Toutes villes · 2 voyageurs'}
+              {filterLabel || 'Tous trajets · 2 voyageurs'}
             </p>
           </div>
           <span
@@ -323,116 +259,66 @@ export function DealsTab() {
             className="px-4 pb-4 sm:px-5 sm:pb-5 border-t border-line"
           >
             <div className="pt-4 mb-4 sm:mb-5">
-              <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
-                <label className="text-base sm:text-lg font-bold text-slate-900 block">
-                  {t('deals.filterDestination')}
-                </label>
-                {destination ? (
-                  <button
-                    type="button"
-                    onClick={() => setDestination('')}
-                    className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
-                  >
-                    {t('deals.clearDestination')}
-                  </button>
-                ) : null}
-              </div>
-              <CityAirportSelect value={destination} onChange={setDestination} />
-              <p className="text-xs text-slate-500 mt-2">
-                {t('deals.filterDestinationHint')}
-              </p>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 sm:gap-2 sm:items-start">
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-2 h-7">
+                    <label className="text-sm font-bold text-ink">
+                      {t('deals.filterOrigin')}
+                    </label>
+                    {origin ? (
+                      <button
+                        type="button"
+                        onClick={() => setOrigin('')}
+                        className="text-xs font-semibold text-primary-600 hover:underline shrink-0"
+                      >
+                        {t('deals.clearOrigin')}
+                      </button>
+                    ) : (
+                      <span className="w-12 shrink-0" aria-hidden />
+                    )}
+                  </div>
+                  <CityAirportSelect value={origin} onChange={setOrigin} />
+                </div>
 
-            <div className="mb-4 sm:mb-5">
-              <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
-                <label className="text-base sm:text-lg font-bold text-slate-900 block">
-                  {t('deals.filterOrigin')}
-                </label>
-                {origin ? (
-                  <button
-                    type="button"
-                    onClick={() => setOrigin('')}
-                    className="text-xs sm:text-sm font-semibold text-primary-600 hover:underline"
-                  >
-                    {t('deals.clearOrigin')}
-                  </button>
-                ) : null}
+                <div
+                  className="hidden sm:flex items-center justify-center pt-9 px-1 text-muted"
+                  aria-hidden
+                >
+                  <span className="text-lg font-semibold leading-none">→</span>
+                </div>
+                <div
+                  className="flex sm:hidden items-center justify-center -my-0.5 text-muted"
+                  aria-hidden
+                >
+                  <span className="text-sm font-semibold">↓</span>
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-2 h-7">
+                    <label className="text-sm font-bold text-ink">
+                      {t('deals.filterDestination')}
+                    </label>
+                    {destination ? (
+                      <button
+                        type="button"
+                        onClick={() => setDestination('')}
+                        className="text-xs font-semibold text-primary-600 hover:underline shrink-0"
+                      >
+                        {t('deals.clearDestination')}
+                      </button>
+                    ) : (
+                      <span className="w-12 shrink-0" aria-hidden />
+                    )}
+                  </div>
+                  <CityAirportSelect value={destination} onChange={setDestination} />
+                </div>
               </div>
-              <CityAirportSelect value={origin} onChange={setOrigin} />
-              <p className="text-xs text-slate-500 mt-2">{t('deals.filterOriginHint')}</p>
+              <p className="text-xs text-slate-500 mt-2.5">
+                {t('deals.filterRouteHint')}
+              </p>
             </div>
 
             <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
-
-            <div className="mt-4 pt-4 border-t border-line">
-              <p className="text-xs text-muted mb-1">
-                Même sélecteur que Search — lance une vraie recherche vols (pas le mur).
-              </p>
-              <DatePresets
-                selected={datePreset}
-                onChange={(preset) => {
-                  setDatePreset(preset)
-                  if (preset !== 'flexible') {
-                    const generated = generateDatesFromPreset(preset)
-                    setPresetDates({
-                      dates_depart: generated.dates_depart.map(fullDay),
-                      dates_retour: generated.dates_retour.map(fullDay),
-                    })
-                    setFlexibleDates({ dates_depart: [], dates_retour: [] })
-                  }
-                }}
-                onFlexibleClick={() => setDatePreset('flexible')}
-              />
-              {datePreset === 'flexible' ? (
-                <div className="mb-3">
-                  <FlexibleDatesSelector
-                    flexibleDates={flexibleDates}
-                    onFlexibleDatesChange={setFlexibleDates}
-                    formatDateFr={formatDateFr}
-                  />
-                </div>
-              ) : null}
-              <button
-                type="button"
-                onClick={runDatedSearch}
-                disabled={!datesReady}
-                className={`mt-1 w-full sm:w-auto rounded-full px-5 py-2.5 text-sm font-bold transition-colors ${
-                  datesReady
-                    ? 'bg-primary-500 text-white hover:bg-primary-600'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                }`}
-              >
-                Lancer la recherche
-              </button>
-            </div>
-
-            <div className="mt-4 pt-4 border-t border-line">
-              <label className="text-base sm:text-lg font-bold text-slate-900 block mb-2">
-                {t('deals.sort')}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    ['recommended', t('deals.sortRecommended')],
-                    ['price_asc', t('deals.sortPriceAsc')],
-                    ['price_desc', t('deals.sortPriceDesc')],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setSort(id)}
-                    className={`rounded-full px-3.5 py-2 text-xs font-bold border transition-colors ${
-                      sort === id
-                        ? 'bg-primary-500 text-white border-primary-500'
-                        : 'bg-white text-ink border-line hover:border-primary-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </motion.div>
         ) : null}
       </div>
@@ -503,11 +389,10 @@ export function DealsTab() {
           <p className="text-sm text-muted mb-4">
             {destination || origin
               ? t('deals.emptyBody', {
-                  origin: [destination && `→ ${destination.split(',')[0]}`, origin && `de ${origin.split(',')[0]}`]
-                    .filter(Boolean)
-                    .join(' ')
-                    || origin
-                    || destination,
+                  origin:
+                    filterLabel ||
+                    origin ||
+                    destination,
                 })
               : t('deals.emptyBodyAll')}
           </p>
