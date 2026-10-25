@@ -1,0 +1,430 @@
+{
+  "fetched_at": "2026-10-25T10:44:23.631681+00:00",
+  "periods": [
+    {
+      "start": "2026-02-06",
+      "end": "2026-02-22",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2026-04-03",
+      "end": "2026-04-19",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-31",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-30",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2026-10-16",
+      "end": "2026-11-01",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2026-12-18",
+      "end": "2027-01-03",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-02-12",
+      "end": "2027-02-28",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-04-09",
+      "end": "2027-04-25",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-05-06",
+      "end": "2027-05-06",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2026-02-13",
+      "end": "2026-03-01",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-04-10",
+      "end": "2026-04-26",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-05-13",
+      "end": "2026-05-17",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-31",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-30",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-10-16",
+      "end": "2026-11-01",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-12-18",
+      "end": "2027-01-03",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-02-19",
+      "end": "2027-03-07",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-05-06",
+      "end": "2027-05-06",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2026-05-13",
+      "end": "2026-05-17",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-30",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2026-10-16",
+      "end": "2026-11-01",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2027-02-05",
+      "end": "2027-02-21",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2027-05-06",
+      "end": "2027-05-06",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2026-02-06",
+      "end": "2026-02-22",
+      "zones": "Guadeloupe"
+    },
+    {
+      "start": "2026-05-25",
+      "end": "2026-05-25",
+      "zones": "Guadeloupe"
+    },
+    {
+      "start": "2026-04-01",
+      "end": "2026-04-19",
+      "zones": "Martinique"
+    },
+    {
+      "start": "2026-02-06",
+      "end": "2026-02-22",
+      "zones": "Guyane"
+    },
+    {
+      "start": "2026-02-27",
+      "end": "2026-03-15",
+      "zones": "Réunion"
+    },
+    {
+      "start": "2026-02-27",
+      "end": "2026-03-08",
+      "zones": "Mayotte"
+    },
+    {
+      "start": "2026-04-29",
+      "end": "2026-05-17",
+      "zones": "Mayotte"
+    },
+    {
+      "start": "2026-02-12",
+      "end": "2026-03-01",
+      "zones": "Saint Pierre et Miquelon"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-09",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2027-02-12",
+      "end": "2027-02-21",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2027-07-01",
+      "end": "2027-08-23",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-08-16",
+      "zones": "Réunion"
+    },
+    {
+      "start": "2027-05-04",
+      "end": "2027-05-18",
+      "zones": "Réunion"
+    },
+    {
+      "start": "2026-10-16",
+      "end": "2026-11-01",
+      "zones": "Corse"
+    },
+    {
+      "start": "2027-05-06",
+      "end": "2027-05-09",
+      "zones": "Corse"
+    },
+    {
+      "start": "2026-12-18",
+      "end": "2027-01-03",
+      "zones": "Guadeloupe"
+    },
+    {
+      "start": "2027-03-23",
+      "end": "2027-03-31",
+      "zones": "Martinique"
+    },
+    {
+      "start": "2026-04-03",
+      "end": "2026-04-18",
+      "zones": "Nouvelle Calédonie"
+    },
+    {
+      "start": "2026-08-07",
+      "end": "2026-08-22",
+      "zones": "Nouvelle Calédonie"
+    },
+    {
+      "start": "2026-10-09",
+      "end": "2026-10-24",
+      "zones": "Nouvelle Calédonie"
+    },
+    {
+      "start": "2026-10-09",
+      "end": "2026-10-24",
+      "zones": "Wallis et Futuna"
+    },
+    {
+      "start": "2026-12-18",
+      "end": "2026-12-18",
+      "zones": "Wallis et Futuna"
+    },
+    {
+      "start": "2027-02-18",
+      "end": "2027-03-07",
+      "zones": "Saint Pierre et Miquelon"
+    },
+    {
+      "start": "2027-04-15",
+      "end": "2027-05-02",
+      "zones": "Saint Pierre et Miquelon"
+    },
+    {
+      "start": "2027-06-30",
+      "end": "2027-06-30",
+      "zones": "Saint Pierre et Miquelon"
+    },
+    {
+      "start": "2027-07-09",
+      "end": "2027-08-22",
+      "zones": "Mayotte"
+    },
+    {
+      "start": "2027-12-10",
+      "end": "2028-01-09",
+      "zones": "Mayotte"
+    },
+    {
+      "start": "2027-07-02",
+      "end": "2027-09-01",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-07-02",
+      "end": "2027-08-31",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-12-17",
+      "end": "2028-01-02",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-10-22",
+      "end": "2027-11-07",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2027-12-17",
+      "end": "2028-01-02",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-10-22",
+      "end": "2027-11-07",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-07-02",
+      "end": "2027-09-01",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-07-02",
+      "end": "2027-08-31",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-10-22",
+      "end": "2027-11-07",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2026-05-13",
+      "end": "2026-05-17",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2028-02-18",
+      "end": "2028-03-05",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2028-04-07",
+      "end": "2028-04-17",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2028-05-19",
+      "end": "2028-05-28",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2028-07-06",
+      "end": "2028-08-21",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2028-04-21",
+      "end": "2028-05-08",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2028-02-18",
+      "end": "2028-03-05",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2028-05-24",
+      "end": "2028-05-28",
+      "zones": "Zone A"
+    },
+    {
+      "start": "2028-04-07",
+      "end": "2028-04-23",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2028-05-24",
+      "end": "2028-05-28",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2028-02-04",
+      "end": "2028-02-20",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2028-02-11",
+      "end": "2028-02-27",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2028-04-14",
+      "end": "2028-05-01",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2027-04-16",
+      "end": "2027-05-02",
+      "zones": "Zone B"
+    },
+    {
+      "start": "2027-04-02",
+      "end": "2027-04-18",
+      "zones": "Zone C"
+    },
+    {
+      "start": "2027-11-05",
+      "end": "2027-11-14",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2027-12-17",
+      "end": "2028-01-16",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2028-07-07",
+      "end": "2028-08-21",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2028-09-22",
+      "end": "2028-10-01",
+      "zones": "Polynésie"
+    },
+    {
+      "start": "2027-03-03",
+      "end": "2027-03-04",
+      "zones": "Guadeloupe"
+    },
+    {
+      "start": "2027-05-26",
+      "end": "2027-05-27",
+      "zones": "Guadeloupe"
+    },
+    {
+      "start": "2027-05-27",
+      "end": "2027-05-28",
+      "zones": "Guadeloupe"
+    },
+    {
+      "start": "2027-05-05",
+      "end": "2027-05-09",
+      "zones": "Martinique"
+    },
+    {
+      "start": "2027-02-19",
+      "end": "2027-03-07",
+      "zones": "Mayotte"
+    },
+    {
+      "start": "2028-04-28",
+      "end": "2028-05-14",
+      "zones": "Mayotte"
+    },
+    {
+      "start": "2028-07-03",
+      "end": "2028-07-03",
+      "zones": "Zone A"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ import {
   normalizeAirports,
   type Airport,
 } from '@flightwatcher/shared'
-import type { TravelDeal } from '../types'
+import type { DealOccasionChip, TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
@@ -28,32 +28,6 @@ const springConfig = {
 
 const ORIGIN_LS_KEY = 'fw_deals_origin'
 type DurationTab = 'weekend' | 'short' | 'week'
-type QuickFilter =
-  | 'under150'
-  | 'breakfast'
-  | 'refund'
-  | 'direct'
-  | 'thisMonth'
-
-function hasBreakfast(deal: TravelDeal): boolean {
-  const b = String(deal.board || deal.hotel?.board || '').toUpperCase()
-  return b.includes('BI') || /BREAKFAST|PETIT/.test(b)
-}
-
-function matchesQuick(deal: TravelDeal, q: QuickFilter): boolean {
-  if (q === 'under150') return (deal.price_per_person || 0) < 150
-  if (q === 'breakfast') return hasBreakfast(deal)
-  if (q === 'refund') return Boolean(deal.hotel?.refundable)
-  if (q === 'direct') return Boolean(deal.flight?.direct)
-  if (q === 'thisMonth') {
-    const out = deal.dates?.outbound
-    if (!out) return false
-    const d = new Date(out + 'T12:00:00')
-    const now = new Date()
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  }
-  return true
-}
 
 function readStoredOrigin(): string {
   try {
@@ -107,19 +81,17 @@ export function DealsTab() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [originChipOpen, setOriginChipOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
-  const [quickFilters, setQuickFilters] = useState<Set<QuickFilter>>(new Set())
+  const [occasion, setOccasion] = useState<string | null>(null)
+  const [occasionMain, setOccasionMain] = useState<DealOccasionChip[]>([])
+  const [occasionMore, setOccasionMore] = useState<DealOccasionChip[]>([])
+  const [occasionsOpen, setOccasionsOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originDefaultedRef = useRef(false)
 
-  const toggleQuick = (id: QuickFilter) => {
-    setQuickFilters((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  const toggleOccasion = (slug: string) => {
+    setOccasion((prev) => (prev === slug ? null : slug))
   }
 
   useEffect(() => {
@@ -196,6 +168,25 @@ export function DealsTab() {
     }
   }, [])
 
+  const loadOccasions = useCallback(async () => {
+    try {
+      const res = await getApiClient().getDealOccasions({
+        origin: queryOrigin || undefined,
+        adults: queryAdults,
+      })
+      setOccasionMain(Array.isArray(res?.main) ? res.main : [])
+      setOccasionMore(Array.isArray(res?.more) ? res.more : [])
+      setOccasion((prev) => {
+        if (!prev) return null
+        const all = [...(res?.main || []), ...(res?.more || [])]
+        return all.some((c) => c.slug === prev) ? prev : null
+      })
+    } catch {
+      setOccasionMain([])
+      setOccasionMore([])
+    }
+  }, [queryOrigin, queryAdults])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -204,9 +195,11 @@ export function DealsTab() {
         origin: queryOrigin || undefined,
         destination: queryDestination || undefined,
         adults: queryAdults,
+        occasion: occasion || undefined,
         limit: 36,
       })
       void loadLikes()
+      void loadOccasions()
       const list = await listPromise
       // Deals = hôtel photo only (no city stock fallback)
       const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
@@ -219,7 +212,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, queryOrigin, queryDestination, queryAdults])
+  }, [t, loadLikes, loadOccasions, queryOrigin, queryDestination, queryAdults, occasion])
 
   useEffect(() => {
     void load()
@@ -314,31 +307,20 @@ export function DealsTab() {
       })
     }
     list = list.filter((d) => nightsInDuration(d.nights, durationTab))
-    if (quickFilters.size > 0) {
-      list = list.filter((d) =>
-        [...quickFilters].every((q) => matchesQuick(d, q)),
-      )
-    }
     return list
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab, quickFilters])
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
 
   /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
-    let list = deals
+    return deals
       .filter((d) => {
         if (queryOrigin && d.flags?.match_origin === false) return true
         if (queryDestination && d.flags?.match_destination === false) return true
         return false
       })
       .filter((d) => nightsInDuration(d.nights, durationTab))
-    if (quickFilters.size > 0) {
-      list = list.filter((d) =>
-        [...quickFilters].every((q) => matchesQuick(d, q)),
-      )
-    }
-    return list
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab, quickFilters])
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
@@ -354,13 +336,11 @@ export function DealsTab() {
     { id: 'week', label: t('deals.durationWeek') },
   ]
 
-  const quickFilterDefs: { id: QuickFilter; label: string }[] = [
-    { id: 'under150', label: t('deals.quickUnder150') },
-    { id: 'breakfast', label: t('deals.quickBreakfast') },
-    { id: 'refund', label: t('deals.quickRefund') },
-    { id: 'direct', label: t('deals.quickDirect') },
-    { id: 'thisMonth', label: t('deals.quickThisMonth') },
-  ]
+  const activeOccasion =
+    [...occasionMain, ...occasionMore].find((c) => c.slug === occasion) || null
+  const occasionChips = occasionsOpen
+    ? [...occasionMain, ...occasionMore]
+    : occasionMain
 
   return (
     <div className="w-full">
@@ -409,25 +389,45 @@ export function DealsTab() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {quickFilterDefs.map((f) => {
-          const on = quickFilters.has(f.id)
-          return (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => toggleQuick(f.id)}
-              className={`rounded-full px-3 py-1.5 text-[11px] font-bold border transition-colors ${
-                on
-                  ? 'bg-primary-50 text-primary-800 border-primary-200'
-                  : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
-              }`}
-            >
-              {f.label}
-            </button>
-          )
-        })}
-      </div>
+      {occasionChips.length > 0 || occasionMore.length > 0 ? (
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {occasionChips.map((f) => {
+              const on = occasion === f.slug
+              return (
+                <button
+                  key={f.slug}
+                  type="button"
+                  onClick={() => toggleOccasion(f.slug)}
+                  title={f.explain || undefined}
+                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold border transition-colors ${
+                    on
+                      ? 'bg-primary-50 text-primary-800 border-primary-200'
+                      : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
+                  }`}
+                >
+                  {f.label || f.slug}
+                </button>
+              )
+            })}
+            {occasionMore.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setOccasionsOpen((o) => !o)}
+                className="rounded-full px-3 py-1.5 text-[11px] font-bold border border-dashed border-line text-muted hover:border-primary-200 hover:text-ink bg-white"
+              >
+                {occasionsOpen ? t('deals.occasionsLess') : t('deals.occasionsMore')}
+              </button>
+            ) : null}
+          </div>
+          {activeOccasion?.explain ? (
+            <p className="mt-2 text-xs text-muted max-w-xl">
+              <span className="font-bold text-ink">{t('deals.occasionExplain')} · </span>
+              {activeOccasion.explain}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {originChipOpen ? (
         <div className="app-card mb-4 p-4 sm:p-5">

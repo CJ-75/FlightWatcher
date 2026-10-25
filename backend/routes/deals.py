@@ -118,6 +118,10 @@ async def list_deals(
     adults: Optional[int] = Query(None, ge=1, le=6),
     window: Optional[str] = Query(None, description="FRI_SUN | SAT_MON"),
     max_pp: Optional[float] = Query(None, ge=0, description="Budget max € / pers."),
+    occasion: Optional[str] = Query(
+        None,
+        description="Occasion slug (ex. moins-200, hiver-soleil) — filtre occasion_tags",
+    ),
     limit: Optional[int] = Query(
         36, ge=12, le=48, description="Taille du mur (défaut 36, max 48)"
     ),
@@ -131,10 +135,40 @@ async def list_deals(
             adults=adults,
             window=window,
             max_pp=max_pp,
+            occasion=occasion,
             limit=limit,
         )
     except NotImplementedError as e:
         raise HTTPException(status_code=501, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/deals/occasions")
+async def list_deal_occasions(
+    origin: Optional[str] = Query(None, description="IATA départ (optionnel)"),
+    adults: Optional[int] = Query(2, ge=1, le=6),
+):
+    """v4 Occasions Lot C — chips with ≥3 deals (main ≤6 + more)."""
+    try:
+        from deals.occasions_api import list_active_occasions
+
+        supabase = None
+        if SUPABASE_AVAILABLE:
+            supabase = get_supabase_service_client() or get_supabase_client()
+        if not supabase:
+            return {
+                "ok": True,
+                "main": [],
+                "more": [],
+                "min_deals": 3,
+                "origin": origin,
+            }
+        return list_active_occasions(
+            supabase,
+            origin=origin,
+            adults=int(adults or 2),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

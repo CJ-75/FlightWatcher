@@ -444,6 +444,10 @@ export interface TravelDeal {
   distance_label?: string | null
   price_pax_note?: string | null
   verification_level?: string
+  /** v4 Occasions — all matching slugs (materialize). */
+  occasion_tags?: string[]
+  /** Highest-priority occasion slug for card badge (UI: discount badge still wins). */
+  occasion_badge?: string | null
 }
 
 /** Persisted like of a TravelDeal for a user. */
@@ -463,8 +467,31 @@ export interface DealsListParams {
   adults?: number
   window?: DealWindowKind
   max_pp?: number
+  /** Occasion slug filter (occasion_tags contains) */
+  occasion?: string
   /** Wall size (backend default 36, max 48) */
   limit?: number
+}
+
+/** Chip from GET /api/deals/occasions (count ≥ min_deals). */
+export interface DealOccasionChip {
+  slug: string
+  label?: string
+  icon?: string
+  kind?: string
+  explain?: string
+  count: number
+  priority?: number
+  push?: boolean
+}
+
+export interface DealOccasionsResponse {
+  ok: boolean
+  today?: string
+  origin?: string | null
+  main: DealOccasionChip[]
+  more: DealOccasionChip[]
+  min_deals?: number
 }
 
 export interface DealCalendarCell {

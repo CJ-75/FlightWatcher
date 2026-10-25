@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { dealAdults, dealBadgeLabels } from '@flightwatcher/shared'
+import { dealAdults, dealBadgeLabels, dealCornerBadge } from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { DealCardGallery } from './DealCardGallery'
@@ -349,9 +349,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-ink text-white">
             {t('deals.newBadge')}
           </span>
-        ) : deal.badge ? (
+        ) : dealCornerBadge(deal) ? (
           <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-accent-500 text-white">
-            {deal.badge}
+            {dealCornerBadge(deal)}
           </span>
         ) : null}
 

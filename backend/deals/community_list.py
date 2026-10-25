@@ -308,6 +308,8 @@ def row_to_travel_deal(
         "deal_score": row.get("deal_score"),
         "fetched_at": row.get("last_verified_at"),
         "served_city_id": row.get("served_city_id"),
+        "occasion_tags": list(row.get("occasion_tags") or []),
+        "occasion_badge": row.get("occasion_badge"),
     }
     human = compute_human_title(deal_out)
     if human:
@@ -1036,6 +1038,7 @@ def list_community_deals(
     destination: Optional[str] = None,
     adults: Optional[int] = None,
     max_pp: Optional[float] = None,
+    occasion: Optional[str] = None,
     limit: int = 36,
 ) -> List[Dict[str, Any]]:
     """
@@ -1046,6 +1049,7 @@ def list_community_deals(
     Filters (optional):
       origin — departure IATA(s)
       destination — arrival city IATA(s), expanded via served_city
+      occasion — slug present in occasion_tags
     """
     import logging
 
@@ -1053,11 +1057,12 @@ def list_community_deals(
     t0 = time.monotonic()
     adults_n = int(adults or 2)
     target = max(12, min(int(limit or 36), 48))
+    occasion_slug = (occasion or "").strip().lower() or None
     with _list_cache_lock:
         epoch = _list_cache_epoch
     cache_key = (
         f"hp3|{epoch}|{origin or ''}|{destination or ''}|"
-        f"{adults_n}|{max_pp}|{target}"
+        f"{adults_n}|{max_pp}|{occasion_slug or ''}|{target}"
     )
     now = time.monotonic()
     with _list_cache_lock:
@@ -1181,6 +1186,12 @@ def list_community_deals(
         cached_enabled=cached_on,
     )
     out = _only_hotel_photo_deals(out)
+    if occasion_slug:
+        out = [
+            d
+            for d in out
+            if occasion_slug in [str(t).lower() for t in (d.get("occasion_tags") or [])]
+        ]
     out = diversify_wall_deals(out)[:target]
     with _list_cache_lock:
         _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])

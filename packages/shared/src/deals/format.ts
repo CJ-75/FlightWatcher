@@ -61,6 +61,32 @@ export function formatFetchedAt(iso?: string | null, locale = 'fr-FR'): string |
   }
 }
 
+/** Labels for occasion_badge slug (discount badge still wins in UI). */
+const OCCASION_BADGE_LABELS: Record<string, string> = {
+  'moins-200': 'Moins de 200 €',
+  'sans-conge': 'Sans congé',
+  'ambiance-noel': 'Ambiance Noël',
+  'pont-noel': 'Week-end de Noël',
+  'nouvel-an': 'Nouvel An',
+  'hiver-soleil': 'Hiver au soleil',
+  'nuits-polaires': 'Nuits polaires',
+  'hotel-plebiscite': 'Hôtel plébiscité',
+  'extras-offerts': 'Extras offerts',
+  'hors-vacances': 'Hors vacances',
+  'max-sur-place': 'Max sur place',
+}
+
+export function occasionBadgeLabel(slug: string | null | undefined): string | null {
+  if (!slug) return null
+  return OCCASION_BADGE_LABELS[slug] || slug.replace(/-/g, ' ')
+}
+
+/** Card corner badge: discount/new first, else occasion. */
+export function dealCornerBadge(deal: TravelDeal): string | null {
+  if (deal.badge) return deal.badge
+  return occasionBadgeLabel(deal.occasion_badge)
+}
+
 export function dealBadgeLabels(deal: TravelDeal): string[] {
   const badges: string[] = []
   if (deal.flight?.direct || deal.highlights?.some((h) => /direct/i.test(h))) {

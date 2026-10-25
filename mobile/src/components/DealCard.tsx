@@ -13,7 +13,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
-import { dealAdults, dealBadgeLabels } from '@flightwatcher/shared'
+import { dealAdults, dealBadgeLabels, dealCornerBadge } from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
 import { getApi } from '../lib/client'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
@@ -309,13 +309,13 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
           pointerEvents="none"
         />
 
-        {fresh || deal.badge ? (
+        {fresh || dealCornerBadge(deal) ? (
           <View
             style={[styles.dealBadge, fresh && { backgroundColor: colors.ink }]}
             pointerEvents="none"
           >
             <Text style={styles.dealText} numberOfLines={1}>
-              {fresh ? 'Nouveau' : deal.badge}
+              {fresh ? 'Nouveau' : dealCornerBadge(deal)}
             </Text>
           </View>
         ) : null}

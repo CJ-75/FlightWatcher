@@ -21,6 +21,8 @@ export type {
   LikedDeal,
   DealProviderId,
   DealsListParams,
+  DealOccasionChip,
+  DealOccasionsResponse,
   DealWindowKind,
   DealCalendarCell,
   DealCalendarResponse,

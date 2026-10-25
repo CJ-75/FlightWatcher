@@ -411,6 +411,16 @@ def materialize_deals_wall(
             errors += 1
             logger.warning("materialize %s: %s", deal_key, e)
 
+    # Lot B — retag all active deals (hotel_top3 may have changed)
+    occasion_summary: Dict[str, Any] = {}
+    try:
+        from deals.occasion_tagger import retag_active_wall
+
+        occasion_summary = retag_active_wall(supabase, limit=limit)
+    except Exception as e:
+        logger.warning("occasion retag: %s", e)
+        occasion_summary = {"ok": False, "error": str(e)}
+
     try:
         from deals.community_list import invalidate_list_cache
 
@@ -430,6 +440,7 @@ def materialize_deals_wall(
         "duplicate_keys_forced": len(dup_keys),
         "skipped_no_unique_hotel": skipped_no_unique,
         "errors": errors,
+        "occasions": occasion_summary,
         "at": now,
     }
     logger.info("materialize_deals_wall %s", summary)

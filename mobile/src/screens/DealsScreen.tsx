@@ -11,7 +11,7 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport, TravelDeal } from '@flightwatcher/shared'
+import type { Airport, DealOccasionChip, TravelDeal } from '@flightwatcher/shared'
 import {
   airportSelectionLabel,
   encodeAirportCodes,
@@ -57,6 +57,10 @@ export function DealsScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [originChipOpen, setOriginChipOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
+  const [occasion, setOccasion] = useState<string | null>(null)
+  const [occasionMain, setOccasionMain] = useState<DealOccasionChip[]>([])
+  const [occasionMore, setOccasionMore] = useState<DealOccasionChip[]>([])
+  const [occasionsOpen, setOccasionsOpen] = useState(false)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
@@ -147,9 +151,28 @@ export function DealsScreen() {
           origin: queryOrigin || undefined,
           destination: queryDestination || undefined,
           adults: queryAdults,
+          occasion: occasion || undefined,
           limit: 36,
         })
         void refreshLikes()
+        void getApi()
+          .getDealOccasions({
+            origin: queryOrigin || undefined,
+            adults: queryAdults,
+          })
+          .then((res) => {
+            setOccasionMain(Array.isArray(res?.main) ? res.main : [])
+            setOccasionMore(Array.isArray(res?.more) ? res.more : [])
+            setOccasion((prev) => {
+              if (!prev) return null
+              const all = [...(res?.main || []), ...(res?.more || [])]
+              return all.some((c) => c.slug === prev) ? prev : null
+            })
+          })
+          .catch(() => {
+            setOccasionMain([])
+            setOccasionMore([])
+          })
         const list = await listPromise
         const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
           (d) => Boolean(d.hotel?.photo || (d.image_url && String(d.image_url).trim())),
@@ -164,14 +187,14 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, queryOrigin, queryDestination, queryAdults, deals.length, uiEnabled],
+    [refreshLikes, queryOrigin, queryDestination, queryAdults, occasion, deals.length, uiEnabled],
   )
 
   // Filter changes → always refetch
   useEffect(() => {
     void load({ force: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- query* only
-  }, [queryOrigin, queryDestination, queryAdults])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion
+  }, [queryOrigin, queryDestination, queryAdults, occasion])
 
   // Tab focus → refetch only if stale (skip first mount: filter effect owns it)
   useFocusEffect(
@@ -313,6 +336,54 @@ export function DealsScreen() {
                   </Pressable>
                 ))}
               </View>
+
+              {occasionMain.length > 0 || occasionMore.length > 0 ? (
+                <View style={[styles.chipRow, { marginTop: 4 }]}>
+                  {(occasionsOpen
+                    ? [...occasionMain, ...occasionMore]
+                    : occasionMain
+                  ).map((f) => {
+                    const on = occasion === f.slug
+                    return (
+                      <Pressable
+                        key={f.slug}
+                        onPress={() =>
+                          setOccasion((prev) => (prev === f.slug ? null : f.slug))
+                        }
+                        style={[styles.chip, on ? styles.chipActive : null]}
+                      >
+                        <Text
+                          style={[styles.chipText, on ? styles.chipTextActive : null]}
+                        >
+                          {f.label || f.slug}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                  {occasionMore.length > 0 ? (
+                    <Pressable
+                      onPress={() => setOccasionsOpen((o) => !o)}
+                      style={styles.chip}
+                    >
+                      <Text style={styles.chipText}>
+                        {occasionsOpen ? 'Moins d’idées' : 'Plus d’idées'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+              {occasion
+                ? (() => {
+                    const active = [...occasionMain, ...occasionMore].find(
+                      (c) => c.slug === occasion,
+                    )
+                    return active?.explain ? (
+                      <Text style={[styles.subtitle, { marginTop: 4 }]}>
+                        {active.explain}
+                      </Text>
+                    ) : null
+                  })()
+                : null}
 
               {originChipOpen ? (
                 <View style={[styles.card, shadow.soft, { marginBottom: spacing.md }]}>

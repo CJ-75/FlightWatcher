@@ -16,6 +16,7 @@ import type {
   SavedSearch,
   TravelDeal,
   DealsListParams,
+  DealOccasionsResponse,
   DealCalendarParams,
   DealCalendarResponse,
   DealRevalidateRequest,
@@ -208,12 +209,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (params?.adults != null) q.set('adults', String(params.adults))
       if (params?.window) q.set('window', params.window)
       if (params?.max_pp != null) q.set('max_pp', String(params.max_pp))
+      if (params?.occasion) q.set('occasion', params.occasion)
       if (params?.limit != null) q.set('limit', String(params.limit))
       const qs = q.toString()
       return request<TravelDeal[]>(`/api/deals${qs ? `?${qs}` : ''}`)
     },
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
+
+    getDealOccasions: (params?: { origin?: string; adults?: number }) => {
+      const q = new URLSearchParams()
+      if (params?.origin) q.set('origin', params.origin)
+      if (params?.adults != null) q.set('adults', String(params.adults))
+      const qs = q.toString()
+      return request<DealOccasionsResponse>(`/api/deals/occasions${qs ? `?${qs}` : ''}`)
+    },
 
     signupOriginAlert: (body: {
       email: string
