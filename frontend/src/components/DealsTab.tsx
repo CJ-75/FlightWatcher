@@ -110,9 +110,7 @@ export function DealsTab() {
     ...INSPIRE_SEED,
   ])
   const [occasionCountsPending, setOccasionCountsPending] = useState(true)
-  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc' | 'time_on_site'>(
-    'recommended',
-  )
+  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originDefaultedRef = useRef(false)
@@ -396,21 +394,6 @@ export function DealsTab() {
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
-    if (sort === 'time_on_site') {
-      const hoursOnSite = (d: (typeof matchedDeals)[0]) => {
-        const out = d.flight?.outbound_local || d.dates?.outbound
-        const ret = d.flight?.inbound_local || d.dates?.inbound
-        if (!out || !ret) return 0
-        try {
-          const a = new Date(String(out).includes('T') ? out : `${out}T12:00:00`).getTime()
-          const b = new Date(String(ret).includes('T') ? ret : `${ret}T12:00:00`).getTime()
-          return (b - a) / 36e5
-        } catch {
-          return Number(d.nights || 0) * 24
-        }
-      }
-      return [...matchedDeals].sort((a, b) => hoursOnSite(b) - hoursOnSite(a))
-    }
     const dir = sort === 'price_asc' ? 1 : -1
     return [...matchedDeals].sort(
       (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
@@ -567,7 +550,6 @@ export function DealsTab() {
             {(
               [
                 ['recommended', t('deals.sortRecommended')],
-                ['time_on_site', 'Max de temps sur place'],
                 ['price_asc', 'Prix ↑'],
                 ['price_desc', 'Prix ↓'],
               ] as const
