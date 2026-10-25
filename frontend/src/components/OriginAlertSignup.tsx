@@ -42,7 +42,7 @@ export function OriginAlertSignup({ originIata, originLabel }: Props) {
       <p className="text-lg font-extrabold text-ink tracking-tight">
         {t('deals.alertTitle', { city })}
       </p>
-      <p className="text-sm text-muted mt-1.5 max-w-xl">{t('deals.alertHint')}</p>
+      <p className="text-sm text-muted mt-1.5 max-w-xl">{t('deals.originAlertHint')}</p>
       {done ? (
         <p className="mt-4 text-sm font-bold text-emerald-700">{t('deals.alertDone')}</p>
       ) : (

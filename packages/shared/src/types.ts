@@ -20,6 +20,8 @@ export interface TripResponse {
   airline?: string | null
   transfers?: number | null
   booking_url?: string | null
+  /** False when aller/retour.price are placeholders (API total only). */
+  leg_prices_reliable?: boolean | null
 }
 
 export interface ScanResponse {
@@ -469,6 +471,8 @@ export interface DealsListParams {
   max_pp?: number
   /** Occasion slug filter (occasion_tags contains) */
   occasion?: string
+  /** weekend | short | week — weekend = Fri/Sat/Sun depart */
+  duration?: 'weekend' | 'short' | 'week' | string
   /** Wall size (backend default 36, max 48) */
   limit?: number
 }

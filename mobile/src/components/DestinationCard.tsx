@@ -96,7 +96,9 @@ export function DestinationCard({
   }
 
   const airlineLabel = formatAirlineLabel(trip)
+  const transfersKnown = trip.transfers != null
   const transfers = trip.transfers ?? 0
+  const legPricesOk = trip.leg_prices_reliable !== false
 
   return (
     <View style={[styles.card, shadow.soft]}>
@@ -150,11 +152,13 @@ export function DestinationCard({
                 {airlineLabel}
               </Text>
             </View>
-            <View style={[styles.metaBadge, transfers === 0 && styles.metaBadgeDirect]}>
-              <Text style={styles.metaBadgeText}>
-                {transfers > 0 ? `${transfers} escale${transfers > 1 ? 's' : ''}` : 'Direct'}
-              </Text>
-            </View>
+            {transfersKnown ? (
+              <View style={[styles.metaBadge, transfers === 0 && styles.metaBadgeDirect]}>
+                <Text style={styles.metaBadgeText}>
+                  {transfers > 0 ? `${transfers} escale${transfers > 1 ? 's' : ''}` : 'Direct'}
+                </Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
@@ -182,7 +186,9 @@ export function DestinationCard({
             <Text style={styles.legValue}>
               {formatDate(trip.aller.departureTime)} · {formatTime(trip.aller.departureTime)}
             </Text>
-            <Text style={styles.legPrice}>{Math.round(trip.aller.price)} €</Text>
+            {legPricesOk && trip.aller.price > 0 ? (
+              <Text style={styles.legPrice}>{Math.round(trip.aller.price)} €</Text>
+            ) : null}
           </View>
           <View style={styles.divider} />
           <View style={styles.leg}>
@@ -190,7 +196,9 @@ export function DestinationCard({
             <Text style={styles.legValue}>
               {formatDate(trip.retour.departureTime)} · {formatTime(trip.retour.departureTime)}
             </Text>
-            <Text style={styles.legPrice}>{Math.round(trip.retour.price)} €</Text>
+            {legPricesOk && trip.retour.price > 0 ? (
+              <Text style={styles.legPrice}>{Math.round(trip.retour.price)} €</Text>
+            ) : null}
           </View>
         </View>
 

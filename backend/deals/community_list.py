@@ -414,6 +414,7 @@ def _fetch_active_rows(
     *,
     codes: Optional[List[str]] = None,
     limit: int = 60,
+    occasion: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     q = (
         supabase.table("deals_active")
@@ -426,11 +427,54 @@ def _fetch_active_rows(
         q = q.eq("origin_iata", codes[0])
     elif codes and len(codes) > 1:
         q = q.in_("origin_iata", codes)
+    occasion_slug = (occasion or "").strip().lower() or None
+    if occasion_slug:
+        # GIN-backed contains — filter before enrich/diversify
+        try:
+            q = q.contains("occasion_tags", [occasion_slug])
+        except Exception:
+            pass
     try:
         res = q.execute()
         return list(res.data or [])
     except Exception:
         return []
+
+
+def _is_weekend_outbound(out_date: str, window_kind: Optional[str] = None) -> bool:
+    """True if departure is Fri/Sat/Sun (or known weekend window_kind)."""
+    wk = (window_kind or "").strip().upper()
+    if wk in ("FRI_SUN", "SAT_MON"):
+        return True
+    raw = (out_date or "")[:10]
+    if len(raw) < 10:
+        return False
+    try:
+        from datetime import date as _date
+
+        d = _date.fromisoformat(raw)
+    except ValueError:
+        return False
+    # Mon=0 … Sun=6 — weekend departures: Fri/Sat/Sun
+    return d.weekday() in (4, 5, 6)
+
+
+def _deal_matches_duration(deal: Dict[str, Any], duration: Optional[str]) -> bool:
+    """Client duration tabs: weekend | short | week."""
+    tab = (duration or "").strip().lower() or None
+    if not tab:
+        return True
+    nights = int(deal.get("nights") or 0)
+    dates = deal.get("dates") or {}
+    out = str(dates.get("outbound") or "")[:10]
+    wk = deal.get("window_kind")
+    if tab == "weekend":
+        return 1 <= nights <= 3 and _is_weekend_outbound(out, wk if isinstance(wk, str) else None)
+    if tab == "short":
+        return 4 <= nights <= 5
+    if tab == "week":
+        return 6 <= nights <= 9
+    return True
 
 
 def _photos_from_pool(supabase, hotel_ids: List[str]) -> Dict[str, str]:
@@ -1046,6 +1090,7 @@ def list_community_deals(
     adults: Optional[int] = None,
     max_pp: Optional[float] = None,
     occasion: Optional[str] = None,
+    duration: Optional[str] = None,
     limit: int = 36,
 ) -> List[Dict[str, Any]]:
     """
@@ -1056,7 +1101,8 @@ def list_community_deals(
     Filters (optional):
       origin — departure IATA(s)
       destination — arrival city IATA(s), expanded via served_city
-      occasion — slug present in occasion_tags
+      occasion — slug present in occasion_tags (SQL contains + post-filter)
+      duration — weekend | short | week (weekend = Fri/Sat/Sun depart + 1–3 nights)
     """
     import logging
 
@@ -1065,11 +1111,15 @@ def list_community_deals(
     adults_n = int(adults or 2)
     target = max(12, min(int(limit or 36), 48))
     occasion_slug = (occasion or "").strip().lower() or None
+    duration_tab = (duration or "").strip().lower() or None
+    if duration_tab not in ("weekend", "short", "week"):
+        duration_tab = None
     with _list_cache_lock:
         epoch = _list_cache_epoch
     cache_key = (
         f"hp3|{epoch}|{origin or ''}|{destination or ''}|"
-        f"{adults_n}|{max_pp}|{occasion_slug or ''}|{target}"
+        f"{adults_n}|{max_pp}|{occasion_slug or ''}|{duration_tab or ''}|"
+        f"{target}"
     )
     now = time.monotonic()
     with _list_cache_lock:
@@ -1106,7 +1156,9 @@ def list_community_deals(
     # Single fetch large enough for match + fillers; one enrich pass
     fetch_n = max(target * 3, 40)
 
-    all_rows = _fetch_active_rows(supabase, codes=None, limit=fetch_n)
+    all_rows = _fetch_active_rows(
+        supabase, codes=None, limit=fetch_n, occasion=occasion_slug
+    )
 
     def _row_match_origin(r: Dict[str, Any]) -> bool:
         if not origin_set:
@@ -1199,6 +1251,8 @@ def list_community_deals(
             for d in out
             if occasion_slug in [str(t).lower() for t in (d.get("occasion_tags") or [])]
         ]
+    if duration_tab:
+        out = [d for d in out if _deal_matches_duration(d, duration_tab)]
     out = diversify_wall_deals(out)[:target]
     with _list_cache_lock:
         _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])

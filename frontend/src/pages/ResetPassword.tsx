@@ -78,14 +78,14 @@ export default function ResetPassword() {
     }
     setBusy(false)
     setDone(true)
-    setTimeout(() => navigate('/'), 1800)
+    setTimeout(() => navigate('/recherche'), 1800)
   }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#FFF9F5]">
       <div className="relative max-w-md mx-auto px-4 py-10 sm:py-16">
         <div className="flex items-center justify-between mb-8">
-          <Link to="/" className="text-sm font-bold text-[#E85A28]">
+          <Link to="/recherche" className="text-sm font-bold text-[#E85A28]">
             {t('login.back')}
           </Link>
           <LanguageSwitcher />

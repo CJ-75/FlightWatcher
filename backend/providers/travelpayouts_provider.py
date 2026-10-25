@@ -245,8 +245,7 @@ def _offer_to_trip(
     else:
         flight_number = airline or "TP"
 
-    # Split round-trip price roughly for leg display (API gives one total)
-    half = round(price / 2, 2)
+    # API gives one round-trip total — do not invent per-leg prices
     origin_full = destination_full_fr(origin_airport)
     dest_full = destination_full_fr(dest_airport)
 
@@ -257,7 +256,7 @@ def _offer_to_trip(
         destination=dest_airport,
         destinationFull=dest_full,
         departureTime=dep.isoformat(),
-        price=half,
+        price=0.0,
         currency="EUR",
     )
     retour = FlightResponse(
@@ -267,9 +266,19 @@ def _offer_to_trip(
         destination=origin_airport,
         destinationFull=origin_full,
         departureTime=ret.isoformat(),
-        price=round(price - half, 2),
+        price=0.0,
         currency="EUR",
     )
+
+    # Outbound stops only (never sum A/R — that invents "3 escales" on RT)
+    outbound_stops = max(0, transfers)
+    # Hide absurd stop counts on low-cost carriers (data often wrong)
+    _LOW_COST = {"FR", "RK", "TO", "HV", "U2", "EC", "VY", "W4", "W6", "W9", "V7"}
+    display_transfers: Optional[int]
+    if airline in _LOW_COST and outbound_stops >= 2:
+        display_transfers = None  # UI: no Direct / no fake multi-stop badge
+    else:
+        display_transfers = outbound_stops
 
     return TripResponse(
         aller=aller,
@@ -278,8 +287,9 @@ def _offer_to_trip(
         destination_code=dest_airport,
         provider="travelpayouts",
         airline=airline,
-        transfers=transfers + return_transfers,
+        transfers=display_transfers,
         booking_url=_build_booking_url(offer.get("link")),
+        leg_prices_reliable=False,
     )
 
 

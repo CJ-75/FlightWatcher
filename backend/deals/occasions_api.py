@@ -52,22 +52,26 @@ def list_active_occasions(
     supabase: Any,
     *,
     origin: Optional[str] = None,
+    destination: Optional[str] = None,
     adults: int = 2,
+    duration: Optional[str] = None,
     today: Optional[date] = None,
     min_deals: int = 3,
 ) -> Dict[str, Any]:
     """
-    Occasions with ≥ min_deals for current wall (origin optional).
+    Occasions with ≥ min_deals for current wall (same filters as deals mur).
     Main row = launch_chip_slugs order (max 6 with count≥min); rest in more[].
     """
     today = today or date.today()
     from deals.community_list import list_community_deals
 
-    # Fetch a wide wall once, count tags client-side (cache-friendly)
+    # Same wall filters as GET /api/deals so chip counts match the grid
     deals = list_community_deals(
         supabase,
         origin=origin,
+        destination=destination,
         adults=adults,
+        duration=duration,
         limit=48,
     )
     counts: Dict[str, int] = {}

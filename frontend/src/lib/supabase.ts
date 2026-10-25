@@ -21,16 +21,15 @@ async function loadSupabaseConfig(): Promise<void> {
   if (supabaseConfigLoaded) return
   
   try {
-    const response = await fetch('/api/config')
-    if (!response.ok) {
+    const { getAppConfig } = await import('../utils/configCache')
+    const config = await getAppConfig()
+    if (!config) {
       console.warn('⚠️ Impossible de charger la configuration depuis le backend')
       return
     }
-    
-    const config = await response.json()
     if (config.available && config.supabase_url && config.supabase_anon_key) {
-      supabaseUrl = config.supabase_url
-      supabaseAnonKey = config.supabase_anon_key
+      supabaseUrl = config.supabase_url as string
+      supabaseAnonKey = config.supabase_anon_key as string
       supabaseConfigLoaded = true
       console.log('✅ Configuration Supabase chargée depuis le backend')
     } else {

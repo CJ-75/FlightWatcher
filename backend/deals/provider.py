@@ -32,6 +32,7 @@ class DealProvider(ABC):
         max_pp: Optional[float] = None,
         limit: Optional[int] = None,
         occasion: Optional[str] = None,
+        duration: Optional[str] = None,
     ) -> List[dict]:
         raise NotImplementedError
 
@@ -56,6 +57,7 @@ class MockDealProvider(DealProvider):
         max_pp: Optional[float] = None,
         limit: Optional[int] = None,
         occasion: Optional[str] = None,
+        duration: Optional[str] = None,
     ) -> List[dict]:
         deals = list(self._deals)
         if origin:
@@ -341,6 +343,7 @@ class LiteApiDealProvider(DealProvider):
         max_pp: Optional[float] = None,
         limit: Optional[int] = None,
         occasion: Optional[str] = None,
+        duration: Optional[str] = None,
     ) -> List[dict]:
         from deals.deal_assemble import load_caches_and_assemble
         from deals.liteapi_config import load_deals_config
@@ -353,6 +356,14 @@ class LiteApiDealProvider(DealProvider):
             if cfg.is_community:
                 from deals.community_list import list_community_deals
 
+                # Prefer explicit duration; else map window → weekend
+                dur = (duration or "").strip().lower() or None
+                if dur not in ("weekend", "short", "week"):
+                    dur = None
+                if not dur:
+                    wk = (window or "").strip().upper()
+                    if wk in ("FRI_SUN", "SAT_MON", "WEEKEND"):
+                        dur = "weekend"
                 community = list_community_deals(
                     supabase,
                     origin=origin,
@@ -360,6 +371,7 @@ class LiteApiDealProvider(DealProvider):
                     adults=adults,
                     max_pp=max_pp,
                     occasion=occasion,
+                    duration=dur,
                     limit=int(limit or 36),
                 )
                 if community:

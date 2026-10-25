@@ -130,7 +130,7 @@ export default function AuthCallback() {
           return
         }
 
-        navigate('/')
+        navigate('/recherche')
       } catch (err) {
         console.error('Erreur callback auth:', err)
         navigate('/login')

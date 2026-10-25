@@ -47,9 +47,21 @@ function writeStoredOrigin(value: string) {
   }
 }
 
-function nightsInDuration(nights: number, tab: DurationTab): boolean {
-  const n = Number(nights) || 0
-  if (tab === 'weekend') return n >= 1 && n <= 3
+function isWeekendOutbound(deal: { dates?: { outbound?: string }; window_kind?: string | null }): boolean {
+  const wk = String(deal.window_kind || '').toUpperCase()
+  if (wk === 'FRI_SUN' || wk === 'SAT_MON') return true
+  const out = String(deal.dates?.outbound || '').slice(0, 10)
+  if (out.length < 10) return false
+  const day = new Date(`${out}T12:00:00`).getDay() // 0=Sun … 5=Fri 6=Sat
+  return day === 0 || day === 5 || day === 6
+}
+
+function dealMatchesDuration(
+  deal: { nights?: number; dates?: { outbound?: string }; window_kind?: string | null },
+  tab: DurationTab,
+): boolean {
+  const n = Number(deal.nights) || 0
+  if (tab === 'weekend') return n >= 1 && n <= 3 && isWeekendOutbound(deal)
   if (tab === 'short') return n >= 4 && n <= 5
   return n >= 6 && n <= 9
 }
@@ -90,7 +102,9 @@ export function DealsTab() {
     }
   })
   const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
-  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
+  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc' | 'time_on_site'>(
+    'recommended',
+  )
   const [airports, setAirports] = useState<Airport[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originDefaultedRef = useRef(false)
@@ -100,10 +114,11 @@ export function DealsTab() {
   }
 
   useEffect(() => {
-    void fetch('/api/config')
-      .then((r) => r.json())
+    void import('../utils/configCache')
+      .then(({ getAppConfig }) => getAppConfig())
       .then((cfg) => {
-        setReadonlyBanner(Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false)
+        if (!cfg) return
+        setReadonlyBanner(Boolean(cfg.prod_readonly) || cfg.booking_enabled === false)
       })
       .catch(() => undefined)
   }, [])
@@ -177,7 +192,9 @@ export function DealsTab() {
     try {
       const res = await getApiClient().getDealOccasions({
         origin: queryOrigin || undefined,
+        destination: queryDestination || undefined,
         adults: queryAdults,
+        duration: durationTab,
       })
       const seen = new Set<string>()
       const all: DealOccasionChip[] = []
@@ -194,7 +211,7 @@ export function DealsTab() {
     } catch {
       setOccasionChips([])
     }
-  }, [queryOrigin, queryAdults])
+  }, [queryOrigin, queryDestination, queryAdults, durationTab])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -205,6 +222,7 @@ export function DealsTab() {
         destination: queryDestination || undefined,
         adults: queryAdults,
         occasion: occasion || undefined,
+        duration: durationTab,
         limit: 36,
       })
       void loadLikes()
@@ -221,7 +239,7 @@ export function DealsTab() {
     } finally {
       setLoading(false)
     }
-  }, [t, loadLikes, loadOccasions, queryOrigin, queryDestination, queryAdults, occasion])
+  }, [t, loadLikes, loadOccasions, queryOrigin, queryDestination, queryAdults, occasion, durationTab])
 
   useEffect(() => {
     void load()
@@ -315,7 +333,7 @@ export function DealsTab() {
         return true
       })
     }
-    list = list.filter((d) => nightsInDuration(d.nights, durationTab))
+    list = list.filter((d) => dealMatchesDuration(d, durationTab))
     return list
   }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
 
@@ -328,11 +346,26 @@ export function DealsTab() {
         if (queryDestination && d.flags?.match_destination === false) return true
         return false
       })
-      .filter((d) => nightsInDuration(d.nights, durationTab))
+      .filter((d) => dealMatchesDuration(d, durationTab))
   }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
+    if (sort === 'time_on_site') {
+      const hoursOnSite = (d: (typeof matchedDeals)[0]) => {
+        const out = d.flight?.outbound_local || d.dates?.outbound
+        const ret = d.flight?.inbound_local || d.dates?.inbound
+        if (!out || !ret) return 0
+        try {
+          const a = new Date(String(out).includes('T') ? out : `${out}T12:00:00`).getTime()
+          const b = new Date(String(ret).includes('T') ? ret : `${ret}T12:00:00`).getTime()
+          return (b - a) / 36e5
+        } catch {
+          return Number(d.nights || 0) * 24
+        }
+      }
+      return [...matchedDeals].sort((a, b) => hoursOnSite(b) - hoursOnSite(a))
+    }
     const dir = sort === 'price_asc' ? 1 : -1
     return [...matchedDeals].sort(
       (a, b) => dir * ((a.price_per_person || 0) - (b.price_per_person || 0)),
@@ -488,6 +521,7 @@ export function DealsTab() {
             {(
               [
                 ['recommended', t('deals.sortRecommended')],
+                ['time_on_site', 'Max de temps sur place'],
                 ['price_asc', 'Prix ↑'],
                 ['price_desc', 'Prix ↓'],
               ] as const

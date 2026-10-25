@@ -84,9 +84,9 @@ export function occasionBadgeLabel(slug: string | null | undefined): string | nu
   return OCCASION_BADGE_LABELS[slug] || slug.replace(/-/g, ' ')
 }
 
-/** Card corner badge: discount/new first, else occasion. */
+/** Card corner badge: discount meta first, else occasion (not generic « Nouveau »). */
 export function dealCornerBadge(deal: TravelDeal): string | null {
-  if (deal.badge) return deal.badge
+  if (deal.badge && !/^nouveau$/i.test(String(deal.badge).trim())) return deal.badge
   return occasionBadgeLabel(deal.occasion_badge)
 }
 
@@ -110,7 +110,7 @@ export function hotelPublicTotal(hotel: TravelDealHotel & { public_hotel_price?:
   const fromAlt = (hotel as { public_hotel_price?: number }).public_hotel_price
   if (typeof fromAlt === 'number') return fromAlt
   if (deal.hotel?.id === hotel.id && deal.price_breakdown) {
-    return deal.price_breakdown.hotel_public_total
+    return deal.price_breakdown.hotel_public_total ?? 0
   }
   return 0
 }

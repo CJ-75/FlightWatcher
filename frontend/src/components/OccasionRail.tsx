@@ -17,14 +17,11 @@ export function OccasionRail({ chips, selected, onToggle, onClear }: Props) {
   if (chips.length === 0) return null
 
   return (
-    <section className="mb-5" aria-label={t('deals.occasionsTitle')}>
-      <div className="flex items-end justify-between gap-3 mb-2.5 px-0.5">
-        <div>
-          <p className="app-kicker mb-0.5">{t('deals.occasionsKicker')}</p>
-          <h3 className="text-[15px] sm:text-base font-extrabold text-ink tracking-tight">
-            {t('deals.occasionsTitle')}
-          </h3>
-        </div>
+    <section className="mb-4" aria-label={t('deals.occasionsTitle')}>
+      <div className="flex items-center justify-between gap-3 mb-2 px-0.5">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-ink-soft">
+          {t('deals.occasionsKicker')}
+        </p>
         {selected ? (
           <button
             type="button"
@@ -37,59 +34,42 @@ export function OccasionRail({ chips, selected, onToggle, onClear }: Props) {
       </div>
 
       <div className="-mx-1 px-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex items-stretch gap-2.5 min-w-min pb-1">
+        <div className="flex items-center gap-2 min-w-min pb-0.5">
           {chips.map((chip, i) => {
             const on = selected === chip.slug
+            const count = chip.count
             return (
               <motion.button
                 key={chip.slug}
                 type="button"
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{
-                  delay: Math.min(i * 0.035, 0.2),
+                  delay: Math.min(i * 0.03, 0.18),
                   type: 'spring',
-                  stiffness: 380,
+                  stiffness: 400,
                   damping: 28,
                 }}
                 onClick={() => onToggle(chip.slug)}
                 aria-pressed={on}
                 title={chip.explain || undefined}
-                className={`group relative flex flex-col items-start gap-2 shrink-0 rounded-[1.15rem] border px-3.5 py-3 text-left transition-all duration-200 w-[8.25rem] sm:w-[9rem] ${
+                className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-3 py-1.5 text-left transition-all duration-150 max-w-[11rem] ${
                   on
-                    ? 'bg-gradient-to-br from-primary-500 to-primary-600 border-primary-500 text-white shadow-soft ring-2 ring-primary-200/60'
-                    : 'bg-white text-ink border-line hover:border-primary-200 hover:shadow-soft'
+                    ? 'bg-primary-500 border-primary-500 text-white shadow-soft'
+                    : 'bg-white text-ink border-line hover:border-primary-200'
                 }`}
               >
-                <span
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                    on
-                      ? 'bg-white/20 text-white'
-                      : 'bg-primary-50 text-primary-600 group-hover:bg-primary-100'
-                  }`}
-                  aria-hidden
-                >
-                  <OccasionIcon icon={chip.icon} slug={chip.slug} size={18} />
-                </span>
-                <span
-                  className={`text-[12.5px] font-extrabold leading-snug tracking-tight line-clamp-2 min-h-[2.4em] ${
-                    on ? 'text-white' : 'text-ink'
-                  }`}
-                >
+                <OccasionIcon icon={chip.icon} slug={chip.slug} size={14} />
+                <span className={`text-[12px] font-bold truncate ${on ? 'text-white' : 'text-ink'}`}>
                   {chip.label || chip.slug}
                 </span>
-                {typeof chip.count === 'number' && chip.count > 0 ? (
+                {typeof count === 'number' && count > 0 ? (
                   <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${
-                      on
-                        ? 'bg-white/20 text-white'
-                        : 'bg-canvas text-muted border border-line'
+                    className={`text-[10px] font-bold tabular-nums ${
+                      on ? 'text-white/80' : 'text-muted'
                     }`}
                   >
-                    {chip.count}{' '}
-                    {chip.count > 1
-                      ? t('deals.occasionsDeals')
-                      : t('deals.occasionsDeal')}
+                    {count}
                   </span>
                 ) : null}
               </motion.button>
@@ -98,30 +78,17 @@ export function OccasionRail({ chips, selected, onToggle, onClear }: Props) {
         </div>
       </div>
 
-      <AnimatePresence initial={false}>
+      <AnimatePresence>
         {active?.explain ? (
-          <motion.div
+          <motion.p
             key={active.slug}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
+            className="mt-2 text-xs text-muted px-0.5"
           >
-            <div className="mt-3 rounded-2xl bg-primary-50/90 border border-primary-100 px-3.5 py-3 flex gap-3 items-start">
-              <span
-                className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white border border-primary-100 text-primary-600 shadow-soft"
-                aria-hidden
-              >
-                <OccasionIcon icon={active.icon} slug={active.slug} size={16} />
-              </span>
-              <p className="text-[12.5px] text-ink/80 leading-snug min-w-0 pt-0.5">
-                <span className="font-extrabold text-ink">{active.label}</span>
-                <span className="text-muted"> — </span>
-                {active.explain}
-              </p>
-            </div>
-          </motion.div>
+            {active.explain}
+          </motion.p>
         ) : null}
       </AnimatePresence>
     </section>

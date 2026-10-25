@@ -161,11 +161,23 @@ export function DealDetailModal({
   }, [dealProp])
 
   useEffect(() => {
-    void fetch('/api/config')
-      .then((r) => r.json())
-      .then((cfg) => setBookingEnabled(cfg?.booking_enabled !== false))
+    void import('../utils/configCache')
+      .then(({ getAppConfig }) => getAppConfig())
+      .then((cfg) => {
+        if (!cfg) return
+        setBookingEnabled(cfg.booking_enabled !== false)
+      })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (!dealProp) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dealProp, onClose])
 
   useEffect(() => {
     if (!deal) return
@@ -262,7 +274,18 @@ export function DealDetailModal({
   const stars = Number(selected?.stars || deal.hotel_stars || 0)
   const distanceM = selected?.distance_m ?? deal.hotel?.distance_m
   const rating = selected?.rating
-  const board = selected?.board || deal.board
+  const boardRaw = selected?.board || deal.board
+  const board = (() => {
+    if (!boardRaw) return null
+    const b = String(boardRaw).toUpperCase()
+    if (b === 'RO' || /room.?only/i.test(String(boardRaw))) return 'Chambre seule'
+    if (b === 'BI' || /breakfast|petit/i.test(String(boardRaw))) return 'Petit-déjeuner inclus'
+    if (b === 'HB') return 'Demi-pension'
+    if (b === 'FB') return 'Pension complète'
+    if (b === 'AI') return 'All inclusive'
+    if (b === 'FR') return null // not a board code when alone
+    return String(boardRaw)
+  })()
   const { out: outTime, ret: inTime } = flightLegTimes(deal.flight)
   const totalForParty = Math.round(pricePp * adults)
 
@@ -432,7 +455,7 @@ export function DealDetailModal({
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Prix du pack
+                    Prix du séjour
                   </p>
                   <p className="text-4xl font-black text-primary-500 tracking-tight leading-none tabular-nums">
                     {Math.round(pricePp)} €

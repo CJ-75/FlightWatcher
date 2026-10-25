@@ -141,6 +141,31 @@
       bg-white/95 border border-line shadow-lift backdrop-blur-md;
   }
 
+  /* Mobile: bottom tab bar (travel-app pattern) */
+  @media (max-width: 639px) {
+    .app-tabnav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(180deg, transparent, rgba(255, 249, 245, 0.92) 28%);
+      pointer-events: none;
+    }
+
+    .app-tabnav .app-tabbar {
+      pointer-events: auto;
+      max-width: none;
+      border-radius: 22px;
+      box-shadow: 0 -4px 24px rgba(26, 18, 14, 0.08);
+    }
+
+    .app-tab {
+      @apply text-[10px] px-1 py-2 min-h-[48px];
+    }
+  }
+
   .app-tab {
     @apply relative inline-flex items-center justify-center px-2 sm:px-3 py-2.5 rounded-[20px]
       text-xs sm:text-sm font-semibold text-muted min-h-[44px] w-full leading-tight;

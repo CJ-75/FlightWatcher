@@ -122,6 +122,10 @@ async def list_deals(
         None,
         description="Occasion slug (ex. moins-200, hiver-soleil) — filtre occasion_tags",
     ),
+    duration: Optional[str] = Query(
+        None,
+        description="weekend | short | week — weekend = Fri/Sat/Sun depart + 1–3 nights",
+    ),
     limit: Optional[int] = Query(
         36, ge=12, le=48, description="Taille du mur (défaut 36, max 48)"
     ),
@@ -136,6 +140,7 @@ async def list_deals(
             window=window,
             max_pp=max_pp,
             occasion=occasion,
+            duration=duration,
             limit=limit,
         )
     except NotImplementedError as e:
@@ -147,7 +152,11 @@ async def list_deals(
 @router.get("/api/deals/occasions")
 async def list_deal_occasions(
     origin: Optional[str] = Query(None, description="IATA départ (optionnel)"),
+    destination: Optional[str] = Query(None, description="IATA arrivée (optionnel)"),
     adults: Optional[int] = Query(2, ge=1, le=6),
+    duration: Optional[str] = Query(
+        None, description="weekend | short | week — align chip counts with wall"
+    ),
 ):
     """v4 Occasions Lot C — chips with ≥3 deals (main ≤6 + more)."""
     try:
@@ -167,7 +176,9 @@ async def list_deal_occasions(
         return list_active_occasions(
             supabase,
             origin=origin,
+            destination=destination,
             adults=int(adults or 2),
+            duration=duration,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -60,9 +60,18 @@ function App() {
           <Route path="tests" element={<TestsPage />} />
         </Route>
         
-        {/* Route principale */}
-        <Route path="/" element={<Dashboard />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* App shell — onglets = vraies URLs (partage, retour navigateur, SEO) */}
+        <Route path="/" element={<Navigate to="/recherche" replace />} />
+        <Route path="/recherche" element={<Dashboard />} />
+        <Route path="/deals" element={<Dashboard />} />
+        <Route path="/planner" element={<Dashboard />} />
+        <Route path="/alertes" element={<Dashboard />} />
+        <Route path="/favoris" element={<Dashboard />} />
+        {/* Legacy aliases */}
+        <Route path="/search" element={<Navigate to="/recherche" replace />} />
+        <Route path="/alerts" element={<Navigate to="/alertes" replace />} />
+        <Route path="/saved" element={<Navigate to="/favoris" replace />} />
+        <Route path="*" element={<Navigate to="/recherche" replace />} />
         </Routes>
       </BrowserRouter>
     </I18nProvider>

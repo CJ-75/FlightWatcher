@@ -34,9 +34,21 @@ const STALE_MS = 90_000
 const ORIGIN_LS_KEY = 'fw_deals_origin'
 type DurationTab = 'weekend' | 'short' | 'week'
 
-function nightsInDuration(nights: number, tab: DurationTab): boolean {
-  const n = Number(nights) || 0
-  if (tab === 'weekend') return n >= 1 && n <= 3
+function isWeekendOutbound(deal: { dates?: { outbound?: string }; window_kind?: string | null }): boolean {
+  const wk = String(deal.window_kind || '').toUpperCase()
+  if (wk === 'FRI_SUN' || wk === 'SAT_MON') return true
+  const out = String(deal.dates?.outbound || '').slice(0, 10)
+  if (out.length < 10) return false
+  const day = new Date(`${out}T12:00:00`).getDay()
+  return day === 0 || day === 5 || day === 6
+}
+
+function dealMatchesDuration(
+  deal: { nights?: number; dates?: { outbound?: string }; window_kind?: string | null },
+  tab: DurationTab,
+): boolean {
+  const n = Number(deal.nights) || 0
+  if (tab === 'weekend') return n >= 1 && n <= 3 && isWeekendOutbound(deal)
   if (tab === 'short') return n >= 4 && n <= 5
   return n >= 6 && n <= 9
 }
@@ -151,13 +163,16 @@ export function DealsScreen() {
           destination: queryDestination || undefined,
           adults: queryAdults,
           occasion: occasion || undefined,
+          duration: durationTab,
           limit: 36,
         })
         void refreshLikes()
         void getApi()
           .getDealOccasions({
             origin: queryOrigin || undefined,
+            destination: queryDestination || undefined,
             adults: queryAdults,
+            duration: durationTab,
           })
           .then((res) => {
             const seen = new Set<string>()
@@ -190,14 +205,14 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, queryOrigin, queryDestination, queryAdults, occasion, deals.length, uiEnabled],
+    [refreshLikes, queryOrigin, queryDestination, queryAdults, occasion, durationTab, deals.length, uiEnabled],
   )
 
   // Filter changes → always refetch
   useEffect(() => {
     void load({ force: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion
-  }, [queryOrigin, queryDestination, queryAdults, occasion])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
+  }, [queryOrigin, queryDestination, queryAdults, occasion, durationTab])
 
   // Tab focus → refetch only if stale (skip first mount: filter effect owns it)
   useFocusEffect(
@@ -235,7 +250,7 @@ export function DealsScreen() {
         return true
       })
     }
-    return list.filter((d) => nightsInDuration(d.nights, durationTab))
+    return list.filter((d) => dealMatchesDuration(d, durationTab))
   }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
@@ -245,7 +260,7 @@ export function DealsScreen() {
         if (queryDestination && d.flags?.match_destination === false) return true
         return false
       })
-      .filter((d) => nightsInDuration(d.nights, durationTab))
+      .filter((d) => dealMatchesDuration(d, durationTab))
   }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals

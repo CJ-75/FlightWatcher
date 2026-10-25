@@ -14,15 +14,55 @@ function formatDate(dateStr?: string | null) {
   })
 }
 
-function partnerLabel(provider?: string, bookingUrl?: string): string {
+function partnerLabel(
+  provider?: string,
+  bookingUrl?: string,
+  airline?: string | null,
+): string {
+  const air = String(airline || '').trim().toUpperCase()
+  if (air === 'FR' || air === 'RK' || /ryanair/i.test(String(airline || ''))) {
+    return 'Réserver sur Ryanair'
+  }
+  if (bookingUrl && /ryanair\.com/i.test(bookingUrl)) return 'Réserver sur Ryanair'
   const p = (provider || '').toLowerCase()
   if (p === 'ryanair') return 'Réserver sur Ryanair'
+  if (air === 'TO' || air === 'HV' || /transavia/i.test(String(airline || ''))) {
+    return 'Réserver sur Transavia'
+  }
   if (p === 'travelpayouts' || p === 'aviasales') return 'Réserver via Aviasales'
   if (bookingUrl && /aviasales|travelpayouts/i.test(bookingUrl)) {
     return 'Réserver via Aviasales'
   }
-  if (bookingUrl && /ryanair\.com/i.test(bookingUrl)) return 'Réserver sur Ryanair'
   return 'Continuer vers le partenaire'
+}
+
+function formatTimeLocal(iso?: string | null): string {
+  if (!iso) return ''
+  // Already local "HH:MM" or ISO
+  const m = String(iso).match(/(\d{2}):(\d{2})/)
+  if (m) return `${m[1]}:${m[2]}`
+  try {
+    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
+function airlineDisplay(flight: Record<string, any>, payload: Record<string, any>): string {
+  const raw = flight.airline || flight.carrier || payload.airline || ''
+  const code = String(raw).trim().toUpperCase()
+  const names: Record<string, string> = {
+    FR: 'Ryanair',
+    RK: 'Ryanair',
+    TO: 'Transavia',
+    HV: 'Transavia',
+    VY: 'Vueling',
+    U2: 'easyJet',
+  }
+  if (names[code]) return names[code]
+  if (raw && String(raw).length > 3) return String(raw)
+  if (code) return `Compagnie ${code}`
+  return ''
 }
 
 /**
@@ -106,18 +146,46 @@ export default function MyTrip() {
     payload.verification_level ||
     'live'
   const isCached = vlevel === 'cached'
-  const cta = partnerLabel(flight.provider, flightUrl)
+  const airlineName = airlineDisplay(flight, payload)
+  const cta = partnerLabel(flight.provider, flightUrl, flight.airline || flight.carrier || airlineName)
   const flightBooked = Boolean(
     draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
   )
   const outDate = draft?.out_date || payload.dates?.outbound
   const retDate = draft?.ret_date || payload.dates?.inbound
+  const originIata = String(
+    flight.origin_iata || payload.origin_iata || draft?.origin_iata || '',
+  ).toUpperCase()
+  const destIata = String(
+    flight.destination_iata || payload.destination || payload.dest_iata || '',
+  ).toUpperCase()
+  const originLabel =
+    payload.origin_airport_label ||
+    (originIata ? originIata : null)
+  const arrivalLabel =
+    payload.arrival_airport_label ||
+    payload.distance_label ||
+    (destIata ? destIata : null)
+  const outTime = formatTimeLocal(flight.outbound_local)
+  const retTime = formatTimeLocal(flight.inbound_local)
+  const hotelObj = hotel && typeof hotel === 'object' ? (hotel as Record<string, any>) : null
+  const hotelPhoto = hotelObj?.photo || hotelObj?.thumbnail || payload.image_url || ''
+  const hotelPrice =
+    hotelObj?.public_hotel_price ??
+    payload.price_breakdown?.hotel_public_total ??
+    null
+  const flightPp =
+    flight.price_pp != null
+      ? Number(flight.price_pp)
+      : payload.price_breakdown?.flight_pp != null
+        ? Number(payload.price_breakdown.flight_pp)
+        : null
   const hotelHref =
     draft?.deal_key && outDate && retDate
-      ? `/?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1&checkin=${encodeURIComponent(String(outDate).slice(0, 10))}&checkout=${encodeURIComponent(String(retDate).slice(0, 10))}`
+      ? `/deals?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1&checkin=${encodeURIComponent(String(outDate).slice(0, 10))}&checkout=${encodeURIComponent(String(retDate).slice(0, 10))}`
       : draft?.deal_key
-        ? `/?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1`
-        : '/'
+        ? `/deals?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1`
+        : '/deals'
 
   const onFlightClick = async () => {
     // Guest OK — affiliate click tracked with draft_token
@@ -227,7 +295,7 @@ export default function MyTrip() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 px-4">
         <p className="text-slate-700 font-medium">{error || 'Voyage introuvable ou expiré'}</p>
-        <Link to="/" className="text-primary-600 font-bold underline">
+        <Link to="/recherche" className="text-primary-600 font-bold underline">
           Retour aux deals
         </Link>
       </div>
@@ -236,6 +304,19 @@ export default function MyTrip() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white">
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
+        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <Link
+            to="/recherche"
+            className="text-sm font-bold text-slate-700 hover:text-primary-600"
+          >
+            ← Accueil
+          </Link>
+          <Link to="/deals" className="text-sm font-semibold text-primary-600">
+            Deals
+          </Link>
+        </div>
+      </header>
       <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">
@@ -248,9 +329,16 @@ export default function MyTrip() {
           </p>
           {price != null ? (
             <p className="text-2xl font-black text-primary-600 mt-2">
-              dès {Math.round(Number(price))} € / pers.
+              {Math.round(Number(price))} € / pers.
             </p>
           ) : null}
+          {(flightPp != null || hotelPrice != null) && (
+            <p className="text-sm text-slate-600 mt-1">
+              {flightPp != null ? `Vol ${Math.round(flightPp)} €` : null}
+              {flightPp != null && hotelPrice != null ? ' + ' : null}
+              {hotelPrice != null ? `hôtel ${Math.round(Number(hotelPrice))} €` : null}
+            </p>
+          )}
           {payload.price_pax_note ? (
             <p className="text-xs text-amber-800 mt-1">{String(payload.price_pax_note)}</p>
           ) : null}
@@ -258,14 +346,6 @@ export default function MyTrip() {
             <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
               Prix agrégateur · à confirmer chez le partenaire
             </p>
-          ) : null}
-          {payload.baggage_line || payload.route_hint ? (
-            <div className="text-xs text-slate-600 mt-2 space-y-0.5">
-              {payload.baggage_line ? <p>{String(payload.baggage_line)}</p> : null}
-              {payload.route_hint ? (
-                <p className="text-slate-500">{String(payload.route_hint)}</p>
-              ) : null}
-            </div>
           ) : null}
         </div>
 
@@ -285,6 +365,37 @@ export default function MyTrip() {
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
                 Réservé ✓
               </span>
+            ) : null}
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-1.5">
+            {airlineName ? (
+              <p className="font-bold text-slate-900">
+                {airlineName}
+                {flight.direct === true ? ' · Direct' : flight.direct === false ? ' · Avec escale' : ''}
+              </p>
+            ) : null}
+            {(originLabel || arrivalLabel) && (
+              <p>
+                {originLabel || originIata || '—'}
+                {' → '}
+                {arrivalLabel || destIata || '—'}
+              </p>
+            )}
+            <p>
+              Aller {formatDate(outDate)}
+              {outTime ? ` · ${outTime}` : ''}
+            </p>
+            <p>
+              Retour {formatDate(retDate)}
+              {retTime ? ` · ${retTime}` : ''}
+            </p>
+            {payload.baggage_line ? (
+              <p className="text-xs text-slate-600 pt-1 border-t border-slate-200">
+                {String(payload.baggage_line)}
+              </p>
+            ) : null}
+            {payload.route_hint ? (
+              <p className="text-xs text-slate-500">{String(payload.route_hint)}</p>
             ) : null}
           </div>
           <p className="text-sm text-slate-600">
@@ -354,8 +465,37 @@ export default function MyTrip() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
           <h2 className="font-bold text-slate-900">2. Hôtel du voyage</h2>
-          {hotel && typeof hotel === 'object' && (hotel as any).name ? (
-            <p className="text-sm text-slate-700 font-medium">{(hotel as any).name}</p>
+          {hotelObj?.name ? (
+            <div className="flex gap-3">
+              {hotelPhoto ? (
+                <img
+                  src={String(hotelPhoto)}
+                  alt=""
+                  className="w-24 h-24 rounded-xl object-cover bg-slate-100 shrink-0"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-xl bg-slate-100 shrink-0" aria-hidden />
+              )}
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm text-slate-900 font-bold leading-snug">{String(hotelObj.name)}</p>
+                <p className="text-xs text-slate-600">
+                  {hotelObj.stars != null ? `${hotelObj.stars}★` : null}
+                  {hotelObj.stars != null && hotelObj.rating != null ? ' · ' : null}
+                  {hotelObj.rating != null ? `note ${hotelObj.rating}` : null}
+                  {hotelObj.board ? ` · ${String(hotelObj.board)}` : null}
+                </p>
+                {hotelPrice != null ? (
+                  <p className="text-sm font-bold text-slate-800">
+                    {Math.round(Number(hotelPrice))} € hôtel
+                  </p>
+                ) : null}
+                {hotelObj.distance_m != null ? (
+                  <p className="text-xs text-slate-500">
+                    {Math.round(Number(hotelObj.distance_m) / 100) / 10} km du centre
+                  </p>
+                ) : null}
+              </div>
+            </div>
           ) : (
             <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
           )}
@@ -471,7 +611,7 @@ export default function MyTrip() {
           </button>
         </section>
 
-        <Link to="/" className="block text-center text-sm text-slate-500 underline">
+        <Link to="/recherche" className="block text-center text-sm text-slate-500 underline">
           ← Retour
         </Link>
       </div>

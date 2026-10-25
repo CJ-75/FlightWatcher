@@ -120,6 +120,8 @@ export function DestinationCard({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const airlineLabel = formatAirlineLabel(trip);
+  const legPricesOk = trip.leg_prices_reliable !== false;
+  const transfersKnown = trip.transfers != null;
 
   return (
     <motion.div
@@ -190,15 +192,15 @@ export function DestinationCard({
             <span className="text-[11px] font-bold tracking-wide bg-white/25 text-white px-2.5 py-1 rounded-full truncate max-w-[55%]">
               {airlineLabel}
             </span>
-            {(trip.transfers ?? 0) > 0 ? (
+            {transfersKnown && (trip.transfers ?? 0) > 0 ? (
               <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-white/20 text-white px-2 py-0.5 rounded-full">
                 {trip.transfers} escale{(trip.transfers || 0) > 1 ? 's' : ''}
               </span>
-            ) : (
+            ) : transfersKnown ? (
               <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide bg-emerald-400/90 text-white px-2 py-0.5 rounded-full">
                 Direct
               </span>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -231,7 +233,9 @@ export function DestinationCard({
               <p className="text-sm font-medium text-ink">
                 {formatDate(trip.aller.departureTime)} · {formatTime(trip.aller.departureTime)}
               </p>
-              <p className="text-sm font-bold text-ink-soft">{Math.round(trip.aller.price)} €</p>
+              {legPricesOk && trip.aller.price > 0 ? (
+                <p className="text-sm font-bold text-ink-soft">{Math.round(trip.aller.price)} €</p>
+              ) : null}
             </div>
           </div>
           <div className="h-px bg-primary-100 mx-4" />
@@ -243,7 +247,9 @@ export function DestinationCard({
               <p className="text-sm font-medium text-ink">
                 {formatDate(trip.retour.departureTime)} · {formatTime(trip.retour.departureTime)}
               </p>
-              <p className="text-sm font-bold text-ink-soft">{Math.round(trip.retour.price)} €</p>
+              {legPricesOk && trip.retour.price > 0 ? (
+                <p className="text-sm font-bold text-ink-soft">{Math.round(trip.retour.price)} €</p>
+              ) : null}
             </div>
           </div>
         </div>

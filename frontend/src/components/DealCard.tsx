@@ -345,13 +345,13 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           onOpen={onClick}
         />
 
-        {fresh ? (
-          <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-ink text-white">
-            {t('deals.newBadge')}
-          </span>
-        ) : dealCornerBadge(deal) ? (
+        {dealCornerBadge(deal) ? (
           <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-accent-500 text-white">
             {dealCornerBadge(deal)}
+          </span>
+        ) : fresh ? (
+          <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-ink text-white">
+            {t('deals.newBadge')}
           </span>
         ) : null}
 
@@ -453,7 +453,7 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
             }}
             className="w-full inline-flex items-center justify-center rounded-2xl bg-primary-500 hover:bg-primary-600 text-white font-bold text-sm min-h-[44px] px-4 shadow-sm active:scale-[0.98] transition-all"
           >
-            {t('deals.viewOffer')}
+            {t('deals.viewOfferSoft')}
           </button>
         </div>
       </div>

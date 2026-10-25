@@ -55,7 +55,7 @@ export default function MyBookings() {
             </h1>
             <p className="text-sm text-muted mt-1">Réservations hôtel via FlightWatcher</p>
           </div>
-          <Link to="/" className="text-sm font-bold text-primary-600 hover:underline">
+          <Link to="/recherche" className="text-sm font-bold text-primary-600 hover:underline">
             ← Accueil
           </Link>
         </div>

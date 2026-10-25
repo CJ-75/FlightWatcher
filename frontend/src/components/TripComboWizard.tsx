@@ -13,6 +13,8 @@ import { getApiClient } from '../utils/apiClient'
 interface Props {
   trip: EnrichedTripResponse
   passengers?: number
+  /** Budget saisi à la recherche — alerte si le total vol+hôtel dépasse. */
+  searchBudget?: number | null
   onClose: () => void
   onSaveFavorite?: () => void
   onNeedLogin?: () => void
@@ -34,6 +36,7 @@ function formatShort(iso?: string) {
 export function TripComboWizard({
   trip,
   passengers = 1,
+  searchBudget = null,
   onClose,
   onSaveFavorite,
 }: Props) {
@@ -406,12 +409,19 @@ export function TripComboWizard({
                             <div className="min-w-0 flex-1 py-0.5">
                               <p className="font-bold text-ink truncate">{h.name}</p>
                               <p className="text-xs text-muted mt-0.5">
-                                {h.rating != null ? `★ ${Number(h.rating).toFixed(1)}` : ''}
-                                {h.stars ? ` · ${h.stars}★` : ''}
+                                {h.rating != null ? `Note ${Number(h.rating).toFixed(1)}` : ''}
+                                {h.rating != null && h.stars ? ' · ' : ''}
+                                {h.stars ? `${h.stars} étoiles` : ''}
                               </p>
                               <p className="text-sm font-extrabold text-primary-600 mt-1">
                                 {Math.round(h.hotel_pp || 0)} € / pers.
                               </p>
+                              {searchBudget != null &&
+                              flightPp + Number(h.hotel_pp || 0) > Number(searchBudget) ? (
+                                <p className="text-[11px] font-semibold text-amber-700 mt-0.5">
+                                  Au-dessus de ton budget ({Math.round(Number(searchBudget))} €)
+                                </p>
+                              ) : null}
                             </div>
                           </button>
                         </motion.li>

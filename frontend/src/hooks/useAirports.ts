@@ -3,8 +3,29 @@ import type { Airport } from '../types'
 import { isValidAirportSelection } from '@flightwatcher/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
 
+/** One airports fetch shared across hooks/tabs. */
+let airportsCache: Airport[] | null = null
+let airportsPromise: Promise<Airport[]> | null = null
+
+async function loadAirportsOnce(): Promise<Airport[]> {
+  if (airportsCache) return airportsCache
+  if (!airportsPromise) {
+    airportsPromise = getApiClient()
+      .getAirports()
+      .then((raw) => {
+        airportsCache = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+        return airportsCache
+      })
+      .catch((err) => {
+        airportsPromise = null
+        throw err
+      })
+  }
+  return airportsPromise
+}
+
 export function useAirports(autoLoad = true) {
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(airportsCache || [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -12,8 +33,8 @@ export function useAirports(autoLoad = true) {
     setLoading(true)
     setError(null)
     try {
-      const raw = await getApiClient().getAirports()
-      setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] }))
+      const list = await loadAirportsOnce()
+      setAirports(list)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur aéroports')
     } finally {

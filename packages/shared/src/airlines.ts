@@ -48,6 +48,18 @@ const AIRLINE_NAMES: Record<string, string> = {
   GQ: 'Sky Express',
   DE: 'Condor',
   EZY: 'easyJet',
+  MW: 'Mokulele',
+  XP: 'Avelo',
+  F9: 'Frontier',
+  NK: 'Spirit',
+  B6: 'jetBlue',
+  AA: 'American Airlines',
+  UA: 'United',
+  DL: 'Delta',
+  AC: 'Air Canada',
+  WK: 'Edelweiss',
+  EN: 'Air Dolomiti',
+  LJ: 'Jin Air',
 }
 
 /**
@@ -63,7 +75,7 @@ export function formatAirlineLabel(trip: {
   if (code && AIRLINE_NAMES[code]) return AIRLINE_NAMES[code]
   // Already a name (not a 2–3 letter code)
   if (raw && (raw.length > 3 || /[a-z]/.test(raw))) return raw
-  if (code && code.length >= 2) return code
+  if (code && code.length >= 2 && code.length <= 3) return `Compagnie ${code}`
 
   const provider = String(trip.provider || '').toLowerCase()
   if (provider === 'ryanair') return 'Ryanair'

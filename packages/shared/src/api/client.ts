@@ -210,6 +210,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       if (params?.window) q.set('window', params.window)
       if (params?.max_pp != null) q.set('max_pp', String(params.max_pp))
       if (params?.occasion) q.set('occasion', params.occasion)
+      if (params?.duration) q.set('duration', params.duration)
       if (params?.limit != null) q.set('limit', String(params.limit))
       const qs = q.toString()
       return request<TravelDeal[]>(`/api/deals${qs ? `?${qs}` : ''}`)
@@ -217,10 +218,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
 
-    getDealOccasions: (params?: { origin?: string; adults?: number }) => {
+    getDealOccasions: (params?: {
+      origin?: string
+      destination?: string
+      adults?: number
+      duration?: string
+    }) => {
       const q = new URLSearchParams()
       if (params?.origin) q.set('origin', params.origin)
+      if (params?.destination) q.set('destination', params.destination)
       if (params?.adults != null) q.set('adults', String(params.adults))
+      if (params?.duration) q.set('duration', params.duration)
       const qs = q.toString()
       return request<DealOccasionsResponse>(`/api/deals/occasions${qs ? `?${qs}` : ''}`)
     },

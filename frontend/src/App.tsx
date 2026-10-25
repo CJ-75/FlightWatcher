@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { ScanResponse, TripResponse, ScanRequest, DateAvecHoraire, Destination, Airport, EnrichedTripResponse } from './types'
 import { 
@@ -17,6 +18,8 @@ import { UserMenu } from './components/UserMenu'
 import { getCurrentUser, onAuthStateChange } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DealsTab } from './components/DealsTab'
+import { HomeDealsTeaser } from './components/HomeDealsTeaser'
+import { SiteFooter } from './components/SiteFooter'
 import { DealCard } from './components/DealCard'
 import { DealDetailModal } from './components/DealDetailModal'
 import { PlannerTab } from './components/PlannerTab'
@@ -40,6 +43,7 @@ import {
 } from './utils/searchPrefill'
 import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
+import { getAppConfig } from './utils/configCache'
 import { prefetchHotelCacheForTrips } from './utils/prefetchHotelCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
@@ -54,20 +58,82 @@ import { CityAirportSelect } from './components/CityAirportSelect'
 
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
 
+const TAB_PATH: Record<Tab, string> = {
+  search: '/recherche',
+  deals: '/deals',
+  planner: '/planner',
+  alerts: '/alertes',
+  saved: '/favoris',
+}
+
+function tabFromPath(pathname: string): Tab | null {
+  const p = pathname.replace(/\/+$/, '') || '/'
+  if (p === '/recherche' || p === '/search') return 'search'
+  if (p === '/deals') return 'deals'
+  if (p === '/planner') return 'planner'
+  if (p === '/alertes' || p === '/alerts') return 'alerts'
+  if (p === '/favoris' || p === '/saved') return 'saved'
+  return null
+}
+
 function Dashboard() {
   const { t } = useI18n()
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [activeTab, setActiveTabState] = useState<Tab>(() => {
+    const fromPath = tabFromPath(window.location.pathname)
+    if (fromPath) return fromPath
     try {
       const saved = sessionStorage.getItem('fw_active_tab')
       if (saved === 'planner' || saved === 'deals' || saved === 'saved' || saved === 'search' || saved === 'alerts') {
         sessionStorage.removeItem('fw_active_tab')
-        return saved
+        return saved as Tab
       }
     } catch {
       /* ignore */
     }
     return 'search'
   })
+
+  const setActiveTab = useCallback(
+    (tab: Tab) => {
+      setActiveTabState(tab)
+      const path = TAB_PATH[tab]
+      const search = tab === 'deals' ? location.search : ''
+      if (location.pathname !== path || (tab !== 'deals' && location.search)) {
+        navigate({ pathname: path, search: tab === 'deals' ? location.search : '' }, { replace: false })
+      }
+    },
+    [navigate, location.pathname, location.search],
+  )
+
+  // After login restore: sessionStorage tab may disagree with URL
+  useEffect(() => {
+    const fromPath = tabFromPath(location.pathname)
+    if (fromPath && fromPath !== activeTab) {
+      // Prefer URL when user used back/forward or deep link
+      setActiveTabState(fromPath)
+      return
+    }
+    if (!fromPath && activeTab) {
+      navigate(TAB_PATH[activeTab], { replace: true })
+    }
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps -- sync from URL only
+
+  // If tab was restored from sessionStorage on /recherche, push the right path once
+  useEffect(() => {
+    const fromPath = tabFromPath(location.pathname)
+    if (fromPath === activeTab) return
+    if (activeTab && location.pathname === '/recherche' && activeTab !== 'search') {
+      navigate(
+        {
+          pathname: TAB_PATH[activeTab],
+          search: activeTab === 'deals' ? location.search : '',
+        },
+        { replace: true },
+      )
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
   const [loading, setLoading] = useState(false)
   const [dealsUiEnabled, setDealsUiEnabled] = useState(true)
   const [data, setData] = useState<ScanResponse | null>(null)
@@ -376,14 +442,12 @@ function Dashboard() {
   }
 
   useEffect(() => {
-    void fetch('/api/config')
-      .then((r) => r.json())
-      .then((cfg) => {
-        const on = cfg?.ui_enabled !== false
-        setDealsUiEnabled(on)
-        if (!on && activeTab === 'deals') setActiveTab('search')
-      })
-      .catch(() => undefined)
+    void getAppConfig().then((cfg) => {
+      if (!cfg) return
+      const on = cfg.ui_enabled !== false
+      setDealsUiEnabled(on)
+      if (!on && activeTab === 'deals') setActiveTab('search')
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
   }, [])
 
@@ -893,16 +957,13 @@ function Dashboard() {
 
   return (
     <div className="app-shell">
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-8">
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-24 sm:pb-8">
         <div className="w-full mb-5 sm:mb-7 space-y-4">
           {/* Brand + compte : pleine largeur */}
           <header className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('search')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
+            <Link
+              to="/recherche"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
               aria-label="FlightWatcher — retour à la recherche"
             >
@@ -910,14 +971,14 @@ function Dashboard() {
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>
-            </button>
+            </Link>
             <div className="shrink-0 flex items-center">
               <UserMenu />
             </div>
           </header>
 
-          {/* Pill 5 onglets : largeur compacte centrée (pas étirée) */}
-          <nav className="flex justify-center" aria-label="Navigation principale">
+          {/* Onglets : barre bas mobile, pill centrée desktop */}
+          <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
             <div className="app-tabbar w-full max-w-lg sm:max-w-2xl">
               {(
                 [
@@ -930,17 +991,26 @@ function Dashboard() {
                   { id: 'saved' as const, label: t('nav.saved') },
                 ] as const
               ).map((tab) => (
-                <motion.button
+                <motion.div
                   key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.97 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 24 }}
-                  className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
+                  className="min-w-0 flex-1"
                 >
-                  <span className="relative z-[1] truncate">{tab.label}</span>
-                </motion.button>
+                  <Link
+                    to={
+                      tab.id === 'deals' && location.search
+                        ? { pathname: TAB_PATH[tab.id], search: location.search }
+                        : TAB_PATH[tab.id]
+                    }
+                    onClick={() => setActiveTabState(tab.id)}
+                    className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
+                    aria-current={activeTab === tab.id ? 'page' : undefined}
+                  >
+                    <span className="relative z-[1] truncate">{tab.label}</span>
+                  </Link>
+                </motion.div>
               ))}
             </div>
           </nav>
@@ -954,6 +1024,7 @@ function Dashboard() {
         ) : activeTab === 'search' ? (
           <>
             <div className="app-col">
+              <HomeDealsTeaser />
               <SimpleSearch
                 key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
@@ -1222,6 +1293,11 @@ function Dashboard() {
         <TripComboWizard
           trip={bookingTrip}
           passengers={lastSearchInfo?.passengers || currentRequest?.passengers || 1}
+          searchBudget={
+            lastSearchInfo?.budget ??
+            currentRequest?.budget_max ??
+            (typeof rouletteBudget === 'number' ? rouletteBudget : null)
+          }
           onClose={() => setBookingTrip(null)}
           onSaveFavorite={() => {
             handleSimpleSaveFavorite(bookingTrip)
@@ -1247,6 +1323,10 @@ function Dashboard() {
         onClose={() => setToastMessage(null)}
         duration={toastType === 'info' ? 5000 : 3000}
       />
+
+      <div className="app-col">
+        <SiteFooter />
+      </div>
     </div>
   )
 }
@@ -3040,9 +3120,11 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                             <div className="text-xs sm:text-sm font-black text-[#E85A28] tracking-wide">
                               ALLER
                             </div>
-                            <div className="text-lg sm:text-xl font-black text-[#E85A28]">
-                              {favorite.trip.aller.price.toFixed(0)}€
-                            </div>
+                            {favorite.trip.leg_prices_reliable !== false && favorite.trip.aller.price > 0 ? (
+                              <div className="text-lg sm:text-xl font-black text-[#E85A28]">
+                                {favorite.trip.aller.price.toFixed(0)}€
+                              </div>
+                            ) : null}
                           </div>
                           <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                             <div className="flex justify-between">
@@ -3068,9 +3150,11 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                             <div className="text-xs sm:text-sm font-black text-slate-700 tracking-wide">
                               RETOUR
                             </div>
-                            <div className="text-lg sm:text-xl font-black text-slate-800">
-                              {favorite.trip.retour.price.toFixed(0)}€
-                            </div>
+                            {favorite.trip.leg_prices_reliable !== false && favorite.trip.retour.price > 0 ? (
+                              <div className="text-lg sm:text-xl font-black text-slate-800">
+                                {favorite.trip.retour.price.toFixed(0)}€
+                              </div>
+                            ) : null}
                           </div>
                           <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                             <div className="flex justify-between">
@@ -3287,7 +3371,9 @@ function TripCard({ trip, onSaveFavorite, isFavorite: isFav }: {
         <div className="bg-[#FFF8F3] rounded-2xl p-4 border border-orange-100">
           <div className="flex items-center mb-2">
             <span className="text-[#E85A28] font-bold mr-2">ALLER</span>
-            <span className="text-sm text-slate-600">{trip.aller.price.toFixed(2)}€</span>
+            {trip.leg_prices_reliable !== false && trip.aller.price > 0 ? (
+              <span className="text-sm text-slate-600">{trip.aller.price.toFixed(2)}€</span>
+            ) : null}
           </div>
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Date:</span> {formatDate(trip.aller.departureTime)}</div>
@@ -3300,7 +3386,9 @@ function TripCard({ trip, onSaveFavorite, isFavorite: isFav }: {
         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
           <div className="flex items-center mb-2">
             <span className="text-slate-700 font-bold mr-2">RETOUR</span>
-            <span className="text-sm text-slate-600">{trip.retour.price.toFixed(2)}€</span>
+            {trip.leg_prices_reliable !== false && trip.retour.price > 0 ? (
+              <span className="text-sm text-slate-600">{trip.retour.price.toFixed(2)}€</span>
+            ) : null}
           </div>
           <div className="text-sm space-y-1">
             <div><span className="font-semibold">Date:</span> {formatDate(trip.retour.departureTime)}</div>

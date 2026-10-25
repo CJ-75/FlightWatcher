@@ -1,204 +1,190 @@
-# État des lieux FlightWatcher — services, workflows, tests
+# FlightWatcher — État des lieux global
 
-_Date : 2026-10-25 · Environnement local (sandbox LiteAPI, `DEALS_SOURCE=community`)_
+_25 oct. 2026 · @Chris_
 
----
-
-## 1. Score global
-
-| Surface | Maturité | Tests auto | Smoke live | Notes |
-|---|---|---|---|---|
-| Auth / session | Bon | Partiel | Config OK | Supabase requis |
-| Search / inspire | Bon | Providers + throttle | Airports OK | Pas de E2E UI |
-| Planner collab | Bon | Limité | — | Invite + scan |
-| **Deals mur + occasions** | Bon (v4) | Fort (unit) | OK | Voir §4 |
-| Favoris / likes | Moyen+ | Partiel | — | Guest landings |
-| My Trip / checkout hôtel | Moyen+ | Draft pricing | — | Paiement sandbox |
-| Alertes (prix / origin / occasions) | Moyen | Unit F/G + price | — | Digests = cron externe |
-| Admin | Moyen+ | — | — | Metrics + Occasions |
-| Mobile | Parité partielle | Typecheck only | — | Pas d’onglet Alerts |
-
-**Légende maturité** : Bon = parcours principal utilisable · Moyen = utilisable avec lacunes · Faible = stub.
+Audit UI : `http://localhost:5173` · visiteur non connecté · 1280 px + mobile 375 px · réseau + console.
 
 ---
 
-## 2. Surfaces produit
+## Verdict global
 
-### Web (`frontend/` via `AppNew.tsx` → `App.tsx`)
-Onglets : **Search** · **Deals** · **Planner** · **Alerts** · **Saved**  
-Routes annexes : `/login`, `/auth/*`, `/security`, `/planner/invite/:token`, `/bookings`, `/trip/:token`, `/admin/*`
+L'app tient debout de bout en bout pour un visiteur non connecté : recherche, composition vol + hôtel, Mon voyage et Deals fonctionnent sans erreur console.
 
-### Mobile (`mobile/App.tsx`)
-Tabs : Search · Deals · Planner · Favorites · Profile  
-Stack : Results, DealDetail, DealCheckout, TripDetail, Bookings, Login, Security
+**Note globale : 6,5/10.**
 
-### Admin
-Users · Searches · Activated · Deals (métriques) · **Occasions** · Plans · Settings · Tests
+Le produit est riche et cohérent, mais trois choses le retiennent :
 
----
+1. la qualité des données de vol affichées
+2. l'absence de routes (aucune URL par onglet)
+3. un mur Deals encore maigre (6 séjours depuis Paris en week-end)
 
-## 3. Workflows utilisateur par service
-
-### 3.1 Auth
-1. Login Google / email (`/login`)  
-2. Callback Supabase → session  
-3. Accès favoris, likes, bookings, claim Mon voyage  
-**Gap** : sans session, landings guest ; likes deals = 401.
-
-### 3.2 Search (vols)
-1. Onglet Search → origines, dates, budget, pax  
-2. `POST /api/inspire` ou `/api/scan`  
-3. Cartes destinations → détail / roulette / combo vol+hôtel → Mon voyage  
-4. Option : sauver recherche, favori vol, Booking SAS  
-**Gap** : timeouts longs sur scan ; pas de suite E2E UI.
-
-### 3.3 Planner
-1. Créer voyage → membres / invite token  
-2. Scan partagé → accepter / rejeter propositions  
-3. Auto-scan cron optionnel  
-**Gap** : couverture tests API limitée.
-
-### 3.4 Deals (séjours vol + hôtel)
-1. Onglet Deals → durée (week-end / court / semaine)  
-2. Chips occasions (inspire-toi) → filtre `?occasion=`  
-3. **Affiner** : départ + arrivée + pax (origine mémorisée)  
-4. Carte → fiche → *Autres dates* (même départ) · like · Mon voyage · checkout hôtel  
-5. Option : alerte email « deals depuis {ville} »  
-**Pipeline data** : seed-scan → baselines → promote → rates → **materialize (+ tags occasions)** → `GET /api/deals`  
-**Gaps connus** :
-- Filtre occasion encore post-fetch (GIN peu utilisé) → mur parfois vide
-- Compteurs chips ≠ filtre durée client
-- Deep link `?occasion=` fragile
-- `il-fera-beau` off tant que `DEALS_WEATHER_ENABLED` false
-
-### 3.5 Favoris / likes
-- **Vols** : Saved / Favorites → `/api/supabase/favorites`  
-- **Deals** : like → `/api/liked-deals` + upsert price alert  
-**Gap** : guest limité ; unlike doit supprimer alerte.
-
-### 3.6 My Trip & bookings
-1. Continuer depuis deal → draft token `/trip/:token`  
-2. Réserver vol partenaire → marquer flight-booked  
-3. Compose / change hôtel → email optionnel → claim si login  
-4. Historique : `/bookings`  
-**Gap** : paiement prod = clés LiteAPI ; mobile sandbox simule succès.
-
-### 3.7 Alertes
-| Type | Déclencheur | Canal | Cron |
+| Surface | Note /10 | Point fort | Point faible principal |
 |---|---|---|---|
-| Auto-check recherches | Onglet Alerts (web) | In-app / email | Client + `/api/auto-check` |
-| Price drop deal | Like deal | Email | `check-price-alerts` (+ après rates) |
-| Origin weekly | Signup mur Deals | Email | `send-origin-alert-digests` (externe) |
-| Occasions | Config `push: true` + ≥3 deals | Email + Expo | `send-occasion-digests` (externe) |
-
-**Gap** : digests origin/occasions **hors** scheduler in-process ; mobile sans onglet Alerts recherches ; push = tokens Expo à enregistrer.
-
-### 3.8 Admin
-- Métriques deals go/no-go, wall health  
-- Page Occasions : volume tags, chips, unverified, sends  
-**Gap** : pas de tests admin automatisés.
+| Recherche | 6 | 27 résultats trouvés, cartes claires | Escales et prix par trajet douteux |
+| Wizard vol + hôtel | 8 | 3 étapes nettes, hôtels chargés vite | Prix hôtel solo très élevé sans explication |
+| Mon voyage | 5 | Brouillon sans compte, email, mention deux réservations | Aucun détail vol/hôtel, plus de navigation |
+| Deals (mur) | 6,5 | Titres générés, prix décomposé, occasions | Week-end ≠ week-end, compteurs faux, « Nouveau » partout |
+| Fiche séjour | 7,5 | « Pourquoi on valide », décomposition, autres dates | Codes bruts (FR, RO, BI), mot « pack », 5 boutons |
+| Planner | 4 | Promesse claire en 3 étapes | Mur Google avant tout essai |
+| Alertes | 3,5 | Promesse claire | Contenu coupé à gauche, relance 15 min |
+| Favoris | 4 | Promesse claire | Contenu coupé à gauche, mur de connexion |
+| Mobile web | 5,5 | Tout est accessible | Une carte/écran, logo et onglet tronqués |
 
 ---
 
-## 4. Occasions v4 — checklist livraison
+## Parcours testés
 
-| Lot | Contenu | Statut |
+| Parcours | Résultat | Durée |
 |---|---|---|
-| A | Config + holidays + daylight | Done + tests |
-| B | SQL tags + tagger materialize | Done · SQL manuel |
-| C | API occasions + filtre | Done + tests |
-| D | Weather LiteAPI gated | Done · env off par défaut |
-| E | UI chips web/mobile | Done (rail + icônes) |
-| F | Digests email + push | Done · SQL + cron |
-| G | Admin occasions | Done |
-| P/O | Pages SSR | Later |
+| Recherche Paris, week-end (30 oct → 1er nov), 100 € | « Pas de résultats » + suggestion budget | ~5 s |
+| Même recherche 250 € → Milan → hôtel → Mon voyage | Abouti : brouillon 456 € / pers. | ~15 s + 6 s hôtels |
+| Deals → « Coup de cœur hôtel » → fiche Milan | Abouti : fiche complète | < 3 s |
+| Planner, Alertes, Favoris (visiteur) | Présentation → « Continuer avec Google » seul | — |
 
-SQL à appliquer manuellement : `apply_deals_occasions_lot_b|d|f_migration.sql` (+ origin alerts si besoin).
+### À garder
 
----
-
-## 5. Jobs deals (ops)
-
-**Scheduler in-process** (`DEALS_SCHEDULER_ENABLED`) : promote 30′ · revalidate 90′ · baselines 24 h · seed-scan 6 h · catalog 7 j · kill-switch 24 h  
-(promote enchaîne rates → **materialize**).
-
-**Cron HTTP** (`CRON_SECRET`) : materialize-wall, digests origin/occasions, price-alerts, wall-health, archive drafts, etc.  
-**Retirés (410)** : calendar deals, refresh-deal-flights legacy.
+- Wizard 3 étapes : une question/écran, hôtels photo+note, « Voyage enregistré »
+- Transparence prix Deals : « 2 nuits · vol 68 € + hôtel 218 € » + décomposition fiche
+- Titres générés (« Milan en 3★, noté 9.2, vol direct »)
+- Bloc « Pourquoi on valide ce plan » + ligne bagages
+- Mention légale : deux réservations distinctes
+- Section « Depuis d'autres aéroports »
+- Aucune erreur console
 
 ---
 
-## 6. Résultats des tests (cette session)
+## P0 — problèmes bloquants
 
-### Unitaires backend (cœur)
-```
-deals/test_occasions_* + tagger + weather + v4_vente + price_alerts + materialize
-→ 48 passed
-```
+| # | Problème | Preuve | Impact |
+|---|---|---|---|
+| 1 | Données de vol incohérentes | « Transavia · 3 ESCALES » ORY→VCE/BCN ; « Ryanair · 1 ESCALE » ; code « MW » | Plus aucune confiance |
+| 2 | Prix aller/retour inventés | 20/27 avec moitiés identiques (72/72) alors que source = total | Prix faux affichés comme réels |
+| 3 | Onglet Week-end ≠ week-end | Cracovie / Lisbonne mar→jeu dans Week-end | Promesse fausse |
+| 4 | Compteurs occasions faux | « Coup de cœur · 4 » → « 1 offre » ; « Hors vacances · 11 » sur mur de 6 | Chip peu crédible |
+| 5 | Aucune route par onglet | URL reste `/` ; `/deals` → Recherche ; 0 `<a>` | Pas de partage, deep link, SEO, retour |
+| 6 | Contenu coupé Alertes / Favoris | Logo/titre à −8 px (« lightWatcher ») | Effet cassé sur 2/5 onglets |
+| 7 | Mon voyage sans détail | Pas horaires/aéroport/compagnie/photo hôtel ; Aviasales pour vol Ryanair | Réserve à l’aveugle |
 
-### Smoke live API (localhost:8000) — 2026-10-25
-| Endpoint | Résultat |
+---
+
+## Analyse écran par écran
+
+### Accueil et Recherche
+
+- Accueil = formulaire seul, pas de promesse ni aperçu deals
+- Titre navigateur : « Scanner de vols Ryanair » (dépassé + marque tierce)
+- Départ vide (placeholder Paris) ; bouton désactivé sans explication
+- « Paris » inclut Vatry (XCR, ~150 km)
+- Horaires techniques « 06:00 → 23:59 » sans réglage fait
+- Résultats répètent la recherche (« Modifier » + « Dernière recherche »)
+- Boutons violet hors palette orange
+- Tri prix seul (ignore « temps sur place »)
+- Pas de ligne bagages ni aéroport secondaire sur les cartes
+
+### Wizard vol + hôtel
+
+- Étape 1 claire ; étape 2 : 5 hôtels Milan 299–425 €/pers. ; total 456 € vs budget 250 € sans avertissement
+- Note et étoiles même icône (« ★ 8.3 · 4★ »)
+- Ordre « note/prix » peu lisible ; étape 3 : 4 boutons dont nom hôtel sur 2 lignes
+
+### Mon voyage
+
+- Nav disparait (seul ← Retour)
+- « dès 456 € » pour un voyage déjà composé
+- Pas d’horaires, aéroport, compagnie, bagages ; hôtel sans photo/prix/note
+- « J'ai réservé mon vol ✓ » annoncé mais invisible avant clic partenaire
+
+### Deals — mur
+
+- Structure OK (durée, occasions, Affiner, tri)
+- 6 occasions permanentes ; pas de saisonnier (Noël, Nouvel An) ; « Sans poser de congé » absent
+- « Max de temps sur place » = tri présenté comme occasion
+- Tuiles ~100 px → deals sous la ligne de flottaison
+- Badge « Nouveau » partout ; badge occasion jamais visible
+- Horaires sans aller/retour ; Bergame non dit sur la carte ; gros CTA orange vs prix orange
+
+### Deals — fiche
+
+- Très complète ; codes FR / RO / BI ; « Prix du pack » (mot écarté juridiquement)
+- Galerie : toilettes en 2e ; rectangle gris avant load ; 5 boutons ; Échap ne ferme pas
+
+### Planner, Alertes, Favoris
+
+- Mur Google seul (pas d’essai guest, pas d’email)
+- Alertes « toutes les 15 min » incompatible budget API Ryanair
+- Jargon « Toast + lightbox » ; deux systèmes d’alertes sans lien visible
+
+### Mobile web (375 px)
+
+- Logo « FlightWatc… », onglet « Rech… »
+- Nav en haut (standard apps = bas)
+- Deals : titre + durée + tuiles + Affiner = 1er écran sans photo
+- Une carte ≈ hauteur écran
+
+---
+
+## Technique / SEO / a11y / légal
+
+| Domaine | Constat | Conséquence |
+|---|---|---|
+| Doublons API | `/api/config` ×3, `/api/airports` ×4 par load + à chaque onglet | Charge inutile |
+| Recherche | ~15 s, 8 req fournisseurs, 1 message vague | Abandon |
+| Routes | Une URL `/` ; `/deals` → Recherche | Pas de deep link |
+| Liens | 0 `<a>` | Pas d’indexation / nouvel onglet |
+| SEO | Pas de meta description ; titre Ryanair ; pas de footer | Invisible moteurs |
+| A11y | Onglets sans nom accessible ; Échap | Clavier / lecteur difficile |
+| État | Budget → 100 €, départ vidé au reload | Ressaisie |
+| Légal | Pas de mentions / CGU / CGV / confidentialité hors fiche | Non conforme emails + résa hôtel |
+
+**Non testé :** connecté, paiement hôtel sandbox, admin au-delà login, app native.
+
+---
+
+## Plan d'action
+
+### P0 — confiance et promesse
+
+- [ ] Recherche : prix total seul si source sans split aller/retour
+- [ ] Recherche : masquer/recalculer escales incohérentes ; nom compagnie (pas code)
+- [ ] Deals : Week-end = départ ven/sam/dim uniquement
+- [ ] Occasions : compteurs avec filtres courants ; filtre SQL
+- [ ] Routes : `/recherche`, `/deals`, `/deals?occasion=…`, `/planner`, `/alertes`, `/favoris` + vrais `<a>`
+- [ ] Corriger décalage −8 px Alertes / Favoris
+- [ ] Mon voyage : horaires, aéroports (secondaire), compagnie, bagages, photo+prix hôtel, nav, partenaire correct
+
+### P1 — clarté et conversion
+
+- [ ] Accueil : promesse + 3–6 deals au-dessus du formulaire
+- [ ] Seed occasions saisonnières (Noël, Nouvel An)
+- [ ] Badge occasion (pas « Nouveau ») ; « Max temps sur place » → tri
+- [ ] Cartes : aéroport secondaire, horaires aller/retour, CTA discret
+- [ ] Fiche : mots au lieu de FR/RO/BI, retirer « pack », galerie, Échap, actions regroupées
+- [ ] Wizard : alerte dépassement budget ; séparer note / étoiles
+- [ ] Planner : essai sans compte + email
+- [ ] Alertes : fréquence ≥ 6 h, sans jargon, regroupement Deals
+- [ ] Mobile : tabs bas, chips compactes, cartes plus courtes
+- [ ] Dedup `/api/config` et `/api/airports`
+
+### P2 — croissance
+
+- [ ] Pages indexables occasion/origine, meta, titre sans marque tierce
+- [ ] Footer légal
+- [ ] Mémoriser dernière recherche
+- [ ] Progression recherches longues
+- [ ] Noms accessibles + test clavier
+
+---
+
+## Annexe — tests techniques (session agent)
+
+| Suite | Résultat |
 |---|---|
-| `GET /api/config` | **200** · sandbox LiteAPI · `deals_source=community` · scheduler on |
-| `GET /api/deals/occasions?adults=2` | **200** · `main=6` chips (≥3) : un-jour-conge, hotel-plebiscite, extras-offerts, hors-vacances, pepites, max-sur-place |
-| `GET /api/deals?adults=2&limit=12` | **200** · 11 deals · tags + badge présents (ex. hiver-soleil, un-jour-conge) · `limit` min=12 |
-| `GET /api/deals?...&occasion=hors-vacances` | **200** · 11 deals (filtre actif ; mur déjà riche en ce tag) |
-| `GET /api/airports` | **200** · 663 aéroports |
-| `booking_sas_events` write/read | **OK** (Supabase) |
+| Unit occasions + vente + alerts + materialize | **48 passed** |
+| `pytest deals providers test_booking_sas` (`--capture=no`) | **exit 0** · ~218 passed · 1 skipped |
+| `GET /api/config` | 200 · sandbox · community |
+| `GET /api/deals/occasions` | 200 · 6 chips main |
+| `GET /api/deals?limit=12` | 200 · 11 deals taggés |
+| `GET /api/airports` | 200 · 663 |
+| Booking SAS write/read | OK |
 
-### Suite backend large (cette session)
-```
-pytest deals providers test_booking_sas.py --capture=no
-→ exit 0 · ~218 passed · 1 skipped (pas de échec)
-```
-Cœur occasions déjà validé : **48 passed** (lots A/C/D/F/G + tagger + v4 + price + materialize).
-
-Bug connu Windows : `pytest` sans `--capture=no` peut crash en teardown (`ValueError: I/O on closed file`) — les tests ont déjà tourné ; ignorer ou utiliser `--capture=no`.
-
-### Non couvert / à faire manuellement
-- [ ] Parcours UI web E2E (Search → Deals → chip → fiche → Autres dates → checkout)
-- [ ] Mobile Expo (même parcours + push token)
-- [ ] Digest origin / occasion (cron dry_run)
-- [ ] Checkout hôtel sandbox bout-en-bout
-- [ ] Admin Occasions + metrics après login
-- [ ] `DEALS_WEATHER_ENABLED=true` + horizon météo
-- [ ] Typecheck monorepo (`npm run typecheck:all`)
-
----
-
-## 7. Priorités produit techniques
-
-**P0**
-1. Filtre occasion en SQL (`contains` + GIN)  
-2. Empty state si 0 chips alors que mur non vide  
-3. Stabiliser un seul process backend (:8000)
-
-**P1**
-4. Compteurs chips alignés durée / destination  
-5. Deep link `?occasion=` robuste (web + mobile)  
-6. Brancher cron externe digests jeudi  
-
-**P2**
-7. Occasions dans fiche détail  
-8. E2E Playwright / Maestro  
-9. Pages SSR occasions (Lot P/O)
-
----
-
-## 8. Comment rejouer les tests
-
-```bash
-# Unitaires occasions + vente + alerts
-cd backend
-python -m pytest deals/test_occasions_lot_a.py deals/test_occasions_lot_c.py deals/test_occasions_lot_f_g.py deals/test_occasion_tagger.py deals/test_weather_lot_d.py deals/test_v4_vente.py deals/test_price_alerts.py deals/test_materialize_wall.py -q
-
-# Smoke
-curl http://127.0.0.1:8000/api/deals/occasions?adults=2
-curl "http://127.0.0.1:8000/api/deals?adults=2&limit=12"
-
-# Materialize (après SQL Lot B)
-# POST /api/deals/jobs/materialize-wall  + header cron
-```
-
----
-
-_Commit suggéré doc : `docs: etat des lieux app workflows`_
+Note Windows : pytest sans `--capture=no` peut crasher en teardown (`I/O on closed file`) alors que les tests ont passé.

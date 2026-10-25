@@ -96,14 +96,14 @@ function PlannerGuestLanding() {
   }
 
   return (
-    <div className="relative w-full overflow-hidden">
+    <div className="relative w-full overflow-x-clip">
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#FF6B35]/15 blur-3xl"
+        className="pointer-events-none absolute -top-16 right-0 w-56 h-56 rounded-full bg-[#FF6B35]/15 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-20 -left-20 w-64 h-64 rounded-full bg-[#FFB088]/25 blur-3xl"
+        className="pointer-events-none absolute -bottom-12 left-0 w-48 h-48 rounded-full bg-[#FFB088]/25 blur-3xl"
       />
 
       <motion.div

@@ -22,6 +22,8 @@ class TripResponse(BaseModel):
     airline: Optional[str] = None
     transfers: Optional[int] = None
     booking_url: Optional[str] = None
+    # False when aller/retour.price are placeholders (e.g. Travelpayouts total-only)
+    leg_prices_reliable: Optional[bool] = True
 
 
 class DateAvecHoraire(BaseModel):

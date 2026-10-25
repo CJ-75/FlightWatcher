@@ -70,7 +70,7 @@ export default function PlannerInvite() {
 
       <div className="relative max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
         <Link
-          to="/"
+          to="/recherche"
           className="inline-flex items-center gap-1 text-sm font-bold text-[#E85A28] hover:text-[#FF6B35]"
         >
           ← FlightWatcher

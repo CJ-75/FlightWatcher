@@ -115,11 +115,35 @@ export function SimpleSearch({
     flexibleDates.dates_depart.length > 0 || flexibleDates.dates_retour.length > 0;
   const startFlexible = forceFlexible || hasParentDates;
 
-  const [budget, setBudget] = useState(externalBudget || 100);
+  const [budget, setBudget] = useState(() => {
+    if (externalBudget) return externalBudget
+    try {
+      const raw = localStorage.getItem('fw_last_search')
+      if (raw) {
+        const parsed = JSON.parse(raw) as { budget?: number }
+        if (typeof parsed.budget === 'number' && parsed.budget > 0) return parsed.budget
+      }
+    } catch {
+      /* ignore */
+    }
+    return 100
+  });
   const [directOnly, setDirectOnly] = useState(false);
-  const [passengers, setPassengers] = useState(
-    initialPassengers > 0 ? initialPassengers : 1,
-  );
+  const [passengers, setPassengers] = useState(() => {
+    if (initialPassengers > 0) return initialPassengers
+    try {
+      const raw = localStorage.getItem('fw_last_search')
+      if (raw) {
+        const parsed = JSON.parse(raw) as { passengers?: number }
+        if (typeof parsed.passengers === 'number' && parsed.passengers > 0) {
+          return parsed.passengers
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return 1
+  });
   const [datePreset, setDatePreset] = useState<DatePreset | null>(
     startFlexible ? 'flexible' : null,
   );
@@ -297,6 +321,19 @@ export function SimpleSearch({
     onError(null);
     setLocalError(null);
     setShowEmpty(false);
+    try {
+      localStorage.setItem(
+        'fw_last_search',
+        JSON.stringify({
+          budget,
+          passengers,
+          airport: selectedAirport.trim().toUpperCase(),
+          savedAt: Date.now(),
+        }),
+      )
+    } catch {
+      /* ignore */
+    }
 
     try {
       const request: InspireRequest = {
@@ -400,9 +437,16 @@ export function SimpleSearch({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={springConfig}
-        className="min-h-[60vh] flex items-center justify-center"
+        className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-4"
       >
         <LoadingSkeleton />
+        <div className="text-center max-w-sm space-y-1.5">
+          <p className="text-sm font-bold text-ink">Exploration des destinations…</p>
+          <p className="text-xs text-muted leading-relaxed">
+            On interroge plusieurs compagnies (souvent 10–20 s pour plusieurs aéroports
+            de Paris). Les premiers bons plans s’affichent dès qu’ils arrivent.
+          </p>
+        </div>
       </motion.div>
     );
   }

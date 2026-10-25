@@ -48,7 +48,7 @@ export default function Login() {
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
         <div className="flex items-center justify-between mb-8 sm:mb-12">
           <Link
-            to="/"
+            to="/recherche"
             className="text-sm font-bold text-[#E85A28] hover:text-[#FF6B35]"
           >
             {t('login.back')}
