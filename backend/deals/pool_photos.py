@@ -2,38 +2,85 @@
 v3.3 Lot A — hotel photos live on hotel_pool, not hotel_rates_cache.
 
 Card photo source of truth = hotel_pool.main_photo / thumbnail.
+v4 Lot C — prefer façade / lobby / exterior; skip bedroom & bathroom when tagged.
 """
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger("deals.pool_photos")
 
+_ROOM_HINT = re.compile(
+    r"(bed\s*room|bedroom|bathroom|bath\s*room|salle[\s_-]*de[\s_-]*bain|"
+    r"\bchambre\b|\bbath\b|\btoilet\b|\bwashroom\b|\ben\s*suite\b)",
+    re.I,
+)
+_GOOD_HINT = re.compile(
+    r"(exterior|outside|facade|fa[cç]ade|lobby|entrance|front|"
+    r"building|pool|piscine|view|vue|terrace|terrasse|garden|jardin)",
+    re.I,
+)
+
+
+def _photo_score(url: str, caption: Optional[str] = None) -> int:
+    """Higher = better cover. Room/bath captions score very low."""
+    blob = f"{caption or ''} {url or ''}"
+    if _ROOM_HINT.search(blob):
+        return -100
+    if _GOOD_HINT.search(blob):
+        return 50
+    return 0
+
+
+def pick_cover_photo(candidates: Sequence[Tuple[str, Optional[str]]]) -> Optional[str]:
+    """
+    Pick best cover URL from (url, caption) pairs.
+    Never prefer bedroom/bathroom when an alternative exists.
+    """
+    scored: List[Tuple[int, int, str]] = []
+    for i, (url, caption) in enumerate(candidates):
+        u = (url or "").strip()
+        if not u:
+            continue
+        scored.append((_photo_score(u, caption), -i, u))
+    if not scored:
+        return None
+    scored.sort(reverse=True)
+    best = scored[0]
+    # If best is a room shot, try next non-room
+    if best[0] < 0:
+        for s, _neg_i, u in scored:
+            if s >= 0:
+                return u
+    return best[2]
+
 
 def extract_main_photo(obj: Any) -> Optional[str]:
-    """Best-effort photo URL from a pool row, rates top item, or LiteAPI raw."""
+    """Best-effort cover photo — façade/lobby preferred over chambre/SDB."""
     if not isinstance(obj, dict):
         return None
+    candidates: List[Tuple[str, Optional[str]]] = []
     for key in ("main_photo", "mainPhoto", "photo", "thumbnail", "thumbnailUrl"):
         val = obj.get(key)
         if isinstance(val, str) and val.strip():
-            return val.strip()
+            candidates.append((val.strip(), None))
     raw = obj.get("raw")
     if isinstance(raw, dict):
         for key in ("main_photo", "mainPhoto", "thumbnail", "thumbnailUrl", "photo"):
             val = raw.get(key)
             if isinstance(val, str) and val.strip():
-                return val.strip()
+                candidates.append((val.strip(), None))
         for key in ("hotelImages", "hotel_images", "images", "photos"):
             block = raw.get(key)
             if not isinstance(block, list):
                 continue
             for item in block:
                 if isinstance(item, str) and item.strip():
-                    return item.strip()
-                if isinstance(item, dict):
+                    candidates.append((item.strip(), None))
+                elif isinstance(item, dict):
                     u = (
                         item.get("url")
                         or item.get("hdUrl")
@@ -41,8 +88,9 @@ def extract_main_photo(obj: Any) -> Optional[str]:
                         or ""
                     ).strip()
                     if u:
-                        return u
-    return None
+                        cap = item.get("caption") or item.get("title") or item.get("type")
+                        candidates.append((u, str(cap) if cap else None))
+    return pick_cover_photo(candidates)
 
 
 def photos_map_from_pool(

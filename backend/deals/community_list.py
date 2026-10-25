@@ -3,6 +3,7 @@ Assemble community deals_active rows into TravelDeal-shaped dicts for the API.
 """
 from __future__ import annotations
 
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -312,6 +313,9 @@ def row_to_travel_deal(
     if hook:
         deal_out["hook"] = hook.get("text")
         deal_out["hook_kind"] = hook.get("kind")
+    why = compute_why_good(deal_out)
+    if why:
+        deal_out["why_good"] = why
     return deal_out
 
 
@@ -811,6 +815,173 @@ def compute_deal_hook(deal: Dict[str, Any]) -> Optional[Dict[str, str]]:
     return {"text": text, "kind": kind}
 
 
+def compute_why_good(deal: Dict[str, Any]) -> List[str]:
+    """Up to 3 true bullets for the detail sheet (data-only)."""
+    bullets: List[str] = []
+    disc = (deal.get("badge_meta") or {}).get("discount_pct")
+    if disc is not None:
+        try:
+            pct = float(disc)
+            if pct >= 10:
+                bullets.append(f"Vol {int(round(pct))} % sous le prix habituel sur cette ligne")
+        except (TypeError, ValueError):
+            pass
+
+    hotel = deal.get("hotel") if isinstance(deal.get("hotel"), dict) else {}
+    try:
+        rating = float(hotel.get("rating")) if hotel.get("rating") is not None else None
+    except (TypeError, ValueError):
+        rating = None
+    stars = hotel.get("stars") or deal.get("hotel_stars")
+    try:
+        stars_n = int(round(float(stars))) if stars is not None else 0
+    except (TypeError, ValueError):
+        stars_n = 0
+    if rating is not None and rating >= 8.0:
+        if stars_n >= 3:
+            bullets.append(
+                f"Hôtel {stars_n}★ noté {rating:.1f}/10"
+                + (
+                    f" ({int(hotel['review_count'])} avis)"
+                    if hotel.get("review_count") is not None
+                    else ""
+                )
+            )
+        else:
+            bullets.append(f"Hôtel bien noté {rating:.1f}/10")
+
+    flight = deal.get("flight") or {}
+    out_t = flight.get("outbound_local") or flight.get("out_dep_local")
+    ret_t = flight.get("inbound_local") or flight.get("ret_dep_local")
+
+    def _hhmm(iso: Any) -> Optional[str]:
+        if not iso:
+            return None
+        m = re.search(r"T(\d{2}):(\d{2})", str(iso))
+        return f"{m.group(1)}:{m.group(2)}" if m else None
+
+    out_c, ret_c = _hhmm(out_t), _hhmm(ret_t)
+    if flight.get("direct"):
+        if out_c and ret_c:
+            bullets.append(f"Vol direct · aller {out_c} · retour {ret_c}")
+        else:
+            bullets.append("Vol direct aller-retour")
+    elif out_c and ret_c:
+        bullets.append(f"Horaires · aller {out_c} · retour {ret_c}")
+
+    board = (hotel.get("board") or deal.get("board") or "").upper()
+    if "BI" in board or "BREAKFAST" in board or "PETIT" in board:
+        bullets.append("Petit-déjeuner inclus")
+    if hotel.get("refundable"):
+        bullets.append("Annulation gratuite sur l’hôtel")
+    if deal.get("baggage_line"):
+        bullets.append(str(deal["baggage_line"]))
+
+    # Dedup preserve order, max 3
+    seen = set()
+    out: List[str] = []
+    for b in bullets:
+        if b in seen:
+            continue
+        seen.add(b)
+        out.append(b)
+        if len(out) >= 3:
+            break
+    return out
+
+
+def list_related_community_deals(
+    supabase,
+    deal: Dict[str, Any],
+    *,
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Same destination city, other origins and/or dates — real prices from deals_active.
+    """
+    dest = str(
+        deal.get("destination")
+        or (deal.get("flight") or {}).get("destination_iata")
+        or ""
+    ).upper()
+    current_key = str(deal.get("deal_key") or deal.get("id") or "")
+    if not dest or not supabase:
+        return []
+    try:
+        res = (
+            supabase.table("deals_active")
+            .select("*")
+            .eq("dest_iata", dest)
+            .eq("status", "active")
+            .order("deal_score", desc=True)
+            .limit(24)
+            .execute()
+        )
+        rows = [r for r in (res.data or []) if str(r.get("deal_key") or "") != current_key]
+    except Exception:
+        return []
+    if not rows:
+        return []
+    fresh = _baselines_fresh_flag(supabase)
+    enriched = _enrich_rows_to_deals(
+        rows,
+        adults_n=int(deal.get("adults") or 2),
+        fresh=fresh,
+        max_pp=None,
+        match_origin=True,
+        supabase=supabase,
+    )
+    enriched = _only_hotel_photo_deals(enriched)
+    # Prefer different origin or different dates vs current
+    cur_origin = str(deal.get("origin_iata") or deal.get("departure_airport") or "").upper()
+    cur_out = str((deal.get("dates") or {}).get("outbound") or "")[:10]
+    scored: List[Tuple[int, Dict[str, Any]]] = []
+    for d in enriched:
+        o = str(d.get("origin_iata") or "").upper()
+        out_d = str((d.get("dates") or {}).get("outbound") or "")[:10]
+        score = 0
+        if o and o != cur_origin:
+            score += 2
+        if out_d and out_d != cur_out:
+            score += 1
+        if score == 0:
+            continue
+        scored.append((score, d))
+    scored.sort(key=lambda x: (-x[0], -(float(x[1].get("deal_score") or 0))))
+    # Diversity: one per origin+dates pair
+    seen_pair = set()
+    out: List[Dict[str, Any]] = []
+    for _s, d in scored:
+        pair = (
+            str(d.get("origin_iata") or ""),
+            str((d.get("dates") or {}).get("outbound") or "")[:10],
+        )
+        if pair in seen_pair:
+            continue
+        seen_pair.add(pair)
+        # Slim payload for alternatives strip
+        out.append(
+            {
+                "id": d.get("id"),
+                "deal_key": d.get("deal_key") or d.get("id"),
+                "city": d.get("city"),
+                "origin_iata": d.get("origin_iata"),
+                "origin_airport_label": d.get("origin_airport_label"),
+                "departure_airport": d.get("departure_airport"),
+                "dates": d.get("dates"),
+                "nights": d.get("nights"),
+                "price_per_person": d.get("price_per_person"),
+                "currency": d.get("currency") or "EUR",
+                "hotel_name": d.get("hotel_name"),
+                "image_url": d.get("image_url"),
+                "hook": d.get("hook"),
+            }
+        )
+        if len(out) >= max(1, min(int(limit), 8)):
+            break
+    return out
+
+
 def list_community_deals(
     supabase,
     *,
@@ -1008,6 +1179,12 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
             match_origin=True,
             supabase=supabase,
         )
-        return rows[0] if rows else None
+        if not rows:
+            return None
+        deal = rows[0]
+        related = list_related_community_deals(supabase, deal, limit=5)
+        if related:
+            deal["related_deals"] = related
+        return deal
     except Exception:
         return None

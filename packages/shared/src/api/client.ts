@@ -215,6 +215,24 @@ export function createApiClient(options: ApiClientOptions = {}) {
     getDeal: (id: string) =>
       request<TravelDeal>(`/api/deals/${encodeURIComponent(id)}`),
 
+    signupOriginAlert: (body: {
+      email: string
+      origin_iata: string
+      origin_label?: string
+      locale?: string
+    }) =>
+      request<{
+        ok: boolean
+        email?: string
+        origin_iata?: string
+        origin_label?: string
+        confirmation_sent?: boolean
+        error?: string
+      }>('/api/deals/origin-alerts', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
     getHotelGallery: (hotelId: string, opts?: { language?: string; fallback?: string }) => {
       const q = new URLSearchParams()
       if (opts?.language) q.set('language', opts.language)

@@ -139,6 +139,42 @@ async def list_deals(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class OriginAlertSignupRequest(BaseModel):
+    email: str
+    origin_iata: str
+    origin_label: Optional[str] = None
+    locale: Optional[str] = "fr"
+
+
+@router.post("/api/deals/origin-alerts")
+async def signup_origin_alert(body: OriginAlertSignupRequest):
+    """v4 Lot E — weekly deals from origin city (no account). Apply SQL migration first."""
+    try:
+        from deals.origin_alerts import signup_origin_alert as do_signup
+
+        supabase = None
+        try:
+            supabase = _svc()
+        except HTTPException:
+            raise
+        result = do_signup(
+            supabase,
+            email=body.email,
+            origin_iata=body.origin_iata,
+            origin_label=body.origin_label,
+            locale=body.locale or "fr",
+        )
+        if not result.get("ok"):
+            err = result.get("error") or "error"
+            code = 400 if err in ("invalid_email", "invalid_origin") else 500
+            raise HTTPException(status_code=code, detail=err)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/calendar")
 async def get_calendar():
     """Retired — use community deals browse + Search combo wizard."""

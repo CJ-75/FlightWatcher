@@ -12,6 +12,7 @@ import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
+import { OriginAlertSignup } from './OriginAlertSignup'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
@@ -559,15 +560,28 @@ export function DealsTab() {
             layout
             className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
           >
-            {gridDeals.map((deal) => (
-              <DealCard
-                key={deal.id}
-                deal={deal}
-                liked={likedIds.has(deal.id)}
-                onToggleLike={() => void toggleLike(deal)}
-                onClick={() => setSelected(deal)}
-              />
-            ))}
+            {gridDeals.flatMap((deal, i) => {
+              const card = (
+                <DealCard
+                  key={deal.id}
+                  deal={deal}
+                  liked={likedIds.has(deal.id)}
+                  onToggleLike={() => void toggleLike(deal)}
+                  onClick={() => setSelected(deal)}
+                />
+              )
+              if (i === 5 && origin) {
+                return [
+                  card,
+                  <OriginAlertSignup
+                    key="origin-alert"
+                    originIata={origin}
+                    originLabel={originCityLabel || origin}
+                  />,
+                ]
+              }
+              return [card]
+            })}
           </motion.div>
           {fillerDeals.length > 0 ? (
             <div>

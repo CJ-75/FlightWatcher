@@ -6,7 +6,7 @@ import {
   formatFetchedAt,
   pricePpWithHotel,
 } from '@flightwatcher/shared'
-import type { TravelDeal, TravelDealHotel } from '../types'
+import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { getApiClient } from '../utils/apiClient'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
@@ -94,8 +94,28 @@ function FactChip({ children, tone = 'neutral' }: { children: ReactNode; tone?: 
   )
 }
 
+function whatsappShareUrl(deal: TravelDeal) {
+  const price = Math.round(deal.price_per_person)
+  const city = deal.city || 'ce séjour'
+  const origin =
+    deal.origin_airport_label || deal.departure_airport || deal.origin_iata || ''
+  const link =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}${window.location.pathname}?deal=${encodeURIComponent(deal.deal_key || deal.id)}`
+      : ''
+  const text = [
+    `Bon plan ${city} : ${price} € / pers. vol + hôtel`,
+    origin ? `depuis ${origin}` : null,
+    deal.hook || null,
+    link,
+  ]
+    .filter(Boolean)
+    .join(' — ')
+  return `https://wa.me/?text=${encodeURIComponent(text)}`
+}
+
 export function DealDetailModal({
-  deal,
+  deal: dealProp,
   onClose,
   liked,
   onToggleLike,
@@ -104,11 +124,41 @@ export function DealDetailModal({
 }: DealDetailModalProps) {
   const { t, language } = useI18n()
   const navigate = useNavigate()
+  const [deal, setDeal] = useState<TravelDeal | null>(dealProp)
   const [startingTrip, setStartingTrip] = useState(false)
   const [composingHotel, setComposingHotel] = useState(false)
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [checkout, setCheckout] = useState(false)
   const [bookingEnabled, setBookingEnabled] = useState(true)
+
+  useEffect(() => {
+    setDeal(dealProp)
+    setHotelId(null)
+    setCheckout(false)
+  }, [dealProp])
+
+  useEffect(() => {
+    if (!dealProp) return
+    const key = dealProp.deal_key || dealProp.id
+    if (!key) return
+    let cancelled = false
+    void getApiClient()
+      .getDeal(key)
+      .then((full) => {
+        if (cancelled || !full) return
+        setDeal((prev) => ({
+          ...(prev || dealProp),
+          ...full,
+          why_good: full.why_good || prev?.why_good || dealProp.why_good,
+          related_deals: full.related_deals || prev?.related_deals,
+          hook: full.hook || prev?.hook || dealProp.hook,
+        }))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [dealProp])
 
   useEffect(() => {
     void fetch('/api/config')
@@ -436,6 +486,30 @@ export function DealDetailModal({
                   {deal.price_pax_note}
                 </p>
               ) : null}
+
+              {(deal.why_good?.length || deal.hook) ? (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800/70 mb-2">
+                    {t('deals.whyGood')}
+                  </p>
+                  <ul className="space-y-1.5">
+                    {(deal.why_good?.length
+                      ? deal.why_good
+                      : deal.hook
+                        ? [deal.hook]
+                        : []
+                    ).map((b) => (
+                      <li
+                        key={b}
+                        className="text-sm text-emerald-950 font-medium flex gap-2 items-start"
+                      >
+                        <span className="text-emerald-600 font-black shrink-0">✓</span>
+                        <span className="leading-snug">{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </header>
 
             {/* 2. Pack at a glance — Vol | Hôtel */}
@@ -663,11 +737,80 @@ export function DealDetailModal({
                 </ul>
             ) : null}
 
+            {(deal.related_deals?.length ?? 0) > 0 ? (
+              <section>
+                <h3 className="text-sm font-bold text-ink mb-3">
+                  {t('deals.relatedOptions')}
+                </h3>
+                <div className="grid gap-2">
+                  {(deal.related_deals as TravelDealRelated[]).slice(0, 5).map((r) => {
+                    const from =
+                      r.origin_airport_label ||
+                      r.departure_airport ||
+                      r.origin_iata ||
+                      '—'
+                    const dates =
+                      r.dates?.outbound && r.dates?.inbound
+                        ? `${formatDateShort(r.dates.outbound)} → ${formatDateShort(r.dates.inbound)}`
+                        : null
+                    return (
+                      <button
+                        key={r.deal_key || r.id}
+                        type="button"
+                        onClick={() => {
+                          if (r.deal_key || r.id) {
+                            void getApiClient()
+                              .getDeal(String(r.deal_key || r.id))
+                              .then((full) => {
+                                if (full) {
+                                  setDeal(full)
+                                  setHotelId(null)
+                                }
+                              })
+                              .catch(() => undefined)
+                          }
+                        }}
+                        className="text-left rounded-2xl border border-line bg-white hover:border-primary-200 px-3 py-3 transition-colors"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-ink truncate">
+                              depuis {from}
+                            </p>
+                            <p className="text-[11px] text-muted mt-0.5 truncate">
+                              {[dates, r.nights != null ? `${r.nights} nuits` : null, r.hook]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                          </div>
+                          <p className="text-sm font-black text-primary-500 tabular-nums shrink-0">
+                            {Math.round(r.price_per_person || 0)} €
+                          </p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+            ) : null}
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              {verifiedLabel || t('deals.methodLine')}
+            </p>
+
             <DealComplianceNotice
               cancelDeadline={selected?.cancel_deadline || deal.hotel?.cancel_deadline}
             />
 
             <div className="flex flex-col gap-2 pb-20 sm:pb-2">
+              <a
+                href={whatsappShareUrl(deal)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-semibold py-3 rounded-xl transition-colors"
+              >
+                {t('deals.shareWhatsApp')}
+              </a>
               <button
                 type="button"
                 onClick={() => void startComposeHotel()}

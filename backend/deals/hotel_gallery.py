@@ -60,7 +60,19 @@ def _extract_urls(payload: Any) -> List[Dict[str, Any]]:
                 "default": default,
             }
         )
-    out.sort(key=lambda x: (0 if x.get("default") else 1, x.get("order") or 0))
+    # Prefer façade / lobby; demote bedroom & bathroom covers (v4 Lot C)
+    try:
+        from deals.pool_photos import _photo_score
+
+        out.sort(
+            key=lambda x: (
+                0 if x.get("default") else 1,
+                -_photo_score(str(x.get("url") or ""), x.get("caption")),
+                x.get("order") or 0,
+            )
+        )
+    except Exception:
+        out.sort(key=lambda x: (0 if x.get("default") else 1, x.get("order") or 0))
     return out[:40]
 
 

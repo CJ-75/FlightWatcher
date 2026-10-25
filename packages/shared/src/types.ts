@@ -370,6 +370,23 @@ export interface InvitePreview {
   invite_token: string
 }
 
+/** Slim alternative deal (same city, other origin/dates). */
+export interface TravelDealRelated {
+  id?: string
+  deal_key?: string
+  city?: string
+  origin_iata?: string
+  origin_airport_label?: string | null
+  departure_airport?: string
+  dates?: TravelDealDates
+  nights?: number
+  price_per_person?: number
+  currency?: string
+  hotel_name?: string
+  image_url?: string
+  hook?: string | null
+}
+
 /**
  * Weekend « vol + hôtel » for Deals tab.
  * Legacy flat fields kept for mock / liked snapshots; LiteAPI fills nested ones.
@@ -400,6 +417,10 @@ export interface TravelDeal {
   hook?: string | null
   /** Kind of hook: baseline | direct | hotel_value */
   hook_kind?: string | null
+  /** Detail sheet: up to 3 data-only value bullets. */
+  why_good?: string[]
+  /** Same dest, other origins/dates (detail sheet). */
+  related_deals?: TravelDealRelated[]
   /** Stable key for likes, alerts, revalidate. */
   deal_key?: DealKey
   origin_iata?: string

@@ -373,6 +373,20 @@ export function DealDetailScreen({ route, navigation }: Props) {
             </Pressable>
           </View>
 
+          {(deal.why_good?.length || deal.hook) ? (
+            <View style={[styles.infoCard, shadow.soft, { backgroundColor: '#ECFDF5' }]}>
+              <Text style={styles.sectionLabel}>Pourquoi c’est un bon plan</Text>
+              {(deal.why_good?.length ? deal.why_good : deal.hook ? [deal.hook] : []).map(
+                (b) => (
+                  <View key={b} style={styles.highlightRow}>
+                    <Text style={[styles.bullet, { color: colors.success }]}>✓</Text>
+                    <Text style={styles.highlightText}>{b}</Text>
+                  </View>
+                ),
+              )}
+            </View>
+          ) : null}
+
           {deal.highlights?.length ? (
             <View style={styles.highlights}>
               <Text style={styles.sectionLabel}>Inclus</Text>
@@ -385,7 +399,74 @@ export function DealDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
+          {(deal.related_deals?.length ?? 0) > 0 ? (
+            <View style={styles.switchBlock}>
+              <Text style={styles.sectionLabel}>Autres départs et dates</Text>
+              {deal.related_deals!.slice(0, 5).map((r) => (
+                <Pressable
+                  key={r.deal_key || r.id}
+                  onPress={() => {
+                    if (r.deal_key || r.id) {
+                      navigation.push('DealDetail', {
+                        dealId: String(r.deal_key || r.id),
+                      })
+                    }
+                  }}
+                  style={styles.hotelOption}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.hotelOptionName} numberOfLines={1}>
+                      depuis{' '}
+                      {r.origin_airport_label ||
+                        r.departure_airport ||
+                        r.origin_iata ||
+                        '—'}
+                    </Text>
+                    <Text style={styles.hotelOptionMeta} numberOfLines={1}>
+                      {[
+                        r.dates?.outbound
+                          ? formatDate(r.dates.outbound)
+                          : null,
+                        r.nights != null ? `${r.nights}n` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                  <Text style={styles.hotelOptionPrice}>
+                    {Math.round(r.price_per_person || 0)} €
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.secondaryLinks}>
+            <Pressable
+              onPress={() => {
+                const price = Math.round(deal.price_per_person)
+                const origin =
+                  deal.origin_airport_label ||
+                  deal.departure_airport ||
+                  deal.origin_iata ||
+                  ''
+                const link = `${getWebOrigin()}?deal=${encodeURIComponent(deal.deal_key || deal.id)}`
+                const text = [
+                  `Bon plan ${deal.city} : ${price} € / pers.`,
+                  origin ? `depuis ${origin}` : null,
+                  deal.hook || null,
+                  link,
+                ]
+                  .filter(Boolean)
+                  .join(' — ')
+                void Linking.openURL(
+                  `https://wa.me/?text=${encodeURIComponent(text)}`,
+                )
+              }}
+              hitSlop={8}
+            >
+              <Text style={styles.linkText}>Partager sur WhatsApp</Text>
+            </Pressable>
             <Pressable
               onPress={() => {
                 navigation.navigate('Main', {
