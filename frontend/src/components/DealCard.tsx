@@ -357,33 +357,27 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           onOpen={onClick}
         />
 
-        {corner || fresh ? (
+        {corner && (corner.text || corner.discountPct != null) ? (
           <span
-            className={`absolute top-3 left-3 z-[3] max-w-[calc(100%-3.75rem)] shadow-soft pointer-events-none rounded-full px-2.5 py-1 min-h-[24px] inline-flex items-center gap-1.5 ${
-              fresh && !corner ? 'bg-ink text-white' : 'bg-accent-500 text-white'
-            }`}
-            title={corner?.fullText || undefined}
+            className="absolute top-3 left-3 z-[3] max-w-[calc(100%-3.75rem)] shadow-soft pointer-events-none rounded-full px-2.5 py-1 min-h-[24px] inline-flex items-center gap-1.5 bg-accent-500 text-white"
+            title={corner.fullText || undefined}
           >
-            {corner?.kind === 'discount' ? (
-              <>
-                {corner.discountPct != null ? (
-                  <span className="text-[11px] font-black tabular-nums leading-none shrink-0">
-                    −{corner.discountPct}%
-                  </span>
-                ) : null}
-                <span className="text-[11px] font-bold leading-snug truncate">
-                  {corner.text}
-                </span>
-              </>
-            ) : corner ? (
+            {corner.kind === 'discount' && corner.discountPct != null ? (
+              <span className="text-[11px] font-black tabular-nums leading-none shrink-0">
+                −{corner.discountPct}%
+              </span>
+            ) : null}
+            {corner.text ? (
               <span className="text-[11px] font-bold leading-snug truncate">
                 {corner.text}
               </span>
-            ) : (
-              <span className="text-[11px] font-bold leading-none">
-                {t('deals.newBadge')}
-              </span>
-            )}
+            ) : null}
+          </span>
+        ) : fresh ? (
+          <span className="absolute top-3 left-3 z-[3] shadow-soft pointer-events-none rounded-full px-2.5 py-1 min-h-[24px] inline-flex items-center bg-ink text-white">
+            <span className="text-[11px] font-bold leading-none">
+              {t('deals.newBadge')}
+            </span>
           </span>
         ) : null}
 

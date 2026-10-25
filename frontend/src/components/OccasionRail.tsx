@@ -40,9 +40,16 @@ export function OccasionRail({
   countsPending = false,
 }: Props) {
   const { t } = useI18n()
-  const active = chips.find((c) => c.slug === selected) || null
+  const visible = chips.filter((chip) => {
+    const label = chipLabel(chip, false).trim()
+    if (!label) return false
+    const on = selected === chip.slug
+    if (typeof chip.count === 'number' && chip.count <= 0 && !on) return false
+    return true
+  })
+  const active = visible.find((c) => c.slug === selected) || null
 
-  if (chips.length === 0) return null
+  if (visible.length === 0) return null
 
   return (
     <section className="mb-4" aria-label={t('deals.occasionsTitle')}>
@@ -64,17 +71,17 @@ export function OccasionRail({
       {/* Mobile: horizontal scroll. Desktop: wrap — never clip chip text. */}
       <div className="max-md:-mx-1 max-md:px-1 max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] max-md:[&::-webkit-scrollbar]:hidden">
         <div className="flex max-md:items-center max-md:gap-2 max-md:min-w-min max-md:pb-0.5 md:flex-wrap md:gap-2">
-          {chips.map((chip, i) => {
+          {visible.map((chip, i) => {
             const on = selected === chip.slug
             const count = chip.count
             const hasCount = typeof count === 'number'
-            const emptyKnown = hasCount && count <= 0
+            const label = chipLabel(chip, false)
             return (
               <motion.button
                 key={chip.slug}
                 type="button"
                 initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: emptyKnown && !on ? 0.45 : 1, y: 0 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{
                   delay: Math.min(i * 0.03, 0.18),
                   type: 'spring',
@@ -82,7 +89,6 @@ export function OccasionRail({
                   damping: 28,
                 }}
                 onClick={() => onToggle(chip.slug)}
-                disabled={emptyKnown && !on}
                 aria-pressed={on}
                 title={chip.explain || chip.label || undefined}
                 className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-3 py-1.5 text-left transition-all duration-150 ${
@@ -104,24 +110,28 @@ export function OccasionRail({
                     on ? 'text-white' : 'text-ink'
                   }`}
                 >
-                  {chipLabel(chip, false)}
+                  {label}
                 </span>
-                <span
-                  className={`inline-flex min-w-[1.25rem] justify-center text-[10px] font-bold tabular-nums rounded-full px-1.5 py-0.5 leading-none shrink-0 ${
-                    on
-                      ? 'bg-white/20 text-white'
-                      : 'bg-primary-50 text-primary-700'
-                  }`}
-                  aria-hidden={!hasCount}
-                >
-                  {hasCount ? (
-                    count
-                  ) : countsPending ? (
+                {hasCount && count > 0 ? (
+                  <span
+                    className={`inline-flex min-w-[1.25rem] justify-center text-[10px] font-bold tabular-nums rounded-full px-1.5 py-0.5 leading-none shrink-0 ${
+                      on
+                        ? 'bg-white/20 text-white'
+                        : 'bg-primary-50 text-primary-700'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                ) : countsPending && !hasCount ? (
+                  <span
+                    className={`inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 py-0.5 ${
+                      on ? 'bg-white/20' : 'bg-primary-50'
+                    }`}
+                    aria-hidden
+                  >
                     <span className="inline-block w-2.5 h-2.5 rounded-full bg-current/30 animate-pulse" />
-                  ) : (
-                    '·'
-                  )}
-                </span>
+                  </span>
+                ) : null}
               </motion.button>
             )
           })}

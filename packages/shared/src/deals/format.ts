@@ -102,21 +102,19 @@ export function dealCornerBadgeParts(deal: TravelDeal): DealCornerBadgeParts | n
   }
   const metaLabel = (meta?.label || '').trim()
   const short = (meta?.short_label || '').trim()
-  if (pct != null || (metaLabel && !/^nouveau$/i.test(metaLabel))) {
+  // Discount badge only when we have a real % — no empty pink shell
+  if (pct != null) {
     const text = short || metaLabel || 'Moins cher'
-    const full =
-      pct != null
-        ? `${text} (−${pct} %)`
-        : metaLabel || text
     return {
       discountPct: pct,
       text,
-      fullText: full,
+      fullText: `${text} (−${pct} %)`,
       kind: 'discount',
     }
   }
   if (deal.badge && !/^nouveau$/i.test(String(deal.badge).trim())) {
     const text = String(deal.badge).trim()
+    if (!text) return null
     // Legacy long "Vol −N % …" → strip number into pct if present
     const m = text.match(/−\s*(\d+)\s*%/)
     if (m) {
@@ -130,7 +128,7 @@ export function dealCornerBadgeParts(deal: TravelDeal): DealCornerBadgeParts | n
     return { discountPct: null, text, fullText: text, kind: 'discount' }
   }
   const occasion = occasionBadgeLabel(deal.occasion_badge)
-  if (occasion) {
+  if (occasion && occasion.trim()) {
     return {
       discountPct: null,
       text: occasion,

@@ -184,6 +184,7 @@ OCCASIONS: List[Dict[str, Any]] = [
         "verified": True,
         "priority": 70,
         "push": False,
+        "chip": False,  # hidden from Inspire-toi rail (keep one row)
     },
     {
         "slug": "il-fera-beau",
