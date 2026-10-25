@@ -399,6 +399,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
             ) : null}
             <div>
               <p className="text-2xl sm:text-[1.75rem] font-extrabold text-primary-500 tracking-tight leading-none tabular-nums">
+                <span className="text-xs sm:text-sm font-bold text-ink-soft mr-1">
+                  À partir de
+                </span>
                 {Math.round(deal.price_per_person)} €{' '}
                 <span className="text-sm font-bold text-ink-soft">/ pers.</span>
               </p>

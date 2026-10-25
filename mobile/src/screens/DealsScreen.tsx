@@ -7,6 +7,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Pressable,
+  ScrollView,
 } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -21,6 +22,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
+import { OccasionIcon } from '../components/OccasionIcon'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { useLikedDeals } from '../hooks/useLikedDeals'
@@ -55,12 +57,9 @@ export function DealsScreen() {
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [originChipOpen, setOriginChipOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
   const [occasion, setOccasion] = useState<string | null>(null)
-  const [occasionMain, setOccasionMain] = useState<DealOccasionChip[]>([])
-  const [occasionMore, setOccasionMore] = useState<DealOccasionChip[]>([])
-  const [occasionsOpen, setOccasionsOpen] = useState(false)
+  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
@@ -161,17 +160,21 @@ export function DealsScreen() {
             adults: queryAdults,
           })
           .then((res) => {
-            setOccasionMain(Array.isArray(res?.main) ? res.main : [])
-            setOccasionMore(Array.isArray(res?.more) ? res.more : [])
+            const seen = new Set<string>()
+            const all: DealOccasionChip[] = []
+            for (const c of [...(res?.main || []), ...(res?.more || [])]) {
+              if (!c?.slug || seen.has(c.slug)) continue
+              seen.add(c.slug)
+              all.push(c)
+            }
+            setOccasionChips(all)
             setOccasion((prev) => {
               if (!prev) return null
-              const all = [...(res?.main || []), ...(res?.more || [])]
               return all.some((c) => c.slug === prev) ? prev : null
             })
           })
           .catch(() => {
-            setOccasionMain([])
-            setOccasionMore([])
+            setOccasionChips([])
           })
         const list = await listPromise
         const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
@@ -291,9 +294,9 @@ export function DealsScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text style={styles.title}>Séjours vol + hôtel</Text>
+              <Text style={styles.title}>Séjours pas chers</Text>
               <Text style={styles.subtitle}>
-                Des prix réels, vérifiés, depuis ton aéroport.
+                Vol + hôtel, prix réels vérifiés. Inspire-toi, filtre, réserve.
               </Text>
               {!uiEnabled ? (
                 <Text style={styles.subtitle}>Onglet deals désactivé (calibration).</Text>
@@ -305,14 +308,6 @@ export function DealsScreen() {
               ) : null}
 
               <View style={styles.chipRow}>
-                <Pressable
-                  onPress={() => setOriginChipOpen((o) => !o)}
-                  style={[styles.chip, origin ? styles.chipActive : null]}
-                >
-                  <Text style={[styles.chipText, origin ? styles.chipTextActive : null]}>
-                    Départ : {originCityLabel || 'Tous'} ▾
-                  </Text>
-                </Pressable>
                 {(
                   [
                     ['weekend', 'Week-end'],
@@ -337,80 +332,72 @@ export function DealsScreen() {
                 ))}
               </View>
 
-              {occasionMain.length > 0 || occasionMore.length > 0 ? (
-                <View style={[styles.chipRow, { marginTop: 4 }]}>
-                  {(occasionsOpen
-                    ? [...occasionMain, ...occasionMore]
-                    : occasionMain
-                  ).map((f) => {
-                    const on = occasion === f.slug
-                    return (
-                      <Pressable
-                        key={f.slug}
-                        onPress={() =>
-                          setOccasion((prev) => (prev === f.slug ? null : f.slug))
-                        }
-                        style={[styles.chip, on ? styles.chipActive : null]}
-                      >
-                        <Text
-                          style={[styles.chipText, on ? styles.chipTextActive : null]}
-                        >
-                          {f.label || f.slug}
-                        </Text>
-                      </Pressable>
-                    )
-                  })}
-                  {occasionMore.length > 0 ? (
-                    <Pressable
-                      onPress={() => setOccasionsOpen((o) => !o)}
-                      style={styles.chip}
-                    >
-                      <Text style={styles.chipText}>
-                        {occasionsOpen ? 'Moins d’idées' : 'Plus d’idées'}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : null}
-              {occasion
-                ? (() => {
-                    const active = [...occasionMain, ...occasionMore].find(
-                      (c) => c.slug === occasion,
-                    )
-                    return active?.explain ? (
-                      <Text style={[styles.subtitle, { marginTop: 4 }]}>
-                        {active.explain}
-                      </Text>
-                    ) : null
-                  })()
-                : null}
-
-              {originChipOpen ? (
-                <View style={[styles.card, shadow.soft, { marginBottom: spacing.md }]}>
-                  <View style={styles.filterBody}>
-                    <View style={styles.originRow}>
-                      <Text style={styles.label}>Départ</Text>
-                      {origin ? (
-                        <Pressable
-                          onPress={() => {
-                            setOriginPersist('')
-                            setOriginChipOpen(false)
-                          }}
-                          hitSlop={8}
-                        >
-                          <Text style={styles.clearOrigin}>Effacer</Text>
-                        </Pressable>
-                      ) : null}
+              {occasionChips.length > 0 ? (
+                <View style={styles.occasionBlock}>
+                  <View style={styles.occasionHeader}>
+                    <View>
+                      <Text style={styles.occasionKicker}>INSPIRE-TOI</Text>
+                      <Text style={styles.occasionTitle}>Envies & moments</Text>
                     </View>
-                    <CityAirportPicker
-                      airports={airports}
-                      value={origin}
-                      onChange={(v) => {
-                        setOriginPersist(v)
-                        setOriginChipOpen(false)
-                      }}
-                    />
+                    {occasion ? (
+                      <Pressable onPress={() => setOccasion(null)} hitSlop={8}>
+                        <Text style={styles.occasionClear}>Tous les séjours</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.occasionRail}
+                  >
+                    {occasionChips.map((f) => {
+                      const on = occasion === f.slug
+                      return (
+                        <Pressable
+                          key={f.slug}
+                          onPress={() =>
+                            setOccasion((prev) => (prev === f.slug ? null : f.slug))
+                          }
+                          style={[styles.occasionCard, on && styles.occasionCardOn]}
+                        >
+                          <View
+                            style={[styles.occasionIcon, on && styles.occasionIconOn]}
+                          >
+                            <OccasionIcon
+                              icon={f.icon}
+                              slug={f.slug}
+                              size={16}
+                              color={on ? colors.white : colors.primaryDeep}
+                            />
+                          </View>
+                          <Text
+                            style={[styles.occasionLabel, on && styles.occasionLabelOn]}
+                            numberOfLines={2}
+                          >
+                            {f.label || f.slug}
+                          </Text>
+                          {f.count > 0 ? (
+                            <Text
+                              style={[styles.occasionCount, on && styles.occasionCountOn]}
+                            >
+                              {f.count} séjours
+                            </Text>
+                          ) : null}
+                        </Pressable>
+                      )
+                    })}
+                  </ScrollView>
+                  {occasion
+                    ? (() => {
+                        const active = occasionChips.find((c) => c.slug === occasion)
+                        return active?.explain ? (
+                          <View style={styles.occasionExplain}>
+                            <Text style={styles.occasionExplainTitle}>{active.label}</Text>
+                            <Text style={styles.occasionExplainBody}>{active.explain}</Text>
+                          </View>
+                        ) : null
+                      })()
+                    : null}
                 </View>
               ) : null}
 
@@ -539,11 +526,11 @@ export function DealsScreen() {
                 </>
               ) : (
                 <>
-                  <Text style={styles.emptyTitle}>Aucun deal pour l’instant</Text>
+                  <Text style={styles.emptyTitle}>Pas encore de bon plan ici</Text>
                   <Text style={styles.emptyBody}>
                     {origin
-                      ? `Pas encore de bonne affaire depuis cet aéroport. Essaie une autre ville ou lance une recherche.`
-                      : 'Pas encore de bonne affaire. Choisis un aéroport ou lance une recherche.'}
+                      ? `Aucun séjour vol + hôtel pour ces filtres. Change d’aéroport, d’envie, ou lance une recherche.`
+                      : 'Aucun séjour pour l’instant. Choisis un départ dans Affiner, ou lance une recherche.'}
                   </Text>
                   <Pressable
                     onPress={() =>
@@ -617,6 +604,101 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     includeFontPadding: false,
+  },
+  occasionBlock: {
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  occasionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  occasionKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  occasionTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    color: colors.ink,
+    letterSpacing: -0.3,
+  },
+  occasionClear: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.primary,
+  },
+  occasionRail: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  occasionCard: {
+    width: 124,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  occasionCardOn: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  occasionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  occasionIconOn: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  occasionLabel: {
+    fontFamily: fonts.extrabold,
+    fontSize: 12,
+    color: colors.ink,
+    lineHeight: 15,
+  },
+  occasionLabelOn: {
+    color: colors.white,
+  },
+  occasionCount: {
+    fontFamily: fonts.semibold,
+    fontSize: 10,
+    color: colors.muted,
+  },
+  occasionCountOn: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+  occasionExplain: {
+    marginTop: 10,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  occasionExplainTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 12,
+    color: colors.ink,
+  },
+  occasionExplainBody: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.inkSoft,
+    lineHeight: 16,
   },
   chipRow: {
     flexDirection: 'row',

@@ -359,6 +359,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
                 </Text>
               ) : null}
               <Text style={styles.price}>
+                <Text style={styles.priceFrom}>À partir de </Text>
                 {Math.round(deal.price_per_person)} €{' '}
                 <Text style={styles.priceUnit}>/ pers.</Text>
               </Text>
@@ -430,9 +431,9 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             onPress={onPress}
             style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
             accessibilityRole="button"
-            accessibilityLabel="Voir l’offre"
+            accessibilityLabel="Voir ce séjour"
           >
-            <Text style={styles.ctaText}>Voir l’offre</Text>
+            <Text style={styles.ctaText}>Voir ce séjour</Text>
           </Pressable>
         </View>
       </Pressable>
@@ -541,6 +542,11 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   price: { ...type.price, fontSize: 26, marginTop: 2 },
+  priceFrom: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.inkSoft,
+  },
   priceUnit: {
     fontFamily: fonts.bold,
     fontSize: 13,

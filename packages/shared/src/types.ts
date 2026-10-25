@@ -370,7 +370,7 @@ export interface InvitePreview {
   invite_token: string
 }
 
-/** Slim alternative deal (same city, other origin/dates). */
+/** Slim alternative deal (same city + origin, other dates). */
 export interface TravelDealRelated {
   id?: string
   deal_key?: string
@@ -419,7 +419,7 @@ export interface TravelDeal {
   hook_kind?: string | null
   /** Detail sheet: up to 3 data-only value bullets. */
   why_good?: string[]
-  /** Same dest, other origins/dates (detail sheet). */
+  /** Same dest + origin, other dates (detail sheet). */
   related_deals?: TravelDealRelated[]
   /** Stable key for likes, alerts, revalidate. */
   deal_key?: DealKey

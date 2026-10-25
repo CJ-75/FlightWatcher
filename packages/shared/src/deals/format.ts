@@ -65,15 +65,18 @@ export function formatFetchedAt(iso?: string | null, locale = 'fr-FR'): string |
 const OCCASION_BADGE_LABELS: Record<string, string> = {
   'moins-200': 'Moins de 200 €',
   'sans-conge': 'Sans congé',
-  'ambiance-noel': 'Ambiance Noël',
+  'un-jour-conge': '1 jour de congé',
+  'ambiance-noel': 'Marchés de Noël',
   'pont-noel': 'Week-end de Noël',
   'nouvel-an': 'Nouvel An',
-  'hiver-soleil': 'Hiver au soleil',
+  'hiver-soleil': 'Fuyez l’hiver',
   'nuits-polaires': 'Nuits polaires',
-  'hotel-plebiscite': 'Hôtel plébiscité',
-  'extras-offerts': 'Extras offerts',
+  'hotel-plebiscite': 'Coup de cœur',
+  'extras-offerts': 'Petit-déj inclus',
   'hors-vacances': 'Hors vacances',
   'max-sur-place': 'Max sur place',
+  pepites: 'Pépite',
+  'il-fera-beau': 'Il fera beau',
 }
 
 export function occasionBadgeLabel(slug: string | null | undefined): string | null {

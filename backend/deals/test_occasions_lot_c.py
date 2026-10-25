@@ -72,3 +72,5 @@ def test_list_active_occasions_min_deals_and_main():
     assert "nouvel-an" not in counts
     assert all(c["count"] >= 3 for c in out["main"] + out["more"])
     assert len(out["main"]) <= 6
+    all_slugs = [c["slug"] for c in out["main"] + out["more"]]
+    assert len(all_slugs) == len(set(all_slugs))

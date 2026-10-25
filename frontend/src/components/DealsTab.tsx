@@ -13,6 +13,7 @@ import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { OriginAlertSignup } from './OriginAlertSignup'
+import { OccasionRail } from './OccasionRail'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
@@ -79,7 +80,6 @@ export function DealsTab() {
   const [queryOrigin, setQueryOrigin] = useState(() => readStoredOrigin())
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [originChipOpen, setOriginChipOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
   const [occasion, setOccasion] = useState<string | null>(() => {
     try {
@@ -89,9 +89,7 @@ export function DealsTab() {
       return null
     }
   })
-  const [occasionMain, setOccasionMain] = useState<DealOccasionChip[]>([])
-  const [occasionMore, setOccasionMore] = useState<DealOccasionChip[]>([])
-  const [occasionsOpen, setOccasionsOpen] = useState(false)
+  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -181,16 +179,20 @@ export function DealsTab() {
         origin: queryOrigin || undefined,
         adults: queryAdults,
       })
-      setOccasionMain(Array.isArray(res?.main) ? res.main : [])
-      setOccasionMore(Array.isArray(res?.more) ? res.more : [])
+      const seen = new Set<string>()
+      const all: DealOccasionChip[] = []
+      for (const c of [...(res?.main || []), ...(res?.more || [])]) {
+        if (!c?.slug || seen.has(c.slug)) continue
+        seen.add(c.slug)
+        all.push(c)
+      }
+      setOccasionChips(all)
       setOccasion((prev) => {
         if (!prev) return null
-        const all = [...(res?.main || []), ...(res?.more || [])]
         return all.some((c) => c.slug === prev) ? prev : null
       })
     } catch {
-      setOccasionMain([])
-      setOccasionMore([])
+      setOccasionChips([])
     }
   }, [queryOrigin, queryAdults])
 
@@ -343,16 +345,10 @@ export function DealsTab() {
     { id: 'week', label: t('deals.durationWeek') },
   ]
 
-  const activeOccasion =
-    [...occasionMain, ...occasionMore].find((c) => c.slug === occasion) || null
-  const occasionChips = occasionsOpen
-    ? [...occasionMain, ...occasionMore]
-    : occasionMain
-
   return (
     <div className="w-full">
       <div className="mb-5 sm:mb-6">
-        <p className="app-kicker mb-1.5">Deals</p>
+        <p className="app-kicker mb-1.5">Séjours</p>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
           {t('deals.titleSell')}
         </h2>
@@ -365,21 +361,6 @@ export function DealsTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button
-          type="button"
-          onClick={() => setOriginChipOpen((o) => !o)}
-          aria-expanded={originChipOpen}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition-colors ${
-            origin
-              ? 'bg-primary-500 text-white border-primary-500'
-              : 'bg-white text-ink border-line hover:border-primary-200'
-          }`}
-        >
-          {t('deals.originChip')} : {originCityLabel || t('deals.originChipAll')}
-          <span className="text-[10px] opacity-80" aria-hidden>
-            ▾
-          </span>
-        </button>
         {durationTabs.map((tab) => (
           <button
             key={tab.id}
@@ -396,72 +377,12 @@ export function DealsTab() {
         ))}
       </div>
 
-      {occasionChips.length > 0 || occasionMore.length > 0 ? (
-        <div className="mb-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {occasionChips.map((f) => {
-              const on = occasion === f.slug
-              return (
-                <button
-                  key={f.slug}
-                  type="button"
-                  onClick={() => toggleOccasion(f.slug)}
-                  title={f.explain || undefined}
-                  className={`rounded-full px-3 py-1.5 text-[11px] font-bold border transition-colors ${
-                    on
-                      ? 'bg-primary-50 text-primary-800 border-primary-200'
-                      : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
-                  }`}
-                >
-                  {f.label || f.slug}
-                </button>
-              )
-            })}
-            {occasionMore.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setOccasionsOpen((o) => !o)}
-                className="rounded-full px-3 py-1.5 text-[11px] font-bold border border-dashed border-line text-muted hover:border-primary-200 hover:text-ink bg-white"
-              >
-                {occasionsOpen ? t('deals.occasionsLess') : t('deals.occasionsMore')}
-              </button>
-            ) : null}
-          </div>
-          {activeOccasion?.explain ? (
-            <p className="mt-2 text-xs text-muted max-w-xl">
-              <span className="font-bold text-ink">{t('deals.occasionExplain')} · </span>
-              {activeOccasion.explain}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {originChipOpen ? (
-        <div className="app-card mb-4 p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <label className="text-sm font-bold text-ink">{t('deals.filterOrigin')}</label>
-            {origin ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOriginPersist('')
-                  setOriginChipOpen(false)
-                }}
-                className="text-xs font-semibold text-primary-600 hover:underline"
-              >
-                {t('deals.clearOrigin')}
-              </button>
-            ) : null}
-          </div>
-          <CityAirportSelect
-            value={origin}
-            onChange={(v) => {
-              setOriginPersist(v)
-              setOriginChipOpen(false)
-            }}
-          />
-        </div>
-      ) : null}
+      <OccasionRail
+        chips={occasionChips}
+        selected={occasion}
+        onToggle={toggleOccasion}
+        onClear={() => setOccasion(null)}
+      />
 
       <div className="w-full app-card mb-5 sm:mb-6 overflow-hidden">
         <button

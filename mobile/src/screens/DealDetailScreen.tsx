@@ -401,7 +401,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
           {(deal.related_deals?.length ?? 0) > 0 ? (
             <View style={styles.switchBlock}>
-              <Text style={styles.sectionLabel}>Autres départs et dates</Text>
+              <Text style={styles.sectionLabel}>Autres dates</Text>
               {deal.related_deals!.slice(0, 5).map((r) => (
                 <Pressable
                   key={r.deal_key || r.id}
@@ -416,17 +416,22 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.hotelOptionName} numberOfLines={1}>
-                      depuis{' '}
-                      {r.origin_airport_label ||
-                        r.departure_airport ||
-                        r.origin_iata ||
-                        '—'}
+                      {r.dates?.outbound
+                        ? `${formatDate(r.dates.outbound)}${
+                            r.dates?.inbound ? ` → ${formatDate(r.dates.inbound)}` : ''
+                          }`
+                        : r.nights != null
+                          ? `${r.nights} nuits`
+                          : 'Autre date'}
                     </Text>
                     <Text style={styles.hotelOptionMeta} numberOfLines={1}>
                       {[
-                        r.dates?.outbound
-                          ? formatDate(r.dates.outbound)
-                          : null,
+                        `depuis ${
+                          r.origin_airport_label ||
+                          r.departure_airport ||
+                          r.origin_iata ||
+                          '—'
+                        }`,
                         r.nights != null ? `${r.nights}n` : null,
                       ]
                         .filter(Boolean)

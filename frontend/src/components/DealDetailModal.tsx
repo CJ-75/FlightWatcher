@@ -785,10 +785,14 @@ export function DealDetailModal({
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-sm font-bold text-ink truncate">
-                              depuis {from}
+                              {dates || (r.nights != null ? `${r.nights} nuits` : 'Autre date')}
                             </p>
                             <p className="text-[11px] text-muted mt-0.5 truncate">
-                              {[dates, r.nights != null ? `${r.nights} nuits` : null, r.hook]
+                              {[
+                                `depuis ${from}`,
+                                r.nights != null && dates ? `${r.nights} nuits` : null,
+                                r.hook,
+                              ]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </p>

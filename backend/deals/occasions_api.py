@@ -102,20 +102,18 @@ def list_active_occasions(
     items.sort(key=lambda x: (x["priority"], -x["count"]))
     launch = launch_chip_slugs()
     main: List[Dict[str, Any]] = []
-    more: List[Dict[str, Any]] = []
     by_slug = {i["slug"]: i for i in items}
     for slug in launch:
         if slug in by_slug and len(main) < 6:
             main.append(by_slug[slug])
-    for i in items:
-        if i["slug"] not in {m["slug"] for m in main}:
-            more.append(i)
     # Fill main if launch chips missing volume
     for i in items:
         if len(main) >= 6:
             break
         if i["slug"] not in {m["slug"] for m in main}:
             main.append(i)
+    main_slugs = {m["slug"] for m in main}
+    more = [i for i in items if i["slug"] not in main_slugs]
 
     return {
         "ok": True,

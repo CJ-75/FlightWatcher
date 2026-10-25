@@ -946,27 +946,41 @@ def list_related_community_deals(
     limit: int = 5,
 ) -> List[Dict[str, Any]]:
     """
-    Same destination city, other origins and/or dates — real prices from deals_active.
+    Same destination + same origin, other dates — real prices from deals_active.
     """
     dest = str(
         deal.get("destination")
         or (deal.get("flight") or {}).get("destination_iata")
         or ""
     ).upper()
+    cur_origin = str(
+        deal.get("origin_iata")
+        or deal.get("departure_airport")
+        or (deal.get("flight") or {}).get("origin_iata")
+        or ""
+    ).upper().split(",")[0].strip()
     current_key = str(deal.get("deal_key") or deal.get("id") or "")
     if not dest or not supabase:
         return []
     try:
-        res = (
+        q = (
             supabase.table("deals_active")
             .select("*")
             .eq("dest_iata", dest)
             .eq("status", "active")
             .order("deal_score", desc=True)
-            .limit(24)
-            .execute()
+            .limit(40)
         )
+        if len(cur_origin) == 3:
+            q = q.eq("origin_iata", cur_origin)
+        res = q.execute()
         rows = [r for r in (res.data or []) if str(r.get("deal_key") or "") != current_key]
+        if len(cur_origin) == 3:
+            rows = [
+                r
+                for r in rows
+                if str(r.get("origin_iata") or "").upper() == cur_origin
+            ]
     except Exception:
         return []
     if not rows:
@@ -981,31 +995,24 @@ def list_related_community_deals(
         supabase=supabase,
     )
     enriched = _only_hotel_photo_deals(enriched)
-    # Prefer different origin or different dates vs current
-    cur_origin = str(deal.get("origin_iata") or deal.get("departure_airport") or "").upper()
+    # Same origin only — other outbound dates
     cur_out = str((deal.get("dates") or {}).get("outbound") or "")[:10]
     scored: List[Tuple[int, Dict[str, Any]]] = []
     for d in enriched:
-        o = str(d.get("origin_iata") or "").upper()
-        out_d = str((d.get("dates") or {}).get("outbound") or "")[:10]
-        score = 0
-        if o and o != cur_origin:
-            score += 2
-        if out_d and out_d != cur_out:
-            score += 1
-        if score == 0:
+        o = str(d.get("origin_iata") or d.get("departure_airport") or "").upper()
+        if cur_origin and o and o != cur_origin:
             continue
-        scored.append((score, d))
-    scored.sort(key=lambda x: (-x[0], -(float(x[1].get("deal_score") or 0))))
-    # Diversity: one per origin+dates pair
+        out_d = str((d.get("dates") or {}).get("outbound") or "")[:10]
+        if not out_d or out_d == cur_out:
+            continue
+        scored.append((1, d))
+    scored.sort(key=lambda x: (-(float(x[1].get("deal_score") or 0)),))
+    # Diversity: one per outbound date
     seen_pair = set()
     out: List[Dict[str, Any]] = []
     for _s, d in scored:
-        pair = (
-            str(d.get("origin_iata") or ""),
-            str((d.get("dates") or {}).get("outbound") or "")[:10],
-        )
-        if pair in seen_pair:
+        pair = str((d.get("dates") or {}).get("outbound") or "")[:10]
+        if not pair or pair in seen_pair:
             continue
         seen_pair.add(pair)
         # Slim payload for alternatives strip
