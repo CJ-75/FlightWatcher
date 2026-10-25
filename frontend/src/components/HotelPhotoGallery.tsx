@@ -12,6 +12,8 @@ export interface HotelPhotoGalleryProps {
   hotelName?: string
   cityLabel?: string
   language?: string
+  /** Compact mosaic for Mon voyage / nested cards (no outer padding) */
+  embedded?: boolean
   /** Overlay controls (like / close) rendered top-right */
   topRight?: ReactNode
   /** Bottom-left overlay (badge / city) — mobile hero only */
@@ -56,6 +58,7 @@ export function HotelPhotoGallery({
   hotelName,
   cityLabel,
   language = 'fr',
+  embedded = false,
   topRight,
   bottomLeft,
 }: HotelPhotoGalleryProps) {
@@ -166,7 +169,7 @@ export function HotelPhotoGallery({
   return (
     <>
       {/* Mobile: full-bleed paging carousel */}
-      <div className="relative sm:hidden">
+      <div className={`relative sm:hidden ${embedded ? 'rounded-xl overflow-hidden' : ''}`}>
         <div
           ref={mobileScrollerRef}
           className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-none overscroll-x-contain touch-pan-x"
@@ -182,7 +185,9 @@ export function HotelPhotoGallery({
             <button
               key={`${p.url}-${i}`}
               type="button"
-              className="relative shrink-0 grow-0 basis-full min-w-full w-full aspect-[5/4] max-h-[42vh] snap-center snap-always focus:outline-none"
+              className={`relative shrink-0 grow-0 basis-full min-w-full w-full snap-center snap-always focus:outline-none ${
+                embedded ? 'aspect-[16/10] max-h-[220px]' : 'aspect-[5/4] max-h-[42vh]'
+              }`}
               onClick={() => openAt(i)}
             >
               <img
@@ -246,10 +251,18 @@ export function HotelPhotoGallery({
       </div>
 
       {/* Desktop: Booking / Airbnb mosaic */}
-      <div className="relative hidden sm:block px-4 pt-4">
+      <div
+        className={`relative hidden sm:block ${embedded ? '' : 'px-4 pt-4'}`}
+      >
         <div
           className={`grid gap-1.5 overflow-hidden rounded-2xl ${
-            showMosaic ? 'grid-cols-4 grid-rows-2 h-[320px] lg:h-[380px]' : 'grid-cols-1 h-[280px]'
+            showMosaic
+              ? embedded
+                ? 'grid-cols-4 grid-rows-2 h-[200px]'
+                : 'grid-cols-4 grid-rows-2 h-[320px] lg:h-[380px]'
+              : embedded
+                ? 'grid-cols-1 h-[180px]'
+                : 'grid-cols-1 h-[280px]'
           }`}
         >
           <button
@@ -296,12 +309,22 @@ export function HotelPhotoGallery({
             : null}
         </div>
 
-        <div className="absolute top-7 right-7 z-10 flex gap-2">{topRight}</div>
+        <div
+          className={`absolute z-10 flex gap-2 ${
+            embedded ? 'top-3 right-3' : 'top-7 right-7'
+          }`}
+        >
+          {topRight}
+        </div>
 
         <button
           type="button"
           onClick={() => openAt(0)}
-          className="absolute bottom-5 right-7 z-10 inline-flex items-center gap-2 rounded-xl bg-white text-ink text-sm font-bold px-3.5 py-2 shadow-lg border border-line/80 hover:bg-slate-50 transition-colors"
+          className={`absolute z-10 inline-flex items-center gap-2 rounded-xl bg-white text-ink font-bold shadow-lg border border-line/80 hover:bg-slate-50 transition-colors ${
+            embedded
+              ? 'bottom-3 right-3 text-xs px-2.5 py-1.5'
+              : 'bottom-5 right-7 text-sm px-3.5 py-2'
+          }`}
         >
           <GridIcon />
           Voir les {count} photos

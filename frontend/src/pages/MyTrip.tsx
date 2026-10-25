@@ -11,6 +11,7 @@ import {
 import { getApiClient } from '../utils/apiClient'
 import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
 import { DealCheckoutFlow } from '../components/DealCheckoutFlow'
+import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '—'
@@ -282,6 +283,22 @@ export default function MyTrip() {
     'live'
   const isCached = vlevel === 'cached'
   const hotelPhoto = hotelObj?.photo || hotelObj?.thumbnail || payload.image_url || ''
+  const hotelId = hotelObj?.id != null ? String(hotelObj.id) : null
+  const hotelSeedPhotos = useMemo(() => {
+    const raw = hotelObj?.photos
+    if (!Array.isArray(raw)) return undefined
+    const urls = raw
+      .map((p) =>
+        typeof p === 'string'
+          ? p
+          : p && typeof p === 'object' && 'url' in p
+            ? String((p as { url?: string }).url || '')
+            : '',
+      )
+      .map((u) => u.trim())
+      .filter(Boolean)
+    return urls.length ? urls : undefined
+  }, [hotelObj?.photos])
   const board = boardLabelFr(hotelObj?.board || payload.board)
   const wantsCompose =
     composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
@@ -1051,16 +1068,18 @@ export default function MyTrip() {
                 )}
               </div>
               {hotelObj?.name ? (
-                <div className="flex gap-3">
-                  {hotelPhoto ? (
-                    <img
-                      src={String(hotelPhoto)}
-                      alt=""
-                      className="w-24 h-24 rounded-xl object-cover bg-slate-100 shrink-0"
+                <div className="space-y-3">
+                  {hotelId || hotelPhoto ? (
+                    <HotelPhotoGallery
+                      embedded
+                      hotelId={hotelId}
+                      seedPhoto={hotelPhoto ? String(hotelPhoto) : null}
+                      seedPhotos={hotelSeedPhotos}
+                      alt={String(hotelObj.name)}
+                      hotelName={String(hotelObj.name)}
+                      cityLabel={String(city !== '—' ? city : '')}
                     />
-                  ) : (
-                    <div className="w-24 h-24 rounded-xl bg-slate-100 shrink-0" aria-hidden />
-                  )}
+                  ) : null}
                   <div className="min-w-0 space-y-1">
                     <p className="text-sm text-slate-900 font-bold leading-snug">
                       {String(hotelObj.name)}
