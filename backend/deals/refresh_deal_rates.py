@@ -133,7 +133,7 @@ def refresh_deal_rates(
     max_calls = (
         max_calls
         if max_calls is not None
-        else max(1, _env_int("DEALS_RATES_REFRESH_MAX_CALLS", 80))
+        else max(1, _env_int("DEALS_RATES_REFRESH_MAX_CALLS", 120))
     )
     owns = client is None
     client = client or LiteApiClient(cfg=cfg)

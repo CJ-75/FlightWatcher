@@ -33,3 +33,4 @@ frontend/.env
 mobile/.env
 
 backend/logs/*.log
+backend/.cache/

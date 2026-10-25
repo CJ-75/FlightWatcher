@@ -194,9 +194,14 @@ export function DealsTab() {
     }
   }, [queryOrigin, queryDestination, queryAdults, durationTab])
 
+  const dealsRef = useRef(deals)
+  dealsRef.current = deals
+
   const load = useCallback(async () => {
-    setLoading(true)
+    // Phase 3 — SWR: skeleton only when empty; keep cards while refetching
     setError(null)
+    const empty = dealsRef.current.length === 0
+    if (empty) setLoading(true)
     try {
       const listPromise = getApiClient().getDeals({
         origin: queryOrigin || undefined,
@@ -216,7 +221,7 @@ export function DealsTab() {
       setDeals(withHotelPhoto)
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
-      setDeals([])
+      if (dealsRef.current.length === 0) setDeals([])
     } finally {
       setLoading(false)
     }

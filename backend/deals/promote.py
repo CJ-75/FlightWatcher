@@ -227,8 +227,8 @@ def _lookup_baseline(
 def apply_diversity(
     scored: List[Dict[str, Any]],
     *,
-    max_per_city: int = 2,
-    max_per_country: int = 3,
+    max_per_city: int = 3,
+    max_per_country: int = 4,
 ) -> List[Dict[str, Any]]:
     """Keep best scores with city/country caps (per origin already filtered)."""
     by_city: Dict[str, int] = {}

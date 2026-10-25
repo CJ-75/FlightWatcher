@@ -8,9 +8,11 @@ import { useI18n } from '../contexts/I18nContext'
 export function HomeDealsTeaser() {
   const { t } = useI18n()
   const [deals, setDeals] = useState<TravelDeal[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
     void getApiClient()
       .getDeals({ adults: 2, duration: 'weekend', limit: 12 })
       .then((list) => {
@@ -23,10 +25,42 @@ export function HomeDealsTeaser() {
       .catch(() => {
         if (!cancelled) setDeals([])
       })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
   }, [])
+
+  if (loading && deals.length === 0) {
+    return (
+      <section className="mb-6" aria-busy="true" aria-label={t('nav.deals')}>
+        <div className="flex items-end justify-between gap-3 mb-3">
+          <div>
+            <p className="app-kicker mb-0.5">Bons plans</p>
+            <h2 className="text-base sm:text-lg font-extrabold text-ink tracking-tight">
+              Week-ends vol + hôtel
+            </h2>
+          </div>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="shrink-0 w-[9.5rem] rounded-2xl border border-line bg-white overflow-hidden animate-pulse"
+            >
+              <div className="h-20 bg-primary-50" />
+              <div className="p-2.5 space-y-2">
+                <div className="h-3 w-16 bg-primary-50 rounded" />
+                <div className="h-4 w-10 bg-primary-50 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    )
+  }
 
   if (deals.length === 0) {
     return (

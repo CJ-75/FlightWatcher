@@ -739,6 +739,31 @@ async def job_wall_health(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/deals/jobs/wall-funnel-diag")
+async def job_wall_funnel_diag(
+    authorization: Optional[str] = Header(None),
+    origin: Optional[str] = None,
+    hours: float = 48.0,
+):
+    """
+    Phase 0 — funnel counts (obs → promote → active → wall) + single verdict A–F.
+    Protégé par CRON_SECRET.
+    """
+    require_cron(authorization)
+    try:
+        from deals.wall_funnel_diag import collect_wall_funnel
+
+        return collect_wall_funnel(
+            _svc(),
+            origin=(origin or "").strip() or None,
+            hours=float(hours or 48),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/deals/jobs/revalidate-deals")
 async def job_revalidate_deals(authorization: Optional[str] = Header(None)):
     """D5: background flight revalidation for deals_active."""

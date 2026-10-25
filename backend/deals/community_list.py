@@ -29,6 +29,12 @@ def invalidate_list_cache() -> None:
     with _list_cache_lock:
         _list_cache.clear()
         _list_cache_epoch += 1
+    try:
+        from deals.wall_list_cache import bump_epoch
+
+        bump_epoch()
+    except Exception:
+        pass
 
 
 def _hotel_top3_has_photo(hotels: Any) -> bool:
@@ -829,8 +835,22 @@ def _prefer_hotel_deals(deals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     )
 
 
-MAX_PER_CITY = 2
-MAX_PER_COUNTRY = 3
+def _wall_diversity_caps() -> Tuple[int, int]:
+    import os
+
+    try:
+        city = int(os.getenv("DEALS_WALL_MAX_PER_CITY", "3") or "3")
+    except ValueError:
+        city = 3
+    try:
+        country = int(os.getenv("DEALS_WALL_MAX_PER_COUNTRY", "4") or "4")
+    except ValueError:
+        country = 4
+    return max(1, city), max(1, country)
+
+
+MAX_PER_CITY = 3
+MAX_PER_COUNTRY = 4
 
 
 def diversify_wall_deals(
@@ -869,10 +889,11 @@ def diversify_wall_min(
     Prefer variety, but never ship a thin wall when inventory exists.
     """
     want = max(int(min_deals), int(target))
-    # Progressive relaxation: (city, country)
+    city0, country0 = _wall_diversity_caps()
+    # Progressive relaxation: (city, country) — starts from env caps
     caps = [
-        (2, 3),
-        (3, 4),
+        (city0, country0),
+        (max(city0, 3), max(country0, 4)),
         (4, 5),
         (6, 8),
         (99, 99),
@@ -1194,8 +1215,13 @@ def list_community_deals(
     duration_tab = (duration or "").strip().lower() or None
     if duration_tab not in ("weekend", "short", "week"):
         duration_tab = None
-    with _list_cache_lock:
-        epoch = _list_cache_epoch
+    try:
+        from deals.wall_list_cache import current_epoch as _l2_epoch
+
+        epoch = _l2_epoch()
+    except Exception:
+        with _list_cache_lock:
+            epoch = _list_cache_epoch
     cache_key = (
         f"hp4|{epoch}|{origin or ''}|{destination or ''}|"
         f"{adults_n}|{max_pp}|{occasion_slug or ''}|{duration_tab or ''}|"
@@ -1213,6 +1239,25 @@ def list_community_deals(
                 (time.monotonic() - t0) * 1000,
             )
             return [dict(d) for d in hit[1]]
+
+    # L2 shared file cache (multi-worker) — Phase 3 latency
+    try:
+        from deals.wall_list_cache import get_shared
+
+        shared = get_shared(cache_key)
+        if shared is not None:
+            with _list_cache_lock:
+                _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in shared])
+            log.info(
+                "list_community_deals l2_hit origin=%s dest=%s n=%s ms=%.0f",
+                origin,
+                destination,
+                len(shared),
+                (time.monotonic() - t0) * 1000,
+            )
+            return [dict(d) for d in shared]
+    except Exception:
+        pass
 
     fresh = _baselines_fresh_flag(supabase)
     from deals.click_checks import is_cached_deals_enabled
@@ -1334,12 +1379,19 @@ def list_community_deals(
     if duration_tab:
         out = _apply_duration_with_floor(out, duration_tab, min_deals=WALL_MIN_DEALS)
     out = diversify_wall_min(out, target=target, min_deals=WALL_MIN_DEALS)
+    snap = [dict(d) for d in out]
     with _list_cache_lock:
-        _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])
+        _list_cache[cache_key] = (time.monotonic(), snap)
         if len(_list_cache) > 64:
             items = sorted(_list_cache.items(), key=lambda kv: kv[1][0])
             for k, _ in items[:32]:
                 _list_cache.pop(k, None)
+    try:
+        from deals.wall_list_cache import set_shared as _l2_set
+
+        _l2_set(cache_key, snap)
+    except Exception:
+        pass
     elapsed_ms = (time.monotonic() - t0) * 1000
     log.info(
         "list_community_deals origin=%s dest=%s n=%s ms=%.0f",
