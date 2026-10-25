@@ -135,6 +135,7 @@ OCCASIONS: List[Dict[str, Any]] = [
         "verified": True,
         "priority": 90,
         "push": False,
+        "chip": False,  # hidden from Inspire-toi rail
     },
     {
         "slug": "hotel-plebiscite",
@@ -208,6 +209,7 @@ OCCASIONS: List[Dict[str, Any]] = [
         "verified": True,
         "priority": 65,
         "push": False,
+        "chip": False,  # hidden from Inspire-toi rail
     },
     # —— Seasonal (launch set late Oct 2026) ——
     {

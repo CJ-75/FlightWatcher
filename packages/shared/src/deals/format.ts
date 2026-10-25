@@ -73,8 +73,6 @@ const OCCASION_BADGE_LABELS: Record<string, string> = {
   'nuits-polaires': 'Nuits polaires',
   'hotel-plebiscite': 'Coup de cœur',
   'extras-offerts': 'Petit-déj',
-  'hors-vacances': 'Hors vacances',
-  'max-sur-place': 'Max sur place',
   pepites: 'Pépite',
   'il-fera-beau': 'Beau temps',
 }

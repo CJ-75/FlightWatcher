@@ -21,7 +21,6 @@ const CHIP_MOBILE_SHORT: Record<string, string> = {
   'un-jour-conge': '1 j. de congé',
   'hotel-plebiscite': 'Coup de cœur',
   'extras-offerts': 'Petit-déj',
-  'hors-vacances': 'Hors vacances',
   'ambiance-noel': 'Marchés de Noël',
   'pont-noel': 'Pont de Noël',
   'nouvel-an': 'Nouvel An',

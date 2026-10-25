@@ -89,6 +89,8 @@ def list_active_occasions(
     # first; counts fill once this response arrives.
     items: List[Dict[str, Any]] = []
     for occ in OCCASIONS:
+        if occ.get("chip") is False:
+            continue
         if not _chip_visible(occ, today):
             continue
         slug = str(occ["slug"])

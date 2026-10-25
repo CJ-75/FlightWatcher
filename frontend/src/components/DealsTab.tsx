@@ -42,6 +42,8 @@ const INSPIRE_SEED: DealOccasionChip[] = [
   { slug: 'moins-200', label: 'Moins de 200 €', icon: 'euro' },
 ]
 
+const INSPIRE_HIDDEN = new Set(['max-sur-place', 'hors-vacances'])
+
 function readStoredOrigin(): string {
   try {
     return (localStorage.getItem(ORIGIN_LS_KEY) || '').trim()
@@ -218,7 +220,7 @@ export function DealsTab() {
       const seen = new Set<string>()
       const all: DealOccasionChip[] = []
       for (const c of [...(res?.main || []), ...(res?.more || [])]) {
-        if (!c?.slug || seen.has(c.slug)) continue
+        if (!c?.slug || seen.has(c.slug) || INSPIRE_HIDDEN.has(c.slug)) continue
         seen.add(c.slug)
         all.push(c)
       }
@@ -266,7 +268,7 @@ export function DealsTab() {
         adults: queryAdults,
         occasion: occasion || undefined,
         duration: durationTab,
-        limit: 72,
+        limit: 96,
       })
       void loadLikes()
       void loadOccasions()

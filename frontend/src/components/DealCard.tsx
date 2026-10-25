@@ -357,9 +357,33 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           onOpen={onClick}
         />
 
-        {fresh && !corner ? (
-          <span className="absolute top-3 left-3 z-[3] shadow-soft pointer-events-none rounded-2xl px-2.5 py-1.5 min-h-[28px] inline-flex items-center bg-ink text-white">
-            <span className="text-[11px] font-bold leading-none">{t('deals.newBadge')}</span>
+        {corner || fresh ? (
+          <span
+            className={`absolute top-3 left-3 z-[3] max-w-[calc(100%-3.75rem)] shadow-soft pointer-events-none rounded-full px-2.5 py-1 min-h-[24px] inline-flex items-center gap-1.5 ${
+              fresh && !corner ? 'bg-ink text-white' : 'bg-accent-500 text-white'
+            }`}
+            title={corner?.fullText || undefined}
+          >
+            {corner?.kind === 'discount' ? (
+              <>
+                {corner.discountPct != null ? (
+                  <span className="text-[11px] font-black tabular-nums leading-none shrink-0">
+                    −{corner.discountPct}%
+                  </span>
+                ) : null}
+                <span className="text-[11px] font-bold leading-snug truncate">
+                  {corner.text}
+                </span>
+              </>
+            ) : corner ? (
+              <span className="text-[11px] font-bold leading-snug truncate">
+                {corner.text}
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold leading-none">
+                {t('deals.newBadge')}
+              </span>
+            )}
           </span>
         ) : null}
 
@@ -409,21 +433,6 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
                   : city}
               </span>
             </p>
-            {corner ? (
-              <span
-                className="inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 w-fit max-w-full rounded-xl bg-accent-500 text-white px-2.5 py-1 shadow-soft"
-                title={corner.fullText}
-              >
-                {corner.kind === 'discount' && corner.discountPct != null ? (
-                  <span className="text-sm font-black tabular-nums leading-none shrink-0">
-                    −{corner.discountPct}%
-                  </span>
-                ) : null}
-                <span className="text-[11px] sm:text-xs font-bold leading-snug">
-                  {deal.badge_meta?.label || corner.text}
-                </span>
-              </span>
-            ) : null}
             {hook ? (
               <p className="text-sm font-semibold text-ink-soft leading-snug line-clamp-2">
                 {hook}

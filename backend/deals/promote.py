@@ -193,12 +193,21 @@ def eligible_candidate_soft(
         price = float(obs.get("price_pp_eur") or 0)
     except (TypeError, ValueError):
         return False
-    if price <= 0 or price > float(cfg.max_flight_pp):
+    import os
+
+    try:
+        soft_max = float(os.getenv("DEALS_SOFT_MAX_FLIGHT_PP", "0") or 0)
+    except (TypeError, ValueError):
+        soft_max = 0.0
+    if soft_max <= 0:
+        soft_max = max(float(cfg.max_flight_pp) * 1.5, 210.0)
+    if price <= 0 or price > soft_max:
         return False
     med = baseline.get("median") or baseline.get("expected_pp_eur")
     if not med or float(med) <= 0:
-        return price <= float(cfg.max_flight_pp)
-    return price <= float(med) * 1.05
+        return price <= soft_max
+    # Soft fill: near or under usual (slightly looser than hard deals)
+    return price <= float(med) * 1.15
 
 
 def _lookup_baseline(
@@ -248,8 +257,8 @@ def _promote_per_origin_cap(cfg: DealsConfig) -> int:
         explicit = 0
     if explicit > 0:
         return explicit
-    # Default: keep room for BVA volume (was ~36 — too tight)
-    return max(int(cfg.min_per_origin) * 8, 80)
+    # Default: room for BVA-heavy walls
+    return max(int(cfg.min_per_origin) * 10, 120)
 
 
 def apply_diversity(
@@ -307,7 +316,13 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
     cfg = cfg or load_deals_config()
     now = datetime.now(timezone.utc)
     # Hard deals: 12h lookback; soft fill: 48h so browse stays populated
-    soft_hours = 48.0
+    import os
+
+    try:
+        soft_hours = float(os.getenv("DEALS_SOFT_LOOKBACK_H", "72") or "72")
+    except (TypeError, ValueError):
+        soft_hours = 72.0
+    soft_hours = max(24.0, soft_hours)
     since = (now - timedelta(hours=soft_hours)).isoformat()
     per_origin_cap = _promote_per_origin_cap(cfg)
     browse_target = per_origin_cap
@@ -390,7 +405,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             if key in best:
                 continue
             best[key] = cand
-            if len(best) >= browse_target * 2:
+            if len(best) >= browse_target * 4:
                 break
 
     scored: List[Dict[str, Any]] = []
