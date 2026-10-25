@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft } from '@flightwatcher/shared'
 import {
   airportDisplayNameFr,
   boardLabelFr,
-  buildRyanairBookingUrl,
   computeTripPartyPrice,
-  formatAirlineLabel,
+  distantAirportLine,
+  resolveCarrierBooking,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
 import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
@@ -34,18 +34,6 @@ function formatTimeLocal(iso?: string | null): string {
   }
 }
 
-function companyCtaLabel(airlineName: string, bookingUrl: string): string {
-  const u = bookingUrl.toLowerCase()
-  if (u.includes('ryanair.com') || /ryanair/i.test(airlineName)) {
-    return 'Réserver sur ryanair.com'
-  }
-  if (u.includes('transavia') || /transavia/i.test(airlineName)) {
-    return 'Réserver sur transavia.com'
-  }
-  if (airlineName) return `Réserver sur ${airlineName}`
-  return 'Réserver mon vol'
-}
-
 async function shareTrip(city: string, url: string) {
   const title = `Week-end à ${city}`
   const text = `Mon week-end à ${city} sur FlightWatcher`
@@ -66,8 +54,8 @@ async function shareTrip(city: string, url: string) {
 }
 
 /**
- * Lot A+B — conversion-first Mon voyage:
- * party price + desktop 2-col sticky récap + mobile bottom bar (§3).
+ * Lot A–C — conversion-first Mon voyage:
+ * party price, 2-col layout, carrier booking + tab return (§4).
  */
 export default function MyTrip() {
   const { token } = useParams<{ token: string }>()
@@ -81,9 +69,13 @@ export default function MyTrip() {
   const [showPriceAsk, setShowPriceAsk] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
   const [checkId, setCheckId] = useState<string | null>(null)
-  const [flightClicked, setFlightClicked] = useState(false)
   const [markingBooked, setMarkingBooked] = useState(false)
   const [shareHint, setShareHint] = useState<string | null>(null)
+  const [askFlightBooked, setAskFlightBooked] = useState(false)
+  const [copyDone, setCopyDone] = useState(false)
+  const leftForFlight = useRef(false)
+  const leftForFlightAt = useRef(0)
+  const hotelSectionRef = useRef<HTMLElement | null>(null)
 
   const load = useCallback(async () => {
     if (!token) return
@@ -173,71 +165,77 @@ export default function MyTrip() {
     (arrivalName && arrivalName.toUpperCase() !== destIata ? arrivalName : null) ||
     city
 
-  const airlineName =
-    formatAirlineLabel({
-      airline: flight.airline || flight.carrier || payload.airline,
-      provider: flight.provider || payload.provider,
-    }) || ''
-  const outTime = formatTimeLocal(flight.outbound_local)
-  const retTime = formatTimeLocal(flight.inbound_local)
+  const outDep =
+    flight.outbound_local || flight.out_dep_local || payload.out_dep_local
+  const retDep =
+    flight.inbound_local || flight.ret_dep_local || payload.ret_dep_local
+  const outTime = formatTimeLocal(outDep)
+  const retTime = formatTimeLocal(retDep)
   const outArrTime = formatTimeLocal(
-    flight.outbound_arrival_local || flight.out_arr_local || flight.outbound_arr_local,
+    flight.outbound_arrival_local ||
+      flight.out_arr_local ||
+      flight.outbound_arr_local ||
+      payload.out_arr_local,
   )
   const retArrTime = formatTimeLocal(
-    flight.inbound_arrival_local || flight.in_arr_local || flight.inbound_arr_local,
+    flight.inbound_arrival_local ||
+      flight.ret_arr_local ||
+      flight.in_arr_local ||
+      payload.ret_arr_local,
   )
 
-  /** Always a company CTA — never « lien indisponible ». */
-  const flightUrl = useMemo(() => {
-    const raw = String(flight.booking_url || payload.booking_url || '').trim()
-    if (raw.startsWith('http') && !/aviasales|travelpayouts/i.test(raw)) {
-      return raw
-    }
-    if (originIata && destIata && outDate && retDate) {
-      try {
-        return buildRyanairBookingUrl(
-          {
-            aller: {
-              origin: originIata,
-              destination: destIata,
-              departureTime: String(flight.outbound_local || outDate),
-            },
-            retour: {
-              departureTime: String(flight.inbound_local || retDate),
-            },
-          },
-          adults,
-        )
-      } catch {
-        /* fall through */
-      }
-    }
-    if (raw.startsWith('http')) return raw
-    if (/ryanair|FR|RK/i.test(String(flight.airline || flight.carrier || airlineName))) {
-      return 'https://www.ryanair.com/fr/fr'
-    }
-    if (/transavia|TO|HV/i.test(String(flight.airline || flight.carrier || airlineName))) {
-      return 'https://www.transavia.com/fr-FR/'
-    }
-    return 'https://www.ryanair.com/fr/fr'
-  }, [
-    adults,
-    airlineName,
-    destIata,
-    flight,
-    originIata,
-    outDate,
-    payload.booking_url,
-    retDate,
-  ])
+  const carrier = useMemo(
+    () =>
+      resolveCarrierBooking({
+        airline: flight.airline || flight.carrier || payload.airline,
+        carrier: flight.carrier,
+        provider: flight.provider || payload.provider,
+        bookingUrl: flight.booking_url || payload.booking_url,
+        originIata,
+        destIata,
+        outDate,
+        retDate,
+        outLocal: outDep,
+        inLocal: retDep,
+        adults,
+        originLabel,
+        arrivalLabel,
+      }),
+    [
+      adults,
+      arrivalLabel,
+      destIata,
+      flight,
+      originIata,
+      originLabel,
+      outDate,
+      outDep,
+      payload.airline,
+      payload.booking_url,
+      payload.provider,
+      retDate,
+      retDep,
+    ],
+  )
 
-  const compareUrl = useMemo(() => {
-    const raw = String(flight.booking_url || payload.booking_url || '').trim()
-    if (raw.startsWith('http') && /aviasales|travelpayouts/i.test(raw)) return raw
-    return null
-  }, [flight.booking_url, payload.booking_url])
-
-  const cta = companyCtaLabel(airlineName, flightUrl)
+  const flightUrl = carrier.url
+  const compareUrl = carrier.compareUrl
+  const cta = carrier.ctaLabel
+  const airlineName = carrier.airlineName
+  const distanceLine =
+    distantAirportLine(destIata, city) ||
+    (typeof payload.route_hint === 'string' && /km/i.test(payload.route_hint)
+      ? String(payload.route_hint)
+      : null)
+  const stopsLabel =
+    flight.direct === true
+      ? 'vol direct'
+      : flight.transfers === 1 || flight.stops === 1
+        ? '1 escale'
+        : flight.direct === false ||
+            (flight.transfers != null && Number(flight.transfers) > 0)
+          ? `${Number(flight.transfers || flight.stops || 1)} escale${Number(flight.transfers || flight.stops || 1) > 1 ? 's' : ''}`
+          : null
   const flightBooked = Boolean(
     draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
   )
@@ -272,7 +270,8 @@ export default function MyTrip() {
   }
 
   const onFlightClick = async () => {
-    setFlightClicked(true)
+    leftForFlight.current = true
+    leftForFlightAt.current = Date.now()
     if (!draft?.deal_key && !payload.deal_key) return
     try {
       const res = await getApiClient().recordFlightClick({
@@ -285,23 +284,67 @@ export default function MyTrip() {
         outcome: 'unknown',
       })
       if (res?.check?.id) setCheckId(String(res.check.id))
-      if (isCached) setShowPriceAsk(true)
     } catch {
-      if (isCached) setShowPriceAsk(true)
+      /* click still opens company tab */
     }
+  }
+
+  const scrollToHotel = () => {
+    window.setTimeout(() => {
+      hotelSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
   }
 
   const onFlightBooked = async () => {
     if (!token) return
     setMarkingBooked(true)
+    setAskFlightBooked(false)
+    leftForFlight.current = false
     try {
       const row = await getApiClient().markMyTripFlightBooked(token)
       setDraft(row)
+      scrollToHotel()
       if (isCached) setShowPriceAsk(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible d’enregistrer')
     } finally {
       setMarkingBooked(false)
+    }
+  }
+
+  const onFlightNotYet = () => {
+    setAskFlightBooked(false)
+    leftForFlight.current = false
+  }
+
+  useEffect(() => {
+    if (flightBooked) {
+      setAskFlightBooked(false)
+      return
+    }
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!leftForFlight.current) return
+      // Ignore instant focus blips right after click
+      if (Date.now() - leftForFlightAt.current < 1200) return
+      setAskFlightBooked(true)
+    }
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+    return () => {
+      document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
+    }
+  }, [flightBooked])
+
+  const copyRouteHint = async () => {
+    if (!carrier.copyHint) return
+    try {
+      await navigator.clipboard.writeText(carrier.copyHint.replace(/^À saisir :\s*/i, ''))
+      setCopyDone(true)
+      window.setTimeout(() => setCopyDone(false), 2000)
+    } catch {
+      /* ignore */
     }
   }
 
@@ -564,70 +607,110 @@ export default function MyTrip() {
                   </span>
                 )}
               </div>
-              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-1.5">
-                <p className="font-bold text-slate-900">
-                  {airlineName || 'Compagnie'}
-                  {flight.direct === true
-                    ? ' · vol direct'
-                    : flight.direct === false
-                      ? ' · avec escale'
-                      : ''}
-                </p>
-                <p>
-                  Aller {formatDate(outDate)}
-                  {outTime ? ` · ${outTime}` : ''}
-                  {outArrTime ? ` → ${outArrTime}` : ''}
-                </p>
-                <p className="text-slate-600">
-                  {originLabel} → {arrivalLabel}
-                </p>
-                <p>
-                  Retour {formatDate(retDate)}
-                  {retTime ? ` · ${retTime}` : ''}
-                  {retArrTime ? ` → ${retArrTime}` : ''}
-                </p>
-                {payload.baggage_line ? (
-                  <p className="text-xs text-slate-600 pt-1 border-t border-slate-200">
-                    {String(payload.baggage_line)}
-                  </p>
-                ) : null}
-                {payload.route_hint ? (
-                  <p className="text-xs text-slate-500">{String(payload.route_hint)}</p>
-                ) : null}
-              </div>
 
-              <a
-                href={flightUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => void onFlightClick()}
-                className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px] lg:bg-white lg:text-primary-700 lg:border lg:border-primary-200 lg:hover:bg-primary-50"
-              >
-                {cta}
-              </a>
-              {compareUrl ? (
-                <a
-                  href={compareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
-                >
-                  Comparer sur Aviasales
-                </a>
-              ) : null}
+              {flightBooked ? (
+                <p className="text-sm text-slate-700">
+                  <span className="font-bold text-slate-900">
+                    {airlineName || 'Compagnie'}
+                  </span>
+                  {' · '}
+                  {formatDate(outDate)} → {formatDate(retDate)}
+                  {stopsLabel ? ` · ${stopsLabel}` : ''}
+                </p>
+              ) : (
+                <>
+                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-1.5">
+                    <p className="font-bold text-slate-900">
+                      {airlineName || 'Compagnie'}
+                      {stopsLabel ? ` · ${stopsLabel}` : ''}
+                    </p>
+                    <p>
+                      Aller {formatDate(outDate)}
+                      {outTime ? ` · ${outTime}` : ''}
+                      {outArrTime ? ` → ${outArrTime}` : ''}
+                    </p>
+                    <p className="text-slate-600">
+                      {originLabel} → {arrivalLabel}
+                    </p>
+                    <p>
+                      Retour {formatDate(retDate)}
+                      {retTime ? ` · ${retTime}` : ''}
+                      {retArrTime ? ` → ${retArrTime}` : ''}
+                    </p>
+                    {payload.baggage_line ? (
+                      <p className="text-xs text-slate-600 pt-1 border-t border-slate-200">
+                        {String(payload.baggage_line)}
+                      </p>
+                    ) : null}
+                    {distanceLine ? (
+                      <p className="text-xs text-slate-500">{distanceLine}</p>
+                    ) : null}
+                  </div>
 
-              {(flightClicked || flightBooked) && !flightBooked ? (
-                <button
-                  type="button"
-                  onClick={() => void onFlightBooked()}
-                  disabled={markingBooked}
-                  className="w-full text-center border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold py-3 rounded-xl disabled:opacity-60 min-h-[44px]"
-                >
-                  {markingBooked ? '…' : 'J’ai réservé mon vol ✓'}
-                </button>
-              ) : null}
+                  <a
+                    href={flightUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => void onFlightClick()}
+                    className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px] lg:bg-white lg:text-primary-700 lg:border lg:border-primary-200 lg:hover:bg-primary-50"
+                  >
+                    {cta}
+                  </a>
 
-              {showPriceAsk && isCached && !feedbackSent ? (
+                  {carrier.copyHint && carrier.kind !== 'deeplink' ? (
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
+                      <p className="text-xs text-slate-600 flex-1 leading-relaxed">
+                        {carrier.copyHint}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void copyRouteHint()}
+                        className="shrink-0 text-xs font-bold text-primary-700 border border-primary-200 bg-white hover:bg-primary-50 px-3 py-2 rounded-lg min-h-[44px]"
+                      >
+                        {copyDone ? 'Copié ✓' : 'Copier'}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {compareUrl ? (
+                    <a
+                      href={compareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
+                    >
+                      Comparer sur Aviasales
+                    </a>
+                  ) : null}
+
+                  {askFlightBooked ? (
+                    <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 p-3 space-y-2">
+                      <p className="text-sm font-semibold text-slate-800">
+                        Ton vol est réservé ?
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void onFlightBooked()}
+                          disabled={markingBooked}
+                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold min-h-[44px] disabled:opacity-60"
+                        >
+                          {markingBooked ? '…' : 'Oui'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onFlightNotYet}
+                          className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 min-h-[44px]"
+                        >
+                          Pas encore
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              )}
+
+              {showPriceAsk && isCached && !feedbackSent && flightBooked ? (
                 <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-2">
                   <p className="text-sm font-medium text-slate-800">
                     Le prix était-il le même ?
@@ -653,7 +736,11 @@ export default function MyTrip() {
             </section>
 
             {/* ② Hôtel */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+            <section
+              ref={hotelSectionRef}
+              id="trip-hotel"
+              className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm scroll-mt-20"
+            >
               <div className="flex items-center justify-between gap-2">
                 <h2 className="font-bold text-slate-900">② Ton hôtel</h2>
                 {hotelBooked ? (
