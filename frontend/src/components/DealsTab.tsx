@@ -209,7 +209,7 @@ export function DealsTab() {
         adults: queryAdults,
         occasion: occasion || undefined,
         duration: durationTab,
-        limit: 36,
+        limit: 72,
       })
       void loadLikes()
       void loadOccasions()

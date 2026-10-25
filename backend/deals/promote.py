@@ -224,22 +224,59 @@ def _lookup_baseline(
     return None
 
 
+def _promote_diversity_caps() -> Tuple[int, int]:
+    """0 = no cap (BVA-heavy traffic: don't starve the main origin)."""
+    import os
+
+    try:
+        city = int(os.getenv("DEALS_PROMOTE_MAX_PER_CITY", "0") or "0")
+    except ValueError:
+        city = 0
+    try:
+        country = int(os.getenv("DEALS_PROMOTE_MAX_PER_COUNTRY", "0") or "0")
+    except ValueError:
+        country = 0
+    return max(0, city), max(0, country)
+
+
+def _promote_per_origin_cap(cfg: DealsConfig) -> int:
+    import os
+
+    try:
+        explicit = int(os.getenv("DEALS_PROMOTE_PER_ORIGIN", "0") or "0")
+    except ValueError:
+        explicit = 0
+    if explicit > 0:
+        return explicit
+    # Default: keep room for BVA volume (was ~36 — too tight)
+    return max(int(cfg.min_per_origin) * 8, 80)
+
+
 def apply_diversity(
     scored: List[Dict[str, Any]],
     *,
-    max_per_city: int = 3,
-    max_per_country: int = 4,
+    max_per_city: int = 0,
+    max_per_country: int = 0,
 ) -> List[Dict[str, Any]]:
-    """Keep best scores with city/country caps (per origin already filtered)."""
+    """
+    Optional city/country caps (per origin already filtered).
+    max_per_* <= 0 → no diversity trim (prefer score order only).
+    """
+    if max_per_city <= 0 and max_per_country <= 0:
+        return sorted(scored, key=lambda r: -float(r.get("deal_score") or 0))
     by_city: Dict[str, int] = {}
     by_country: Dict[str, int] = {}
     out: List[Dict[str, Any]] = []
     for row in sorted(scored, key=lambda r: -float(r.get("deal_score") or 0)):
         city = str(row.get("served_city_id") or "")
         country = str(row.get("country_code") or "")
-        if by_city.get(city, 0) >= max_per_city:
+        if max_per_city > 0 and by_city.get(city, 0) >= max_per_city:
             continue
-        if country and by_country.get(country, 0) >= max_per_country:
+        if (
+            max_per_country > 0
+            and country
+            and by_country.get(country, 0) >= max_per_country
+        ):
             continue
         by_city[city] = by_city.get(city, 0) + 1
         if country:
@@ -272,7 +309,9 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
     # Hard deals: 12h lookback; soft fill: 48h so browse stays populated
     soft_hours = 48.0
     since = (now - timedelta(hours=soft_hours)).isoformat()
-    browse_target = max(int(cfg.min_per_origin) * 3, 30)
+    per_origin_cap = _promote_per_origin_cap(cfg)
+    browse_target = per_origin_cap
+    city_cap, country_cap = _promote_diversity_caps()
 
     try:
         obs_res = (
@@ -546,9 +585,10 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
     promoted = 0
     soft_n = 0
     for origin, rows in by_origin.items():
-        kept = apply_diversity(rows, max_per_city=3, max_per_country=5)
-        # Cap to browse target per origin (was too tight → empty grid)
-        kept = kept[: max(cfg.min_per_origin * 2, browse_target)]
+        kept = apply_diversity(
+            rows, max_per_city=city_cap, max_per_country=country_cap
+        )
+        kept = kept[:per_origin_cap]
         for row in kept:
             if (row.get("baseline_snapshot") or {}).get("soft_fill"):
                 soft_n += 1
@@ -587,4 +627,6 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         "promoted": promoted,
         "soft_fill": soft_n,
         "browse_target": browse_target,
+        "per_origin_cap": per_origin_cap,
+        "diversity": {"max_per_city": city_cap, "max_per_country": country_cap},
     }

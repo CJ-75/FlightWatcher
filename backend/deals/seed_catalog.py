@@ -446,8 +446,23 @@ def _seed_ryanair_origins() -> List[str]:
     """Small FR Ryanair hubs — enough for UX, low 403 risk."""
     import os
 
-    raw = (os.getenv("SEED_RYANAIR_ORIGINS") or "BVA,MRS").strip()
-    return _parse_iata_list(raw) or ["BVA", "MRS"]
+    # Main FR Ryanair bases (not every regional strip in airports.csv)
+    raw = (
+        os.getenv("SEED_RYANAIR_ORIGINS")
+        or "BVA,MRS,NTE,TLS,NCE,LIL,BIQ,BZR,XCR,GNB"
+    ).strip()
+    return _parse_iata_list(raw) or [
+        "BVA",
+        "MRS",
+        "NTE",
+        "TLS",
+        "NCE",
+        "LIL",
+        "BIQ",
+        "BZR",
+        "XCR",
+        "GNB",
+    ]
 
 
 def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = False) -> Dict[str, Any]:
@@ -456,7 +471,7 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
 
     Travelpayouts always (bulk). Ryanair optionally, slowly:
       - SEED_RYANAIR_ENABLED (default true)
-      - only SEED_RYANAIR_ORIGINS (default BVA,MRS)
+      - only SEED_RYANAIR_ORIGINS (main FR hubs)
       - only the nearest weekend date pair
       - max SEED_RYANAIR_MAX_CELLS_PER_RUN (default 8)
       - pause SEED_RYANAIR_PAUSE_S (default 4s) between Ryanair cells

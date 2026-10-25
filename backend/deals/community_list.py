@@ -20,7 +20,20 @@ _FLAG_CACHE_TTL_S = 60.0
 
 # Hard floor — a wall under 30 feels empty / broken (audit)
 WALL_MIN_DEALS = 30
-WALL_MAX_DEALS = 48
+
+
+def _wall_max_deals() -> int:
+    import os
+
+    try:
+        n = int(os.getenv("DEALS_WALL_MAX_DEALS", "120") or "120")
+    except ValueError:
+        n = 120
+    return max(WALL_MIN_DEALS, n)
+
+
+# Back-compat for imports / diagnostics
+WALL_MAX_DEALS = _wall_max_deals()
 
 
 def invalidate_list_cache() -> None:
@@ -836,21 +849,22 @@ def _prefer_hotel_deals(deals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _wall_diversity_caps() -> Tuple[int, int]:
+    """0 = no city/country trim on the wall (BVA should not be starved)."""
     import os
 
     try:
-        city = int(os.getenv("DEALS_WALL_MAX_PER_CITY", "3") or "3")
+        city = int(os.getenv("DEALS_WALL_MAX_PER_CITY", "0") or "0")
     except ValueError:
-        city = 3
+        city = 0
     try:
-        country = int(os.getenv("DEALS_WALL_MAX_PER_COUNTRY", "4") or "4")
+        country = int(os.getenv("DEALS_WALL_MAX_PER_COUNTRY", "0") or "0")
     except ValueError:
-        country = 4
-    return max(1, city), max(1, country)
+        country = 0
+    return max(0, city), max(0, country)
 
 
-MAX_PER_CITY = 3
-MAX_PER_COUNTRY = 4
+MAX_PER_CITY = 0
+MAX_PER_COUNTRY = 0
 
 
 def diversify_wall_deals(
@@ -859,16 +873,24 @@ def diversify_wall_deals(
     max_per_city: int = MAX_PER_CITY,
     max_per_country: int = MAX_PER_COUNTRY,
 ) -> List[Dict[str, Any]]:
-    """Strict wall variety: ≤max_per_city / city, ≤max_per_country / country."""
+    """
+    Optional wall variety. max_per_* <= 0 → keep score/order as-is (no trim).
+    """
+    if max_per_city <= 0 and max_per_country <= 0:
+        return list(deals)
     city_n: Dict[str, int] = {}
     country_n: Dict[str, int] = {}
     out: List[Dict[str, Any]] = []
     for d in deals:
         city = str(d.get("city") or d.get("destination") or "").strip().lower()
         country = str(d.get("country") or "").strip().lower()
-        if city and city_n.get(city, 0) >= max_per_city:
+        if max_per_city > 0 and city and city_n.get(city, 0) >= max_per_city:
             continue
-        if country and country_n.get(country, 0) >= max_per_country:
+        if (
+            max_per_country > 0
+            and country
+            and country_n.get(country, 0) >= max_per_country
+        ):
             continue
         out.append(d)
         if city:
@@ -887,16 +909,19 @@ def diversify_wall_min(
     """
     Diversify then relax city/country caps until we hit min_deals (or exhaust pool).
     Prefer variety, but never ship a thin wall when inventory exists.
+    Caps 0/0 = no diversity filter.
     """
     want = max(int(min_deals), int(target))
     city0, country0 = _wall_diversity_caps()
+    if city0 <= 0 and country0 <= 0:
+        return list(deals)[:want]
     # Progressive relaxation: (city, country) — starts from env caps
     caps = [
         (city0, country0),
         (max(city0, 3), max(country0, 4)),
         (4, 5),
         (6, 8),
-        (99, 99),
+        (0, 0),  # last resort: no caps
     ]
     best: List[Dict[str, Any]] = []
     for city_cap, country_cap in caps:
@@ -1196,7 +1221,7 @@ def list_community_deals(
     """
     Browse: deals with hotel photo only (no city stock, no flight-only cards).
     Read path is cache-only enrichment — hotel composition happens in jobs.
-    Default ~36 for choice; hard cap 48 (single wall, no pagination yet).
+    Default ~36 for choice; soft cap via DEALS_WALL_MAX_DEALS (default 120).
 
     Filters (optional):
       origin — departure IATA(s)
@@ -1210,7 +1235,8 @@ def list_community_deals(
     t0 = time.monotonic()
     adults_n = int(adults or 2)
     # Never aim below WALL_MIN_DEALS — thin walls are banned
-    target = max(WALL_MIN_DEALS, min(int(limit or 36), WALL_MAX_DEALS))
+    wall_max = _wall_max_deals()
+    target = max(WALL_MIN_DEALS, min(int(limit or 36), wall_max))
     occasion_slug = (occasion or "").strip().lower() or None
     duration_tab = (duration or "").strip().lower() or None
     if duration_tab not in ("weekend", "short", "week"):
