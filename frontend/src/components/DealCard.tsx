@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { dealAdults, dealBadgeLabels, dealCornerBadge } from '@flightwatcher/shared'
+import {
+  dealAdults,
+  dealBadgeLabels,
+  dealCornerBadgeParts,
+} from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { DealCardGallery } from './DealCardGallery'
+import { CountryFlag } from './CountryFlag'
 
 interface DealCardProps {
   deal: TravelDeal
@@ -267,7 +272,13 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   const adults = dealAdults(deal)
   const stars = Number(deal.hotel_stars || deal.hotel?.stars || 0)
   const hotelName = deal.hotel_name || deal.hotel?.name || 'Hôtel'
-  const origin = cardPlaceLabel(deal.origin_airport_label)
+  const originCity = (deal.origin_city || '').trim()
+  const originAirport = cardPlaceLabel(deal.origin_airport_label)
+  // City-first: « depuis Paris », not « depuis Paris-Beauvais »
+  const origin =
+    originCity ||
+    originAirport ||
+    cardPlaceLabel(null, deal.origin_iata || deal.departure_airport)
   const city = (deal.city || '').trim() || cardPlaceLabel(deal.arrival_airport_label) || 'Destination'
 
   const flightPp = Math.round(
@@ -292,6 +303,7 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   const reviews = deal.hotel?.review_count
   const fresh = isFreshDeal(deal.fetched_at)
   const hook = (deal.hook || '').trim()
+  const corner = dealCornerBadgeParts(deal)
 
   const baggageLine = (deal.baggage_line || '').trim()
   const pills: { label: string; tone: 'neutral' | 'good' }[] = []
@@ -345,13 +357,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           onOpen={onClick}
         />
 
-        {dealCornerBadge(deal) ? (
-          <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-accent-500 text-white">
-            {dealCornerBadge(deal)}
-          </span>
-        ) : fresh ? (
-          <span className="absolute top-3 left-3 z-[3] text-[11px] font-bold px-2.5 py-1 rounded-full shadow-soft min-h-[24px] inline-flex items-center justify-center pointer-events-none bg-ink text-white">
-            {t('deals.newBadge')}
+        {fresh && !corner ? (
+          <span className="absolute top-3 left-3 z-[3] shadow-soft pointer-events-none rounded-2xl px-2.5 py-1.5 min-h-[28px] inline-flex items-center bg-ink text-white">
+            <span className="text-[11px] font-bold leading-none">{t('deals.newBadge')}</span>
           </span>
         ) : null}
 
@@ -386,12 +394,36 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
       <div className="flex flex-col flex-1 min-h-0 p-3.5 sm:p-4 gap-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-1.5">
-            <p className="text-lg sm:text-xl font-extrabold text-ink tracking-tight leading-snug line-clamp-2">
-              {(deal.title || '').trim() &&
-              !(deal.title || '').startsWith('Week-end')
-                ? deal.title
-                : city}
+            <p className="text-lg sm:text-xl font-extrabold text-ink tracking-tight leading-snug flex items-start gap-2 min-w-0">
+              {deal.country ? (
+                <CountryFlag
+                  country={deal.country}
+                  className="w-5 h-[14px] sm:w-6 sm:h-4 mt-1.5"
+                  title={deal.country}
+                />
+              ) : null}
+              <span className="min-w-0 line-clamp-2">
+                {(deal.title || '').trim() &&
+                !(deal.title || '').startsWith('Week-end')
+                  ? deal.title
+                  : city}
+              </span>
             </p>
+            {corner ? (
+              <span
+                className="inline-flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 w-fit max-w-full rounded-xl bg-accent-500 text-white px-2.5 py-1 shadow-soft"
+                title={corner.fullText}
+              >
+                {corner.kind === 'discount' && corner.discountPct != null ? (
+                  <span className="text-sm font-black tabular-nums leading-none shrink-0">
+                    −{corner.discountPct}%
+                  </span>
+                ) : null}
+                <span className="text-[11px] sm:text-xs font-bold leading-snug">
+                  {deal.badge_meta?.label || corner.text}
+                </span>
+              </span>
+            ) : null}
             {hook ? (
               <p className="text-sm font-semibold text-ink-soft leading-snug line-clamp-2">
                 {hook}

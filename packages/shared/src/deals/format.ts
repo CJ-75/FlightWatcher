@@ -61,22 +61,22 @@ export function formatFetchedAt(iso?: string | null, locale = 'fr-FR'): string |
   }
 }
 
-/** Labels for occasion_badge slug (discount badge still wins in UI). */
+/** Labels for occasion_badge slug (discount badge still wins in UI). Keep short for chips. */
 const OCCASION_BADGE_LABELS: Record<string, string> = {
-  'moins-200': 'Moins de 200 €',
+  'moins-200': '−200 €',
   'sans-conge': 'Sans congé',
-  'un-jour-conge': '1 jour de congé',
-  'ambiance-noel': 'Marchés de Noël',
-  'pont-noel': 'Week-end de Noël',
+  'un-jour-conge': '1 j. congé',
+  'ambiance-noel': 'Noël',
+  'pont-noel': 'Pont de Noël',
   'nouvel-an': 'Nouvel An',
-  'hiver-soleil': 'Fuyez l’hiver',
+  'hiver-soleil': 'Soleil d’hiver',
   'nuits-polaires': 'Nuits polaires',
   'hotel-plebiscite': 'Coup de cœur',
-  'extras-offerts': 'Petit-déj inclus',
+  'extras-offerts': 'Petit-déj',
   'hors-vacances': 'Hors vacances',
   'max-sur-place': 'Max sur place',
   pepites: 'Pépite',
-  'il-fera-beau': 'Il fera beau',
+  'il-fera-beau': 'Beau temps',
 }
 
 export function occasionBadgeLabel(slug: string | null | undefined): string | null {
@@ -84,10 +84,71 @@ export function occasionBadgeLabel(slug: string | null | undefined): string | nu
   return OCCASION_BADGE_LABELS[slug] || slug.replace(/-/g, ' ')
 }
 
-/** Card corner badge: discount meta first, else occasion (not generic « Nouveau »). */
+export type DealCornerBadgeParts = {
+  /** −32 when known; null → show text-only / reserve slot in UI if desired */
+  discountPct: number | null
+  /** Short chip copy that fits on one line with the % */
+  text: string
+  /** Longer sentence for tooltip / detail */
+  fullText: string
+  kind: 'discount' | 'occasion'
+}
+
+/** Structured corner badge: text first, % when baseline math is ready. */
+export function dealCornerBadgeParts(deal: TravelDeal): DealCornerBadgeParts | null {
+  const meta = deal.badge_meta
+  const discRaw = meta?.discount_pct
+  let pct: number | null = null
+  if (discRaw != null && Number.isFinite(Number(discRaw)) && Number(discRaw) >= 15) {
+    pct = Math.round(Number(discRaw))
+  }
+  const metaLabel = (meta?.label || '').trim()
+  const short = (meta?.short_label || '').trim()
+  if (pct != null || (metaLabel && !/^nouveau$/i.test(metaLabel))) {
+    const text = short || metaLabel || 'Moins cher'
+    const full =
+      pct != null
+        ? `${text} (−${pct} %)`
+        : metaLabel || text
+    return {
+      discountPct: pct,
+      text,
+      fullText: full,
+      kind: 'discount',
+    }
+  }
+  if (deal.badge && !/^nouveau$/i.test(String(deal.badge).trim())) {
+    const text = String(deal.badge).trim()
+    // Legacy long "Vol −N % …" → strip number into pct if present
+    const m = text.match(/−\s*(\d+)\s*%/)
+    if (m) {
+      return {
+        discountPct: Number(m[1]),
+        text: 'Moins cher',
+        fullText: text,
+        kind: 'discount',
+      }
+    }
+    return { discountPct: null, text, fullText: text, kind: 'discount' }
+  }
+  const occasion = occasionBadgeLabel(deal.occasion_badge)
+  if (occasion) {
+    return {
+      discountPct: null,
+      text: occasion,
+      fullText: occasion,
+      kind: 'occasion',
+    }
+  }
+  return null
+}
+
+/** Card corner badge string (compat): prefers short + optional −N%. */
 export function dealCornerBadge(deal: TravelDeal): string | null {
-  if (deal.badge && !/^nouveau$/i.test(String(deal.badge).trim())) return deal.badge
-  return occasionBadgeLabel(deal.occasion_badge)
+  const parts = dealCornerBadgeParts(deal)
+  if (!parts) return null
+  if (parts.discountPct != null) return `−${parts.discountPct}% · ${parts.text}`
+  return parts.text
 }
 
 export function dealBadgeLabels(deal: TravelDeal): string[] {

@@ -232,7 +232,11 @@ export interface TravelDealFlags {
 }
 
 export interface TravelDealBadgeMeta {
+  /** Stable text without the % (e.g. « Moins cher que d'habitude »). */
   label: string
+  /** Compact chip text when space is tight. */
+  short_label?: string | null
+  /** Filled once baseline math is done — UI shows −N% separately. */
   discount_pct?: number | null
   scope?: 'flight' | 'pack'
   tooltip?: string
@@ -428,6 +432,8 @@ export interface TravelDeal {
   /** Stable key for likes, alerts, revalidate. */
   deal_key?: DealKey
   origin_iata?: string
+  /** Departure city (metro), e.g. Paris for BVA/CDG/ORY — prefer over airport on cards. */
+  origin_city?: string | null
   destination?: string
   window_kind?: DealWindowKind
   window_id?: string
@@ -479,14 +485,15 @@ export interface DealsListParams {
   limit?: number
 }
 
-/** Chip from GET /api/deals/occasions (count ≥ min_deals). */
+/** Chip from GET /api/deals/occasions — label first; count may arrive later. */
 export interface DealOccasionChip {
   slug: string
   label?: string
   icon?: string
   kind?: string
   explain?: string
-  count: number
+  /** Filled once wall counts are computed; omit/undefined while pending. */
+  count?: number | null
   priority?: number
   push?: boolean
 }

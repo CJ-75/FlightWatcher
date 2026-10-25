@@ -90,31 +90,30 @@ def badge_for_baseline(baseline: Dict[str, Any]) -> Dict[str, Any]:
     """
     Honest badge: flight-only vs usual price (30d).
 
-    Only show a badge when we have a real measured discount_pct.
-    Soft-fill / estimated / unreliable → no badge (avoids « Très bon prix » everywhere).
+    Text is stable (« Moins cher… »); discount_pct is the number to surface
+    once measured. Soft-fill / estimated → no badge.
     """
+    empty = {
+        "label": None,
+        "short_label": None,
+        "discount_pct": None,
+        "scope": "flight",
+        "tooltip": None,
+    }
     kind = baseline.get("baseline_kind") or "observed"
     disc = baseline.get("discount_pct")
-    if (
-        kind == "estimated"
-        or baseline.get("soft_fill")
-        or disc is None
-    ):
-        return {
-            "label": None,
-            "discount_pct": None,
-            "scope": "flight",
-            "tooltip": None,
-        }
+    if kind == "estimated" or baseline.get("soft_fill") or disc is None:
+        return dict(empty)
     try:
         pct = float(disc)
     except (TypeError, ValueError):
-        return {"label": None, "discount_pct": None, "scope": "flight", "tooltip": None}
+        return dict(empty)
     if pct < 15:
-        # Keep badge rare: only meaningful savings
-        return {"label": None, "discount_pct": None, "scope": "flight", "tooltip": None}
+        return dict(empty)
     return {
-        "label": f"Vol −{int(round(pct))} % moins cher que d'habitude",
+        # Full readable sentence — UI may prefer short_label + −N%
+        "label": "Moins cher que d'habitude",
+        "short_label": "Moins cher",
         "discount_pct": pct,
         "scope": "flight",
         "tooltip": (
@@ -241,13 +240,17 @@ def row_to_travel_deal(
 
     hotel_image = _hotel_photo(hotel) or ""
     dest_iata = str(row.get("dest_iata") or "").upper()
+    origin_iata_s = str(row.get("origin_iata") or "").upper()
     country = ""
+    origin_city = ""
     try:
-        from city_names_fr import country_for_code
+        from city_names_fr import city_for_code, country_for_code
 
         country = country_for_code(dest_iata, "") or ""
+        origin_city = city_for_code(origin_iata_s, "") or ""
     except Exception:
         country = ""
+        origin_city = ""
 
     deal_out: Dict[str, Any] = {
         "id": row.get("deal_key"),
@@ -262,6 +265,7 @@ def row_to_travel_deal(
         "nights": int(row.get("nights") or 2),
         "departure_airport": row.get("origin_iata"),
         "origin_iata": row.get("origin_iata"),
+        "origin_city": origin_city or None,
         "destination": row.get("dest_iata"),
         "dates": {"outbound": out_date, "inbound": ret_date},
         "hotel_name": hotel_name,

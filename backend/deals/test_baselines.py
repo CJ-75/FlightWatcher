@@ -54,7 +54,8 @@ class TestBaselineStats(unittest.TestCase):
         }
         self.assertEqual(discount_pct_vs_usual(68, bl), 32.0)
         badge = badge_for_baseline(bl)
-        self.assertIn("Vol", badge["label"])
+        self.assertIn("Moins cher", badge["label"] or "")
+        self.assertEqual(badge.get("discount_pct"), 32.0)
         self.assertEqual(badge["scope"], "flight")
         soft = badge_for_baseline({"baseline_kind": "estimated"})
         self.assertIsNone(soft["label"])

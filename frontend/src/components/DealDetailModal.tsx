@@ -12,6 +12,7 @@ import { getApiClient } from '../utils/apiClient'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
 import { DealComplianceNotice } from './DealComplianceNotice'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
+import { CountryFlag } from './CountryFlag'
 
 interface DealDetailModalProps {
   deal: TravelDeal | null
@@ -421,7 +422,12 @@ export function DealDetailModal({
                     {deal.badge}
                   </span>
                 ) : null}
-                <h2 className="text-white text-2xl font-black drop-shadow">{deal.city}</h2>
+                <h2 className="text-white text-2xl font-black drop-shadow flex items-center gap-2">
+                  {deal.country ? (
+                    <CountryFlag country={deal.country} className="w-6 h-4" title={deal.country} />
+                  ) : null}
+                  {deal.city}
+                </h2>
                 <p className="text-white/85 text-sm drop-shadow">{deal.country}</p>
             </div>
             }
@@ -436,16 +442,25 @@ export function DealDetailModal({
                   {deal.badge}
                 </span>
               ) : null}
-                <h2 className="text-2xl sm:text-[1.75rem] font-black text-ink tracking-tight leading-tight">
-                  {(deal.title || '').trim() && !(deal.title || '').startsWith('Week-end')
-                    ? deal.title
-                    : deal.city}
+                <h2 className="text-2xl sm:text-[1.75rem] font-black text-ink tracking-tight leading-tight flex items-center gap-2.5 flex-wrap">
                   {deal.country ? (
-                    <span className="text-slate-400 font-bold text-lg sm:text-xl">
-                      {' '}
-                      · {deal.country}
-                    </span>
+                    <CountryFlag
+                      country={deal.country}
+                      className="w-6 h-4 sm:w-7 sm:h-[18px]"
+                      title={deal.country}
+                    />
                   ) : null}
+                  <span>
+                    {(deal.title || '').trim() && !(deal.title || '').startsWith('Week-end')
+                      ? deal.title
+                      : deal.city}
+                    {deal.country ? (
+                      <span className="text-slate-400 font-bold text-lg sm:text-xl">
+                        {' '}
+                        · {deal.country}
+                      </span>
+                    ) : null}
+                  </span>
                 </h2>
                 {deal.hook ? (
                   <p className="text-sm font-semibold text-ink-soft mt-1">{deal.hook}</p>
@@ -479,7 +494,7 @@ export function DealDetailModal({
                     {formatDateShort(deal.dates.inbound)}
                   </p>
                   <p className="text-[11px] text-primary-700/80 mt-1 font-medium line-clamp-2 max-w-[9rem] sm:max-w-none">
-                    depuis {deal.origin_airport_label || deal.departure_airport || '—'}
+                    depuis {deal.origin_city || deal.origin_airport_label || deal.departure_airport || '—'}
                   </p>
             </div>
           </div>

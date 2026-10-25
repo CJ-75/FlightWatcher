@@ -3,8 +3,10 @@ import { motion } from 'framer-motion'
 import {
   airportSelectionLabel,
   encodeAirportCodes,
+  findCityGroupByCodes,
   groupAirportsByCity,
   normalizeAirports,
+  parseAirportCodes,
   type Airport,
 } from '@flightwatcher/shared'
 import type { DealOccasionChip, TravelDeal } from '../types'
@@ -30,6 +32,16 @@ const springConfig = {
 const ORIGIN_LS_KEY = 'fw_deals_origin'
 type DurationTab = 'weekend' | 'short' | 'week'
 
+/** Inspire-toi rail — labels/icons immediately; counts merge from API. */
+const INSPIRE_SEED: DealOccasionChip[] = [
+  { slug: 'sans-conge', label: 'Sans poser de congé', icon: 'briefcase-off' },
+  { slug: 'ambiance-noel', label: 'Marchés de Noël', icon: 'tree' },
+  { slug: 'pont-noel', label: 'Week-end de Noël', icon: 'bridge' },
+  { slug: 'nouvel-an', label: 'Nouvel An ailleurs', icon: 'champagne' },
+  { slug: 'hiver-soleil', label: 'Fuyez l’hiver', icon: 'sun' },
+  { slug: 'moins-200', label: 'Moins de 200 €', icon: 'euro' },
+]
+
 function readStoredOrigin(): string {
   try {
     return (localStorage.getItem(ORIGIN_LS_KEY) || '').trim()
@@ -53,6 +65,16 @@ function shortOriginLabel(encoded: string, airports: Airport[]): string {
   const full = airportSelectionLabel(encoded, groups)
   if (!full) return encoded.split(',')[0] || ''
   return full.split(' · ')[0] || full
+}
+
+/** Prefer city metro (all airports) over a single stored IATA like BVA. */
+function expandOriginToCity(encoded: string, airports: Airport[]): string {
+  const codes = parseAirportCodes(encoded)
+  if (codes.length !== 1 || !airports.length) return encoded
+  const groups = groupAirportsByCity(airports)
+  const group = findCityGroupByCodes(groups, codes)
+  if (!group || group.airports.length <= 1) return encoded
+  return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
 }
 
 export function DealsTab() {
@@ -82,7 +104,10 @@ export function DealsTab() {
       return null
     }
   })
-  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
+  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>(() => [
+    ...INSPIRE_SEED,
+  ])
+  const [occasionCountsPending, setOccasionCountsPending] = useState(true)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc' | 'time_on_site'>(
     'recommended',
   )
@@ -112,7 +137,18 @@ export function DealsTab() {
         if (cancelled) return
         const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
         setAirports(list)
-        if (originDefaultedRef.current || readStoredOrigin()) return
+        if (originDefaultedRef.current) return
+        const stored = readStoredOrigin()
+        if (stored) {
+          const expanded = expandOriginToCity(stored, list)
+          originDefaultedRef.current = true
+          if (expanded !== stored) {
+            setOrigin(expanded)
+            setQueryOrigin(expanded)
+            writeStoredOrigin(expanded)
+          }
+          return
+        }
         const groups = groupAirportsByCity(list)
         const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
         if (!paris) return
@@ -120,6 +156,7 @@ export function DealsTab() {
         if (!encoded) return
         originDefaultedRef.current = true
         setOrigin(encoded)
+        setQueryOrigin(encoded)
         writeStoredOrigin(encoded)
       })
       .catch(() => undefined)
@@ -170,6 +207,7 @@ export function DealsTab() {
   }, [])
 
   const loadOccasions = useCallback(async () => {
+    setOccasionCountsPending(true)
     try {
       const res = await getApiClient().getDealOccasions({
         origin: queryOrigin || undefined,
@@ -184,13 +222,32 @@ export function DealsTab() {
         seen.add(c.slug)
         all.push(c)
       }
-      setOccasionChips(all)
+      // Keep seed order for launch chips, then API extras
+      if (all.length === 0) {
+        setOccasionChips(INSPIRE_SEED.map((c) => ({ ...c, count: 0 })))
+      } else {
+        const bySlug = new Map(all.map((c) => [c.slug, c]))
+        const ordered: DealOccasionChip[] = []
+        for (const seed of INSPIRE_SEED) {
+          ordered.push(bySlug.get(seed.slug) || { ...seed, count: 0 })
+          bySlug.delete(seed.slug)
+        }
+        for (const c of all) {
+          if (bySlug.has(c.slug)) ordered.push(c)
+        }
+        setOccasionChips(ordered)
+      }
       setOccasion((prev) => {
         if (!prev) return null
-        return all.some((c) => c.slug === prev) ? prev : null
+        return all.some((c) => c.slug === prev) || INSPIRE_SEED.some((c) => c.slug === prev)
+          ? prev
+          : null
       })
     } catch {
-      setOccasionChips([])
+      /* keep seed labels; mark counts as unknown */
+      setOccasionChips(INSPIRE_SEED)
+    } finally {
+      setOccasionCountsPending(false)
     }
   }, [queryOrigin, queryDestination, queryAdults, durationTab])
 
@@ -397,6 +454,7 @@ export function DealsTab() {
 
       <OccasionRail
         chips={occasionChips}
+        countsPending={occasionCountsPending}
         selected={occasion}
         onToggle={toggleOccasion}
         onClear={() => setOccasion(null)}
@@ -537,9 +595,10 @@ export function DealsTab() {
             >
               <div className="aspect-[16/10] bg-primary-50" />
               <div className="p-5 space-y-3">
+                <div className="h-5 w-2/3 bg-primary-50 rounded" />
+                <div className="h-6 w-40 bg-primary-50 rounded-xl" />
                 <div className="h-8 w-24 bg-primary-50 rounded-lg" />
                 <div className="h-4 w-full bg-primary-50 rounded" />
-                <div className="h-4 w-2/3 bg-primary-50 rounded" />
                 <div className="h-11 w-full bg-primary-50 rounded-2xl mt-2" />
               </div>
             </div>

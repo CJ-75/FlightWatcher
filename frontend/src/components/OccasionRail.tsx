@@ -8,9 +8,38 @@ type Props = {
   selected: string | null
   onToggle: (slug: string) => void
   onClear: () => void
+  /** Counts still loading from API */
+  countsPending?: boolean
 }
 
-export function OccasionRail({ chips, selected, onToggle, onClear }: Props) {
+/**
+ * Web: full labels (no truncate).
+ * Mobile: slightly shorter where the official label is long.
+ */
+const CHIP_MOBILE_SHORT: Record<string, string> = {
+  'sans-conge': 'Sans congé',
+  'un-jour-conge': '1 j. de congé',
+  'hotel-plebiscite': 'Coup de cœur',
+  'extras-offerts': 'Petit-déj',
+  'hors-vacances': 'Hors vacances',
+  'ambiance-noel': 'Marchés de Noël',
+  'pont-noel': 'Pont de Noël',
+  'nouvel-an': 'Nouvel An',
+  'hiver-soleil': 'Soleil d’hiver',
+}
+
+function chipLabel(chip: DealOccasionChip, compact: boolean): string {
+  if (compact && CHIP_MOBILE_SHORT[chip.slug]) return CHIP_MOBILE_SHORT[chip.slug]
+  return chip.label || CHIP_MOBILE_SHORT[chip.slug] || chip.slug
+}
+
+export function OccasionRail({
+  chips,
+  selected,
+  onToggle,
+  onClear,
+  countsPending = false,
+}: Props) {
   const { t } = useI18n()
   const active = chips.find((c) => c.slug === selected) || null
 
@@ -33,17 +62,20 @@ export function OccasionRail({ chips, selected, onToggle, onClear }: Props) {
         ) : null}
       </div>
 
-      <div className="-mx-1 px-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex items-center gap-2 min-w-min pb-0.5">
+      {/* Mobile: horizontal scroll. Desktop: wrap — never clip chip text. */}
+      <div className="max-md:-mx-1 max-md:px-1 max-md:overflow-x-auto max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] max-md:[&::-webkit-scrollbar]:hidden">
+        <div className="flex max-md:items-center max-md:gap-2 max-md:min-w-min max-md:pb-0.5 md:flex-wrap md:gap-2">
           {chips.map((chip, i) => {
             const on = selected === chip.slug
             const count = chip.count
+            const hasCount = typeof count === 'number'
+            const emptyKnown = hasCount && count <= 0
             return (
               <motion.button
                 key={chip.slug}
                 type="button"
                 initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
+                animate={{ opacity: emptyKnown && !on ? 0.45 : 1, y: 0 }}
                 transition={{
                   delay: Math.min(i * 0.03, 0.18),
                   type: 'spring',
@@ -51,27 +83,46 @@ export function OccasionRail({ chips, selected, onToggle, onClear }: Props) {
                   damping: 28,
                 }}
                 onClick={() => onToggle(chip.slug)}
+                disabled={emptyKnown && !on}
                 aria-pressed={on}
-                title={chip.explain || undefined}
-                className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-3 py-1.5 text-left transition-all duration-150 max-w-[11rem] ${
+                title={chip.explain || chip.label || undefined}
+                className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-3 py-1.5 text-left transition-all duration-150 ${
                   on
                     ? 'bg-primary-500 border-primary-500 text-white shadow-soft'
                     : 'bg-white text-ink border-line hover:border-primary-200'
                 }`}
               >
                 <OccasionIcon icon={chip.icon} slug={chip.slug} size={14} />
-                <span className={`text-[12px] font-bold truncate ${on ? 'text-white' : 'text-ink'}`}>
-                  {chip.label || chip.slug}
+                <span
+                  className={`text-[12px] font-bold whitespace-nowrap md:hidden ${
+                    on ? 'text-white' : 'text-ink'
+                  }`}
+                >
+                  {chipLabel(chip, true)}
                 </span>
-                {typeof count === 'number' && count > 0 ? (
-                  <span
-                    className={`text-[10px] font-bold tabular-nums ${
-                      on ? 'text-white/80' : 'text-muted'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                ) : null}
+                <span
+                  className={`text-[12px] font-bold whitespace-nowrap hidden md:inline ${
+                    on ? 'text-white' : 'text-ink'
+                  }`}
+                >
+                  {chipLabel(chip, false)}
+                </span>
+                <span
+                  className={`inline-flex min-w-[1.25rem] justify-center text-[10px] font-bold tabular-nums rounded-full px-1.5 py-0.5 leading-none shrink-0 ${
+                    on
+                      ? 'bg-white/20 text-white'
+                      : 'bg-primary-50 text-primary-700'
+                  }`}
+                  aria-hidden={!hasCount}
+                >
+                  {hasCount ? (
+                    count
+                  ) : countsPending ? (
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-current/30 animate-pulse" />
+                  ) : (
+                    '·'
+                  )}
+                </span>
               </motion.button>
             )
           })}

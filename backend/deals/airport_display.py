@@ -108,8 +108,8 @@ def enrich_route_labels(
     route_hint keeps the shorter « depuis / arrivée » notes when useful.
     """
     origin_city = origin_city or ""
-    # Infer Paris for BVA/CDG/ORY if unknown
-    if not origin_city and (origin_iata or "").upper() in ("BVA", "CDG", "ORY"):
+    # Infer Paris for metro airports if unknown
+    if not origin_city and (origin_iata or "").upper() in ("BVA", "CDG", "ORY", "XCR"):
         origin_city = "Paris"
 
     origin_name = _airport_full_name(origin_iata)

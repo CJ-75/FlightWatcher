@@ -13,8 +13,13 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
-import { dealAdults, dealBadgeLabels, dealCornerBadge } from '@flightwatcher/shared'
+import {
+  dealAdults,
+  dealBadgeLabels,
+  dealCornerBadgeParts,
+} from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
+import { CountryFlag } from './CountryFlag'
 import { getApi } from '../lib/client'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
@@ -169,7 +174,9 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const adults = dealAdults(deal)
   const stars = Number(deal.hotel_stars || deal.hotel?.stars || 0)
   const hotelName = deal.hotel_name || deal.hotel?.name || 'Hôtel'
-  const origin = cardPlaceLabel(deal.origin_airport_label)
+  const originCity = (deal.origin_city || '').trim()
+  const origin =
+    originCity || cardPlaceLabel(deal.origin_airport_label)
   const dest =
     (deal.city || '').trim() ||
     cardPlaceLabel(deal.arrival_airport_label) ||
@@ -309,16 +316,41 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
           pointerEvents="none"
         />
 
-        {fresh || dealCornerBadge(deal) ? (
-          <View
-            style={[styles.dealBadge, fresh && { backgroundColor: colors.ink }]}
-            pointerEvents="none"
-          >
-            <Text style={styles.dealText} numberOfLines={1}>
-              {fresh ? 'Nouveau' : dealCornerBadge(deal)}
-            </Text>
-          </View>
-        ) : null}
+        {(() => {
+          const corner = dealCornerBadgeParts(deal)
+          if (!corner && !fresh) return null
+          return (
+            <View
+              style={[
+                styles.dealBadge,
+                !corner && fresh ? { backgroundColor: colors.ink } : null,
+              ]}
+              pointerEvents="none"
+            >
+              {corner?.kind === 'discount' ? (
+                <View style={styles.dealBadgeRow}>
+                  <Text
+                    style={[
+                      styles.dealPct,
+                      corner.discountPct == null && { opacity: 0.4 },
+                    ]}
+                  >
+                    {corner.discountPct != null
+                      ? `−${corner.discountPct}%`
+                      : '−–%'}
+                  </Text>
+                  <Text style={styles.dealText} numberOfLines={2}>
+                    {corner.text}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.dealText} numberOfLines={2}>
+                  {corner ? corner.text : 'Nouveau'}
+                </Text>
+              )}
+            </View>
+          )
+        })()}
 
         {onToggleLike ? (
           <Pressable onPress={onToggleLike} hitSlop={12} style={styles.likeBtn}>
@@ -347,12 +379,17 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
         <View style={styles.bodyMain}>
           <View style={styles.titleRow}>
             <View style={styles.titleCol}>
-              <Text style={styles.hookTitle} numberOfLines={2}>
-                {(deal.title || '').trim() &&
-                !(deal.title || '').startsWith('Week-end')
-                  ? deal.title
-                  : dest}
-              </Text>
+              <View style={styles.cityTitleRow}>
+                {deal.country ? (
+                  <CountryFlag country={deal.country} style={styles.cityFlag} />
+                ) : null}
+                <Text style={styles.hookTitle} numberOfLines={2}>
+                  {(deal.title || '').trim() &&
+                  !(deal.title || '').startsWith('Week-end')
+                    ? deal.title
+                    : dest}
+                </Text>
+              </View>
               {hook ? (
                 <Text style={styles.hookLine} numberOfLines={2}>
                   {hook}
@@ -461,17 +498,30 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: 12,
-    maxWidth: '55%',
+    maxWidth: '78%',
     backgroundColor: colors.accent,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.full,
+    paddingVertical: 6,
+    borderRadius: 14,
     zIndex: 3,
+  },
+  dealBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '100%',
+  },
+  dealPct: {
+    color: colors.white,
+    fontFamily: fonts.extrabold,
+    fontSize: 13,
   },
   dealText: {
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 11,
+    flexShrink: 1,
+    lineHeight: 14,
   },
   likeBtn: {
     position: 'absolute',
@@ -528,7 +578,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 4,
   },
+  cityTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  cityFlag: {
+    marginTop: 4,
+  },
   hookTitle: {
+    flex: 1,
     fontFamily: fonts.extrabold,
     fontSize: 18,
     color: colors.ink,

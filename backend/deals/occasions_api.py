@@ -82,13 +82,18 @@ def list_active_occasions(
                 continue
             counts[slug] = counts.get(slug, 0) + 1
 
+    launch = launch_chip_slugs()
+    launch_set = set(launch)
+
+    # Always emit visible chips (incl. launch with count 0) — UI shows labels
+    # first; counts fill once this response arrives.
     items: List[Dict[str, Any]] = []
     for occ in OCCASIONS:
         if not _chip_visible(occ, today):
             continue
         slug = str(occ["slug"])
         n = int(counts.get(slug, 0))
-        if n < min_deals:
+        if n < min_deals and slug not in launch_set:
             continue
         items.append(
             {
@@ -104,20 +109,18 @@ def list_active_occasions(
         )
 
     items.sort(key=lambda x: (x["priority"], -x["count"]))
-    launch = launch_chip_slugs()
     main: List[Dict[str, Any]] = []
     by_slug = {i["slug"]: i for i in items}
     for slug in launch:
         if slug in by_slug and len(main) < 6:
             main.append(by_slug[slug])
-    # Fill main if launch chips missing volume
     for i in items:
         if len(main) >= 6:
             break
         if i["slug"] not in {m["slug"] for m in main}:
             main.append(i)
     main_slugs = {m["slug"] for m in main}
-    more = [i for i in items if i["slug"] not in main_slugs]
+    more = [i for i in items if i["slug"] not in main_slugs and i["count"] >= min_deals]
 
     return {
         "ok": True,
