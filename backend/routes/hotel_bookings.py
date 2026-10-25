@@ -403,21 +403,87 @@ async def get_booking(
     return _public_booking(booking)
 
 
+def _nights_from_dates(dates: Any) -> Optional[int]:
+    if not isinstance(dates, dict):
+        return None
+    out = dates.get("outbound")
+    inn = dates.get("inbound")
+    if not out or not inn:
+        return None
+    try:
+        d0 = datetime.fromisoformat(str(out)[:10])
+        d1 = datetime.fromisoformat(str(inn)[:10])
+        n = (d1 - d0).days
+        return n if n > 0 else None
+    except Exception:
+        return None
+
+
+def _holder_from_raw(raw: Any) -> Optional[Dict[str, str]]:
+    if not isinstance(raw, dict):
+        return None
+    data = raw.get("data") if isinstance(raw.get("data"), dict) else raw
+    holder = data.get("holder") if isinstance(data, dict) else None
+    if not isinstance(holder, dict):
+        return None
+    email = holder.get("email")
+    first = holder.get("firstName") or holder.get("first_name")
+    last = holder.get("lastName") or holder.get("last_name")
+    if not email and not first:
+        return None
+    out: Dict[str, str] = {}
+    if first:
+        out["firstName"] = str(first)
+    if last:
+        out["lastName"] = str(last)
+    if email:
+        out["email"] = str(email)
+    return out or None
+
+
 def _public_booking(row: dict) -> dict:
     snap = row.get("deal_snapshot") or {}
+    if not isinstance(snap, dict):
+        snap = {}
+    hotel = snap.get("hotel") if isinstance(snap.get("hotel"), dict) else {}
+    flight = snap.get("flight") if isinstance(snap.get("flight"), dict) else {}
+    pb = snap.get("price_breakdown") if isinstance(snap.get("price_breakdown"), dict) else {}
+    dates = snap.get("dates") if isinstance(snap.get("dates"), dict) else None
+    nights = snap.get("nights")
+    if nights is None:
+        nights = _nights_from_dates(dates)
+    refundable = hotel.get("refundable")
+    if refundable is None:
+        refundable = snap.get("refundable")
+    holder = _holder_from_raw(row.get("raw_book"))
     return {
         "id": row["id"],
         "deal_key": row.get("deal_key"),
-        "hotel_id": row.get("hotel_id"),
+        "hotel_id": row.get("hotel_id") or hotel.get("id"),
         "status": row.get("status"),
         "displayed_price": row.get("displayed_price"),
         "charged_price": row.get("charged_price"),
         "confirmation_code": row.get("confirmation_code"),
         "liteapi_booking_id": row.get("liteapi_booking_id"),
         "prebook_id": row.get("prebook_id"),
+        "draft_token": row.get("draft_token"),
         "city": snap.get("city"),
-        "hotel_name": (snap.get("hotel") or {}).get("name") or snap.get("hotel_name"),
-        "dates": snap.get("dates"),
+        "hotel_name": hotel.get("name") or snap.get("hotel_name"),
+        "hotel_photo": hotel.get("photo"),
+        "hotel_stars": hotel.get("stars"),
+        "hotel_rating": hotel.get("rating"),
+        "board": hotel.get("board") or snap.get("board"),
+        "refundable": refundable,
+        "cancel_deadline": hotel.get("cancel_deadline") or snap.get("cancel_deadline"),
+        "nights": nights,
+        "adults": snap.get("adults"),
+        "origin": snap.get("origin"),
+        "destination": snap.get("destination") or snap.get("dest"),
+        "flight_airline": flight.get("airline") or flight.get("carrier"),
+        "excluded_fees": pb.get("excluded_fees"),
+        "currency": "EUR",
+        "holder": holder,
+        "dates": dates,
         "deal_snapshot": snap,
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),

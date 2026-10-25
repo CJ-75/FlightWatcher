@@ -722,8 +722,28 @@ export interface HotelBooking {
   confirmation_code?: string | null
   liteapi_booking_id?: string | null
   prebook_id?: string | null
+  /** Linked Mon voyage draft when booked from /trip/:token */
+  draft_token?: string | null
   city?: string
   hotel_name?: string
+  hotel_photo?: string | null
+  hotel_stars?: number | null
+  hotel_rating?: number | null
+  board?: string | null
+  refundable?: boolean | null
+  cancel_deadline?: string | null
+  nights?: number | null
+  adults?: number | null
+  origin?: string | null
+  destination?: string | null
+  flight_airline?: string | null
+  excluded_fees?: number | null
+  currency?: string | null
+  holder?: {
+    firstName?: string
+    lastName?: string
+    email?: string
+  } | null
   dates?: TravelDealDates
   deal_snapshot?: TravelDeal | Record<string, unknown>
   created_at?: string

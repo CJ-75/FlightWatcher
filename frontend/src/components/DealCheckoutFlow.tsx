@@ -499,7 +499,7 @@ export function DealCheckoutFlow({
 
                 {!guestMode ? (
                   <a
-                    href="/bookings"
+                    href={`/bookings?id=${encodeURIComponent(booking.id)}`}
                     className="block text-center border border-line font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px]"
                   >
                     Mes réservations
