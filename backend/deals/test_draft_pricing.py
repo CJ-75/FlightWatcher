@@ -40,6 +40,14 @@ class TrustCreatePayloadTests(unittest.TestCase):
         self.assertEqual(out["price_breakdown"]["flight_pp"], 80.0)
         self.assertEqual(out["hotel"]["public_hotel_price"], 100.0)
         self.assertEqual(out["price_trust"], "server")
+        # Lot A party euros (components rounded, then sum)
+        bd = out["price_breakdown"]
+        self.assertEqual(bd["flight_pp_eur"], 80)
+        self.assertEqual(bd["flight_total_eur"], 160)
+        self.assertEqual(bd["hotel_total_eur"], 100)
+        self.assertEqual(bd["total_eur"], 260)
+        self.assertEqual(bd["per_person_eur"], 130)
+        self.assertEqual(bd["adults"], 2)
 
     def test_alt_hotel_id_from_deal(self):
         deal = {

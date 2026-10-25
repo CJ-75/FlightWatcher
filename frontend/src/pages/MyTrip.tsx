@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft } from '@flightwatcher/shared'
+import {
+  airportDisplayNameFr,
+  boardLabelFr,
+  buildRyanairBookingUrl,
+  computeTripPartyPrice,
+  formatAirlineLabel,
+} from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
-import { getCurrentUser } from '../lib/supabase'
 import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
 
 function formatDate(dateStr?: string | null) {
@@ -14,60 +20,35 @@ function formatDate(dateStr?: string | null) {
   })
 }
 
-function partnerLabel(
-  provider?: string,
-  bookingUrl?: string,
-  airline?: string | null,
-): string {
-  const air = String(airline || '').trim().toUpperCase()
-  if (air === 'FR' || air === 'RK' || /ryanair/i.test(String(airline || ''))) {
-    return 'Réserver sur Ryanair'
-  }
-  if (bookingUrl && /ryanair\.com/i.test(bookingUrl)) return 'Réserver sur Ryanair'
-  const p = (provider || '').toLowerCase()
-  if (p === 'ryanair') return 'Réserver sur Ryanair'
-  if (air === 'TO' || air === 'HV' || /transavia/i.test(String(airline || ''))) {
-    return 'Réserver sur Transavia'
-  }
-  if (p === 'travelpayouts' || p === 'aviasales') return 'Réserver via Aviasales'
-  if (bookingUrl && /aviasales|travelpayouts/i.test(bookingUrl)) {
-    return 'Réserver via Aviasales'
-  }
-  return 'Continuer vers le partenaire'
-}
-
 function formatTimeLocal(iso?: string | null): string {
   if (!iso) return ''
-  // Already local "HH:MM" or ISO
   const m = String(iso).match(/(\d{2}):(\d{2})/)
   if (m) return `${m[1]}:${m[2]}`
   try {
-    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    return new Date(iso).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   } catch {
     return ''
   }
 }
 
-function airlineDisplay(flight: Record<string, any>, payload: Record<string, any>): string {
-  const raw = flight.airline || flight.carrier || payload.airline || ''
-  const code = String(raw).trim().toUpperCase()
-  const names: Record<string, string> = {
-    FR: 'Ryanair',
-    RK: 'Ryanair',
-    TO: 'Transavia',
-    HV: 'Transavia',
-    VY: 'Vueling',
-    U2: 'easyJet',
+function companyCtaLabel(airlineName: string, bookingUrl: string): string {
+  const u = bookingUrl.toLowerCase()
+  if (u.includes('ryanair.com') || /ryanair/i.test(airlineName)) {
+    return 'Réserver sur ryanair.com'
   }
-  if (names[code]) return names[code]
-  if (raw && String(raw).length > 3) return String(raw)
-  if (code) return `Compagnie ${code}`
-  return ''
+  if (u.includes('transavia') || /transavia/i.test(airlineName)) {
+    return 'Réserver sur transavia.com'
+  }
+  if (airlineName) return `Réserver sur ${airlineName}`
+  return 'Réserver mon vol'
 }
 
 /**
- * Booking-oriented « Mon voyage » (not Planner).
- * ① Vol (lien externe) ② Hôtel (in-app) — invite optionnelle.
+ * Lot A — conversion-first Mon voyage:
+ * suppressions + party price display (no email / suivi / hotel lock / lien indisponible).
  */
 export default function MyTrip() {
   const { token } = useParams<{ token: string }>()
@@ -78,33 +59,11 @@ export default function MyTrip() {
   const [composeOpen, setComposeOpen] = useState(
     () => searchParams.get('compose') === '1',
   )
-  const [claiming, setClaiming] = useState(false)
   const [showPriceAsk, setShowPriceAsk] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState(false)
   const [checkId, setCheckId] = useState<string | null>(null)
   const [flightClicked, setFlightClicked] = useState(false)
   const [markingBooked, setMarkingBooked] = useState(false)
-  const [email, setEmail] = useState('')
-  const [consent, setConsent] = useState(false)
-  const [emailSending, setEmailSending] = useState(false)
-  const [emailMsg, setEmailMsg] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
-  const [showLoginGate, setShowLoginGate] = useState(false)
-  const [tripMode, setTripMode] = useState<'duo' | 'groupe'>('duo')
-
-  useEffect(() => {
-    void getCurrentUser().then((u) => setUserId(u?.id ?? null))
-  }, [])
-
-  const requireLogin = () => {
-    if (userId) return true
-    setShowLoginGate(true)
-    return false
-  }
-
-  const goLogin = () => {
-    window.location.href = `/login?next=${encodeURIComponent(`/trip/${token}`)}`
-  }
 
   const load = useCallback(async () => {
     if (!token) return
@@ -128,58 +87,146 @@ export default function MyTrip() {
   const payload = (draft?.payload || {}) as Record<string, any>
   const flight = payload.flight || {}
   const hotel = payload.hotel || draft?.hotel
-  const flightUrl = flight.booking_url || payload.booking_url || ''
+  const hotelObj = hotel && typeof hotel === 'object' ? (hotel as Record<string, any>) : null
   const city = draft?.city_name || payload.city || '—'
-  const price = payload.price_per_person
-  const wantsCompose =
-    composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
-
-  const closeCompose = () => {
-    setComposeOpen(false)
-    const next = new URLSearchParams(searchParams)
-    next.delete('compose')
-    setSearchParams(next, { replace: true })
-  }
-  const vlevel =
-    flight.verification_level ||
-    payload.flags?.verification_level ||
-    payload.verification_level ||
-    'live'
-  const isCached = vlevel === 'cached'
-  const airlineName = airlineDisplay(flight, payload)
-  const cta = partnerLabel(flight.provider, flightUrl, flight.airline || flight.carrier || airlineName)
-  const flightBooked = Boolean(
-    draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
-  )
+  const adults = Math.max(1, Number(draft?.adults || payload.adults || 2))
   const outDate = draft?.out_date || payload.dates?.outbound
   const retDate = draft?.ret_date || payload.dates?.inbound
+  const bd = payload.price_breakdown || {}
+
+  const party = useMemo(() => {
+    if (bd.total_eur != null && bd.flight_total_eur != null) {
+      return {
+        adults: Number(bd.adults) || adults,
+        nights: Number(payload.nights) || 0,
+        flightPp: Number(bd.flight_pp_eur) || 0,
+        flightTotal: Number(bd.flight_total_eur) || 0,
+        hotelTotal: Number(bd.hotel_total_eur) || 0,
+        total: Number(bd.total_eur) || 0,
+        perPerson: Number(bd.per_person_eur) || 0,
+        cityTax:
+          bd.city_tax_eur != null && Number(bd.city_tax_eur) > 0
+            ? Number(bd.city_tax_eur)
+            : null,
+      }
+    }
+    const flightPp =
+      flight.price_pp != null
+        ? Number(flight.price_pp)
+        : bd.flight_pp != null
+          ? Number(bd.flight_pp)
+          : null
+    const hotelTotal =
+      hotelObj?.public_hotel_price != null
+        ? Number(hotelObj.public_hotel_price)
+        : bd.hotel_public_total != null
+          ? Number(bd.hotel_public_total)
+          : null
+    return computeTripPartyPrice({
+      adults,
+      flightPp,
+      hotelTotal,
+      cityTax: payload.excluded_fees ?? hotelObj?.excluded_fees ?? null,
+      outDate,
+      retDate,
+      nights: payload.nights,
+    })
+  }, [adults, bd, flight.price_pp, hotelObj, outDate, payload, retDate])
+
+  const nights = party.nights || Number(payload.nights) || 0
+
   const originIata = String(
     flight.origin_iata || payload.origin_iata || draft?.origin_iata || '',
   ).toUpperCase()
   const destIata = String(
     flight.destination_iata || payload.destination || payload.dest_iata || '',
   ).toUpperCase()
+
+  const originName = airportDisplayNameFr(originIata, null)
+  const arrivalName = airportDisplayNameFr(destIata, city)
   const originLabel =
     payload.origin_airport_label ||
-    (originIata ? originIata : null)
+    (originName && originName.toUpperCase() !== originIata ? originName : null) ||
+    'Départ'
   const arrivalLabel =
     payload.arrival_airport_label ||
-    payload.distance_label ||
-    (destIata ? destIata : null)
+    (arrivalName && arrivalName.toUpperCase() !== destIata ? arrivalName : null) ||
+    city
+
+  const airlineName =
+    formatAirlineLabel({
+      airline: flight.airline || flight.carrier || payload.airline,
+      provider: flight.provider || payload.provider,
+    }) || ''
   const outTime = formatTimeLocal(flight.outbound_local)
   const retTime = formatTimeLocal(flight.inbound_local)
-  const hotelObj = hotel && typeof hotel === 'object' ? (hotel as Record<string, any>) : null
+
+  /** Always a company CTA — never « lien indisponible ». */
+  const flightUrl = useMemo(() => {
+    const raw = String(flight.booking_url || payload.booking_url || '').trim()
+    if (raw.startsWith('http') && !/aviasales|travelpayouts/i.test(raw)) {
+      return raw
+    }
+    // Prefer airline deep-link when we have route + dates
+    if (originIata && destIata && outDate && retDate) {
+      try {
+        return buildRyanairBookingUrl(
+          {
+            aller: {
+              origin: originIata,
+              destination: destIata,
+              departureTime: String(flight.outbound_local || outDate),
+            },
+            retour: {
+              departureTime: String(flight.inbound_local || retDate),
+            },
+          },
+          adults,
+        )
+      } catch {
+        /* fall through */
+      }
+    }
+    if (raw.startsWith('http')) return raw
+    if (/ryanair|FR|RK/i.test(String(flight.airline || flight.carrier || airlineName))) {
+      return 'https://www.ryanair.com/fr/fr'
+    }
+    if (/transavia|TO|HV/i.test(String(flight.airline || flight.carrier || airlineName))) {
+      return 'https://www.transavia.com/fr-FR/'
+    }
+    return 'https://www.ryanair.com/fr/fr'
+  }, [
+    adults,
+    airlineName,
+    destIata,
+    flight,
+    originIata,
+    outDate,
+    payload.booking_url,
+    retDate,
+  ])
+
+  const compareUrl = useMemo(() => {
+    const raw = String(flight.booking_url || payload.booking_url || '').trim()
+    if (raw.startsWith('http') && /aviasales|travelpayouts/i.test(raw)) return raw
+    return null
+  }, [flight.booking_url, payload.booking_url])
+
+  const cta = companyCtaLabel(airlineName, flightUrl)
+  const flightBooked = Boolean(
+    draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
+  )
+  const vlevel =
+    flight.verification_level ||
+    payload.flags?.verification_level ||
+    payload.verification_level ||
+    'live'
+  const isCached = vlevel === 'cached'
   const hotelPhoto = hotelObj?.photo || hotelObj?.thumbnail || payload.image_url || ''
-  const hotelPrice =
-    hotelObj?.public_hotel_price ??
-    payload.price_breakdown?.hotel_public_total ??
-    null
-  const flightPp =
-    flight.price_pp != null
-      ? Number(flight.price_pp)
-      : payload.price_breakdown?.flight_pp != null
-        ? Number(payload.price_breakdown.flight_pp)
-        : null
+  const board = boardLabelFr(hotelObj?.board || payload.board)
+  const wantsCompose =
+    composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
+
   const hotelHref =
     draft?.deal_key && outDate && retDate
       ? `/deals?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1&checkin=${encodeURIComponent(String(outDate).slice(0, 10))}&checkout=${encodeURIComponent(String(retDate).slice(0, 10))}`
@@ -187,22 +234,21 @@ export default function MyTrip() {
         ? `/deals?deal=${encodeURIComponent(draft.deal_key)}&book_hotel=1`
         : '/deals'
 
+  const closeCompose = () => {
+    setComposeOpen(false)
+    const next = new URLSearchParams(searchParams)
+    next.delete('compose')
+    setSearchParams(next, { replace: true })
+  }
+
   const onFlightClick = async () => {
-    // Guest OK — affiliate click tracked with draft_token
     setFlightClicked(true)
-    if (!draft?.deal_key && !payload.deal_key) {
-      return
-    }
+    if (!draft?.deal_key && !payload.deal_key) return
     try {
       const res = await getApiClient().recordFlightClick({
         deal_key: String(draft?.deal_key || payload.deal_key),
         verification_level: vlevel,
-        displayed_pp:
-          flight.price_pp != null
-            ? Number(flight.price_pp)
-            : price != null
-              ? Number(price)
-              : null,
+        displayed_pp: party.perPerson || party.flightPp,
         source: 'deals',
         draft_token: token,
         partner: flight.provider || null,
@@ -216,7 +262,6 @@ export default function MyTrip() {
   }
 
   const onFlightBooked = async () => {
-    // Guest OK — draft token is enough
     if (!token) return
     setMarkingBooked(true)
     try {
@@ -238,49 +283,11 @@ export default function MyTrip() {
         draft_token: token,
         deal_key: draft?.deal_key || payload.deal_key,
       })
-      setFeedbackSent(true)
-      setShowPriceAsk(false)
     } catch {
-      setFeedbackSent(true)
-      setShowPriceAsk(false)
+      /* ignore */
     }
-  }
-
-  const onSendEmail = async () => {
-    if (!token) return
-    setEmailSending(true)
-    setEmailMsg(null)
-    try {
-      await getApiClient().emailMyTrip(token, { email, consent })
-      setEmailMsg('Email envoyé — vérifie ta boîte de réception.')
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Envoi impossible'
-      setEmailMsg(
-        msg.includes('email_not_sent')
-          ? 'Envoi indisponible (Resend non configuré).'
-          : msg,
-      )
-    } finally {
-      setEmailSending(false)
-    }
-  }
-
-  const onClaim = async () => {
-    if (!token) return
-    setClaiming(true)
-    try {
-      const user = await getCurrentUser()
-      if (!user) {
-        window.location.href = `/login?next=${encodeURIComponent(`/trip/${token}`)}`
-        return
-      }
-      const row = await getApiClient().claimMyTrip(token)
-      setDraft(row)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Connexion requise')
-    } finally {
-      setClaiming(false)
-    }
+    setFeedbackSent(true)
+    setShowPriceAsk(false)
   }
 
   if (loading) {
@@ -295,58 +302,85 @@ export default function MyTrip() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 px-4">
         <p className="text-slate-700 font-medium">{error || 'Voyage introuvable ou expiré'}</p>
-        <Link to="/recherche" className="text-primary-600 font-bold underline">
-          Retour aux deals
+        <Link to="/deals" className="text-primary-600 font-bold underline">
+          ← Deals
         </Link>
       </div>
     )
   }
 
+  const travelersLabel =
+    adults === 1 ? '1 voyageur' : `${adults} voyageurs`
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white">
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
-        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <Link
-            to="/recherche"
-            className="text-sm font-bold text-slate-700 hover:text-primary-600"
-          >
-            ← Accueil
+        <div className="max-w-lg mx-auto lg:max-w-5xl px-4 h-14 flex items-center justify-between gap-3">
+          <Link to="/deals" className="text-sm font-bold text-slate-700 hover:text-primary-600">
+            ← Deals
           </Link>
-          <Link to="/deals" className="text-sm font-semibold text-primary-600">
-            Deals
-          </Link>
+          <span className="text-sm font-extrabold text-ink tracking-tight">FlightWatcher</span>
         </div>
       </header>
-      <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
+
+      <div className="max-w-lg mx-auto lg:max-w-5xl px-4 py-8 space-y-6">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">
-            Mon voyage
-          </p>
-          <h1 className="text-3xl font-black text-slate-900">{city}</h1>
-          <p className="text-slate-600 mt-1">
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+            Ton week-end à {city}
+          </h1>
+          <p className="text-slate-600 mt-1.5">
             {formatDate(outDate)} → {formatDate(retDate)}
-            {draft.adults ? ` · ${draft.adults} pers.` : null}
+            {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
+            {` · ${travelersLabel}`}
           </p>
-          {price != null ? (
-            <p className="text-2xl font-black text-primary-600 mt-2">
-              {Math.round(Number(price))} € / pers.
+
+          {/* Prix — Lot A §2 */}
+          <div className="mt-4 rounded-2xl border border-primary-100 bg-primary-50/50 px-4 py-3.5">
+            {adults === 1 ? (
+              <p className="text-3xl font-black text-primary-600 tracking-tight">
+                Total {party.total} €
+              </p>
+            ) : (
+              <>
+                <p className="text-3xl font-black text-primary-600 tracking-tight">
+                  Total {party.total} €{' '}
+                  <span className="text-lg font-bold text-slate-600">pour {adults}</span>
+                </p>
+                <p className="text-sm font-semibold text-slate-700 mt-1">
+                  {party.perPerson} € / pers.
+                </p>
+              </>
+            )}
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              Vol {party.flightTotal} €
+              {adults > 1 ? (
+                <span className="text-slate-400">
+                  {' '}
+                  ({party.flightPp} € × {adults})
+                </span>
+              ) : null}
+              {' · '}
+              Hôtel {party.hotelTotal} €
+              {nights > 0 ? (
+                <span className="text-slate-400">
+                  {' '}
+                  ({nights} nuit{nights > 1 ? 's' : ''})
+                </span>
+              ) : null}
             </p>
-          ) : null}
-          {(flightPp != null || hotelPrice != null) && (
-            <p className="text-sm text-slate-600 mt-1">
-              {flightPp != null ? `Vol ${Math.round(flightPp)} €` : null}
-              {flightPp != null && hotelPrice != null ? ' + ' : null}
-              {hotelPrice != null ? `hôtel ${Math.round(Number(hotelPrice))} €` : null}
-            </p>
-          )}
-          {payload.price_pax_note ? (
-            <p className="text-xs text-amber-800 mt-1">{String(payload.price_pax_note)}</p>
-          ) : null}
-          {isCached ? (
-            <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
-              Prix agrégateur · à confirmer chez le partenaire
-            </p>
-          ) : null}
+            {party.cityTax != null ? (
+              <p className="text-xs text-slate-500 mt-1.5">
+                + taxe de séjour à régler à l’hôtel : {party.cityTax} €
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 mt-1.5">
+                Taxe de séjour éventuelle à régler à l’hôtel
+              </p>
+            )}
+            {payload.price_pax_note ? (
+              <p className="text-xs text-amber-800 mt-1">{String(payload.price_pax_note)}</p>
+            ) : null}
+          </div>
         </div>
 
         {wantsCompose && token && draft ? (
@@ -358,32 +392,35 @@ export default function MyTrip() {
           />
         ) : null}
 
+        {/* ① Vol */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-bold text-slate-900">1. Réserver le vol</h2>
+            <h2 className="font-bold text-slate-900">① Ton vol</h2>
             {flightBooked ? (
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
                 Réservé ✓
               </span>
-            ) : null}
+            ) : (
+              <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
+                À réserver
+              </span>
+            )}
           </div>
           <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-1.5">
-            {airlineName ? (
-              <p className="font-bold text-slate-900">
-                {airlineName}
-                {flight.direct === true ? ' · Direct' : flight.direct === false ? ' · Avec escale' : ''}
-              </p>
-            ) : null}
-            {(originLabel || arrivalLabel) && (
-              <p>
-                {originLabel || originIata || '—'}
-                {' → '}
-                {arrivalLabel || destIata || '—'}
-              </p>
-            )}
+            <p className="font-bold text-slate-900">
+              {airlineName || 'Compagnie'}
+              {flight.direct === true
+                ? ' · vol direct'
+                : flight.direct === false
+                  ? ' · avec escale'
+                  : ''}
+            </p>
             <p>
               Aller {formatDate(outDate)}
               {outTime ? ` · ${outTime}` : ''}
+            </p>
+            <p className="text-slate-600">
+              {originLabel} → {arrivalLabel}
             </p>
             <p>
               Retour {formatDate(retDate)}
@@ -398,31 +435,33 @@ export default function MyTrip() {
               <p className="text-xs text-slate-500">{String(payload.route_hint)}</p>
             ) : null}
           </div>
-          <p className="text-sm text-slate-600">
-            Deux réservations distinctes (vol + hôtel). Le lien ouvre le partenaire ci-dessous.
-          </p>
-          {flightUrl ? (
+
+          <a
+            href={flightUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => void onFlightClick()}
+            className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+          >
+            {cta}
+          </a>
+          {compareUrl ? (
             <a
-              href={flightUrl}
+              href={compareUrl}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => void onFlightClick()}
-              className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl"
+              className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
             >
-              {cta}
+              Comparer sur Aviasales
             </a>
-          ) : (
-            <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
-              Lien vol indisponible pour l’instant — réessaie dans un instant.
-            </p>
-          )}
+          ) : null}
 
           {(flightClicked || flightBooked) && !flightBooked ? (
             <button
               type="button"
               onClick={() => void onFlightBooked()}
               disabled={markingBooked}
-              className="w-full text-center border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold py-3 rounded-xl disabled:opacity-60"
+              className="w-full text-center border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold py-3 rounded-xl disabled:opacity-60 min-h-[44px]"
             >
               {markingBooked ? '…' : 'J’ai réservé mon vol ✓'}
             </button>
@@ -430,41 +469,31 @@ export default function MyTrip() {
 
           {showPriceAsk && isCached && !feedbackSent ? (
             <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-2">
-              <p className="text-sm font-medium text-slate-800">
-                Le prix était-il le même ?
-              </p>
+              <p className="text-sm font-medium text-slate-800">Le prix était-il le même ?</p>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void sendFeedback('same')}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
-                >
-                  Oui
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void sendFeedback('higher')}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
-                >
-                  Plus cher
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void sendFeedback('gone')}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
-                >
-                  Plus disponible
-                </button>
+                {(['same', 'higher', 'gone'] as const).map((fb) => (
+                  <button
+                    key={fb}
+                    type="button"
+                    onClick={() => void sendFeedback(fb)}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold"
+                  >
+                    {fb === 'same' ? 'Oui' : fb === 'higher' ? 'Plus cher' : 'Plus disponible'}
+                  </button>
+                ))}
               </div>
             </div>
           ) : null}
-          {feedbackSent ? (
-            <p className="text-xs text-slate-500">Merci — ça nous aide à rester honnêtes.</p>
-          ) : null}
         </section>
 
+        {/* ② Hôtel — toujours réservable (plus de verrou vol) */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
-          <h2 className="font-bold text-slate-900">2. Hôtel du voyage</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-slate-900">② Ton hôtel</h2>
+            <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
+              À réserver
+            </span>
+          </div>
           {hotelObj?.name ? (
             <div className="flex gap-3">
               {hotelPhoto ? (
@@ -477,170 +506,81 @@ export default function MyTrip() {
                 <div className="w-24 h-24 rounded-xl bg-slate-100 shrink-0" aria-hidden />
               )}
               <div className="min-w-0 space-y-1">
-                <p className="text-sm text-slate-900 font-bold leading-snug">{String(hotelObj.name)}</p>
-                <p className="text-xs text-slate-600">
-                  {hotelObj.stars != null ? `${hotelObj.stars}★` : null}
-                  {hotelObj.stars != null && hotelObj.rating != null ? ' · ' : null}
-                  {hotelObj.rating != null ? `note ${hotelObj.rating}` : null}
-                  {hotelObj.board ? ` · ${String(hotelObj.board)}` : null}
+                <p className="text-sm text-slate-900 font-bold leading-snug">
+                  {String(hotelObj.name)}
                 </p>
-                {hotelPrice != null ? (
-                  <p className="text-sm font-bold text-slate-800">
-                    {Math.round(Number(hotelPrice))} € hôtel
-                  </p>
-                ) : null}
+                <p className="text-xs text-slate-600">
+                  {hotelObj.stars != null ? `${hotelObj.stars} étoiles` : null}
+                  {hotelObj.stars != null && hotelObj.rating != null ? ' · ' : null}
+                  {hotelObj.rating != null
+                    ? `${Number(hotelObj.rating).toFixed(1).replace('.', ',')}/10`
+                    : null}
+                  {hotelObj.review_count != null
+                    ? ` (${Number(hotelObj.review_count).toLocaleString('fr-FR')} avis)`
+                    : null}
+                </p>
+                {board ? <p className="text-xs text-slate-600">{board}</p> : null}
+                <p className="text-sm font-bold text-slate-800">
+                  {party.hotelTotal} €
+                  {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
+                </p>
                 {hotelObj.distance_m != null ? (
                   <p className="text-xs text-slate-500">
-                    {Math.round(Number(hotelObj.distance_m) / 100) / 10} km du centre
+                    À {Math.round(Number(hotelObj.distance_m) / 100) / 10} km du centre
                   </p>
+                ) : null}
+                {hotelObj.refundable === false ? (
+                  <p className="text-xs font-semibold text-slate-700">Non remboursable</p>
+                ) : hotelObj.refundable === true ? (
+                  <p className="text-xs font-semibold text-emerald-700">Annulation gratuite</p>
                 ) : null}
               </div>
             </div>
           ) : (
             <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
           )}
-          <p className="text-sm text-slate-600">
-            Dates : {formatDate(outDate)} → {formatDate(retDate)}
-          </p>
-          {!wantsCompose ? (
-            <button
-              type="button"
-              onClick={() => {
-                setComposeOpen(true)
-                const next = new URLSearchParams(searchParams)
-                next.set('compose', '1')
-                setSearchParams(next, { replace: true })
-              }}
-              className="w-full text-center border border-primary-200 bg-primary-50 hover:bg-primary-100 text-primary-800 font-bold py-3 rounded-xl"
-            >
-              Modifier l’hôtel
-            </button>
-          ) : null}
-          {flightBooked && (draft.deal_key || hotel) ? (
-            <Link
-              to={hotelHref}
-              className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl"
-            >
-              Réserver l’hôtel
-            </Link>
-          ) : !flightBooked ? (
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            {(draft.deal_key || hotelObj) && (
+              <Link
+                to={hotelHref}
+                className="flex-1 text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+              >
+                Réserver l’hôtel
+                {party.hotelTotal > 0 ? ` · ${party.hotelTotal} €` : ''}
+              </Link>
+            )}
+            {!wantsCompose ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setComposeOpen(true)
+                  const next = new URLSearchParams(searchParams)
+                  next.set('compose', '1')
+                  setSearchParams(next, { replace: true })
+                }}
+                className="sm:w-auto px-4 text-center border border-line bg-white hover:bg-slate-50 text-ink font-semibold py-3 rounded-xl min-h-[44px]"
+              >
+                Changer d’hôtel
+              </button>
+            ) : null}
+          </div>
+          {hotelObj?.refundable === false && !flightBooked ? (
             <p className="text-xs text-slate-500">
-              Réserve le vol (étape 1), puis confirme « J’ai réservé mon vol ✓ » pour
-              débloquer la réservation hôtel in-app.
+              Conseil : réserve ton vol d’abord, son prix bouge plus vite.
             </p>
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
-          <h2 className="font-bold text-slate-900">Recevoir ce voyage par email</h2>
-          <p className="text-sm text-slate-600">
-            Sans créer de compte — on t’envoie uniquement le lien de ce voyage.
+        <aside className="rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-sm text-slate-600 leading-relaxed">
+          <p className="font-bold text-slate-800 mb-1">Comment ça marche</p>
+          <p>
+            Tu réserves ton vol sur le site de la compagnie, puis ton hôtel ici en 2 minutes.
+            Ton hôtel ne dépend pas de ton vol : si la compagnie modifie ton vol, ta réservation
+            d’hôtel reste valable selon ses conditions.
           </p>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="toi@email.com"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-            autoComplete="email"
-          />
-          <label className="flex items-start gap-2 text-xs text-slate-600">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              J’accepte de recevoir ce lien par email. Aucune autre utilisation de mon adresse.
-            </span>
-          </label>
-          <button
-            type="button"
-            disabled={!consent || !email.trim() || emailSending}
-            onClick={() => void onSendEmail()}
-            className="w-full text-center border border-line bg-white hover:bg-slate-50 text-ink font-bold py-3 rounded-xl disabled:opacity-50"
-          >
-            {emailSending ? 'Envoi…' : 'Envoyer le lien'}
-          </button>
-          {emailMsg ? <p className="text-xs text-slate-600">{emailMsg}</p> : null}
-        </section>
-
-        <section className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-5 space-y-3">
-          <h2 className="font-bold text-slate-800">Suivi du combo</h2>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setTripMode('duo')}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-bold border-2 ${
-                tripMode === 'duo'
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-line text-muted'
-              }`}
-            >
-              Duo / couple
-            </button>
-            <button
-              type="button"
-              onClick={() => setTripMode('groupe')}
-              className={`flex-1 rounded-xl py-2.5 text-sm font-bold border-2 ${
-                tripMode === 'groupe'
-                  ? 'border-primary-500 bg-primary-50 text-primary-700'
-                  : 'border-line text-muted'
-              }`}
-            >
-              Groupe
-            </button>
-          </div>
-          <p className="text-sm text-slate-600">
-            {tripMode === 'duo'
-              ? 'Suivi à deux des étapes vol → hôtel. Pas de vote — juste le combo partagé.'
-              : 'Besoin du feu vert du groupe : invite des membres dans le Planner (l’organisateur valide).'}
-          </p>
-          <button
-            type="button"
-            onClick={() => void onClaim()}
-            disabled={claiming}
-            className="w-full rounded-xl bg-slate-900 text-white font-bold py-3 disabled:opacity-50"
-          >
-            {claiming
-              ? '…'
-              : tripMode === 'duo'
-                ? 'Sauvegarder mon voyage (connexion)'
-                : 'Ouvrir le Planner groupe (connexion)'}
-          </button>
-        </section>
-
-        <Link to="/recherche" className="block text-center text-sm text-slate-500 underline">
-          ← Retour
-        </Link>
+        </aside>
       </div>
-
-      {showLoginGate ? (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/45 backdrop-blur-[2px] p-4">
-          <div className="bg-white rounded-3xl shadow-lift border border-line max-w-sm w-full p-6 text-center">
-            <h3 className="text-xl font-black text-ink">Connecte-toi pour continuer</h3>
-            <p className="text-sm text-muted mt-2">
-              Réservation vol et suivi « j’ai réservé » restent possibles sans compte. La
-              connexion sert à inviter, synchroniser et ouvrir le Planner.
-            </p>
-            <button
-              type="button"
-              onClick={goLogin}
-              className="mt-5 w-full rounded-2xl bg-primary-500 text-white font-bold py-3.5"
-            >
-              Se connecter
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowLoginGate(false)}
-              className="mt-2 w-full text-sm font-medium text-muted py-2"
-            >
-              Plus tard
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

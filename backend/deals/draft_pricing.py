@@ -250,6 +250,12 @@ def trust_create_payload(supabase, payload: Dict[str, Any]) -> Dict[str, Any]:
         out["hotel"] = raw or None
         hotel_total = None
 
+    # Display money: round components to € first, then sum (Lot A Mon voyage)
+    flight_pp_eur = int(round(float(flight_pp or 0)))
+    hotel_eur = int(round(float(hotel_total or 0)))
+    flight_total_eur = flight_pp_eur * adults
+    total_eur = flight_total_eur + hotel_eur
+    pp_display = int(round(total_eur / adults)) if adults else total_eur
     pp = round(price_per_person(flight_pp, float(hotel_total or 0), adults), 2)
     out["flight"] = trusted_flight
     out["price_per_person"] = pp
@@ -258,6 +264,13 @@ def trust_create_payload(supabase, payload: Dict[str, Any]) -> Dict[str, Any]:
         "hotel_public_total": float(hotel_total or 0),
         "hotel_pp": round(float(hotel_total or 0) / adults, 2) if hotel_total else None,
         "total_pp": pp,
+        # Party display (integers €) — UI must sum these exactly
+        "flight_pp_eur": flight_pp_eur,
+        "flight_total_eur": flight_total_eur,
+        "hotel_total_eur": hotel_eur,
+        "total_eur": total_eur,
+        "per_person_eur": pp_display,
+        "adults": adults,
     }
     if deal and out.get("price_trust") != "flight_quoted_unverified":
         out["price_trust"] = "server"
@@ -317,6 +330,11 @@ def trust_hotel_patch(
         "hotel_pp": round(hotel_total / adults, 2),
     }
     pp = round(price_per_person(flight_pp, hotel_total, adults), 2)
+    flight_pp_eur = int(round(float(flight_pp or 0)))
+    hotel_eur = int(round(float(hotel_total or 0)))
+    flight_total_eur = flight_pp_eur * adults
+    total_eur = flight_total_eur + hotel_eur
+    pp_display = int(round(total_eur / adults)) if adults else total_eur
     payload.update(
         {
             "flight": flight,
@@ -327,6 +345,12 @@ def trust_hotel_patch(
                 "hotel_public_total": hotel_total,
                 "hotel_pp": round(hotel_total / adults, 2),
                 "total_pp": pp,
+                "flight_pp_eur": flight_pp_eur,
+                "flight_total_eur": flight_total_eur,
+                "hotel_total_eur": hotel_eur,
+                "total_eur": total_eur,
+                "per_person_eur": pp_display,
+                "adults": adults,
             },
             "price_trust": "server" if deal else payload.get("price_trust") or "hotel_server",
             "compose_hotel": False,
