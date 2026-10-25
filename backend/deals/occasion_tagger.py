@@ -255,9 +255,33 @@ _RULES = {
     "pepites": lambda row, params, ctx: rule_pepites(
         row, min_rating=float(params.get("min_rating") or 8.5)
     ),
-    # Weather / event gates — no-op until verified
-    "il_fera_beau": lambda row, params, ctx: False,
+    "il_fera_beau": lambda row, params, ctx: rule_il_fera_beau(row, params, ctx),
 }
+
+
+def rule_il_fera_beau(row: Dict[str, Any], params: Dict[str, Any], ctx: Dict[str, Any]) -> bool:
+    """Lot D — majority of stay days ≥ seasonal max °C (LiteAPI only, no invention)."""
+    from deals.weather_service import rule_il_fera_beau_temps, stay_temps_c, weather_enabled
+
+    if not weather_enabled():
+        return False
+    temps = stay_temps_c(
+        row,
+        supabase=ctx.get("supabase"),
+        today=ctx.get("today"),
+        client=ctx.get("liteapi"),
+    )
+    if not temps:
+        return False
+    out_d = _parse_date(row.get("out_date"))
+    if not out_d:
+        return False
+    return rule_il_fera_beau_temps(
+        temps,
+        out_d=out_d,
+        winter_min_c=float(params.get("winter_min_c") or 18),
+        summer_min_c=float(params.get("summer_min_c") or 24),
+    )
 
 
 def _is_promoted_today(occ: Dict[str, Any], today: date) -> bool:
@@ -311,20 +335,39 @@ def _stay_in_window(row: Dict[str, Any], occ: Dict[str, Any]) -> bool:
         return True
 
 
+def _occasion_active(occ: Dict[str, Any]) -> bool:
+    """Unverified occasions skipped; il-fera-beau opens when DEALS_WEATHER_ENABLED."""
+    slug = occ.get("slug")
+    if slug == "il-fera-beau":
+        try:
+            from deals.weather_service import weather_enabled
+
+            return weather_enabled()
+        except Exception:
+            return False
+    return bool(occ.get("verified", True))
+
+
 def tag_deal_row(
     row: Dict[str, Any],
     *,
     today: Optional[date] = None,
     school_periods=None,
     has_discount_badge: bool = False,
+    supabase: Any = None,
+    liteapi: Any = None,
 ) -> Tuple[List[str], Optional[str]]:
     """Return (occasion_tags, occasion_badge) for one deals_active row."""
     today = today or date.today()
-    ctx = {"school_periods": school_periods, "today": today}
+    ctx = {
+        "school_periods": school_periods,
+        "today": today,
+        "supabase": supabase,
+        "liteapi": liteapi,
+    }
     tags: List[str] = []
     for occ in OCCASIONS:
-        # Skip unverified (events + weather until Lot D)
-        if not occ.get("verified", True):
+        if not _occasion_active(occ):
             continue
         rule_name = occ.get("rule") or ""
         fn = _RULES.get(str(rule_name))
@@ -359,12 +402,23 @@ def tag_deals_batch(
 ) -> Dict[str, Any]:
     """Write occasion_tags / occasion_badge for provided deals_active rows."""
     from deals.holiday_service import fetch_school_holidays_fr
+    from deals.weather_service import reset_budget, weather_enabled
 
     today = today or date.today()
     try:
         periods = fetch_school_holidays_fr()
     except Exception:
         periods = None
+
+    reset_budget()
+    liteapi = None
+    if weather_enabled():
+        try:
+            from deals.liteapi_client import get_liteapi_client
+
+            liteapi = get_liteapi_client()
+        except Exception as e:
+            logger.warning("weather client unavailable: %s", e)
 
     updated = 0
     errors = 0
@@ -385,6 +439,8 @@ def tag_deals_batch(
                 today=today,
                 school_periods=periods,
                 has_discount_badge=has_disc,
+                supabase=supabase,
+                liteapi=liteapi,
             )
             if supabase:
                 supabase.table("deals_active").update(
@@ -410,8 +466,8 @@ def retag_active_wall(supabase: Any, *, limit: int = 800) -> Dict[str, Any]:
         res = (
             supabase.table("deals_active")
             .select(
-                "deal_key,dest_iata,out_date,ret_date,nights,flight_snapshot,"
-                "hotel_top3,baseline_snapshot,discount_pct,status"
+                "deal_key,dest_iata,served_city_id,out_date,ret_date,nights,"
+                "flight_snapshot,hotel_top3,baseline_snapshot,discount_pct,status"
             )
             .eq("status", "active")
             .limit(max(1, min(int(limit), 2000)))

@@ -81,7 +81,14 @@ export function DealsTab() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [originChipOpen, setOriginChipOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
-  const [occasion, setOccasion] = useState<string | null>(null)
+  const [occasion, setOccasion] = useState<string | null>(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get('occasion')
+      return q ? q.trim().toLowerCase() : null
+    } catch {
+      return null
+    }
+  })
   const [occasionMain, setOccasionMain] = useState<DealOccasionChip[]>([])
   const [occasionMore, setOccasionMore] = useState<DealOccasionChip[]>([])
   const [occasionsOpen, setOccasionsOpen] = useState(false)

@@ -192,9 +192,10 @@ OCCASIONS: List[Dict[str, Any]] = [
         "rule": "il_fera_beau",
         "params": {"winter_min_c": 18, "summer_min_c": 24},
         "explain": "Prévision de température agréable sur le séjour.",
-        "verified": False,  # enabled after sandbox weather horizon check
+        # Lot D: flip live with DEALS_WEATHER_ENABLED=true (horizon ~7j, LiteAPI only)
+        "verified": False,
         "priority": 60,
-        "push": False,
+        "push": True,
     },
     {
         "slug": "hors-vacances",

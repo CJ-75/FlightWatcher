@@ -243,6 +243,17 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: JSON.stringify(body),
       }),
 
+    registerPushToken: (body: {
+      token: string
+      platform?: string
+      locale?: string
+      origin_iata?: string
+    }) =>
+      request<{ ok: boolean }>('/api/deals/push-tokens', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
     getHotelGallery: (hotelId: string, opts?: { language?: string; fallback?: string }) => {
       const q = new URLSearchParams()
       if (opts?.language) q.set('language', opts.language)

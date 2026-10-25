@@ -10,7 +10,16 @@ from deals.occasions_config import OCCASIONS, launch_chip_slugs
 
 
 def _chip_visible(occ: Dict[str, Any], today: date) -> bool:
-    if not occ.get("verified", True):
+    slug = occ.get("slug")
+    if slug == "il-fera-beau":
+        try:
+            from deals.weather_service import weather_enabled
+
+            if not weather_enabled():
+                return False
+        except Exception:
+            return False
+    elif not occ.get("verified", True):
         return False
     kind = occ.get("kind") or "evergreen"
     if kind == "evergreen":

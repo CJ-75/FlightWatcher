@@ -473,3 +473,13 @@ async def admin_deals_metrics(request: Request):
     supabase = get_supabase_service_client() or get_supabase_client()
     return collect_deals_metrics(supabase)
 
+
+@router.get("/deals-occasions")
+@require_admin
+async def admin_deals_occasions(request: Request):
+    """v4 Occasions Lot G — actives / volume / unverified events."""
+    from deals.occasions_admin import collect_occasions_admin
+
+    supabase = get_supabase_service_client() or get_supabase_client()
+    return collect_occasions_admin(supabase)
+

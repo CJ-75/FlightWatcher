@@ -22,6 +22,7 @@ import { PlansPage } from './admin/pages/PlansPage'
 import { SettingsPage } from './admin/pages/SettingsPage'
 import { TestsPage } from './admin/pages/TestsPage'
 import { DealsMetricsPage } from './admin/pages/DealsMetricsPage'
+import { OccasionsPage } from './admin/pages/OccasionsPage'
 
 function App() {
   return (
@@ -54,6 +55,7 @@ function App() {
           <Route path="activated" element={<ActivatedPage />} />
           <Route path="plans" element={<PlansPage />} />
           <Route path="deals" element={<DealsMetricsPage />} />
+          <Route path="occasions" element={<OccasionsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="tests" element={<TestsPage />} />
         </Route>

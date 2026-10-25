@@ -186,6 +186,30 @@ class LiteApiClient:
     def list_facilities(self) -> Any:
         return self._request("GET", self.cfg.search_base, "/data/facilities")
 
+    def get_weather(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        start_date: str,
+        end_date: str,
+        units: str = "metric",
+    ) -> Any:
+        """GET /data/weather — forecast reliability drops beyond ~1 week."""
+        return self._request(
+            "GET",
+            self.cfg.search_base,
+            "/data/weather",
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "startDate": start_date,
+                "endDate": end_date,
+                "units": units or "metric",
+            },
+            retry=True,
+        )
+
     def get_hotel_details(
         self,
         hotel_id: str,

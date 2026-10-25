@@ -471,6 +471,67 @@ async def job_send_origin_alert_digests(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/jobs/send-occasion-digests")
+async def job_send_occasion_digests(
+    authorization: Optional[str] = Header(None),
+    dry_run: bool = Query(False),
+    force: bool = Query(False, description="Ignore 7-day cooldown"),
+):
+    """v4 Occasions Lot F — seasonal email + Expo push (≤1/week, ≥3 deals)."""
+    require_cron(authorization)
+    try:
+        from deals.occasion_alerts import run_occasion_digests
+
+        return run_occasion_digests(_svc(), dry_run=dry_run, force=force)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class PushTokenRegisterRequest(BaseModel):
+    token: str
+    platform: Optional[str] = None
+    locale: Optional[str] = "fr"
+    origin_iata: Optional[str] = None
+
+
+@router.post("/api/deals/push-tokens")
+async def register_push_token(
+    request: Request,
+    body: PushTokenRegisterRequest,
+):
+    """Register Expo push token for seasonal occasion digests (auth optional)."""
+    tok = (body.token or "").strip()
+    if len(tok) < 8:
+        raise HTTPException(status_code=400, detail="invalid_token")
+    user_id = None
+    try:
+        user_id = get_user_id_from_token(request)
+    except Exception:
+        user_id = None
+    supabase = get_supabase_service_client() or get_supabase_client()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="no_supabase")
+    from datetime import datetime, timezone
+
+    row = {
+        "token": tok,
+        "platform": (body.platform or "")[:32] or None,
+        "locale": (body.locale or "fr")[:5],
+        "origin_iata": (body.origin_iata or "").strip().upper()[:64] or None,
+        "active": True,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if user_id:
+        row["user_id"] = user_id
+    try:
+        supabase.table("push_tokens").upsert(row, on_conflict="token").execute()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/deals/jobs/check-price-alerts")
 async def job_check_price_alerts(
     authorization: Optional[str] = Header(None),

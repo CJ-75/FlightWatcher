@@ -9,6 +9,7 @@ const menuItems = [
   { path: '/admin/searches', label: 'Searches', icon: '🔍' },
   { path: '/admin/activated', label: 'Activated', icon: '📊' },
   { path: '/admin/deals', label: 'Deals', icon: '✈️' },
+  { path: '/admin/occasions', label: 'Occasions', icon: '🎯' },
   { path: '/admin/plans', label: 'Plans', icon: '💳' },
   { path: '/admin/settings', label: 'Settings', icon: '⚙️' },
   { path: '/admin/tests', label: 'Tests', icon: '🧪' }
