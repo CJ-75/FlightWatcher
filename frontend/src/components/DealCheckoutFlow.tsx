@@ -343,39 +343,64 @@ export function DealCheckoutFlow({
 
             {step === 'guests' ? (
               <div className="space-y-4">
-                <p className="text-sm text-slate-600">
-                  Titulaire de la réservation
-                  {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
-                </p>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Titulaire de la réservation
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Nom sur la réservation hôtel
+                    {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
+                  </p>
+                </div>
                 {!guestMode ? (
                   <p className="text-sm text-slate-600">
                     Total affiché : <strong>{Math.round(price)} € / pers.</strong>
                   </p>
                 ) : null}
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <input
-                    className="rounded-xl border border-line px-3 py-2.5 text-sm min-h-[44px]"
-                    placeholder="Prénom"
-                    autoComplete="given-name"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                  />
-                  <input
-                    className="rounded-xl border border-line px-3 py-2.5 text-sm min-h-[44px]"
-                    placeholder="Nom"
-                    autoComplete="family-name"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                  />
+                <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 space-y-3 shadow-sm">
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
+                        Prénom
+                      </span>
+                      <input
+                        className="w-full rounded-xl border-2 border-slate-300 bg-slate-50 px-3.5 py-3 text-base font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-200"
+                        placeholder="Marie"
+                        autoComplete="given-name"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                      />
+                    </label>
+                    <label className="block space-y-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
+                        Nom
+                      </span>
+                      <input
+                        className="w-full rounded-xl border-2 border-slate-300 bg-slate-50 px-3.5 py-3 text-base font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-200"
+                        placeholder="Dupont"
+                        autoComplete="family-name"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
+                      Email
+                    </span>
+                    <input
+                      className="w-full rounded-xl border-2 border-slate-300 bg-slate-50 px-3.5 py-3 text-base font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-200"
+                      placeholder="marie.dupont@email.com"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                    <span className="text-[11px] text-slate-500">
+                      Confirmation de réservation envoyée à cette adresse
+                    </span>
+                  </label>
                 </div>
-                <input
-                  className="w-full rounded-xl border border-line px-3 py-2.5 text-sm min-h-[44px]"
-                  placeholder="Email (confirmation)"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
                 <button
                   type="button"
                   disabled={!firstName || !lastName || !email}
