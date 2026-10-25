@@ -77,6 +77,8 @@ class BookRequest(BaseModel):
     guests: List[GuestInput] = Field(default_factory=list)
     payment_status: str = "succeeded"  # succeeded | requires_capture
     draft_token: Optional[str] = None
+    # Sandbox: skip Payment SDK and book with ACC_CREDIT_CARD (LiteAPI test mode)
+    sandbox_simulate: bool = False
 
 
 def _resolve_booking_actor(request: Request, draft_token: Optional[str]) -> Dict[str, Optional[str]]:
@@ -260,16 +262,41 @@ async def book(booking_id: str, body: BookRequest, request: Request):
     if not prebook_id or not transaction_id:
         raise HTTPException(status_code=400, detail="Prebook manquant")
 
-    guests = [g.model_dump() for g in body.guests] or [
-        {
-            "firstName": body.holder.firstName,
-            "lastName": body.holder.lastName,
-            "email": body.holder.email,
-            "occupancyNumber": 1,
-        }
-    ]
+    # LiteAPI: one primary guest per room (occupancyNumber = room index, not pax count)
+    guests = [g.model_dump(exclude_none=True) for g in body.guests]
+    if not guests:
+        guests = [
+            {
+                "firstName": body.holder.firstName,
+                "lastName": body.holder.lastName,
+                "email": body.holder.email,
+                "occupancyNumber": 1,
+            }
+        ]
+    else:
+        # Dedupe accidental duplicate occupancyNumber=1 (old FE sent 2 adults as 2 guests)
+        by_occ: Dict[int, Dict[str, Any]] = {}
+        for g in guests:
+            occ = int(g.get("occupancyNumber") or 1)
+            by_occ[occ] = {
+                "firstName": g.get("firstName") or body.holder.firstName,
+                "lastName": g.get("lastName") or body.holder.lastName,
+                "email": g.get("email") or body.holder.email,
+                "occupancyNumber": occ,
+            }
+        guests = [by_occ[k] for k in sorted(by_occ.keys())]
 
     cfg = load_deals_config()
+    # Sandbox simulate (FE button) must NOT use TRANSACTION_ID — payment never ran.
+    # LiteAPI docs: ACC_CREDIT_CARD simulates booking without charge in sandbox.
+    if cfg.is_sandbox and body.sandbox_simulate:
+        payment: Dict[str, Any] = {"method": "ACC_CREDIT_CARD"}
+    else:
+        payment = {
+            "method": "TRANSACTION_ID",
+            "transactionId": transaction_id,
+        }
+
     client = LiteApiClient(cfg=cfg)
     try:
         supabase.table("hotel_bookings").update(
@@ -281,17 +308,21 @@ async def book(booking_id: str, body: BookRequest, request: Request):
                 "prebookId": prebook_id,
                 "holder": body.holder.model_dump(),
                 "guests": guests,
-                "payment": {
-                    "method": "TRANSACTION_ID",
-                    "transactionId": transaction_id,
-                },
+                "payment": payment,
             }
         )
     except LiteApiError as e:
+        err_detail: Any = str(e)
+        if e.body is not None:
+            err_detail = {"message": str(e), "liteapi": e.body}
         supabase.table("hotel_bookings").update(
-            {"status": "failed", "updated_at": _now(), "raw_book": {"error": str(e)}}
+            {
+                "status": "failed",
+                "updated_at": _now(),
+                "raw_book": {"error": str(e), "body": e.body},
+            }
         ).eq("id", booking_id).execute()
-        raise HTTPException(status_code=502, detail=f"Book échoué: {e}")
+        raise HTTPException(status_code=502, detail=err_detail)
     finally:
         client.close()
 

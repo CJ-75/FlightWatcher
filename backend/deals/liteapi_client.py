@@ -88,10 +88,11 @@ class LiteApiClient:
                     except Exception:
                         body_preview = (resp.text or "")[:300]
                     logger.warning(
-                        "liteapi_error endpoint=%s status=%s duration_ms=%s",
+                        "liteapi_error endpoint=%s status=%s duration_ms=%s body=%s",
                         path,
                         resp.status_code,
                         elapsed_ms,
+                        str(body_preview)[:400],
                     )
                     raise LiteApiError(
                         f"LiteAPI {path} HTTP {resp.status_code}",

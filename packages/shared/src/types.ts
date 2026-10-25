@@ -708,6 +708,8 @@ export interface HotelBookingBookRequest {
   }>
   payment_status: 'succeeded' | 'requires_capture'
   draft_token?: string | null
+  /** Sandbox only: book via ACC_CREDIT_CARD without Payment SDK */
+  sandbox_simulate?: boolean
 }
 
 export interface HotelBooking {

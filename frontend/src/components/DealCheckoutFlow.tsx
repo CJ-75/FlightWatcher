@@ -190,11 +190,15 @@ export function DealCheckoutFlow({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- finalizeBook closed over latest state via pay step
   }, [step, prebookMeta])
 
-  const finalizeBook = async (payment_status: 'succeeded' | 'requires_capture') => {
+  const finalizeBook = async (
+    payment_status: 'succeeded' | 'requires_capture',
+    opts?: { sandboxSimulate?: boolean },
+  ) => {
     if (!bookingId) return
     setStep('pending')
     setError(null)
     try {
+      // LiteAPI: one primary guest per room (not one per traveler)
       const guests = [
         {
           firstName,
@@ -203,19 +207,12 @@ export function DealCheckoutFlow({
           occupancyNumber: 1,
         },
       ]
-      if ((reval?.adults || deal.adults || 2) >= 2) {
-        guests.push({
-          firstName: firstName || 'Guest',
-          lastName: lastName || '2',
-          email,
-          occupancyNumber: 1,
-        })
-      }
       const b = await getApiClient().bookHotel(bookingId, {
         holder: { firstName, lastName, email },
         guests,
         payment_status,
         draft_token: draftToken || undefined,
+        sandbox_simulate: opts?.sandboxSimulate || undefined,
       })
       let final = b
       if (b.status === 'booking_pending') {
@@ -242,7 +239,16 @@ export function DealCheckoutFlow({
       setShowAccountCta(guestMode)
       setStep('done')
     } catch (e) {
-      const msg = e instanceof Error ? e.message : t('app.error')
+      let msg = e instanceof Error ? e.message : t('app.error')
+      // Surface nested LiteAPI body when API returns { detail: { message, liteapi } }
+      try {
+        const raw = String(msg)
+        if (raw.includes('liteapi') || raw.includes('Book échoué')) {
+          msg = raw
+        }
+      } catch {
+        /* keep msg */
+      }
       setError(msg)
       // Keep holder fields — retry payment without re-typing
       setStep('error')
@@ -429,7 +435,7 @@ export function DealCheckoutFlow({
                 {prebookMeta?.liteapi_env === 'sandbox' ? (
                   <button
                     type="button"
-                    onClick={() => void finalizeBook('succeeded')}
+                    onClick={() => void finalizeBook('succeeded', { sandboxSimulate: true })}
                     className="w-full border border-dashed border-primary-300 text-primary-700 font-bold py-3 rounded-xl min-h-[48px]"
                   >
                     Simuler paiement réussi (sandbox)
