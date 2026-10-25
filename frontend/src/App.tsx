@@ -1016,10 +1016,16 @@ function Dashboard() {
           </nav>
         </div>
 
-        {/* Contenu selon l'onglet */}
-        {activeTab === 'deals' ? (
-          <DealsTab />
-        ) : activeTab === 'planner' ? (
+        {/* Contenu selon l'onglet — Deals warm-mount so wall is ready on first tab open */}
+        {dealsUiEnabled ? (
+          <div
+            className={activeTab === 'deals' ? undefined : 'hidden'}
+            aria-hidden={activeTab !== 'deals'}
+          >
+            <DealsTab />
+          </div>
+        ) : null}
+        {activeTab === 'deals' ? null : activeTab === 'planner' ? (
           <PlannerTab />
         ) : activeTab === 'search' ? (
           <>

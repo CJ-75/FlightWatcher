@@ -47,7 +47,7 @@ export function CityPicker({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return []
+    if (!q) return groups
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||

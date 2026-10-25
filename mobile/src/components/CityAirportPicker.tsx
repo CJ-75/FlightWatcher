@@ -64,7 +64,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return []
+    if (!q) return groups
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
@@ -296,9 +296,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             ListEmptyComponent={
               exactAirport ? null : (
                 <Text style={styles.empty}>
-                  {query.trim()
-                    ? 'Aucune ville trouvée'
-                    : 'Commence à taper pour chercher une ville'}
+                  {query.trim() ? 'Aucune ville trouvée' : 'Chargement des villes…'}
                 </Text>
               )
             }

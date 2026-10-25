@@ -133,11 +133,11 @@ function MainTabs() {
         component={SearchScreen}
         options={{ title: 'Recherche', headerShown: false }}
       />
-      {/* Deals tab always registered; screen can no-op if DEALS_UI_ENABLED=false via config */}
+      {/* Mount at app start so wall is warm when user opens the tab */}
       <Tab.Screen
         name="Deals"
         component={DealsScreen}
-        options={{ title: 'Deals', headerShown: false }}
+        options={{ title: 'Deals', headerShown: false, lazy: false }}
       />
       <Tab.Screen
         name="Planner"
