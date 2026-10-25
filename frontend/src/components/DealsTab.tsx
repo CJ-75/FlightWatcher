@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import {
+  airportSelectionLabel,
+  encodeAirportCodes,
+  groupAirportsByCity,
+  normalizeAirports,
+  type Airport,
+} from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
@@ -18,6 +25,41 @@ const springConfig = {
   mass: 0.5,
 }
 
+const ORIGIN_LS_KEY = 'fw_deals_origin'
+type DurationTab = 'weekend' | 'short' | 'week'
+
+function readStoredOrigin(): string {
+  try {
+    return (localStorage.getItem(ORIGIN_LS_KEY) || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function writeStoredOrigin(value: string) {
+  try {
+    if (value) localStorage.setItem(ORIGIN_LS_KEY, value)
+    else localStorage.removeItem(ORIGIN_LS_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function nightsInDuration(nights: number, tab: DurationTab): boolean {
+  const n = Number(nights) || 0
+  if (tab === 'weekend') return n >= 1 && n <= 3
+  if (tab === 'short') return n >= 4 && n <= 5
+  return n >= 6 && n <= 9
+}
+
+function shortOriginLabel(encoded: string, airports: Airport[]): string {
+  if (!encoded) return ''
+  const groups = groupAirportsByCity(airports)
+  const full = airportSelectionLabel(encoded, groups)
+  if (!full) return encoded.split(',')[0] || ''
+  return full.split(' · ')[0] || full
+}
+
 export function DealsTab() {
   const { t } = useI18n()
   const [deals, setDeals] = useState<TravelDeal[]>([])
@@ -29,15 +71,19 @@ export function DealsTab() {
 
   /** Arrival city first (hotel axis); origin optional for flight priority. */
   const [destination, setDestination] = useState('')
-  const [origin, setOrigin] = useState('')
+  const [origin, setOrigin] = useState(() => readStoredOrigin())
   const [adults, setAdults] = useState(2)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
   const [queryDestination, setQueryDestination] = useState('')
-  const [queryOrigin, setQueryOrigin] = useState('')
+  const [queryOrigin, setQueryOrigin] = useState(() => readStoredOrigin())
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [originChipOpen, setOriginChipOpen] = useState(false)
+  const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
+  const [airports, setAirports] = useState<Airport[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const originDefaultedRef = useRef(false)
 
   useEffect(() => {
     void fetch('/api/config')
@@ -46,6 +92,35 @@ export function DealsTab() {
         setReadonlyBanner(Boolean(cfg?.prod_readonly) || cfg?.booking_enabled === false)
       })
       .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void getApiClient()
+      .getAirports()
+      .then((raw) => {
+        if (cancelled) return
+        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+        setAirports(list)
+        if (originDefaultedRef.current || readStoredOrigin()) return
+        const groups = groupAirportsByCity(list)
+        const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
+        if (!paris) return
+        const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+        if (!encoded) return
+        originDefaultedRef.current = true
+        setOrigin(encoded)
+        writeStoredOrigin(encoded)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const setOriginPersist = useCallback((value: string) => {
+    setOrigin(value)
+    writeStoredOrigin(value)
   }, [])
 
   // Debounce filter → query (avoids reload on every stepper tick)
@@ -173,8 +248,13 @@ export function DealsTab() {
     }
   }
 
+  const originCityLabel = useMemo(
+    () => shortOriginLabel(origin, airports),
+    [origin, airports],
+  )
+
   const filterLabel = useMemo(() => {
-    const from = origin ? origin.split(',')[0] || origin : null
+    const from = originCityLabel || null
     const to = destination ? destination.split(',')[0] || destination : null
     const parts: string[] = []
     if (from && to) parts.push(`${from} → ${to}`)
@@ -183,28 +263,33 @@ export function DealsTab() {
     if (adults === 1) parts.push('solo')
     else if (adults !== 2) parts.push(`${adults} ad.`)
     return parts.join(' · ')
-  }, [destination, origin, adults])
+  }, [destination, originCityLabel, adults])
 
   const hasWallFilter = Boolean(queryOrigin || queryDestination)
 
   const matchedDeals = useMemo(() => {
-    if (!hasWallFilter) return deals
-    return deals.filter((d) => {
-      if (queryOrigin && d.flags?.match_origin === false) return false
-      if (queryDestination && d.flags?.match_destination === false) return false
-      return true
-    })
-  }, [deals, queryOrigin, queryDestination, hasWallFilter])
+    let list = deals
+    if (hasWallFilter) {
+      list = list.filter((d) => {
+        if (queryOrigin && d.flags?.match_origin === false) return false
+        if (queryDestination && d.flags?.match_destination === false) return false
+        return true
+      })
+    }
+    return list.filter((d) => nightsInDuration(d.nights, durationTab))
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
 
   /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
-    return deals.filter((d) => {
-      if (queryOrigin && d.flags?.match_origin === false) return true
-      if (queryDestination && d.flags?.match_destination === false) return true
-      return false
-    })
-  }, [deals, queryOrigin, queryDestination, hasWallFilter])
+    return deals
+      .filter((d) => {
+        if (queryOrigin && d.flags?.match_origin === false) return true
+        if (queryDestination && d.flags?.match_destination === false) return true
+        return false
+      })
+      .filter((d) => nightsInDuration(d.nights, durationTab))
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
@@ -214,20 +299,85 @@ export function DealsTab() {
     )
   }, [sort, matchedDeals])
 
+  const durationTabs: { id: DurationTab; label: string }[] = [
+    { id: 'weekend', label: t('deals.durationWeekend') },
+    { id: 'short', label: t('deals.durationShort') },
+    { id: 'week', label: t('deals.durationWeek') },
+  ]
+
   return (
     <div className="w-full">
       <div className="mb-5 sm:mb-6">
         <p className="app-kicker mb-1.5">Deals</p>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-          {t('nav.deals')}
+          {t('deals.titleSell')}
         </h2>
-        <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitle')}</p>
+        <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitleSell')}</p>
         {readonlyBanner ? (
           <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
             {t('deals.readonlyBanner')}
           </p>
         ) : null}
       </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <button
+          type="button"
+          onClick={() => setOriginChipOpen((o) => !o)}
+          aria-expanded={originChipOpen}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-bold transition-colors ${
+            origin
+              ? 'bg-primary-500 text-white border-primary-500'
+              : 'bg-white text-ink border-line hover:border-primary-200'
+          }`}
+        >
+          {t('deals.originChip')} : {originCityLabel || t('deals.originChipAll')}
+          <span className="text-[10px] opacity-80" aria-hidden>
+            ▾
+          </span>
+        </button>
+        {durationTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setDurationTab(tab.id)}
+            className={`rounded-full px-3.5 py-2 text-sm font-bold border transition-colors ${
+              durationTab === tab.id
+                ? 'bg-ink text-white border-ink'
+                : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {originChipOpen ? (
+        <div className="app-card mb-4 p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <label className="text-sm font-bold text-ink">{t('deals.filterOrigin')}</label>
+            {origin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOriginPersist('')
+                  setOriginChipOpen(false)
+                }}
+                className="text-xs font-semibold text-primary-600 hover:underline"
+              >
+                {t('deals.clearOrigin')}
+              </button>
+            ) : null}
+          </div>
+          <CityAirportSelect
+            value={origin}
+            onChange={(v) => {
+              setOriginPersist(v)
+              setOriginChipOpen(false)
+            }}
+          />
+        </div>
+      ) : null}
 
       <div className="w-full app-card mb-5 sm:mb-6 overflow-hidden">
         <button
@@ -268,7 +418,7 @@ export function DealsTab() {
                     {origin ? (
                       <button
                         type="button"
-                        onClick={() => setOrigin('')}
+                        onClick={() => setOriginPersist('')}
                         className="text-xs font-semibold text-primary-600 hover:underline shrink-0"
                       >
                         {t('deals.clearOrigin')}
@@ -277,7 +427,7 @@ export function DealsTab() {
                       <span className="w-12 shrink-0" aria-hidden />
                     )}
                   </div>
-                  <CityAirportSelect value={origin} onChange={setOrigin} />
+                  <CityAirportSelect value={origin} onChange={setOriginPersist} />
                 </div>
 
                 <div
@@ -326,7 +476,7 @@ export function DealsTab() {
       {!loading && !error && deals.length > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <p className="text-sm font-semibold text-muted">
-            {deals.length} offre{deals.length > 1 ? 's' : ''}
+            {gridDeals.length} offre{gridDeals.length > 1 ? 's' : ''}
             {filterLabel ? ` · ${filterLabel}` : ''}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -383,18 +533,17 @@ export function DealsTab() {
             {t('deals.retry')}
           </button>
         </div>
-      ) : deals.length === 0 ? (
+      ) : deals.length === 0 || (gridDeals.length === 0 && fillerDeals.length === 0) ? (
         <div className="app-card p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.emptyTitle')}</p>
           <p className="text-sm text-muted mb-4">
-            {destination || origin
-              ? t('deals.emptyBody', {
-                  origin:
-                    filterLabel ||
-                    origin ||
-                    destination,
-                })
-              : t('deals.emptyBodyAll')}
+            {deals.length > 0
+              ? 'Aucun séjour pour cette durée. Essaie un autre onglet.'
+              : destination || origin
+                ? t('deals.emptyBody', {
+                    origin: filterLabel || origin || destination,
+                  })
+                : t('deals.emptyBodyAll')}
           </p>
           <button
             type="button"

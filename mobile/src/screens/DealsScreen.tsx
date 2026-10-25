@@ -12,7 +12,13 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, TravelDeal } from '@flightwatcher/shared'
-import { normalizeAirports } from '@flightwatcher/shared'
+import {
+  airportSelectionLabel,
+  encodeAirportCodes,
+  groupAirportsByCity,
+  normalizeAirports,
+} from '@flightwatcher/shared'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { CityAirportPicker } from '../components/CityAirportPicker'
@@ -23,6 +29,15 @@ import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const STALE_MS = 90_000
+const ORIGIN_LS_KEY = 'fw_deals_origin'
+type DurationTab = 'weekend' | 'short' | 'week'
+
+function nightsInDuration(nights: number, tab: DurationTab): boolean {
+  const n = Number(nights) || 0
+  if (tab === 'weekend') return n >= 1 && n <= 3
+  if (tab === 'short') return n >= 4 && n <= 5
+  return n >= 6 && n <= 9
+}
 
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
@@ -40,6 +55,8 @@ export function DealsScreen() {
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [originChipOpen, setOriginChipOpen] = useState(false)
+  const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const [uiEnabled, setUiEnabled] = useState(true)
@@ -47,13 +64,39 @@ export function DealsScreen() {
   const configLoadedRef = useRef(false)
   const lastFetchAtRef = useRef(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const originHydratedRef = useRef(false)
+
+  const setOriginPersist = useCallback((value: string) => {
+    setOrigin(value)
+    void AsyncStorage.setItem(ORIGIN_LS_KEY, value || '').catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     getApi()
       .getAirports()
-      .then((raw) => {
+      .then(async (raw) => {
         const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
         setAirports(list)
+        if (originHydratedRef.current) return
+        originHydratedRef.current = true
+        try {
+          const stored = ((await AsyncStorage.getItem(ORIGIN_LS_KEY)) || '').trim()
+          if (stored) {
+            setOrigin(stored)
+            setQueryOrigin(stored)
+            return
+          }
+        } catch {
+          /* ignore */
+        }
+        const groups = groupAirportsByCity(list)
+        const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
+        if (!paris) return
+        const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+        if (!encoded) return
+        setOrigin(encoded)
+        setQueryOrigin(encoded)
+        void AsyncStorage.setItem(ORIGIN_LS_KEY, encoded).catch(() => undefined)
       })
       .catch(() => undefined)
 
@@ -138,8 +181,15 @@ export function DealsScreen() {
     }, [load]),
   )
 
+  const originCityLabel = useMemo(() => {
+    if (!origin) return ''
+    const groups = groupAirportsByCity(airports)
+    const full = airportSelectionLabel(origin, groups)
+    return (full.split(' · ')[0] || full || origin.split(',')[0] || '').trim()
+  }, [origin, airports])
+
   const filterSummary = (() => {
-    const from = origin ? origin.split(',')[0] : null
+    const from = originCityLabel || null
     const to = destination ? destination.split(',')[0] : null
     const parts: string[] = []
     if (from && to) parts.push(`${from} → ${to}`)
@@ -151,21 +201,26 @@ export function DealsScreen() {
 
   const hasWallFilter = Boolean(queryOrigin || queryDestination)
   const matchedDeals = useMemo(() => {
-    if (!hasWallFilter) return deals
-    return deals.filter((d) => {
-      if (queryOrigin && d.flags?.match_origin === false) return false
-      if (queryDestination && d.flags?.match_destination === false) return false
-      return true
-    })
-  }, [deals, queryOrigin, queryDestination, hasWallFilter])
+    let list = deals
+    if (hasWallFilter) {
+      list = list.filter((d) => {
+        if (queryOrigin && d.flags?.match_origin === false) return false
+        if (queryDestination && d.flags?.match_destination === false) return false
+        return true
+      })
+    }
+    return list.filter((d) => nightsInDuration(d.nights, durationTab))
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
-    return deals.filter((d) => {
-      if (queryOrigin && d.flags?.match_origin === false) return true
-      if (queryDestination && d.flags?.match_destination === false) return true
-      return false
-    })
-  }, [deals, queryOrigin, queryDestination, hasWallFilter])
+    return deals
+      .filter((d) => {
+        if (queryOrigin && d.flags?.match_origin === false) return true
+        if (queryDestination && d.flags?.match_destination === false) return true
+        return false
+      })
+      .filter((d) => nightsInDuration(d.nights, durationTab))
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
     const dir = sort === 'price_asc' ? 1 : -1
@@ -213,9 +268,9 @@ export function DealsScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text style={styles.title}>Deals</Text>
+              <Text style={styles.title}>Séjours vol + hôtel</Text>
               <Text style={styles.subtitle}>
-                Bonnes affaires vol + hôtel depuis ton aéroport
+                Des prix réels, vérifiés, depuis ton aéroport.
               </Text>
               {!uiEnabled ? (
                 <Text style={styles.subtitle}>Onglet deals désactivé (calibration).</Text>
@@ -224,6 +279,68 @@ export function DealsScreen() {
                 <Text style={[styles.subtitle, { color: colors.primary }]}>
                   Lecture seule — réservation hôtel fermée.
                 </Text>
+              ) : null}
+
+              <View style={styles.chipRow}>
+                <Pressable
+                  onPress={() => setOriginChipOpen((o) => !o)}
+                  style={[styles.chip, origin ? styles.chipActive : null]}
+                >
+                  <Text style={[styles.chipText, origin ? styles.chipTextActive : null]}>
+                    Départ : {originCityLabel || 'Tous'} ▾
+                  </Text>
+                </Pressable>
+                {(
+                  [
+                    ['weekend', 'Week-end'],
+                    ['short', 'Court séjour'],
+                    ['week', 'Semaine'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <Pressable
+                    key={id}
+                    onPress={() => setDurationTab(id)}
+                    style={[styles.chip, durationTab === id && styles.chipInk]}
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        durationTab === id && styles.chipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {originChipOpen ? (
+                <View style={[styles.card, shadow.soft, { marginBottom: spacing.md }]}>
+                  <View style={styles.filterBody}>
+                    <View style={styles.originRow}>
+                      <Text style={styles.label}>Départ</Text>
+                      {origin ? (
+                        <Pressable
+                          onPress={() => {
+                            setOriginPersist('')
+                            setOriginChipOpen(false)
+                          }}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.clearOrigin}>Effacer</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    <CityAirportPicker
+                      airports={airports}
+                      value={origin}
+                      onChange={(v) => {
+                        setOriginPersist(v)
+                        setOriginChipOpen(false)
+                      }}
+                    />
+                  </View>
+                </View>
               ) : null}
 
               <View style={[styles.card, shadow.soft]}>
@@ -256,7 +373,7 @@ export function DealsScreen() {
                         <View style={styles.originRow}>
                           <Text style={styles.label}>Départ</Text>
                           {origin ? (
-                            <Pressable onPress={() => setOrigin('')} hitSlop={8}>
+                            <Pressable onPress={() => setOriginPersist('')} hitSlop={8}>
                               <Text style={styles.clearOrigin}>Effacer</Text>
                             </Pressable>
                           ) : null}
@@ -264,7 +381,7 @@ export function DealsScreen() {
                         <CityAirportPicker
                           airports={airports}
                           value={origin}
-                          onChange={setOrigin}
+                          onChange={setOriginPersist}
                         />
                       </View>
 
@@ -300,7 +417,7 @@ export function DealsScreen() {
               {!loading && !error && deals.length > 0 ? (
                 <View style={styles.countRow}>
                   <Text style={styles.count}>
-                    {deals.length} offre{deals.length > 1 ? 's' : ''}
+                    {gridDeals.length} offre{gridDeals.length > 1 ? 's' : ''}
                     {filterSummary ? ` · ${filterSummary}` : ''}
                   </Text>
                   <View style={styles.sortRowCompact}>
@@ -424,11 +541,41 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 6,
-    marginBottom: 14,
+    marginBottom: 12,
     fontFamily: fonts.medium,
     fontSize: 14,
     color: colors.muted,
     includeFontPadding: false,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  chip: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipInk: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  chipText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  chipTextActive: {
+    color: colors.white,
   },
   card: {
     backgroundColor: colors.surface,

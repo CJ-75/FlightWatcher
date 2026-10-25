@@ -396,6 +396,10 @@ export interface TravelDeal {
   badge?: string
   /** Honest market badge (flight-only % vs usual). */
   badge_meta?: TravelDealBadgeMeta
+  /** Calculated value hook for the card (data-only, no invention). */
+  hook?: string | null
+  /** Kind of hook: baseline | direct | hotel_value */
+  hook_kind?: string | null
   /** Stable key for likes, alerts, revalidate. */
   deal_key?: DealKey
   origin_iata?: string

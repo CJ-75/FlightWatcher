@@ -216,13 +216,21 @@ def row_to_travel_deal(
         price_pax_note = "Prix pour 1–2 voyageurs"
 
     hotel_image = _hotel_photo(hotel) or ""
+    dest_iata = str(row.get("dest_iata") or "").upper()
+    country = ""
+    try:
+        from city_names_fr import country_for_code
 
-    return {
+        country = country_for_code(dest_iata, "") or ""
+    except Exception:
+        country = ""
+
+    deal_out: Dict[str, Any] = {
         "id": row.get("deal_key"),
         "deal_key": row.get("deal_key"),
         "title": f"Week-end à {city}" if city else "Deal",
         "city": city,
-        "country": "",
+        "country": country,
         # Prefer hôtel photo so same-city deals don't share one city stock image
         "image_url": hotel_image,
         "price_per_person": price_pp,
@@ -300,6 +308,11 @@ def row_to_travel_deal(
         "fetched_at": row.get("last_verified_at"),
         "served_city_id": row.get("served_city_id"),
     }
+    hook = compute_deal_hook(deal_out)
+    if hook:
+        deal_out["hook"] = hook.get("text")
+        deal_out["hook_kind"] = hook.get("kind")
+    return deal_out
 
 
 def _cached_flag(key: str, compute) -> Any:
@@ -715,6 +728,89 @@ def _prefer_hotel_deals(deals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     )
 
 
+MAX_PER_CITY = 2
+MAX_PER_COUNTRY = 3
+
+
+def diversify_wall_deals(
+    deals: List[Dict[str, Any]],
+    *,
+    max_per_city: int = MAX_PER_CITY,
+    max_per_country: int = MAX_PER_COUNTRY,
+) -> List[Dict[str, Any]]:
+    """Strict wall variety: ≤2 cards / city, ≤3 / country (order preserved)."""
+    city_n: Dict[str, int] = {}
+    country_n: Dict[str, int] = {}
+    out: List[Dict[str, Any]] = []
+    for d in deals:
+        city = str(d.get("city") or d.get("destination") or "").strip().lower()
+        country = str(d.get("country") or "").strip().lower()
+        if city and city_n.get(city, 0) >= max_per_city:
+            continue
+        if country and country_n.get(country, 0) >= max_per_country:
+            continue
+        out.append(d)
+        if city:
+            city_n[city] = city_n.get(city, 0) + 1
+        if country:
+            country_n[country] = country_n.get(country, 0) + 1
+    return out
+
+
+def compute_deal_hook(deal: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """
+    Best true hook for the card (value signal). Data-only — no invention.
+    Returns {text, kind} or None.
+    """
+    candidates: List[Tuple[float, str, str]] = []
+    badge = deal.get("badge") or (deal.get("badge_meta") or {}).get("label")
+    disc = (deal.get("badge_meta") or {}).get("discount_pct")
+    if badge and disc is not None:
+        try:
+            pct = float(disc)
+            if pct >= 15:
+                candidates.append(
+                    (100 + pct, f"−{int(round(pct))} % vs habitude", "baseline")
+                )
+        except (TypeError, ValueError):
+            pass
+
+    flight = deal.get("flight") or {}
+    try:
+        fpp = float((deal.get("price_breakdown") or {}).get("flight_pp") or flight.get("price_pp") or 0)
+    except (TypeError, ValueError):
+        fpp = 0.0
+    if flight.get("direct") and fpp > 0:
+        candidates.append(
+            (70 + max(0, 80 - fpp) / 2, f"Vol direct à {int(round(fpp))} € A/R", "direct")
+        )
+
+    hotel = deal.get("hotel") if isinstance(deal.get("hotel"), dict) else {}
+    try:
+        rating = float(hotel.get("rating")) if hotel.get("rating") is not None else None
+    except (TypeError, ValueError):
+        rating = None
+    try:
+        hpp = float((deal.get("price_breakdown") or {}).get("hotel_pp") or 0)
+    except (TypeError, ValueError):
+        hpp = 0.0
+    nights = int(deal.get("nights") or 2)
+    if rating is not None and rating >= 8.5 and hpp > 0:
+        candidates.append(
+            (
+                50 + rating,
+                f"Hôtel {rating:.1f}/10 pour {int(round(hpp))} € / {nights} nuit{'s' if nights > 1 else ''}",
+                "hotel_value",
+            )
+        )
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: -x[0])
+    _score, text, kind = candidates[0]
+    return {"text": text, "kind": kind}
+
+
 def list_community_deals(
     supabase,
     *,
@@ -866,7 +962,8 @@ def list_community_deals(
         max_share=cfg.cached_max_share,
         cached_enabled=cached_on,
     )
-    out = _only_hotel_photo_deals(out)[:target]
+    out = _only_hotel_photo_deals(out)
+    out = diversify_wall_deals(out)[:target]
     with _list_cache_lock:
         _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in out])
         if len(_list_cache) > 64:
