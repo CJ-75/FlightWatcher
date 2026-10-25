@@ -1,10 +1,11 @@
 """
 v3.2 — shared Ryanair hourly call budget (priority queue).
 
-Background jobs (revalidate / promote) are capped per hour.
+Background jobs (revalidate / promote / seed) are capped per hour.
 User-facing Search (organic) and click revalidate always proceed.
 
-Seed must NOT call Ryanair (Travelpayouts only).
+Seed may call Ryanair sparingly (PURPOSE_SEED) — slow pause + max cells/run
+in deals.seed_catalog to avoid 403.
 """
 from __future__ import annotations
 
@@ -20,13 +21,15 @@ logger = logging.getLogger("providers.ryanair_budget")
 PURPOSE_CLICK = "click"
 PURPOSE_REVALIDATE = "revalidate"
 PURPOSE_ORGANIC = "organic"
+PURPOSE_SEED = "seed"
 PURPOSE_PROMOTE = "promote"
 
 PRIORITY = {
     PURPOSE_CLICK: 0,
     PURPOSE_REVALIDATE: 1,
     PURPOSE_ORGANIC: 2,
-    PURPOSE_PROMOTE: 3,
+    PURPOSE_SEED: 3,
+    PURPOSE_PROMOTE: 4,
 }
 
 _lock = threading.Lock()
@@ -60,7 +63,7 @@ def try_acquire(purpose: str) -> bool:
     Reserve one Ryanair HTTP slot for this hour.
 
     User-facing Search (organic) and click revalidate always proceed —
-    the hourly cap only throttles background jobs (revalidate / promote).
+    the hourly cap throttles background jobs (seed / revalidate / promote).
     """
     purpose = (purpose or PURPOSE_ORGANIC).lower()
     if purpose not in PRIORITY:

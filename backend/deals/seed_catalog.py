@@ -415,11 +415,52 @@ def _week_stays(n: int = 2) -> List[Tuple[str, str]]:
     return out
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    import os
+
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_float(name: str, default: float) -> float:
+    import os
+
+    try:
+        return float(os.getenv(name, str(default)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    import os
+
+    try:
+        return int(os.getenv(name, str(default)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _seed_ryanair_origins() -> List[str]:
+    """Small FR Ryanair hubs — enough for UX, low 403 risk."""
+    import os
+
+    raw = (os.getenv("SEED_RYANAIR_ORIGINS") or "BVA,MRS").strip()
+    return _parse_iata_list(raw) or ["BVA", "MRS"]
+
+
 def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = False) -> Dict[str, Any]:
     """
     Scan seed catalog × FR origins into price_observations (source=seed_batch).
-    v3.2: Travelpayouts only (no Ryanair). Respects SEED_SCAN_BUDGET_PER_DAY;
-    skips cells with fresh organic obs (<12h).
+
+    Travelpayouts always (bulk). Ryanair optionally, slowly:
+      - SEED_RYANAIR_ENABLED (default true)
+      - only SEED_RYANAIR_ORIGINS (default BVA,MRS)
+      - only the nearest weekend date pair
+      - max SEED_RYANAIR_MAX_CELLS_PER_RUN (default 8)
+      - pause SEED_RYANAIR_PAUSE_S (default 4s) between Ryanair cells
+      - PURPOSE_SEED counts against RYANAIR_BUDGET_PER_HOUR
     """
     cfg = cfg or load_deals_config()
     origins = ordered_seed_origins(cfg)
@@ -440,10 +481,21 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
             "dry_run": dry_run,
         }
 
+    ryanair_on = _env_bool("SEED_RYANAIR_ENABLED", True)
+    ryanair_max_cells = max(0, _env_int("SEED_RYANAIR_MAX_CELLS_PER_RUN", 8))
+    ryanair_pause_s = max(0.0, _env_float("SEED_RYANAIR_PAUSE_S", 4.0))
+    ryanair_origins = set(_seed_ryanair_origins())
+    ryanair_cells = 0
+    ryanair_hits = 0
+    ryanair_skips = 0
+
     try:
         cat = (
             supabase.table("seed_catalog_cities")
-            .select("served_city_id, excluded, served_cities(primary_iata, city_name, verified)")
+            .select(
+                "served_city_id, excluded, pinned, seed_rank, "
+                "served_cities(primary_iata, city_name, verified)"
+            )
             .eq("excluded", False)
             .limit(cfg.seed_catalog_size)
             .execute()
@@ -452,15 +504,40 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+    # Prefer classics with supply first (rank>0), then new pins
+    entries.sort(
+        key=lambda r: (
+            0 if r.get("pinned") else 1,
+            -(float(r.get("seed_rank") or 0)),
+        )
+    )
+
     date_pairs = date_pairs_from_sets()
+    # Ryanair only on nearest pair (usually first weekend) — fewer HTTP calls
+    ryanair_date_pair: Optional[Tuple[str, str]] = date_pairs[0] if date_pairs else None
+
     scans_done = 0
     skipped_organic = 0
     errors = 0
+    trips_recorded = 0
     aborted_circuit = False
     cell_gaps_h: List[float] = []
 
+    # Seed must collect price points for baselines — NOT the deal wall cap.
+    # Wall/promote still filters with DEALS_MAX_FLIGHT_PP later.
+    import os
+
+    try:
+        seed_budget_pp = float(os.getenv("SEED_SCAN_MAX_PP", "0") or 0)
+    except ValueError:
+        seed_budget_pp = 0.0
+    if seed_budget_pp <= 0:
+        seed_budget_pp = max(float(cfg.max_flight_pp) * 3.5, 450.0)
+    seed_budget_pp = int(seed_budget_pp)
+
     from api_models import DateAvecHoraire
     from providers.orchestrator import search_roundtrips
+    from providers.ryanair_budget import PURPOSE_SEED
 
     for entry in entries:
         if scans_done >= remaining:
@@ -479,8 +556,10 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
             for out_d, ret_d in date_pairs:
                 if scans_done >= remaining:
                     break
-                # v3.2: seed is Travelpayouts-only (no Ryanair)
-                if is_circuit_open("travelpayouts"):
+                # Abort only if BOTH providers are dead
+                if is_circuit_open("travelpayouts") and (
+                    not ryanair_on or is_circuit_open("ryanair")
+                ):
                     aborted_circuit = True
                     break
                 # Skip if fresh organic exists
@@ -517,35 +596,121 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
                     if gap is not None:
                         cell_gaps_h.append(gap)
 
-                    trips, _nq = search_roundtrips(
-                        aeroport_depart=origin,
-                        dates_depart=[DateAvecHoraire(date=out_d)],
-                        dates_retour=[DateAvecHoraire(date=ret_d)],
-                        budget_max=int(cfg.max_flight_pp * 1.5),
-                        limite_allers=30,
-                        destinations_incluses=[dest_iata],
-                        record_prices=False,  # we write seed_batch ourselves
-                        passengers=1,
-                        direct=True,
-                        providers=["travelpayouts"],
+                    trips: List[Any] = []
+                    if not is_circuit_open("travelpayouts"):
+                        trips, _nq = search_roundtrips(
+                            aeroport_depart=origin,
+                            dates_depart=[DateAvecHoraire(date=out_d)],
+                            dates_retour=[DateAvecHoraire(date=ret_d)],
+                            budget_max=seed_budget_pp,
+                            limite_allers=30,
+                            destinations_incluses=[dest_iata],
+                            record_prices=False,
+                            passengers=1,
+                            direct=True,
+                            providers=["travelpayouts"],
+                        )
+                        trips = [
+                            t
+                            for t in trips
+                            if (getattr(t, "destination_code", None) or "").upper()
+                            == dest_iata
+                        ]
+                        if not trips:
+                            trips, _nq2 = search_roundtrips(
+                                aeroport_depart=origin,
+                                dates_depart=[DateAvecHoraire(date=out_d)],
+                                dates_retour=[DateAvecHoraire(date=ret_d)],
+                                budget_max=seed_budget_pp,
+                                limite_allers=30,
+                                destinations_incluses=[dest_iata],
+                                record_prices=False,
+                                passengers=1,
+                                direct=False,
+                                providers=["travelpayouts"],
+                            )
+                            trips = [
+                                t
+                                for t in trips
+                                if (getattr(t, "destination_code", None) or "").upper()
+                                == dest_iata
+                            ]
+
+                    # Ryanair overlay — sparse, slow, priority hubs only
+                    want_ryanair = (
+                        ryanair_on
+                        and ryanair_max_cells > 0
+                        and ryanair_cells < ryanair_max_cells
+                        and origin in ryanair_origins
+                        and ryanair_date_pair is not None
+                        and (out_d, ret_d) == ryanair_date_pair
+                        and not is_circuit_open("ryanair")
                     )
-                    # Filter to dest
-                    trips = [
-                        t
-                        for t in trips
-                        if (getattr(t, "destination_code", None) or "").upper() == dest_iata
-                    ]
+                    if want_ryanair:
+                        if ryanair_pause_s > 0:
+                            import time as _time
+
+                            _time.sleep(ryanair_pause_s)
+                        try:
+                            ra_trips, _ra_nq = search_roundtrips(
+                                aeroport_depart=origin,
+                                dates_depart=[DateAvecHoraire(date=out_d)],
+                                dates_retour=[DateAvecHoraire(date=ret_d)],
+                                budget_max=seed_budget_pp,
+                                limite_allers=12,
+                                destinations_incluses=[dest_iata],
+                                record_prices=False,
+                                passengers=1,
+                                direct=True,
+                                providers=["ryanair"],
+                                ryanair_purpose=PURPOSE_SEED,
+                            )
+                            ra_trips = [
+                                t
+                                for t in ra_trips
+                                if (getattr(t, "destination_code", None) or "").upper()
+                                == dest_iata
+                            ]
+                            ryanair_cells += 1
+                            if ra_trips:
+                                ryanair_hits += 1
+                                # Prefer live Ryanair rows; keep TP as fill
+                                trips = list(ra_trips) + list(trips or [])
+                            if is_circuit_open("ryanair"):
+                                logger.warning(
+                                    "seed_scan: ryanair circuit opened — TP-only for rest of run"
+                                )
+                                ryanair_on = False
+                        except Exception as ra_e:
+                            ryanair_skips += 1
+                            logger.warning(
+                                "seed_scan ryanair %s→%s: %s", origin, dest_iata, ra_e
+                            )
+                            if is_circuit_open("ryanair"):
+                                ryanair_on = False
+                    elif (
+                        ryanair_on
+                        and origin in ryanair_origins
+                        and ryanair_date_pair
+                        and (out_d, ret_d) == ryanair_date_pair
+                    ):
+                        ryanair_skips += 1
+
                     if trips:
                         record_price_observations(
                             trips, source="seed_batch", sync=True
                         )
+                        trips_recorded += len(trips)
                     scans_done += 1
                     seed_cell_pause()
                 except Exception as e:
                     errors += 1
                     logger.warning("seed_scan %s→%s %s: %s", origin, dest_iata, out_d, e)
                     seed_cell_pause()
-                    if is_circuit_open("travelpayouts") and errors >= 5:
+                    if is_circuit_open("travelpayouts") and is_circuit_open("ryanair"):
+                        aborted_circuit = True
+                        break
+                    if errors >= 12:
                         aborted_circuit = True
                         break
             if aborted_circuit:
@@ -563,16 +728,32 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
             len(cell_gaps_h),
         )
 
+    providers_used = ["travelpayouts"]
+    if ryanair_cells > 0:
+        providers_used.append("ryanair")
+
     return {
         "ok": True,
         "scans": scans_done,
+        "trips_recorded": trips_recorded,
+        "seed_budget_pp": seed_budget_pp,
         "budget": budget,
         "already_today": already,
         "remaining_cap": remaining,
         "skipped_organic": skipped_organic,
         "errors": errors,
         "aborted_circuit": aborted_circuit,
-        "providers": ["travelpayouts"],
+        "providers": providers_used,
+        "ryanair": {
+            "enabled": _env_bool("SEED_RYANAIR_ENABLED", True),
+            "cells": ryanair_cells,
+            "hits": ryanair_hits,
+            "skips": ryanair_skips,
+            "max_cells": ryanair_max_cells,
+            "origins": sorted(ryanair_origins),
+            "pause_s": ryanair_pause_s,
+            "date_pair": list(ryanair_date_pair) if ryanair_date_pair else None,
+        },
         "origins_order": origins,
         "date_pairs": len(date_pairs),
         "avg_cell_gap_h": avg_gap,

@@ -20,13 +20,14 @@ class TestRyanairBudget(unittest.TestCase):
         self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_REVALIDATE))
         self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_REVALIDATE))
         self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_REVALIDATE))
+        self.assertFalse(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_SEED))
         self.assertFalse(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_PROMOTE))
         # User Search / click never blocked by the hourly cap
         self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_ORGANIC))
         self.assertTrue(ryanair_budget.try_acquire(ryanair_budget.PURPOSE_CLICK))
         snap = ryanair_budget.status_snapshot()
         self.assertEqual(snap["remaining"], 0)
-        self.assertGreaterEqual(snap["denied_by_purpose"].get("promote", 0), 1)
+        self.assertGreaterEqual(snap["denied_by_purpose"].get("seed", 0), 1)
 
     def test_note_no_calendar_api(self):
         note = str(ryanair_budget.status_snapshot().get("note") or "")
