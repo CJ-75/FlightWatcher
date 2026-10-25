@@ -196,16 +196,14 @@ export function SearchScreen() {
   const originCodes = useMemo(() => parseAirportCodes(airport), [airport])
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
   const departureLabel = useMemo(
-    () => airportSelectionLabel(airport, cityGroups) || airport,
+    () => airportSelectionLabel(airport, cityGroups) || 'Paris',
     [airport, cityGroups],
   )
   const departureShort = useMemo(() => {
     const group = findCityGroupByCodes(cityGroups, originCodes)
-    if (group && originCodes.length > 1) {
-      return `${group.city} (${originCodes.length})`
-    }
-    return originCodes.join(' · ') || airport
-  }, [cityGroups, originCodes, airport])
+    if (group) return group.city
+    return departureLabel || 'Départ'
+  }, [cityGroups, originCodes, departureLabel])
 
   const loadDestinations = useCallback(async () => {
     if (!originCodes.length) return

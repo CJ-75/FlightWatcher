@@ -458,17 +458,14 @@ export function airportDisplayNameFr(
   return cityDisplayNameFr(iata, null) || iata
 }
 
-/** Card subtitle: "Aéroport · XXX" for arrival. */
+/** Card subtitle for arrival — name only, no IATA. */
 export function arrivalAirportSubtitle(
   code?: string | null,
   destinationFull?: string | null,
 ): string {
   const iata = (code || '').trim().toUpperCase()
   const fromFull = (destinationFull || '').split(',')[0]?.trim() || ''
-  const airport = airportDisplayNameFr(iata, fromFull)
-  if (!iata) return airport
-  if (!airport || normalizeCityKey(airport) === normalizeCityKey(iata)) return iata
-  return `${airport} · ${iata}`
+  return airportDisplayNameFr(iata, fromFull) || fromFull || iata
 }
 
 function hashCityKey(key: string): number {
@@ -635,7 +632,23 @@ export function isValidAirportSelection(
   return codes.every((c) => set.has(c))
 }
 
-/** Label for a multi-airport selection, e.g. "Paris · CDG · ORY · BVA". */
+/**
+ * Short airport name for chips (no IATA) — e.g. Paris + "Paris Orly" → "Orly".
+ */
+export function airportChipLabelFr(
+  code?: string | null,
+  city?: string | null,
+): string {
+  const full = airportDisplayNameFr(code)
+  const c = (city || '').trim()
+  if (c && full.toLowerCase().startsWith(c.toLowerCase())) {
+    const rest = full.slice(c.length).replace(/^[\s\-–—]+/, '').trim()
+    if (rest) return rest
+  }
+  return full || (code || '').trim().toUpperCase()
+}
+
+/** End-user label for a multi-airport selection — city first, never raw IATA. */
 export function airportSelectionLabel(
   value: string | null | undefined,
   groups: CityAirportGroup[],
@@ -645,13 +658,18 @@ export function airportSelectionLabel(
   const group = findCityGroupByCodes(groups, codes)
   if (group) {
     const selected = group.airports.filter((a) => codes.includes(a.code))
-    const codesPart = selected.map((a) => a.code).join(' · ')
     if (selected.length === group.airports.length) {
-      return selected.length > 1 ? `${group.city} · tous (${codesPart})` : `${group.city} · ${codesPart}`
+      return selected.length > 1
+        ? `${group.city} · tous les aéroports`
+        : group.city
     }
-    return `${group.city} · ${codesPart}`
+    if (selected.length === 1) {
+      return `${group.city} · ${airportChipLabelFr(selected[0].code, group.city)}`
+    }
+    return `${group.city} · ${selected.length} aéroports`
   }
-  return codes.join(' · ')
+  if (codes.length === 1) return airportDisplayNameFr(codes[0])
+  return `${codes.length} aéroports`
 }
 
 export function findCityGroupByCodes(

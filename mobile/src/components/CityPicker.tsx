@@ -60,8 +60,10 @@ export function CityPicker({
     if (!open) setQuery('')
   }, [open])
 
-  const codesLabel = selected
-    ? selected.airports.map((a) => a.code).join(' · ')
+  const airportsLabel = selected
+    ? selected.airports.length > 1
+      ? `${selected.airports.length} aéroports`
+      : '1 aéroport'
     : ''
 
   return (
@@ -89,7 +91,8 @@ export function CityPicker({
                 {selected.city}
               </Text>
               <Text style={styles.triggerMeta} numberOfLines={1}>
-                {selected.country} · {codesLabel}
+                {selected.country}
+                {airportsLabel ? ` · ${airportsLabel}` : ''}
               </Text>
             </View>
             <Text style={styles.triggerChevron}>›</Text>
@@ -117,10 +120,7 @@ export function CityPicker({
           />
           <View style={styles.heroCaption}>
             <Text style={styles.heroCity}>{selected.city}</Text>
-            <Text style={styles.heroMeta}>
-              {selected.airports.length} aéroport
-              {selected.airports.length > 1 ? 's' : ''} · {codesLabel}
-            </Text>
+            <Text style={styles.heroMeta}>{airportsLabel}</Text>
           </View>
         </View>
       ) : null}
@@ -218,7 +218,10 @@ function CityRow({
           {group.city}
         </Text>
         <Text style={styles.rowMeta} numberOfLines={1}>
-          {group.country} · {group.airports.map((a) => a.code).join(' · ')}
+          {group.country} ·{' '}
+          {group.airports.length > 1
+            ? `${group.airports.length} aéroports`
+            : '1 aéroport'}
         </Text>
       </View>
       {selected ? <Text style={styles.check}>✓</Text> : null}

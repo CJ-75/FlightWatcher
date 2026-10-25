@@ -17,8 +17,10 @@ import {
   airportSelectionLabel,
   dedupeDealsByHotelTitle,
   encodeAirportCodes,
+  findCityGroupByCodes,
   groupAirportsByCity,
   normalizeAirports,
+  parseAirportCodes,
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { apiBase, getApi } from '../lib/client'
@@ -76,17 +78,29 @@ export function DealsScreen() {
         setAirports(list)
         if (originHydratedRef.current) return
         originHydratedRef.current = true
+        const groups = groupAirportsByCity(list)
+        const expandToCity = (encoded: string) => {
+          const codes = parseAirportCodes(encoded)
+          if (!codes.length) return encoded
+          const group = findCityGroupByCodes(groups, codes)
+          if (!group || group.airports.length <= 1) return encoded
+          return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
+        }
         try {
           const stored = ((await AsyncStorage.getItem(ORIGIN_LS_KEY)) || '').trim()
           if (stored) {
-            setOrigin(stored)
-            setQueryOrigin(stored)
+            const expanded = expandToCity(stored)
+            setOrigin(expanded)
+            setQueryOrigin(expanded)
+            if (expanded !== stored) {
+              void AsyncStorage.setItem(ORIGIN_LS_KEY, expanded).catch(() => undefined)
+            }
             return
           }
         } catch {
           /* ignore */
         }
-        const groups = groupAirportsByCity(list)
+        // Default: Paris + tous ses aéroports
         const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
         if (!paris) return
         const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))

@@ -12,6 +12,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
 import {
+  airportChipLabelFr,
+  airportDisplayNameFr,
   airportSelectionLabel,
   encodeAirportCodes,
   findCityGroupByCodes,
@@ -122,9 +124,24 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
 
   const placeholder = PLACEHOLDER_CITIES[placeholderIndex]
 
+  const allSelected =
+    !!selectedGroup &&
+    selectedCodes.length === selectedGroup.airports.length &&
+    selectedCodes.length > 0
+
+  const triggerSub = (() => {
+    if (!selectedCodes.length) return 'Choisis une ville'
+    if (!selectedGroup) return airportSelectionLabel(value, groups) || 'Départ'
+    if (allSelected && selectedCodes.length > 1) return 'Tous les aéroports'
+    if (selectedCodes.length === 1) {
+      return airportChipLabelFr(selectedCodes[0], selectedGroup.city)
+    }
+    return `${selectedCodes.length} aéroports sélectionnés`
+  })()
+
   const renderCity = (group: CityAirportGroup) => {
-    const codes = group.airports.map((a) => a.code)
     const active = selectedGroup?.key === group.key
+    const n = group.airports.length
     return (
       <Pressable
         onPress={() => selectCity(group)}
@@ -140,8 +157,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             {group.city}
           </Text>
           <Text style={styles.rowMeta} numberOfLines={1}>
-            {group.airports.length} aéroport{group.airports.length > 1 ? 's' : ''} ·{' '}
-            {codes.join(' · ')}
+            {n > 1 ? `${n} aéroports` : '1 aéroport'}
             {group.country ? ` · ${group.country}` : ''}
           </Text>
         </View>
@@ -180,7 +196,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                 {placeholder.city}
               </Text>
               <Text style={styles.triggerSub} numberOfLines={1}>
-                Ville ou code IATA
+                Choisis une ville
               </Text>
             </>
           ) : (
@@ -189,13 +205,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                 {selectedGroup?.city || label}
               </Text>
               <Text style={styles.triggerSub} numberOfLines={1}>
-                {!selectedCodes.length
-                  ? 'Ville ou code IATA'
-                  : selectedGroup &&
-                      selectedCodes.length === selectedGroup.airports.length &&
-                      selectedCodes.length > 1
-                    ? `Tous les aéroports · ${selectedCodes.join(' · ')}`
-                    : selectedCodes.join(' · ')}
+                {triggerSub}
               </Text>
             </>
           )}
@@ -220,6 +230,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           <View style={styles.subRow}>
             {selectedGroup.airports.map((a) => {
               const on = selectedCodes.includes(a.code)
+              const chip = airportChipLabelFr(a.code, selectedGroup.city)
               return (
                 <Pressable
                   key={a.code}
@@ -234,7 +245,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                     {on ? <Text style={styles.tickMark}>✓</Text> : null}
                   </View>
                   <Text style={[styles.subChipText, on && styles.subChipTextOn]}>
-                    {a.code}
+                    {chip}
                   </Text>
                 </Pressable>
               )
@@ -258,15 +269,15 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             </Pressable>
           </View>
           <Text style={styles.sheetHint}>
-            Tape une ville — tous ses aéroports sont sélectionnés (ex. Paris → CDG, ORY, BVA).
+            Choisis une ville — tous ses aéroports sont inclus (tu pourras affiner ensuite).
           </Text>
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Rechercher une ville ou un code…"
+            placeholder="Rechercher une ville…"
             placeholderTextColor={colors.faint}
             autoCorrect={false}
-            autoCapitalize="characters"
+            autoCapitalize="words"
             autoFocus
             style={styles.search}
           />
@@ -276,14 +287,17 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
               style={[styles.row, styles.exactRow]}
             >
               <View style={styles.exactBadge}>
-                <Text style={styles.exactBadgeText}>{exactAirport.code}</Text>
+                <Text style={styles.exactBadgeText} numberOfLines={1}>
+                  1
+                </Text>
               </View>
               <View style={styles.rowBody}>
                 <Text style={styles.rowCity} numberOfLines={1}>
-                  Uniquement {exactAirport.code}
+                  Uniquement {airportChipLabelFr(exactAirport.code, exactAirport.city)}
                 </Text>
                 <Text style={styles.rowMeta} numberOfLines={1}>
-                  {exactAirport.name} · {exactAirport.city}
+                  {airportDisplayNameFr(exactAirport.code, exactAirport.name)}
+                  {exactAirport.city ? ` · ${exactAirport.city}` : ''}
                 </Text>
               </View>
             </Pressable>

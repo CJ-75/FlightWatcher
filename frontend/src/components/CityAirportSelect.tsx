@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Airport } from '../types'
 import {
+  airportChipLabelFr,
   airportSelectionLabel,
   encodeAirportCodes,
   findCityGroupByCodes,
@@ -231,7 +232,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
                       ✓
                     </span>
                   </span>
-                  {a.code}
+                  {airportChipLabelFr(a.code, selectedGroup.city)}
                 </motion.button>
               )
             })}
@@ -246,6 +247,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
           </div>
           {filtered.map((g) => {
             const active = selectedGroup?.key === g.key
+            const n = g.airports.length
             return (
               <button
                 key={g.key}
@@ -264,8 +266,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="font-semibold text-gray-800">{g.city}</div>
                     <div className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                      {g.airports.length} aéroport{g.airports.length > 1 ? 's' : ''} ·{' '}
-                      {g.airports.map((a) => a.code).join(' · ')}
+                      {n > 1 ? `${n} aéroports` : '1 aéroport'}
                       {g.country ? ` · ${g.country}` : ''}
                     </div>
                   </div>
