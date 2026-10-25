@@ -9,6 +9,7 @@ import {
   FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
@@ -84,31 +85,44 @@ function DateCell({
   dow,
   day,
   month,
+  time,
 }: {
   dow: string
   day: number
   month: string
+  time?: string | null
 }) {
   return (
     <View style={styles.dateCell}>
       <Text style={styles.dateDow}>{dow}</Text>
       <Text style={styles.dateDay}>{day}</Text>
       <Text style={styles.dateMonth}>{month}</Text>
+      {time ? <Text style={styles.dateTime}>{time}</Text> : null}
     </View>
   )
 }
 
-function DealDateRange({ outbound, inbound }: { outbound: string; inbound: string }) {
+function DealDateRange({
+  outbound,
+  inbound,
+  outTime,
+  retTime,
+}: {
+  outbound: string
+  inbound: string
+  outTime?: string | null
+  retTime?: string | null
+}) {
   const out = parseDealDate(outbound)
   const ret = parseDealDate(inbound)
   return (
     <View
       style={styles.dateRange}
-      accessibilityLabel={`Du ${out.dow} ${out.day} ${out.month} au ${ret.dow} ${ret.day} ${ret.month}`}
+      accessibilityLabel={`Du ${out.dow} ${out.day} ${out.month}${outTime ? ` ${outTime}` : ''} au ${ret.dow} ${ret.day} ${ret.month}${retTime ? ` ${retTime}` : ''}`}
     >
-      <DateCell {...out} />
-      <View style={styles.dateConnector} />
-      <DateCell {...ret} />
+      <DateCell {...out} time={outTime} />
+      <View style={styles.dateDivider} />
+      <DateCell {...ret} time={retTime} />
     </View>
   )
 }
@@ -186,20 +200,13 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
     !Number.isNaN(Date.parse(deal.fetched_at)) &&
     Date.now() - Date.parse(deal.fetched_at) < 24 * 60 * 60 * 1000
 
+  const baggageLine = (deal.baggage_line || '').trim()
   const pills: string[] = []
   if (deal.flight?.direct) pills.push('Vol direct')
   if (board) pills.push(board)
-  if (deal.baggage_line) pills.push(deal.baggage_line)
-  else if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
+  if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
     pills.push('Annul. OK')
   }
-
-  const flightMeta = [
-    outTime ? `Aller ${outTime}` : null,
-    retTime ? `Retour ${retTime}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
 
   const hotelMeta = [
     rating ? `${rating}/10` : null,
@@ -338,35 +345,40 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
       <Pressable onPress={onPress} style={styles.body}>
         <View style={styles.bodyMain}>
-          <Text style={styles.hookTitle} numberOfLines={2}>
-            {dest}
-            {hook ? ` · ${hook}` : ''}
-          </Text>
-
-          <View>
-            <Text style={styles.price}>
-              {Math.round(deal.price_per_person)} €{' '}
-              <Text style={styles.priceUnit}>/ pers.</Text>
-            </Text>
-            {priceMeta ? (
-              <Text style={styles.priceHint} numberOfLines={1}>
-                {priceMeta}
+          <View style={styles.titleRow}>
+            <View style={styles.titleCol}>
+              <Text style={styles.hookTitle} numberOfLines={2}>
+                {(deal.title || '').trim() &&
+                !(deal.title || '').startsWith('Week-end')
+                  ? deal.title
+                  : dest}
               </Text>
-            ) : null}
-          </View>
-
-          <View>
-            <DealDateRange outbound={deal.dates.outbound} inbound={deal.dates.inbound} />
-            {flightMeta ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {flightMeta}
+              {hook ? (
+                <Text style={styles.hookLine} numberOfLines={2}>
+                  {hook}
+                </Text>
+              ) : null}
+              <Text style={styles.price}>
+                {Math.round(deal.price_per_person)} €{' '}
+                <Text style={styles.priceUnit}>/ pers.</Text>
               </Text>
-            ) : null}
-            {origin ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                depuis {origin}
-              </Text>
-            ) : null}
+              {priceMeta ? (
+                <Text style={styles.priceHint} numberOfLines={1}>
+                  {priceMeta}
+                </Text>
+              ) : null}
+              {origin ? (
+                <Text style={styles.originLine} numberOfLines={1}>
+                  depuis {origin}
+                </Text>
+              ) : null}
+            </View>
+            <DealDateRange
+              outbound={deal.dates.outbound}
+              inbound={deal.dates.inbound}
+              outTime={outTime}
+              retTime={retTime}
+            />
           </View>
 
           <View>
@@ -381,7 +393,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             ) : null}
           </View>
 
-          {pills.length > 0 ? (
+          {pills.length > 0 || baggageLine ? (
             <View style={styles.chips}>
               {pills.slice(0, 3).map((c) => (
                 <View
@@ -395,10 +407,33 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
                   </Text>
                 </View>
               ))}
+              {baggageLine ? (
+                <Pressable
+                  onPress={(e) => {
+                    e?.stopPropagation?.()
+                    Alert.alert('Bagages', baggageLine)
+                  }}
+                  hitSlop={8}
+                  style={styles.bagBtn}
+                  accessibilityLabel={baggageLine}
+                >
+                  <View style={styles.bagGlyph}>
+                    <View style={styles.bagHandle} />
+                    <View style={styles.bagBody} />
+                  </View>
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
 
-          <Text style={styles.softCta}>Voir l’offre →</Text>
+          <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Voir l’offre"
+          >
+            <Text style={styles.ctaText}>Voir l’offre</Text>
+          </Pressable>
         </View>
       </Pressable>
     </View>
@@ -481,69 +516,108 @@ const styles = StyleSheet.create({
   },
   body: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 14 },
   bodyMain: { gap: 10 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  titleCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
   hookTitle: {
     fontFamily: fonts.extrabold,
     fontSize: 18,
     color: colors.ink,
     letterSpacing: -0.3,
+    lineHeight: 22,
   },
-  price: { ...type.price, fontSize: 26 },
+  hookLine: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
+    lineHeight: 17,
+  },
+  price: { ...type.price, fontSize: 26, marginTop: 2 },
   priceUnit: {
     fontFamily: fonts.bold,
     fontSize: 13,
     color: colors.inkSoft,
   },
   priceHint: { ...type.caption, marginTop: 3, fontSize: 11, lineHeight: 15 },
-  softCta: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.primary,
+  originLine: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.muted,
     marginTop: 2,
+  },
+  cta: {
+    marginTop: 2,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  ctaText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.white,
   },
   dateRange: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  dateConnector: {
-    width: 10,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.primaryMuted,
-  },
-  dateCell: {
-    width: 48,
+    alignItems: 'stretch',
     borderRadius: radius.sm,
     backgroundColor: colors.primarySoft,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.primaryMuted,
     overflow: 'hidden',
+  },
+  dateDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: colors.primaryMuted,
+  },
+  dateCell: {
+    width: 52,
+    paddingHorizontal: 4,
+    paddingVertical: 5,
     alignItems: 'center',
   },
   dateDow: {
-    alignSelf: 'stretch',
     textAlign: 'center',
     fontFamily: fonts.bold,
-    fontSize: 9,
-    letterSpacing: 0.6,
+    fontSize: 8,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
     color: colors.primaryInk,
-    backgroundColor: colors.primaryMuted,
-    paddingVertical: 3,
-    opacity: 0.9,
+    opacity: 0.75,
   },
   dateDay: {
     fontFamily: fonts.extrabold,
-    fontSize: 18,
+    fontSize: 17,
     color: colors.primaryInk,
-    lineHeight: 22,
-    marginTop: 4,
+    lineHeight: 20,
+    marginTop: 2,
   },
   dateMonth: {
     fontFamily: fonts.semibold,
-    fontSize: 10,
+    fontSize: 9,
     color: colors.primary,
-    marginBottom: 5,
     marginTop: 1,
+  },
+  dateTime: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    color: colors.primaryInk,
+    marginTop: 4,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.primaryMuted,
+    alignSelf: 'stretch',
+    textAlign: 'center',
   },
   route: {
     fontFamily: fonts.semibold,
@@ -560,6 +634,38 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 14,
     color: colors.ink,
+  },
+  bagBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bagGlyph: {
+    width: 12,
+    height: 13,
+    alignItems: 'center',
+  },
+  bagHandle: {
+    width: 7,
+    height: 3,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    borderColor: colors.inkSoft,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  bagBody: {
+    width: 12,
+    height: 9,
+    marginTop: -0.5,
+    borderWidth: 1.5,
+    borderColor: colors.inkSoft,
+    borderRadius: 2,
   },
   chips: {
     flexDirection: 'row',

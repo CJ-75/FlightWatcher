@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { dealAdults, dealBadgeLabels } from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
@@ -68,14 +69,64 @@ function distanceLabel(deal: TravelDeal) {
   return `${(m / 1000).toFixed(1)} km du centre`
 }
 
-function formatDateSpan(outbound: string, inbound: string) {
+function DealDateRange({
+  outbound,
+  inbound,
+  outTime,
+  retTime,
+}: {
+  outbound: string
+  inbound: string
+  outTime?: string | null
+  retTime?: string | null
+}) {
   const out = parseDealDate(outbound)
   const ret = parseDealDate(inbound)
-  const sameMonth = out.month === ret.month
-  if (sameMonth) {
-    return `${out.dow}. ${out.day} → ${ret.dow}. ${ret.day} ${ret.month}`
-  }
-  return `${out.dow}. ${out.day} ${out.month} → ${ret.dow}. ${ret.day} ${ret.month}`
+  const label = [
+    `${out.dow} ${out.day} ${out.month}${outTime ? ` ${outTime}` : ''}`,
+    `${ret.dow} ${ret.day} ${ret.month}${retTime ? ` ${retTime}` : ''}`,
+  ].join(' → ')
+  return (
+    <div
+      className="shrink-0 inline-flex items-stretch rounded-xl bg-primary-50 border border-primary-100 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+      aria-label={label}
+    >
+      <DateCell {...out} time={outTime} />
+      <div className="w-px self-stretch bg-primary-200/80" aria-hidden />
+      <DateCell {...ret} time={retTime} />
+    </div>
+  )
+}
+
+function DateCell({
+  dow,
+  day,
+  month,
+  time,
+}: {
+  dow: string
+  day: number
+  month: string
+  time?: string | null
+}) {
+  return (
+    <div className="w-[3.35rem] px-1 py-1 text-center">
+      <p className="text-[8px] font-bold uppercase tracking-[0.05em] text-primary-700/70 leading-none">
+        {dow}
+      </p>
+      <p className="text-[1.05rem] font-black text-primary-900 tabular-nums leading-none mt-0.5 tracking-tight">
+        {day}
+      </p>
+      <p className="text-[9px] font-semibold text-primary-600/85 leading-none mt-0.5">
+        {month}
+      </p>
+      {time ? (
+        <p className="text-[9px] font-bold text-primary-800 tabular-nums leading-none mt-1 pt-1 border-t border-primary-100/90">
+          {time}
+        </p>
+      ) : null}
+    </div>
+  )
 }
 
 function isFreshDeal(fetchedAt?: string | null) {
@@ -112,6 +163,76 @@ function SoftChip({ children, tone = 'neutral' }: { children: string; tone?: 'ne
       }`}
     >
       {children}
+    </span>
+  )
+}
+
+function BagSvg() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M6 8V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" />
+      <rect x="4" y="8" width="16" height="13" rx="2" />
+      <path d="M10 12h4" />
+    </svg>
+  )
+}
+
+/** Icon-only baggage; full policy on click (mobile-friendly). */
+function BaggageTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <span ref={rootRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-label={text}
+        aria-expanded={open}
+        title={text}
+        onClick={(e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          setOpen((v) => !v)
+        }}
+        className="inline-flex items-center justify-center rounded-lg border border-line bg-canvas text-ink-soft w-7 h-7 hover:border-primary-200 hover:text-primary-700"
+      >
+        <BagSvg />
+      </button>
+      {open ? (
+        <span
+          role="tooltip"
+          className="absolute z-20 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 max-w-[70vw] rounded-xl border border-line bg-white px-3 py-2 text-[11px] font-medium text-ink shadow-lift leading-snug"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {text}
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -172,23 +293,14 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   const fresh = isFreshDeal(deal.fetched_at)
   const hook = (deal.hook || '').trim()
 
+  const baggageLine = (deal.baggage_line || '').trim()
   const pills: { label: string; tone: 'neutral' | 'good' }[] = []
   if (deal.flight?.direct) pills.push({ label: 'Vol direct', tone: 'good' })
   if (board) pills.push({ label: board, tone: 'neutral' })
-  if (deal.baggage_line) {
-    pills.push({ label: deal.baggage_line, tone: 'neutral' })
-  } else if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
+  if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
     pills.push({ label: 'Annul. gratuite', tone: 'good' })
   }
   const showPills = pills.slice(0, 3)
-
-  const dateLine = formatDateSpan(deal.dates.outbound, deal.dates.inbound)
-  const timesLine = [
-    outTime ? `Aller ${outTime}` : null,
-    retTime ? `Retour ${retTime}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
 
   const priceMeta = [
     `${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`,
@@ -271,36 +383,41 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
         ) : null}
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0 p-3.5 sm:p-4 space-y-2.5">
-        <div className="min-w-0">
-          <p className="text-lg sm:text-xl font-extrabold text-ink tracking-tight truncate">
-            {city}
-            {hook ? (
-              <span className="font-semibold text-ink-soft"> · {hook}</span>
-            ) : null}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-2xl sm:text-[1.75rem] font-extrabold text-primary-500 tracking-tight leading-none tabular-nums">
-            {Math.round(deal.price_per_person)} €{' '}
-            <span className="text-sm font-bold text-ink-soft">/ pers.</span>
-          </p>
-          {priceMeta ? (
-            <p className="text-[11px] text-muted font-medium mt-1.5 leading-snug whitespace-nowrap overflow-hidden text-ellipsis">
-              {priceMeta}
+      <div className="flex flex-col flex-1 min-h-0 p-3.5 sm:p-4 gap-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-lg sm:text-xl font-extrabold text-ink tracking-tight leading-snug line-clamp-2">
+              {(deal.title || '').trim() &&
+              !(deal.title || '').startsWith('Week-end')
+                ? deal.title
+                : city}
             </p>
-          ) : null}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-ink truncate">{dateLine}</p>
-          {timesLine ? (
-            <p className="text-[11px] text-muted mt-0.5 truncate">{timesLine}</p>
-          ) : null}
-          {origin ? (
-            <p className="text-[11px] text-muted mt-0.5 truncate">depuis {origin}</p>
-          ) : null}
+            {hook ? (
+              <p className="text-sm font-semibold text-ink-soft leading-snug line-clamp-2">
+                {hook}
+              </p>
+            ) : null}
+            <div>
+              <p className="text-2xl sm:text-[1.75rem] font-extrabold text-primary-500 tracking-tight leading-none tabular-nums">
+                {Math.round(deal.price_per_person)} €{' '}
+                <span className="text-sm font-bold text-ink-soft">/ pers.</span>
+              </p>
+              {priceMeta ? (
+                <p className="text-[11px] text-muted font-medium mt-1.5 leading-snug whitespace-nowrap overflow-hidden text-ellipsis">
+                  {priceMeta}
+                </p>
+              ) : null}
+              {origin ? (
+                <p className="text-[11px] text-muted mt-1 truncate">depuis {origin}</p>
+              ) : null}
+            </div>
+          </div>
+          <DealDateRange
+            outbound={deal.dates.outbound}
+            inbound={deal.dates.inbound}
+            outTime={outTime}
+            retTime={retTime}
+          />
         </div>
 
         <div className="min-w-0">
@@ -313,19 +430,29 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
           ) : null}
         </div>
 
-        {showPills.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
+        {showPills.length > 0 || baggageLine ? (
+          <div className="flex flex-wrap items-center gap-1.5">
             {showPills.map((p) => (
               <SoftChip key={p.label} tone={p.tone}>
                 {p.label}
               </SoftChip>
             ))}
+            {baggageLine ? <BaggageTip text={baggageLine} /> : null}
           </div>
         ) : null}
 
-        <p className="pt-0.5 text-xs font-semibold text-primary-600 group-hover:text-primary-700">
-          {t('deals.viewOfferSoft')}
-        </p>
+        <div className="mt-auto pt-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onClick()
+            }}
+            className="w-full inline-flex items-center justify-center rounded-2xl bg-primary-500 hover:bg-primary-600 text-white font-bold text-sm min-h-[44px] px-4 shadow-sm active:scale-[0.98] transition-all"
+          >
+            {t('deals.viewOffer')}
+          </button>
+        </div>
       </div>
     </motion.article>
   )

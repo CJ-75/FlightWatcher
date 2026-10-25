@@ -419,6 +419,24 @@ async def job_refresh_hotel_rates(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/jobs/send-origin-alert-digests")
+async def job_send_origin_alert_digests(
+    authorization: Optional[str] = Header(None),
+    dry_run: bool = Query(False),
+    force: bool = Query(False, description="Ignore 6-day cooldown"),
+):
+    """v4 Lot E — weekly digests for deal_origin_alerts (cron Thursday)."""
+    require_cron(authorization)
+    try:
+        from deals.origin_alerts import run_origin_alert_digests
+
+        return run_origin_alert_digests(_svc(), dry_run=dry_run, force=force)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/deals/jobs/check-price-alerts")
 async def job_check_price_alerts(
     authorization: Optional[str] = Header(None),

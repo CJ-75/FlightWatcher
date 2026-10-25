@@ -414,9 +414,19 @@ export function DealDetailModal({
                 </span>
               ) : null}
                 <h2 className="text-2xl sm:text-[1.75rem] font-black text-ink tracking-tight leading-tight">
-                  {deal.city}
-                  <span className="text-slate-400 font-bold text-lg sm:text-xl"> · {deal.country}</span>
+                  {(deal.title || '').trim() && !(deal.title || '').startsWith('Week-end')
+                    ? deal.title
+                    : deal.city}
+                  {deal.country ? (
+                    <span className="text-slate-400 font-bold text-lg sm:text-xl">
+                      {' '}
+                      · {deal.country}
+                    </span>
+                  ) : null}
                 </h2>
+                {deal.hook ? (
+                  <p className="text-sm font-semibold text-ink-soft mt-1">{deal.hook}</p>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap items-end justify-between gap-4">

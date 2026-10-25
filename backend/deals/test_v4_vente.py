@@ -1,7 +1,12 @@
 """Unit tests for v4 vente helpers (no network)."""
 from __future__ import annotations
 
-from deals.community_list import compute_deal_hook, compute_why_good, diversify_wall_deals
+from deals.community_list import (
+    compute_deal_hook,
+    compute_human_title,
+    compute_why_good,
+    diversify_wall_deals,
+)
 from deals.pool_photos import extract_main_photo, pick_cover_photo
 
 
@@ -77,3 +82,21 @@ def test_extract_main_photo_from_raw_prefers_good():
         }
     )
     assert photo and "lobby" in photo
+
+
+def test_human_title_data_only():
+    title = compute_human_title(
+        {
+            "city": "Lisbonne",
+            "hotel": {"stars": 4, "rating": 9.4, "board": "BI"},
+            "flight": {"direct": True},
+            "nights": 2,
+        }
+    )
+    assert title
+    assert title.startswith("Lisbonne")
+    assert "4★" in title
+    assert "9.4" in title
+    assert "vol direct" in title
+    assert "petit-déj" in title
+    assert "partent" not in title.lower()

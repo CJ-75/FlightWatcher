@@ -28,6 +28,32 @@ const springConfig = {
 
 const ORIGIN_LS_KEY = 'fw_deals_origin'
 type DurationTab = 'weekend' | 'short' | 'week'
+type QuickFilter =
+  | 'under150'
+  | 'breakfast'
+  | 'refund'
+  | 'direct'
+  | 'thisMonth'
+
+function hasBreakfast(deal: TravelDeal): boolean {
+  const b = String(deal.board || deal.hotel?.board || '').toUpperCase()
+  return b.includes('BI') || /BREAKFAST|PETIT/.test(b)
+}
+
+function matchesQuick(deal: TravelDeal, q: QuickFilter): boolean {
+  if (q === 'under150') return (deal.price_per_person || 0) < 150
+  if (q === 'breakfast') return hasBreakfast(deal)
+  if (q === 'refund') return Boolean(deal.hotel?.refundable)
+  if (q === 'direct') return Boolean(deal.flight?.direct)
+  if (q === 'thisMonth') {
+    const out = deal.dates?.outbound
+    if (!out) return false
+    const d = new Date(out + 'T12:00:00')
+    const now = new Date()
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  }
+  return true
+}
 
 function readStoredOrigin(): string {
   try {
@@ -81,10 +107,20 @@ export function DealsTab() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [originChipOpen, setOriginChipOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
+  const [quickFilters, setQuickFilters] = useState<Set<QuickFilter>>(new Set())
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originDefaultedRef = useRef(false)
+
+  const toggleQuick = (id: QuickFilter) => {
+    setQuickFilters((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     void fetch('/api/config')
@@ -277,20 +313,32 @@ export function DealsTab() {
         return true
       })
     }
-    return list.filter((d) => nightsInDuration(d.nights, durationTab))
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
+    list = list.filter((d) => nightsInDuration(d.nights, durationTab))
+    if (quickFilters.size > 0) {
+      list = list.filter((d) =>
+        [...quickFilters].every((q) => matchesQuick(d, q)),
+      )
+    }
+    return list
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab, quickFilters])
 
   /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(() => {
     if (!hasWallFilter) return []
-    return deals
+    let list = deals
       .filter((d) => {
         if (queryOrigin && d.flags?.match_origin === false) return true
         if (queryDestination && d.flags?.match_destination === false) return true
         return false
       })
       .filter((d) => nightsInDuration(d.nights, durationTab))
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab])
+    if (quickFilters.size > 0) {
+      list = list.filter((d) =>
+        [...quickFilters].every((q) => matchesQuick(d, q)),
+      )
+    }
+    return list
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, durationTab, quickFilters])
 
   const gridDeals = useMemo(() => {
     if (sort === 'recommended') return matchedDeals
@@ -304,6 +352,14 @@ export function DealsTab() {
     { id: 'weekend', label: t('deals.durationWeekend') },
     { id: 'short', label: t('deals.durationShort') },
     { id: 'week', label: t('deals.durationWeek') },
+  ]
+
+  const quickFilterDefs: { id: QuickFilter; label: string }[] = [
+    { id: 'under150', label: t('deals.quickUnder150') },
+    { id: 'breakfast', label: t('deals.quickBreakfast') },
+    { id: 'refund', label: t('deals.quickRefund') },
+    { id: 'direct', label: t('deals.quickDirect') },
+    { id: 'thisMonth', label: t('deals.quickThisMonth') },
   ]
 
   return (
@@ -351,6 +407,26 @@ export function DealsTab() {
             {tab.label}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {quickFilterDefs.map((f) => {
+          const on = quickFilters.has(f.id)
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => toggleQuick(f.id)}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-bold border transition-colors ${
+                on
+                  ? 'bg-primary-50 text-primary-800 border-primary-200'
+                  : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
+              }`}
+            >
+              {f.label}
+            </button>
+          )
+        })}
       </div>
 
       {originChipOpen ? (

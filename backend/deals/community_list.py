@@ -229,7 +229,7 @@ def row_to_travel_deal(
     deal_out: Dict[str, Any] = {
         "id": row.get("deal_key"),
         "deal_key": row.get("deal_key"),
-        "title": f"Week-end à {city}" if city else "Deal",
+        "title": f"Week-end à {city}" if city else "Deal",  # overwritten by compute_human_title
         "city": city,
         "country": country,
         # Prefer hôtel photo so same-city deals don't share one city stock image
@@ -309,6 +309,9 @@ def row_to_travel_deal(
         "fetched_at": row.get("last_verified_at"),
         "served_city_id": row.get("served_city_id"),
     }
+    human = compute_human_title(deal_out)
+    if human:
+        deal_out["title"] = human
     hook = compute_deal_hook(deal_out)
     if hook:
         deal_out["hook"] = hook.get("text")
@@ -759,6 +762,50 @@ def diversify_wall_deals(
         if country:
             country_n[country] = country_n.get(country, 0) + 1
     return out
+
+
+def compute_human_title(deal: Dict[str, Any]) -> Optional[str]:
+    """
+    Data-only human title (Lot F). No invention, no urgency, no stock claims.
+    Ex: « Lisbonne en 4★ noté 9,4, vol direct, petit-déj »
+    """
+    city = str(deal.get("city") or "").strip()
+    if not city:
+        return None
+    bits: List[str] = []
+    hotel = deal.get("hotel") if isinstance(deal.get("hotel"), dict) else {}
+    try:
+        stars = int(round(float(hotel.get("stars") or deal.get("hotel_stars") or 0)))
+    except (TypeError, ValueError):
+        stars = 0
+    if stars >= 3:
+        bits.append(f"en {stars}★")
+    try:
+        rating = float(hotel.get("rating")) if hotel.get("rating") is not None else None
+    except (TypeError, ValueError):
+        rating = None
+    if rating is not None and rating >= 8.0:
+        bits.append(f"noté {rating:.1f}")
+    flight = deal.get("flight") or {}
+    if flight.get("direct"):
+        bits.append("vol direct")
+    board = str(hotel.get("board") or deal.get("board") or "").upper()
+    if "BI" in board or "BREAKFAST" in board or "PETIT" in board:
+        bits.append("petit-déj")
+    elif "AI" in board or "ALL" in board:
+        bits.append("tout inclus")
+    nights = int(deal.get("nights") or 0)
+    if nights >= 1 and not bits:
+        bits.append(f"{nights} nuit{'s' if nights > 1 else ''}")
+    return _join_title(city, bits)
+
+
+def _join_title(city: str, bits: List[str]) -> str:
+    if not bits:
+        return city
+    if len(bits) == 1:
+        return f"{city} {bits[0]}"
+    return f"{city} {', '.join(bits[:-1])}, {bits[-1]}"
 
 
 def compute_deal_hook(deal: Dict[str, Any]) -> Optional[Dict[str, str]]:
