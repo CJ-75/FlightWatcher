@@ -17,13 +17,17 @@ from deals.hotel_pool import (
 
 
 class TestSeed(unittest.TestCase):
-    def test_ten_destinations(self):
-        self.assertEqual(len(DESTINATIONS_SEED), 10)
+    def test_curated_destinations(self):
+        # classics(10) + P0(10) + P1(16) + P2(7) = 43
+        self.assertGreaterEqual(len(DESTINATIONS_SEED), 40)
         slugs = [d["slug"] for d in DESTINATIONS_SEED]
         self.assertEqual(len(slugs), len(set(slugs)))
+        iatas = [d["iata_arrival"] for d in DESTINATIONS_SEED]
+        self.assertEqual(len(iatas), len(set(iatas)))
         for d in DESTINATIONS_SEED:
             self.assertGreaterEqual(d["pool_radius_m"], 1000)
             self.assertTrue(d["iata_arrival"])
+            self.assertIn(d.get("wave"), ("classic", "P0", "P1", "P2"))
 
 
 class TestNormalizeRating(unittest.TestCase):

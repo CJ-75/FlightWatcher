@@ -137,6 +137,96 @@ def rank_seed_cities(
     return out
 
 
+def select_catalog_rows(
+    ranked: Sequence[Dict[str, Any]], *, size: int
+) -> List[Dict[str, Any]]:
+    """Always keep every pinned city, then fill up to size."""
+    pinned = [r for r in ranked if r.get("pinned") and not r.get("excluded")]
+    rest = [r for r in ranked if not r.get("pinned") and not r.get("excluded")]
+    want = max(int(size), len(pinned))
+    return (pinned + rest)[:want]
+
+
+def pin_trend_catalog_cities(supabase) -> Dict[str, Any]:
+    """
+    Mark TREND_PIN_IATAS as pinned on seed_catalog_cities (and ensure rows exist).
+    Call after upsert_city_mapping so served_cities are present.
+    """
+    from deals.destinations_seed import TREND_PIN_IATAS
+
+    pins = sorted(TREND_PIN_IATAS)
+    if not pins:
+        return {"ok": True, "pinned": 0}
+    try:
+        cities = (
+            supabase.table("served_cities")
+            .select("id, primary_iata, city_name, verified")
+            .in_("primary_iata", pins)
+            .execute()
+        )
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    now = datetime.now(timezone.utc).isoformat()
+    pinned_n = 0
+    missing: List[str] = []
+    found_iatas = {
+        str(c.get("primary_iata") or "").upper() for c in (cities.data or [])
+    }
+    for code in pins:
+        if code not in found_iatas:
+            missing.append(code)
+
+    for c in cities.data or []:
+        cid = c.get("id")
+        if not cid:
+            continue
+        # Ensure verified for curated destinations
+        if not c.get("verified"):
+            try:
+                supabase.table("served_cities").update(
+                    {"verified": True, "updated_at": now}
+                ).eq("id", cid).execute()
+            except Exception as e:
+                logger.warning("verify city %s: %s", cid, e)
+        payload = {
+            "served_city_id": cid,
+            "pinned": True,
+            "excluded": False,
+            "computed_at": now,
+        }
+        try:
+            # Preserve existing rank/supply if present
+            existing = (
+                supabase.table("seed_catalog_cities")
+                .select("seed_rank,n_origins_fr,hotel_supply")
+                .eq("served_city_id", cid)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                payload["seed_rank"] = existing.data[0].get("seed_rank") or 0
+                payload["n_origins_fr"] = existing.data[0].get("n_origins_fr") or 1
+                payload["hotel_supply"] = existing.data[0].get("hotel_supply") or 0
+            else:
+                payload["seed_rank"] = 0.5
+                payload["n_origins_fr"] = 1
+                payload["hotel_supply"] = 0
+            supabase.table("seed_catalog_cities").upsert(
+                payload, on_conflict="served_city_id"
+            ).execute()
+            pinned_n += 1
+        except Exception as e:
+            logger.warning("pin catalog %s: %s", cid, e)
+
+    return {
+        "ok": True,
+        "pinned": pinned_n,
+        "requested": len(pins),
+        "missing_iata": missing,
+    }
+
+
 def build_seed_catalog(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, Any]:
     """
     Auto catalog from verified served cities.
@@ -226,9 +316,28 @@ def build_seed_catalog(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[s
             }
         )
 
-    ranked = rank_seed_cities(raw_rows)[: cfg.seed_catalog_size]
+    ranked = rank_seed_cities(raw_rows)
+    selected = select_catalog_rows(ranked, size=cfg.seed_catalog_size)
+    selected_ids = {str(r["served_city_id"]) for r in selected}
+
+    # Drop unselected non-pinned leftovers so catalog stays focused
+    try:
+        old = (
+            supabase.table("seed_catalog_cities")
+            .select("served_city_id, pinned")
+            .execute()
+        )
+        for row in old.data or []:
+            sid = str(row.get("served_city_id") or "")
+            if sid and sid not in selected_ids and not row.get("pinned"):
+                supabase.table("seed_catalog_cities").delete().eq(
+                    "served_city_id", sid
+                ).execute()
+    except Exception as e:
+        logger.warning("seed catalog prune: %s", e)
+
     upserted = 0
-    for r in ranked:
+    for r in selected:
         payload = {
             "served_city_id": r["served_city_id"],
             "seed_rank": r["seed_rank"],
@@ -250,9 +359,15 @@ def build_seed_catalog(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[s
         "ok": True,
         "candidates": len(raw_rows),
         "catalog_size": upserted,
+        "pinned": sum(1 for r in selected if r.get("pinned")),
         "top": [
-            {"city": r.get("city_name"), "iata": r.get("primary_iata"), "rank": r["seed_rank"]}
-            for r in ranked[:10]
+            {
+                "city": r.get("city_name"),
+                "iata": r.get("primary_iata"),
+                "rank": r["seed_rank"],
+                "pinned": bool(r.get("pinned")),
+            }
+            for r in selected[:15]
         ],
     }
 
