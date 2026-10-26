@@ -439,13 +439,6 @@ export function SimpleSearch({
         className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-4"
       >
         <LoadingSkeleton />
-        <div className="text-center max-w-sm space-y-1.5">
-          <p className="text-sm font-bold text-ink">Exploration des destinations…</p>
-          <p className="text-xs text-muted leading-relaxed">
-            On interroge plusieurs compagnies (souvent 10–20 s pour plusieurs aéroports
-            de Paris). Les premiers bons plans s’affichent dès qu’ils arrivent.
-          </p>
-        </div>
       </motion.div>
     );
   }
