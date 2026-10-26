@@ -27,76 +27,18 @@ export function HotelUpsellLine({
       return
     }
     let cancelled = false
-    let pollTimer: ReturnType<typeof setTimeout> | undefined
 
     const run = async () => {
+      // Cache-only — never start LiteAPI fetch on Search/booking teaser.
+      // Hotel rates are generated when the user opens « ajouter un hôtel ».
       try {
         const { results } = await getApiClient().lookupHotelUpsell([
           { iata, checkin, checkout, participants },
         ])
         if (cancelled) return
         const first = results?.[0] || null
-        setResult(first)
-
-        if (first?.status === 'miss') {
-          const fetched = await getApiClient().fetchHotelUpsell({
-            iata,
-            checkin,
-            checkout,
-            participants,
-          })
-          if (cancelled) return
-          setResult(fetched)
-          if (fetched.status === 'pending' && fetched.job_id) {
-            const poll = async (n: number) => {
-              if (cancelled || n > 12) return
-              try {
-                const job = await getApiClient().getHotelUpsellJob(fetched.job_id!)
-                if (job.done && job.status === 'ready' && job.hotel_pp != null) {
-                  setResult({
-                    ...fetched,
-                    status: 'ready',
-                    hotel_pp: job.hotel_pp,
-                    hotel_name: job.hotel_name,
-                    hotel_id: job.hotel_id,
-                  })
-                  return
-                }
-                if (job.done) {
-                  setResult({ ...fetched, status: 'unavailable', reason: job.status })
-                  return
-                }
-              } catch {
-                /* ignore */
-              }
-              pollTimer = setTimeout(() => void poll(n + 1), 1500)
-            }
-            pollTimer = setTimeout(() => void poll(0), 1200)
-          } else if (fetched.status === 'pending') {
-            // DB pending — re-lookup a few times
-            const pollLookup = async (n: number) => {
-              if (cancelled || n > 10) return
-              try {
-                const again = await getApiClient().lookupHotelUpsell([
-                  { iata, checkin, checkout, participants },
-                ])
-                const r = again.results?.[0]
-                if (r?.status === 'ready') {
-                  setResult(r)
-                  return
-                }
-                if (r?.status === 'unavailable') {
-                  setResult(r)
-                  return
-                }
-              } catch {
-                /* ignore */
-              }
-              pollTimer = setTimeout(() => void pollLookup(n + 1), 1500)
-            }
-            pollTimer = setTimeout(() => void pollLookup(0), 1200)
-          }
-        }
+        if (first?.status === 'ready') setResult(first)
+        else setResult(null)
       } catch {
         if (!cancelled) setResult(null)
       }
@@ -105,7 +47,6 @@ export function HotelUpsellLine({
     void run()
     return () => {
       cancelled = true
-      if (pollTimer) clearTimeout(pollTimer)
     }
   }, [iata, checkin, checkout, participants])
 

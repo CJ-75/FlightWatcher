@@ -44,7 +44,6 @@ import {
 import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { getAppConfig } from './utils/configCache'
-import { prefetchHotelCacheForTrips } from './utils/prefetchHotelCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import {
@@ -884,8 +883,7 @@ function Dashboard() {
     // Scroll after results + collapsed form paint (see effect below)
     if (results.length > 0) {
       shouldScrollToResults.current = true
-      // Hôtels en fond après paint vols — lookup cache only, jamais sur /inspire
-      prefetchHotelCacheForTrips(results, searchInfo?.passengers || 1)
+      // Pas de prefetch hôtel ici — tarifs LiteAPI seulement si l'user compose un hôtel
     }
   }
 

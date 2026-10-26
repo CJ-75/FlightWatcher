@@ -11,7 +11,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, Future, wait, FIRST_COMPLETED
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from api_models import DateAvecHoraire, TripResponse
 from providers.base import SearchParams
@@ -147,6 +147,14 @@ def _merge_deadline_s() -> float:
         return 8.0
 
 
+def _stream_deadline_s() -> float:
+    """Longer wall for progressive Search — TP first, Ryanair can still land."""
+    try:
+        return max(10.0, float(os.getenv("SEARCH_STREAM_DEADLINE_S", "28")))
+    except (TypeError, ValueError):
+        return 28.0
+
+
 def _merge_grace_s() -> float:
     """After first provider returns, wait this long for the second."""
     try:
@@ -256,12 +264,21 @@ def _race_providers(
             if first_done_at is not None and batches:
                 grace_left = grace_s - (time.monotonic() - first_done_at)
                 if grace_left <= 0:
-                    slog(
-                        f"⏱ merge grace {grace_s:.1f}s after first provider — "
-                        f"return ({', '.join(sorted(providers_done)) or '?'})"
+                    # Never early-drop Ryanair while wall deadline remains — TP is
+                    # fast; cutting after grace was returning Search without Ryanair.
+                    ryanair_pending = any(
+                        futures[f] == "ryanair" for f in pending
                     )
-                    break
-                timeout = min(remaining, grace_left, 0.35)
+                    if ryanair_pending and remaining > 0.2:
+                        timeout = min(remaining, 0.35)
+                    else:
+                        slog(
+                            f"⏱ merge grace {grace_s:.1f}s after first provider — "
+                            f"return ({', '.join(sorted(providers_done)) or '?'})"
+                        )
+                        break
+                else:
+                    timeout = min(remaining, grace_left, 0.35)
             else:
                 timeout = min(max(remaining, 0.05), 0.5)
 
@@ -465,6 +482,180 @@ def search_roundtrips(
         capped = merged[:cap]
         _maybe_record_observations(capped, record_prices=record_prices)
         return capped, total_queries
+
+
+def search_roundtrips_stream(
+    aeroport_depart: str,
+    dates_depart: List[DateAvecHoraire],
+    dates_retour: List[DateAvecHoraire],
+    budget_max: int = 200,
+    limite_allers: int = 50,
+    destinations_exclues: Optional[List[str]] = None,
+    destinations_incluses: Optional[List[str]] = None,
+    record_prices: bool = True,
+    passengers: int = 1,
+    direct: bool = False,
+    providers: Optional[Sequence[str]] = None,
+    ryanair_purpose: Optional[str] = None,
+) -> Iterator[Dict[str, Any]]:
+    """
+    Progressive Search: yield each (origin × provider) batch as soon as it finishes.
+
+    No preferred provider — whichever of Ryanair / Travelpayouts / … answers first
+    is served first; others append. Race wait runs in a background thread so the
+    consumer (enrich / HTTP) never stalls other providers.
+    """
+    import queue as _queue
+
+    from scan_log import slog
+
+    origins = parse_origins(aeroport_depart)
+    active = _active_providers(only=providers)
+    purpose = ryanair_purpose or PURPOSE_ORGANIC
+    use_fast = purpose in (PURPOSE_ORGANIC, "organic", "click", "user", "")
+    deadline = _stream_deadline_s()
+    per_origin_limit = max(
+        12,
+        (limite_allers or 50) // max(1, len(origins)),
+    )
+
+    if not active:
+        yield {
+            "provider": "_done",
+            "origin": ",".join(origins),
+            "trips": [],
+            "nq": 0,
+            "done": True,
+        }
+        return
+
+    out_q: _queue.Queue = _queue.Queue()
+    _SENTINEL = object()
+
+    def _runner() -> None:
+        futures: dict[Future, Tuple[str, str]] = {}
+        start = time.monotonic()
+        total_nq = 0
+        all_trips: List[TripResponse] = []
+        try:
+            with fast_search_path(use_fast):
+                workers = min(len(origins) * len(active), 8)
+                with ThreadPoolExecutor(max_workers=max(2, workers)) as pool:
+                    for origin in origins:
+                        params = SearchParams(
+                            aeroport_depart=origin,
+                            dates_depart=dates_depart,
+                            dates_retour=dates_retour,
+                            budget_max=budget_max,
+                            limite_allers=per_origin_limit,
+                            destinations_exclues=destinations_exclues or [],
+                            destinations_incluses=destinations_incluses,
+                            passengers=passengers,
+                            direct=direct,
+                            record_prices=record_prices,
+                            ryanair_purpose=purpose,
+                        )
+                        for p in active:
+                            fut = pool.submit(p.search_roundtrips, params)
+                            futures[fut] = (origin, getattr(p, "name", "?"))
+
+                    pending = set(futures.keys())
+                    slog(
+                        f"📡 stream search {','.join(origins)} — "
+                        f"{len(pending)} jobs, deadline={deadline:.0f}s "
+                        f"(first ready wins)"
+                    )
+
+                    while pending:
+                        left = deadline - (time.monotonic() - start)
+                        if left <= 0:
+                            slog(
+                                f"⏱ stream deadline — {len(pending)} job(s) still running"
+                            )
+                            break
+                        done, pending = wait(
+                            pending,
+                            timeout=min(max(left, 0.05), 0.4),
+                            return_when=FIRST_COMPLETED,
+                        )
+                        for fut in done:
+                            origin, name = futures[fut]
+                            try:
+                                trips, nq = fut.result()
+                                n = len(trips or [])
+                                total_nq += int(nq or 0)
+                                if trips:
+                                    all_trips.extend(trips)
+                                slog(
+                                    f"✅ stream [{name}@{origin}] {n} A/R ({nq} req)"
+                                )
+                                out_q.put(
+                                    {
+                                        "provider": name,
+                                        "origin": origin,
+                                        "trips": list(trips or []),
+                                        "nq": int(nq or 0),
+                                    }
+                                )
+                            except Exception as e:
+                                slog(f"❌ stream [{name}@{origin}] {e}")
+                                out_q.put(
+                                    {
+                                        "provider": name,
+                                        "origin": origin,
+                                        "trips": [],
+                                        "nq": 0,
+                                        "error": str(e)[:200],
+                                    }
+                                )
+
+                    for fut in pending:
+                        origin, name = futures[fut]
+                        threading.Thread(
+                            target=_drain_late,
+                            args=(fut, f"{name}@{origin}"),
+                            daemon=True,
+                            name=f"fw-late-{name}-{origin}",
+                        ).start()
+
+            if record_prices and all_trips:
+                merged = merge_trips([all_trips])
+                cap = max(limite_allers or 50, 30) * max(1, len(origins))
+                _maybe_record_observations(merged[:cap], record_prices=True)
+
+            out_q.put(
+                {
+                    "provider": "_done",
+                    "origin": ",".join(origins),
+                    "trips": [],
+                    "nq": total_nq,
+                    "done": True,
+                }
+            )
+        except Exception as e:
+            slog(f"❌ stream runner: {e}")
+            out_q.put(
+                {
+                    "provider": "_done",
+                    "origin": ",".join(origins),
+                    "trips": [],
+                    "nq": 0,
+                    "done": True,
+                    "error": str(e)[:200],
+                }
+            )
+        finally:
+            out_q.put(_SENTINEL)
+
+    threading.Thread(
+        target=_runner, daemon=True, name="fw-stream-race"
+    ).start()
+
+    while True:
+        item = out_q.get()
+        if item is _SENTINEL:
+            break
+        yield item
 
 
 def _maybe_record_observations(

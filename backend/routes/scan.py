@@ -1,10 +1,12 @@
 import asyncio
 import hashlib
 import json
+import queue
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from api_models import (
     DateAvecHoraire,
@@ -19,6 +21,7 @@ from flight_scanner import (
     scanner_vols_api,
     get_dates_from_preset,
     enrich_trip_results,
+    enrich_trip_results_fast,
 )
 from scan_log import slog, slog_banner, slog_dates, slog_provider_results
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, optional_auth
@@ -128,18 +131,21 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
         slog("⏳ Scan live (Ryanair + Travelpayouts)…")
 
         def _run_scan():
-            return scanner_vols_api(
-                aeroport_depart=request.aeroport_depart or "BVA",
-                dates_depart=request.dates_depart,
-                dates_retour=request.dates_retour,
-                budget_max=request.budget_max or 200,
-                limite_allers=request.limite_allers or 50,
-                destinations_exclues=request.destinations_exclues or [],
-                destinations_incluses=request.destinations_incluses,
-                record_prices=True,
-                passengers=request.passengers or 1,
-                direct=bool(request.direct),
-            )
+            from search_priority import search_active
+
+            with search_active():
+                return scanner_vols_api(
+                    aeroport_depart=request.aeroport_depart or "BVA",
+                    dates_depart=request.dates_depart,
+                    dates_retour=request.dates_retour,
+                    budget_max=request.budget_max or 200,
+                    limite_allers=request.limite_allers or 50,
+                    destinations_exclues=request.destinations_exclues or [],
+                    destinations_incluses=request.destinations_incluses,
+                    record_prices=True,
+                    passengers=request.passengers or 1,
+                    direct=bool(request.direct),
+                )
 
         loop = asyncio.get_running_loop()
         resultats, num_requetes = await loop.run_in_executor(_SCAN_POOL, _run_scan)
@@ -197,8 +203,8 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
     slog(f"  budget      : {request.budget} €/pers")
     slog(f"  voyageurs   : {request.passengers or 1}")
     slog(f"  directs     : {bool(request.direct)}")
-    # Search: no soft cap on outbound destinations (client may still pass an explicit limit)
-    inspire_limite = request.limite_allers if request.limite_allers is not None else 120
+    # Fast Search default (50). Client may raise; avoid huge caps that make Ryanair miss merge.
+    inspire_limite = request.limite_allers if request.limite_allers is not None else 50
     slog(f"  limite_allers: {inspire_limite}")
     if request.destinations_exclues:
         slog(f"  exclus      : {request.destinations_exclues}")
@@ -234,22 +240,25 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
         slog("⏳ Scan live (Ryanair + Travelpayouts)…")
 
         def _inspire_scan_and_enrich():
-            # Vols first — no hotel / LiteAPI on this path
-            trips, nq = scanner_vols_api(
-                aeroport_depart=request.departure,
-                dates_depart=dates_depart,
-                dates_retour=dates_retour,
-                budget_max=request.budget,
-                limite_allers=inspire_limite,
-                destinations_exclues=request.destinations_exclues or [],
-                destinations_incluses=None,
-                record_prices=True,
-                passengers=request.passengers or 1,
-                direct=bool(request.direct),
-            )
-            enriched = enrich_trip_results(trips, request.departure)
-            enriched.sort(key=lambda t: t.prix_total)
-            return enriched, nq
+            from search_priority import search_active
+
+            # Vols first — no hotel / LiteAPI on this path; hotel workers yield
+            with search_active():
+                trips, nq = scanner_vols_api(
+                    aeroport_depart=request.departure,
+                    dates_depart=dates_depart,
+                    dates_retour=dates_retour,
+                    budget_max=request.budget,
+                    limite_allers=inspire_limite,
+                    destinations_exclues=request.destinations_exclues or [],
+                    destinations_incluses=None,
+                    record_prices=True,
+                    passengers=request.passengers or 1,
+                    direct=bool(request.direct),
+                )
+                enriched = enrich_trip_results(trips, request.departure)
+                enriched.sort(key=lambda t: t.prix_total)
+                return enriched, nq
 
         loop = asyncio.get_running_loop()
         enriched_results, num_requetes = await loop.run_in_executor(
@@ -284,6 +293,133 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
     except Exception as e:
         slog(f"❌ Inspire erreur: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _parse_inspire_dates(request: InspireRequest):
+    if request.flexible_dates:
+        dates_depart_raw = request.flexible_dates.get("dates_depart", [])
+        dates_retour_raw = request.flexible_dates.get("dates_retour", [])
+        dates_depart = []
+        for d in dates_depart_raw:
+            if isinstance(d, dict):
+                dates_depart.append(DateAvecHoraire(**d))
+            else:
+                dates_depart.append(d)
+        dates_retour = []
+        for d in dates_retour_raw:
+            if isinstance(d, dict):
+                dates_retour.append(DateAvecHoraire(**d))
+            else:
+                dates_retour.append(d)
+    else:
+        dates_depart, dates_retour = get_dates_from_preset(request.date_preset)
+    return dates_depart, dates_retour
+
+
+@router.post("/api/inspire/stream")
+@optional_auth
+async def inspire_trip_stream(request: InspireRequest, http_request: Request = None):
+    """
+    Progressive inspire (NDJSON): serve whichever provider finishes first
+    (Ryanair, Travelpayouts, …), then append others in chunks of 3.
+    """
+    from providers.orchestrator import search_roundtrips_stream
+    from search_priority import search_active
+
+    slog_banner("POST /api/inspire/stream")
+    inspire_limite = request.limite_allers if request.limite_allers is not None else 50
+    slog(f"  origine={request.departure} budget={request.budget} limite={inspire_limite}")
+
+    try:
+        dates_depart, dates_retour = _parse_inspire_dates(request)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not dates_depart or not dates_retour:
+        raise HTTPException(status_code=400, detail="Impossible de générer les dates pour ce preset")
+
+    chunk_size = 3
+    event_q: queue.Queue = queue.Queue()
+
+    def _worker() -> None:
+        total_nq = 0
+        painted = 0
+        try:
+            with search_active():
+                for ev in search_roundtrips_stream(
+                    aeroport_depart=request.departure,
+                    dates_depart=dates_depart,
+                    dates_retour=dates_retour,
+                    budget_max=request.budget,
+                    limite_allers=inspire_limite,
+                    destinations_exclues=request.destinations_exclues or [],
+                    destinations_incluses=None,
+                    record_prices=True,
+                    passengers=request.passengers or 1,
+                    direct=bool(request.direct),
+                ):
+                    if ev.get("done"):
+                        total_nq = int(ev.get("nq") or total_nq)
+                        break
+                    total_nq += int(ev.get("nq") or 0)
+                    trips = ev.get("trips") or []
+                    if not trips:
+                        continue
+                    origin = str(ev.get("origin") or request.departure)
+                    # Fast enrich — no avg-price RPC (keeps stream non-blocking)
+                    enriched = enrich_trip_results_fast(trips, origin)
+                    enriched.sort(key=lambda t: t.prix_total)
+                    provider = str(ev.get("provider") or "?")
+                    for i in range(0, len(enriched), chunk_size):
+                        chunk = enriched[i : i + chunk_size]
+                        painted += len(chunk)
+                        event_q.put(
+                            {
+                                "type": "batch",
+                                "provider": provider,
+                                "origin": origin,
+                                "resultats": [
+                                    t.model_dump() if hasattr(t, "model_dump") else t.dict()
+                                    for t in chunk
+                                ],
+                                "done": False,
+                            }
+                        )
+            event_q.put(
+                {
+                    "type": "done",
+                    "nombre_requetes": total_nq,
+                    "total": painted,
+                    "message": (
+                        f"{painted} destination(s) trouvée(s) "
+                        f"pour {request.budget}€/pers"
+                    ),
+                    "done": True,
+                }
+            )
+        except Exception as e:
+            slog(f"❌ Inspire stream erreur: {e}")
+            event_q.put({"type": "error", "message": str(e), "done": True})
+        finally:
+            event_q.put(None)
+
+    _SCAN_POOL.submit(_worker)
+
+    async def _ndjson():
+        loop = asyncio.get_running_loop()
+        while True:
+            item = await loop.run_in_executor(None, event_q.get)
+            if item is None:
+                break
+            yield json.dumps(item, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(
+        _ndjson(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/api/auto-check")

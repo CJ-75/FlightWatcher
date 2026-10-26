@@ -14,6 +14,46 @@ import { getApiClient } from '../utils/apiClient';
 import { getSessionId } from '../utils/session';
 import { useI18n } from '../contexts/I18nContext';
 
+function tripScheduleKey(t: EnrichedTripResponse): string {
+  const origin = (t.aller?.origin || '').toUpperCase()
+  const dest = (t.destination_code || t.aller?.destination || '').toUpperCase()
+  const out = (t.aller?.departureTime || '').slice(0, 16)
+  const back = (t.retour?.departureTime || '').slice(0, 16)
+  return `${origin}|${dest}|${out}|${back}`
+}
+
+function providerRank(p?: string | null): number {
+  const x = (p || '').toLowerCase()
+  if (x === 'ryanair') return 0
+  if (x === 'travelpayouts' || x === 'aviasales') return 2
+  return 1
+}
+
+/** Merge stream batches — prefer Ryanair on same créneau, else cheaper. */
+function mergeStreamTrips(
+  prev: EnrichedTripResponse[],
+  next: EnrichedTripResponse[],
+): EnrichedTripResponse[] {
+  const map = new Map<string, EnrichedTripResponse>()
+  for (const t of prev) map.set(tripScheduleKey(t), t)
+  for (const t of next) {
+    const k = tripScheduleKey(t)
+    const cur = map.get(k)
+    if (!cur) {
+      map.set(k, t)
+      continue
+    }
+    const ra = providerRank(cur.provider)
+    const rb = providerRank(t.provider)
+    if (rb < ra || (rb === ra && Number(t.prix_total) < Number(cur.prix_total))) {
+      map.set(k, t)
+    }
+  }
+  return [...map.values()].sort(
+    (a, b) => Number(a.prix_total) - Number(b.prix_total),
+  )
+}
+
 function withFullDayHours(dates: {
   dates_depart: DateAvecHoraire[];
   dates_retour: DateAvecHoraire[];
@@ -148,7 +188,10 @@ export function SimpleSearch({
     startFlexible ? 'flexible' : null,
   );
   const [isSearching, setIsSearching] = useState(false);
+  /** Providers still arriving after first paint (Ryanair late, etc.) */
+  const [stillStreaming, setStillStreaming] = useState(false);
   const [formOpen, setFormOpen] = useState(!collapseWhenResults);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setFormOpen(!collapseWhenResults)
@@ -335,6 +378,10 @@ export function SimpleSearch({
       /* ignore */
     }
 
+    streamAbortRef.current?.abort();
+    const abort = new AbortController();
+    streamAbortRef.current = abort;
+
     try {
       const request: InspireRequest = {
         budget,
@@ -349,40 +396,10 @@ export function SimpleSearch({
         ...(excludedDestinations.length > 0 && {
           destinations_exclues: excludedDestinations
         }),
-        // Always send — backend inspire default used to soft-cap at 18 when omitted
-        limite_allers: Math.max(limiteAllers || 120, 120),
+        limite_allers: limiteAllers || 50,
       };
 
-      const result = await getApiClient().inspire(request);
-      const trips = Array.isArray(result?.resultats) ? result.resultats : [];
-
-      void getApiClient().trackSearchEvent({
-          departure_airport: selectedAirport.trim().toUpperCase(),
-          date_preset: request.date_preset,
-          budget,
-          dates_depart: resolvedDates.dates_depart,
-          dates_retour: resolvedDates.dates_retour,
-          destinations_exclues: excludedDestinations,
-          limite_allers: limiteAllers,
-          results_count: trips.length,
-          results: trips.slice(0, 10),
-          search_duration_ms: 0,
-          api_requests_count: result.nombre_requetes,
-          source: 'web',
-          user_agent: navigator.userAgent,
-          session_id: getSessionId()
-        })
-        .then((data: unknown) => {
-          const payload = data as { status?: string; id?: string }
-          if (payload.status === 'success' && payload.id) {
-            onSearchEventId?.(payload.id);
-          }
-        })
-        .catch(err => {
-          console.warn('Erreur enregistrement événement de recherche:', err);
-        });
-
-      onResults(trips, {
+      const searchInfo = {
         datePreset: request.date_preset,
         airport: selectedAirport.trim().toUpperCase(),
         budget,
@@ -391,17 +408,85 @@ export function SimpleSearch({
         datesRetour: resolvedDates.dates_retour,
         excludedDestinations,
         direct: directOnly,
-      });
+      };
 
-      setShowEmpty(trips.length === 0);
-      } catch (err) {
+      let accumulated: EnrichedTripResponse[] = [];
+      let painted = false;
+      let nombreRequetes = 0;
+      let streamError: string | null = null;
+      setStillStreaming(true);
+
+      await getApiClient().inspireStream(
+        request,
+        (ev) => {
+          if (ev.type === 'error') {
+            streamError = ev.message || t('app.error');
+            return;
+          }
+          if (ev.type === 'batch' && Array.isArray(ev.resultats) && ev.resultats.length) {
+            accumulated = mergeStreamTrips(accumulated, ev.resultats);
+            onResults([...accumulated], searchInfo);
+            if (!painted) {
+              painted = true;
+              setIsSearching(false);
+              onLoading(false);
+              setFormOpen(false);
+            }
+            setShowEmpty(false);
+          }
+          if (ev.type === 'done') {
+            nombreRequetes = ev.nombre_requetes || nombreRequetes;
+            if (!painted) {
+              onResults([], searchInfo);
+              setShowEmpty(true);
+            }
+          }
+        },
+        { signal: abort.signal },
+      );
+
+      if (streamError) throw new Error(streamError);
+
+      void getApiClient()
+        .trackSearchEvent({
+          departure_airport: selectedAirport.trim().toUpperCase(),
+          date_preset: request.date_preset,
+          budget,
+          dates_depart: resolvedDates.dates_depart,
+          dates_retour: resolvedDates.dates_retour,
+          destinations_exclues: excludedDestinations,
+          limite_allers: limiteAllers,
+          results_count: accumulated.length,
+          results: accumulated.slice(0, 10),
+          search_duration_ms: 0,
+          api_requests_count: nombreRequetes,
+          source: 'web',
+          user_agent: navigator.userAgent,
+          session_id: getSessionId(),
+        })
+        .then((data: unknown) => {
+          const payload = data as { status?: string; id?: string };
+          if (payload.status === 'success' && payload.id) {
+            onSearchEventId?.(payload.id);
+          }
+        })
+        .catch((err) => {
+          console.warn('Erreur enregistrement événement de recherche:', err);
+        });
+
+      if (!painted) setShowEmpty(true);
+    } catch (err) {
+      if (abort.signal.aborted) return;
       const msg = err instanceof Error ? err.message : t('app.error');
       setLocalError(msg);
       onError(msg);
       setShowEmpty(false);
     } finally {
-      setIsSearching(false);
-      onLoading(false);
+      if (streamAbortRef.current === abort) {
+        setIsSearching(false);
+        setStillStreaming(false);
+        onLoading(false);
+      }
     }
   };
 
@@ -439,6 +524,9 @@ export function SimpleSearch({
         className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-4"
       >
         <LoadingSkeleton />
+        <p className="text-xs text-muted text-center max-w-xs">
+          Premiers résultats dès qu’une compagnie répond (Ryanair, Travelpayouts…)
+        </p>
       </motion.div>
     );
   }
@@ -462,23 +550,30 @@ export function SimpleSearch({
 
   if (collapseWhenResults && !formOpen) {
     return (
-      <div className="w-full app-card overflow-hidden mb-2">
-        <button
-          type="button"
-          onClick={() => setFormOpen(true)}
-          aria-expanded={false}
-          className="w-full flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5 text-left hover:bg-canvas/60 transition-colors"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-ink">Modifier la recherche</p>
-            <p className="text-xs text-muted truncate mt-0.5">
-              {summaryParts.join(' · ') || 'Afficher le formulaire'}
-            </p>
-          </div>
-          <span className="shrink-0 text-muted text-lg leading-none" aria-hidden>
-            ▾
-          </span>
-        </button>
+      <div className="w-full mb-2 space-y-2">
+        {stillStreaming ? (
+          <p className="text-xs font-semibold text-primary-600 px-1 animate-pulse">
+            Comparaison en cours — d’autres vols arrivent…
+          </p>
+        ) : null}
+        <div className="w-full app-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            aria-expanded={false}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5 text-left hover:bg-canvas/60 transition-colors"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-ink">Modifier la recherche</p>
+              <p className="text-xs text-muted truncate mt-0.5">
+                {summaryParts.join(' · ') || 'Afficher le formulaire'}
+              </p>
+            </div>
+            <span className="shrink-0 text-muted text-lg leading-none" aria-hidden>
+              ▾
+            </span>
+          </button>
+        </div>
       </div>
     )
   }

@@ -30,7 +30,17 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 _rate: Dict[str, List[float]] = {}
 _rate_lock = threading.Lock()
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="upsell")
+# Single worker: hotel work never saturates CPU/network vs flight Search
+_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="upsell")
+
+
+def _yield_to_search() -> None:
+    try:
+        from search_priority import wait_while_search_busy
+
+        wait_while_search_busy()
+    except Exception:
+        pass
 
 
 def rooms_for_participants(participants: int) -> Tuple[int, int]:
@@ -259,6 +269,7 @@ def _insert_destination_for_iata(
 
 def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
     """LiteAPI list → hotel_pool for one destination (quick, upsell path)."""
+    _yield_to_search()
     cfg = load_deals_config()
     if not cfg.api_key:
         logger.warning("bootstrap pool skipped: no LiteAPI key")
@@ -837,12 +848,17 @@ def _mark_upsell_row(
 def _run_fetch_job(
     job_id: str,
     *,
-    destination_id: str,
+    destination_id: Optional[str],
     checkin: date,
     checkout: date,
     adults: int,
     flight_pp: Optional[float] = None,
+    iata: Optional[str] = None,
+    city: Optional[str] = None,
 ) -> None:
+    # Flight Search first — pause hotel LiteAPI while inspire/scan runs
+    _yield_to_search()
+
     with _jobs_lock:
         job = _jobs.get(job_id) or {}
         job["status"] = "running"
@@ -859,17 +875,29 @@ def _run_fetch_job(
         if not cfg.api_key:
             raise LiteApiError("LiteAPI key missing")
 
-        dest_r = (
-            supabase.table("deal_destinations")
-            .select("*")
-            .eq("id", destination_id)
-            .limit(1)
-            .execute()
-        )
-        dest = (dest_r.data or [None])[0]
-        if not dest:
+        dest = None
+        if destination_id:
+            dest_r = (
+                supabase.table("deal_destinations")
+                .select("*")
+                .eq("id", destination_id)
+                .limit(1)
+                .execute()
+            )
+            dest = (dest_r.data or [None])[0]
+        if not dest and iata:
+            _yield_to_search()
+            dest = ensure_destination_with_pool(supabase, iata=iata, city=city)
+            if dest:
+                destination_id = str(dest["id"])
+                with _jobs_lock:
+                    cur = _jobs.get(job_id) or {}
+                    cur["destination_id"] = destination_id
+                    _jobs[job_id] = cur
+        if not dest or not destination_id:
             raise LiteApiError("destination missing")
 
+        _yield_to_search()
         pool = (
             supabase.table("hotel_pool")
             .select("*")
@@ -911,6 +939,7 @@ def _run_fetch_job(
             return
 
         pool_map = {str(h["hotel_id"]): h for h in pool_rows if h.get("hotel_id")}
+        _yield_to_search()
         body = {
             "hotelIds": hotel_ids,
             "checkin": checkin.isoformat(),
@@ -1031,7 +1060,12 @@ def start_upsell_fetch(
     flight_pp: Optional[float] = None,
     city: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Start async on-demand fetch if needed. Idempotent when pending/fresh."""
+    """
+    Start async on-demand fetch if needed. Idempotent when pending/fresh.
+
+    Never blocks on LiteAPI / pool bootstrap — that runs in the upsell worker
+    and yields while a client flight Search is in flight.
+    """
     looked = lookup_upsell(
         supabase,
         iata=iata,
@@ -1045,43 +1079,6 @@ def start_upsell_fetch(
         return {**looked, "job_id": None}
     if looked.get("status") == "unavailable" and looked.get("reason") == "bad_dates":
         return looked
-
-    # Outside seed catalogue or empty pool → create dest + bootstrap hotels
-    if looked.get("status") == "unavailable" and looked.get("reason") == "not_in_catalogue":
-        ensured = ensure_destination_with_pool(supabase, iata=iata, city=city)
-        if not ensured:
-            return looked
-        looked = lookup_upsell(
-            supabase,
-            iata=iata,
-            checkin=checkin,
-            checkout=checkout,
-            participants=participants,
-            flight_pp=flight_pp,
-            city=city,
-        )
-        if looked.get("status") == "ready":
-            return {**looked, "job_id": None}
-        if looked.get("status") == "unavailable" and looked.get("reason") == "not_in_catalogue":
-            # Still missing after ensure — attach destination_id manually
-            looked = {
-                **looked,
-                "status": "miss",
-                "reason": "cache_miss",
-                "destination_id": ensured.get("id"),
-                "city": ensured.get("city_name") or looked.get("city"),
-            }
-
-    dest_id = looked.get("destination_id")
-    if not dest_id:
-        dest = find_destination_by_iata(supabase, iata) or ensure_destination_with_pool(
-            supabase, iata=iata, city=city
-        )
-        if not dest:
-            return {**looked, "status": "unavailable", "reason": "not_in_catalogue"}
-        dest_id = dest["id"]
-        if _pool_size(supabase, str(dest_id)) == 0:
-            _bootstrap_pool_for_dest(supabase, dest)
 
     cin = _parse_ymd(checkin)
     cout = _parse_ymd(checkout)
@@ -1101,14 +1098,34 @@ def start_upsell_fetch(
             "reason": "too_many_fetches",
         }
 
-    _mark_upsell_row(
-        supabase,
-        destination_id=str(dest_id),
-        checkin=cin,
-        checkout=cout,
-        adults=adults,
-        status="pending",
-    )
+    dest_id = looked.get("destination_id")
+    if not dest_id:
+        # Cache-only resolve — no LiteAPI here
+        dest = find_destination_by_iata(supabase, iata)
+        if dest:
+            dest_id = dest["id"]
+
+    # Outside catalogue: still queue a job (ensure+pool in background)
+    if (
+        looked.get("status") == "unavailable"
+        and looked.get("reason") == "not_in_catalogue"
+        and not dest_id
+    ):
+        looked = {
+            **looked,
+            "status": "miss",
+            "reason": "ensuring_catalogue",
+        }
+
+    if dest_id:
+        _mark_upsell_row(
+            supabase,
+            destination_id=str(dest_id),
+            checkin=cin,
+            checkout=cout,
+            adults=adults,
+            status="pending",
+        )
 
     job_id = str(uuid.uuid4())
     with _jobs_lock:
@@ -1117,6 +1134,7 @@ def start_upsell_fetch(
             "status": "queued",
             "done": False,
             "iata": (iata or "").upper(),
+            "city": city,
             "checkin": cin.isoformat(),
             "checkout": cout.isoformat(),
             "participants": max(1, int(participants or 1)),
@@ -1128,11 +1146,13 @@ def start_upsell_fetch(
     _executor.submit(
         _run_fetch_job,
         job_id,
-        destination_id=str(dest_id),
+        destination_id=str(dest_id) if dest_id else None,
         checkin=cin,
         checkout=cout,
         adults=adults,
         flight_pp=float(flight_pp) if flight_pp is not None else None,
+        iata=(iata or "").upper() or None,
+        city=city,
     )
     return {
         **looked,

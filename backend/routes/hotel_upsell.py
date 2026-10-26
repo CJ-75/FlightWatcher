@@ -81,14 +81,14 @@ async def upsell_lookup(body: UpsellLookupRequest):
 async def upsell_fetch(body: UpsellFetchRequest, request: Request):
     """
     Start on-demand LiteAPI rates job (3 h cache). Rate-limited per user/IP.
-    Non-blocking for flight UI — poll GET .../jobs/{id} or re-lookup.
+    Returns immediately (pending + job_id). Pool/rates run in background and
+    yield while a flight Search/Inspire is in flight.
     """
     try:
         from deals.upsell import start_upsell_fetch
 
-        supabase = _svc()
         result = start_upsell_fetch(
-            supabase,
+            _svc(),
             iata=body.iata.upper(),
             checkin=body.checkin,
             checkout=body.checkout,

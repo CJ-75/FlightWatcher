@@ -95,6 +95,28 @@ export interface InspireResponse {
   message: string
 }
 
+/** NDJSON event from POST /api/inspire/stream */
+export type InspireStreamEvent =
+  | {
+      type: 'batch'
+      provider: string
+      origin?: string
+      resultats: EnrichedTripResponse[]
+      done?: boolean
+    }
+  | {
+      type: 'done'
+      nombre_requetes?: number
+      total?: number
+      message?: string
+      done: true
+    }
+  | {
+      type: 'error'
+      message: string
+      done?: boolean
+    }
+
 export interface SavedSearch {
   id: string
   name: string

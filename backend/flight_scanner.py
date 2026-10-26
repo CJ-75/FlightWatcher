@@ -191,6 +191,32 @@ def calculate_discount(current_price: float, avg_price: Optional[float]) -> floa
     return round(discount, 1)
 
 
+def enrich_trip_results_fast(
+    trips: List[TripResponse], departure_airport: str
+) -> List[EnrichedTripResponse]:
+    """Stream path: localize only — no avg-price RPC so first provider paints ASAP."""
+    out: List[EnrichedTripResponse] = []
+    for trip in trips or []:
+        out.append(
+            EnrichedTripResponse(
+                aller=_localize_flight(trip.aller),
+                retour=_localize_flight(trip.retour),
+                prix_total=trip.prix_total,
+                destination_code=trip.destination_code,
+                provider=trip.provider or "ryanair",
+                airline=trip.airline,
+                transfers=trip.transfers,
+                booking_url=trip.booking_url,
+                leg_prices_reliable=getattr(trip, "leg_prices_reliable", True),
+                discount_percent=None,
+                is_good_deal=False,
+                image_url=None,
+                avg_price_last_month=None,
+            )
+        )
+    return out
+
+
 def enrich_trip_results(trips: List[TripResponse], departure_airport: str) -> List[EnrichedTripResponse]:
     """Enrich trips with discount flags. Avg-price RPCs run in parallel — never serial."""
 

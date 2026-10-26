@@ -6,6 +6,7 @@ import type {
   Destination,
   InspireRequest,
   InspireResponse,
+  InspireStreamEvent,
   InvitePreview,
   LikedDeal,
   PlannedTrip,
@@ -147,6 +148,88 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: JSON.stringify(body),
         timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       }),
+
+    /**
+     * Progressive inspire (NDJSON). Whichever provider finishes first paints;
+     * others append as they arrive. Calls onEvent for each line.
+     */
+    inspireStream: async (
+      body: InspireRequest,
+      onEvent: (event: InspireStreamEvent) => void,
+      opts?: { signal?: AbortSignal },
+    ): Promise<void> => {
+      const headers = new Headers({ 'Content-Type': 'application/json' })
+      if (options.getToken) {
+        const token = await options.getToken()
+        if (token) headers.set('Authorization', `Bearer ${token}`)
+      }
+      const controller =
+        typeof AbortController !== 'undefined' ? new AbortController() : null
+      const timer =
+        controller && LONG_REQUEST_TIMEOUT_MS > 0
+          ? setTimeout(() => controller.abort(), LONG_REQUEST_TIMEOUT_MS)
+          : undefined
+      if (opts?.signal && controller) {
+        if (opts.signal.aborted) controller.abort()
+        else
+          opts.signal.addEventListener('abort', () => controller.abort(), {
+            once: true,
+          })
+      }
+      try {
+        const response = await fetchFn(joinUrl(baseUrl, '/api/inspire/stream'), {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: controller?.signal ?? opts?.signal,
+        })
+        if (!response.ok) {
+          const raw = await response.text().catch(() => response.statusText)
+          throw new Error(raw || response.statusText)
+        }
+        if (!response.body) {
+          throw new Error('Stream inspire indisponible')
+        }
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop() || ''
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed) continue
+            try {
+              onEvent(JSON.parse(trimmed) as InspireStreamEvent)
+            } catch {
+              /* skip bad line */
+            }
+          }
+        }
+        const tail = buf.trim()
+        if (tail) {
+          try {
+            onEvent(JSON.parse(tail) as InspireStreamEvent)
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (e) {
+        const name = e instanceof Error ? e.name : ''
+        const msg = e instanceof Error ? e.message : String(e)
+        if (name === 'AbortError' || /timeout|timed out|aborted/i.test(msg)) {
+          throw new Error(
+            'La recherche a pris trop de temps. Vérifie que le backend tourne, ou réduis les dates.',
+          )
+        }
+        throw e
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
+    },
 
     getAirports: () => request<{ airports: Airport[] } | Airport[]>('/api/airports'),
 
