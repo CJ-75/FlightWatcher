@@ -575,7 +575,11 @@ export function DealsScreen() {
                 deal={deal}
                 liked={isLiked(deal.id)}
                 onToggleLike={() => void toggleLike(deal)}
-                onPress={() => navigation.navigate('DealDetail', { dealId: deal.id })}
+                onPress={() =>
+                  navigation.navigate('DealDetail', {
+                    dealId: String(deal.deal_key || deal.id || ''),
+                  })
+                }
               />
             )
           }}

@@ -349,9 +349,8 @@ export function SimpleSearch({
         ...(excludedDestinations.length > 0 && {
           destinations_exclues: excludedDestinations
         }),
-        ...(limiteAllers !== 50 && {
-          limite_allers: limiteAllers
-        })
+        // Always send — backend inspire default used to soft-cap at 18 when omitted
+        limite_allers: Math.max(limiteAllers || 120, 120),
       };
 
       const result = await getApiClient().inspire(request);

@@ -561,6 +561,8 @@ export interface HotelUpsellLookupItem {
   participants?: number
   /** Flight price per person — caps hotel options at 2.5× */
   flight_pp?: number
+  /** City label — helps ensure destination outside seed catalogue */
+  city?: string
 }
 
 /** Hotel option for Search combo wizard / Deals. */

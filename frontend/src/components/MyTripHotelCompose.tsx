@@ -41,15 +41,28 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
       setLoading(true)
       setError(null)
       try {
+        const cityHint =
+          String(
+            draft.city_name ||
+              (payload as { city?: string }).city ||
+              '',
+          ).trim() || undefined
         const item = {
           iata: destIata,
           checkin,
           checkout,
           participants: adults,
           flight_pp: flightPp || undefined,
+          city: cityHint,
         }
         let result = (await getApiClient().lookupHotelUpsell([item])).results?.[0]
-        if (result?.status === 'miss' || result?.status === 'pending') {
+        // miss / pending / hors catalogue → fetch (backend ensure dest+pool)
+        if (
+          result?.status === 'miss' ||
+          result?.status === 'pending' ||
+          (result?.status === 'unavailable' &&
+            result?.reason === 'not_in_catalogue')
+        ) {
           result = await getApiClient().fetchHotelUpsell(item)
         }
         if (result?.status === 'pending' && result.job_id) {
@@ -85,7 +98,16 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         )
         setSelected(match || opts[0] || null)
         if (!opts.length) {
-          setError('Aucun hôtel disponible pour cette ville / ces dates')
+          const reason = String(result?.reason || '')
+          setError(
+            reason === 'not_in_catalogue'
+              ? 'Cette destination n’a pas encore d’hôtels — réessaie dans un instant'
+              : reason === 'bad_dates'
+                ? 'Dates invalides pour l’hôtel'
+                : reason === 'empty_pool' || reason === 'no_rates'
+                  ? 'Pas de dispo hôtel pour ces dates'
+                  : 'Aucun hôtel disponible pour cette ville / ces dates',
+          )
         }
       } catch {
         if (!cancelled) setError('Impossible de charger les hôtels')

@@ -725,6 +725,7 @@ def _enrich_rows_to_deals(
     max_pp: Optional[float],
     match_origin: bool,
     supabase=None,
+    require_photo: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Read path only: no per-row compose_hotel / rates lookup.
@@ -819,7 +820,7 @@ def _enrich_rows_to_deals(
         d = row_to_travel_deal(enriched, adults=adults_n, baselines_fresh=fresh)
         if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
             continue
-        if not _deal_has_hotel_photo(d):
+        if require_photo and not _deal_has_hotel_photo(d):
             continue
         flags = dict(d.get("flags") or {})
         flags["match_origin"] = match_origin
@@ -1452,6 +1453,7 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         if not res.data:
             return None
         fresh = _baselines_fresh_flag(supabase)
+        # Detail: never drop for missing photo (wall filter is list-only)
         rows = _enrich_rows_to_deals(
             [res.data[0]],
             adults_n=2,
@@ -1459,6 +1461,7 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
             max_pp=None,
             match_origin=True,
             supabase=supabase,
+            require_photo=False,
         )
         if not rows:
             return None

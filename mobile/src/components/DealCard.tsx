@@ -464,14 +464,10 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             </View>
           ) : null}
 
-          <Pressable
-            onPress={onPress}
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.9 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Voir ce séjour"
-          >
+          {/* View (not nested Pressable) — Android often drops nested CTA presses */}
+          <View style={styles.cta} accessibilityRole="button" accessibilityLabel="Voir ce séjour">
             <Text style={styles.ctaText}>Voir ce séjour</Text>
-          </Pressable>
+          </View>
         </View>
       </Pressable>
     </View>

@@ -197,7 +197,9 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
     slog(f"  budget      : {request.budget} €/pers")
     slog(f"  voyageurs   : {request.passengers or 1}")
     slog(f"  directs     : {bool(request.direct)}")
-    slog(f"  limite_allers: {request.limite_allers or 30}")
+    # Search: no soft cap on outbound destinations (client may still pass an explicit limit)
+    inspire_limite = request.limite_allers if request.limite_allers is not None else 120
+    slog(f"  limite_allers: {inspire_limite}")
     if request.destinations_exclues:
         slog(f"  exclus      : {request.destinations_exclues}")
     try:
@@ -238,8 +240,7 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
                 dates_depart=dates_depart,
                 dates_retour=dates_retour,
                 budget_max=request.budget,
-                # 18 dests max: enough variety, fewer Ryanair return legs
-                limite_allers=request.limite_allers or 18,
+                limite_allers=inspire_limite,
                 destinations_exclues=request.destinations_exclues or [],
                 destinations_incluses=None,
                 record_prices=True,

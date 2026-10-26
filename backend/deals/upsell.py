@@ -2,8 +2,8 @@
 Hotel upsell for Search / Planner (§9.4).
 
 Sync: catalogue + fenêtre canonique → hotel_rates_cache (0 LiteAPI).
-Miss / dates hors fenêtre : job court → hotel_upsell_cache TTL 3 h.
-Hors catalogue : unavailable (pas de job).
+Miss / dates hors fenêtre : job court → hotel_rates_cache via FREE window.
+Hors catalogue : ensure destination + pool on demand, then fetch.
 """
 from __future__ import annotations
 
@@ -140,6 +140,249 @@ def find_destination_by_iata(supabase: Any, iata: str) -> Optional[Dict[str, Any
     if resolved.get("served_city_id") and not out.get("served_city_id"):
         out["served_city_id"] = resolved["served_city_id"]
     return out
+
+
+def _pool_size(supabase: Any, destination_id: str) -> int:
+    if not supabase or not destination_id:
+        return 0
+    try:
+        res = (
+            supabase.table("hotel_pool")
+            .select("hotel_id", count="exact")
+            .eq("destination_id", destination_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(res, "count", None) is not None:
+            return int(res.count or 0)
+        return len(res.data or [])
+    except Exception:
+        try:
+            res = (
+                supabase.table("hotel_pool")
+                .select("hotel_id")
+                .eq("destination_id", destination_id)
+                .limit(5)
+                .execute()
+            )
+            return len(res.data or [])
+        except Exception:
+            return 0
+
+
+def _insert_destination_for_iata(
+    supabase: Any,
+    *,
+    iata: str,
+    city: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Create a minimal deal_destinations row from served city / CITY_FR."""
+    from deals.airport_tz import tz_for_iata
+    from deals.city_mapping import _slugify, resolve_served_city
+    from city_names_fr import city_for_code, country_for_code
+
+    code = (iata or "").strip().upper()
+    if len(code) != 3:
+        return None
+
+    served = resolve_served_city(supabase, code, require_verified=False)
+    city_name = (
+        (city or "").strip()
+        or (served or {}).get("city_name")
+        or city_for_code(code, code)
+    )
+    slug = _slugify(str(city_name))
+    country = (
+        (served or {}).get("country_code")
+        or country_for_code(code, "")
+        or ""
+    ).upper()
+    lat = (served or {}).get("center_lat")
+    lng = (served or {}).get("center_lng")
+    tz = (served or {}).get("timezone") or tz_for_iata(code) or "Europe/Paris"
+    primary = ((served or {}).get("primary_iata") or code).upper()
+    served_id = (served or {}).get("served_city_id")
+
+    row: Dict[str, Any] = {
+        "slug": slug,
+        "city_name": city_name,
+        "country_code": country or "",
+        "iata_arrival": primary,
+        "center_lat": lat,
+        "center_lng": lng,
+        "pool_radius_m": 2500,
+        "timezone": tz,
+        "priority": 900,
+        "active": True,
+    }
+    if served_id:
+        row["served_city_id"] = served_id
+
+    try:
+        # Prefer existing slug / iata
+        existing = (
+            supabase.table("deal_destinations")
+            .select("*")
+            .eq("slug", slug)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return existing.data[0]
+        exact = (
+            supabase.table("deal_destinations")
+            .select("*")
+            .eq("iata_arrival", primary)
+            .eq("active", True)
+            .limit(1)
+            .execute()
+        )
+        if exact.data:
+            return exact.data[0]
+
+        ins = supabase.table("deal_destinations").insert(row).execute()
+        if ins.data:
+            return ins.data[0]
+        # re-select
+        again = (
+            supabase.table("deal_destinations")
+            .select("*")
+            .eq("slug", slug)
+            .limit(1)
+            .execute()
+        )
+        return (again.data or [None])[0]
+    except Exception as e:
+        logger.warning("insert destination %s: %s", code, e)
+        return None
+
+
+def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
+    """LiteAPI list → hotel_pool for one destination (quick, upsell path)."""
+    cfg = load_deals_config()
+    if not cfg.api_key:
+        logger.warning("bootstrap pool skipped: no LiteAPI key")
+        return 0
+    client = LiteApiClient(cfg=cfg)
+    try:
+        from deals.hotel_pool import (
+            _load_ref_maps,
+            build_pool_for_destination,
+            extract_hotels_list,
+            hotel_passes_filters,
+            mark_24h_reception,
+            replace_pool_rows,
+            select_pool,
+        )
+
+        lat = dest.get("center_lat")
+        lng = dest.get("center_lng")
+        excluded, reception = _load_ref_maps(client)
+
+        if lat is not None and lng is not None:
+            built = build_pool_for_destination(
+                client,
+                dest,
+                excluded_type_ids=excluded,
+                reception_facility_ids=reception,
+            )
+            return replace_pool_rows(supabase, dest["id"], built["hotels"])
+
+        # No coords — list by city name, infer center from hotels
+        city = (dest.get("city_name") or "").strip()
+        country = (dest.get("country_code") or "").strip() or None
+        if not city:
+            return 0
+        payload = client.list_hotels(
+            city_name=city,
+            country_code=country,
+            limit=80,
+            min_rating=7.5,
+            min_reviews_count=30,
+            star_rating="3.0,3.5,4.0,4.5",
+        )
+        raw = extract_hotels_list(payload)
+        if not raw:
+            return 0
+        # Median-ish center from first hotels with coords
+        coords: List[Tuple[float, float]] = []
+        for h in raw:
+            try:
+                hlat = float(h.get("latitude") if h.get("latitude") is not None else h.get("lat"))
+                hlng = float(h.get("longitude") if h.get("longitude") is not None else h.get("lng"))
+                coords.append((hlat, hlng))
+            except (TypeError, ValueError):
+                continue
+        if not coords:
+            return 0
+        center_lat = sum(c[0] for c in coords) / len(coords)
+        center_lng = sum(c[1] for c in coords) / len(coords)
+        radius = int(dest.get("pool_radius_m") or 3000)
+        candidates = []
+        for h in raw:
+            c = hotel_passes_filters(
+                h,
+                center_lat=center_lat,
+                center_lng=center_lng,
+                radius_m=radius * 2,
+                excluded_type_ids=excluded,
+            )
+            if c:
+                candidates.append(c)
+        mark_24h_reception(candidates, reception)
+        selected = select_pool(candidates, radius_m=radius * 2, target=30, max_n=40)
+        # Persist inferred center for next time
+        try:
+            supabase.table("deal_destinations").update(
+                {"center_lat": center_lat, "center_lng": center_lng}
+            ).eq("id", dest["id"]).execute()
+        except Exception:
+            pass
+        return replace_pool_rows(supabase, dest["id"], selected)
+    except Exception as e:
+        logger.warning("bootstrap pool dest=%s: %s", dest.get("slug") or dest.get("id"), e)
+        return 0
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
+def ensure_destination_with_pool(
+    supabase: Any,
+    *,
+    iata: str,
+    city: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Resolve or create deal_destinations for arrival IATA, ensure hotel_pool
+    has at least one hotel. Used when Search destination is outside seed catalogue.
+    """
+    from deals.city_mapping import resolve_hotel_destination
+
+    code = (iata or "").strip().upper()
+    if len(code) != 3 or not supabase:
+        return None
+
+    resolved = resolve_hotel_destination(supabase, iata=code, city=city)
+    dest = resolved.get("destination") if resolved else None
+    if not dest:
+        dest = _insert_destination_for_iata(supabase, iata=code, city=city)
+    if not dest or not dest.get("id"):
+        return None
+
+    if _pool_size(supabase, str(dest["id"])) > 0:
+        return dest
+
+    n = _bootstrap_pool_for_dest(supabase, dest)
+    logger.info(
+        "ensure_destination_with_pool iata=%s slug=%s pool=%s",
+        code,
+        dest.get("slug"),
+        n,
+    )
+    return dest if n > 0 else dest
 
 
 def find_window_by_dates(
@@ -353,6 +596,7 @@ def lookup_upsell(
     checkout: str,
     participants: int = 2,
     flight_pp: Optional[float] = None,
+    city: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Cache-only lookup. Never calls LiteAPI.
@@ -373,12 +617,12 @@ def lookup_upsell(
 
     from deals.city_mapping import resolve_hotel_destination
 
-    resolved = resolve_hotel_destination(supabase, iata=iata)
+    resolved = resolve_hotel_destination(supabase, iata=iata, city=city)
     dest = resolved.get("destination") if resolved else None
     if not dest:
         return {**base, "status": "unavailable", "reason": "not_in_catalogue"}
 
-    city_label = (resolved or {}).get("city_name") or dest.get("city_name")
+    city_label = (resolved or {}).get("city_name") or dest.get("city_name") or city
     served_city_id = (resolved or {}).get("served_city_id") or dest.get("served_city_id")
     base["city"] = city_label
     base["served_city_id"] = served_city_id
@@ -636,6 +880,19 @@ def _run_fetch_job(
         pool_rows = list(pool.data or [])
         hotel_ids = [str(h["hotel_id"]) for h in pool_rows if h.get("hotel_id")]
         if not hotel_ids:
+            # First-time Search destination: build pool then re-read
+            n = _bootstrap_pool_for_dest(supabase, dest)
+            if n > 0:
+                pool = (
+                    supabase.table("hotel_pool")
+                    .select("*")
+                    .eq("destination_id", destination_id)
+                    .order("pool_rank")
+                    .execute()
+                )
+                pool_rows = list(pool.data or [])
+                hotel_ids = [str(h["hotel_id"]) for h in pool_rows if h.get("hotel_id")]
+        if not hotel_ids:
             _mark_upsell_row(
                 supabase,
                 destination_id=destination_id,
@@ -772,6 +1029,7 @@ def start_upsell_fetch(
     participants: int = 2,
     rate_bucket: str = "anon",
     flight_pp: Optional[float] = None,
+    city: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Start async on-demand fetch if needed. Idempotent when pending/fresh."""
     looked = lookup_upsell(
@@ -781,20 +1039,49 @@ def start_upsell_fetch(
         checkout=checkout,
         participants=participants,
         flight_pp=flight_pp,
+        city=city,
     )
     if looked.get("status") == "ready":
         return {**looked, "job_id": None}
-    if looked.get("status") == "unavailable" and looked.get("reason") == "not_in_catalogue":
-        return looked
     if looked.get("status") == "unavailable" and looked.get("reason") == "bad_dates":
         return looked
 
+    # Outside seed catalogue or empty pool → create dest + bootstrap hotels
+    if looked.get("status") == "unavailable" and looked.get("reason") == "not_in_catalogue":
+        ensured = ensure_destination_with_pool(supabase, iata=iata, city=city)
+        if not ensured:
+            return looked
+        looked = lookup_upsell(
+            supabase,
+            iata=iata,
+            checkin=checkin,
+            checkout=checkout,
+            participants=participants,
+            flight_pp=flight_pp,
+            city=city,
+        )
+        if looked.get("status") == "ready":
+            return {**looked, "job_id": None}
+        if looked.get("status") == "unavailable" and looked.get("reason") == "not_in_catalogue":
+            # Still missing after ensure — attach destination_id manually
+            looked = {
+                **looked,
+                "status": "miss",
+                "reason": "cache_miss",
+                "destination_id": ensured.get("id"),
+                "city": ensured.get("city_name") or looked.get("city"),
+            }
+
     dest_id = looked.get("destination_id")
     if not dest_id:
-        dest = find_destination_by_iata(supabase, iata)
+        dest = find_destination_by_iata(supabase, iata) or ensure_destination_with_pool(
+            supabase, iata=iata, city=city
+        )
         if not dest:
             return {**looked, "status": "unavailable", "reason": "not_in_catalogue"}
         dest_id = dest["id"]
+        if _pool_size(supabase, str(dest_id)) == 0:
+            _bootstrap_pool_for_dest(supabase, dest)
 
     cin = _parse_ymd(checkin)
     cout = _parse_ymd(checkout)
@@ -873,6 +1160,7 @@ def batch_lookup(
             flight_pp = float(fp) if fp is not None else None
         except (TypeError, ValueError):
             flight_pp = None
+        city = item.get("city")
         out.append(
             lookup_upsell(
                 supabase,
@@ -881,6 +1169,7 @@ def batch_lookup(
                 checkout=str(item.get("checkout") or ""),
                 participants=int(item.get("participants") or 2),
                 flight_pp=flight_pp,
+                city=str(city) if city else None,
             )
         )
     return out
