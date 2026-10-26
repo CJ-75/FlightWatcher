@@ -18,7 +18,6 @@ import { UserMenu } from './components/UserMenu'
 import { getCurrentUser, onAuthStateChange } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
 import { DealsTab } from './components/DealsTab'
-import { HomeDealsTeaser } from './components/HomeDealsTeaser'
 import { SiteFooter } from './components/SiteFooter'
 import { DealCard } from './components/DealCard'
 import { DealDetailModal } from './components/DealDetailModal'
@@ -1028,7 +1027,6 @@ function Dashboard() {
         ) : activeTab === 'search' ? (
           <>
             <div className="app-col">
-              <HomeDealsTeaser />
               <SimpleSearch
                 key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
