@@ -1026,7 +1026,7 @@ function Dashboard() {
           <PlannerTab />
         ) : activeTab === 'search' ? (
           <>
-            <div className="app-col">
+            <div className="app-col pt-5 sm:pt-8">
               <SimpleSearch
                 key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
