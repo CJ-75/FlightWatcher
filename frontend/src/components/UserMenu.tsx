@@ -5,6 +5,7 @@ import { getCurrentUser, signOut, signInWithGoogle, onAuthStateChange } from '..
 import { migrateLocalStorageToSupabase } from '../utils/migration';
 import { useI18n } from '../contexts/I18nContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { prefetchHotelBookings } from '../utils/bookingsCache';
 import type { User } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -187,7 +188,11 @@ export function UserMenu() {
 
         <button
           ref={buttonRef}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => {
+            const next = !isOpen
+            setIsOpen(next)
+            if (next && user) prefetchHotelBookings()
+          }}
           type="button"
           className="app-icon-btn h-10 w-10 sm:h-11 sm:w-11 rounded-full border-2 border-line shadow-soft bg-white flex items-center justify-center shrink-0"
           aria-label={t('auth.userMenu')}
@@ -294,6 +299,8 @@ export function UserMenu() {
                       setIsOpen(false)
                       navigate('/bookings')
                     }}
+                    onMouseEnter={() => prefetchHotelBookings()}
+                    onFocus={() => prefetchHotelBookings()}
                     type="button"
                     className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-ink hover:bg-primary-50 transition-colors min-h-[44px]"
                   >

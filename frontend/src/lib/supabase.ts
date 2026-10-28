@@ -112,7 +112,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
 }
 
 /**
- * Obtient la session actuelle
+ * Obtient la session actuelle (local storage — pas de round-trip Auth).
  */
 export const getCurrentSession = async (): Promise<Session | null> => {
   const client = await getSupabaseClient()
@@ -260,8 +260,9 @@ export const isAuthenticated = async (): Promise<boolean> => {
  * Obtient le token d'accès pour les appels API backend
  */
 export const getAccessToken = async (): Promise<string | null> => {
-  if (!supabase) return null
-  const session = await getCurrentSession()
+  const client = await getSupabaseClient()
+  if (!client) return null
+  const { data: { session } } = await client.auth.getSession()
   return session?.access_token || null
 }
 

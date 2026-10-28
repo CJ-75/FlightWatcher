@@ -8,7 +8,11 @@ import {
   type HotelBookingStatus,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
-import { getCurrentUser } from '../lib/supabase'
+import { getCurrentSession } from '../lib/supabase'
+import {
+  readBookingsCache,
+  writeBookingsCache,
+} from '../utils/bookingsCache'
 import { SiteFooter } from '../components/SiteFooter'
 
 type FilterTab = 'upcoming' | 'past' | 'all'
@@ -489,8 +493,10 @@ function BookingCard({
 export default function MyBookings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const focusId = searchParams.get('id')
-  const [bookings, setBookings] = useState<HotelBooking[]>([])
-  const [loading, setLoading] = useState(true)
+  const cached = useMemo(() => readBookingsCache(), [])
+  const [bookings, setBookings] = useState<HotelBooking[]>(() => cached || [])
+  const [loading, setLoading] = useState(() => !cached)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [authed, setAuthed] = useState(true)
   const [tab, setTab] = useState<FilterTab>('upcoming')
@@ -498,30 +504,38 @@ export default function MyBookings() {
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    const background = Boolean(opts?.background)
+    if (background) setRefreshing(true)
+    else setLoading(true)
     setError(null)
     try {
-      const user = await getCurrentUser()
-      if (!user) {
+      // getSession = local (fast). Avoid getUser() network round-trip on paint.
+      const session = await getCurrentSession()
+      if (!session?.user) {
         setAuthed(false)
         setBookings([])
+        writeBookingsCache([])
         return
       }
       setAuthed(true)
       const list = await getApiClient().listHotelBookings()
-      setBookings(Array.isArray(list) ? list : [])
+      const next = Array.isArray(list) ? list : []
+      setBookings(next)
+      writeBookingsCache(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
-      setBookings([])
+      if (!background) setBookings([])
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    // Cache → paint now; always revalidate in background
+    void load({ background: Boolean(cached?.length) })
+  }, [load, cached])
 
   useEffect(() => {
     if (focusId) setExpandedId(focusId)
@@ -554,6 +568,11 @@ export default function MyBookings() {
               Preuves d’hôtel, codes de confirmation et prochaines étapes — pour
               arriver serein à la réception.
             </p>
+            {refreshing ? (
+              <p className="text-xs text-muted mt-1.5" aria-live="polite">
+                Mise à jour…
+              </p>
+            ) : null}
           </div>
           <Link
             to="/vols"
@@ -586,7 +605,7 @@ export default function MyBookings() {
               />
             ))}
           </div>
-        ) : error ? (
+        ) : error && bookings.length === 0 ? (
           <div className="bg-white rounded-3xl border border-line p-6">
             <p className="text-sm text-red-600 mb-3">{error}</p>
             <button
