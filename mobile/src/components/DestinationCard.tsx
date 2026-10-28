@@ -10,13 +10,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import {
-  arrivalAirportSubtitle,
   buildBookingUrl,
   cityDisplayNameFr,
+  countryIsoForAirport,
   formatAirlineLabel,
   resolveTripImageUrl,
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
+import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'
 
 type CardAction = {
@@ -64,22 +65,11 @@ export function DestinationCard({
   secondaryAction,
   isFavorite,
 }: Props) {
-  const cityName = cityDisplayNameFr(
-    trip.destination_code,
-    trip.aller.destinationFull,
-  )
-  const originCode = (trip.aller.origin || '').trim().toUpperCase()
-  const destCode = (
-    trip.aller.destination ||
-    trip.destination_code ||
-    ''
-  )
-    .trim()
-    .toUpperCase()
-  const routeLabel =
-    originCode && destCode
-      ? `${originCode} → ${destCode}`
-      : arrivalAirportSubtitle(trip.destination_code, trip.aller.destinationFull)
+  const destCode = trip.aller.destination || trip.destination_code
+  const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull)
+  const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)
+  const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull)
+  const originIso = countryIsoForAirport(trip.aller.origin, trip.aller.originFull)
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     iata: trip.destination_code,
@@ -140,12 +130,23 @@ export function DestinationCard({
         </Pressable>
 
         <View style={styles.heroText}>
-          <Text style={styles.city} numberOfLines={1}>
-            {cityName}
-          </Text>
-          <Text style={styles.route} numberOfLines={1}>
-            {routeLabel}
-          </Text>
+          <View style={styles.cityRow}>
+            <CountryFlag iso={destIso} size={{ width: 24, height: 16 }} />
+            <Text style={styles.city} numberOfLines={1}>
+              {cityName}
+            </Text>
+          </View>
+          <View style={styles.routeRow}>
+            <CountryFlag iso={originIso} size={{ width: 16, height: 11 }} />
+            <Text style={styles.route} numberOfLines={1}>
+              {originCity}
+            </Text>
+            <Text style={styles.routeArrow}>→</Text>
+            <CountryFlag iso={destIso} size={{ width: 16, height: 11 }} />
+            <Text style={styles.route} numberOfLines={1}>
+              {cityName}
+            </Text>
+          </View>
           <View style={styles.badgeRow}>
             <View style={[styles.metaBadge, styles.airlineBadge]}>
               <Text style={styles.airlineBadgeText} numberOfLines={1}>
@@ -303,18 +304,37 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   heroText: { position: 'absolute', left: 16, right: 16, bottom: 16 },
+  cityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
   city: {
+    flexShrink: 1,
     color: colors.white,
     fontFamily: fonts.extrabold,
     fontSize: 26,
     letterSpacing: -0.8,
   },
+  routeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    minWidth: 0,
+  },
   route: {
+    flexShrink: 1,
     color: 'rgba(255,255,255,0.95)',
     fontFamily: fonts.bold,
     fontSize: 14,
     letterSpacing: 0.4,
-    marginTop: 4,
+  },
+  routeArrow: {
+    color: 'rgba(255,255,255,0.8)',
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
   badgeRow: {
     flexDirection: 'row',

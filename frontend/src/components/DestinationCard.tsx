@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  arrivalAirportSubtitle,
   cityDisplayNameFr,
+  countryIsoForAirport,
   formatAirlineLabel,
   resolveTripImageUrl,
 } from '@flightwatcher/shared';
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
+import { CountryFlag } from './CountryFlag';
 
 type CardAction = {
   label: string;
@@ -95,22 +96,11 @@ export function DestinationCard({
     });
   };
 
-  const cityName = cityDisplayNameFr(
-    trip.destination_code,
-    trip.aller.destinationFull,
-  );
-  const originCode = (trip.aller.origin || '').trim().toUpperCase();
-  const destCode = (
-    trip.aller.destination ||
-    trip.destination_code ||
-    ''
-  )
-    .trim()
-    .toUpperCase();
-  const routeLabel =
-    originCode && destCode
-      ? `${originCode} → ${destCode}`
-      : arrivalAirportSubtitle(trip.destination_code, trip.aller.destinationFull);
+  const destCode = trip.aller.destination || trip.destination_code;
+  const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull);
+  const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull);
+  const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull);
+  const originIso = countryIsoForAirport(trip.aller.origin, trip.aller.originFull);
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     iata: trip.destination_code,
@@ -182,11 +172,18 @@ export function DestinationCard({
         </motion.button>
 
         <div className="absolute bottom-0 left-0 right-0 p-3.5 sm:p-4">
-          <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
-            {cityName}
+          <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight flex items-center gap-2 min-w-0">
+            <CountryFlag iso={destIso} className="w-6 h-4 sm:w-7 sm:h-[18px]" title={cityName} />
+            <span className="truncate">{cityName}</span>
           </h3>
-          <p className="text-sm text-white/95 font-bold tracking-wide mt-0.5 truncate tabular-nums">
-            {routeLabel}
+          <p className="text-sm text-white/95 font-bold tracking-wide mt-0.5 flex items-center gap-1.5 min-w-0">
+            <CountryFlag iso={originIso} className="w-[18px] h-3" title={originCity} />
+            <span className="truncate">{originCity}</span>
+            <span className="opacity-80 shrink-0" aria-hidden>
+              →
+            </span>
+            <CountryFlag iso={destIso} className="w-[18px] h-3" title={cityName} />
+            <span className="truncate">{cityName}</span>
           </p>
           <div className="mt-2 flex flex-nowrap items-center gap-1.5 h-6 overflow-hidden">
             <span className="text-[11px] font-bold tracking-wide bg-white/25 text-white px-2.5 py-1 rounded-full truncate max-w-[55%]">

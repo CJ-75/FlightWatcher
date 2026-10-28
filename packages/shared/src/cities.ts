@@ -290,6 +290,7 @@ const CITY_FR_BY_IATA: Record<string, string> = {
   "VAR": "Varna",
   "VCE": "Venise",
   "VIE": "Vienne",
+  "VKO": "Moscou",
   "VLC": "Valence",
   "WAW": "Varsovie",
   "WRO": "Wroclaw",
@@ -297,6 +298,81 @@ const CITY_FR_BY_IATA: Record<string, string> = {
   "XRY": "Jerez",
   "ZAD": "Zadar",
   "ZAG": "Zagreb",
+  // World hubs often missing from the Ryanair-centric map
+  "EVN": "Erevan",
+  "SVO": "Moscou",
+  "DME": "Moscou",
+  "LED": "Saint-Pétersbourg",
+  "TBS": "Tbilissi",
+  "BUS": "Batoumi",
+  "GYD": "Bakou",
+  "IST": "Istanbul",
+  "SAW": "Istanbul",
+  "AYT": "Antalya",
+  "ESB": "Ankara",
+  "ADB": "Izmir",
+  "BJV": "Bodrum",
+  "DXB": "Dubaï",
+  "AUH": "Abou Dabi",
+  "DOH": "Doha",
+  "BAH": "Manama",
+  "RUH": "Riyad",
+  "JED": "Djeddah",
+  "CAI": "Le Caire",
+  "SSH": "Charm el-Cheikh",
+  "HRG": "Hurghada",
+  "TLV": "Tel Aviv",
+  "BEY": "Beyrouth",
+  "JFK": "New York",
+  "EWR": "New York",
+  "LGA": "New York",
+  "LAX": "Los Angeles",
+  "SFO": "San Francisco",
+  "MIA": "Miami",
+  "ORD": "Chicago",
+  "BOS": "Boston",
+  "IAD": "Washington",
+  "YUL": "Montréal",
+  "YYZ": "Toronto",
+  "YVR": "Vancouver",
+  "MEX": "Mexico",
+  "CUN": "Cancún",
+  "HAV": "La Havane",
+  "BOG": "Bogota",
+  "LIM": "Lima",
+  "SCL": "Santiago",
+  "EZE": "Buenos Aires",
+  "GRU": "São Paulo",
+  "GIG": "Rio de Janeiro",
+  "BKK": "Bangkok",
+  "SIN": "Singapour",
+  "HKG": "Hong Kong",
+  "NRT": "Tokyo",
+  "HND": "Tokyo",
+  "ICN": "Séoul",
+  "PEK": "Pékin",
+  "PVG": "Shanghai",
+  "DEL": "Delhi",
+  "BOM": "Mumbai",
+  "KUL": "Kuala Lumpur",
+  "MNL": "Manille",
+  "CGK": "Jakarta",
+  "SYD": "Sydney",
+  "MEL": "Melbourne",
+  "AKL": "Auckland",
+  "CPT": "Le Cap",
+  "JNB": "Johannesbourg",
+  "ADD": "Addis-Abeba",
+  "NBO": "Nairobi",
+  "KBP": "Kiev",
+  "IEV": "Kiev",
+  "ODS": "Odessa",
+  "MSQ": "Minsk",
+  "KIV": "Chișinău",
+  "ALA": "Almaty",
+  "NQZ": "Astana",
+  "TAS": "Tachkent",
+  "FRU": "Bichkek",
   "ZAZ": "Saragosse",
   "ZRH": "Zurich",
   "ZTH": "Zante",
@@ -362,6 +438,41 @@ const CITY_EN_TO_FR: Record<string, string> = {
   gatwick: 'Londres',
   prague: 'Prague',
   naples: 'Naples',
+  moscow: 'Moscou',
+  moskva: 'Moscou',
+  vnukovo: 'Moscou',
+  sheremetyevo: 'Moscou',
+  domodedovo: 'Moscou',
+  yerevan: 'Erevan',
+  erevan: 'Erevan',
+  tbilisi: 'Tbilissi',
+  baku: 'Bakou',
+  istanbul: 'Istanbul',
+  dubai: 'Dubaï',
+  'new york': 'New York',
+  tokyo: 'Tokyo',
+  beijing: 'Pékin',
+  shanghai: 'Shanghai',
+  seoul: 'Séoul',
+  bangkok: 'Bangkok',
+  singapore: 'Singapour',
+  cairo: 'Le Caire',
+  marrakech: 'Marrakech',
+  casablanca: 'Casablanca',
+}
+
+function stripAirportNoise(label: string): string {
+  return label
+    .replace(
+      /\b(international|intl|airport|aéroport|aeroport|airfield|terminal)\b/gi,
+      ' ',
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function looksLikeIataTrigram(value: string): boolean {
+  return /^[A-Za-z]{3}$/.test((value || '').trim())
 }
 
 /** French display name for a city, preferring IATA then EN→FR / label. */
@@ -373,10 +484,13 @@ export function cityDisplayNameFr(
   if (iata && CITY_FR_BY_IATA[iata]) return CITY_FR_BY_IATA[iata]
 
   const raw = (label || '').trim()
-  if (!raw) return iata || ''
+  if (!raw) {
+    // Last resort: never invent a fake city — keep IATA only if nothing else
+    return iata || ''
+  }
 
   // destinationFull is often "Airport, Country"
-  const beforeComma = raw.split(',')[0]?.trim() || raw
+  const beforeComma = stripAirportNoise(raw.split(',')[0]?.trim() || raw)
   const candidates = [
     beforeComma,
     ...beforeComma.split(/[\s\-–—/]+/).filter(Boolean),
@@ -389,12 +503,30 @@ export function cityDisplayNameFr(
   // Prefer a human label over a bare IATA trigram
   if (
     beforeComma &&
-    normalizeCityKey(beforeComma) !== normalizeCityKey(iata) &&
-    beforeComma.length > 3
+    !looksLikeIataTrigram(beforeComma) &&
+    normalizeCityKey(beforeComma) !== normalizeCityKey(iata)
   ) {
     return beforeComma
   }
-  return iata || beforeComma
+  if (iata && CITY_FR_BY_IATA[iata]) return CITY_FR_BY_IATA[iata]
+  // Avoid flashing "VKO" / "EVN" as the title when the label was also a trigram
+  if (beforeComma && !looksLikeIataTrigram(beforeComma)) return beforeComma
+  return beforeComma || iata || ''
+}
+
+/** "Paris → Moscou" — never "BVA → VKO". */
+export function routeCitiesLabelFr(opts: {
+  originCode?: string | null
+  originFull?: string | null
+  destCode?: string | null
+  destFull?: string | null
+}): string {
+  const from = cityDisplayNameFr(opts.originCode, opts.originFull)
+  const to = cityDisplayNameFr(opts.destCode, opts.destFull)
+  if (from && to && from !== to) return `${from} → ${to}`
+  if (to) return to
+  if (from) return from
+  return ''
 }
 
 /** French airport label by IATA (when distinct from city). */
