@@ -140,12 +140,12 @@ function MainTabs() {
       <Tab.Screen
         name="Search"
         component={SearchScreen}
-        options={{ title: 'Recherche', headerShown: false }}
+        options={{ title: 'Vols', headerShown: false }}
       />
       <Tab.Screen
         name="Deals"
         component={DealsScreen}
-        options={{ title: 'Deals', headerShown: false }}
+        options={{ title: 'Séjours', headerShown: false }}
       />
       <Tab.Screen
         name="Planner"

@@ -57,8 +57,8 @@ import { CityAirportSelect } from './components/CityAirportSelect'
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
 
 const TAB_PATH: Record<Tab, string> = {
-  search: '/recherche',
-  deals: '/deals',
+  search: '/vols',
+  deals: '/sejours',
   planner: '/planner',
   alerts: '/alertes',
   saved: '/favoris',
@@ -66,8 +66,8 @@ const TAB_PATH: Record<Tab, string> = {
 
 function tabFromPath(pathname: string): Tab | null {
   const p = pathname.replace(/\/+$/, '') || '/'
-  if (p === '/recherche' || p === '/search') return 'search'
-  if (p === '/deals') return 'deals'
+  if (p === '/vols' || p === '/recherche' || p === '/search') return 'search'
+  if (p === '/sejours' || p === '/deals') return 'deals'
   if (p === '/planner') return 'planner'
   if (p === '/alertes' || p === '/alerts') return 'alerts'
   if (p === '/favoris' || p === '/saved') return 'saved'
@@ -118,11 +118,15 @@ function Dashboard() {
     }
   }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps -- sync from URL only
 
-  // If tab was restored from sessionStorage on /recherche, push the right path once
+  // If tab was restored from sessionStorage on default path, push the right path once
   useEffect(() => {
     const fromPath = tabFromPath(location.pathname)
     if (fromPath === activeTab) return
-    if (activeTab && location.pathname === '/recherche' && activeTab !== 'search') {
+    const onLegacyHome =
+      location.pathname === '/vols' ||
+      location.pathname === '/recherche' ||
+      location.pathname === '/'
+    if (activeTab && onLegacyHome && activeTab !== 'search') {
       navigate(
         {
           pathname: TAB_PATH[activeTab],
@@ -170,7 +174,7 @@ function Dashboard() {
   const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>([])
   const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>([])
   const [budgetMax, setBudgetMax] = useState(100)
-  const [limiteAllers, setLimiteAllers] = useState(50)
+  const [limiteAllers, setLimiteAllers] = useState(500)
   const [currentRequest, setCurrentRequest] = useState<ScanRequest | null>(null)
   const [destinationsExclues, setDestinationsExclues] = useState<string[]>([])
   const [searchPassengers, setSearchPassengers] = useState(1)
@@ -959,7 +963,7 @@ function Dashboard() {
           {/* Brand + compte : pleine largeur */}
           <header className="flex items-center justify-between gap-3">
             <Link
-              to="/recherche"
+              to="/vols"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
               aria-label="FlightWatcher — retour à la recherche"

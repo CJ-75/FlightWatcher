@@ -556,7 +556,7 @@ export default function MyBookings() {
             </p>
           </div>
           <Link
-            to="/recherche"
+            to="/vols"
             className="text-sm font-bold text-primary-600 hover:underline shrink-0 pt-1"
           >
             ← Accueil
@@ -606,13 +606,13 @@ export default function MyBookings() {
             </p>
             <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
               <Link
-                to="/deals"
+                to="/sejours"
                 className="inline-flex justify-center app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
               >
                 Voir les deals
               </Link>
               <Link
-                to="/recherche"
+                to="/vols"
                 className="inline-flex justify-center rounded-2xl border border-line px-5 py-2.5 text-sm font-bold text-ink hover:bg-slate-50"
               >
                 Rechercher un vol

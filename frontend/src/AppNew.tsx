@@ -1,9 +1,12 @@
 /**
  * Point d'entrée principal de l'application avec router
  */
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { I18nProvider } from './contexts/I18nContext'
+import { prefetchAirports } from './hooks/useAirports'
+
+prefetchAirports()
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import PlannerInvite from './pages/PlannerInvite'
@@ -23,6 +26,12 @@ import { SettingsPage } from './admin/pages/SettingsPage'
 import { TestsPage } from './admin/pages/TestsPage'
 import { DealsMetricsPage } from './admin/pages/DealsMetricsPage'
 import { OccasionsPage } from './admin/pages/OccasionsPage'
+
+/** Preserve query string on legacy path aliases (e.g. /deals?deal=…). */
+function LegacyRedirect({ to }: { to: string }) {
+  const { search } = useLocation()
+  return <Navigate to={{ pathname: to, search }} replace />
+}
 
 function App() {
   return (
@@ -61,17 +70,19 @@ function App() {
         </Route>
         
         {/* App shell — onglets = vraies URLs (partage, retour navigateur, SEO) */}
-        <Route path="/" element={<Navigate to="/recherche" replace />} />
-        <Route path="/recherche" element={<Dashboard />} />
-        <Route path="/deals" element={<Dashboard />} />
+        <Route path="/" element={<Navigate to="/vols" replace />} />
+        <Route path="/vols" element={<Dashboard />} />
+        <Route path="/sejours" element={<Dashboard />} />
         <Route path="/planner" element={<Dashboard />} />
         <Route path="/alertes" element={<Dashboard />} />
         <Route path="/favoris" element={<Dashboard />} />
         {/* Legacy aliases */}
-        <Route path="/search" element={<Navigate to="/recherche" replace />} />
+        <Route path="/recherche" element={<LegacyRedirect to="/vols" />} />
+        <Route path="/search" element={<LegacyRedirect to="/vols" />} />
+        <Route path="/deals" element={<LegacyRedirect to="/sejours" />} />
         <Route path="/alerts" element={<Navigate to="/alertes" replace />} />
         <Route path="/saved" element={<Navigate to="/favoris" replace />} />
-        <Route path="*" element={<Navigate to="/recherche" replace />} />
+        <Route path="*" element={<Navigate to="/vols" replace />} />
         </Routes>
       </BrowserRouter>
     </I18nProvider>

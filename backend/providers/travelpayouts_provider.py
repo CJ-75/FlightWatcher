@@ -69,20 +69,43 @@ def _build_booking_url(link: Optional[str]) -> Optional[str]:
     return url
 
 
-def _fetch_prices(
+def _normalize_rows(data: Any) -> List[dict]:
+    if isinstance(data, dict):
+        rows: List[dict] = []
+        for dest, offers in data.items():
+            if isinstance(offers, dict):
+                for offer in offers.values():
+                    if isinstance(offer, dict):
+                        offer.setdefault("destination", dest)
+                        rows.append(offer)
+        return rows
+    if isinstance(data, list):
+        return [r for r in data if isinstance(r, dict)]
+    return []
+
+
+def _fetch_prices_page(
     *,
     origin: str,
     destination: Optional[str],
     departure_at: str,
     return_at: str,
     direct: bool,
-    limit: int = 50,
+    limit: int,
+    page: int,
+    unique: bool,
 ) -> Tuple[List[dict], int]:
+    """One page of prices_for_dates. limit max 1000 (API)."""
     token = _token()
     if not token:
         return [], 0
 
-    cache_key = f"{origin}|{destination or '-'}|{departure_at}|{return_at}|{direct}|{limit}"
+    page_limit = min(max(int(limit or 1000), 1), 1000)
+    page_n = max(1, int(page or 1))
+    cache_key = (
+        f"{origin}|{destination or '-'}|{departure_at}|{return_at}|"
+        f"{direct}|u={int(unique)}|p{page_n}|l{page_limit}"
+    )
     now = time.time()
     cached = _CACHE.get(cache_key)
     if cached and now - cached[0] < _CACHE_TTL:
@@ -97,12 +120,14 @@ def _fetch_prices(
         "currency": "EUR",
         "market": "fr",
         "sorting": "price",
-        "limit": str(min(max(limit, 1), 100)),
-        "page": "1",
+        "unique": "true" if unique else "false",
+        "limit": str(page_limit),
+        "page": str(page_n),
         "token": token,
     }
     if destination:
         params["destination"] = destination
+        params["unique"] = "false"
 
     url = API_URL + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(
@@ -140,22 +165,52 @@ def _fetch_prices(
         slog(f"⚠️ [travelpayouts] unsuccessful: {payload.get('error')}")
         return [], 1
 
-    data = payload.get("data") or []
-    if isinstance(data, dict):
-        # Older shapes
-        rows = []
-        for dest, offers in data.items():
-            if isinstance(offers, dict):
-                for offer in offers.values():
-                    if isinstance(offer, dict):
-                        offer.setdefault("destination", dest)
-                        rows.append(offer)
-        data = rows
-    if not isinstance(data, list):
-        data = []
-
+    data = _normalize_rows(payload.get("data") or [])
     _CACHE[cache_key] = (now, data)
     return data, 1
+
+
+def _fetch_prices(
+    *,
+    origin: str,
+    destination: Optional[str],
+    departure_at: str,
+    return_at: str,
+    direct: bool,
+    limit: int = 1000,
+    unique: bool = False,
+    max_pages: int = 20,
+) -> Tuple[List[dict], int]:
+    """
+    Fetch prices — for open Search (no destination) paginate with unique=true
+    so we cover as many world destinations as the cache holds.
+    """
+    page_size = min(max(int(limit or 1000), 1), 1000)
+    # Open world Search: one dest per row via unique=true + page through
+    open_world = not destination
+    use_unique = bool(unique or open_world)
+    pages = max(1, int(max_pages if open_world else 1))
+
+    all_rows: List[dict] = []
+    queries = 0
+    for page in range(1, pages + 1):
+        rows, nq = _fetch_prices_page(
+            origin=origin,
+            destination=destination,
+            departure_at=departure_at,
+            return_at=return_at,
+            direct=direct,
+            limit=page_size,
+            page=page,
+            unique=use_unique,
+        )
+        queries += nq
+        if not rows:
+            break
+        all_rows.extend(rows)
+        if len(rows) < page_size:
+            break
+    return all_rows, queries
 
 
 def _parse_dt(value: Any) -> Optional[datetime]:
@@ -321,7 +376,12 @@ class TravelpayoutsProvider:
         destinations_exclues = params.destinations_exclues or []
         destinations_incluses = params.destinations_incluses
         direct = bool(params.direct)
-        limite = min(params.limite_allers or 50, 80)
+        # None / <=0 = unlimited (Search world). Positive = seed/deals caps only.
+        try:
+            raw_lim = int(params.limite_allers) if params.limite_allers is not None else 0
+        except (TypeError, ValueError):
+            raw_lim = 0
+        hard_cap: Optional[int] = raw_lim if raw_lim > 0 else None
 
         dates_depart_by_day = {d.date[:10]: d for d in params.dates_depart}
         dates_retour_by_day = {d.date[:10]: d for d in params.dates_retour}
@@ -341,24 +401,29 @@ class TravelpayoutsProvider:
             if p not in seen:
                 seen.add(p)
                 uniq_pairs.append(p)
-        # Cap fan-out
+        # Cap fan-out of date pairs (not destinations)
         uniq_pairs = uniq_pairs[:12]
 
-        # Specific destinations or open inspire
+        # Specific destinations (deals/seed) or open world Search
         dest_targets: List[Optional[str]]
+        open_world = False
         if destinations_incluses:
             dest_targets = [c.strip().upper() for c in destinations_incluses if c]
+            if hard_cap is not None:
+                dest_targets = dest_targets[:hard_cap]
         else:
             dest_targets = [None]
+            open_world = True
 
         slog(
             f"📥 [travelpayouts] depuis {origin} "
-            f"({len(uniq_pairs)} paires dates, dest={len(dest_targets)}, "
+            f"({len(uniq_pairs)} paires dates, "
+            f"{'WORLD unique' if open_world else f'dest={len(dest_targets)}'}, "
             f"direct={direct}, budget={budget_max}€, pax={pax})..."
         )
 
         jobs: List[Tuple[Optional[str], str, str]] = []
-        for dest in dest_targets[:40]:
+        for dest in dest_targets:
             for dep_day, ret_day in uniq_pairs:
                 jobs.append((dest, dep_day, ret_day))
 
@@ -373,7 +438,9 @@ class TravelpayoutsProvider:
                 departure_at=dep_day,
                 return_at=ret_day,
                 direct=direct,
-                limit=limite,
+                limit=1000,
+                unique=open_world,
+                max_pages=20 if open_world else 1,
             )
             out: List[TripResponse] = []
             for offer in rows:
@@ -405,15 +472,19 @@ class TravelpayoutsProvider:
                 except Exception as e:
                     slog(f"  [travelpayouts] pair error: {e}")
 
-        # Best offer per destination (cheapest)
+        # Best offer per destination (cheapest) — no Search soft-cap
         by_dest: Dict[str, TripResponse] = {}
         for t in trips:
             prev = by_dest.get(t.destination_code)
             if prev is None or t.prix_total < prev.prix_total:
                 by_dest[t.destination_code] = t
 
-        resultats = sorted(by_dest.values(), key=lambda t: t.prix_total)[:limite]
+        resultats = sorted(by_dest.values(), key=lambda t: t.prix_total)
+        if hard_cap is not None and not open_world:
+            resultats = resultats[:hard_cap]
         slog(
-            f"  ✓ [travelpayouts] {len(resultats)} A/R ({queries} req, workers={workers})"
+            f"  ✓ [travelpayouts] {len(resultats)} A/R "
+            f"({queries} req, workers={workers}"
+            f"{', WORLD' if open_world else ''})"
         )
         return resultats, queries

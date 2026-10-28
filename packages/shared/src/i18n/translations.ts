@@ -9,8 +9,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'app.error': 'Une erreur est survenue',
     
     // Navigation
-    'nav.search': 'Recherche',
-    'nav.deals': 'Deals',
+    'nav.search': 'Vols',
+    'nav.deals': 'Séjours',
     'nav.planner': 'Planner',
     'nav.alerts': 'Alertes',
     'nav.saved': 'Favoris',
@@ -402,8 +402,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'app.error': 'An error occurred',
     
     // Navigation
-    'nav.search': 'Search',
-    'nav.deals': 'Deals',
+    'nav.search': 'Flights',
+    'nav.deals': 'Stays',
     'nav.planner': 'Planner',
     'nav.alerts': 'Alerts',
     'nav.saved': 'Favorites',

@@ -6,12 +6,12 @@ import {
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
-  normalizeAirports,
   parseAirportCodes,
   type Airport,
 } from '@flightwatcher/shared'
 import type { DealOccasionChip, TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
+import { loadAirportsOnce, peekAirports } from '../hooks/useAirports'
 import { getCurrentUser } from '../lib/supabase'
 import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
@@ -112,7 +112,7 @@ export function DealsTab() {
   ])
   const [occasionCountsPending, setOccasionCountsPending] = useState(true)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(() => peekAirports())
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originDefaultedRef = useRef(false)
 
@@ -132,11 +132,9 @@ export function DealsTab() {
 
   useEffect(() => {
     let cancelled = false
-    void getApiClient()
-      .getAirports()
-      .then((raw) => {
+    void loadAirportsOnce()
+      .then((list) => {
         if (cancelled) return
-        const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
         setAirports(list)
         if (originDefaultedRef.current) return
         const stored = readStoredOrigin()

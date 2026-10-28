@@ -127,6 +127,27 @@ class RyanairProvider:
             slog(f"💾 [ryanair] cache hit ({len(trips)} trips)")
             return list(trips), int(nq)
 
+        aeroport_depart = (params.aeroport_depart or "BVA").strip().upper()
+        dates_depart = params.dates_depart or []
+        dates_retour = params.dates_retour or []
+        limite_allers = params.limite_allers or 50
+        destinations_exclues = params.destinations_exclues or []
+        destinations_incluses = params.destinations_incluses
+
+        if not dates_depart or not dates_retour:
+            return [], 0
+
+        # CDG/ORY/XCR etc. are not Ryanair bases — skip before fare API / throttle / budget
+        try:
+            from ryanair_routes import fetch_served_codes
+
+            served = fetch_served_codes(aeroport_depart)
+            if not served:
+                slog(f"⏸ [ryanair] {aeroport_depart} pas de base — skip")
+                return [], 0
+        except Exception as e:
+            slog(f"⚠️ [ryanair] routes check {aeroport_depart}: {e}")
+
         purpose = (params.ryanair_purpose or PURPOSE_ORGANIC).lower()
         if not try_acquire(purpose):
             slog(f"⏸ [ryanair] budget deny purpose={purpose}")
@@ -137,15 +158,6 @@ class RyanairProvider:
         pax = _clamp_passengers(params.passengers)
         pax_params = {"adultPaxCount": pax} if pax > 1 else None
         budget_total = int(params.budget_max) * pax
-        aeroport_depart = (params.aeroport_depart or "BVA").strip().upper()
-        dates_depart = params.dates_depart or []
-        dates_retour = params.dates_retour or []
-        limite_allers = params.limite_allers or 50
-        destinations_exclues = params.destinations_exclues or []
-        destinations_incluses = params.destinations_incluses
-
-        if not dates_depart or not dates_retour:
-            return [], 0
 
         slog(
             f"📥 [ryanair] vols aller depuis {aeroport_depart} "
@@ -207,9 +219,16 @@ class RyanairProvider:
             if dest not in vols_aller_optimises or vol.price < vols_aller_optimises[dest].price:
                 vols_aller_optimises[dest] = vol
 
-        vols_aller_filtres = sorted(
-            vols_aller_optimises.values(), key=lambda v: v.price
-        )[:limite_allers]
+        # Search (organic / unlimited): all destinations. Seed/deals may pass a cap.
+        try:
+            raw_lim = int(limite_allers) if limite_allers is not None else 0
+        except (TypeError, ValueError):
+            raw_lim = 0
+        ranked = sorted(vols_aller_optimises.values(), key=lambda v: v.price)
+        if raw_lim > 0 and not is_fast_search_path():
+            vols_aller_filtres = ranked[:raw_lim]
+        else:
+            vols_aller_filtres = ranked
 
         # Parallel return legs on fast Search path (seed stays serial / gentler)
         workers_hint = 6 if is_fast_search_path() else 1

@@ -66,7 +66,7 @@ export default function Security() {
       />
       <div className="relative max-w-lg mx-auto px-4 py-8 sm:py-12">
         <div className="flex items-center justify-between mb-8">
-          <Link to="/recherche" className="text-sm font-bold text-[#E85A28]">
+          <Link to="/vols" className="text-sm font-bold text-[#E85A28]">
             ← {t('login.back')}
           </Link>
           <LanguageSwitcher />

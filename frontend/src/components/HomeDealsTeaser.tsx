@@ -70,7 +70,7 @@ export function HomeDealsTeaser() {
         </p>
         <p className="text-xs text-muted mt-1">
           Cherche un vol, ou parcours les{' '}
-          <Link to="/deals" className="font-bold text-primary-600 underline-offset-2 hover:underline">
+          <Link to="/sejours" className="font-bold text-primary-600 underline-offset-2 hover:underline">
             bons plans
           </Link>
           .
@@ -89,7 +89,7 @@ export function HomeDealsTeaser() {
           </h2>
         </div>
         <Link
-          to="/deals"
+          to="/sejours"
           className="text-xs font-bold text-primary-600 hover:text-primary-700 shrink-0"
         >
           Tout voir →
@@ -99,7 +99,7 @@ export function HomeDealsTeaser() {
         {deals.map((d) => (
           <Link
             key={d.id || d.deal_key}
-            to={`/deals?deal=${encodeURIComponent(d.deal_key || d.id)}`}
+            to={`/sejours?deal=${encodeURIComponent(d.deal_key || d.id)}`}
             className="shrink-0 w-[9.5rem] rounded-2xl border border-line bg-white overflow-hidden hover:border-primary-200 hover:shadow-soft transition-all"
           >
             <div className="h-20 bg-slate-100">

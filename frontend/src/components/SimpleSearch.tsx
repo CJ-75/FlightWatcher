@@ -396,7 +396,8 @@ export function SimpleSearch({
         ...(excludedDestinations.length > 0 && {
           destinations_exclues: excludedDestinations
         }),
-        limite_allers: limiteAllers || 50,
+        // Vols = uncapped world Search; Séjours/Deals apply their own limits
+        limite_allers: 0,
       };
 
       const searchInfo = {

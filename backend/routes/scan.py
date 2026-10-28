@@ -203,9 +203,9 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
     slog(f"  budget      : {request.budget} €/pers")
     slog(f"  voyageurs   : {request.passengers or 1}")
     slog(f"  directs     : {bool(request.direct)}")
-    # Fast Search default (50). Client may raise; avoid huge caps that make Ryanair miss merge.
-    inspire_limite = request.limite_allers if request.limite_allers is not None else 50
-    slog(f"  limite_allers: {inspire_limite}")
+    # Vols/Search = world destinations (uncapped). Séjours/Deals use their own caps.
+    inspire_limite = 0
+    slog(f"  limite_allers: unlimited (Search)")
     if request.destinations_exclues:
         slog(f"  exclus      : {request.destinations_exclues}")
     try:
@@ -327,8 +327,9 @@ async def inspire_trip_stream(request: InspireRequest, http_request: Request = N
     from search_priority import search_active
 
     slog_banner("POST /api/inspire/stream")
-    inspire_limite = request.limite_allers if request.limite_allers is not None else 50
-    slog(f"  origine={request.departure} budget={request.budget} limite={inspire_limite}")
+    # Vols/Search = world destinations (uncapped). Séjours/Deals stay separate.
+    inspire_limite = 0
+    slog(f"  origine={request.departure} budget={request.budget} limite=unlimited")
 
     try:
         dates_depart, dates_retour = _parse_inspire_dates(request)

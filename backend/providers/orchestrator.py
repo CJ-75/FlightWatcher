@@ -147,12 +147,12 @@ def _merge_deadline_s() -> float:
         return 8.0
 
 
-def _stream_deadline_s() -> float:
-    """Longer wall for progressive Search — TP first, Ryanair can still land."""
+def _stream_absolute_timeout_s() -> float:
+    """Hard safety cap only — Search waits for every job and yields before done."""
     try:
-        return max(10.0, float(os.getenv("SEARCH_STREAM_DEADLINE_S", "28")))
+        return max(30.0, float(os.getenv("SEARCH_STREAM_TIMEOUT_S", "180")))
     except (TypeError, ValueError):
-        return 28.0
+        return 180.0
 
 
 def _merge_grace_s() -> float:
@@ -368,7 +368,7 @@ def search_roundtrips(
     dates_depart: List[DateAvecHoraire],
     dates_retour: List[DateAvecHoraire],
     budget_max: int = 200,
-    limite_allers: int = 50,
+    limite_allers: int = 500,
     destinations_exclues: Optional[List[str]] = None,
     destinations_incluses: Optional[List[str]] = None,
     record_prices: bool = True,
@@ -391,6 +391,10 @@ def search_roundtrips(
 
     deadline = _merge_deadline_s()
     grace = _merge_grace_s()
+    try:
+        limit = int(limite_allers) if limite_allers is not None else 0
+    except (TypeError, ValueError):
+        limit = 0
 
     with fast_search_path(use_fast):
         # Single origin
@@ -401,7 +405,7 @@ def search_roundtrips(
                 dates_depart,
                 dates_retour,
                 budget_max,
-                limite_allers,
+                limit,
                 destinations_exclues,
                 destinations_incluses,
                 record_prices,
@@ -411,10 +415,8 @@ def search_roundtrips(
                 deadline_s=deadline,
                 grace_s=grace,
             )
-            cap = max(limite_allers or 50, 30)
-            capped = trips[: cap * 2]
-            _maybe_record_observations(capped, record_prices=record_prices)
-            return capped, nq
+            _maybe_record_observations(trips, record_prices=record_prices)
+            return trips, nq
 
         # Multi-origin city aggregation (e.g. Paris = CDG,ORY,BVA)
         from scan_log import slog
@@ -424,7 +426,6 @@ def search_roundtrips(
         total_queries = 0
         # Share one wall clock across origins so Paris ≠ 3× deadline
         workers = min(len(origins), 4)
-        per_origin_limit = max(12, (limite_allers or 50) // len(origins))
         start = time.monotonic()
 
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -436,7 +437,7 @@ def search_roundtrips(
                     dates_depart,
                     dates_retour,
                     budget_max,
-                    per_origin_limit,
+                    limit,
                     destinations_exclues,
                     destinations_incluses,
                     record_prices,
@@ -478,10 +479,8 @@ def search_roundtrips(
                 ).start()
 
         merged = merge_trips(batches)
-        cap = max(limite_allers or 50, 30) * max(1, len(origins))
-        capped = merged[:cap]
-        _maybe_record_observations(capped, record_prices=record_prices)
-        return capped, total_queries
+        _maybe_record_observations(merged, record_prices=record_prices)
+        return merged, total_queries
 
 
 def search_roundtrips_stream(
@@ -489,7 +488,7 @@ def search_roundtrips_stream(
     dates_depart: List[DateAvecHoraire],
     dates_retour: List[DateAvecHoraire],
     budget_max: int = 200,
-    limite_allers: int = 50,
+    limite_allers: int = 500,
     destinations_exclues: Optional[List[str]] = None,
     destinations_incluses: Optional[List[str]] = None,
     record_prices: bool = True,
@@ -513,11 +512,12 @@ def search_roundtrips_stream(
     active = _active_providers(only=providers)
     purpose = ryanair_purpose or PURPOSE_ORGANIC
     use_fast = purpose in (PURPOSE_ORGANIC, "organic", "click", "user", "")
-    deadline = _stream_deadline_s()
-    per_origin_limit = max(
-        12,
-        (limite_allers or 50) // max(1, len(origins)),
-    )
+    absolute_timeout = _stream_absolute_timeout_s()
+    # 0 / None = unlimited destinations (Search). Positive = seed/deals only.
+    try:
+        per_origin_limit = int(limite_allers) if limite_allers is not None else 0
+    except (TypeError, ValueError):
+        per_origin_limit = 0
 
     if not active:
         yield {
@@ -562,23 +562,13 @@ def search_roundtrips_stream(
                     pending = set(futures.keys())
                     slog(
                         f"📡 stream search {','.join(origins)} — "
-                        f"{len(pending)} jobs, deadline={deadline:.0f}s "
-                        f"(first ready wins)"
+                        f"{len(pending)} jobs, wait-all timeout={absolute_timeout:.0f}s "
+                        f"(limite={per_origin_limit}/origin)"
                     )
 
-                    while pending:
-                        left = deadline - (time.monotonic() - start)
-                        if left <= 0:
-                            slog(
-                                f"⏱ stream deadline — {len(pending)} job(s) still running"
-                            )
-                            break
-                        done, pending = wait(
-                            pending,
-                            timeout=min(max(left, 0.05), 0.4),
-                            return_when=FIRST_COMPLETED,
-                        )
-                        for fut in done:
+                    def _emit_done(done_set) -> None:
+                        nonlocal total_nq, all_trips
+                        for fut in done_set:
                             origin, name = futures[fut]
                             try:
                                 trips, nq = fut.result()
@@ -609,6 +599,22 @@ def search_roundtrips_stream(
                                     }
                                 )
 
+                    # Wait for every job — late results still go to the UI
+                    while pending:
+                        left = absolute_timeout - (time.monotonic() - start)
+                        if left <= 0:
+                            slog(
+                                f"⏱ stream absolute timeout — "
+                                f"{len(pending)} job(s) abandoned to cache"
+                            )
+                            break
+                        done, pending = wait(
+                            pending,
+                            timeout=min(max(left, 0.05), 0.4),
+                            return_when=FIRST_COMPLETED,
+                        )
+                        _emit_done(done)
+
                     for fut in pending:
                         origin, name = futures[fut]
                         threading.Thread(
@@ -620,8 +626,7 @@ def search_roundtrips_stream(
 
             if record_prices and all_trips:
                 merged = merge_trips([all_trips])
-                cap = max(limite_allers or 50, 30) * max(1, len(origins))
-                _maybe_record_observations(merged[:cap], record_prices=True)
+                _maybe_record_observations(merged, record_prices=True)
 
             out_q.put(
                 {

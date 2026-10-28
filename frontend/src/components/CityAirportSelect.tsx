@@ -10,7 +10,7 @@ import {
   resolvePopularCityGroups,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
-import { getApiClient, normalizeAirports } from '../utils/apiClient'
+import { loadAirportsOnce, peekAirports } from '../hooks/useAirports'
 import { CountryFlag } from './CountryFlag'
 
 type Props = {
@@ -27,7 +27,7 @@ const PLACEHOLDER_CITIES = [
 const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[14px]'
 
 export function CityAirportSelect({ value, onChange }: Props) {
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(() => peekAirports())
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
@@ -37,10 +37,8 @@ export function CityAirportSelect({ value, onChange }: Props) {
     let cancelled = false
     ;(async () => {
       try {
-        const raw = await getApiClient().getAirports()
-        if (!cancelled) {
-          setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] }))
-        }
+        const list = await loadAirportsOnce()
+        if (!cancelled) setAirports(list)
       } catch {
         /* ignore */
       }

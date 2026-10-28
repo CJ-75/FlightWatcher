@@ -2,9 +2,10 @@ import csv
 import json
 import os
 import sys
+import time
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ryanair_routes import fetch_destinations_by_country
 from airports_catalog import common_airports_from_travelpayouts, merge_airport_lists
@@ -22,6 +23,10 @@ from ryanair import Ryanair
 
 router = APIRouter()
 
+# Merged catalog — avoid Ryanair locate + TP on every keystroke / mount
+_AIRPORTS_MERGED_CACHE: Optional[Tuple[float, List[dict]]] = None
+_AIRPORTS_MERGED_TTL_S = 6 * 60 * 60
+
 
 def _generate_airports_from_api(country_names: dict) -> List[dict]:
     """Charge les aéroports actifs Ryanair via l'API locate (source de vérité)."""
@@ -34,7 +39,7 @@ def _generate_airports_from_api(country_names: dict) -> List[dict]:
             url,
             headers={'User-Agent': 'FlightWatcher/1.0', 'Accept': 'application/json'},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode('utf-8'))
 
         airports_list = []
@@ -79,60 +84,79 @@ _FALLBACK_AIRPORTS = [
 ]
 
 
+def _build_merged_airports() -> List[dict]:
+    """Build once; callers use process cache."""
+    country_names = dict(COUNTRY_FR_BY_ISO)
+
+    ryanair = _generate_airports_from_api(country_names) or []
+    if not ryanair:
+        airports_file = os.path.normpath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "ryanair-py",
+                "ryanair",
+                "airports.csv",
+            )
+        )
+        try:
+            if os.path.isfile(airports_file):
+                with open(airports_file, "r", encoding="utf-8", errors="replace") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        iata_code = (row.get("iata_code") or "").strip()
+                        municipality = (row.get("municipality") or "").strip()
+                        iso_country = (row.get("iso_country") or "").strip()
+                        airport_name = (row.get("name") or "").strip()
+                        if not iata_code or len(iata_code) != 3:
+                            continue
+                        ryanair.append(
+                            localize_airport_dict(
+                                {
+                                    "code": iata_code,
+                                    "name": airport_name or "N/A",
+                                    "city": municipality or "N/A",
+                                    "country": country_names.get(
+                                        iso_country, iso_country
+                                    ),
+                                }
+                            )
+                        )
+        except OSError as e:
+            print(f"airports.csv skip: {e}")
+
+    try:
+        common = common_airports_from_travelpayouts(country_names)
+    except Exception as e:
+        print(f"travelpayouts airports skip: {e}")
+        common = []
+
+    # Ryanair first so their FR labels win on overlap
+    return merge_airport_lists(ryanair, common) or list(ryanair) or list(
+        _FALLBACK_AIRPORTS
+    )
+
+
+def _merged_airports_cached() -> List[dict]:
+    global _AIRPORTS_MERGED_CACHE
+    now = time.time()
+    if (
+        _AIRPORTS_MERGED_CACHE is not None
+        and now - _AIRPORTS_MERGED_CACHE[0] < _AIRPORTS_MERGED_TTL_S
+        and _AIRPORTS_MERGED_CACHE[1]
+    ):
+        return _AIRPORTS_MERGED_CACHE[1]
+    airports = _build_merged_airports()
+    _AIRPORTS_MERGED_CACHE = (now, airports)
+    return airports
+
+
 @router.get("/api/airports")
 def get_airports(query: Optional[str] = None):
     """Ryanair actives + aéroports courants (Travelpayouts), labels FR."""
     try:
-        country_names = dict(COUNTRY_FR_BY_ISO)
-
-        ryanair = _generate_airports_from_api(country_names) or []
-        if not ryanair:
-            airports_file = os.path.normpath(
-                os.path.join(
-                    os.path.dirname(__file__),
-                    "..",
-                    "..",
-                    "ryanair-py",
-                    "ryanair",
-                    "airports.csv",
-                )
-            )
-            try:
-                if os.path.isfile(airports_file):
-                    with open(airports_file, "r", encoding="utf-8", errors="replace") as f:
-                        reader = csv.DictReader(f)
-                        for row in reader:
-                            iata_code = (row.get("iata_code") or "").strip()
-                            municipality = (row.get("municipality") or "").strip()
-                            iso_country = (row.get("iso_country") or "").strip()
-                            airport_name = (row.get("name") or "").strip()
-                            if not iata_code or len(iata_code) != 3:
-                                continue
-                            ryanair.append(
-                                localize_airport_dict(
-                                    {
-                                        "code": iata_code,
-                                        "name": airport_name or "N/A",
-                                        "city": municipality or "N/A",
-                                        "country": country_names.get(
-                                            iso_country, iso_country
-                                        ),
-                                    }
-                                )
-                            )
-            except OSError as e:
-                print(f"airports.csv skip: {e}")
-
-        try:
-            common = common_airports_from_travelpayouts(country_names)
-        except Exception as e:
-            print(f"travelpayouts airports skip: {e}")
-            common = []
-
-        # Ryanair first so their FR labels win on overlap
-        airports = merge_airport_lists(ryanair, common) or list(ryanair) or list(
-            _FALLBACK_AIRPORTS
-        )
+        airports = _merged_airports_cached()
 
         if query:
             query_lower = query.lower()

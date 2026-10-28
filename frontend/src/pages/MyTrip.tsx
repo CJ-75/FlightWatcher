@@ -303,9 +303,11 @@ export default function MyTrip() {
   const wantsCompose =
     composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
 
-  const backHref = searchParams.get('from') === 'recherche' ? '/recherche' : '/deals'
+  const from = searchParams.get('from')
+  const backHref =
+    from === 'recherche' || from === 'vols' ? '/vols' : '/sejours'
   const backLabel =
-    searchParams.get('from') === 'recherche' ? '← Recherche' : '← Deals'
+    from === 'recherche' || from === 'vols' ? '← Vols' : '← Séjours'
 
   const closeCompose = () => {
     setComposeOpen(false)
@@ -672,8 +674,8 @@ export default function MyTrip() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 px-4">
         <p className="text-slate-700 font-medium">{error || 'Voyage introuvable ou expiré'}</p>
-        <Link to="/deals" className="text-primary-600 font-bold underline">
-          ← Deals
+        <Link to="/sejours" className="text-primary-600 font-bold underline">
+          ← Séjours
         </Link>
       </div>
     )
@@ -912,7 +914,7 @@ export default function MyTrip() {
                     disponible.
                   </p>
                   <Link
-                    to="/deals"
+                    to="/sejours"
                     className="inline-block text-xs font-bold text-primary-700 underline-offset-2 hover:underline"
                   >
                     Voir d’autres dates

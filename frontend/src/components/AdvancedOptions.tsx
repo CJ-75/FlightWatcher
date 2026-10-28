@@ -250,9 +250,9 @@ export function AdvancedOptions({
               <div className="hidden">
                 <input
                   type="range"
-                  min={10}
-                  max={100}
-                  step={10}
+                  min={50}
+                  max={500}
+                  step={50}
                   value={limiteAllers}
                   onChange={(e) => onLimiteAllersChange(Number(e.target.value))}
                   className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer
