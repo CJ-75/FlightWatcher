@@ -284,6 +284,8 @@ export function SearchScreen() {
 
     setLoading(true)
     setLoadingMsg(LOADING_MESSAGES[0])
+    const MIN_LOADING_MS = 2000
+    const startedAt = Date.now()
     try {
       const result = await getApi().inspire({
         budget,
@@ -297,6 +299,12 @@ export function SearchScreen() {
         },
         ...(excluded.length > 0 ? { destinations_exclues: excluded } : {}),
       })
+
+      // Floor 2s so slower providers (Ryanair) are more likely in the first paint
+      const wait = Math.max(0, MIN_LOADING_MS - (Date.now() - startedAt))
+      if (wait > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, wait))
+      }
 
       let searchEventId: string | null = null
       try {

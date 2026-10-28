@@ -412,10 +412,28 @@ export function SimpleSearch({
       };
 
       let accumulated: EnrichedTripResponse[] = [];
-      let painted = false;
+      let revealed = false;
       let nombreRequetes = 0;
       let streamError: string | null = null;
+      /** Hold loading ≥2s so Ryanair can land before first paint. */
+      const MIN_LOADING_MS = 2000;
+      const startedAt = Date.now();
       setStillStreaming(true);
+
+      const revealResults = () => {
+        if (revealed || abort.signal.aborted) return;
+        revealed = true;
+        onResults([...accumulated], searchInfo);
+        setIsSearching(false);
+        onLoading(false);
+        setFormOpen(false);
+        setShowEmpty(accumulated.length === 0);
+      };
+
+      // Always reveal at T+2s (even if TP already answered) so Ryanair can catch up
+      const revealTimer = window.setTimeout(revealResults, MIN_LOADING_MS);
+      const clearRevealTimer = () => window.clearTimeout(revealTimer);
+      abort.signal.addEventListener('abort', clearRevealTimer, { once: true });
 
       await getApiClient().inspireStream(
         request,
@@ -426,27 +444,36 @@ export function SimpleSearch({
           }
           if (ev.type === 'batch' && Array.isArray(ev.resultats) && ev.resultats.length) {
             accumulated = mergeStreamTrips(accumulated, ev.resultats);
-            onResults([...accumulated], searchInfo);
-            if (!painted) {
-              painted = true;
-              setIsSearching(false);
-              onLoading(false);
-              setFormOpen(false);
+            if (revealed) {
+              onResults([...accumulated], searchInfo);
+              setShowEmpty(false);
             }
-            setShowEmpty(false);
           }
           if (ev.type === 'done') {
             nombreRequetes = ev.nombre_requetes || nombreRequetes;
-            if (!painted) {
-              onResults([], searchInfo);
-              setShowEmpty(true);
-            }
           }
         },
         { signal: abort.signal },
       );
 
-      if (streamError) throw new Error(streamError);
+      if (streamError) {
+        clearRevealTimer();
+        throw new Error(streamError);
+      }
+
+      // Stream finished — wait out the remainder of the 2s floor if needed
+      if (!revealed) {
+        const wait = Math.max(0, MIN_LOADING_MS - (Date.now() - startedAt));
+        if (wait > 0) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, wait);
+          });
+        }
+        clearRevealTimer();
+        revealResults();
+      } else {
+        clearRevealTimer();
+      }
 
       void getApiClient()
         .trackSearchEvent({
@@ -459,7 +486,7 @@ export function SimpleSearch({
           limite_allers: limiteAllers,
           results_count: accumulated.length,
           results: accumulated.slice(0, 10),
-          search_duration_ms: 0,
+          search_duration_ms: Math.max(0, Date.now() - startedAt),
           api_requests_count: nombreRequetes,
           source: 'web',
           user_agent: navigator.userAgent,
@@ -474,8 +501,6 @@ export function SimpleSearch({
         .catch((err) => {
           console.warn('Erreur enregistrement événement de recherche:', err);
         });
-
-      if (!painted) setShowEmpty(true);
     } catch (err) {
       if (abort.signal.aborted) return;
       const msg = err instanceof Error ? err.message : t('app.error');
