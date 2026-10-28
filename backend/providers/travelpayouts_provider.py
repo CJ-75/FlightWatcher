@@ -59,7 +59,27 @@ def _build_booking_url(link: Optional[str]) -> Optional[str]:
     else:
         if not path.startswith("/"):
             path = "/" + path
-        url = AVIASALES_HOST + path
+        # Default FR market — client may still localize by app language on click
+        url = "https://www.aviasales.fr" + path
+    # Prefer .fr host when API returned .com
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.netloc or "").lower()
+        if host.endswith("aviasales.com"):
+            host = host[: -len("aviasales.com")] + "aviasales.fr"
+            q = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+            q["locale"] = ["fr"]
+            q["language"] = ["fr"]
+            url = urllib.parse.urlunparse(
+                parsed._replace(
+                    netloc=host,
+                    query=urllib.parse.urlencode(
+                        {k: v[-1] if isinstance(v, list) else v for k, v in q.items()}
+                    ),
+                )
+            )
+    except Exception:
+        pass
     marker = _marker()
     if marker:
         sep = "&" if "?" in url else "?"

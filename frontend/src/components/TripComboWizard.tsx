@@ -7,6 +7,7 @@ import {
   dateFromFlightIso,
 } from '@flightwatcher/shared'
 import type { EnrichedTripResponse } from '../types'
+import { useI18n } from '../contexts/I18nContext'
 import { getApiClient } from '../utils/apiClient'
 
 interface Props {
@@ -41,6 +42,7 @@ export function TripComboWizard({
   onSaveFavorite,
 }: Props) {
   const navigate = useNavigate()
+  const { language } = useI18n()
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -52,7 +54,7 @@ export function TripComboWizard({
   const pax = Math.min(6, Math.max(1, passengers || 1))
   const checkin = dateFromFlightIso(trip.aller?.departureTime)
   const checkout = dateFromFlightIso(trip.retour?.departureTime)
-  const flightUrl = buildBookingUrl(trip, pax)
+  const flightUrl = buildBookingUrl(trip, pax, language)
 
   const createAndGo = async (composeHotel: boolean) => {
     if (!checkin || !checkout || !trip.destination_code) {

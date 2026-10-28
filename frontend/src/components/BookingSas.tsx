@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { EnrichedTripResponse } from '../types';
 import { getSessionId } from '../utils/session';
 import { bookingPartnerMeta, buildBookingUrl } from '@flightwatcher/shared';
+import { useI18n } from '../contexts/I18nContext';
 import { HotelUpsellLine } from './HotelUpsellLine';
 
 interface BookingSasProps {
@@ -30,7 +31,11 @@ interface Partner {
   enabled: boolean;
 }
 
-function buildPartners(trip: EnrichedTripResponse, passengers: number): Partner[] {
+function buildPartners(
+  trip: EnrichedTripResponse,
+  passengers: number,
+  language: string,
+): Partner[] {
   const adults = Math.min(6, Math.max(1, passengers || 1));
   const meta = bookingPartnerMeta(trip);
   const isTp =
@@ -44,7 +49,7 @@ function buildPartners(trip: EnrichedTripResponse, passengers: number): Partner[
       name: meta.partner_name || (isTp ? 'aviasales' : 'ryanair'),
       logo: '✈️',
       description: 'Redirection vers le site de réservation',
-      redirectUrl: (t) => buildBookingUrl(t, adults),
+      redirectUrl: (t) => buildBookingUrl(t, adults, language),
       priority: 1,
       enabled: true,
     },
@@ -60,7 +65,8 @@ export function BookingSas({
   onSaveFavorite,
   searchEventId,
 }: BookingSasProps) {
-  const partners = buildPartners(trip, passengers);
+  const { language } = useI18n();
+  const partners = buildPartners(trip, passengers, language);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [countdown, setCountdown] = useState(AUTO_REDIRECT_DELAY / 1000);
   const [isRedirecting, setIsRedirecting] = useState(false);

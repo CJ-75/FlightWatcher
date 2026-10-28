@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   dealAdults,
   formatFetchedAt,
+  localizeAviasalesBookingUrl,
   pricePpWithHotel,
 } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
@@ -272,7 +273,10 @@ export function DealDetailModal({
       ].filter((u, i, arr) => u && arr.indexOf(u) === i),
     [selected?.photos, deal.hotel?.photos, hotelPhoto],
   )
-  const flightUrl = deal.flight?.booking_url || ''
+  const flightUrl = localizeAviasalesBookingUrl(
+    deal.flight?.booking_url || '',
+    language,
+  )
   const hasPartnerUrl = Boolean(deal.booking_url)
 
   const hotelName = selected?.name || deal.hotel_name || 'Hôtel'

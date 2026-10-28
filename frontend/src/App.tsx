@@ -2032,9 +2032,11 @@ interface SavedTabProps {
 function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSearch, formatDateFr, onBook, setToastMessage, setToastType }: SavedTabProps) {
   // Utiliser useI18n avec gestion d'erreur pour éviter de casser le chargement
   let t: (key: string, params?: Record<string, string | number>) => string;
+  let language: string = 'fr';
   try {
     const i18n = useI18n();
     t = i18n.t;
+    language = i18n.language;
   } catch (error) {
     console.error('Erreur initialisation i18n dans SavedTab:', error);
     // Fallback: fonction de traduction qui retourne la clé
@@ -2106,9 +2108,13 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
     }
   }
 
-  // Fonction pour construire l'URL Ryanair à partir d'un favori
+  // Fonction pour construire l'URL de réservation à partir d'un favori
   const buildRyanairUrl = (favorite: SavedFavorite): string => {
-    return buildBookingUrl(favorite.trip, favorite.searchRequest?.passengers || 1)
+    return buildBookingUrl(
+      favorite.trip,
+      favorite.searchRequest?.passengers || 1,
+      language,
+    )
   }
 
   // Fonction pour ouvrir BookingSas avec le favori (comme dans les résultats de recherche)

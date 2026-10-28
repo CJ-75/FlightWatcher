@@ -58,7 +58,8 @@ export function BookingSheet({
   const pax = Math.min(6, Math.max(1, passengers || 1))
   const checkin = trip ? dateFromFlightIso(trip.aller?.departureTime) : null
   const checkout = trip ? dateFromFlightIso(trip.retour?.departureTime) : null
-  const flightUrl = trip ? buildBookingUrl(trip, pax) : ''
+  // Mobile UI is FR-first — keep Aviasales on aviasales.fr
+  const flightUrl = trip ? buildBookingUrl(trip, pax, 'fr') : ''
   const totalPp = Math.round(flightPp + (selected?.hotel_pp || 0))
 
   const loadHotels = async (current: EnrichedTripResponse) => {

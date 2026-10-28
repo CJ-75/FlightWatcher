@@ -192,12 +192,48 @@ export type BookableTrip = {
   retour: { departureTime: string }
 }
 
+/**
+ * Force Aviasales UI language to match the app (FR → aviasales.fr + locale=fr).
+ * Safe no-op for non-Aviasales URLs.
+ */
+export function localizeAviasalesBookingUrl(
+  url: string,
+  language: string = 'fr',
+): string {
+  const raw = (url || '').trim()
+  if (!raw || !/aviasales/i.test(raw)) return raw
+  try {
+    const u = new URL(raw)
+    const fr = (language || 'fr').toLowerCase().startsWith('fr')
+    if (fr) {
+      if (/aviasales\.com$/i.test(u.hostname)) {
+        u.hostname = u.hostname.replace(/aviasales\.com$/i, 'aviasales.fr')
+      }
+      u.searchParams.set('locale', 'fr')
+      u.searchParams.set('language', 'fr')
+    } else {
+      if (/aviasales\.fr$/i.test(u.hostname)) {
+        u.hostname = u.hostname.replace(/aviasales\.fr$/i, 'aviasales.com')
+      }
+      u.searchParams.set('locale', 'en')
+      u.searchParams.set('language', 'en')
+    }
+    return u.toString()
+  } catch {
+    return raw
+  }
+}
+
 /** Prefer Travelpayouts/Aviasales booking_url when present; else Ryanair deep-link. */
-export function buildBookingUrl(trip: BookableTrip, passengers = 1): string {
+export function buildBookingUrl(
+  trip: BookableTrip,
+  passengers = 1,
+  language: string = 'fr',
+): string {
   const provider = String(trip.provider || '').toLowerCase()
   const url = (trip.booking_url || '').trim()
   if ((provider === 'travelpayouts' || url) && url.startsWith('http')) {
-    return url
+    return localizeAviasalesBookingUrl(url, language)
   }
   return buildRyanairBookingUrl(trip, passengers)
 }
