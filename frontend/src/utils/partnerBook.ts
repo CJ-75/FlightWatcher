@@ -10,6 +10,7 @@ import {
 import type { EnrichedTripResponse } from '../types'
 import { getSessionId } from './session'
 import { getApiClient } from './apiClient'
+import { rememberTrip } from './tripRecovery'
 
 export const PENDING_HOTEL_UPSELL_KEY = 'fw_pending_hotel_upsell'
 
@@ -213,6 +214,9 @@ export async function createMyTripComposeFromTrip(opts: {
     price_per_person: Math.round(flightPp),
     booking_url: ps.primaryUrl,
   })
+  if (draft.draft_token) {
+    rememberTrip({ draft_token: draft.draft_token, city })
+  }
   if (markFlightBooked && draft.draft_token) {
     try {
       await getApiClient().markMyTripFlightBooked(draft.draft_token)

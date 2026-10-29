@@ -41,6 +41,62 @@ function nightsLabel(n?: number | null) {
   return n === 1 ? '1 nuit' : `${n} nuits`
 }
 
+function OpenTripsSection({
+  trips,
+}: {
+  trips: ReturnType<typeof listRememberedTrips>
+}) {
+  if (!trips.length) return null
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted">
+          Voyages en cours
+        </p>
+        <p className="text-sm text-muted mt-0.5">
+          Trips générés sur cet appareil — continue la réservation hôtel.
+        </p>
+      </div>
+      <ul className="space-y-3">
+        {trips.map((t) => (
+          <li
+            key={t.draft_token}
+            className="rounded-3xl border border-line bg-white shadow-soft overflow-hidden"
+          >
+            <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Mon voyage
+                </p>
+                <h2 className="text-lg font-extrabold text-ink tracking-tight mt-0.5">
+                  {t.city ? `Week-end à ${t.city}` : 'Voyage en préparation'}
+                </h2>
+                <p className="text-sm text-ink-soft mt-1">
+                  Vol et hôtel à finaliser — pas encore de confirmation hôtel.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Link
+                  to={`/trip/${t.draft_token}`}
+                  className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
+                >
+                  Ouvrir le voyage
+                </Link>
+                <Link
+                  to={`/bookings?draft=${encodeURIComponent(t.draft_token)}`}
+                  className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 min-h-[40px]"
+                >
+                  Voir ce dossier
+                </Link>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function adultsLabel(n?: number | null) {
   if (n == null || n <= 0) return null
   return n === 1 ? '1 voyageur' : `${n} voyageurs`
@@ -503,9 +559,9 @@ export default function MyBookings() {
     () => draftFromUrl || latestTripDraft(),
     [draftFromUrl],
   )
-  const remembered = useMemo(() => listRememberedTrips(), [])
   const cached = useMemo(() => readBookingsCache(), [])
   const [bookings, setBookings] = useState<HotelBooking[]>(() => cached || [])
+  const [remembered, setRemembered] = useState(() => listRememberedTrips())
   const [loading, setLoading] = useState(() => !cached)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -515,6 +571,13 @@ export default function MyBookings() {
   )
   const [tab, setTab] = useState<FilterTab>('upcoming')
   const [expandedId, setExpandedId] = useState<string | null>(focusId)
+
+  const openTrips = useMemo(() => {
+    const bookedTokens = new Set(
+      bookings.map((b) => b.draft_token).filter(Boolean) as string[],
+    )
+    return remembered.filter((t) => !bookedTokens.has(t.draft_token))
+  }, [bookings, remembered])
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
@@ -567,12 +630,14 @@ export default function MyBookings() {
           })
         }
       }
+      setRemembered(listRememberedTrips())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       if (!background) setBookings([])
     } finally {
       setLoading(false)
       setRefreshing(false)
+      setRemembered(listRememberedTrips())
     }
   }, [draftFromUrl])
 
@@ -643,32 +708,9 @@ export default function MyBookings() {
                 Se connecter
               </Link>
             </div>
-            {remembered.length ? (
+            {openTrips.length ? (
               <div className="text-left border-t border-line pt-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-                  Voyages récents sur cet appareil
-                </p>
-                <ul className="space-y-2">
-                  {remembered.slice(0, 5).map((t) => (
-                    <li key={t.draft_token}>
-                      <Link
-                        to={`/bookings?draft=${encodeURIComponent(t.draft_token)}`}
-                        className="block rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink hover:bg-slate-50"
-                      >
-                        {t.city ? `Voyage à ${t.city}` : 'Mon voyage'}
-                        <span className="block text-xs font-medium text-muted mt-0.5">
-                          Ouvrir les réservations
-                        </span>
-                      </Link>
-                      <Link
-                        to={`/trip/${t.draft_token}`}
-                        className="inline-block mt-1 text-xs font-bold text-primary-600 hover:underline"
-                      >
-                        Voir le trip →
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                <OpenTripsSection trips={openTrips.slice(0, 5)} />
               </div>
             ) : null}
           </div>
@@ -693,33 +735,41 @@ export default function MyBookings() {
             </button>
           </div>
         ) : bookings.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center space-y-4">
-            <p className="font-extrabold text-ink text-lg">Aucune réservation encore</p>
-            <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
-              Quand tu réserves un hôtel depuis un deal ou Mon voyage, la
-              confirmation et le code apparaissent ici.
-            </p>
-            {guestMode && guestDraft ? (
-              <Link
-                to={`/trip/${guestDraft}`}
-                className="inline-flex justify-center app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
-              >
-                Retour à mon voyage
-              </Link>
-            ) : null}
-            <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
-              <Link
-                to="/sejours"
-                className="inline-flex justify-center app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
-              >
-                Voir les deals
-              </Link>
-              <Link
-                to="/vols"
-                className="inline-flex justify-center rounded-2xl border border-line px-5 py-2.5 text-sm font-bold text-ink hover:bg-slate-50"
-              >
-                Rechercher un vol
-              </Link>
+          <div className="space-y-6">
+            {openTrips.length ? <OpenTripsSection trips={openTrips} /> : null}
+            <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center space-y-4">
+              <p className="font-extrabold text-ink text-lg">
+                {openTrips.length
+                  ? 'Aucune confirmation hôtel encore'
+                  : 'Aucune réservation encore'}
+              </p>
+              <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
+                {openTrips.length
+                  ? 'Tes voyages générés sont ci-dessus. Dès que tu paies un hôtel, la confirmation apparaît ici.'
+                  : 'Quand tu réserves un hôtel depuis un deal ou Mon voyage, la confirmation et le code apparaissent ici.'}
+              </p>
+              {guestMode && guestDraft ? (
+                <Link
+                  to={`/trip/${guestDraft}`}
+                  className="inline-flex justify-center app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
+                >
+                  Retour à mon voyage
+                </Link>
+              ) : null}
+              <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
+                <Link
+                  to="/sejours"
+                  className="inline-flex justify-center app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
+                >
+                  Voir les deals
+                </Link>
+                <Link
+                  to="/vols"
+                  className="inline-flex justify-center rounded-2xl border border-line px-5 py-2.5 text-sm font-bold text-ink hover:bg-slate-50"
+                >
+                  Rechercher un vol
+                </Link>
+              </div>
             </div>
           </div>
         ) : (
@@ -816,6 +866,11 @@ export default function MyBookings() {
               </ul>
             )}
 
+            {openTrips.length ? (
+              <div className="mt-8">
+                <OpenTripsSection trips={openTrips} />
+              </div>
+            ) : null}
           </>
         )}
 

@@ -844,9 +844,8 @@ export default function MyTrip() {
     </>
   )
 
-  const nextActionButton = (opts: { className?: string; compact?: boolean }) => {
+  const nextActionButton = () => {
     const cls =
-      opts.className ||
       'block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]'
     if (nextAction.kind === 'flight') {
       return (
@@ -857,7 +856,7 @@ export default function MyTrip() {
           onClick={() => void onFlightClick()}
           className={cls}
         >
-          {opts.compact ? 'Réserver mon vol' : nextAction.label}
+          {nextAction.label}
         </a>
       )
     }
@@ -872,7 +871,7 @@ export default function MyTrip() {
           >
             {checkoutLoading ? '…' : nextAction.label}
           </button>
-          {!opts.compact ? <PaymentCardMarks /> : <PaymentCardMarks compact />}
+          <PaymentCardMarks />
         </div>
       )
     }
@@ -909,9 +908,7 @@ export default function MyTrip() {
 
   return (
     <div
-      className={`min-h-screen bg-[#F7F7F7] lg:pb-10 ${
-        wantsCompose ? 'pb-4' : 'pb-28'
-      }`}
+      className={`min-h-screen bg-[#F7F7F7] pb-4 lg:pb-10`}
     >
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
         <div
@@ -1193,8 +1190,6 @@ export default function MyTrip() {
                   retLabel={formatDate(retDate)}
                   cancelLabel={cancelLabel}
                   booked={hotelBooked}
-                  checkoutLoading={checkoutLoading}
-                  onBook={() => void openHotelCheckout()}
                   onChangeHotel={
                     !wantsCompose && !hotelBooked
                       ? () => {
@@ -1332,63 +1327,19 @@ export default function MyTrip() {
             </aside>
           </div>
 
-          {/* Colonne droite sticky — desktop only */}
-          <aside className="hidden lg:block">
-            <div className="sticky top-20 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          {/* Récapitulatif — sticky desktop, flux mobile */}
+          <aside className="mt-6 lg:mt-0">
+            <div className="lg:sticky lg:top-20 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                 Récapitulatif
               </p>
               {priceBreakdown}
-              {nextActionButton({})}
+              {nextActionButton()}
             </div>
           </aside>
         </div>
         )}
       </div>
-
-      {/* Barre basse mobile */}
-      {!wantsCompose ? (
-      <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-sm safe-pb">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            {hotelPaymentFocus ? (
-              adults === 1 ? (
-                <p className="text-lg font-black text-slate-900 tabular-nums leading-tight">
-                  Hôtel {hotelRecapTotal} €
-                </p>
-              ) : (
-                <>
-                  <p className="text-sm font-bold text-slate-800 tabular-nums leading-tight">
-                    {hotelRecapPp} € / pers.
-                  </p>
-                  <p className="text-xs text-slate-500 tabular-nums">
-                    Hôtel {hotelRecapTotal} €
-                  </p>
-                </>
-              )
-            ) : adults === 1 ? (
-              <p className="text-lg font-black text-slate-900 tabular-nums leading-tight">
-                Total {party.total} €
-              </p>
-            ) : (
-              <>
-                <p className="text-sm font-bold text-slate-800 tabular-nums leading-tight">
-                  {party.perPerson} € / pers.
-                </p>
-                <p className="text-xs text-slate-500 tabular-nums">{party.total} €</p>
-              </>
-            )}
-          </div>
-          <div className="shrink-0 w-[min(58%,220px)]">
-            {nextActionButton({
-              className:
-                'block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3 rounded-xl min-h-[48px] text-sm px-3',
-              compact: true,
-            })}
-          </div>
-        </div>
-      </div>
-      ) : null}
 
       {checkoutDeal && token ? (
         <DealCheckoutFlow

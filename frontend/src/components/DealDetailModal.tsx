@@ -10,6 +10,7 @@ import {
 import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { getApiClient } from '../utils/apiClient'
+import { rememberTrip } from '../utils/tripRecovery'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
 import { DealComplianceNotice } from './DealComplianceNotice'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
@@ -346,6 +347,12 @@ export function DealDetailModal({
     setStartingTrip(true)
     try {
       const draft = await getApiClient().createMyTrip(await buildDraftPayload())
+      if (draft.draft_token) {
+        rememberTrip({
+          draft_token: draft.draft_token,
+          city: draft.city_name || deal.city,
+        })
+      }
       onClose()
       navigate(`/trip/${draft.draft_token}`)
     } catch {
@@ -362,6 +369,12 @@ export function DealDetailModal({
       const draft = await getApiClient().createMyTrip(
         await buildDraftPayload({ composeHotel: true }),
       )
+      if (draft.draft_token) {
+        rememberTrip({
+          draft_token: draft.draft_token,
+          city: draft.city_name || deal.city,
+        })
+      }
       onClose()
       navigate(`/trip/${draft.draft_token}?compose=1`)
     } catch {

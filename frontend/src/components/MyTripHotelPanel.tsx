@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { boardLabelFr, type HotelGuestReview } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
-import { PaymentCardMarks } from './PaymentCardMarks'
 
 type HotelLike = Record<string, unknown>
 
@@ -17,8 +16,6 @@ type Props = {
   retLabel: string
   cancelLabel: string | null
   booked: boolean
-  checkoutLoading?: boolean
-  onBook: () => void
   onChangeHotel?: () => void
 }
 
@@ -207,8 +204,6 @@ export function MyTripHotelPanel({
   retLabel,
   cancelLabel,
   booked,
-  checkoutLoading,
-  onBook,
   onChangeHotel,
 }: Props) {
   const name = String(hotel.name || 'Hôtel')
@@ -565,57 +560,14 @@ export function MyTripHotelPanel({
         </div>
       ) : null}
 
-      {/* Payment conversion block */}
-      {!booked ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-3 shadow-sm">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                Total hôtel
-              </p>
-              <p className="text-2xl font-black text-slate-900 tabular-nums leading-none mt-1">
-                {hotelTotal > 0 ? `${Math.round(hotelTotal)} €` : '—'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1">
-                {nights > 0 ? `${nights} nuit${nights > 1 ? 's' : ''}` : 'Séjour'}
-                {adults > 1 ? ` · ${adults} voyageurs` : ''}
-                {adults > 1 && hotelTotal > 0
-                  ? ` · ${Math.round(hotelTotal / adults)} €/pers.`
-                  : ''}
-              </p>
-            </div>
-            {cancelLabel && hotel.refundable !== false ? (
-              <p className="text-[10px] font-bold text-emerald-700 text-right max-w-[40%] leading-snug">
-                {cancelLabel}
-              </p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            disabled={checkoutLoading}
-            onClick={onBook}
-            className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[52px] disabled:opacity-60 text-[15px]"
-          >
-            {checkoutLoading
-              ? '…'
-              : hotelTotal > 0
-                ? `Payer l’hôtel · ${Math.round(hotelTotal)} €`
-                : 'Payer l’hôtel'}
-          </button>
-          <PaymentCardMarks />
-          <p className="text-[10px] text-center text-slate-400 leading-snug">
-            Paiement sécurisé · confirmation immédiate
-          </p>
-          {onChangeHotel ? (
-            <button
-              type="button"
-              onClick={onChangeHotel}
-              className="w-full text-center text-sm font-semibold text-slate-600 underline-offset-2 hover:underline py-1.5 min-h-[40px]"
-            >
-              Changer d’hôtel
-            </button>
-          ) : null}
-        </div>
+      {!booked && onChangeHotel ? (
+        <button
+          type="button"
+          onClick={onChangeHotel}
+          className="w-full text-center text-sm font-semibold text-slate-600 underline-offset-2 hover:underline py-1.5 min-h-[40px]"
+        >
+          Changer d’hôtel
+        </button>
       ) : null}
     </div>
   )
