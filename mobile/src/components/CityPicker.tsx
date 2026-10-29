@@ -20,7 +20,11 @@ import {
   seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
-import { getCachedAirports, hasFullAirportsCatalog } from '../lib/airportsCache'
+import {
+  getCachedAirports,
+  hasFullAirportsCatalog,
+  subscribeAirports,
+} from '../lib/airportsCache'
 import { colors, fonts, radius, shadow } from '../theme'
 import { CountryFlag } from './CountryFlag'
 
@@ -33,6 +37,7 @@ type Props = {
 }
 
 const SEED = seedPopularAirports()
+const MIN_FULL = 80
 
 export function CityPicker({
   airports,
@@ -43,36 +48,50 @@ export function CityPicker({
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [catalog, setCatalog] = useState<Airport[]>(() =>
+    airports.length >= MIN_FULL ? airports : SEED,
+  )
 
-  const effective = airports.length > 0 ? airports : SEED
+  useEffect(() => {
+    if (airports.length >= MIN_FULL) setCatalog(airports)
+  }, [airports])
+
+  useEffect(() => subscribeAirports(setCatalog), [])
+
+  const effective = catalog.length > 0 ? catalog : SEED
   const groups = useMemo(() => groupAirportsByCity(effective), [effective])
   const selected = useMemo(
     () => findCityGroupByKey(groups, valueKey),
     [groups, valueKey],
   )
 
-  const popularGroups = useMemo(() => {
+  const allGroupsOrdered = useMemo(() => {
     const popular = resolvePopularCityGroups(groups, effective)
-    return popular.length ? popular : groups.slice(0, 12)
+    const seen = new Set(popular.map((g) => g.key))
+    const rest = groups
+      .filter((g) => !seen.has(g.key))
+      .slice()
+      .sort((a, b) => a.city.localeCompare(b.city, 'fr'))
+    return popular.length ? [...popular, ...rest] : rest
   }, [groups, effective])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return popularGroups
+    if (!q) return allGroupsOrdered
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
         g.country.toLowerCase().includes(q) ||
         g.airports.some((a) => a.code.toLowerCase().includes(q)),
     )
-  }, [groups, popularGroups, query])
+  }, [groups, allGroupsOrdered, query])
 
   useEffect(() => {
     if (!open) {
       setQuery('')
       return
     }
-    if (!hasFullAirportsCatalog()) void getCachedAirports()
+    if (!hasFullAirportsCatalog()) void getCachedAirports({ force: true })
   }, [open])
 
   const airportsLabel = selected

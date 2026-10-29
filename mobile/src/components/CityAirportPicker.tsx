@@ -8,6 +8,7 @@ import {
   Modal,
   FlatList,
   Keyboard,
+  ActivityIndicator,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
@@ -22,7 +23,11 @@ import {
   seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
-import { getCachedAirports, hasFullAirportsCatalog } from '../lib/airportsCache'
+import {
+  getCachedAirports,
+  hasFullAirportsCatalog,
+  subscribeAirports,
+} from '../lib/airportsCache'
 import { colors, fonts, shadow } from '../theme'
 import { CountryFlag } from './CountryFlag'
 
@@ -40,14 +45,30 @@ const PLACEHOLDER_CITIES = [
 ] as const
 
 const SEED = seedPopularAirports()
+const MIN_FULL = 80
 
 export function CityAirportPicker({ airports, value, onChange }: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [catalog, setCatalog] = useState<Airport[]>(() =>
+    airports.length >= MIN_FULL ? airports : SEED,
+  )
+  const [loadingFull, setLoadingFull] = useState(() => !hasFullAirportsCatalog())
 
-  const effectiveAirports = airports.length > 0 ? airports : SEED
+  // Prefer parent list when full; otherwise keep local catalog (API / disk).
+  useEffect(() => {
+    if (airports.length >= MIN_FULL) setCatalog(airports)
+  }, [airports])
+
+  useEffect(() => subscribeAirports((list) => {
+    setCatalog(list)
+    setLoadingFull(list.length < MIN_FULL)
+  }), [])
+
+  const effectiveAirports = catalog.length > 0 ? catalog : SEED
+  const isFull = effectiveAirports.length >= MIN_FULL
   const groups = useMemo(
     () => groupAirportsByCity(effectiveAirports),
     [effectiveAirports],
@@ -72,16 +93,20 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     return () => clearInterval(id)
   }, [showPlaceholder])
 
-  // Empty query = popular hubs only (instant). Typing = full catalog filter.
-  const popularGroups = useMemo(() => {
+  // Full catalog: popular hubs first, then every other city A→Z (same source as web).
+  const allGroupsOrdered = useMemo(() => {
     const popular = resolvePopularCityGroups(groups, effectiveAirports)
-    if (popular.length) return popular
-    return groups.slice(0, 12)
+    const seen = new Set(popular.map((g) => g.key))
+    const rest = groups
+      .filter((g) => !seen.has(g.key))
+      .slice()
+      .sort((a, b) => a.city.localeCompare(b.city, 'fr'))
+    return popular.length ? [...popular, ...rest] : rest
   }, [groups, effectiveAirports])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return popularGroups
+    if (!q) return allGroupsOrdered
     return groups.filter(
       (g) =>
         g.city.toLowerCase().includes(q) ||
@@ -92,7 +117,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             a.name.toLowerCase().includes(q),
         ),
     )
-  }, [groups, popularGroups, query])
+  }, [groups, allGroupsOrdered, query])
 
   const exactAirport = useMemo(() => {
     const q = query.trim().toUpperCase()
@@ -106,10 +131,15 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
       Keyboard.dismiss()
       return
     }
-    // Opening the sheet: pull full catalog if we still only have the seed.
-    if (!hasFullAirportsCatalog()) {
-      void getCachedAirports()
+    if (hasFullAirportsCatalog()) {
+      setLoadingFull(false)
+      return
     }
+    setLoadingFull(true)
+    void getCachedAirports({ force: true }).then((list) => {
+      setCatalog(list)
+      setLoadingFull(list.length < MIN_FULL)
+    })
   }, [open])
 
   const selectCity = (group: CityAirportGroup) => {
@@ -287,18 +317,42 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           <Text style={styles.sheetHint}>
             {query.trim()
               ? 'Résultats de recherche'
-              : 'Villes fréquentes — tape pour chercher partout'}
+              : isFull
+                ? `${groups.length} villes · ${effectiveAirports.length} aéroports`
+                : loadingFull
+                  ? 'Chargement du catalogue…'
+                  : 'Catalogue incomplet — réessaie'}
           </Text>
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Rechercher une ville…"
+            placeholder="Rechercher une ville ou un code IATA…"
             placeholderTextColor={colors.faint}
             autoCorrect={false}
             autoCapitalize="words"
             autoFocus
             style={styles.search}
           />
+          {loadingFull && !isFull ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.loadingText}>Chargement des villes…</Text>
+            </View>
+          ) : null}
+          {!loadingFull && !isFull ? (
+            <Pressable
+              onPress={() => {
+                setLoadingFull(true)
+                void getCachedAirports({ force: true }).then((list) => {
+                  setCatalog(list)
+                  setLoadingFull(list.length < MIN_FULL)
+                })
+              }}
+              style={styles.retryBtn}
+            >
+              <Text style={styles.retryText}>Recharger le catalogue</Text>
+            </Pressable>
+          ) : null}
           {exactAirport ? (
             <Pressable
               onPress={() => selectSingleAirport(exactAirport.code)}
@@ -499,4 +553,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     color: colors.muted,
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  loadingText: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    marginBottom: 8,
+  },
+  retryText: { fontFamily: fonts.bold, fontSize: 13, color: colors.primary },
 })

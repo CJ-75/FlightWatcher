@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Airport } from '@flightwatcher/shared'
 import { normalizeAirports, seedPopularAirports } from '@flightwatcher/shared'
-import { getApi } from './client'
+import { apiBase } from './client'
 
 const SEED = seedPopularAirports()
 const LS_KEY = 'fw_airports_v1'
 const LS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 /** Below this → treat as seed/partial, keep fetching full catalog. */
 const MIN_FULL_COUNT = 80
+const NETWORK_TIMEOUT_MS = 25_000
 
 let cached: Airport[] | null = null
 let inflight: Promise<Airport[]> | null = null
@@ -15,6 +16,7 @@ let fromDisk = false
 let quietRefreshStarted = false
 let hydrateStarted = false
 let retryTimer: ReturnType<typeof setTimeout> | null = null
+let retryAttempt = 0
 
 type Listener = (list: Airport[]) => void
 const listeners = new Set<Listener>()
@@ -57,27 +59,56 @@ function writeDisk(list: Airport[]) {
 function applyFull(list: Airport[], source: 'network' | 'disk') {
   cached = list
   fromDisk = source === 'disk'
+  retryAttempt = 0
   if (source === 'network') writeDisk(list)
   notify(list)
 }
 
+/**
+ * Public /api/airports — direct XHR, no auth token (avoids Supabase getSession lag).
+ */
 function fetchNetwork(): Promise<Airport[]> {
-  return getApi()
-    .getAirports()
-    .then((raw) => {
-      const list = normalizeAirports(raw as Airport[] | { airports: Airport[] })
-      if (!list.length) throw new Error('empty airports')
-      applyFull(list, 'network')
-      return list
-    })
+  const url = `${apiBase.replace(/\/$/, '')}/api/airports`
+  if (__DEV__) console.log('[airports] GET', url)
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('GET', url)
+    xhr.timeout = NETWORK_TIMEOUT_MS
+    xhr.onload = () => {
+      try {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(`airports HTTP ${xhr.status}`))
+          return
+        }
+        const data = JSON.parse(xhr.responseText) as
+          | Airport[]
+          | { airports: Airport[] }
+        const list = normalizeAirports(data)
+        if (!isFullCatalog(list)) {
+          reject(new Error(`airports too small (${list.length})`))
+          return
+        }
+        applyFull(list, 'network')
+        resolve(list)
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)))
+      }
+    }
+    xhr.onerror = () => reject(new TypeError(`Network failed: ${url}`))
+    xhr.ontimeout = () => reject(new Error(`airports timeout ${NETWORK_TIMEOUT_MS}ms`))
+    xhr.send()
+  })
 }
 
-function scheduleRetry(delayMs = 2500) {
+function scheduleRetry() {
   if (isFullCatalog(cached) || retryTimer) return
+  retryAttempt += 1
+  const delayMs = Math.min(10_000, 1500 * retryAttempt)
   retryTimer = setTimeout(() => {
     retryTimer = null
     if (isFullCatalog(cached)) return
-    void getCachedAirports()
+    void getCachedAirports({ force: true })
   }, delayMs)
 }
 
@@ -93,7 +124,6 @@ function refreshQuiet() {
     })
 }
 
-/** Kick AsyncStorage hydrate once (non-blocking). */
 function ensureHydrate(): void {
   if (hydrateStarted || isFullCatalog(cached)) return
   hydrateStarted = true
@@ -107,12 +137,10 @@ function ensureHydrate(): void {
 
 ensureHydrate()
 
-/**
- * Full catalog when possible. Seed is never stored as the permanent cache —
- * failed/timeout fetches keep retrying.
- */
-export function getCachedAirports(): Promise<Airport[]> {
-  if (isFullCatalog(cached)) {
+export function getCachedAirports(opts?: { force?: boolean }): Promise<Airport[]> {
+  const force = Boolean(opts?.force)
+
+  if (!force && isFullCatalog(cached)) {
     refreshQuiet()
     return Promise.resolve(cached!)
   }
@@ -121,7 +149,7 @@ export function getCachedAirports(): Promise<Airport[]> {
   const t0 = Date.now()
   inflight = (async () => {
     try {
-      if (!isFullCatalog(cached)) {
+      if (!force && !isFullCatalog(cached)) {
         const fromLs = await readDisk()
         if (fromLs) {
           applyFull(fromLs, 'disk')
@@ -139,9 +167,10 @@ export function getCachedAirports(): Promise<Airport[]> {
       return list
     } catch (err) {
       if (__DEV__) console.warn('[airports] failed — seed until retry', err)
-      // Never assign SEED to `cached` — next open / scheduled retry must hit network.
       scheduleRetry()
-      return isFullCatalog(cached) ? cached! : SEED
+      const fallback = isFullCatalog(cached) ? cached! : SEED
+      notify(fallback)
+      return fallback
     } finally {
       inflight = null
     }
@@ -150,19 +179,16 @@ export function getCachedAirports(): Promise<Airport[]> {
   return inflight
 }
 
-/** Sync peek for first paint: full cache if ready, else seed (never blocks). */
 export function peekCachedAirports(): Airport[] {
   ensureHydrate()
   return isFullCatalog(cached) ? cached! : SEED
 }
 
-/** Subscribe to catalog updates (disk / network). Immediate if full already. */
+/** Subscribe — immediate peek, then updates when full catalog arrives. */
 export function subscribeAirports(fn: Listener): () => void {
   listeners.add(fn)
-  if (isFullCatalog(cached)) fn(cached!)
-  else void getCachedAirports().then((list) => {
-    if (isFullCatalog(list)) fn(list)
-  })
+  fn(peekCachedAirports())
+  void getCachedAirports().then((list) => fn(list))
   return () => {
     listeners.delete(fn)
   }
