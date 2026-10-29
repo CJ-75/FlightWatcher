@@ -1021,7 +1021,12 @@ function Dashboard() {
       })
       clearPendingHotelUpsell()
       setPostBookTrip(null)
-      navigate(`/trip/${draft.draft_token}?compose=1`)
+      // New tab → keep Search results in the current tab
+      const path = `/trip/${draft.draft_token}?compose=1`
+      const opened = window.open(path, '_blank', 'noopener,noreferrer')
+      if (!opened) {
+        navigate(path)
+      }
     } catch {
       setToastMessage('Impossible de créer le voyage — réessaie')
       setToastType('error')
