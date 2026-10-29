@@ -43,6 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    /** Never block the UI on a slow Supabase storage read. */
+    const AUTH_BOOT_MS = 1200
 
     const applySession = (s: Session | null) => {
       if (!mounted) return
@@ -52,9 +54,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
     }
 
+    const bootTimer = setTimeout(() => {
+      if (mounted) setLoading(false)
+    }, AUTH_BOOT_MS)
+
     ;(async () => {
-      const s = await auth.getCurrentSession()
-      applySession(s)
+      try {
+        const s = await auth.getCurrentSession()
+        applySession(s)
+      } catch {
+        if (mounted) setLoading(false)
+      } finally {
+        clearTimeout(bootTimer)
+      }
     })()
 
     const unsub = auth.onAuthStateChange((_event, s) => {
@@ -96,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false
+      clearTimeout(bootTimer)
       unsub()
       linkSub.remove()
     }

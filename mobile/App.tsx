@@ -1,8 +1,13 @@
-import React, { useCallback } from 'react'
+import React, { Suspense, useCallback, useEffect, useState } from 'react'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { ActivityIndicator, View, StyleSheet } from 'react-native'
+import {
+  ActivityIndicator,
+  InteractionManager,
+  View,
+  StyleSheet,
+} from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -16,16 +21,6 @@ import {
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
-import { ResultsScreen } from './src/screens/ResultsScreen'
-import { DealsScreen } from './src/screens/DealsScreen'
-import { DealDetailScreen } from './src/screens/DealDetailScreen'
-import { PlannerScreen } from './src/screens/PlannerScreen'
-import { TripDetailScreen } from './src/screens/TripDetailScreen'
-import { FavoritesScreen } from './src/screens/FavoritesScreen'
-import { ProfileScreen } from './src/screens/ProfileScreen'
-import { BookingsScreen } from './src/screens/BookingsScreen'
-import { DealCheckoutScreen } from './src/screens/DealCheckoutScreen'
-import { SecurityScreen } from './src/screens/SecurityScreen'
 import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
@@ -100,17 +95,75 @@ const navTheme = {
   },
 }
 
+function BootSpinner() {
+  return (
+    <View style={styles.boot}>
+      <ActivityIndicator color={colors.primary} size="large" />
+    </View>
+  )
+}
+
+/** Defer heavy screens until first navigation — keeps cold start lean. */
+function lazyScreen<P extends object>(
+  loader: () => Promise<{ default: React.ComponentType<P> }>,
+): React.ComponentType<P> {
+  const Lazy = React.lazy(loader)
+  function Wrapped(props: P) {
+    return (
+      <Suspense fallback={<BootSpinner />}>
+        <Lazy {...props} />
+      </Suspense>
+    )
+  }
+  Wrapped.displayName = 'LazyScreen'
+  return Wrapped
+}
+
+const DealsScreen = lazyScreen(() =>
+  import('./src/screens/DealsScreen').then((m) => ({ default: m.DealsScreen })),
+)
+const PlannerScreen = lazyScreen(() =>
+  import('./src/screens/PlannerScreen').then((m) => ({ default: m.PlannerScreen })),
+)
+const FavoritesScreen = lazyScreen(() =>
+  import('./src/screens/FavoritesScreen').then((m) => ({ default: m.FavoritesScreen })),
+)
+const ProfileScreen = lazyScreen(() =>
+  import('./src/screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
+)
+const ResultsScreen = lazyScreen(() =>
+  import('./src/screens/ResultsScreen').then((m) => ({ default: m.ResultsScreen })),
+)
+const DealDetailScreen = lazyScreen(() =>
+  import('./src/screens/DealDetailScreen').then((m) => ({ default: m.DealDetailScreen })),
+)
+const TripDetailScreen = lazyScreen(() =>
+  import('./src/screens/TripDetailScreen').then((m) => ({ default: m.TripDetailScreen })),
+)
+const BookingsScreen = lazyScreen(() =>
+  import('./src/screens/BookingsScreen').then((m) => ({ default: m.BookingsScreen })),
+)
+const DealCheckoutScreen = lazyScreen(() =>
+  import('./src/screens/DealCheckoutScreen').then((m) => ({ default: m.DealCheckoutScreen })),
+)
+const SecurityScreen = lazyScreen(() =>
+  import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
+)
+
 function MainTabs() {
   const insets = useSafeAreaInsets()
   const tabClearance = FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
 
-  // Prefetch airports only (do NOT mount Deals eagerly — freezes cold start)
+  // Airports after first paint — never compete with boot JS/fonts/auth
   React.useEffect(() => {
-    void import('./src/lib/airportsCache')
-      .then(({ getCachedAirports }) => getCachedAirports())
-      .catch((e) => {
-        if (__DEV__) console.warn('[airports] prefetch failed', e)
-      })
+    const handle = InteractionManager.runAfterInteractions(() => {
+      void import('./src/lib/airportsCache')
+        .then(({ getCachedAirports }) => getCachedAirports())
+        .catch((e) => {
+          if (__DEV__) console.warn('[airports] prefetch failed', e)
+        })
+    })
+    return () => handle.cancel()
   }, [])
 
   return (
@@ -126,6 +179,8 @@ function MainTabs() {
           fontSize: 18,
         },
         headerShadowVisible: false,
+        lazy: true,
+        freezeOnBlur: true,
         tabBarStyle: {
           position: 'absolute',
           backgroundColor: 'transparent',
@@ -170,11 +225,7 @@ function RootNavigator() {
   const { user, loading, isGuest } = useAuth()
 
   if (loading) {
-    return (
-      <View style={styles.boot}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    )
+    return <BootSpinner />
   }
 
   const signedIn = !!user || isGuest
@@ -282,6 +333,8 @@ function RootNavigator() {
   )
 }
 
+const FONT_GATE_MS = 1500
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     Sora_400Regular,
@@ -290,15 +343,18 @@ export default function App() {
     Sora_700Bold,
     Sora_800ExtraBold,
   })
+  const [fontsTimedOut, setFontsTimedOut] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setFontsTimedOut(true), FONT_GATE_MS)
+    return () => clearTimeout(t)
+  }, [])
 
   const onLayoutRoot = useCallback(() => undefined, [])
+  const ready = fontsLoaded || fontsTimedOut
 
-  if (!fontsLoaded) {
-    return (
-      <View style={styles.boot}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    )
+  if (!ready) {
+    return <BootSpinner />
   }
 
   return (
