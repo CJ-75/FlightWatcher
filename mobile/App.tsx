@@ -2,12 +2,7 @@ import React, { Suspense, useCallback, useEffect, useState } from 'react'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import {
-  ActivityIndicator,
-  InteractionManager,
-  View,
-  StyleSheet,
-} from 'react-native'
+import { ActivityIndicator, View, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -156,14 +151,19 @@ function MainTabs() {
 
   // Airports after first paint — never compete with boot JS/fonts/auth
   React.useEffect(() => {
-    const handle = InteractionManager.runAfterInteractions(() => {
+    let cancelled = false
+    const t = setTimeout(() => {
+      if (cancelled) return
       void import('./src/lib/airportsCache')
         .then(({ getCachedAirports }) => getCachedAirports())
         .catch((e) => {
           if (__DEV__) console.warn('[airports] prefetch failed', e)
         })
-    })
-    return () => handle.cancel()
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
   }, [])
 
   return (
