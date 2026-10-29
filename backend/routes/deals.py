@@ -1222,7 +1222,7 @@ async def get_hotel_gallery(
 async def get_hotel_reviews_endpoint(
     hotel_id: str,
     language: Optional[str] = Query("fr"),
-    limit: int = Query(8, ge=1, le=10),
+    limit: int = Query(10, ge=1, le=10),
 ):
     """Nuitee/LiteAPI guest reviews (FR translate when language=fr, max 10)."""
     try:

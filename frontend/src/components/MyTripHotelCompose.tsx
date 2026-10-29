@@ -76,6 +76,261 @@ function formatStationDistance(h: HotelUpsellOption) {
   return `${dist} de ${name}`
 }
 
+function formatStationDistOnly(m?: number | null) {
+  if (m == null || Number.isNaN(Number(m))) return null
+  const n = Number(m)
+  return n < 1000 ? `${Math.round(n)} m` : `${(n / 1000).toFixed(1)} km`
+}
+
+/** Picto gare / train */
+function StationIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="4" y="3" width="16" height="14" rx="2" />
+      <path d="M4 11h16" />
+      <path d="M12 3v8" />
+      <circle cx="8" cy="17.5" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="17.5" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M8 21h8" />
+    </svg>
+  )
+}
+
+/** Picto centre-ville */
+function PinIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 21s-6-5.5-6-10a6 6 0 1 1 12 0c0 4.5-6 10-6 10z" />
+      <circle cx="12" cy="11" r="2" />
+    </svg>
+  )
+}
+
+function CoffeeIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M17 8h1a3 3 0 0 1 0 6h-1" />
+      <path d="M3 8h14v7a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z" />
+      <path d="M6 2v2M10 2v2M14 2v2" />
+    </svg>
+  )
+}
+
+function UtensilsIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2" />
+      <path d="M7 2v20" />
+      <path d="M21 15V2a5 5 0 0 0-5 5v6h5z" />
+      <path d="M21 15v7" />
+    </svg>
+  )
+}
+
+function BedIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8" />
+      <path d="M4 10V6a2 2 0 0 1 2-2h4v6" />
+      <path d="M2 18h20" />
+    </svg>
+  )
+}
+
+function CheckFlexIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  )
+}
+
+type StayOfferChip = {
+  key: string
+  label: string
+  tone: 'included' | 'available' | 'neutral'
+  icon: 'coffee' | 'utensils' | 'bed' | 'check'
+}
+
+/** Board rate + équipements → chips repas / formule visibles. */
+function stayOfferChips(
+  h: HotelUpsellOption,
+  facilities: string[],
+): StayOfferChip[] {
+  const out: StayOfferChip[] = []
+  const boardFr = boardLabelFr(h.board)
+  const raw = String(h.board || '').trim()
+  const code = raw.toUpperCase()
+  const facilityBreakfast = facilities.some((f) =>
+    /petit|breakfast|café|cafe/i.test(f),
+  )
+  const facilityRestaurant = facilities.some((f) =>
+    /restaurant|demi-pension|pension|half.?board|full.?board/i.test(f),
+  )
+
+  if (
+    boardFr === 'Petit-déjeuner inclus' ||
+    code === 'BI' ||
+    code === 'BB' ||
+    code === 'BDI' ||
+    code === 'BLI'
+  ) {
+    out.push({
+      key: 'bf-in',
+      label: 'Petit-déjeuner inclus',
+      tone: 'included',
+      icon: 'coffee',
+    })
+  } else if (boardFr === 'Demi-pension' || code === 'HB') {
+    out.push({
+      key: 'hb',
+      label: 'Demi-pension',
+      tone: 'included',
+      icon: 'utensils',
+    })
+  } else if (boardFr === 'Pension complète' || code === 'FB') {
+    out.push({
+      key: 'fb',
+      label: 'Pension complète',
+      tone: 'included',
+      icon: 'utensils',
+    })
+  } else if (boardFr === 'All inclusive' || code === 'AI') {
+    out.push({
+      key: 'ai',
+      label: 'All inclusive',
+      tone: 'included',
+      icon: 'utensils',
+    })
+  } else if (
+    boardFr === 'Chambre seule' ||
+    code === 'RO' ||
+    /room.?only/i.test(raw)
+  ) {
+    out.push({
+      key: 'ro',
+      label: 'Chambre seule',
+      tone: 'neutral',
+      icon: 'bed',
+    })
+    if (facilityBreakfast) {
+      out.push({
+        key: 'bf-opt',
+        label: 'Petit-déj. en option',
+        tone: 'available',
+        icon: 'coffee',
+      })
+    }
+  } else if (boardFr) {
+    out.push({
+      key: 'board',
+      label: boardFr,
+      tone: 'included',
+      icon: /petit|breakfast/i.test(boardFr) ? 'coffee' : 'utensils',
+    })
+  } else if (facilityBreakfast) {
+    out.push({
+      key: 'bf-hotel',
+      label: 'Petit-déj. à l’hôtel',
+      tone: 'available',
+      icon: 'coffee',
+    })
+  }
+
+  if (
+    facilityRestaurant &&
+    !out.some((c) => c.key === 'hb' || c.key === 'fb' || c.key === 'ai')
+  ) {
+    // already covered by demi/full if board; else hint restaurant exists
+    if (!out.some((c) => c.icon === 'utensils')) {
+      out.push({
+        key: 'resto',
+        label: 'Restaurant',
+        tone: 'available',
+        icon: 'utensils',
+      })
+    }
+  }
+
+  if (h.refundable) {
+    out.push({
+      key: 'flex',
+      label: 'Annulation flexible',
+      tone: 'included',
+      icon: 'check',
+    })
+  }
+
+  return out
+}
+
+function StayOfferIcon({
+  kind,
+  className,
+}: {
+  kind: StayOfferChip['icon']
+  className?: string
+}) {
+  if (kind === 'coffee') return <CoffeeIcon className={className} />
+  if (kind === 'utensils') return <UtensilsIcon className={className} />
+  if (kind === 'bed') return <BedIcon className={className} />
+  return <CheckFlexIcon className={className} />
+}
+
 function mapsQuery(name: string, city?: string | null) {
   return [name, city].filter(Boolean).join(', ')
 }
@@ -141,8 +396,69 @@ function ReviewStars({ score }: { score?: number | null }) {
   )
 }
 
+function formatReviewDate(raw?: string | null): string | null {
+  if (!raw) return null
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) {
+    const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/)
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(raw).slice(0, 10)
+  }
+  return d.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatReviewCountry(raw?: string | null): string | null {
+  if (!raw) return null
+  const s = String(raw).trim()
+  if (!s) return null
+  if (/^[a-z]{2}$/i.test(s)) {
+    try {
+      const name = new Intl.DisplayNames(['fr'], { type: 'region' }).of(
+        s.toUpperCase(),
+      )
+      if (name) return name
+    } catch {
+      /* ignore */
+    }
+    return s.toUpperCase()
+  }
+  return s
+}
+
+function formatReviewType(raw?: string | null): string | null {
+  if (!raw) return null
+  const t = String(raw).trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (!t) return null
+  const map: Record<string, string> = {
+    couple: 'En couple',
+    family: 'En famille',
+    family_with_children: 'En famille',
+    family_with_kids: 'En famille',
+    solo: 'Solo',
+    solo_traveller: 'Solo',
+    solo_traveler: 'Solo',
+    business: 'Affaires',
+    group: 'Entre amis',
+    friends: 'Entre amis',
+    other: 'Voyageur',
+  }
+  if (map[t]) return map[t]
+  return t.charAt(0).toUpperCase() + t.slice(1).replace(/_/g, ' ')
+}
+
+/** Ex. « Graeme · Royaume-Uni · En couple · 17 oct. 2026 » */
 function reviewMeta(r: HotelGuestReview) {
-  return [r.name, r.country, r.type, r.date].filter(Boolean).join(' · ')
+  return [
+    r.name?.trim() || null,
+    formatReviewCountry(r.country),
+    formatReviewType(r.type),
+    formatReviewDate(r.date),
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function ratingLabel(rating?: number | null) {
@@ -744,10 +1060,10 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         if (!cancelled) setDescription(null)
       })
     void api
-      .getHotelReviews(id, { language: 'fr', limit: 8 })
+      .getHotelReviews(id, { language: 'fr', limit: 10 })
       .then((r) => {
         if (cancelled) return
-        setGuestReviews(Array.isArray(r.reviews) ? r.reviews.slice(0, 8) : [])
+        setGuestReviews(Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : [])
       })
       .catch(() => {
         if (!cancelled) setGuestReviews([])
@@ -877,27 +1193,43 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
       return null
     }
   }, [checkin, checkout])
+  const offerChips = useMemo(
+    () => (selected ? stayOfferChips(selected, facilities) : []),
+    [selected, facilities],
+  )
   const amenityChips = useMemo(() => {
-    // Board / annulation already in the stay strip — keep chips for location + facilities.
-    const skip = new Set(
-      [boardLabelFr(selected?.board), selected?.refundable ? 'Annulation flexible' : null]
-        .filter(Boolean)
-        .map((s) => String(s)),
-    )
+    // Meal / cancel already in offerChips — keep location + other facilities.
+    const skip = new Set<string>([
+      ...offerChips.map((c) => c.label),
+      'Petit-déjeuner',
+      'Petit-déjeuner inclus',
+      'Petit-déj. en option',
+      'Petit-déj. à l’hôtel',
+      'Restaurant',
+      'Annulation flexible',
+      'Chambre seule',
+      'Demi-pension',
+      'Pension complète',
+      'All inclusive',
+    ])
+    const boardFr = boardLabelFr(selected?.board)
+    if (boardFr) skip.add(boardFr)
     const seen = new Set<string>()
     const out: string[] = []
     for (const a of [...advantages, ...facilities]) {
       const t = String(a || '').trim()
       if (!t || seen.has(t) || skip.has(t)) continue
+      if (/petit|breakfast|annulation|pension|inclusive|chambre seule/i.test(t))
+        continue
       seen.add(t)
       out.push(t)
       if (out.length >= 7) break
     }
     return out
-  }, [advantages, facilities, selected?.board, selected?.refundable])
+  }, [advantages, facilities, offerChips, selected?.board])
   const visibleReviews = reviewsExpanded
     ? guestReviews
-    : guestReviews.slice(0, 2)
+    : guestReviews.slice(0, 5)
   const packPp =
     selectedPrice && flightPp > 0
       ? Math.round(selectedPrice.amount + flightPp)
@@ -999,17 +1331,34 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                 ) : null}
               </div>
               {(formatDistance(selected.distance_m) ||
-                formatStationDistance(selected) ||
+                selected.station_name ||
                 cityLabel) && (
-                <p className="mt-1 text-[11px] text-slate-500 line-clamp-1">
-                  {[
-                    formatDistance(selected.distance_m),
-                    formatStationDistance(selected),
-                    cityLabel,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-500">
+                  {formatDistance(selected.distance_m) ? (
+                    <span className="inline-flex items-center gap-1">
+                      <PinIcon className="w-3 h-3 text-slate-400 shrink-0" />
+                      {formatDistance(selected.distance_m)}
+                    </span>
+                  ) : cityLabel ? (
+                    <span className="inline-flex items-center gap-1">
+                      <PinIcon className="w-3 h-3 text-slate-400 shrink-0" />
+                      {cityLabel}
+                    </span>
+                  ) : null}
+                  {selected.station_name &&
+                  formatStationDistOnly(selected.station_distance_m) ? (
+                    <span className="inline-flex items-center gap-1 min-w-0">
+                      <StationIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span className="truncate">
+                        <span className="font-semibold text-slate-700">
+                          {formatStationDistOnly(selected.station_distance_m)}
+                        </span>
+                        {' · '}
+                        {selected.station_name}
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
               )}
             </div>
             {selectedPrice ? (
@@ -1024,8 +1373,8 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
             ) : null}
           </div>
 
-          {/* 2 · Séjour + réassurance */}
-          <div className="rounded-2xl bg-slate-50 px-3 py-2.5 space-y-2">
+          {/* 2 · Séjour + formule (petit-déj. / pension) */}
+          <div className="rounded-2xl bg-slate-50 px-3 py-2.5 space-y-2.5">
             {(outLabel || retLabel || nights) && (
               <p className="text-[12px] text-slate-800 font-semibold">
                 {[outLabel, retLabel].filter(Boolean).join(' → ')}
@@ -1037,18 +1386,35 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                   : ''}
               </p>
             )}
-            {(checkinTime || checkoutTime || selected.refundable || boardLabelFr(selected.board)) && (
+            {offerChips.length > 0 ? (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">
+                  Formule
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {offerChips.map((c) => (
+                    <span
+                      key={c.key}
+                      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold ${
+                        c.tone === 'included'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
+                          : c.tone === 'available'
+                            ? 'bg-amber-50 text-amber-900 border border-amber-100'
+                            : 'bg-white text-slate-700 border border-slate-200'
+                      }`}
+                    >
+                      <StayOfferIcon
+                        kind={c.icon}
+                        className="w-3.5 h-3.5 shrink-0 opacity-90"
+                      />
+                      {c.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {(checkinTime || checkoutTime) && (
               <div className="flex flex-wrap gap-1.5">
-                {selected.refundable ? (
-                  <span className="rounded-lg bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-1">
-                    Annulation flexible
-                  </span>
-                ) : null}
-                {boardLabelFr(selected.board) ? (
-                  <span className="rounded-lg bg-white border border-slate-200 text-slate-700 text-[10px] font-bold px-2 py-1">
-                    {boardLabelFr(selected.board)}
-                  </span>
-                ) : null}
                 {checkinTime ? (
                   <span className="rounded-lg bg-white border border-slate-200 text-slate-600 text-[10px] font-semibold px-2 py-1">
                     Arrivée {checkinTime}
@@ -1192,22 +1558,59 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                 </p>
               ) : null}
               {selected.stations && selected.stations.length > 0 ? (
-                <ul className="text-[11px] text-slate-600 space-y-0.5 mb-2">
-                  {selected.stations.slice(0, 2).map((s) => {
-                    const n = Number(s.distance_m)
-                    const dist =
-                      n < 1000
-                        ? `${Math.round(n)} m`
-                        : `${(n / 1000).toFixed(1)} km`
+                <ul className="space-y-1.5 mb-2.5">
+                  {selected.stations.slice(0, 2).map((s, idx) => {
+                    const dist = formatStationDistOnly(s.distance_m)
                     return (
-                      <li key={s.name}>
-                        <span className="font-semibold text-slate-800">{dist}</span>
-                        {' · '}
-                        {s.name}
+                      <li
+                        key={s.name}
+                        className="flex items-center gap-2 text-[11px] text-slate-600"
+                      >
+                        <span
+                          className={`shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg ${
+                            idx === 0
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                          title="Gare"
+                        >
+                          <StationIcon className="w-3.5 h-3.5" />
+                        </span>
+                        <span className="min-w-0">
+                          {dist ? (
+                            <span className="font-bold text-slate-900 tabular-nums">
+                              {dist}
+                            </span>
+                          ) : null}
+                          {dist ? ' · ' : null}
+                          <span className="font-medium text-slate-700">
+                            {s.name}
+                          </span>
+                          {idx === 0 ? (
+                            <span className="text-slate-400"> · gare principale</span>
+                          ) : null}
+                        </span>
                       </li>
                     )
                   })}
                 </ul>
+              ) : selected.station_name &&
+                formatStationDistOnly(selected.station_distance_m) ? (
+                <div className="flex items-center gap-2 text-[11px] text-slate-600 mb-2.5">
+                  <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-900 text-white">
+                    <StationIcon className="w-3.5 h-3.5" />
+                  </span>
+                  <span>
+                    <span className="font-bold text-slate-900 tabular-nums">
+                      {formatStationDistOnly(selected.station_distance_m)}
+                    </span>
+                    {' · '}
+                    <span className="font-medium text-slate-700">
+                      {selected.station_name}
+                    </span>
+                    <span className="text-slate-400"> · gare principale</span>
+                  </span>
+                </div>
               ) : null}
               <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 h-[120px]">
                 <iframe
@@ -1275,7 +1678,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                       )
                     })}
                   </ul>
-                  {guestReviews.length > 2 ||
+                  {guestReviews.length > 5 ||
                   guestReviews.some(
                     (r) => String(r.pros || r.text || '').length > 120,
                   ) ? (
@@ -1286,8 +1689,8 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                     >
                       {reviewsExpanded
                         ? 'Voir moins'
-                        : guestReviews.length > 2
-                          ? `Voir plus · ${guestReviews.length - 2} avis`
+                        : guestReviews.length > 5
+                          ? `Voir plus · ${guestReviews.length - 5} avis`
                           : 'Voir plus'}
                     </button>
                   ) : null}
@@ -1586,9 +1989,21 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                             </span>
                           ) : null}
                         </p>
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">
-                          {[board, dist, station].filter(Boolean).join(' · ') || '—'}
-                        </p>
+                        <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+                          {(board || dist) && (
+                            <p className="line-clamp-1">
+                              {[board, dist].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                          {station ? (
+                            <p className="inline-flex items-center gap-1 line-clamp-1 text-slate-600">
+                              <StationIcon className="w-3 h-3 shrink-0 text-slate-500" />
+                              <span className="truncate">{station}</span>
+                            </p>
+                          ) : !board && !dist ? (
+                            <p>—</p>
+                          ) : null}
+                        </div>
                         <p className="mt-auto pt-1 text-[10px] font-semibold text-slate-400 flex items-center justify-between gap-2">
                           <span>{price?.label || 'prix hôtel'}</span>
                           <span className="lg:hidden text-[#FF385C] font-bold">Voir →</span>

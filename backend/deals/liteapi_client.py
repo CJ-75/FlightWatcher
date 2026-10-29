@@ -236,14 +236,14 @@ class LiteApiClient:
         hotel_id: str,
         *,
         language: str = "fr",
-        limit: int = 8,
+        limit: int = 10,
         get_sentiment: bool = False,
         timeout: Optional[float] = None,
     ) -> Any:
         """GET /data/reviews — guest reviews (language=fr → AI translate, max 10)."""
         params: Dict[str, Any] = {
             "hotelId": hotel_id,
-            "limit": max(1, min(int(limit or 8), 10 if language else 200)),
+            "limit": max(1, min(int(limit or 10), 10 if language else 200)),
             "timeout": int(timeout or 8),
         }
         if language:

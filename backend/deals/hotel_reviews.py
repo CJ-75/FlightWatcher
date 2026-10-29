@@ -71,7 +71,7 @@ def get_hotel_reviews(
     hotel_id: str,
     *,
     language: str = "fr",
-    limit: int = 8,
+    limit: int = 10,
 ) -> Dict[str, Any]:
     """
     Guest reviews via GET /data/reviews.
@@ -82,7 +82,7 @@ def get_hotel_reviews(
         return {"hotel_id": "", "reviews": [], "count": 0}
 
     lang = (language or "fr").strip().lower()[:5] or "fr"
-    lim = max(1, min(int(limit or 8), 10))
+    lim = max(1, min(int(limit or 10), 10))
     cache_key = f"{hid}:{lang}:{lim}"
 
     with _CACHE_LOCK:
