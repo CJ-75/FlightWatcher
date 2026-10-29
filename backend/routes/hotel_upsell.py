@@ -56,7 +56,7 @@ class UpsellFetchRequest(BaseModel):
     participants: int = Field(2, ge=1, le=6)
     flight_pp: Optional[float] = Field(None, ge=0)
     city: Optional[str] = None
-    # MyTrip compose: live LiteAPI, skip rates cache (Séjours only)
+    # MyTrip compose: live LiteAPI (skip cache read; still writes for reload)
     live: bool = False
 
 

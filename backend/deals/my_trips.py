@@ -180,6 +180,90 @@ def update_draft_hotel(
     return out
 
 
+_COMPOSE_OPTION_KEYS = (
+    "id",
+    "hotel_id",
+    "name",
+    "stars",
+    "rating",
+    "review_count",
+    "photo",
+    "thumbnail",
+    "board",
+    "hotel_pp",
+    "public_hotel_price",
+    "distance_m",
+    "refundable",
+    "cancel_deadline",
+)
+
+
+def _slim_compose_option(raw: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return None
+    hid = raw.get("id") or raw.get("hotel_id")
+    if hid is None or str(hid).strip() == "":
+        return None
+    out: Dict[str, Any] = {}
+    for k in _COMPOSE_OPTION_KEYS:
+        if k in raw and raw[k] is not None:
+            out[k] = raw[k]
+    out["id"] = str(hid)
+    if out.get("hotel_id") is None:
+        out["hotel_id"] = str(hid)
+    return out
+
+
+def save_compose_options(
+    supabase,
+    draft_token: str,
+    *,
+    options: Any,
+    night_cap: Optional[float] = None,
+    city: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Snapshot the hotel list shown on MyTrip compose so reload keeps the same
+    hotels (live revalidate may drop unavailable ones / refresh prices).
+    """
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return None
+    slim: list = []
+    seen = set()
+    for item in options or []:
+        if len(slim) >= 12:
+            break
+        opt = _slim_compose_option(item)
+        if not opt:
+            continue
+        key = str(opt.get("id") or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        slim.append(opt)
+    now = _now().isoformat()
+    patch: Dict[str, Any] = {
+        "compose_options": slim,
+        "compose_options_at": now,
+    }
+    if night_cap is not None:
+        try:
+            patch["compose_night_cap"] = float(night_cap)
+        except (TypeError, ValueError):
+            pass
+    if city:
+        patch["compose_city"] = str(city)[:120]
+    payload = _merge_payload(row, patch)
+    res = (
+        supabase.table("my_trip_drafts")
+        .update({"payload": payload, "updated_at": now})
+        .eq("id", row["id"])
+        .execute()
+    )
+    return (res.data or [{**row, "payload": payload, "updated_at": now}])[0]
+
+
 def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
     """Lot F — step ① done → unlock hotel at flight dates."""
     row = get_draft(supabase, draft_token)

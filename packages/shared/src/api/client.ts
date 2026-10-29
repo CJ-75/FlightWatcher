@@ -30,6 +30,7 @@ import type {
   HotelGalleryResponse,
   HotelUpsellJob,
   HotelUpsellLookupItem,
+  HotelUpsellOption,
   HotelUpsellResult,
   TripProposal,
   TripMember,
@@ -412,6 +413,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
     ) =>
       request<MyTripDraft>(
         `/api/deals/my-trip/${encodeURIComponent(draftToken)}/hotel`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      ),
+
+    saveMyTripComposeOptions: (
+      draftToken: string,
+      body: {
+        options: HotelUpsellOption[]
+        night_cap?: number | null
+        city?: string | null
+      },
+    ) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/compose-options`,
         { method: 'PATCH', body: JSON.stringify(body) },
       ),
 

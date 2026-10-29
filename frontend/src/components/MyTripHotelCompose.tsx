@@ -23,6 +23,40 @@ function hotelKey(h: HotelUpsellOption, idx = 0) {
   return String(h.id || h.hotel_id || idx)
 }
 
+function hotelIdOf(h: HotelUpsellOption | Record<string, unknown> | null | undefined) {
+  if (!h) return ''
+  return String((h as HotelUpsellOption).id || (h as HotelUpsellOption).hotel_id || '')
+}
+
+/** Keep initial order; refresh prices from live; drop unavailable. */
+function revalidateSnapshot(
+  snapshot: HotelUpsellOption[],
+  live: HotelUpsellOption[],
+): HotelUpsellOption[] {
+  if (!snapshot.length) return live
+  const byId = new Map<string, HotelUpsellOption>()
+  for (const h of live) {
+    const id = hotelIdOf(h)
+    if (id) byId.set(id, h)
+  }
+  const kept: HotelUpsellOption[] = []
+  for (const h of snapshot) {
+    const id = hotelIdOf(h)
+    const fresh = id ? byId.get(id) : undefined
+    if (fresh) kept.push({ ...h, ...fresh })
+  }
+  return kept
+}
+
+function readSnapshot(payload: Record<string, unknown>): HotelUpsellOption[] {
+  const raw = payload.compose_options
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((x): x is HotelUpsellOption => Boolean(x && typeof x === 'object'))
+    .filter((h) => hotelIdOf(h))
+    .slice(0, 12)
+}
+
 function formatDistance(m?: number | null) {
   if (m == null || Number.isNaN(Number(m))) return null
   const n = Number(m)
@@ -87,67 +121,133 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
       }
       setLoading(true)
       setError(null)
-      try {
-        const cityHint =
-          String(
-            draft.city_name ||
-              (payload as { city?: string }).city ||
-              '',
-          ).trim() || undefined
-        const item = {
-          iata: destIata,
-          checkin,
-          checkout,
-          participants: adults,
-          flight_pp: flightPp || undefined,
-          city: cityHint,
-          live: true,
+
+      const cityHint =
+        String(
+          draft.city_name ||
+            payload.compose_city ||
+            (payload as { city?: string }).city ||
+            '',
+        ).trim() || undefined
+      const snapshot = readSnapshot(payload)
+      const lookupItem = {
+        iata: destIata,
+        checkin,
+        checkout,
+        participants: adults,
+        flight_pp: flightPp || undefined,
+        city: cityHint,
+      }
+      const liveItem = { ...lookupItem, live: true }
+
+      const pickOpts = (r: {
+        options?: HotelUpsellOption[] | null
+        hotel?: HotelUpsellOption | null
+      }) =>
+        r?.options?.length ? r.options : r?.hotel ? [r.hotel] : []
+
+      const applyOpts = (
+        opts: HotelUpsellOption[],
+        meta?: { night_cap?: number | null; city?: string | null },
+      ) => {
+        setOptions(opts)
+        if (meta?.night_cap != null) setNightCap(Number(meta.night_cap))
+        if (meta?.city) setCityLabel(String(meta.city))
+        else if (cityHint) setCityLabel(cityHint)
+        const curId = hotelIdOf(currentHotel)
+        const match = opts.find((h) => hotelIdOf(h) === curId)
+        setSelected(match || opts[0] || null)
+      }
+
+      const persistSnapshot = async (
+        opts: HotelUpsellOption[],
+        meta?: { night_cap?: number | null; city?: string | null },
+      ) => {
+        if (!opts.length || !token) return
+        try {
+          const row = await getApiClient().saveMyTripComposeOptions(token, {
+            options: opts,
+            night_cap: meta?.night_cap ?? nightCap,
+            city: meta?.city ?? cityHint ?? null,
+          })
+          if (!cancelled) onUpdated(row)
+        } catch (e) {
+          console.warn('[MyTripHotelCompose] persist snapshot failed', e)
         }
+      }
 
-        const pickOpts = (r: {
-          options?: HotelUpsellOption[] | null
-          hotel?: HotelUpsellOption | null
-        }) =>
-          r?.options?.length
-            ? r.options
-            : r?.hotel
-              ? [r.hotel]
-              : []
+      const reasonError = (reason: string, status?: string) =>
+        reason === 'not_in_catalogue'
+          ? 'Cette destination n’a pas encore d’hôtels — réessaie dans un instant'
+          : reason === 'bad_dates'
+            ? 'Dates invalides pour l’hôtel'
+            : reason === 'empty_pool' ||
+                reason === 'no_rates' ||
+                status === 'no_rates'
+              ? 'Pas de dispo hôtel pour ces dates'
+              : reason === 'rate_limited' || reason === 'too_many_fetches'
+                ? 'Trop de recherches hôtel — réessaie dans un moment'
+                : 'Aucun hôtel disponible pour cette ville / ces dates'
 
-        const pollJob = async (jobId: string) => {
-          for (let i = 0; i < 40; i++) {
-            await new Promise((r) => setTimeout(r, 1200))
-            if (cancelled) return null
-            try {
-              const job = await getApiClient().getHotelUpsellJob(jobId)
-              if (
-                job.status === 'ready' ||
-                job.status === 'error' ||
-                job.status === 'no_rates'
-              ) {
-                return job
-              }
-            } catch {
-              return null
-            }
+      const loadCached = async () => {
+        try {
+          const cached = (
+            await getApiClient().lookupHotelUpsell([lookupItem])
+          ).results?.[0]
+          const opts = pickOpts(cached || {})
+          return {
+            opts,
+            night_cap: cached?.night_cap ?? null,
+            city: cached?.city ?? null,
+            status: cached?.status,
+            reason: cached?.reason,
           }
-          return null
+        } catch {
+          return {
+            opts: [] as HotelUpsellOption[],
+            night_cap: null,
+            city: null,
+            status: undefined,
+            reason: undefined,
+          }
         }
+      }
 
-        let result = await getApiClient().fetchHotelUpsell(item)
-        if (result?.status === 'pending') {
-          if (result.job_id) {
-            const job = await pollJob(result.job_id)
-            if (job) {
-              result = {
-                ...result,
-                status: job.status,
-                options: job.options,
-                night_cap: job.night_cap ?? result.night_cap,
-                reason: (job as { error?: string }).error || result.reason,
-              }
-            } else if (!cancelled) {
-              result = await getApiClient().fetchHotelUpsell(item)
+      const pollJob = async (jobId: string) => {
+        for (let i = 0; i < 40; i++) {
+          await new Promise((r) => setTimeout(r, 1200))
+          if (cancelled) return null
+          try {
+            const job = await getApiClient().getHotelUpsellJob(jobId)
+            if (
+              job.status === 'ready' ||
+              job.status === 'error' ||
+              job.status === 'no_rates'
+            ) {
+              return job
+            }
+          } catch {
+            return null
+          }
+        }
+        return null
+      }
+
+      const fetchLive = async () => {
+        let result = await getApiClient().fetchHotelUpsell(liveItem)
+        if (result?.status === 'pending' && result.job_id) {
+          const job = await pollJob(result.job_id)
+          if (job) {
+            result = {
+              ...result,
+              status: job.status,
+              options: job.options,
+              night_cap: job.night_cap ?? result.night_cap,
+              reason: (job as { error?: string }).error || result.reason,
+            }
+          } else if (!cancelled) {
+            try {
+              result = await getApiClient().fetchHotelUpsell(liveItem)
               if (result?.status === 'pending' && result.job_id) {
                 const job2 = await pollJob(result.job_id)
                 if (job2) {
@@ -156,69 +256,118 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                     status: job2.status,
                     options: job2.options,
                     night_cap: job2.night_cap ?? result.night_cap,
-                    reason: (job2 as { error?: string }).error || result.reason,
+                    reason:
+                      (job2 as { error?: string }).error || result.reason,
                   }
                 }
               }
+            } catch {
+              /* keep prior */
             }
           }
+        }
+        return result
+      }
+
+      try {
+        // 1) Trip snapshot first (exact hotels shown initially)
+        const snapCap =
+          payload.compose_night_cap != null
+            ? Number(payload.compose_night_cap)
+            : null
+        if (snapshot.length) {
+          applyOpts(snapshot, { night_cap: snapCap, city: cityHint })
+          setLoading(false)
+        } else {
+          // First visit fallback: rates cache while live loads
+          const cached = await loadCached()
+          if (cancelled) return
+          if (cached.opts.length) {
+            applyOpts(cached.opts, cached)
+            setLoading(false)
+          }
+        }
+
+        // 2) Live revalidate — keep snapshot order, drop unavailable
+        let result: Awaited<
+          ReturnType<ReturnType<typeof getApiClient>['fetchHotelUpsell']>
+        > | null = null
+        try {
+          result = await fetchLive()
+        } catch (e) {
+          if (snapshot.length) {
+            if (!cancelled) setLoading(false)
+            return
+          }
+          const cached = await loadCached()
+          if (cached.opts.length) {
+            applyOpts(cached.opts, cached)
+            await persistSnapshot(cached.opts, cached)
+            return
+          }
+          throw e
         }
 
         if (cancelled) return
-        let opts = pickOpts(result || {})
-        if (!opts.length && !cancelled) {
-          try {
-            const cached = (
-              await getApiClient().lookupHotelUpsell([
-                {
-                  iata: destIata,
-                  checkin,
-                  checkout,
-                  participants: adults,
-                  flight_pp: flightPp || undefined,
-                  city: cityHint,
-                },
-              ])
-            ).results?.[0]
-            const cachedOpts = pickOpts(cached || {})
-            if (cachedOpts.length) {
-              opts = cachedOpts
-              result = cached || result
-            }
-          } catch {
-            /* ignore */
+        const liveOpts = pickOpts(result || {})
+        let opts: HotelUpsellOption[] = []
+
+        if (snapshot.length && liveOpts.length) {
+          opts = revalidateSnapshot(snapshot, liveOpts)
+          // All previous hotels gone → fall back to new live set
+          if (!opts.length) opts = liveOpts
+        } else if (liveOpts.length) {
+          opts = liveOpts
+        } else if (snapshot.length) {
+          // Live empty / error status — keep snapshot (may be briefly stale)
+          opts = snapshot
+        } else {
+          const again = await loadCached()
+          opts = again.opts
+          if (again.night_cap != null && result) {
+            result = { ...result, night_cap: again.night_cap, city: again.city }
           }
         }
 
-        setOptions(opts)
-        if (result?.night_cap != null) setNightCap(Number(result.night_cap))
-        if (result?.city) setCityLabel(String(result.city))
-        else if (cityHint) setCityLabel(cityHint)
-        const curId = String(currentHotel?.id || currentHotel?.hotel_id || '')
-        const match = opts.find(
-          (h) => String(h.id || h.hotel_id || '') === curId,
-        )
-        setSelected(match || opts[0] || null)
-        if (!opts.length) {
-          const reason = String(result?.reason || result?.status || '')
+        if (opts.length) {
+          const meta = {
+            night_cap: result?.night_cap ?? snapCap,
+            city: result?.city ?? cityHint,
+          }
+          applyOpts(opts, meta)
+          setError(null)
+          // Snapshot (or refresh prices / drop unavailable) on the draft
+          await persistSnapshot(opts, meta)
+        } else {
           setError(
-            reason === 'not_in_catalogue'
-              ? 'Cette destination n’a pas encore d’hôtels — réessaie dans un instant'
-              : reason === 'bad_dates'
-                ? 'Dates invalides pour l’hôtel'
-                : reason === 'empty_pool' ||
-                    reason === 'no_rates' ||
-                    result?.status === 'no_rates'
-                  ? 'Pas de dispo hôtel pour ces dates'
-                  : reason === 'rate_limited'
-                    ? 'Trop de recherches hôtel — réessaie dans un moment'
-                    : 'Aucun hôtel disponible pour cette ville / ces dates',
+            reasonError(
+              String(result?.reason || result?.status || ''),
+              result?.status,
+            ),
           )
         }
       } catch (e) {
         if (!cancelled) {
           console.warn('[MyTripHotelCompose] hotel load failed', e)
-          setError('Impossible de charger les hôtels')
+          if (snapshot.length) {
+            applyOpts(snapshot, {
+              night_cap:
+                payload.compose_night_cap != null
+                  ? Number(payload.compose_night_cap)
+                  : null,
+              city: cityHint,
+            })
+            setError(null)
+          } else {
+            const again = await loadCached()
+            if (again.opts.length) {
+              applyOpts(again.opts, again)
+              await persistSnapshot(again.opts, again)
+              setError(null)
+            } else {
+              setError('Impossible de charger les hôtels')
+            }
+          }
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -228,7 +377,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destIata, checkin, checkout, adults, flightPp])
+  }, [destIata, checkin, checkout, adults, flightPp, token])
 
   const sorted = useMemo(() => {
     const list = [...options]

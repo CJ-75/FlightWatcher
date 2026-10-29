@@ -4,7 +4,9 @@ Hotel upsell for Search / Planner / MyTrip compose (§9.4).
 Séjours / Search prefetch: catalogue + fenêtre → hotel_rates_cache (0 LiteAPI).
 Miss : job on-demand → peut écrire hotel_rates_cache (FREE window).
 
-MyTrip compose (live=True): toujours LiteAPI, ignore et n'écrit pas le rates cache.
+MyTrip compose (live=True): toujours LiteAPI (ignore le cache en lecture).
+Après succès, écrit hotel_rates_cache pour que le reload /trip?compose=1
+puisse réafficher via lookup si LiteAPI/rate-limit échoue.
 """
 from __future__ import annotations
 
@@ -1002,7 +1004,7 @@ def _run_fetch_job(
             require_photo=True,
         )
         offer = options[0] if options else None
-        # Séjours wall only — compose live must not write hotel_rates_cache
+        # Persist so compose reload can lookup (live path still skips cache on read)
         if persist_cache:
             _mark_upsell_row(
                 supabase,
@@ -1028,7 +1030,7 @@ def _run_fetch_job(
                 "median_night": meta.get("median_night"),
                 "tier": meta.get("tier"),
                 "nights": nights,
-                "live": not persist_cache,
+                "live": bool((_jobs.get(job_id) or {}).get("live")),
             }
     except Exception as e:
         logger.warning("upsell_fetch_fail job=%s: %s", job_id, e)
@@ -1071,8 +1073,8 @@ def start_upsell_fetch(
     """
     Start async on-demand fetch if needed.
 
-    live=True (MyTrip compose): always call LiteAPI, ignore hotel_rates_cache.
-    Cache writes are skipped — rates cache is for Séjours wall only.
+    live=True (MyTrip compose): always call LiteAPI, ignore hotel_rates_cache
+    on read. Still persists the result so reload can serve via lookup.
 
     Never blocks on LiteAPI / pool bootstrap — that runs in the upsell worker
     and yields while a client flight Search is in flight.
@@ -1148,8 +1150,8 @@ def start_upsell_fetch(
             "reason": "ensuring_catalogue",
         }
 
-    # Non-live: mark pending row in rates cache. Live compose never touches cache.
-    if dest_id and not live:
+    # Mark pending in rates cache (incl. live) so concurrent lookups see progress
+    if dest_id:
         _mark_upsell_row(
             supabase,
             destination_id=str(dest_id),
@@ -1186,7 +1188,7 @@ def start_upsell_fetch(
         flight_pp=float(flight_pp) if flight_pp is not None else None,
         iata=(iata or "").upper() or None,
         city=city,
-        persist_cache=not bool(live),
+        persist_cache=True,
     )
     return {
         **looked,

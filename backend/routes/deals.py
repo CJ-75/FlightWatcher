@@ -1038,6 +1038,36 @@ async def update_my_trip_hotel(draft_token: str, body: MyTripHotelRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class MyTripComposeOptionsRequest(BaseModel):
+    options: List[Dict[str, Any]] = Field(default_factory=list)
+    night_cap: Optional[float] = None
+    city: Optional[str] = None
+
+
+@router.patch("/api/deals/my-trip/{draft_token}/compose-options")
+async def save_my_trip_compose_options(
+    draft_token: str, body: MyTripComposeOptionsRequest
+):
+    """Persist the compose hotel list so reload shows the same offers."""
+    try:
+        from deals.my_trips import save_compose_options
+
+        row = save_compose_options(
+            _svc(),
+            draft_token,
+            options=body.options or [],
+            night_cap=body.night_cap,
+            city=body.city,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class MyTripEmailRequest(BaseModel):
     email: str
     consent: bool = False
