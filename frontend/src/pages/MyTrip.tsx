@@ -79,6 +79,8 @@ export default function MyTrip() {
   const [copyDone, setCopyDone] = useState(false)
   const [checkoutDeal, setCheckoutDeal] = useState<TravelDeal | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  /** After compose → checkout, Précédent / fermer returns to compose. */
+  const [returnToCompose, setReturnToCompose] = useState(false)
   const [priceChange, setPriceChange] = useState<{ from: number; to: number } | null>(
     null,
   )
@@ -331,6 +333,20 @@ export default function MyTrip() {
     next.delete('compose')
     setSearchParams(next, { replace: true })
   }
+
+  const openCompose = useCallback(() => {
+    setComposeOpen(true)
+    const next = new URLSearchParams(searchParams)
+    next.set('compose', '1')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const dismissHotelCheckout = useCallback(() => {
+    setCheckoutDeal(null)
+    if (!returnToCompose) return
+    setReturnToCompose(false)
+    openCompose()
+  }, [openCompose, returnToCompose])
 
   const onFlightClick = async () => {
     leftForFlight.current = true
@@ -1003,6 +1019,7 @@ export default function MyTrip() {
             onDone={closeCompose}
             onHotelChosen={(row) => {
               setDraft(row)
+              setReturnToCompose(true)
               closeCompose()
               void openHotelCheckout(row)
             }}
@@ -1191,14 +1208,7 @@ export default function MyTrip() {
                   cancelLabel={cancelLabel}
                   booked={hotelBooked}
                   onChangeHotel={
-                    !wantsCompose && !hotelBooked
-                      ? () => {
-                          setComposeOpen(true)
-                          const next = new URLSearchParams(searchParams)
-                          next.set('compose', '1')
-                          setSearchParams(next, { replace: true })
-                        }
-                      : undefined
+                    !wantsCompose && !hotelBooked ? () => openCompose() : undefined
                   }
                 />
               ) : (
@@ -1240,12 +1250,7 @@ export default function MyTrip() {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        setComposeOpen(true)
-                        const next = new URLSearchParams(searchParams)
-                        next.set('compose', '1')
-                        setSearchParams(next, { replace: true })
-                      }}
+                      onClick={() => openCompose()}
                       className="text-sm font-bold text-primary-700 underline-offset-2 hover:underline"
                     >
                       Choisir un autre hôtel
@@ -1273,12 +1278,7 @@ export default function MyTrip() {
               {!hotelObj?.name && !hotelBooked && !hotelUnavailable ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    setComposeOpen(true)
-                    const next = new URLSearchParams(searchParams)
-                    next.set('compose', '1')
-                    setSearchParams(next, { replace: true })
-                  }}
+                  onClick={() => openCompose()}
                   className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
                 >
                   Choisir un hôtel
@@ -1347,13 +1347,18 @@ export default function MyTrip() {
           hotelId={hotelObj?.id ? String(hotelObj.id) : checkoutDeal.hotel?.id}
           draftToken={token}
           hotelTotalHint={party.hotelTotal}
-          onClose={() => setCheckoutDeal(null)}
+          onClose={dismissHotelCheckout}
           onUnavailable={() => {
             setCheckoutDeal(null)
             setHotelUnavailable(true)
+            if (returnToCompose) {
+              setReturnToCompose(false)
+              openCompose()
+            }
           }}
           onAccountCta={() => track('account_cta')}
           onBooked={() => {
+            setReturnToCompose(false)
             void load()
           }}
         />
