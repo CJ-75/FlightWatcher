@@ -41,6 +41,42 @@ export const POPULAR_AIRPORT_CODES = [
 
 export type PopularAirportCode = (typeof POPULAR_AIRPORT_CODES)[number]
 
+/** Static seed so the city picker opens before /api/airports returns. */
+const SEED_COUNTRY_BY_IATA: Record<string, string> = {
+  CDG: 'France',
+  ORY: 'France',
+  BVA: 'France',
+  LYS: 'France',
+  MRS: 'France',
+  NCE: 'France',
+  TLS: 'France',
+  BOD: 'France',
+  NTE: 'France',
+  LIL: 'France',
+  LHR: 'Royaume-Uni',
+  LGW: 'Royaume-Uni',
+  AMS: 'Pays-Bas',
+  BRU: 'Belgique',
+  CRL: 'Belgique',
+  BCN: 'Espagne',
+  MAD: 'Espagne',
+  FCO: 'Italie',
+  MXP: 'Italie',
+  DUB: 'Irlande',
+}
+
+export function seedPopularAirports(): Airport[] {
+  return POPULAR_AIRPORT_CODES.map((code) => {
+    const city = CITY_FR_BY_IATA[code] || code
+    return {
+      code,
+      name: city,
+      city,
+      country: SEED_COUNTRY_BY_IATA[code] || 'Europe',
+    }
+  })
+}
+
 /** Resolve popular codes against a loaded airport list (order preserved). */
 export function resolvePopularAirports(airports: Airport[]): Airport[] {
   const safe = Array.isArray(airports) ? airports : []

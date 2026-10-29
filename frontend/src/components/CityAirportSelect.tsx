@@ -9,6 +9,7 @@ import {
   groupAirportsByCity,
   parseAirportCodes,
   resolvePopularCityGroups,
+  seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { loadAirportsOnce, peekAirports } from '../hooks/useAirports'
@@ -26,12 +27,16 @@ const PLACEHOLDER_CITIES = [
 ] as const
 
 const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[14px]'
+const SEED = seedPopularAirports()
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number }
 
 export function CityAirportSelect({ value, onChange }: Props) {
-  const [airports, setAirports] = useState<Airport[]>(() => peekAirports())
-  const [loading, setLoading] = useState(() => peekAirports().length === 0)
+  const peeked = peekAirports()
+  const [airports, setAirports] = useState<Airport[]>(() =>
+    peeked.length ? peeked : SEED,
+  )
+  const [loading, setLoading] = useState(() => peeked.length === 0)
   const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -41,16 +46,22 @@ export function CityAirportSelect({ value, onChange }: Props) {
   const inputWrapRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const reloadAirports = () => {
+  const applyList = (list: Airport[]) => {
+    if (list.length) setAirports(list)
+    else setAirports(SEED)
+  }
+
+  const reloadAirports = (force = true) => {
     setLoading(true)
     setLoadError(false)
     void (async () => {
       try {
-        const list = await loadAirportsOnce()
-        setAirports(list)
+        const list = await loadAirportsOnce({ force })
+        applyList(list)
         setLoadError(list.length === 0)
       } catch {
         setLoadError(true)
+        applyList([])
       } finally {
         setLoading(false)
       }
@@ -63,10 +74,13 @@ export function CityAirportSelect({ value, onChange }: Props) {
       try {
         const list = await loadAirportsOnce()
         if (cancelled) return
-        setAirports(list)
+        applyList(list)
         setLoadError(list.length === 0)
       } catch {
-        if (!cancelled) setLoadError(true)
+        if (!cancelled) {
+          setLoadError(true)
+          applyList([])
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -125,15 +139,20 @@ export function CityAirportSelect({ value, onChange }: Props) {
     if (!el) return
     const r = el.getBoundingClientRect()
     const gap = 4
-    const spaceBelow = window.innerHeight - r.bottom - 12
-    const spaceAbove = r.top - 12
+    const vv = window.visualViewport
+    const viewH = vv?.height ?? window.innerHeight
+    const viewTop = vv?.offsetTop ?? 0
+    const spaceBelow = viewTop + viewH - r.bottom - 12
+    const spaceAbove = r.top - viewTop - 12
     const preferBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove
     const maxHeight = Math.max(
       140,
       Math.min(320, preferBelow ? spaceBelow : spaceAbove),
     )
     setMenuPos({
-      top: preferBelow ? r.bottom + gap : Math.max(8, r.top - gap - maxHeight),
+      top: preferBelow
+        ? r.bottom + gap
+        : Math.max(viewTop + 8, r.top - gap - maxHeight),
       left: r.left,
       width: r.width,
       maxHeight,
@@ -149,9 +168,13 @@ export function CityAirportSelect({ value, onChange }: Props) {
     const onWin = () => updateMenuPos()
     window.addEventListener('resize', onWin)
     window.addEventListener('scroll', onWin, true)
+    window.visualViewport?.addEventListener('resize', onWin)
+    window.visualViewport?.addEventListener('scroll', onWin)
     return () => {
       window.removeEventListener('resize', onWin)
       window.removeEventListener('scroll', onWin, true)
+      window.visualViewport?.removeEventListener('resize', onWin)
+      window.visualViewport?.removeEventListener('scroll', onWin)
     }
   }, [open])
 
@@ -210,17 +233,20 @@ export function CityAirportSelect({ value, onChange }: Props) {
             maxHeight: menuPos.maxHeight,
           }}
         >
-          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100 sticky top-0 bg-white">
-            Villes
+          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100 sticky top-0 bg-white flex items-center justify-between gap-2">
+            <span>Villes</span>
+            {loading ? (
+              <span className="normal-case tracking-normal font-medium text-slate-400">
+                Mise à jour…
+              </span>
+            ) : null}
           </div>
-          {loading ? (
-            <p className="px-3 py-4 text-sm text-slate-500">Chargement des villes…</p>
-          ) : loadError ? (
+          {loadError && filtered.length === 0 ? (
             <div className="px-3 py-4 space-y-2">
               <p className="text-sm text-slate-600">Impossible de charger les villes.</p>
               <button
                 type="button"
-                onClick={reloadAirports}
+                onClick={() => reloadAirports(true)}
                 className="text-sm font-bold text-primary-600"
               >
                 Réessayer

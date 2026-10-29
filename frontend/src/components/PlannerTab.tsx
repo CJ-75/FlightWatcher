@@ -10,7 +10,8 @@ import type {
   TripMember,
   TripProposal,
 } from '../types'
-import { getApiClient, normalizeAirports, destinationsToAirports, normalizeDestinations } from '../utils/apiClient'
+import { getApiClient, destinationsToAirports, normalizeDestinations } from '../utils/apiClient'
+import { loadAirportsOnce } from '../hooks/useAirports'
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
@@ -675,9 +676,8 @@ export function PlannerTab() {
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
 
   useEffect(() => {
-    void getApiClient()
-      .getAirports()
-      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+    void loadAirportsOnce()
+      .then((list) => setAirports(list))
       .catch(() => undefined)
   }, [])
 
@@ -930,9 +930,8 @@ function CreateTripModal({
   }, [cityGroups, cityQuery])
 
   useEffect(() => {
-    void getApiClient()
-      .getAirports()
-      .then((raw) => setAirports(normalizeAirports(raw as Airport[] | { airports: Airport[] })))
+    void loadAirportsOnce()
+      .then((list) => setAirports(list))
       .catch(() => undefined)
   }, [])
 

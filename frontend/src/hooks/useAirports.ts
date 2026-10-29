@@ -69,7 +69,15 @@ function refreshAirportsQuiet() {
     })
 }
 
-export async function loadAirportsOnce(): Promise<Airport[]> {
+export async function loadAirportsOnce(opts?: {
+  force?: boolean
+}): Promise<Airport[]> {
+  const force = Boolean(opts?.force)
+  if (force) {
+    airportsCache = null
+    fromLocalStorage = false
+    airportsPromise = null
+  }
   if (airportsCache && airportsCache.length > 0) {
     refreshAirportsQuiet()
     return airportsCache

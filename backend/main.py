@@ -86,6 +86,18 @@ async def _lifespan(app: FastAPI):
     except Exception:
         pass
     try:
+        import threading
+
+        from routes.ref import warm_airports_cache
+
+        threading.Thread(
+            target=warm_airports_cache,
+            name="airports-warmup",
+            daemon=True,
+        ).start()
+    except Exception as e:
+        print(f"⚠️  Airports warm-up schedule: {e}")
+    try:
         from deals.scheduler import start_deals_scheduler
 
         if start_deals_scheduler():

@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import sys
+import threading
 import time
 from collections import defaultdict
 from datetime import date, timedelta
@@ -26,6 +27,8 @@ router = APIRouter()
 # Merged catalog — avoid Ryanair locate + TP on every keystroke / mount
 _AIRPORTS_MERGED_CACHE: Optional[Tuple[float, List[dict]]] = None
 _AIRPORTS_MERGED_TTL_S = 6 * 60 * 60
+_TP_ENRICH_LOCK = threading.Lock()
+_TP_ENRICH_STARTED = False
 
 
 def _generate_airports_from_api(country_names: dict) -> List[dict]:
@@ -84,61 +87,97 @@ _FALLBACK_AIRPORTS = [
 ]
 
 
-def _build_merged_airports() -> List[dict]:
-    """Build once; callers use process cache."""
-    country_names = dict(COUNTRY_FR_BY_ISO)
-
-    ryanair = _generate_airports_from_api(country_names) or []
-    if not ryanair:
-        airports_file = os.path.normpath(
-            os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "ryanair-py",
-                "ryanair",
-                "airports.csv",
-            )
+def _airports_from_csv(country_names: dict) -> List[dict]:
+    out: List[dict] = []
+    airports_file = os.path.normpath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "ryanair-py",
+            "ryanair",
+            "airports.csv",
         )
-        try:
-            if os.path.isfile(airports_file):
-                with open(airports_file, "r", encoding="utf-8", errors="replace") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        iata_code = (row.get("iata_code") or "").strip()
-                        municipality = (row.get("municipality") or "").strip()
-                        iso_country = (row.get("iso_country") or "").strip()
-                        airport_name = (row.get("name") or "").strip()
-                        if not iata_code or len(iata_code) != 3:
-                            continue
-                        ryanair.append(
-                            localize_airport_dict(
-                                {
-                                    "code": iata_code,
-                                    "name": airport_name or "N/A",
-                                    "city": municipality or "N/A",
-                                    "country": country_names.get(
-                                        iso_country, iso_country
-                                    ),
-                                }
-                            )
-                        )
-        except OSError as e:
-            print(f"airports.csv skip: {e}")
-
-    try:
-        common = common_airports_from_travelpayouts(country_names)
-    except Exception as e:
-        print(f"travelpayouts airports skip: {e}")
-        common = []
-
-    # Ryanair first so their FR labels win on overlap
-    return merge_airport_lists(ryanair, common) or list(ryanair) or list(
-        _FALLBACK_AIRPORTS
     )
+    try:
+        if not os.path.isfile(airports_file):
+            return out
+        with open(airports_file, "r", encoding="utf-8", errors="replace") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                iata_code = (row.get("iata_code") or "").strip()
+                municipality = (row.get("municipality") or "").strip()
+                iso_country = (row.get("iso_country") or "").strip()
+                airport_name = (row.get("name") or "").strip()
+                if not iata_code or len(iata_code) != 3:
+                    continue
+                out.append(
+                    localize_airport_dict(
+                        {
+                            "code": iata_code,
+                            "name": airport_name or "N/A",
+                            "city": municipality or "N/A",
+                            "country": country_names.get(iso_country, iso_country),
+                        }
+                    )
+                )
+    except OSError as e:
+        print(f"airports.csv skip: {e}")
+    return out
+
+
+def _build_fast_airports() -> List[dict]:
+    """CSV / fallback only — never blocks on Ryanair or Travelpayouts."""
+    country_names = dict(COUNTRY_FR_BY_ISO)
+    csv_list = _airports_from_csv(country_names)
+    return list(csv_list) or list(_FALLBACK_AIRPORTS)
+
+
+def _enrich_airports_background(base: List[dict]) -> None:
+    """Background: Ryanair locate + TP dumps → update process cache."""
+    global _AIRPORTS_MERGED_CACHE, _TP_ENRICH_STARTED
+    try:
+        country_names = dict(COUNTRY_FR_BY_ISO)
+        ryanair = _generate_airports_from_api(country_names) or []
+        if not ryanair:
+            ryanair = list(base)
+        try:
+            common = common_airports_from_travelpayouts(country_names)
+        except Exception as e:
+            print(f"travelpayouts airports skip: {e}")
+            common = []
+        merged = (
+            merge_airport_lists(ryanair, common)
+            or list(ryanair)
+            or list(base)
+            or list(_FALLBACK_AIRPORTS)
+        )
+        _AIRPORTS_MERGED_CACHE = (time.time(), merged)
+        print(f"  OK airports enrich: {len(merged)} total")
+    except Exception as e:
+        print(f"airports enrich skip: {e}")
+    finally:
+        with _TP_ENRICH_LOCK:
+            _TP_ENRICH_STARTED = False
+
+
+def _schedule_airports_enrich(base: List[dict]) -> None:
+    global _TP_ENRICH_STARTED
+    with _TP_ENRICH_LOCK:
+        if _TP_ENRICH_STARTED:
+            return
+        _TP_ENRICH_STARTED = True
+    t = threading.Thread(
+        target=_enrich_airports_background,
+        args=(list(base),),
+        name="airports-enrich",
+        daemon=True,
+    )
+    t.start()
 
 
 def _merged_airports_cached() -> List[dict]:
+    """Fast path for HTTP: warm cache or CSV; Ryanair+TP enrich async."""
     global _AIRPORTS_MERGED_CACHE
     now = time.time()
     if (
@@ -147,14 +186,24 @@ def _merged_airports_cached() -> List[dict]:
         and _AIRPORTS_MERGED_CACHE[1]
     ):
         return _AIRPORTS_MERGED_CACHE[1]
-    airports = _build_merged_airports()
+    airports = _build_fast_airports()
     _AIRPORTS_MERGED_CACHE = (now, airports)
+    _schedule_airports_enrich(airports)
     return airports
+
+
+def warm_airports_cache() -> None:
+    """Startup warm-up so the first client does not wait on Ryanair locate."""
+    try:
+        n = len(_merged_airports_cached())
+        print(f"✅ Airports cache warm: {n}")
+    except Exception as e:
+        print(f"⚠️  Airports warm-up: {e}")
 
 
 @router.get("/api/airports")
 def get_airports(query: Optional[str] = None):
-    """Ryanair actives + aéroports courants (Travelpayouts), labels FR."""
+    """Ryanair actives (+ TP enrich async), labels FR."""
     try:
         airports = _merged_airports_cached()
 

@@ -73,7 +73,8 @@ def _http_json(url: str) -> Any:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}token={urllib.parse.quote(token)}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    # Keep short — never block /api/airports cold path for a full dump download
+    with urllib.request.urlopen(req, timeout=5) as resp:
         raw = resp.read()
         if resp.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
             try:

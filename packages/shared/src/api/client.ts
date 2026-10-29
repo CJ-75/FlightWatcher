@@ -233,7 +233,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }
     },
 
-    getAirports: () => request<{ airports: Airport[] } | Airport[]>('/api/airports'),
+    getAirports: () =>
+      request<{ airports: Airport[] } | Airport[]>('/api/airports', {
+        timeoutMs: 10_000,
+      }),
 
     getDestinations: (airport: string) =>
       request<{ destinations: Destination[] } | Destination[]>(
