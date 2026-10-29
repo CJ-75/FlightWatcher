@@ -48,6 +48,11 @@ if __name__ == "__main__":
 
         print("🚀 Démarrage du serveur FastAPI...", flush=True)
         print("📡 Serveur accessible sur http://localhost:8000", flush=True)
+        print(
+            "📱 Mobile (Expo device): http://<IP-LAN>:8000 "
+            "(écoute 0.0.0.0 — pas seulement 127.0.0.1)",
+            flush=True,
+        )
         print("📚 Documentation API: http://localhost:8000/docs", flush=True)
         print(f"📋 Scan/provider logs -> {scan_log}", flush=True)
         print(
