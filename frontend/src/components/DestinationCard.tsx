@@ -9,7 +9,6 @@ import {
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
 import { CountryFlag } from './CountryFlag';
-import { resolveTripPriceSource } from '../utils/partnerBook';
 
 type CardAction = {
   label: string;
@@ -64,16 +63,9 @@ export function DestinationCard({
   primaryAction,
   secondaryAction,
   isFavorite = false,
-  passengers = 1,
 }: DestinationCardProps) {
-  const { t, language } = useI18n();
-  const priceSource = resolveTripPriceSource(trip, passengers, language);
-  const bookLabel =
-    priceSource.partnerId === 'aviasales'
-      ? t('card.bookAviasales')
-      : priceSource.partnerId === 'ryanair'
-        ? t('card.bookRyanair')
-        : t('card.bookOnSite', { site: priceSource.siteLabel });
+  const { t } = useI18n();
+  const bookLabel = t('card.book');
 
   const getDayOfWeekMondayBased = (date: Date): number => {
     const jsDay = date.getDay();

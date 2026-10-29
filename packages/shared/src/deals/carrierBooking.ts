@@ -363,9 +363,7 @@ export function resolvePriceSourceBooking(
 
   return {
     primaryUrl: airline.url,
-    primaryLabel: isRyanair
-      ? 'Réserver sur ryanair.com'
-      : `Réserver sur ${airline.siteLabel}`,
+    primaryLabel: 'Réserver ce vol',
     secondaryUrl: null,
     secondaryLabel: null,
     partnerId: isRyanair ? 'ryanair' : airline.siteLabel.replace(/\./g, '_'),

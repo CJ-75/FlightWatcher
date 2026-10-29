@@ -78,7 +78,7 @@ export function DestinationCard({
   })
   const [failed, setFailed] = useState(false)
   const priceSource = resolveTripPriceSource(trip, passengers, 'fr')
-  const ctaLabel = bookCtaLabel(priceSource)
+  const ctaLabel = bookCtaLabel()
 
   const openBook = async () => {
     if (onBook) {
