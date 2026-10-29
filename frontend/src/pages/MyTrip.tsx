@@ -542,59 +542,93 @@ export default function MyTrip() {
     retDep,
   ])
 
-  const openHotelCheckout = useCallback(async () => {
-    if (!draft || hotelBooked) return
-    setCheckoutLoading(true)
-    setError(null)
-    setHotelUnavailable(false)
-    try {
-      let deal: TravelDeal | null = null
-      const key = String(draft.deal_key || payload.deal_key || '')
-      if (key) {
-        try {
-          deal = await getApiClient().getDeal(key)
-        } catch {
-          deal = null
+  const openHotelCheckout = useCallback(
+    async (overrideDraft?: MyTripDraft | null) => {
+      const d = overrideDraft || draft
+      if (!d || hotelBooked) return
+      const pl = (d.payload || {}) as Record<string, unknown>
+      const hotel =
+        (pl.hotel as Record<string, unknown> | undefined) ||
+        (d.hotel as Record<string, unknown> | undefined) ||
+        null
+      setCheckoutLoading(true)
+      setError(null)
+      setHotelUnavailable(false)
+      try {
+        let deal: TravelDeal | null = null
+        const key = String(d.deal_key || pl.deal_key || payload.deal_key || '')
+        if (key) {
+          try {
+            deal = await getApiClient().getDeal(key)
+          } catch {
+            deal = null
+          }
         }
-      }
-      if (!deal) deal = buildDealFromDraft()
-      if (!deal) {
-        setError('Impossible d’ouvrir la réservation hôtel')
-        return
-      }
-      // Prefer draft hotel id when user switched hotel
-      if (hotelObj?.id && deal.hotel) {
-        deal = {
-          ...deal,
-          hotel: {
-            ...deal.hotel,
-            id: String(hotelObj.id),
-            name: hotelObj.name ? String(hotelObj.name) : deal.hotel.name,
-            public_hotel_price:
-              hotelObj.public_hotel_price != null
-                ? Number(hotelObj.public_hotel_price)
-                : deal.hotel.public_hotel_price,
-          },
+        if (!deal) deal = buildDealFromDraft()
+        if (!deal) {
+          setError('Impossible d’ouvrir la réservation hôtel')
+          return
         }
+        if (hotel?.id) {
+          const hid = String(hotel.id)
+          const pub =
+            hotel.public_hotel_price != null
+              ? Number(hotel.public_hotel_price)
+              : undefined
+          deal = {
+            ...deal,
+            hotel: {
+              ...(deal.hotel || { id: hid }),
+              id: hid,
+              name: hotel.name ? String(hotel.name) : deal.hotel?.name,
+              stars:
+                hotel.stars != null ? Number(hotel.stars) : deal.hotel?.stars,
+              rating:
+                hotel.rating != null
+                  ? Number(hotel.rating)
+                  : deal.hotel?.rating,
+              photo: hotel.photo
+                ? String(hotel.photo)
+                : deal.hotel?.photo,
+              board: hotel.board
+                ? String(hotel.board)
+                : deal.hotel?.board,
+              refundable:
+                typeof hotel.refundable === 'boolean'
+                  ? hotel.refundable
+                  : deal.hotel?.refundable,
+              public_hotel_price:
+                pub ?? deal.hotel?.public_hotel_price,
+            },
+            hotel_name: hotel.name
+              ? String(hotel.name)
+              : deal.hotel_name,
+            price_breakdown: {
+              ...(deal.price_breakdown || { flight_pp: 0 }),
+              hotel_public_total:
+                pub ?? deal.price_breakdown?.hotel_public_total,
+            },
+          }
+        }
+        track('hotel_checkout_open', { deal_key: key || null })
+        setCheckoutDeal(deal)
+        const next = new URLSearchParams(searchParams)
+        next.delete('book_hotel')
+        setSearchParams(next, { replace: true })
+      } finally {
+        setCheckoutLoading(false)
       }
-      track('hotel_checkout_open', { deal_key: key || null })
-      setCheckoutDeal(deal)
-      const next = new URLSearchParams(searchParams)
-      next.delete('book_hotel')
-      setSearchParams(next, { replace: true })
-    } finally {
-      setCheckoutLoading(false)
-    }
-  }, [
-    buildDealFromDraft,
-    draft,
-    hotelBooked,
-    hotelObj,
-    payload.deal_key,
-    searchParams,
-    setSearchParams,
-    track,
-  ])
+    },
+    [
+      buildDealFromDraft,
+      draft,
+      hotelBooked,
+      payload.deal_key,
+      searchParams,
+      setSearchParams,
+      track,
+    ],
+  )
 
   /** Soft revalidate on load — price change / flight gone (§7). */
   useEffect(() => {
@@ -933,6 +967,11 @@ export default function MyTrip() {
             token={token}
             onUpdated={(row) => setDraft(row)}
             onDone={closeCompose}
+            onHotelChosen={(row) => {
+              setDraft(row)
+              closeCompose()
+              void openHotelCheckout(row)
+            }}
           />
         ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">

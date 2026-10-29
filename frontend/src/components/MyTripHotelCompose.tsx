@@ -16,7 +16,10 @@ type Props = {
   draft: MyTripDraft
   token: string
   onUpdated: (row: MyTripDraft) => void
+  /** Fermer sans réserver (Plus tard). */
   onDone: () => void
+  /** Après choix d’hôtel → ouvrir le paiement. */
+  onHotelChosen?: (row: MyTripDraft) => void
 }
 
 type SortKey = 'price' | 'rating' | 'distance'
@@ -573,7 +576,13 @@ function airportLabel(
   return iata
 }
 
-export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
+export function MyTripHotelCompose({
+  draft,
+  token,
+  onUpdated,
+  onDone,
+  onHotelChosen,
+}: Props) {
   const payload = (draft.payload || {}) as Record<string, unknown>
   const flight = (payload.flight || {}) as Record<string, unknown>
   const currentHotel = (payload.hotel || draft.hotel) as Record<string, unknown> | null
@@ -1150,7 +1159,8 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
       })
       setMobileSheet(false)
       onUpdated(row)
-      onDone()
+      if (onHotelChosen) onHotelChosen(row)
+      else onDone()
     } catch {
       setError('Impossible d’enregistrer l’hôtel')
     } finally {
@@ -1729,8 +1739,8 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
             {saving
               ? '…'
               : selectedPrice
-                ? `Choisir · ${selectedPrice.amount} € / pers.`
-                : 'Choisir cet hôtel'}
+                ? `Réserver · ${selectedPrice.amount} € / pers.`
+                : 'Réserver cet hôtel'}
           </button>
         </div>
       </div>
