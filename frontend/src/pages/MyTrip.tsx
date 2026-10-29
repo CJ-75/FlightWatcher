@@ -5,6 +5,7 @@ import {
   airportDisplayNameFr,
   computeTripPartyPrice,
   distantAirportLine,
+  hotelCancelLabel,
   resolveCarrierBooking,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
@@ -81,9 +82,6 @@ export default function MyTrip() {
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   /** After compose → checkout, Précédent / fermer returns to compose. */
   const [returnToCompose, setReturnToCompose] = useState(false)
-  const [priceChange, setPriceChange] = useState<{ from: number; to: number } | null>(
-    null,
-  )
   const [flightUnavailable, setFlightUnavailable] = useState(false)
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
@@ -92,6 +90,8 @@ export default function MyTrip() {
   const hotelSectionRef = useRef<HTMLElement | null>(null)
   const autoBookHotel = useRef(searchParams.get('book_hotel') === '1')
   const trackedView = useRef(false)
+  /** One live hotel revalidate per token+hotel (avoid loop after persist). */
+  const hotelLiveKey = useRef<string | null>(null)
 
   const track = useCallback(
     (event: string, meta?: Record<string, unknown>) => {
@@ -597,6 +597,14 @@ export default function MyTrip() {
           setError('Impossible d’ouvrir la réservation hôtel')
           return
         }
+        const draftTok = String(d.draft_token || token || '').trim()
+        if (draftTok && !String(deal.deal_key || '').startsWith('mytrip-')) {
+          const mk = `mytrip-${draftTok}`
+          deal = { ...deal, id: mk, deal_key: mk }
+        } else if (draftTok && !deal.deal_key) {
+          const mk = `mytrip-${draftTok}`
+          deal = { ...deal, id: mk, deal_key: mk }
+        }
         const hid = String(hotel?.id || hotel?.hotel_id || deal.hotel?.id || '')
         const pub =
           hotel?.public_hotel_price != null
@@ -625,6 +633,9 @@ export default function MyTrip() {
                 typeof hotel?.refundable === 'boolean'
                   ? hotel.refundable
                   : deal.hotel?.refundable,
+              cancel_deadline: hotel?.cancel_deadline
+                ? String(hotel.cancel_deadline)
+                : deal.hotel?.cancel_deadline ?? null,
               public_hotel_price: pub ?? deal.hotel?.public_hotel_price,
             },
             hotel_name: hotel?.name
@@ -655,6 +666,7 @@ export default function MyTrip() {
       hotelBooked,
       searchParams,
       setSearchParams,
+      token,
       track,
     ],
   )
@@ -674,17 +686,6 @@ export default function MyTrip() {
           setFlightUnavailable(true)
           return
         }
-        const displayed = Number(res.displayed_pp)
-        const checked = Number(res.checked_pp)
-        if (
-          Number.isFinite(displayed) &&
-          Number.isFinite(checked) &&
-          Math.abs(checked - displayed) >= 1
-        ) {
-          const fromTotal = Math.round(displayed) * adults + party.hotelTotal
-          const toTotal = Math.round(checked) * adults + party.hotelTotal
-          setPriceChange({ from: fromTotal, to: toTotal })
-        }
       } catch {
         /* soft fail */
       }
@@ -692,7 +693,84 @@ export default function MyTrip() {
     return () => {
       cancelled = true
     }
-  }, [adults, draft?.deal_key, loading, party.hotelTotal])
+  }, [adults, draft?.deal_key, loading])
+
+  /**
+   * Live hotel sync on trip load — price + refundable/cancel from LiteAPI
+   * (same preference as checkout), then persist so panel matches checkout.
+   */
+  useEffect(() => {
+    if (!token || !draft || loading || hotelBooked) return
+    const hid = String(hotelObj?.id || hotelObj?.hotel_id || '').trim()
+    if (!hid) return
+    const key = `${token}:${hid}`
+    if (hotelLiveKey.current === key) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const displayedPp =
+          party.perPerson > 0
+            ? party.perPerson
+            : party.flightPp + (adults > 0 ? party.hotelTotal / adults : 0)
+        const res = await getApiClient().revalidateMyTripHotel(token, {
+          hotel_id: hid,
+          displayed_price_pp: displayedPp || undefined,
+          draft_token: token,
+          soft: true,
+        })
+        if (cancelled) return
+        if (!res?.ok) {
+          setHotelUnavailable(true)
+          return
+        }
+        setHotelUnavailable(false)
+
+        const liveHotelTotal = Number(res.public_hotel_price)
+        const liveRefundable = Boolean(res.refundable)
+        const liveDeadline =
+          res.cancel_deadline != null ? String(res.cancel_deadline) : null
+
+        const row = await getApiClient().updateMyTripHotel(token, {
+          hotel: {
+            ...(hotelObj || {}),
+            id: res.hotel_id || hid,
+            hotel_id: res.hotel_id || hid,
+            name: res.hotel_name || hotelObj?.name,
+            board: res.board ?? hotelObj?.board,
+            refundable: liveRefundable,
+            cancel_deadline: liveDeadline,
+            public_hotel_price: Number.isFinite(liveHotelTotal)
+              ? liveHotelTotal
+              : hotelObj?.public_hotel_price,
+            excluded_fees:
+              res.excluded_fees ?? hotelObj?.excluded_fees ?? null,
+            offer_id: res.offer_id || hotelObj?.offer_id || null,
+          },
+          price_per_person: res.revalidated_price_pp ?? undefined,
+        })
+        if (cancelled) return
+        hotelLiveKey.current = `${token}:${String(res.hotel_id || hid)}`
+        setDraft(row)
+      } catch {
+        /* soft — keep snapshot */
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    adults,
+    draft,
+    hotelBooked,
+    hotelObj,
+    loading,
+    party.flightPp,
+    party.hotelTotal,
+    party.perPerson,
+    token,
+  ])
 
   const altHotels = useMemo(() => {
     const raw = payload.alt_hotels
@@ -702,6 +780,7 @@ export default function MyTrip() {
 
   const pickAltHotel = async (hotel: Record<string, any>) => {
     if (!token || !hotel?.id) return
+    hotelLiveKey.current = null
     setSwitchingHotel(true)
     try {
       const row = await getApiClient().updateMyTripHotel(token, {
@@ -709,6 +788,9 @@ export default function MyTrip() {
           id: String(hotel.id),
           name: hotel.name,
           public_hotel_price: hotel.public_hotel_price,
+          refundable: hotel.refundable,
+          cancel_deadline: hotel.cancel_deadline ?? null,
+          board: hotel.board,
         },
       })
       setDraft(row)
@@ -726,26 +808,35 @@ export default function MyTrip() {
     void openHotelCheckout()
   }, [draft, hotelBooked, loading, openHotelCheckout])
 
-  /** Unique next action for sticky / bottom bar (§5). */
+  /** Sticky récap CTA — hôtel prêt → paiement, sinon vol, sinon choisir hôtel. */
   const nextAction = useMemo(() => {
     if (flightBooked && hotelBooked) {
       return { kind: 'done' as const, label: 'Voir ma réservation' }
     }
-    if (flightBooked) {
+    const hotelReady = Boolean(
+      !hotelBooked && (hotelObj?.id || hotelObj?.hotel_id),
+    )
+    if (hotelReady) {
       return {
         kind: 'hotel' as const,
         label:
           party.hotelTotal > 0
-            ? `Réserver mon hôtel · ${party.hotelTotal} €`
+            ? `Réserver mon hôtel · ${Math.round(party.hotelTotal)} €`
             : 'Réserver mon hôtel',
       }
     }
-    return {
-      kind: 'flight' as const,
-      label: 'Réserver mon vol',
-      href: flightUrl,
+    if (!flightBooked) {
+      return {
+        kind: 'flight' as const,
+        label: 'Réserver mon vol',
+        href: flightUrl,
+      }
     }
-  }, [flightBooked, flightUrl, hotelBooked, party.hotelTotal])
+    return {
+      kind: 'pick_hotel' as const,
+      label: 'Choisir un hôtel',
+    }
+  }, [flightBooked, flightUrl, hotelBooked, hotelObj, party.hotelTotal])
 
   if (loading) {
     return (
@@ -783,7 +874,9 @@ export default function MyTrip() {
 
   /** Hotel payment focus: never cite the flight in the sticky récap. */
   const hotelPaymentFocus =
-    nextAction.kind === 'hotel' || Boolean(checkoutDeal)
+    nextAction.kind === 'hotel' ||
+    nextAction.kind === 'pick_hotel' ||
+    Boolean(checkoutDeal)
   const hotelRecapTotal = Math.round(Number(party.hotelTotal) || 0)
   const hotelRecapPp =
     adults > 1 && hotelRecapTotal > 0
@@ -920,6 +1013,13 @@ export default function MyTrip() {
         </div>
       )
     }
+    if (nextAction.kind === 'pick_hotel') {
+      return (
+        <button type="button" onClick={() => openCompose()} className={cls}>
+          {nextAction.label}
+        </button>
+      )
+    }
     return (
       <button
         type="button"
@@ -931,25 +1031,17 @@ export default function MyTrip() {
     )
   }
 
-  const cancelLabel = (() => {
-    if (hotelObj?.refundable === false) return 'Non remboursable'
-    const deadline = hotelObj?.cancel_deadline
-    if (hotelObj?.refundable === true && deadline) {
-      try {
-        const d = new Date(String(deadline))
-        if (Number.isFinite(d.getTime())) {
-          return `Annulation gratuite jusqu’au ${d.toLocaleDateString('fr-FR', {
-            day: 'numeric',
-            month: 'short',
-          })}`
+  const cancelLabel = hotelCancelLabel(
+    hotelObj
+      ? {
+          refundable: hotelObj.refundable as boolean | null | undefined,
+          cancel_deadline:
+            hotelObj.cancel_deadline != null
+              ? String(hotelObj.cancel_deadline)
+              : null,
         }
-      } catch {
-        /* fall through */
-      }
-    }
-    if (hotelObj?.refundable === true) return 'Annulation gratuite'
-    return null
-  })()
+      : null,
+  )
 
   return (
     <div
@@ -1032,21 +1124,19 @@ export default function MyTrip() {
             {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
             {` · ${travelersLabel}`}
           </p>
-          {priceChange ? (
-            <p className="mt-3 text-sm font-medium text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-              Le prix a changé depuis ta recherche : {priceChange.from} € →{' '}
-              {priceChange.to} €
-            </p>
-          ) : null}
         </div>
 
         {wantsCompose && token && draft ? (
           <MyTripHotelCompose
             draft={draft}
             token={token}
-            onUpdated={(row) => setDraft(row)}
+            onUpdated={(row) => {
+              hotelLiveKey.current = null
+              setDraft(row)
+            }}
             onDone={closeCompose}
             onHotelChosen={(row) => {
+              hotelLiveKey.current = null
               setDraft(row)
               setReturnToCompose(true)
               closeCompose()

@@ -645,6 +645,7 @@ export interface HotelUpsellOption {
   station_distance_m?: number | null
   stations?: HotelStationDistance[]
   refundable?: boolean
+  cancel_deadline?: string | null
 }
 
 export interface HotelUpsellResult {
@@ -716,6 +717,8 @@ export interface DealRevalidateRequest {
   displayed_price_pp?: number
   /** Mon voyage guest path when there is no community deal_key */
   draft_token?: string
+  /** Trip soft sync: 1 rates call, no margin calage */
+  soft?: boolean
 }
 
 export interface DealRevalidateResponse {

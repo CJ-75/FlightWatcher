@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   airportDisplayNameFr,
   boardLabelFr,
+  hotelCancelLabel,
   resolveCarrierBooking,
   type HotelGalleryPhoto,
   type HotelGuestReview,
@@ -310,10 +311,14 @@ function stayOfferChips(
     }
   }
 
-  if (h.refundable) {
+  const flexLabel = hotelCancelLabel({
+    refundable: h.refundable,
+    cancel_deadline: h.cancel_deadline,
+  })
+  if (flexLabel) {
     out.push({
       key: 'flex',
-      label: 'Annulation flexible',
+      label: flexLabel,
       tone: 'included',
       icon: 'check',
     })
@@ -480,7 +485,7 @@ function hotelAdvantages(h: HotelUpsellOption): string[] {
   const out: string[] = []
   const board = boardLabelFr(h.board)
   if (board) out.push(board)
-  if (h.refundable) out.push('Annulation flexible')
+  // Cancel already in stayOfferChips — keep advantages location-only.
   const dist = formatDistance(h.distance_m)
   if (dist) out.push(dist)
   const station = formatStationDistance(h)
@@ -902,15 +907,15 @@ export function MyTripHotelCompose({
           payload.compose_night_cap != null
             ? Number(payload.compose_night_cap)
             : null
+        // Prefill from snapshot/cache but keep loading until live rates
+        // so refundable/price don't flip after first paint.
         if (snapshot.length) {
           applyOpts(snapshot, { night_cap: snapCap, city: cityHint })
-          setLoading(false)
         } else {
           const cached = await loadCached()
           if (cancelled) return
           if (cached.opts.length) {
             applyOpts(cached.opts, cached)
-            setLoading(false)
           }
         }
 
@@ -1155,6 +1160,7 @@ export function MyTripHotelCompose({
           hotel_pp: pick.hotel_pp,
           distance_m: pick.distance_m,
           refundable: pick.refundable,
+          cancel_deadline: pick.cancel_deadline ?? null,
         },
         price_per_person: totalPp,
       })
@@ -1217,7 +1223,6 @@ export function MyTripHotelCompose({
       'Petit-déj. en option',
       'Petit-déj. à l’hôtel',
       'Restaurant',
-      'Annulation flexible',
       'Chambre seule',
       'Demi-pension',
       'Pension complète',
@@ -1230,7 +1235,7 @@ export function MyTripHotelCompose({
     for (const a of [...advantages, ...facilities]) {
       const t = String(a || '').trim()
       if (!t || seen.has(t) || skip.has(t)) continue
-      if (/petit|breakfast|annulation|pension|inclusive|chambre seule/i.test(t))
+      if (/petit|breakfast|annul|pension|inclusive|chambre seule|non remboursable/i.test(t))
         continue
       seen.add(t)
       out.push(t)

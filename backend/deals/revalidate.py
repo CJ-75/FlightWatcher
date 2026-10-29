@@ -63,18 +63,21 @@ def calage_margin_offer(
     checkout: str,
     adults: int,
     cfg: DealsConfig,
+    soft: bool = False,
 ) -> Dict[str, Any]:
     """
     §5.4: rates → if SSP > retail, re-rates with margin so retail ≈ SSP.
     Returns offer dict + metadata.
+    soft=True: one rates call only (trip page sync) — skip margin calage.
     """
+    timeout = min(float(cfg.timeout_s or 8.0), 4.0) if soft else float(cfg.timeout_s or 8.0)
     payload = _fetch_single_hotel_rates(
         client,
         hotel_id=hotel_id,
         checkin=checkin,
         checkout=checkout,
         adults=adults,
-        timeout=cfg.timeout_s,
+        timeout=timeout,
     )
     offer = _best_offer_from_rates(payload, hotel_id)
     if not offer:
@@ -85,6 +88,18 @@ def calage_margin_offer(
     net = offer.get("net")
     public = float(offer.get("public_hotel_price") or 0)
     margin_pct_used: Optional[float] = None
+
+    if soft:
+        return {
+            "ok": True,
+            "offer": offer,
+            "public_hotel_price": public,
+            "margin_pct_used": None,
+            "ssp_total": offer.get("ssp_total"),
+            "retail_total": offer.get("retail_total"),
+            "excluded_fees": offer.get("excluded_fees") or 0,
+            "ssp_source": offer.get("ssp_source"),
+        }
 
     if (
         ssp is not None
@@ -211,10 +226,12 @@ def revalidate_deal(
     draft_token: Optional[str] = None,
     client: Optional[LiteApiClient] = None,
     cfg: Optional[DealsConfig] = None,
+    soft: bool = False,
 ) -> Dict[str, Any]:
     """
     Live revalidation for checkout. May call LiteAPI (unlike GET /api/deals).
     Supports Mon voyage drafts via draft_token / mytrip-* deal_key when no community deal.
+    soft=True: trip-page sync — single hotel, no margin calage (faster).
     """
     cfg = cfg or load_deals_config()
     owns = client is None
@@ -276,7 +293,8 @@ def revalidate_deal(
 
         tried: List[str] = []
         last_reason = "unavailable"
-        for cand in candidates[:3]:
+        max_cands = 1 if soft else 3
+        for cand in candidates[:max_cands]:
             hid = str(cand.get("id") or "")
             if not hid or hid in tried:
                 continue
@@ -289,6 +307,7 @@ def revalidate_deal(
                     checkout=checkout,
                     adults=adults,
                     cfg=cfg,
+                    soft=soft,
                 )
             except LiteApiError as e:
                 last_reason = str(e)
@@ -346,7 +365,13 @@ def revalidate_deal(
                 "deal_snapshot": {
                     **deal,
                     "price_per_person": new_pp,
-                    "hotel": {**(deal.get("hotel") or {}), **cand, "id": hid},
+                    "hotel": {
+                        **(deal.get("hotel") or {}),
+                        **cand,
+                        "id": hid,
+                        "refundable": bool(offer.get("refundable")),
+                        "cancel_deadline": offer.get("cancel_deadline"),
+                    },
                     "price_breakdown": {
                         "flight_pp": flight_pp,
                         "hotel_public_total": public_hotel,

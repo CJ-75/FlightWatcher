@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   dealAdults,
   formatFetchedAt,
+  hotelCancelLabel,
   localizeAviasalesBookingUrl,
   pricePpWithHotel,
 } from '@flightwatcher/shared'
@@ -284,6 +285,7 @@ export function DealDetailModal({
   const stars = Number(selected?.stars || deal.hotel_stars || 0)
   const distanceM = selected?.distance_m ?? deal.hotel?.distance_m
   const rating = selected?.rating
+  const cancelLabel = hotelCancelLabel(selected || deal.hotel)
   const boardRaw = selected?.board || deal.board
   const board = (() => {
     if (!boardRaw) return null
@@ -525,7 +527,7 @@ export function DealDetailModal({
                 {deal.flight?.direct ? <FactChip tone="good">Vol direct</FactChip> : null}
                 {deal.flight?.airline ? <FactChip>{deal.flight.airline}</FactChip> : null}
                 {board ? <FactChip>{board}</FactChip> : null}
-                {selected?.refundable ? <FactChip tone="good">Annulation gratuite</FactChip> : null}
+                {cancelLabel ? <FactChip tone="good">{cancelLabel}</FactChip> : null}
                 {stars > 0 ? <FactChip>{Math.round(stars)}★</FactChip> : null}
                 {rating != null ? (
                   <FactChip tone={Number(rating) >= 8 ? 'good' : 'neutral'}>
@@ -657,16 +659,10 @@ export function DealDetailModal({
                         ? `${Math.round(distanceM)} m centre`
                         : `${(distanceM / 1000).toFixed(1)} km centre`
                       : null,
-                    selected?.refundable ? 'Annul. gratuite' : null,
                   ]
                     .filter(Boolean)
                     .join(' · ') || `${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`}
                 </p>
-                {selected?.cancel_deadline ? (
-                  <p className="text-[11px] text-emerald-700 mt-2 pt-2 border-t border-slate-100 font-medium">
-                    Annul. avant {formatDate(selected.cancel_deadline.slice(0, 10))}
-                  </p>
-                ) : null}
               </div>
             </section>
 
@@ -758,7 +754,7 @@ export function DealDetailModal({
                             <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                               {[
                                 h.board,
-                                h.refundable ? 'Annul. gratuite' : null,
+                                hotelCancelLabel(h, { short: true }),
                                 h.rating != null ? `${Number(h.rating).toFixed(1)}/10` : null,
                                 h.distance_m != null
                                   ? `${(h.distance_m / 1000).toFixed(1)} km`
@@ -871,9 +867,7 @@ export function DealDetailModal({
               {verifiedLabel || t('deals.methodLine')}
             </p>
 
-            <DealComplianceNotice
-              cancelDeadline={selected?.cancel_deadline || deal.hotel?.cancel_deadline}
-            />
+            <DealComplianceNotice />
 
             <div className="flex flex-col gap-2 pb-20 sm:pb-2">
               <a

@@ -46,6 +46,8 @@ class RevalidateRequest(BaseModel):
     displayed_price_pp: Optional[float] = None
     # Mon voyage without community deal_key — load stay from draft
     draft_token: Optional[str] = None
+    # Trip-page soft sync: 1 rates call, no margin calage
+    soft: bool = False
 
 
 class GuestInput(BaseModel):
@@ -119,6 +121,49 @@ def _fetch_booking_for_actor(
     return result.data[0]
 
 
+def _raise_revalidate_result(result: dict):
+    if result.get("ok"):
+        return result
+    raise HTTPException(
+        status_code=409 if result.get("reason") == "unavailable" else 404,
+        detail=result,
+    )
+
+
+@router.post("/api/deals/my-trip/{draft_token}/revalidate-hotel")
+@optional_auth
+async def revalidate_my_trip_hotel(
+    draft_token: str, body: RevalidateRequest, request: Request
+):
+    """Revalidate hotel rates for a Mon voyage draft (no community deal_key)."""
+    _ = request
+    cfg = load_deals_config()
+    if not cfg.api_key:
+        raise HTTPException(status_code=503, detail="LiteAPI non configuré")
+    token = (draft_token or "").strip()
+    if not token:
+        raise HTTPException(
+            status_code=400, detail={"ok": False, "reason": "missing_draft_token"}
+        )
+    try:
+        result = revalidate_deal(
+            _svc(),
+            f"mytrip-{token}",
+            hotel_id=body.hotel_id,
+            displayed_price_pp=body.displayed_price_pp,
+            draft_token=token,
+            cfg=cfg,
+            soft=bool(body.soft),
+        )
+        return _raise_revalidate_result(result)
+    except HTTPException:
+        raise
+    except LiteApiError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/deals/{deal_key}/revalidate")
 @optional_auth
 async def revalidate(deal_key: str, body: RevalidateRequest, request: Request):
@@ -137,12 +182,7 @@ async def revalidate(deal_key: str, body: RevalidateRequest, request: Request):
             draft_token=body.draft_token,
             cfg=cfg,
         )
-        if not result.get("ok"):
-            raise HTTPException(
-                status_code=409 if result.get("reason") == "unavailable" else 404,
-                detail=result,
-            )
-        return result
+        return _raise_revalidate_result(result)
     except HTTPException:
         raise
     except LiteApiError as e:

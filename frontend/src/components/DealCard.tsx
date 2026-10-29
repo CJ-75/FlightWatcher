@@ -4,6 +4,7 @@ import {
   dealAdults,
   dealBadgeLabels,
   dealCornerBadgeParts,
+  hotelCancelLabel,
 } from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 import { useI18n } from '../contexts/I18nContext'
@@ -309,8 +310,11 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   const pills: { label: string; tone: 'neutral' | 'good' }[] = []
   if (deal.flight?.direct) pills.push({ label: 'Vol direct', tone: 'good' })
   if (board) pills.push({ label: board, tone: 'neutral' })
-  if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
-    pills.push({ label: 'Annul. gratuite', tone: 'good' })
+  {
+    const cancelPill =
+      hotelCancelLabel(deal.hotel, { short: true }) ||
+      dealBadgeLabels(deal).find((b) => /annul/i.test(b))
+    if (cancelPill) pills.push({ label: cancelPill, tone: 'good' })
   }
   const showPills = pills.slice(0, 3)
 

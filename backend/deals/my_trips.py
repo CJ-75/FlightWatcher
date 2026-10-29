@@ -177,14 +177,13 @@ def update_draft_hotel(
     payload = trust_hotel_patch(supabase, row, hotel)
     payload["hotel_selected_at"] = now
     trusted_hotel = payload.get("hotel")
-    res = (
-        supabase.table("my_trip_drafts")
-        .update({"payload": payload, "updated_at": now})
-        .eq("id", row["id"])
-        .execute()
-    )
-    out = (res.data or [{**row, "payload": payload}])[0]
-    out["hotel"] = trusted_hotel
+    supabase.table("my_trip_drafts").update(
+        {"payload": payload, "updated_at": now}
+    ).eq("id", row["id"]).execute()
+    # Always return full draft (update() may omit draft_token)
+    out = {**row, "payload": payload, "updated_at": now, "hotel": trusted_hotel}
+    if not out.get("draft_token"):
+        out["draft_token"] = draft_token
     return out
 
 

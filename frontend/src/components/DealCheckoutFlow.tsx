@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { hotelCancelLabel } from '@flightwatcher/shared'
 import type {
   DealRevalidateResponse,
   HotelBooking,
@@ -10,7 +11,6 @@ import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { rememberTrip } from '../utils/tripRecovery'
-import { DealComplianceNotice } from './DealComplianceNotice'
 import { PaymentCardMarks } from './PaymentCardMarks'
 
 type Step = 'revalidate' | 'confirm' | 'guests' | 'pay' | 'pending' | 'done' | 'error'
@@ -61,6 +61,134 @@ function loadPaymentScript(): Promise<void> {
   })
 }
 
+function formatStayDate(dateStr?: string | null) {
+  if (!dateStr) return '—'
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('fr-FR', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  })
+}
+
+function LockIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  )
+}
+
+function CheckIcon({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+      <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function MailIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3 7 9 6 9-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function BoltIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path d="M13 2 4 14h7l-1 8 10-14h-7l0-6z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function TrustPoints() {
+  // Cancel deadline lives only in staySummary — avoid repeating it here.
+  const items = [
+    { icon: <LockIcon className="w-3.5 h-3.5" />, label: 'Tu paies en toute sécurité' },
+    { icon: <BoltIcon className="w-3.5 h-3.5" />, label: 'Ta chambre est confirmée tout de suite' },
+    { icon: <MailIcon className="w-3.5 h-3.5" />, label: 'Tu reçois ton n° de réservation par email' },
+  ]
+  return (
+    <ul className="space-y-1.5" aria-label="Ce que tu obtiens">
+      {items.map((item) => (
+        <li
+          key={item.label}
+          className="flex items-center gap-2.5 text-[12px] sm:text-[13px] font-medium text-slate-700"
+        >
+          <span className="shrink-0 w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center">
+            {item.icon}
+          </span>
+          <span className="leading-snug">{item.label}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+const STEP_ORDER = ['guests', 'pay', 'done'] as const
+
+function CheckoutSteps({ current }: { current: Step }) {
+  const active =
+    current === 'confirm' || current === 'revalidate'
+      ? 'guests'
+      : current === 'error' || current === 'pending'
+        ? 'pay'
+        : current === 'done'
+          ? 'done'
+          : current === 'pay'
+            ? 'pay'
+            : 'guests'
+  const idx = STEP_ORDER.indexOf(active as (typeof STEP_ORDER)[number])
+  const labels = ['Coordonnées', 'Paiement', 'Confirmé']
+  return (
+    <ol className="flex items-center gap-1.5 sm:gap-2" aria-label="Étapes de réservation">
+      {labels.map((label, i) => {
+        const done = idx > i || (active === 'done' && i <= 2)
+        const here = idx === i && active !== 'done'
+        return (
+          <li key={label} className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            {i > 0 ? (
+              <span
+                className={`hidden sm:block w-6 h-px shrink-0 ${
+                  done || here ? 'bg-slate-900' : 'bg-slate-200'
+                }`}
+                aria-hidden
+              />
+            ) : null}
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-bold tracking-wide ${
+                done
+                  ? 'bg-slate-900 text-white'
+                  : here
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-400'
+              }`}
+            >
+              <span className="tabular-nums">{i + 1}</span>
+              <span className="truncate">{label}</span>
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+const fieldClass =
+  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-[15px] font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] shadow-sm transition focus:outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10'
+
 export function DealCheckoutFlow({
   deal,
   hotelId,
@@ -90,7 +218,10 @@ export function DealCheckoutFlow({
   const [email, setEmail] = useState('')
   const [showAccountCta, setShowAccountCta] = useState(false)
   const payRef = useRef<HTMLDivElement>(null)
-  const dealKey = deal.deal_key || deal.id
+  const dealKey =
+    draftToken && !String(deal.deal_key || '').startsWith('mytrip-')
+      ? `mytrip-${draftToken}`
+      : deal.deal_key || deal.id || (draftToken ? `mytrip-${draftToken}` : '')
 
   const runRevalidate = useCallback(async () => {
     setStep('revalidate')
@@ -104,11 +235,15 @@ export function DealCheckoutFlow({
           return
         }
       }
-      const res = await getApiClient().revalidateDeal(dealKey, {
+      const body = {
         hotel_id: hotelId || deal.hotel?.id,
         displayed_price_pp: deal.price_per_person,
         draft_token: draftToken || undefined,
-      })
+      }
+      const api = getApiClient()
+      const res = draftToken
+        ? await api.revalidateMyTripHotel(draftToken, body)
+        : await api.revalidateDeal(dealKey, body)
       setReval(res)
       if (res.action === 'confirm') setStep('confirm')
       else if (res.action === 'fallback' && res.hotel_switched) setStep('confirm')
@@ -147,6 +282,16 @@ export function DealCheckoutFlow({
       const hotelCharge =
         reval.public_hotel_price ??
         (deal.price_breakdown?.hotel_public_total || price)
+      const baseSnap = (reval.deal_snapshot || deal) as TravelDeal
+      const snapHotel = {
+        ...(baseSnap.hotel || {}),
+        refundable:
+          reval.refundable ?? baseSnap.hotel?.refundable ?? null,
+        cancel_deadline:
+          reval.cancel_deadline ??
+          baseSnap.hotel?.cancel_deadline ??
+          null,
+      }
       const pb = await getApiClient().prebookHotel({
         deal_key: dealKey,
         offer_id: reval.offer_id,
@@ -155,7 +300,12 @@ export function DealCheckoutFlow({
         charged_price: hotelCharge,
         margin_pct_used: reval.margin_pct_used,
         ssp_at_booking: reval.ssp_total,
-        deal_snapshot: (reval.deal_snapshot || deal) as TravelDeal,
+        deal_snapshot: {
+          ...baseSnap,
+          hotel: snapHotel,
+          refundable: snapHotel.refundable,
+          cancel_deadline: snapHotel.cancel_deadline,
+        } as TravelDeal,
         draft_token: draftToken || undefined,
       })
       setBookingId(pb.booking_id)
@@ -289,329 +439,558 @@ export function DealCheckoutFlow({
     reval?.public_hotel_price ??
     deal.price_breakdown?.hotel_public_total ??
     null
+  const chargeTotal = Math.round(
+    Number(prebookMeta?.charged_price ?? reval?.public_hotel_price ?? hotelTotal ?? 0),
+  )
+  const nightsLabel =
+    deal.nights && deal.nights > 0
+      ? `${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`
+      : null
+  const adults = Math.max(1, Number(deal.adults) || 2)
+  const canSubmitGuests = Boolean(firstName.trim() && lastName.trim() && email.trim())
+  const cancelHotel = {
+    refundable:
+      reval?.refundable ?? deal.hotel?.refundable ?? null,
+    cancel_deadline:
+      reval?.cancel_deadline || deal.hotel?.cancel_deadline || null,
+  }
+  const cancelBadge = hotelCancelLabel(cancelHotel, {
+    includeNonRefundable: true,
+  })
+  const isRefundable = cancelHotel.refundable === true
+  const hasCancelDeadline = Boolean(
+    cancelHotel.cancel_deadline && isRefundable,
+  )
+
+  const staySummary = (
+    <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-slate-50 to-white p-4 sm:p-5 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+            Séjour à {deal.city || '—'}
+          </p>
+          <h3 className="mt-1 text-[17px] sm:text-lg font-extrabold text-slate-900 tracking-tight leading-snug">
+            {hotelName}
+          </h3>
+          {dates?.outbound && dates?.inbound ? (
+            <p className="mt-1.5 text-sm text-slate-600">
+              {formatStayDate(dates.outbound)}
+              <span className="text-slate-300 mx-1.5">→</span>
+              {formatStayDate(dates.inbound)}
+              {nightsLabel ? (
+                <span className="text-slate-400"> · {nightsLabel}</span>
+              ) : null}
+              <span className="text-slate-400">
+                {' '}
+                · {adults} voyageur{adults > 1 ? 's' : ''}
+              </span>
+            </p>
+          ) : null}
+        </div>
+        {hotelTotal != null || chargeTotal > 0 ? (
+          <div className="text-right shrink-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Total hôtel
+            </p>
+            <p className="mt-0.5 text-2xl font-black text-slate-900 tabular-nums tracking-tight">
+              {chargeTotal > 0 ? chargeTotal : Math.round(Number(hotelTotal))}&nbsp;€
+            </p>
+          </div>
+        ) : null}
+      </div>
+      {cancelBadge ? (
+        <div
+          className={`rounded-xl px-3.5 py-3 ${
+            isRefundable
+              ? 'bg-emerald-50 border border-emerald-100'
+              : 'bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <p
+            className={`text-[11px] font-bold uppercase tracking-wide ${
+              isRefundable ? 'text-emerald-800/70' : 'text-slate-500'
+            }`}
+          >
+            Conditions d’annulation
+          </p>
+          <p
+            className={`mt-1 text-[13px] font-semibold leading-snug ${
+              isRefundable ? 'text-emerald-900' : 'text-slate-700'
+            }`}
+          >
+            {cancelBadge}
+          </p>
+          {hasCancelDeadline ? (
+            <p className="mt-1 text-[11px] text-emerald-800/75 leading-snug">
+              Après cette date, les conditions de l’hôtel s’appliquent.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
 
   return (
     <AnimatePresence>
-      <motion.div className="app-dialog-root" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <button type="button" className="app-dialog-backdrop" aria-label="Fermer" onClick={onClose} />
+      <motion.div
+        className="app-dialog-root"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
+        <button
+          type="button"
+          className="app-dialog-backdrop"
+          aria-label="Fermer"
+          onClick={onClose}
+        />
         <motion.div
-          initial={{ y: 40, opacity: 0 }}
+          initial={{ y: 48, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="app-dialog-panel app-dialog-xl max-h-[92vh] overflow-y-auto"
+          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+          className="app-dialog-panel app-dialog-lg max-h-[94vh] overflow-hidden flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="checkout-title"
         >
-          <div className="p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Réservation hôtel
+          <header className="shrink-0 border-b border-slate-100 px-5 sm:px-6 pt-5 pb-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                  <LockIcon className="w-3.5 h-3.5 text-slate-400" />
+                  Paiement sécurisé
                 </p>
-                <h2 className="text-xl font-black text-slate-900">{deal.city}</h2>
+                <h2
+                  id="checkout-title"
+                  className="mt-1 text-xl sm:text-[22px] font-extrabold text-slate-900 tracking-tight"
+                >
+                  Réserver l’hôtel
+                </h2>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="w-9 h-9 rounded-full bg-slate-100 font-bold"
+                className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 text-xl leading-none font-medium transition shrink-0"
+                aria-label="Fermer"
               >
                 ×
               </button>
             </div>
-
-            {/* Compact récap */}
-            <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 space-y-0.5">
-              <p className="font-bold text-slate-900">{hotelName}</p>
-              {dates?.outbound && dates?.inbound ? (
-                <p className="text-xs text-slate-600">
-                  {dates.outbound} → {dates.inbound}
-                  {deal.nights ? ` · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''}` : ''}
-                </p>
-              ) : null}
-              {hotelTotal != null ? (
-                <p className="text-xs font-semibold text-slate-800">
-                  {Math.round(Number(hotelTotal))} € hôtel
-                </p>
-              ) : null}
-              {reval?.cancel_deadline || deal.hotel?.refundable === false ? (
-                <DealComplianceNotice cancelDeadline={reval?.cancel_deadline} />
-              ) : deal.hotel?.refundable === true ? (
-                <p className="text-xs text-emerald-700 font-semibold">Annulation gratuite</p>
-              ) : null}
+            <div className="mt-4">
+              <CheckoutSteps current={step} />
             </div>
+            <p className="mt-3 text-[12px] text-slate-500">
+              Paiement sécurisé · confirmation immédiate · reçu par email
+            </p>
+          </header>
 
-            {step === 'revalidate' ? (
-              <p className="text-sm text-slate-600">Vérification du prix en cours…</p>
+          <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-6 py-5 space-y-5">
+            {step !== 'done' ? staySummary : null}
+            {step === 'guests' || step === 'pay' || step === 'confirm' ? (
+              <TrustPoints />
             ) : null}
 
-            {step === 'confirm' && reval ? (
-              <div className="space-y-4">
-                <p className="text-sm text-slate-700 font-medium">
-                  Le prix hôtel a changé
-                  {hotelTotal != null
-                    ? ` : ${Math.round(Number(hotelTotal))} €`
-                    : reval.public_hotel_price != null
-                      ? ` : ${Math.round(Number(reval.public_hotel_price))} €`
-                      : ''}
-                  .
-                </p>
-                {reval.hotel_switched ? (
-                  <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
-                    Hôtel mis à jour : {reval.hotel_name}
-                  </p>
-                ) : null}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setStep('guests')}
-                    className="flex-1 bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
-                  >
-                    Continuer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="flex-1 border border-line font-bold py-3 rounded-xl min-h-[48px]"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {step === 'guests' ? (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    Titulaire de la réservation
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Nom sur la réservation hôtel
-                    {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
-                  </p>
-                </div>
-                {hotelTotal != null ? (
-                  <p className="text-sm text-slate-600">
-                    Total hôtel : <strong>{Math.round(Number(hotelTotal))} €</strong>
-                  </p>
-                ) : null}
-                <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 space-y-3 shadow-sm">
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    <label className="block space-y-1.5">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                        Prénom
-                      </span>
-                      <input
-                        className="w-full rounded-xl border-2 border-slate-300 bg-slate-50 px-3.5 py-3 text-base font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-200"
-                        placeholder="Marie"
-                        autoComplete="given-name"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                      />
-                    </label>
-                    <label className="block space-y-1.5">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                        Nom
-                      </span>
-                      <input
-                        className="w-full rounded-xl border-2 border-slate-300 bg-slate-50 px-3.5 py-3 text-base font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-200"
-                        placeholder="Dupont"
-                        autoComplete="family-name"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <label className="block space-y-1.5">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                      Email
-                    </span>
-                    <input
-                      className="w-full rounded-xl border-2 border-slate-300 bg-slate-50 px-3.5 py-3 text-base font-medium text-slate-900 placeholder:text-slate-400 min-h-[48px] focus:outline-none focus:border-primary-500 focus:bg-white focus:ring-2 focus:ring-primary-200"
-                      placeholder="marie.dupont@email.com"
-                      type="email"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                    <span className="text-[11px] text-slate-500">
-                      Confirmation de réservation envoyée à cette adresse
-                    </span>
-                  </label>
-                </div>
-                <div className="flex flex-col-reverse sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (reval?.action === 'confirm' || reval?.hotel_switched) {
-                        setStep('confirm')
-                        return
-                      }
-                      onClose()
-                    }}
-                    className="sm:w-auto px-4 border border-line font-bold py-3 rounded-xl min-h-[48px] text-slate-700"
-                  >
-                    Précédent
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!firstName || !lastName || !email}
-                    onClick={() => void doPrebook()}
-                    className="flex-1 bg-primary-500 disabled:bg-slate-200 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
-                  >
-                    Continuer vers le paiement
-                  </button>
-                </div>
-                <PaymentCardMarks className="pt-1" />
-                {guestMode ? (
-                  <p className="text-xs text-slate-500 text-center">
-                    Aucun compte requis pour payer. Tu pourras retrouver ce voyage via le
-                    lien /trip ou Mes réservations.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {step === 'pay' ? (
-              <div className="space-y-4">
-                <p className="text-sm text-slate-600">
-                  Paiement hôtel :{' '}
-                  <strong>
-                    {Math.round(prebookMeta?.charged_price || reval?.public_hotel_price || 0)} €
-                  </strong>
-                </p>
-                <div ref={payRef} className="min-h-[120px] rounded-xl border border-line p-3" />
-                <PaymentCardMarks className="pt-0.5" />
-                {prebookMeta?.liteapi_env === 'sandbox' ? (
-                  <button
-                    type="button"
-                    onClick={() => void finalizeBook('succeeded', { sandboxSimulate: true })}
-                    className="w-full border border-dashed border-primary-300 text-primary-700 font-bold py-3 rounded-xl min-h-[48px]"
-                  >
-                    Simuler paiement réussi (sandbox)
-                  </button>
-                ) : null}
-                {!prebookMeta?.payment_public_key ? (
-                  <p className="text-xs text-amber-800">
-                    Clé publique paiement manquante — utilisez le mode sandbox ou configurez
-                    LITEAPI_PAYMENT_PUBLIC_KEY_*.
-                  </p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setStep('guests')}
-                  className="w-full border border-line font-bold py-3 rounded-xl min-h-[48px] text-slate-700"
+            <AnimatePresence mode="wait">
+              {step === 'revalidate' ? (
+                <motion.div
+                  key="revalidate"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center gap-3 py-10 text-center"
                 >
-                  Précédent — modifier les coordonnées
-                </button>
-              </div>
-            ) : null}
-
-            {step === 'pending' ? (
-              <p className="text-sm text-slate-600">Confirmation en cours…</p>
-            ) : null}
-
-            {step === 'done' && booking ? (
-              <div className="space-y-3">
-                <p className="text-lg font-bold text-ink">Hôtel réservé ✓</p>
-                {booking.confirmation_code ? (
-                  <p className="text-sm">
-                    N° de réservation : <strong>{booking.confirmation_code}</strong>
-                  </p>
-                ) : (
-                  <p className="text-sm text-slate-600">Statut : {booking.status}</p>
-                )}
-                {email ? (
-                  <p className="text-sm text-slate-600">
-                    Confirmation envoyée à <strong>{email}</strong>
-                  </p>
-                ) : null}
-
-                {showAccountCta && draftToken ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
-                    <p className="text-sm font-semibold text-slate-800">
-                      Retrouve ce voyage sur tous tes appareils
+                  <span className="w-9 h-9 rounded-full border-2 border-slate-200 border-t-slate-900 animate-spin" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Vérification de la disponibilité</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Prix et conditions confirmés en direct auprès de l’hôtel.
                     </p>
-                    <p className="text-xs text-slate-500">
-                      Optionnel — sans compte, garde le lien Mon voyage ou Mes
-                      réservations sur cet appareil.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <Link
-                        to={`/login?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(`/trip/${draftToken}?claim=1`)}`}
-                        onClick={() => onAccountCta?.()}
-                        className="flex-1 text-center bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[44px]"
-                      >
-                        Créer un compte
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setShowAccountCta(false)}
-                        className="flex-1 text-center border border-line font-semibold py-3 rounded-xl min-h-[44px] text-sm"
-                      >
-                        Non merci
-                      </button>
-                    </div>
                   </div>
-                ) : null}
+                </motion.div>
+              ) : null}
 
-                <div className="flex flex-col gap-2">
-                  {draftToken ? (
-                    <Link
-                      to={`/trip/${draftToken}`}
-                      onClick={onClose}
-                      className="block text-center bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
-                    >
-                      Retour à mon voyage
-                    </Link>
-                  ) : (
+              {step === 'confirm' && reval ? (
+                <motion.div
+                  key="confirm"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-4"
+                >
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3.5">
+                    <p className="text-sm font-bold text-amber-950">Le tarif a été mis à jour</p>
+                    <p className="text-sm text-amber-900/80 mt-1 leading-relaxed">
+                      Nouveau total hôtel :{' '}
+                      <strong className="tabular-nums">
+                        {Math.round(
+                          Number(reval.public_hotel_price ?? hotelTotal ?? 0),
+                        )}{' '}
+                        €
+                      </strong>
+                      . Confirme pour continuer avec ce prix.
+                    </p>
+                    {reval.hotel_switched ? (
+                      <p className="text-sm text-amber-900 mt-2 font-medium">
+                        Hôtel proposé : {reval.hotel_name}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row gap-2">
                     <button
                       type="button"
                       onClick={onClose}
-                      className="w-full bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
+                      className="sm:flex-1 border border-slate-200 font-bold py-3.5 rounded-xl min-h-[48px] text-slate-700 hover:bg-slate-50"
                     >
-                      Fermer
+                      Annuler
                     </button>
-                  )}
-                  <Link
-                    to={
-                      draftToken
-                        ? `/bookings?draft=${encodeURIComponent(draftToken)}${
-                            booking.id
-                              ? `&id=${encodeURIComponent(booking.id)}`
-                              : ''
-                          }`
-                        : `/bookings?id=${encodeURIComponent(booking.id)}`
-                    }
-                    onClick={onClose}
-                    className="block text-center border border-line font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px]"
-                  >
-                    Mes réservations
-                  </Link>
-                </div>
-              </div>
-            ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setStep('guests')}
+                      className="sm:flex-[1.4] bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                    >
+                      Continuer avec ce prix
+                    </button>
+                  </div>
+                </motion.div>
+              ) : null}
 
-            {step === 'error' ? (
-              <div className="space-y-3">
-                <p className="text-sm text-red-600">{error || 'Erreur'}</p>
+              {step === 'guests' ? (
+                <motion.div
+                  key="guests"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                      Titulaire de la réservation
+                    </h3>
+                    <p className="text-[13px] text-slate-500 mt-1 leading-snug">
+                      Nom tel qu’il apparaîtra sur la confirmation hôtel
+                      {fees > 0
+                        ? ` · taxes de séjour estimées ${Math.round(fees)} € à régler sur place`
+                        : ''}
+                      .
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                          Prénom
+                        </span>
+                        <input
+                          className={fieldClass}
+                          placeholder="Marie"
+                          autoComplete="given-name"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                        />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                          Nom
+                        </span>
+                        <input
+                          className={fieldClass}
+                          placeholder="Dupont"
+                          autoComplete="family-name"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <label className="block space-y-1.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                        Email de confirmation
+                      </span>
+                      <input
+                        className={fieldClass}
+                        placeholder="marie.dupont@email.com"
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                      <span className="text-[11px] text-slate-400">
+                        Le bon de réservation sera envoyé à cette adresse.
+                      </span>
+                    </label>
+                  </div>
+                  {guestMode ? (
+                    <p className="text-[12px] text-slate-500 leading-relaxed rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2.5">
+                      Aucun compte requis. Tu pourras retrouver ce voyage via le lien Mon
+                      voyage ou Mes réservations.
+                    </p>
+                  ) : null}
+                </motion.div>
+              ) : null}
+
+              {step === 'pay' ? (
+                <motion.div
+                  key="pay"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                      Régler l’hôtel
+                    </h3>
+                    <p className="text-[13px] text-slate-500 mt-1">
+                      Montant débité maintenant :{' '}
+                      <strong className="text-slate-800 tabular-nums">{chargeTotal} €</strong>
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                    <div className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                      <LockIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      <p className="text-[12px] font-semibold text-slate-700">
+                        Ton paiement est protégé
+                      </p>
+                    </div>
+                    <div ref={payRef} className="min-h-[140px] p-4" />
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3.5 py-3">
+                    <PaymentCardMarks />
+                    <p className="mt-2 text-center text-[11px] text-slate-500">
+                      Tu paies le montant affiché · tu reçois ta confirmation par email
+                    </p>
+                  </div>
+                  {prebookMeta?.liteapi_env === 'sandbox' ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void finalizeBook('succeeded', { sandboxSimulate: true })
+                      }
+                      className="w-full border border-dashed border-slate-300 text-slate-600 font-semibold py-3 rounded-xl min-h-[48px] hover:bg-slate-50 text-sm"
+                    >
+                      Simuler un paiement réussi (sandbox)
+                    </button>
+                  ) : null}
+                  {!prebookMeta?.payment_public_key &&
+                  prebookMeta?.liteapi_env !== 'sandbox' ? (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                      Module de paiement indisponible pour le moment. Réessaie dans un instant.
+                    </p>
+                  ) : null}
+                </motion.div>
+              ) : null}
+
+              {step === 'pending' ? (
+                <motion.div
+                  key="pending"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center gap-3 py-12 text-center"
+                >
+                  <span className="w-9 h-9 rounded-full border-2 border-slate-200 border-t-slate-900 animate-spin" />
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Confirmation en cours</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Nous finalisons ta réservation auprès de l’hôtel…
+                    </p>
+                  </div>
+                </motion.div>
+              ) : null}
+
+              {step === 'done' && booking ? (
+                <motion.div
+                  key="done"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-5"
+                >
+                  <div className="text-center pt-2 pb-1">
+                    <div className="mx-auto w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <CheckIcon className="w-7 h-7" />
+                    </div>
+                    <h3 className="mt-4 text-xl font-extrabold text-slate-900 tracking-tight">
+                      Hôtel réservé
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">{hotelName}</p>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-4 space-y-2">
+                    {booking.confirmation_code ? (
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800/70">
+                          N° de réservation
+                        </p>
+                        <p className="mt-1 font-mono text-xl font-extrabold text-emerald-950 tracking-wide">
+                          {booking.confirmation_code}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-600">Statut : {booking.status}</p>
+                    )}
+                    {email ? (
+                      <p className="text-[13px] text-emerald-900/80">
+                        Confirmation envoyée à <strong>{email}</strong>
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {staySummary}
+
+                  {showAccountCta && draftToken ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 space-y-3">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          Retrouve ce voyage partout
+                        </p>
+                        <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">
+                          Optionnel — sans compte, conserve le lien Mon voyage sur cet
+                          appareil.
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Link
+                          to={`/login?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(`/trip/${draftToken}?claim=1`)}`}
+                          onClick={() => onAccountCta?.()}
+                          className="flex-1 text-center bg-slate-900 text-white font-bold py-3 rounded-xl min-h-[44px]"
+                        >
+                          Créer un compte
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => setShowAccountCta(false)}
+                          className="flex-1 text-center border border-slate-200 font-semibold py-3 rounded-xl min-h-[44px] text-sm text-slate-600"
+                        >
+                          Plus tard
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-2">
+                    {draftToken ? (
+                      <Link
+                        to={`/trip/${draftToken}`}
+                        onClick={onClose}
+                        className="block text-center bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                      >
+                        Retour à mon voyage
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                      >
+                        Fermer
+                      </button>
+                    )}
+                    <Link
+                      to={
+                        draftToken
+                          ? `/bookings?draft=${encodeURIComponent(draftToken)}${
+                              booking.id
+                                ? `&id=${encodeURIComponent(booking.id)}`
+                                : ''
+                            }`
+                          : `/bookings?id=${encodeURIComponent(booking.id)}`
+                      }
+                      onClick={onClose}
+                      className="block text-center border border-slate-200 font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px] text-slate-800"
+                    >
+                      Voir mes réservations
+                    </Link>
+                  </div>
+                </motion.div>
+              ) : null}
+
+              {step === 'error' ? (
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="space-y-4"
+                >
+                  <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3.5">
+                    <p className="text-sm font-bold text-red-900">Impossible de finaliser</p>
+                    <p className="text-sm text-red-800/80 mt-1 break-words">
+                      {error || 'Une erreur est survenue. Réessaie.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (firstName && lastName && email && bookingId) {
+                        setStep('pay')
+                        return
+                      }
+                      if (firstName && lastName && email) {
+                        setStep('guests')
+                        return
+                      }
+                      void runRevalidate()
+                    }}
+                    className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                  >
+                    Réessayer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full border border-slate-200 font-semibold py-3 rounded-xl min-h-[44px] text-slate-600"
+                  >
+                    Fermer
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+
+          {step === 'guests' || step === 'pay' ? (
+            <footer className="shrink-0 border-t border-slate-100 bg-white/95 backdrop-blur-sm px-5 sm:px-6 py-4 space-y-3">
+              {step === 'guests' ? (
+                <>
+                  <div className="flex flex-col-reverse sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (reval?.action === 'confirm' || reval?.hotel_switched) {
+                          setStep('confirm')
+                          return
+                        }
+                        onClose()
+                      }}
+                      className="sm:w-auto px-5 border border-slate-200 font-bold py-3.5 rounded-xl min-h-[48px] text-slate-700 hover:bg-slate-50"
+                    >
+                      Précédent
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canSubmitGuests}
+                      onClick={() => void doPrebook()}
+                      className="flex-1 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl min-h-[48px] transition"
+                    >
+                      Continuer vers le paiement
+                      {hotelTotal != null
+                        ? ` · ${Math.round(Number(hotelTotal))} €`
+                        : ''}
+                    </button>
+                  </div>
+                  <PaymentCardMarks compact />
+                </>
+              ) : null}
+              {step === 'pay' ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (firstName && lastName && email && bookingId) {
-                      setStep('pay')
-                      return
-                    }
-                    if (firstName && lastName && email) {
-                      setStep('guests')
-                      return
-                    }
-                    void runRevalidate()
-                  }}
-                  className="w-full border border-line font-bold py-3 rounded-xl min-h-[48px]"
+                  onClick={() => setStep('guests')}
+                  className="w-full border border-slate-200 font-bold py-3 rounded-xl min-h-[44px] text-slate-700 hover:bg-slate-50 text-sm"
                 >
-                  Réessayer
+                  Modifier les coordonnées
                 </button>
-              </div>
-            ) : null}
-          </div>
+              ) : null}
+            </footer>
+          ) : null}
         </motion.div>
       </motion.div>
     </AnimatePresence>

@@ -187,9 +187,7 @@ function offerChips(hotel: HotelLike, facilities: string[]) {
     out.push({ key: 'bf-h', label: 'Petit-déj. à l’hôtel', tone: 'opt' })
   }
 
-  if (hotel.refundable === true) {
-    out.push({ key: 'flex', label: 'Annulation flexible', tone: 'in' })
-  }
+  // Cancel shown once via cancelLabel prop — not as a chip.
   return out
 }
 
@@ -283,7 +281,7 @@ export function MyTripHotelPanel({
     const skip = new Set(chips.map((c) => c.label))
     const out: string[] = []
     for (const f of facilities) {
-      if (skip.has(f) || /petit|breakfast|annulation|pension|inclusive/i.test(f))
+      if (skip.has(f) || /petit|breakfast|annul|pension|inclusive|non remboursable/i.test(f))
         continue
       out.push(f)
       if (out.length >= 6) break

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   boardLabelFr,
   cityImageUrl,
-  formatCancelDeadlineLocal,
+  hotelCancelLabel,
   type HotelBooking,
   type HotelBookingStatus,
 } from '@flightwatcher/shared'
@@ -192,7 +192,15 @@ function BookingCard({
 }) {
   const meta = statusMeta(booking.status)
   const board = boardLabelFr(booking.board)
-  const cancelLocal = formatCancelDeadlineLocal(booking.cancel_deadline, 'fr-FR')
+  const cancelLabel =
+    hotelCancelLabel(
+      {
+        refundable: booking.refundable,
+        cancel_deadline: booking.cancel_deadline,
+      },
+      { includeNonRefundable: true },
+    ) ||
+    (booking.refundable == null ? 'Selon conditions du tarif' : null)
   const photo =
     booking.hotel_photo ||
     cityImageUrl(booking.city || null) ||
@@ -395,13 +403,7 @@ function BookingCard({
                   <div>
                     <dt className="text-muted">Annulation</dt>
                     <dd className="font-semibold text-ink">
-                      {booking.refundable === true
-                        ? cancelLocal
-                          ? `Remboursable jusqu’au ${cancelLocal}`
-                          : 'Remboursable (voir conditions)'
-                        : booking.refundable === false
-                          ? 'Non remboursable'
-                          : 'Selon conditions du tarif'}
+                      {cancelLabel || 'Selon conditions du tarif'}
                     </dd>
                   </div>
                   {holderName || booking.holder?.email ? (

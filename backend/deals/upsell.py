@@ -446,6 +446,7 @@ def _top_public(top: Any) -> Optional[Dict[str, Any]]:
         "thumbnail": first.get("thumbnail") or photo,
         "main_photo": first.get("main_photo") or photo,
         "refundable": bool(first.get("refundable")),
+        "cancel_deadline": first.get("cancel_deadline") or first.get("cancelDeadline"),
         "excluded_fees": first.get("excluded_fees") or 0,
     }
 

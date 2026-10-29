@@ -98,21 +98,66 @@ def _refundable(rate_or_room: Dict[str, Any]) -> bool:
 
 
 def _cancel_deadline(rate_or_room: Dict[str, Any]) -> Optional[str]:
-    policies = rate_or_room.get("cancellationPolicies") or {}
-    if not isinstance(policies, dict):
+    """
+    Earliest free-cancel cutoff from LiteAPI policies.
+    Policies often live on nested rates[] while refundableTag may be on the room —
+    walk both, same as _refundable.
+    """
+    deadlines: list[str] = []
+
+    def _collect(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        # Direct fields sometimes present on rate/room
+        for k in (
+            "freeCancellationUntil",
+            "free_cancellation_until",
+            "cancelTime",
+            "cancel_time",
+        ):
+            if node.get(k):
+                deadlines.append(str(node[k]))
+        policies = node.get("cancellationPolicies") or node.get("cancellation_policies")
+        if isinstance(policies, dict):
+            for k in (
+                "freeCancellationUntil",
+                "free_cancellation_until",
+                "cancelTime",
+                "cancel_time",
+            ):
+                if policies.get(k):
+                    deadlines.append(str(policies[k]))
+            infos = (
+                policies.get("cancelPolicyInfos")
+                or policies.get("cancel_policy_infos")
+                or []
+            )
+            if isinstance(infos, list):
+                for info in infos:
+                    if not isinstance(info, dict):
+                        continue
+                    for k in (
+                        "cancelTime",
+                        "cancel_time",
+                        "deadline",
+                        "start",
+                        "end",
+                    ):
+                        if info.get(k):
+                            deadlines.append(str(info[k]))
+        rates = node.get("rates")
+        if isinstance(rates, list):
+            for r in rates:
+                _collect(r)
+
+    _collect(rate_or_room)
+    if not deadlines:
         return None
-    infos = policies.get("cancelPolicyInfos") or policies.get("cancel_policy_infos") or []
-    if not isinstance(infos, list) or not infos:
-        return None
-    # earliest cancel deadline
-    deadlines = []
-    for info in infos:
-        if not isinstance(info, dict):
-            continue
-        for k in ("cancelTime", "cancel_time", "deadline"):
-            if info.get(k):
-                deadlines.append(str(info[k]))
-    return min(deadlines) if deadlines else None
+    # ISO-ish strings compare ok lexicographically for earliest cutoff
+    try:
+        return min(deadlines)
+    except TypeError:
+        return deadlines[0]
 
 
 def _offer_id(room: Dict[str, Any]) -> Optional[str]:
@@ -289,8 +334,12 @@ def build_candidates(
                 weights=weights,
             )
             scored.append((s, o))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        best_score, best = scored[0]
+        # Align with checkout revalidate: prefer a refundable rate when available
+        # so trip/compose don't show NRFN then flip to RFN on live check.
+        refundable_scored = [(s, o) for s, o in scored if o.get("refundable")]
+        pool = refundable_scored or scored
+        pool.sort(key=lambda x: x[0], reverse=True)
+        best_score, best = pool[0]
         if best.get("ssp_missing"):
             ssp_missing_count += 1
         if best.get("margin_gap") is not None:

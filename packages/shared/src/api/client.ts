@@ -404,6 +404,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify(body) },
       ),
 
+    /** Mon voyage guest checkout — bypasses community deal_key */
+    revalidateMyTripHotel: (
+      draftToken: string,
+      body: DealRevalidateRequest = {},
+    ) =>
+      request<DealRevalidateResponse>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/revalidate-hotel`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ ...body, draft_token: draftToken }),
+        },
+      ),
+
     createMyTrip: (body: Record<string, unknown>) =>
       request<MyTripDraft>('/api/deals/my-trip', {
         method: 'POST',

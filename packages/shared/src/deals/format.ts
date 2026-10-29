@@ -18,10 +18,14 @@ export function formatCancelDeadlineLocal(
 ): string | null {
   if (!iso) return null
   try {
-    const raw = String(iso).trim()
+    let raw = String(iso).trim()
+    // LiteAPI often returns "2026-11-05 00:00:00" (space, no TZ)
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) {
+      raw = raw.replace(' ', 'T')
+    }
     const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw)
     const d = new Date(hasTz ? raw : `${raw}Z`)
-    if (Number.isNaN(d.getTime())) return raw
+    if (Number.isNaN(d.getTime())) return String(iso).trim()
     return d.toLocaleString(locale, {
       weekday: 'short',
       day: 'numeric',
@@ -32,6 +36,36 @@ export function formatCancelDeadlineLocal(
   } catch {
     return String(iso)
   }
+}
+
+export type HotelCancelFields = {
+  refundable?: boolean | null
+  cancel_deadline?: string | null
+}
+
+/**
+ * Single source of truth for cancel copy (fiche, trip, checkout, bookings).
+ * Prefer deadline when refundable; never invent a date.
+ * Non remboursable is omitted by default (fiche) — pass includeNonRefundable for checkout/bookings.
+ */
+export function hotelCancelLabel(
+  hotel: HotelCancelFields | null | undefined,
+  opts?: { locale?: string; short?: boolean; includeNonRefundable?: boolean },
+): string | null {
+  if (!hotel) return null
+  const locale = opts?.locale || 'fr-FR'
+  const short = Boolean(opts?.short)
+  if (hotel.refundable === false) {
+    return opts?.includeNonRefundable ? 'Non remboursable' : null
+  }
+  if (hotel.refundable !== true) return null
+  const when = formatCancelDeadlineLocal(hotel.cancel_deadline, locale)
+  if (when) {
+    return short
+      ? `Annul. gratuite jusqu’au ${when}`
+      : `Annulation gratuite jusqu’au ${when}`
+  }
+  return short ? 'Annul. gratuite' : 'Annulation gratuite'
 }
 
 /** Recompute price_pp when switching hotel from alt_hotels (cache only). */
@@ -155,7 +189,10 @@ export function dealBadgeLabels(deal: TravelDeal): string[] {
   if (deal.flags?.breakfast || (deal.board && /petit|breakfast|BI/i.test(deal.board))) {
     badges.push('Petit-déj')
   }
-  if (deal.hotel?.refundable || deal.highlights?.some((h) => /annulation/i.test(h))) {
+  const cancelBadge = hotelCancelLabel(deal.hotel, { short: true })
+  if (cancelBadge) {
+    badges.push(cancelBadge)
+  } else if (deal.highlights?.some((h) => /annulation/i.test(h))) {
     badges.push('Annul. gratuite')
   }
   if (deal.flags?.late_arrival) badges.push('Arrivée tardive')
