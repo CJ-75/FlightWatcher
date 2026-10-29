@@ -248,10 +248,6 @@ export default function MyTrip() {
   )
 
   const flightUrl = carrier.url
-  const secondaryUrl = carrier.secondaryUrl || carrier.compareUrl
-  const secondaryLabel =
-    carrier.secondaryLabel ||
-    (secondaryUrl ? `Site de ${carrier.airlineName}` : null)
   const cta = carrier.ctaLabel
   const airlineName = carrier.airlineName
   const distanceLine =
@@ -990,17 +986,6 @@ export default function MyTrip() {
                         {copyDone ? 'Copié ✓' : 'Copier'}
                       </button>
                     </div>
-                  ) : null}
-
-                  {secondaryUrl && secondaryLabel ? (
-                    <a
-                      href={secondaryUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
-                    >
-                      {secondaryLabel}
-                    </a>
                   ) : null}
 
                   {askFlightBooked ? (

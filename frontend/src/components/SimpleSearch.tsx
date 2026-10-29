@@ -550,9 +550,6 @@ export function SimpleSearch({
         className="min-h-[60vh] flex flex-col items-center justify-center gap-4 px-4"
       >
         <LoadingSkeleton />
-        <p className="text-xs text-muted text-center max-w-xs">
-          Premiers résultats dès qu’une compagnie répond (Ryanair, Travelpayouts…)
-        </p>
       </motion.div>
     );
   }

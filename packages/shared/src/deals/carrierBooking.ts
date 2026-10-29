@@ -341,15 +341,11 @@ export function resolvePriceSourceBooking(
 
   if (isTp && raw.startsWith('http') && isAffiliateUrl(raw)) {
     const primaryUrl = localizeAviasalesBookingUrl(raw, lang)
-    const secondaryUrl =
-      airline.url && airline.url !== primaryUrl ? airline.url : null
     return {
       primaryUrl,
-      primaryLabel: 'Voir ce prix sur Aviasales',
-      secondaryUrl,
-      secondaryLabel: secondaryUrl
-        ? `Site de ${airline.airlineName}`
-        : null,
+      primaryLabel: 'Réserver ce vol',
+      secondaryUrl: null,
+      secondaryLabel: null,
       partnerId: 'aviasales',
       partnerName: 'Aviasales',
       airlineName: airline.airlineName,

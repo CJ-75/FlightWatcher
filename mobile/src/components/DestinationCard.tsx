@@ -71,7 +71,6 @@ export function DestinationCard({
   const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull)
   const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)
   const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull)
-  const originIso = countryIsoForAirport(trip.aller.origin, trip.aller.originFull)
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     iata: trip.destination_code,
@@ -141,12 +140,10 @@ export function DestinationCard({
             </Text>
           </View>
           <View style={styles.routeRow}>
-            <CountryFlag iso={originIso} size={{ width: 16, height: 11 }} />
             <Text style={styles.route} numberOfLines={1}>
               {originCity}
             </Text>
             <Text style={styles.routeArrow}>→</Text>
-            <CountryFlag iso={destIso} size={{ width: 16, height: 11 }} />
             <Text style={styles.route} numberOfLines={1}>
               {cityName}
             </Text>
@@ -248,16 +245,6 @@ export function DestinationCard({
             {onAddHotel ? (
               <Pressable onPress={onAddHotel} style={styles.addHotelBtn}>
                 <Text style={styles.addHotelText}>Ajouter un hôtel</Text>
-              </Pressable>
-            ) : null}
-            {priceSource.secondaryUrl ? (
-              <Pressable
-                onPress={() => void Linking.openURL(priceSource.secondaryUrl!)}
-                style={styles.addHotelBtn}
-              >
-                <Text style={styles.addHotelText}>
-                  Site de {priceSource.airlineName}
-                </Text>
               </Pressable>
             ) : null}
           </>

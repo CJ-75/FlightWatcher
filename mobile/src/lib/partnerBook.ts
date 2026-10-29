@@ -196,7 +196,7 @@ export async function openMyTripCompose(draftToken: string): Promise<void> {
 }
 
 export function bookCtaLabel(ps: PriceSourceBooking): string {
-  if (ps.partnerId === 'aviasales') return 'Voir ce prix sur Aviasales'
+  if (ps.partnerId === 'aviasales') return 'Réserver ce vol'
   if (ps.partnerId === 'ryanair') return 'Réserver sur ryanair.com'
   return `Réserver sur ${ps.siteLabel}`
 }

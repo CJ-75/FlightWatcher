@@ -112,7 +112,6 @@ export function DestinationCard({
   const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull);
   const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull);
   const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull);
-  const originIso = countryIsoForAirport(trip.aller.origin, trip.aller.originFull);
   const imageUrl = resolveTripImageUrl({
     city: cityName,
     iata: trip.destination_code,
@@ -189,12 +188,10 @@ export function DestinationCard({
             <span className="truncate">{cityName}</span>
           </h3>
           <p className="text-sm text-white/95 font-bold tracking-wide mt-0.5 flex items-center gap-1.5 min-w-0">
-            <CountryFlag iso={originIso} className="w-[18px] h-3" title={originCity} />
             <span className="truncate">{originCity}</span>
             <span className="opacity-80 shrink-0" aria-hidden>
               →
             </span>
-            <CountryFlag iso={destIso} className="w-[18px] h-3" title={cityName} />
             <span className="truncate">{cityName}</span>
           </p>
           <div className="mt-2 flex flex-nowrap items-center gap-1.5 h-6 overflow-hidden">
@@ -306,17 +303,6 @@ export function DestinationCard({
               >
                 {t('card.addHotel')}
               </button>
-            ) : null}
-            {priceSource.secondaryUrl && !primaryAction ? (
-              <a
-                href={priceSource.secondaryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {t('card.airlineSite', { airline: priceSource.airlineName })}
-              </a>
             ) : null}
           </div>
         ) : null}
