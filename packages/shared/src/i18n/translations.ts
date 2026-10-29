@@ -319,8 +319,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'card.addFavorite': 'Ajouter aux favoris',
     'card.removeFavorite': 'Retirer des favoris',
 
-    // Hotel upsell after partner return
+    // Hotel upsell after partner open
     'upsell.flightBooked': 'Ton vol pour {city} est réservé ?',
+    'upsell.lightboxHint':
+      'Pendant que tu finalises sur le site partenaire, prépare ton hôtel ici.',
     'upsell.yesHotel': 'Oui, trouver mon hôtel',
     'upsell.notYet': 'Pas encore',
     
@@ -722,8 +724,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'card.addFavorite': 'Add to favorites',
     'card.removeFavorite': 'Remove from favorites',
 
-    // Hotel upsell after partner return
+    // Hotel upsell after partner open
     'upsell.flightBooked': 'Is your flight to {city} booked?',
+    'upsell.lightboxHint':
+      'While you finish on the partner site, set up your hotel here.',
     'upsell.yesHotel': 'Yes, find my hotel',
     'upsell.notYet': 'Not yet',
     

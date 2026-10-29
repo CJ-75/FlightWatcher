@@ -132,8 +132,10 @@ export function ResultsScreen({ route }: Props) {
       trip,
       passengers,
       searchEventId: searchInfo?.searchEventId,
+    }).then(async () => {
+      const pending = await readPendingHotelUpsell()
+      if (pending) setHotelUpsell(pending)
     })
-    setHotelUpsell(null)
   }
 
   const handleAddHotel = async (trip: EnrichedTripResponse) => {
