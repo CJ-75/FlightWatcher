@@ -879,18 +879,20 @@ export default function MyTrip() {
           ) : null}
         </div>
 
+        {wantsCompose && token && draft ? (
+          <div className="mb-8">
+            <MyTripHotelCompose
+              draft={draft}
+              token={token}
+              onUpdated={(row) => setDraft(row)}
+              onDone={closeCompose}
+            />
+          </div>
+        ) : null}
+
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
           {/* Colonne gauche */}
           <div className="space-y-6 min-w-0">
-            {wantsCompose && token && draft ? (
-              <MyTripHotelCompose
-                draft={draft}
-                token={token}
-                onUpdated={(row) => setDraft(row)}
-                onDone={closeCompose}
-              />
-            ) : null}
-
             {/* ① Vol */}
             <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
               <div className="flex items-center justify-between gap-2">
