@@ -837,12 +837,22 @@ export default function MyTrip() {
   })()
 
   return (
-    <div className="min-h-screen bg-[#F7F7F7] pb-28 lg:pb-10">
+    <div
+      className={`min-h-screen bg-[#F7F7F7] lg:pb-10 ${
+        wantsCompose ? 'pb-4' : 'pb-28'
+      }`}
+    >
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
-        <div className="w-[92%] max-w-[1500px] mx-auto px-2 sm:px-4 h-14 flex items-center justify-between gap-3">
+        <div
+          className={`max-w-[1500px] mx-auto h-14 flex items-center justify-between gap-3 ${
+            wantsCompose
+              ? 'w-full px-3 sm:w-[92%] sm:px-4'
+              : 'w-[92%] px-2 sm:px-4'
+          }`}
+        >
           <Link
             to={backHref}
-            className="text-sm font-bold text-slate-700 hover:text-primary-600 shrink-0"
+            className="text-sm font-bold text-slate-700 hover:text-primary-600 shrink-0 min-h-[44px] inline-flex items-center"
           >
             {backLabel}
           </Link>
@@ -891,8 +901,14 @@ export default function MyTrip() {
         </div>
       </header>
 
-      <div className="w-[92%] max-w-[1500px] mx-auto px-2 sm:px-4 py-6 sm:py-8">
-        <div className="mb-5 lg:mb-7">
+      <div
+        className={`max-w-[1500px] mx-auto ${
+          wantsCompose
+            ? 'w-full px-3 sm:w-[92%] sm:px-4 py-3 sm:py-6'
+            : 'w-[92%] px-2 sm:px-4 py-6 sm:py-8'
+        }`}
+      >
+        <div className={`mb-5 lg:mb-7 ${wantsCompose ? 'hidden lg:block' : ''}`}>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
             {flightBooked && hotelBooked
               ? `Ton voyage à ${city} est prêt`

@@ -214,8 +214,37 @@ export interface HotelGalleryResponse {
   hotel_id: string
   name?: string | null
   description?: string | null
+  address?: string | null
+  city?: string | null
+  /** Curated amenity chips (often FR). */
+  facilities?: string[]
+  checkin_time?: string | null
+  checkout_time?: string | null
+  lat?: number | null
+  lng?: number | null
   photos: HotelGalleryPhoto[]
   count?: number
+}
+
+export interface HotelGuestReview {
+  score?: number | null
+  name?: string | null
+  country?: string | null
+  type?: string | null
+  date?: string | null
+  headline?: string | null
+  pros?: string | null
+  cons?: string | null
+  text?: string | null
+  language?: string | null
+}
+
+export interface HotelReviewsResponse {
+  hotel_id: string
+  language?: string
+  reviews: HotelGuestReview[]
+  count?: number
+  sentiment?: Record<string, unknown> | null
 }
 
 export interface TravelDealPriceBreakdown {
@@ -593,6 +622,11 @@ export interface HotelUpsellLookupItem {
 }
 
 /** Hotel option for Search combo wizard / Deals. */
+export interface HotelStationDistance {
+  name: string
+  distance_m: number
+}
+
 export interface HotelUpsellOption {
   id?: string
   hotel_id?: string
@@ -606,6 +640,10 @@ export interface HotelUpsellOption {
   hotel_pp?: number
   public_hotel_price?: number
   distance_m?: number
+  /** Nearest main train station (when known for the city) */
+  station_name?: string | null
+  station_distance_m?: number | null
+  stations?: HotelStationDistance[]
   refundable?: boolean
 }
 

@@ -1218,6 +1218,30 @@ async def get_hotel_gallery(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/deals/hotels/{hotel_id}/reviews")
+async def get_hotel_reviews_endpoint(
+    hotel_id: str,
+    language: Optional[str] = Query("fr"),
+    limit: int = Query(8, ge=1, le=10),
+):
+    """Nuitee/LiteAPI guest reviews (FR translate when language=fr, max 10)."""
+    try:
+        from deals.hotel_reviews import get_hotel_reviews as fetch_reviews
+
+        hid = (hotel_id or "").strip()
+        if not hid or hid == "primary":
+            raise HTTPException(status_code=400, detail="hotel_id requis")
+        return fetch_reviews(
+            hid,
+            language=(language or "fr")[:5],
+            limit=limit,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/deals/{deal_id}")
 async def get_deal(deal_id: str):
     """Get a single deal by id or deal_key."""

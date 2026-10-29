@@ -231,6 +231,34 @@ class LiteApiClient:
             retry=False,
         )
 
+    def get_hotel_reviews(
+        self,
+        hotel_id: str,
+        *,
+        language: str = "fr",
+        limit: int = 8,
+        get_sentiment: bool = False,
+        timeout: Optional[float] = None,
+    ) -> Any:
+        """GET /data/reviews — guest reviews (language=fr → AI translate, max 10)."""
+        params: Dict[str, Any] = {
+            "hotelId": hotel_id,
+            "limit": max(1, min(int(limit or 8), 10 if language else 200)),
+            "timeout": int(timeout or 8),
+        }
+        if language:
+            params["language"] = language
+        if get_sentiment:
+            params["getSentiment"] = "true"
+        return self._request(
+            "GET",
+            self.cfg.search_base,
+            "/data/reviews",
+            params=params,
+            timeout=float(timeout or min(10.0, self.cfg.timeout_s)),
+            retry=False,
+        )
+
     # --- Rates ---
 
     def hotels_rates(self, body: Dict[str, Any], *, timeout: Optional[float] = None) -> Any:

@@ -28,6 +28,7 @@ import type {
   HotelBookingPrebookRequest,
   HotelBookingPrebookResponse,
   HotelGalleryResponse,
+  HotelReviewsResponse,
   HotelUpsellJob,
   HotelUpsellLookupItem,
   HotelUpsellOption,
@@ -353,6 +354,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
       const qs = q.toString()
       return request<HotelGalleryResponse>(
         `/api/deals/hotels/${encodeURIComponent(hotelId)}/gallery${qs ? `?${qs}` : ''}`,
+      )
+    },
+
+    getHotelReviews: (
+      hotelId: string,
+      opts?: { language?: string; limit?: number },
+    ) => {
+      const q = new URLSearchParams()
+      if (opts?.language) q.set('language', opts.language)
+      if (opts?.limit != null) q.set('limit', String(opts.limit))
+      const qs = q.toString()
+      return request<HotelReviewsResponse>(
+        `/api/deals/hotels/${encodeURIComponent(hotelId)}/reviews${qs ? `?${qs}` : ''}`,
       )
     },
 

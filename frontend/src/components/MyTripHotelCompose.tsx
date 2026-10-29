@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
+  airportDisplayNameFr,
   boardLabelFr,
+  resolveCarrierBooking,
+  type HotelGalleryPhoto,
+  type HotelGuestReview,
   type HotelUpsellOption,
   type MyTripDraft,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
-import { HotelPhotoGallery } from './HotelPhotoGallery'
 
 type Props = {
   draft: MyTripDraft
@@ -62,6 +66,16 @@ function formatDistance(m?: number | null) {
   return `${(n / 1000).toFixed(1)} km du centre`
 }
 
+function formatStationDistance(h: HotelUpsellOption) {
+  const m = h.station_distance_m
+  const name = h.station_name
+  if (m == null || Number.isNaN(Number(m)) || !name) return null
+  const n = Number(m)
+  const dist =
+    n < 1000 ? `${Math.round(n)} m` : `${(n / 1000).toFixed(1)} km`
+  return `${dist} de ${name}`
+}
+
 function mapsQuery(name: string, city?: string | null) {
   return [name, city].filter(Boolean).join(', ')
 }
@@ -88,6 +102,49 @@ function StarRow({ stars }: { stars?: number | null }) {
   )
 }
 
+/** Note /10 → étoiles /5, arrondi au 0,5 le plus proche. */
+function scoreToHalfStars5(scoreOutOf10?: number | null): number | null {
+  if (scoreOutOf10 == null || Number.isNaN(Number(scoreOutOf10))) return null
+  const n = Math.min(10, Math.max(0, Number(scoreOutOf10)))
+  return Math.round((n / 10) * 5 * 2) / 2
+}
+
+function ReviewStars({ score }: { score?: number | null }) {
+  const stars = scoreToHalfStars5(score)
+  if (stars == null) return null
+  const full = Math.floor(stars)
+  const half = stars - full >= 0.5
+  const empty = 5 - full - (half ? 1 : 0)
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 text-amber-500"
+      aria-label={`${stars} sur 5`}
+      title={`${Number(score).toFixed(1)}/10 → ${stars}/5`}
+    >
+      {Array.from({ length: full }, (_, i) => (
+        <span key={`f${i}`} className="text-[13px] leading-none" aria-hidden>
+          ★
+        </span>
+      ))}
+      {half ? (
+        <span className="relative inline-block w-[13px] h-[13px] text-[13px] leading-none" aria-hidden>
+          <span className="absolute inset-0 text-slate-300">★</span>
+          <span className="absolute inset-0 overflow-hidden w-[50%] text-amber-500">★</span>
+        </span>
+      ) : null}
+      {Array.from({ length: empty }, (_, i) => (
+        <span key={`e${i}`} className="text-[13px] leading-none text-slate-300" aria-hidden>
+          ★
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function reviewMeta(r: HotelGuestReview) {
+  return [r.name, r.country, r.type, r.date].filter(Boolean).join(' · ')
+}
+
 function ratingLabel(rating?: number | null) {
   if (rating == null || Number.isNaN(Number(rating))) return null
   const r = Number(rating)
@@ -98,6 +155,7 @@ function ratingLabel(rating?: number | null) {
   return 'Correct'
 }
 
+/** Selling chips only — rating / stars live in the identity block. */
 function hotelAdvantages(h: HotelUpsellOption): string[] {
   const out: string[] = []
   const board = boardLabelFr(h.board)
@@ -105,16 +163,98 @@ function hotelAdvantages(h: HotelUpsellOption): string[] {
   if (h.refundable) out.push('Annulation flexible')
   const dist = formatDistance(h.distance_m)
   if (dist) out.push(dist)
-  if (h.stars != null && Number(h.stars) >= 4) {
-    out.push(`${Math.round(Number(h.stars))} étoiles`)
-  }
-  if (h.rating != null && Number(h.rating) >= 8) {
-    out.push(`Note voyageurs ${Number(h.rating).toFixed(1)}/10`)
-  }
-  if (h.review_count != null && Number(h.review_count) >= 200) {
-    out.push(`${Number(h.review_count).toLocaleString('fr-FR')} avis`)
-  }
+  const station = formatStationDistance(h)
+  if (station) out.push(station)
   return out
+}
+
+/** Hotel-only price (never pack with flight). */
+function hotelOnlyPrice(h: HotelUpsellOption): {
+  amount: number
+  label: string
+} | null {
+  if (h.hotel_pp != null && !Number.isNaN(Number(h.hotel_pp))) {
+    return {
+      amount: Math.round(Number(h.hotel_pp)),
+      label: '/ pers. · hôtel',
+    }
+  }
+  if (
+    h.public_hotel_price != null &&
+    !Number.isNaN(Number(h.public_hotel_price))
+  ) {
+    return {
+      amount: Math.round(Number(h.public_hotel_price)),
+      label: 'hôtel · séjour',
+    }
+  }
+  return null
+}
+
+function formatShortDate(dateStr?: string | null) {
+  if (!dateStr) return null
+  try {
+    return new Date(dateStr.slice(0, 10) + 'T12:00:00').toLocaleDateString(
+      'fr-FR',
+      { weekday: 'short', day: 'numeric', month: 'short' },
+    )
+  } catch {
+    return dateStr.slice(0, 10)
+  }
+}
+
+/** Strip LiteAPI/Nuitee HTML descriptions for clean UI text. */
+function htmlToPlainText(raw: string): string {
+  let s = String(raw || '').trim()
+  if (!s) return ''
+  s = s.replace(/<\/?(?:p|div|br|li|ul|ol|h[1-6]|tr|section|article)[^>]*>/gi, '\n')
+  s = s.replace(/<[^>]+>/g, '')
+  if (typeof document !== 'undefined') {
+    const el = document.createElement('textarea')
+    el.innerHTML = s
+    s = el.value
+  } else {
+    s = s
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+  }
+  return s
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+function formatTimeLocal(iso?: string | null): string {
+  if (!iso) return ''
+  const m = String(iso).match(/(\d{2}):(\d{2})/)
+  if (m) return `${m[1]}:${m[2]}`
+  try {
+    return new Date(iso).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
+
+function airportLabel(
+  iata: string,
+  fallbackCity?: string | null,
+  payloadLabel?: string | null,
+) {
+  if (payloadLabel && String(payloadLabel).trim()) return String(payloadLabel).trim()
+  if (!iata) return fallbackCity || '—'
+  const name = airportDisplayNameFr(iata, fallbackCity || null)
+  if (name && name.toUpperCase() !== iata) return `${name} (${iata})`
+  return iata
 }
 
 export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
@@ -129,6 +269,113 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
   const checkout = String(draft.ret_date || (payload.dates as any)?.inbound || '').slice(0, 10)
   const adults = Number(draft.adults || payload.adults || 2)
   const flightPp = Number(flight.price_pp || 0)
+  const originIata = String(
+    draft.origin_iata ||
+      payload.origin_iata ||
+      payload.departure_airport ||
+      flight.origin_iata ||
+      flight.origin ||
+      '',
+  ).toUpperCase()
+  const flightBooked = Boolean(
+    draft.flight_booked_at ||
+      payload.flight_booked ||
+      payload.flight_booked_at,
+  )
+  const cityHint = String(
+    draft.city_name ||
+      payload.compose_city ||
+      (payload as { city?: string }).city ||
+      '',
+  ).trim()
+  const originLabel = airportLabel(
+    originIata,
+    null,
+    payload.origin_airport_label != null
+      ? String(payload.origin_airport_label)
+      : null,
+  )
+  const arrivalLabel = airportLabel(
+    destIata,
+    cityHint || null,
+    payload.arrival_airport_label != null
+      ? String(payload.arrival_airport_label)
+      : null,
+  )
+  const outDep =
+    flight.outbound_local || flight.out_dep_local || payload.out_dep_local
+  const retDep =
+    flight.inbound_local || flight.ret_dep_local || payload.ret_dep_local
+  const outTime = formatTimeLocal(
+    outDep != null ? String(outDep) : null,
+  )
+  const retTime = formatTimeLocal(
+    retDep != null ? String(retDep) : null,
+  )
+  const outArrTime = formatTimeLocal(
+    String(
+      flight.outbound_arrival_local ||
+        flight.out_arr_local ||
+        flight.outbound_arr_local ||
+        payload.out_arr_local ||
+        '',
+    ) || null,
+  )
+  const retArrTime = formatTimeLocal(
+    String(
+      flight.inbound_arrival_local ||
+        flight.ret_arr_local ||
+        flight.in_arr_local ||
+        payload.ret_arr_local ||
+        '',
+    ) || null,
+  )
+  const stopsLabel =
+    flight.direct === true
+      ? 'vol direct'
+      : flight.transfers === 1 || flight.stops === 1
+        ? '1 escale'
+        : flight.direct === false ||
+            (flight.transfers != null && Number(flight.transfers) > 0)
+          ? `${Number(flight.transfers || flight.stops || 1)} escale${
+              Number(flight.transfers || flight.stops || 1) > 1 ? 's' : ''
+            }`
+          : null
+
+  const carrier = useMemo(
+    () =>
+      resolveCarrierBooking({
+        airline: flight.airline || flight.carrier || payload.airline,
+        carrier: flight.carrier,
+        provider: flight.provider || payload.provider,
+        bookingUrl: flight.booking_url || payload.booking_url,
+        originIata: originIata || undefined,
+        destIata: destIata || undefined,
+        outDate: checkin || undefined,
+        retDate: checkout || undefined,
+        outLocal: outDep != null ? String(outDep) : undefined,
+        inLocal: retDep != null ? String(retDep) : undefined,
+        adults,
+        language: 'fr',
+        originLabel,
+        arrivalLabel,
+      }),
+    [
+      adults,
+      arrivalLabel,
+      checkin,
+      checkout,
+      destIata,
+      flight,
+      originIata,
+      originLabel,
+      outDep,
+      payload.airline,
+      payload.booking_url,
+      payload.provider,
+      retDep,
+    ],
+  )
 
   const [options, setOptions] = useState<HotelUpsellOption[]>([])
   const [selected, setSelected] = useState<HotelUpsellOption | null>(null)
@@ -139,7 +386,32 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
   const [nightCap, setNightCap] = useState<number | null>(null)
   const [cityLabel, setCityLabel] = useState<string | null>(null)
   const [description, setDescription] = useState<string | null>(null)
+  const [galleryPhotos, setGalleryPhotos] = useState<HotelGalleryPhoto[]>([])
+  const [facilities, setFacilities] = useState<string[]>([])
+  const [hotelAddress, setHotelAddress] = useState<string | null>(null)
+  const [checkinTime, setCheckinTime] = useState<string | null>(null)
+  const [checkoutTime, setCheckoutTime] = useState<string | null>(null)
+  const [guestReviews, setGuestReviews] = useState<HotelGuestReview[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewsExpanded, setReviewsExpanded] = useState(false)
+  const [descExpanded, setDescExpanded] = useState(false)
+  const [bodyLightbox, setBodyLightbox] = useState<number | null>(null)
+  const [mobileSheet, setMobileSheet] = useState(false)
+  const [flightExpanded, setFlightExpanded] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(false)
   const detailRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const apply = () => {
+      setIsDesktop(mq.matches)
+      if (mq.matches) setMobileSheet(false)
+    }
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -407,25 +679,118 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
     const id = hotelIdOf(selected)
     if (!id) {
       setDescription(null)
+      setGalleryPhotos([])
+      setFacilities([])
+      setHotelAddress(null)
+      setCheckinTime(null)
+      setCheckoutTime(null)
+      setGuestReviews([])
+      setReviewsLoading(false)
+      setReviewsExpanded(false)
+      setDescExpanded(false)
+      setBodyLightbox(null)
       return
     }
     let cancelled = false
     setDescription(null)
-    void getApiClient()
+    setGalleryPhotos([])
+    setFacilities([])
+    setHotelAddress(null)
+    setCheckinTime(null)
+    setCheckoutTime(null)
+    setGuestReviews([])
+    setReviewsLoading(true)
+    setReviewsExpanded(false)
+    setDescExpanded(false)
+    setBodyLightbox(null)
+    const seed = selected?.photo || selected?.thumbnail
+    if (seed) {
+      setGalleryPhotos([{ url: String(seed), thumb: String(seed), order: 0 }])
+    }
+    const api = getApiClient()
+    void api
       .getHotelGallery(id, { language: 'fr' })
       .then((g) => {
-        if (!cancelled) {
-          const d = typeof g.description === 'string' ? g.description.trim() : ''
-          setDescription(d || null)
-        }
+        if (cancelled) return
+        const d =
+          typeof g.description === 'string'
+            ? htmlToPlainText(g.description)
+            : ''
+        setDescription(d || null)
+        setFacilities(
+          Array.isArray(g.facilities)
+            ? g.facilities.filter((x): x is string => Boolean(x && String(x).trim()))
+            : [],
+        )
+        setHotelAddress(
+          typeof g.address === 'string' && g.address.trim() ? g.address.trim() : null,
+        )
+        setCheckinTime(
+          typeof g.checkin_time === 'string' && g.checkin_time.trim()
+            ? g.checkin_time.trim()
+            : null,
+        )
+        setCheckoutTime(
+          typeof g.checkout_time === 'string' && g.checkout_time.trim()
+            ? g.checkout_time.trim()
+            : null,
+        )
+        const photos = Array.isArray(g.photos)
+          ? g.photos.filter((p) => p?.url)
+          : []
+        if (photos.length) setGalleryPhotos(photos)
       })
       .catch(() => {
         if (!cancelled) setDescription(null)
+      })
+    void api
+      .getHotelReviews(id, { language: 'fr', limit: 8 })
+      .then((r) => {
+        if (cancelled) return
+        setGuestReviews(Array.isArray(r.reviews) ? r.reviews.slice(0, 8) : [])
+      })
+      .catch(() => {
+        if (!cancelled) setGuestReviews([])
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false)
       })
     return () => {
       cancelled = true
     }
   }, [selected])
+
+  useEffect(() => {
+    if (bodyLightbox == null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBodyLightbox(null)
+      if (e.key === 'ArrowRight') {
+        setBodyLightbox((i) =>
+          i == null ? i : Math.min(i + 1, Math.max(0, galleryPhotos.length - 1)),
+        )
+      }
+      if (e.key === 'ArrowLeft') {
+        setBodyLightbox((i) => (i == null ? i : Math.max(0, i - 1)))
+      }
+    }
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [bodyLightbox, galleryPhotos.length])
+
+  /** Cover = gallery[0]. Body mosaic = next photos (never the cover). */
+  const coverPhoto = galleryPhotos[0] || null
+  const mosaicAll = useMemo(
+    () => (galleryPhotos.length > 1 ? galleryPhotos.slice(1) : []),
+    [galleryPhotos],
+  )
+  const bodyPhotos = useMemo(() => mosaicAll.slice(0, 5), [mosaicAll])
+  const mosaicExtra = Math.max(0, mosaicAll.length - bodyPhotos.length)
+  const bodyPhotoGlobalIndex = (localIdx: number) => 1 + localIdx
 
   const sorted = useMemo(() => {
     const list = [...options]
@@ -467,6 +832,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         },
         price_per_person: totalPp,
       })
+      setMobileSheet(false)
       onUpdated(row)
       onDone()
     } catch {
@@ -476,71 +842,671 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
     }
   }
 
-  const packTotal = (h: HotelUpsellOption) =>
-    Math.round(flightPp + Number(h.hotel_pp || 0))
-
   const selectHotel = (h: HotelUpsellOption) => {
     setSelected(h)
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
-      requestAnimationFrame(() => {
-        detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      })
+      setMobileSheet(true)
     }
   }
 
+  useEffect(() => {
+    if (!mobileSheet) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && bodyLightbox == null) setMobileSheet(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [mobileSheet, bodyLightbox])
+
   const advantages = selected ? hotelAdvantages(selected) : []
   const rLabel = selected ? ratingLabel(selected.rating) : null
+  const selectedPrice = selected ? hotelOnlyPrice(selected) : null
+  const nights = useMemo(() => {
+    if (!checkin || !checkout) return null
+    try {
+      const a = new Date(checkin + 'T12:00:00').getTime()
+      const b = new Date(checkout + 'T12:00:00').getTime()
+      const n = Math.round((b - a) / 86400000)
+      return n > 0 ? n : null
+    } catch {
+      return null
+    }
+  }, [checkin, checkout])
+  const amenityChips = useMemo(() => {
+    // Board / annulation already in the stay strip — keep chips for location + facilities.
+    const skip = new Set(
+      [boardLabelFr(selected?.board), selected?.refundable ? 'Annulation flexible' : null]
+        .filter(Boolean)
+        .map((s) => String(s)),
+    )
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const a of [...advantages, ...facilities]) {
+      const t = String(a || '').trim()
+      if (!t || seen.has(t) || skip.has(t)) continue
+      seen.add(t)
+      out.push(t)
+      if (out.length >= 7) break
+    }
+    return out
+  }, [advantages, facilities, selected?.board, selected?.refundable])
+  const visibleReviews = reviewsExpanded
+    ? guestReviews
+    : guestReviews.slice(0, 2)
+  const packPp =
+    selectedPrice && flightPp > 0
+      ? Math.round(selectedPrice.amount + flightPp)
+      : null
+
+  const outLabel = formatShortDate(checkin)
+  const retLabel = formatShortDate(checkout)
+  const flightPriceLabel =
+    flightPp > 0 ? `${Math.round(flightPp)} € / pers.` : null
+
+  const renderHotelDetail = (variant: 'aside' | 'sheet') => {
+    if (!selected) return null
+    const sheet = variant === 'sheet'
+    return (
+      <div
+        className={
+          sheet
+            ? 'h-full flex flex-col bg-white'
+            : 'rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden h-full flex flex-col'
+        }
+      >
+        {sheet ? (
+          <div
+            className="shrink-0 flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 bg-white/95 backdrop-blur-sm"
+            style={{ paddingTop: 'max(0.625rem, env(safe-area-inset-top))' }}
+          >
+            <button
+              type="button"
+              onClick={() => setMobileSheet(false)}
+              className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 min-h-[44px] text-sm font-bold text-slate-800 hover:bg-slate-50"
+              aria-label="Retour à la liste"
+            >
+              <span aria-hidden>‹</span> Liste
+            </button>
+            <p className="min-w-0 flex-1 text-sm font-extrabold text-slate-900 truncate text-center pr-12">
+              {selected.name || 'Hôtel'}
+            </p>
+          </div>
+        ) : null}
+
+        <div
+          className={`shrink-0 ${sheet ? 'px-0' : 'px-3.5 pt-3.5 sm:px-4 sm:pt-4'}`}
+        >
+          <button
+            type="button"
+            onClick={() => setBodyLightbox(0)}
+            className={`relative w-full overflow-hidden bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+              sheet
+                ? 'aspect-[4/3] max-h-[42vh]'
+                : 'rounded-2xl h-[190px] sm:h-[210px]'
+            }`}
+            aria-label="Voir la photo de couverture"
+          >
+            {coverPhoto?.url || selected.photo || selected.thumbnail ? (
+              <img
+                src={coverPhoto?.url || selected.photo || selected.thumbnail || ''}
+                alt={selected.name || 'Hôtel'}
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="eager"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-300 to-slate-500" />
+            )}
+            {galleryPhotos.length > 1 ? (
+              <span className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-white/95 text-slate-900 text-[11px] font-bold px-2.5 py-1 shadow-sm">
+                {galleryPhotos.length} photos
+              </span>
+            ) : null}
+          </button>
+        </div>
+
+        <div
+          className={`flex-1 min-h-0 overflow-y-auto overscroll-contain px-3.5 sm:px-4 py-3.5 space-y-4 ${
+            sheet ? 'pb-5' : ''
+          }`}
+        >
+          {/* 1 · Identité + prix */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3
+                className={`font-extrabold text-slate-900 tracking-tight leading-snug line-clamp-2 ${
+                  sheet ? 'text-xl' : 'text-lg sm:text-xl'
+                }`}
+              >
+                {selected.name || 'Hôtel'}
+              </h3>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                <StarRow stars={selected.stars} />
+                {selected.rating != null ? (
+                  <span className="inline-flex items-center gap-1 font-semibold text-slate-800">
+                    <span className="rounded-md bg-slate-900 text-white text-[10px] font-black tabular-nums px-1.5 py-0.5">
+                      {Number(selected.rating).toFixed(1)}
+                    </span>
+                    {rLabel || 'Note'}
+                    {selected.review_count != null && selected.review_count > 0
+                      ? ` · ${Number(selected.review_count).toLocaleString('fr-FR')} avis`
+                      : ''}
+                  </span>
+                ) : null}
+              </div>
+              {(formatDistance(selected.distance_m) ||
+                formatStationDistance(selected) ||
+                cityLabel) && (
+                <p className="mt-1 text-[11px] text-slate-500 line-clamp-1">
+                  {[
+                    formatDistance(selected.distance_m),
+                    formatStationDistance(selected),
+                    cityLabel,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
+            </div>
+            {selectedPrice ? (
+              <div className="text-right shrink-0 pt-0.5">
+                <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
+                  {selectedPrice.amount}€
+                </p>
+                <p className="text-[10px] font-semibold text-slate-400 mt-1">
+                  / pers. hôtel
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {/* 2 · Séjour + réassurance */}
+          <div className="rounded-2xl bg-slate-50 px-3 py-2.5 space-y-2">
+            {(outLabel || retLabel || nights) && (
+              <p className="text-[12px] text-slate-800 font-semibold">
+                {[outLabel, retLabel].filter(Boolean).join(' → ')}
+                {nights != null
+                  ? ` · ${nights} nuit${nights > 1 ? 's' : ''}`
+                  : ''}
+                {adults > 0
+                  ? ` · ${adults} voy.`
+                  : ''}
+              </p>
+            )}
+            {(checkinTime || checkoutTime || selected.refundable || boardLabelFr(selected.board)) && (
+              <div className="flex flex-wrap gap-1.5">
+                {selected.refundable ? (
+                  <span className="rounded-lg bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-1">
+                    Annulation flexible
+                  </span>
+                ) : null}
+                {boardLabelFr(selected.board) ? (
+                  <span className="rounded-lg bg-white border border-slate-200 text-slate-700 text-[10px] font-bold px-2 py-1">
+                    {boardLabelFr(selected.board)}
+                  </span>
+                ) : null}
+                {checkinTime ? (
+                  <span className="rounded-lg bg-white border border-slate-200 text-slate-600 text-[10px] font-semibold px-2 py-1">
+                    Arrivée {checkinTime}
+                  </span>
+                ) : null}
+                {checkoutTime ? (
+                  <span className="rounded-lg bg-white border border-slate-200 text-slate-600 text-[10px] font-semibold px-2 py-1">
+                    Départ {checkoutTime}
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {/* 3 · Atouts (scan rapide) */}
+          {amenityChips.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {amenityChips.map((a) => (
+                <span
+                  key={a}
+                  className="inline-flex items-center gap-1 rounded-full bg-white border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-700"
+                >
+                  <span className="text-[#FF385C]" aria-hidden>
+                    ✓
+                  </span>
+                  {a}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {/* 4 · Mosaïque (preuve visuelle) */}
+          {bodyPhotos.length > 0 ? (
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h4 className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
+                  Photos
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setBodyLightbox(1)}
+                  className="text-[11px] font-bold text-[#FF385C] hover:underline underline-offset-2 min-h-[36px]"
+                >
+                  Voir plus
+                </button>
+              </div>
+              <div
+                className={`grid gap-1 overflow-hidden rounded-2xl ${
+                  bodyPhotos.length >= 5
+                    ? 'grid-cols-4 grid-rows-2 h-[160px] sm:h-[188px]'
+                    : bodyPhotos.length === 4
+                      ? 'grid-cols-2 grid-rows-2 h-[160px] sm:h-[188px]'
+                      : bodyPhotos.length === 3
+                        ? 'grid-cols-3 h-[110px] sm:h-[128px]'
+                        : bodyPhotos.length === 2
+                          ? 'grid-cols-2 h-[128px] sm:h-[148px]'
+                          : 'grid-cols-1 h-[128px]'
+                }`}
+              >
+                {bodyPhotos.map((p, i) => {
+                  const isHero = bodyPhotos.length >= 5 && i === 0
+                  const isLast =
+                    i === bodyPhotos.length - 1 && mosaicExtra > 0
+                  return (
+                    <button
+                      key={`${p.url}-mosaic-${i}`}
+                      type="button"
+                      onClick={() => setBodyLightbox(bodyPhotoGlobalIndex(i))}
+                      className={`relative overflow-hidden bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+                        isHero ? 'col-span-2 row-span-2' : ''
+                      }`}
+                    >
+                      <img
+                        src={p.thumb || p.url}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {isLast ? (
+                        <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-ink/55 text-white">
+                          <span className="text-sm font-black tabular-nums">
+                            +{mosaicExtra}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-wide">
+                            Voir plus
+                          </span>
+                        </span>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* 5 · Présentation courte */}
+          {description ? (
+            <div>
+              <h4 className="text-xs font-extrabold text-slate-900 tracking-wide uppercase mb-1.5">
+                À propos
+              </h4>
+              <p
+                className={`text-[12px] text-slate-600 leading-relaxed whitespace-pre-line ${
+                  descExpanded ? '' : 'line-clamp-3'
+                }`}
+              >
+                {description}
+              </p>
+              {description.length > 160 ? (
+                <button
+                  type="button"
+                  onClick={() => setDescExpanded((v) => !v)}
+                  className="mt-1 text-[11px] font-bold text-[#FF385C] hover:underline underline-offset-2 min-h-[36px]"
+                >
+                  {descExpanded ? 'Réduire' : 'Lire la suite'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* 6 · Emplacement */}
+          {selected.name ? (
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <h4 className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
+                  Emplacement
+                </h4>
+                <a
+                  href={mapsSearchUrl(selected.name, cityLabel)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-[#FF385C] hover:underline underline-offset-2 min-h-[36px] inline-flex items-center"
+                >
+                  Ouvrir Maps
+                </a>
+              </div>
+              {hotelAddress ? (
+                <p className="text-[11px] text-slate-600 mb-1.5 leading-snug">
+                  {hotelAddress}
+                  {cityLabel ? `, ${cityLabel}` : ''}
+                </p>
+              ) : null}
+              {selected.stations && selected.stations.length > 0 ? (
+                <ul className="text-[11px] text-slate-600 space-y-0.5 mb-2">
+                  {selected.stations.slice(0, 2).map((s) => {
+                    const n = Number(s.distance_m)
+                    const dist =
+                      n < 1000
+                        ? `${Math.round(n)} m`
+                        : `${(n / 1000).toFixed(1)} km`
+                    return (
+                      <li key={s.name}>
+                        <span className="font-semibold text-slate-800">{dist}</span>
+                        {' · '}
+                        {s.name}
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
+              <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 h-[120px]">
+                <iframe
+                  title={`Carte — ${selected.name}`}
+                  src={mapsEmbedUrl(selected.name, cityLabel)}
+                  className="w-full h-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {/* 7 · Avis (bas) */}
+          {reviewsLoading || guestReviews.length > 0 ? (
+            <div className="border-t border-slate-100 pt-4">
+              <div className="flex items-baseline justify-between gap-2 mb-2.5">
+                <h4 className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
+                  Avis
+                </h4>
+                {selected.review_count != null && selected.review_count > 0 ? (
+                  <p className="text-[10px] font-semibold text-slate-400 tabular-nums">
+                    {Number(selected.review_count).toLocaleString('fr-FR')} avis
+                  </p>
+                ) : null}
+              </div>
+              {reviewsLoading && guestReviews.length === 0 ? (
+                <p className="text-[11px] text-slate-400">Chargement…</p>
+              ) : (
+                <>
+                  <ul className="space-y-2">
+                    {visibleReviews.map((r, i) => {
+                      const meta = reviewMeta(r)
+                      const excerpt =
+                        r.pros || r.text || r.headline || r.cons || ''
+                      return (
+                        <li
+                          key={`${r.name || 'avis'}-${r.date || i}`}
+                          className="rounded-2xl bg-slate-50 px-3 py-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <ReviewStars score={r.score} />
+                            {meta ? (
+                              <p className="text-[10px] text-slate-400 truncate min-w-0">
+                                {meta}
+                              </p>
+                            ) : null}
+                          </div>
+                          {excerpt ? (
+                            <p
+                              className={`text-[11px] text-slate-700 leading-relaxed mt-1.5 ${
+                                reviewsExpanded ? '' : 'line-clamp-2'
+                              }`}
+                            >
+                              {r.headline && r.headline !== excerpt ? (
+                                <span className="font-bold text-slate-900">
+                                  {r.headline}
+                                  {' · '}
+                                </span>
+                              ) : null}
+                              {excerpt}
+                            </p>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  {guestReviews.length > 2 ||
+                  guestReviews.some(
+                    (r) => String(r.pros || r.text || '').length > 120,
+                  ) ? (
+                    <button
+                      type="button"
+                      onClick={() => setReviewsExpanded((v) => !v)}
+                      className="mt-2.5 w-full rounded-xl border border-slate-200 bg-white py-2.5 min-h-[44px] text-[12px] font-bold text-slate-800 active:scale-[0.99] transition"
+                    >
+                      {reviewsExpanded
+                        ? 'Voir moins'
+                        : guestReviews.length > 2
+                          ? `Voir plus · ${guestReviews.length - 2} avis`
+                          : 'Voir plus'}
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div
+          className="shrink-0 border-t border-slate-100 bg-white/95 backdrop-blur-sm px-3.5 sm:px-4 py-3"
+          style={
+            sheet
+              ? { paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }
+              : undefined
+          }
+        >
+          {packPp != null ? (
+            <p className="text-[11px] text-center text-slate-500 mb-2 tabular-nums">
+              Pack ~{packPp} €/pers. avec ton vol
+              {nights != null
+                ? ` · ${nights} nuit${nights > 1 ? 's' : ''}`
+                : ''}
+            </p>
+          ) : nights != null ? (
+            <p className="text-[11px] text-center text-slate-500 mb-2">
+              {nights} nuit{nights > 1 ? 's' : ''}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void confirm(selected)}
+            className="w-full rounded-2xl bg-[#FF385C] hover:bg-[#E31C5F] text-white font-bold py-3.5 min-h-[52px] disabled:opacity-50 shadow-sm transition-colors text-[15px]"
+          >
+            {saving
+              ? '…'
+              : selectedPrice
+                ? `Choisir · ${selectedPrice.amount} € / pers.`
+                : 'Choisir cet hôtel'}
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <section className="w-full">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+      <div className="flex items-start justify-between gap-3 mb-3 sm:mb-5">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF385C]">
             Composer le voyage
           </p>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
-            {cityLabel ? `Choisis ton hôtel à ${cityLabel}` : 'Choisis ton hôtel'}
+          <h2 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-0.5 sm:mt-1 leading-tight">
+            {cityLabel ? `Hôtel à ${cityLabel}` : 'Choisis ton hôtel'}
           </h2>
-          <p className="text-sm text-slate-600 mt-1.5 max-w-2xl">
-            Sélectionne à gauche — le détail s’affiche à droite
-            {flightPp > 0 ? ` · vol fixe ${Math.round(flightPp)} € / pers.` : ''}
-            {nightCap != null ? ` · confort ≤ ~${Math.round(nightCap)} €/nuit` : ''}.
+          <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+            Prix hôtel seulement
+            {nightCap != null ? ` · ≤ ~${Math.round(nightCap)} €/nuit` : ''}.
           </p>
         </div>
         <button
           type="button"
           onClick={onDone}
-          className="self-start sm:self-auto text-sm font-semibold text-slate-500 hover:text-slate-900 min-h-[40px]"
+          className="shrink-0 text-sm font-semibold text-slate-500 hover:text-slate-900 min-h-[44px] px-1"
         >
           Plus tard
         </button>
       </div>
 
-      {!loading && options.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 mb-5">
-          {(
-            [
-              ['price', 'Meilleur prix'],
-              ['rating', 'Mieux notés'],
-              ['distance', 'Plus proches'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setSort(key)}
-              className={`rounded-full px-3.5 py-2 text-xs font-bold min-h-[40px] transition-colors ${
-                sort === key
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-400'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <span className="text-xs font-semibold text-slate-400 ml-1">
-            {options.length} logement{options.length > 1 ? 's' : ''}
+      {/* Vol — compact mobile / détail expandable */}
+      <div className="mb-3 sm:mb-5 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setFlightExpanded((v) => !v)}
+          className="w-full flex items-center gap-2 px-3.5 py-3 text-left min-h-[52px] lg:hidden"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              Ton vol
+              {flightBooked ? ' · réservé' : ' · à part'}
+            </p>
+            <p className="text-sm font-extrabold text-slate-900 truncate mt-0.5">
+              {[outLabel, retLabel].filter(Boolean).join(' → ') || 'Dates'}
+              {flightPriceLabel ? ` · ${flightPriceLabel}` : ''}
+            </p>
+            <p className="text-[11px] text-slate-500 truncate">
+              {originLabel} → {arrivalLabel}
+              {carrier.airlineName ? ` · ${carrier.airlineName}` : ''}
+            </p>
+          </div>
+          <span className="text-slate-400 text-lg font-bold shrink-0" aria-hidden>
+            {flightExpanded ? '▴' : '▾'}
           </span>
+        </button>
+
+        <div
+          className={`${
+            flightExpanded ? 'block' : 'hidden'
+          } lg:flex lg:flex-row lg:items-stretch border-t border-slate-100 lg:border-0 px-3.5 py-3 lg:px-4 lg:py-3.5 gap-3 lg:gap-5`}
+        >
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <div className="hidden lg:flex flex-wrap items-center gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                Ton vol
+              </p>
+              {flightBooked ? (
+                <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  Réservé
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold uppercase tracking-wide text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full">
+                  À réserver à part
+                </span>
+              )}
+              {carrier.airlineName ? (
+                <span className="text-[11px] font-semibold text-slate-600">
+                  {carrier.airlineName}
+                  {stopsLabel ? ` · ${stopsLabel}` : ''}
+                </span>
+              ) : stopsLabel ? (
+                <span className="text-[11px] font-semibold text-slate-600">
+                  {stopsLabel}
+                </span>
+              ) : null}
+              {flightPriceLabel ? (
+                <span className="text-[11px] font-bold text-slate-800 tabular-nums">
+                  {flightPriceLabel}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-2.5">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  Aller
+                </p>
+                <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+                  {outLabel || '—'}
+                  {outTime ? (
+                    <span className="tabular-nums">
+                      {' '}
+                      · {outTime}
+                      {outArrTime ? ` → ${outArrTime}` : ''}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="text-xs text-slate-600 mt-1 leading-snug">
+                  <span className="font-semibold text-slate-800">{originLabel}</span>
+                  <span className="text-slate-400"> → </span>
+                  <span className="font-semibold text-slate-800">{arrivalLabel}</span>
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  Retour
+                </p>
+                <p className="text-sm font-extrabold text-slate-900 mt-0.5">
+                  {retLabel || '—'}
+                  {retTime ? (
+                    <span className="tabular-nums">
+                      {' '}
+                      · {retTime}
+                      {retArrTime ? ` → ${retArrTime}` : ''}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="text-xs text-slate-600 mt-1 leading-snug">
+                  <span className="font-semibold text-slate-800">{arrivalLabel}</span>
+                  <span className="text-slate-400"> → </span>
+                  <span className="font-semibold text-slate-800">{originLabel}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          {carrier.url ? (
+            <div className="shrink-0 flex lg:flex-col lg:justify-center">
+              <a
+                href={carrier.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full lg:w-[11.5rem] items-center justify-center rounded-xl border border-slate-900 bg-slate-900 text-white text-sm font-bold px-4 py-2.5 min-h-[48px] hover:bg-slate-800 text-center"
+              >
+                {flightBooked
+                  ? 'Voir / gérer le vol'
+                  : carrier.ctaLabel || 'Réserver le vol'}
+              </a>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {!loading && options.length > 0 ? (
+        <div className="sticky top-14 z-10 -mx-3 px-3 sm:mx-0 sm:px-0 mb-3 sm:mb-5 bg-[#F7F7F7]/95 backdrop-blur-sm py-2">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none touch-pan-x pb-0.5 -mb-0.5">
+            {(
+              [
+                ['price', 'Prix'],
+                ['rating', 'Notes'],
+                ['distance', 'Proches'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSort(key)}
+                className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold min-h-[40px] transition-colors ${
+                  sort === key
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white text-slate-700 border border-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="shrink-0 text-xs font-semibold text-slate-400 pl-1">
+              {options.length} logement{options.length > 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
       ) : null}
 
@@ -550,7 +1516,7 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         </p>
       ) : null}
 
-      <div className="lg:grid lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.35fr)] lg:gap-8 lg:items-start">
+      <div className="lg:grid lg:grid-cols-[minmax(300px,0.88fr)_minmax(0,1.42fr)] lg:gap-6 lg:items-start">
         {/* Liste */}
         <div className="min-w-0">
           {loading ? (
@@ -565,13 +1531,14 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           ) : null}
 
           {!loading && sorted.length > 0 ? (
-            <ul className="space-y-2.5 max-h-[none] lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto lg:pr-1 lg:scroll-smooth">
+            <ul className="space-y-2.5">
               {sorted.map((h, idx) => {
                 const id = hotelKey(h, idx)
                 const active = hotelIdOf(selected) === hotelIdOf(h)
                 const dist = formatDistance(h.distance_m)
+                const station = formatStationDistance(h)
                 const board = boardLabelFr(h.board)
-                const total = packTotal(h)
+                const price = hotelOnlyPrice(h)
                 const photo = h.photo || h.thumbnail
 
                 return (
@@ -579,13 +1546,13 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                     <button
                       type="button"
                       onClick={() => selectHotel(h)}
-                      className={`w-full text-left flex gap-3 rounded-2xl border bg-white p-2.5 sm:p-3 transition-all ${
+                      className={`w-full text-left flex gap-3 rounded-2xl border bg-white p-2.5 sm:p-3 transition-all active:scale-[0.99] ${
                         active
                           ? 'border-slate-900 shadow-[0_0_0_1px_#111827]'
                           : 'border-slate-200 hover:border-slate-400 hover:shadow-sm'
                       }`}
                     >
-                      <div className="relative w-[104px] sm:w-[120px] h-[96px] shrink-0 rounded-xl overflow-hidden bg-slate-100">
+                      <div className="relative w-[96px] sm:w-[120px] aspect-[4/5] sm:aspect-auto sm:h-[96px] shrink-0 rounded-xl overflow-hidden bg-slate-100 self-stretch min-h-[104px]">
                         {photo ? (
                           <img
                             src={photo}
@@ -597,14 +1564,16 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                           <div className="absolute inset-0 bg-gradient-to-br from-slate-300 to-slate-500" />
                         )}
                       </div>
-                      <div className="min-w-0 flex-1 flex flex-col py-0.5">
+                      <div className="min-w-0 flex-1 flex flex-col py-0.5 min-h-[104px]">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-bold text-slate-900 text-sm sm:text-[15px] leading-snug line-clamp-2">
+                          <p className="font-bold text-slate-900 text-[15px] leading-snug line-clamp-2">
                             {h.name || 'Hôtel'}
                           </p>
-                          <p className="shrink-0 text-base font-extrabold text-slate-900 tabular-nums">
-                            {total} €
-                          </p>
+                          {price ? (
+                            <p className="shrink-0 text-base font-extrabold text-slate-900 tabular-nums">
+                              {price.amount} €
+                            </p>
+                          ) : null}
                         </div>
                         <p className="text-[11px] text-slate-500 font-medium mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <StarRow stars={h.stars} />
@@ -617,14 +1586,12 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
                             </span>
                           ) : null}
                         </p>
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
-                          {[board, dist].filter(Boolean).join(' · ') || '—'}
+                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">
+                          {[board, dist, station].filter(Boolean).join(' · ') || '—'}
                         </p>
-                        <p className="mt-auto pt-1 text-[10px] font-semibold text-slate-400">
-                          / pers. vol + hôtel
-                          {h.hotel_pp != null
-                            ? ` · hôtel ${Math.round(Number(h.hotel_pp))} €`
-                            : ''}
+                        <p className="mt-auto pt-1 text-[10px] font-semibold text-slate-400 flex items-center justify-between gap-2">
+                          <span>{price?.label || 'prix hôtel'}</span>
+                          <span className="lg:hidden text-[#FF385C] font-bold">Voir →</span>
                         </p>
                       </div>
                     </button>
@@ -641,183 +1608,131 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           ) : null}
         </div>
 
-        {/* Fiche détail */}
+        {/* Fiche détail — desktop sticky only */}
         <aside
           ref={detailRef}
-          className="mt-8 lg:mt-0 min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto scroll-mt-20"
+          className="hidden lg:block min-w-0 lg:sticky lg:top-[4.25rem] lg:h-[calc(100vh-4.75rem)] lg:max-h-[calc(100vh-4.75rem)]"
         >
-          {selected ? (
+          {isDesktop && selected ? (
             <motion.div
               key={hotelIdOf(selected)}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.22 }}
-              className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+              className="h-full"
             >
-              <div className="p-4 sm:p-5 space-y-5">
-                <HotelPhotoGallery
-                  hotelId={hotelIdOf(selected)}
-                  seedPhoto={selected.photo || selected.thumbnail}
-                  alt={selected.name || 'Hôtel'}
-                  hotelName={selected.name}
-                  cityLabel={cityLabel || undefined}
-                  embedded
-                />
-
-                <div>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                        {selected.name || 'Hôtel'}
-                      </h3>
-                      <p className="mt-1 text-sm text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <StarRow stars={selected.stars} />
-                        {formatDistance(selected.distance_m) ? (
-                          <span>{formatDistance(selected.distance_m)}</span>
-                        ) : null}
-                        {cityLabel ? <span>· {cityLabel}</span> : null}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
-                        {packTotal(selected)} €
-                      </p>
-                      <p className="text-[11px] font-semibold text-slate-400 mt-1">
-                        / pers. vol + hôtel
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Avis */}
-                <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3.5 flex gap-4 items-center">
-                  <div className="shrink-0 w-14 h-14 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center">
-                    <span className="text-lg font-black tabular-nums leading-none">
-                      {selected.rating != null
-                        ? Number(selected.rating).toFixed(1)
-                        : '—'}
-                    </span>
-                    <span className="text-[9px] font-bold uppercase tracking-wide opacity-70 mt-0.5">
-                      /10
-                    </span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-extrabold text-slate-900">
-                      {rLabel || 'Avis voyageurs'}
-                    </p>
-                    <p className="text-sm text-slate-600 mt-0.5">
-                      {selected.review_count != null && selected.review_count > 0
-                        ? `Basé sur ${Number(selected.review_count).toLocaleString('fr-FR')} avis`
-                        : 'Note moyenne des voyageurs'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Avantages */}
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900 mb-2.5">
-                    Ce qui est inclus
-                  </h4>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {advantages.length ? (
-                      advantages.map((a) => (
-                        <li
-                          key={a}
-                          className="flex items-start gap-2 text-sm text-slate-700 rounded-xl border border-slate-100 bg-white px-3 py-2.5"
-                        >
-                          <span
-                            className="mt-0.5 text-[#FF385C] font-bold"
-                            aria-hidden
-                          >
-                            ✓
-                          </span>
-                          <span className="font-medium">{a}</span>
-                        </li>
-                      ))
-                    ) : (
-                      <li className="text-sm text-slate-500 col-span-full">
-                        Détails de l’offre à confirmer à la réservation.
-                      </li>
-                    )}
-                    {selected.hotel_pp != null ? (
-                      <li className="flex items-start gap-2 text-sm text-slate-700 rounded-xl border border-slate-100 bg-white px-3 py-2.5">
-                        <span className="mt-0.5 text-[#FF385C] font-bold" aria-hidden>
-                          ✓
-                        </span>
-                        <span className="font-medium">
-                          Hôtel {Math.round(Number(selected.hotel_pp))} € / pers. pour
-                          le séjour
-                        </span>
-                      </li>
-                    ) : null}
-                  </ul>
-                </div>
-
-                {description ? (
-                  <div>
-                    <h4 className="text-sm font-extrabold text-slate-900 mb-2">
-                      À propos
-                    </h4>
-                    <p className="text-sm text-slate-600 leading-relaxed line-clamp-6 whitespace-pre-line">
-                      {description}
-                    </p>
-                  </div>
-                ) : null}
-
-                {/* Maps */}
-                {selected.name ? (
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-2.5">
-                      <h4 className="text-sm font-extrabold text-slate-900">
-                        Emplacement
-                      </h4>
-                      <a
-                        href={mapsSearchUrl(selected.name, cityLabel)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs font-bold text-[#FF385C] hover:underline underline-offset-2"
-                      >
-                        Ouvrir dans Maps →
-                      </a>
-                    </div>
-                    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[16/10] sm:aspect-[2/1]">
-                      <iframe
-                        title={`Carte — ${selected.name}`}
-                        src={mapsEmbedUrl(selected.name, cityLabel)}
-                        className="w-full h-full border-0"
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
-                    </div>
-                    {formatDistance(selected.distance_m) ? (
-                      <p className="text-xs text-slate-500 mt-2 font-medium">
-                        {formatDistance(selected.distance_m)}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void confirm(selected)}
-                  className="w-full rounded-2xl bg-[#FF385C] hover:bg-[#E31C5F] text-white font-bold py-3.5 min-h-[52px] disabled:opacity-50 shadow-sm transition-colors"
-                >
-                  {saving
-                    ? '…'
-                    : `Choisir cet hôtel · ${packTotal(selected)} € / pers.`}
-                </button>
-              </div>
+              {renderHotelDetail('aside')}
             </motion.div>
-          ) : (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center text-sm text-slate-500">
+          ) : isDesktop ? (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center text-sm text-slate-500 h-full flex items-center justify-center">
               {loading
                 ? 'Chargement des hôtels…'
                 : 'Sélectionne un hôtel dans la liste'}
             </div>
-          )}
+          ) : null}
         </aside>
       </div>
+
+      {/* Fiche plein écran — mobile */}
+      {typeof document !== 'undefined' && !isDesktop && mobileSheet && selected
+        ? createPortal(
+            <AnimatePresence>
+              <motion.div
+                key={`sheet-${hotelIdOf(selected)}`}
+                className="fixed inset-0 z-[100] flex flex-col bg-white"
+                role="dialog"
+                aria-modal="true"
+                aria-label={selected.name || 'Détail hôtel'}
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+              >
+                {renderHotelDetail('sheet')}
+              </motion.div>
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
+
+      {typeof document !== 'undefined' && bodyLightbox != null && galleryPhotos[bodyLightbox]
+        ? createPortal(
+            <AnimatePresence>
+              <motion.div
+                key="body-lightbox"
+                className="fixed inset-0 z-[210] flex flex-col bg-ink"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Photos de l’hôtel"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  paddingTop: 'env(safe-area-inset-top)',
+                  paddingBottom: 'env(safe-area-inset-bottom)',
+                }}
+              >
+                <div className="flex items-center justify-between gap-3 px-3 sm:px-6 py-2.5 text-white shrink-0">
+                  <p className="font-bold truncate text-sm sm:text-base min-w-0">
+                    {selected?.name || 'Hôtel'}
+                  </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-semibold tabular-nums text-white/90">
+                      {bodyLightbox + 1} / {galleryPhotos.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setBodyLightbox(null)}
+                      className="w-11 h-11 rounded-full bg-white/15 text-white text-2xl font-bold"
+                      aria-label="Fermer"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                <div className="relative flex-1 flex items-center justify-center min-h-0 px-2 sm:px-16">
+                  {galleryPhotos.length > 1 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBodyLightbox((i) =>
+                            i == null ? i : Math.max(0, i - 1),
+                          )
+                        }
+                        className="hidden sm:flex absolute left-4 z-10 w-11 h-11 rounded-full bg-white/15 text-white items-center justify-center"
+                        aria-label="Photo précédente"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setBodyLightbox((i) =>
+                            i == null
+                              ? i
+                              : Math.min(galleryPhotos.length - 1, i + 1),
+                          )
+                        }
+                        className="hidden sm:flex absolute right-4 z-10 w-11 h-11 rounded-full bg-white/15 text-white items-center justify-center"
+                        aria-label="Photo suivante"
+                      >
+                        ›
+                      </button>
+                    </>
+                  ) : null}
+                  <img
+                    src={galleryPhotos[bodyLightbox].url}
+                    alt=""
+                    className="max-h-full max-w-full object-contain select-none"
+                    draggable={false}
+                  />
+                </div>
+              </motion.div>
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
     </section>
   )
 }

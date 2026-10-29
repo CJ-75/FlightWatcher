@@ -304,6 +304,8 @@ def build_candidates(
                 "rating": meta.get("rating"),
                 "review_count": meta.get("review_count"),
                 "distance_m": meta.get("distance_m"),
+                "lat": meta.get("lat"),
+                "lng": meta.get("lng"),
                 "photo": meta.get("main_photo") or meta.get("thumbnail"),
                 "thumbnail": meta.get("thumbnail"),
                 "board": best.get("board"),

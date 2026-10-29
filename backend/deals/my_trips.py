@@ -201,6 +201,9 @@ _COMPOSE_OPTION_KEYS = (
     "hotel_pp",
     "public_hotel_price",
     "distance_m",
+    "station_name",
+    "station_distance_m",
+    "stations",
     "refundable",
     "cancel_deadline",
 )

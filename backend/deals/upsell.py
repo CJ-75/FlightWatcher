@@ -439,6 +439,9 @@ def _top_public(top: Any) -> Optional[Dict[str, Any]]:
         "stars": first.get("stars"),
         "rating": first.get("rating"),
         "distance_m": first.get("distance_m"),
+        "station_name": first.get("station_name"),
+        "station_distance_m": first.get("station_distance_m"),
+        "stations": first.get("stations"),
         "photo": photo,
         "thumbnail": first.get("thumbnail") or photo,
         "main_photo": first.get("main_photo") or photo,
@@ -576,6 +579,14 @@ def _ready_with_options(
         top_n=8,
         require_photo=True,
     )
+    try:
+        from deals.stations import enrich_hotels_with_stations, stations_for
+
+        stns = stations_for(city=base.get("city"), iata=base.get("iata"))
+        if stns:
+            options = enrich_hotels_with_stations(options, stns, top_n=2)
+    except Exception:
+        pass
     primary = options[0] if options else None
     public = float((primary or offer).get("public_hotel_price") or 0)
     hotel_pp = hotel_pp_of(primary or offer, adults=participants)
@@ -966,6 +977,17 @@ def _run_fetch_job(
             weights=cfg.score_weights,
             top_n=12,
         )
+        try:
+            from deals.stations import enrich_hotels_with_stations, stations_for
+
+            stns = stations_for(
+                city=(dest or {}).get("city_name") or city,
+                iata=(iata or (dest or {}).get("iata_arrival")),
+            )
+            if stns:
+                cands = enrich_hotels_with_stations(cands, stns, top_n=2)
+        except Exception as e:
+            logger.warning("station enrich skip: %s", e)
         if not cands:
             if persist_cache:
                 _mark_upsell_row(

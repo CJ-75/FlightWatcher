@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { HotelGalleryPhoto } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
@@ -14,6 +15,8 @@ export interface HotelPhotoGalleryProps {
   language?: string
   /** Compact mosaic for Mon voyage / nested cards (no outer padding) */
   embedded?: boolean
+  /** Even denser mosaic for trip compose sticky panel */
+  compact?: boolean
   /** Overlay controls (like / close) rendered top-right */
   topRight?: ReactNode
   /** Bottom-left overlay (badge / city) — mobile hero only */
@@ -59,6 +62,7 @@ export function HotelPhotoGallery({
   cityLabel,
   language = 'fr',
   embedded = false,
+  compact = false,
   topRight,
   bottomLeft,
 }: HotelPhotoGalleryProps) {
@@ -180,6 +184,10 @@ export function HotelPhotoGallery({
   const showMosaic = count >= 3
   const mosaicSlots = photos.slice(0, 5)
   const extra = Math.max(0, count - 5)
+  /** Compose sticky panel: 1 cover + up to 4 side thumbs */
+  const compactCover = photos[0]
+  const compactSide = photos.slice(1, 5)
+  const compactExtra = Math.max(0, count - 5)
   const mobileSlides = photos.slice(0, 20)
 
   return (
@@ -202,7 +210,11 @@ export function HotelPhotoGallery({
               key={`${p.url}-${i}`}
               type="button"
               className={`relative shrink-0 grow-0 basis-full min-w-full w-full snap-center snap-always focus:outline-none ${
-                embedded ? 'aspect-[16/10] max-h-[220px]' : 'aspect-[5/4] max-h-[42vh]'
+                compact
+                  ? 'aspect-[16/9] max-h-[180px]'
+                  : embedded
+                    ? 'aspect-[16/10] max-h-[240px]'
+                    : 'aspect-[5/4] max-h-[48vh]'
               }`}
               onClick={() => openAt(i)}
             >
@@ -266,43 +278,43 @@ export function HotelPhotoGallery({
         )}
       </div>
 
-      {/* Desktop: Booking / Airbnb mosaic */}
+      {/* Desktop: Booking / Airbnb mosaic (or 6-up compact grid) */}
       <div
         className={`relative hidden sm:block ${embedded ? '' : 'px-4 pt-4'}`}
       >
-        <div
-          className={`grid gap-1.5 overflow-hidden rounded-2xl ${
-            showMosaic
-              ? embedded
-                ? 'grid-cols-4 grid-rows-2 h-[200px]'
-                : 'grid-cols-4 grid-rows-2 h-[320px] lg:h-[380px]'
-              : embedded
-                ? 'grid-cols-1 h-[180px]'
-                : 'grid-cols-1 h-[280px]'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => openAt(0)}
-            className={`relative group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
-              showMosaic ? 'col-span-2 row-span-2' : 'col-span-1'
-            }`}
-          >
-            <img
-              src={mosaicSlots[0].url}
-              alt={alt}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-          </button>
-
-          {showMosaic
-            ? mosaicSlots.slice(1, 5).map((p, i) => {
+        {compact && compactCover ? (
+          <div className="space-y-2">
+            <div
+              className={`grid gap-1.5 overflow-hidden rounded-2xl ${
+                compactSide.length >= 2
+                  ? 'grid-cols-4 grid-rows-2 h-[220px]'
+                  : compactSide.length === 1
+                    ? 'grid-cols-2 h-[200px]'
+                    : 'grid-cols-1 h-[200px]'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => openAt(0)}
+                className={`relative group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+                  compactSide.length >= 2 ? 'col-span-2 row-span-2' : 'col-span-1'
+                }`}
+              >
+                <img
+                  src={compactCover.url}
+                  alt={alt}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                  loading="eager"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              </button>
+              {compactSide.map((p, i) => {
                 const idx = i + 1
-                const isLast = idx === mosaicSlots.length - 1 && extra > 0
+                const isLast =
+                  i === compactSide.length - 1 && compactExtra > 0
                 return (
                   <button
-                    key={`${p.url}-${idx}`}
+                    key={`${p.url}-c${idx}`}
                     type="button"
                     onClick={() => openAt(idx)}
                     className="relative group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
@@ -315,42 +327,125 @@ export function HotelPhotoGallery({
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
                     {isLast ? (
-                      <span className="absolute inset-0 flex items-center justify-center bg-ink/45 text-white text-sm font-bold tracking-wide">
-                        +{extra} photos
+                      <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-ink/50 text-white">
+                        <span className="text-sm font-black tabular-nums">
+                          +{compactExtra}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide">
+                          Voir plus
+                        </span>
                       </span>
                     ) : null}
                   </button>
                 )
-              })
-            : null}
-        </div>
+              })}
+            </div>
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <p className="text-[11px] font-semibold text-slate-500 tabular-nums">
+                {count} photo{count > 1 ? 's' : ''}
+                {loading ? ' · …' : ''}
+              </p>
+              <button
+                type="button"
+                onClick={() => openAt(0)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-[11px] font-bold px-2.5 py-1.5 hover:border-slate-400 hover:bg-slate-50 transition-colors"
+              >
+                <GridIcon />
+                Voir toutes les photos
+              </button>
+            </div>
+            {topRight ? (
+              <div className="absolute top-2 right-2 z-10 flex gap-2">{topRight}</div>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <div
+              className={`grid gap-1.5 overflow-hidden rounded-2xl ${
+                showMosaic
+                  ? embedded
+                    ? 'grid-cols-4 grid-rows-2 h-[200px]'
+                    : 'grid-cols-4 grid-rows-2 h-[320px] lg:h-[380px]'
+                  : embedded
+                    ? 'grid-cols-1 h-[180px]'
+                    : 'grid-cols-1 h-[280px]'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => openAt(0)}
+                className={`relative group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+                  showMosaic ? 'col-span-2 row-span-2' : 'col-span-1'
+                }`}
+              >
+                <img
+                  src={mosaicSlots[0].url}
+                  alt={alt}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              </button>
 
-        <div
-          className={`absolute z-10 flex gap-2 ${
-            embedded ? 'top-3 right-3' : 'top-7 right-7'
-          }`}
-        >
-          {topRight}
-        </div>
+              {showMosaic
+                ? mosaicSlots.slice(1, 5).map((p, i) => {
+                    const idx = i + 1
+                    const isLast = idx === mosaicSlots.length - 1 && extra > 0
+                    return (
+                      <button
+                        key={`${p.url}-${idx}`}
+                        type="button"
+                        onClick={() => openAt(idx)}
+                        className="relative group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                      >
+                        <img
+                          src={p.thumb || p.url}
+                          alt={`${alt} ${idx + 1}`}
+                          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
+                        {isLast ? (
+                          <span className="absolute inset-0 flex items-center justify-center bg-ink/45 text-white text-sm font-bold tracking-wide">
+                            +{extra} photos
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })
+                : null}
+            </div>
 
-        <button
-          type="button"
-          onClick={() => openAt(0)}
-          className={`absolute z-10 inline-flex items-center gap-2 rounded-xl bg-white text-ink font-bold shadow-lg border border-line/80 hover:bg-slate-50 transition-colors ${
-            embedded
-              ? 'bottom-3 right-3 text-xs px-2.5 py-1.5'
-              : 'bottom-5 right-7 text-sm px-3.5 py-2'
-          }`}
-        >
-          <GridIcon />
-          Voir les {count} photos
-        </button>
+            <div
+              className={`absolute z-10 flex gap-2 ${
+                embedded ? 'top-3 right-3' : 'top-7 right-7'
+              }`}
+            >
+              {topRight}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => openAt(0)}
+              className={`absolute z-10 inline-flex items-center gap-2 rounded-xl bg-white text-ink font-bold shadow-lg border border-line/80 hover:bg-slate-50 transition-colors ${
+                embedded
+                  ? 'bottom-3 right-3 text-xs px-2.5 py-1.5'
+                  : 'bottom-5 right-7 text-sm px-3.5 py-2'
+              }`}
+            >
+              <GridIcon />
+              Voir les {count} photos
+            </button>
+          </>
+        )}
       </div>
 
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <>
       {/* Absorb ghost tap after close (same corner as deal × on mobile) */}
       {closeGuard ? (
         <div
-          className="fixed inset-0 z-[85]"
+          className="fixed inset-0 z-[220]"
           aria-hidden
           onPointerDown={(e) => {
             e.preventDefault()
@@ -363,11 +458,11 @@ export function HotelPhotoGallery({
         />
       ) : null}
 
-      {/* Fullscreen lightbox — mobile-first */}
+      {/* Fullscreen lightbox — portaled above sticky headers */}
       <AnimatePresence>
         {lightbox != null ? (
           <motion.div
-            className="fixed inset-0 z-[80] flex flex-col bg-ink"
+            className="fixed inset-0 z-[210] flex flex-col bg-ink"
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelId}
@@ -502,6 +597,10 @@ export function HotelPhotoGallery({
           </motion.div>
         ) : null}
       </AnimatePresence>
+            </>,
+            document.body,
+          )
+        : null}
     </>
   )
 }
