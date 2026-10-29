@@ -452,7 +452,11 @@ export function DealsTab() {
         onClear={() => setOccasion(null)}
       />
 
-      <div className="w-full app-card mb-5 sm:mb-6 overflow-hidden">
+      <div
+        className={`w-full app-card mb-5 sm:mb-6 ${
+          filtersOpen ? 'overflow-visible' : 'overflow-hidden'
+        }`}
+      >
         <button
           type="button"
           onClick={() => setFiltersOpen((o) => !o)}
@@ -476,10 +480,10 @@ export function DealsTab() {
         </button>
         {filtersOpen ? (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={springConfig}
-            className="px-4 pb-4 sm:px-5 sm:pb-5 border-t border-line"
+            className="px-4 pb-4 sm:px-5 sm:pb-5 border-t border-line overflow-visible"
           >
             <div className="pt-4 mb-4 sm:mb-5">
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 sm:gap-2 sm:items-start">

@@ -41,6 +41,56 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Prefer real bookings over abandoned sandbox / prebook retries.
+_STATUS_RANK = {
+    "confirmed": 70,
+    "booking_pending": 60,
+    "payment_succeeded": 50,
+    "payment_pending": 40,
+    "prebooked": 30,
+    "draft": 20,
+    "cancelled": 10,
+    "failed": 0,
+}
+
+
+def _booking_collapse_key(row: Dict[str, Any]) -> str:
+    token = str(row.get("draft_token") or "").strip()
+    if token:
+        return f"draft:{token}"
+    lite = str(row.get("liteapi_booking_id") or "").strip()
+    if lite:
+        return f"lite:{lite}"
+    conf = str(row.get("confirmation_code") or "").strip()
+    if conf:
+        return f"conf:{conf}"
+    return f"id:{row.get('id')}"
+
+
+def _dedupe_booking_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One row per trip (draft_token) / LiteAPI id — keep best status, then newest."""
+    best: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        key = _booking_collapse_key(r)
+        prev = best.get(key)
+        if not prev:
+            best[key] = r
+            continue
+        rank_r = _STATUS_RANK.get(str(r.get("status") or ""), 0)
+        rank_p = _STATUS_RANK.get(str(prev.get("status") or ""), 0)
+        if rank_r > rank_p:
+            best[key] = r
+        elif rank_r == rank_p and str(r.get("created_at") or "") > str(
+            prev.get("created_at") or ""
+        ):
+            best[key] = r
+    return sorted(
+        best.values(),
+        key=lambda r: str(r.get("created_at") or ""),
+        reverse=True,
+    )
+
+
 class RevalidateRequest(BaseModel):
     hotel_id: Optional[str] = None
     displayed_price_pp: Optional[float] = None
@@ -464,11 +514,7 @@ async def list_bookings(
                 if r.get("id"):
                     by_id[str(r["id"])] = r
 
-    rows = sorted(
-        by_id.values(),
-        key=lambda r: str(r.get("created_at") or ""),
-        reverse=True,
-    )
+    rows = _dedupe_booking_rows(list(by_id.values()))
     return [_public_booking(r) for r in rows]
 
 

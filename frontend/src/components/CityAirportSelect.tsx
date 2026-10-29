@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Airport } from '../types'
 import {
@@ -26,21 +27,48 @@ const PLACEHOLDER_CITIES = [
 
 const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[14px]'
 
+type MenuPos = { top: number; left: number; width: number; maxHeight: number }
+
 export function CityAirportSelect({ value, onChange }: Props) {
   const [airports, setAirports] = useState<Airport[]>(() => peekAirports())
+  const [loading, setLoading] = useState(() => peekAirports().length === 0)
+  const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [menuPos, setMenuPos] = useState<MenuPos | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const inputWrapRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const reloadAirports = () => {
+    setLoading(true)
+    setLoadError(false)
+    void (async () => {
+      try {
+        const list = await loadAirportsOnce()
+        setAirports(list)
+        setLoadError(list.length === 0)
+      } catch {
+        setLoadError(true)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         const list = await loadAirportsOnce()
-        if (!cancelled) setAirports(list)
+        if (cancelled) return
+        setAirports(list)
+        setLoadError(list.length === 0)
       } catch {
-        /* ignore */
+        if (!cancelled) setLoadError(true)
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => {
@@ -92,13 +120,52 @@ export function CityAirportSelect({ value, onChange }: Props) {
       .slice(0, 40)
   }, [groups, popularGroups, query])
 
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+  const updateMenuPos = () => {
+    const el = inputWrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const gap = 4
+    const spaceBelow = window.innerHeight - r.bottom - 12
+    const spaceAbove = r.top - 12
+    const preferBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove
+    const maxHeight = Math.max(
+      140,
+      Math.min(320, preferBelow ? spaceBelow : spaceAbove),
+    )
+    setMenuPos({
+      top: preferBelow ? r.bottom + gap : Math.max(8, r.top - gap - maxHeight),
+      left: r.left,
+      width: r.width,
+      maxHeight,
+    })
+  }
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPos(null)
+      return
     }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
+    updateMenuPos()
+    const onWin = () => updateMenuPos()
+    window.addEventListener('resize', onWin)
+    window.addEventListener('scroll', onWin, true)
+    return () => {
+      window.removeEventListener('resize', onWin)
+      window.removeEventListener('scroll', onWin, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: Event) => {
+      const t = e.target as Node
+      if (rootRef.current?.contains(t)) return
+      if (menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDoc, true)
+    return () => document.removeEventListener('pointerdown', onDoc, true)
+  }, [open])
 
   const selectCity = (group: CityAirportGroup) => {
     const encoded = encodeAirportCodes(group.airports.map((a) => a.code))
@@ -127,10 +194,81 @@ export function CityAirportSelect({ value, onChange }: Props) {
   }
 
   const placeholder = PLACEHOLDER_CITIES[placeholderIndex]
+  const showMenu = open && menuPos != null
+
+  const menu = showMenu
+    ? createPortal(
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-label="Villes"
+          className="fixed z-[200] bg-white border border-gray-300 rounded-lg shadow-xl overflow-y-auto overscroll-contain"
+          style={{
+            top: menuPos.top,
+            left: menuPos.left,
+            width: menuPos.width,
+            maxHeight: menuPos.maxHeight,
+          }}
+        >
+          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100 sticky top-0 bg-white">
+            Villes
+          </div>
+          {loading ? (
+            <p className="px-3 py-4 text-sm text-slate-500">Chargement des villes…</p>
+          ) : loadError ? (
+            <div className="px-3 py-4 space-y-2">
+              <p className="text-sm text-slate-600">Impossible de charger les villes.</p>
+              <button
+                type="button"
+                onClick={reloadAirports}
+                className="text-sm font-bold text-primary-600"
+              >
+                Réessayer
+              </button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-slate-500">
+              Aucune ville trouvée{query.trim() ? ` pour « ${query.trim()} »` : ''}.
+            </p>
+          ) : (
+            filtered.map((g) => {
+              const active = selectedGroup?.key === g.key
+              const n = g.airports.length
+              return (
+                <button
+                  key={g.key}
+                  type="button"
+                  onClick={() => selectCity(g)}
+                  className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-primary-50 transition-colors min-h-[56px] ${
+                    active ? 'bg-primary-100' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CountryFlag
+                      country={g.country}
+                      className="w-5 h-[14px]"
+                      title={g.country}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-gray-800">{g.city}</div>
+                      <div className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                        {n > 1 ? `${n} aéroports` : '1 aéroport'}
+                        {g.country ? ` · ${g.country}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              )
+            })
+          )}
+        </div>,
+        document.body,
+      )
+    : null
 
   return (
     <div ref={rootRef} className="relative">
-      <div className="relative">
+      <div ref={inputWrapRef} className="relative">
         <input
           type="text"
           value={open ? query : label || ''}
@@ -144,6 +282,8 @@ export function CityAirportSelect({ value, onChange }: Props) {
           }}
           placeholder=""
           aria-label="Ville de départ"
+          aria-expanded={open}
+          autoComplete="off"
           className={`w-full py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl text-sm sm:text-base focus:border-primary-500 focus:ring-2 focus:ring-primary-200 hover:border-slate-300 min-h-[44px] pr-3 sm:pr-4 ${
             showSelectedFlag || showAnimatedPlaceholder
               ? 'pl-10 sm:pl-11'
@@ -243,42 +383,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
         </div>
       ) : null}
 
-      {open && filtered.length > 0 ? (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 sm:max-h-80 overflow-y-auto">
-          <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100">
-            Villes
-          </div>
-          {filtered.map((g) => {
-            const active = selectedGroup?.key === g.key
-            const n = g.airports.length
-            return (
-              <button
-                key={g.key}
-                type="button"
-                onClick={() => selectCity(g)}
-                className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-primary-50 transition-colors min-h-[56px] ${
-                  active ? 'bg-primary-100' : ''
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <CountryFlag
-                    country={g.country}
-                    className="w-5 h-[14px]"
-                    title={g.country}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-gray-800">{g.city}</div>
-                    <div className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                      {n > 1 ? `${n} aéroports` : '1 aéroport'}
-                      {g.country ? ` · ${g.country}` : ''}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
+      {menu}
     </div>
   )
 }

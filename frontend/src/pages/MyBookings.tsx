@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   boardLabelFr,
@@ -10,6 +16,7 @@ import {
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentSession } from '../lib/supabase'
 import {
+  dedupeHotelBookings,
   readBookingsCache,
   writeBookingsCache,
 } from '../utils/bookingsCache'
@@ -41,6 +48,46 @@ function nightsLabel(n?: number | null) {
   return n === 1 ? '1 nuit' : `${n} nuits`
 }
 
+/** Shared shell — same thumb column + body for bookings & open trips. */
+function StayCardShell({
+  photo,
+  chipClass,
+  chipLabel,
+  children,
+}: {
+  photo: string | null
+  chipClass: string
+  chipLabel: string
+  children: ReactNode
+}) {
+  return (
+    <li className="bg-white rounded-3xl border border-line shadow-soft overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-[11rem_minmax(0,1fr)] sm:items-stretch min-h-[11rem]">
+        <div className="relative h-40 sm:h-auto sm:min-h-[11rem] bg-slate-100 overflow-hidden">
+          {photo ? (
+            <img
+              src={photo}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-slate-200" />
+          )}
+          <span
+            className={`absolute top-3 left-3 rounded-full text-[11px] font-bold px-2.5 py-1 ${chipClass}`}
+          >
+            {chipLabel}
+          </span>
+        </div>
+        <div className="p-5 sm:p-6 flex flex-col min-w-0 min-h-[11rem]">
+          {children}
+        </div>
+      </div>
+    </li>
+  )
+}
+
 function OpenTripsSection({
   trips,
 }: {
@@ -58,24 +105,32 @@ function OpenTripsSection({
         </p>
       </div>
       <ul className="space-y-3">
-        {trips.map((t) => (
-          <li
-            key={t.draft_token}
-            className="rounded-3xl border border-line bg-white shadow-soft overflow-hidden"
-          >
-            <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Mon voyage
-                </p>
-                <h2 className="text-lg font-extrabold text-ink tracking-tight mt-0.5">
-                  {t.city ? `Week-end à ${t.city}` : 'Voyage en préparation'}
-                </h2>
-                <p className="text-sm text-ink-soft mt-1">
-                  Vol et hôtel à finaliser — pas encore de confirmation hôtel.
-                </p>
+        {trips.map((t) => {
+          const photo = cityImageUrl(t.city || null)
+          return (
+            <StayCardShell
+              key={t.draft_token}
+              photo={photo}
+              chipClass="bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+              chipLabel="En cours"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {t.city || 'Mon voyage'}
+                  </p>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-ink tracking-tight mt-0.5">
+                    {t.city ? `Week-end à ${t.city}` : 'Voyage en préparation'}
+                  </h2>
+                  <p className="text-sm text-ink-soft mt-1">
+                    Vol et hôtel à finaliser
+                  </p>
+                  <p className="text-xs text-muted mt-1.5">
+                    Pas encore de confirmation hôtel.
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2 shrink-0">
+              <div className="mt-auto pt-4 flex flex-wrap gap-2">
                 <Link
                   to={`/trip/${t.draft_token}`}
                   className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
@@ -89,9 +144,9 @@ function OpenTripsSection({
                   Voir ce dossier
                 </Link>
               </div>
-            </div>
-          </li>
-        ))}
+            </StayCardShell>
+          )
+        })}
       </ul>
     </div>
   )
@@ -248,27 +303,11 @@ function BookingCard({
     .join('\n')
 
   return (
-    <li className="bg-white rounded-3xl border border-line shadow-soft overflow-hidden">
-      <div className="sm:flex">
-        <div className="relative sm:w-44 sm:shrink-0 h-36 sm:h-auto min-h-[9rem] bg-slate-100">
-          {photo ? (
-            <img
-              src={photo}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-slate-200" />
-          )}
-          <span
-            className={`absolute top-3 left-3 rounded-full text-[11px] font-bold px-2.5 py-1 ${meta.chip}`}
-          >
-            {meta.label}
-          </span>
-        </div>
-
-        <div className="flex-1 p-5 sm:p-6">
+    <StayCardShell
+      photo={photo}
+      chipClass={meta.chip}
+      chipLabel={meta.label}
+    >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -340,32 +379,6 @@ function BookingCard({
               ) : null}
             </div>
           ) : null}
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={onToggle}
-              className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 min-h-[40px]"
-              aria-expanded={expanded}
-            >
-              {expanded ? 'Masquer les détails' : 'Voir les détails'}
-            </button>
-            {booking.draft_token ? (
-              <Link
-                to={`/trip/${booking.draft_token}`}
-                className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
-              >
-                Mon voyage
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void onCopy('summary', summaryText)}
-              className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-slate-50 min-h-[40px]"
-            >
-              {copied === 'summary' ? 'Récap copié ✓' : 'Copier le récap'}
-            </button>
-          </div>
 
           {expanded ? (
             <div className="mt-5 pt-5 border-t border-line space-y-5">
@@ -547,9 +560,33 @@ function BookingCard({
               </section>
             </div>
           ) : null}
-        </div>
-      </div>
-    </li>
+
+          <div className="mt-auto pt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onToggle}
+              className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 min-h-[40px]"
+              aria-expanded={expanded}
+            >
+              {expanded ? 'Masquer les détails' : 'Voir les détails'}
+            </button>
+            {booking.draft_token ? (
+              <Link
+                to={`/trip/${booking.draft_token}`}
+                className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
+              >
+                Mon voyage
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void onCopy('summary', summaryText)}
+              className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-slate-50 min-h-[40px]"
+            >
+              {copied === 'summary' ? 'Récap copié ✓' : 'Copier le récap'}
+            </button>
+          </div>
+    </StayCardShell>
   )
 }
 
@@ -605,7 +642,7 @@ export default function MyBookings() {
         const list = await getApiClient().listHotelBookings(
           draft ? { draft_token: draft } : undefined,
         )
-        const next = Array.isArray(list) ? list : []
+        const next = dedupeHotelBookings(Array.isArray(list) ? list : [])
         setBookings(next)
         writeBookingsCache(next)
         return
@@ -621,7 +658,7 @@ export default function MyBookings() {
 
       setGuestMode(true)
       const list = await getApiClient().listHotelBookings({ draft_token: draft })
-      const next = Array.isArray(list) ? list : []
+      const next = dedupeHotelBookings(Array.isArray(list) ? list : [])
       setBookings(next)
       for (const b of next) {
         if (b.draft_token) {
