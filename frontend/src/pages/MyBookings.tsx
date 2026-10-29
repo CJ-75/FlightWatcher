@@ -308,8 +308,8 @@ function BookingCard({
       chipClass={meta.chip}
       chipLabel={meta.label}
     >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 pr-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                 {booking.city || 'Séjour'}
                 {booking.hotel_stars ? ` · ${booking.hotel_stars}★` : ''}
@@ -329,11 +329,11 @@ function BookingCard({
               <p className="text-xs text-muted mt-1.5">{meta.hint}</p>
             </div>
             {price != null ? (
-              <div className="text-right shrink-0">
-                <p className="text-2xl font-extrabold text-ink tracking-tight">
+              <div className="text-right shrink-0 ml-auto">
+                <p className="text-2xl font-extrabold text-ink tracking-tight tabular-nums leading-none">
                   {price}&nbsp;€
                 </p>
-                <p className="text-[11px] text-muted font-medium">Hôtel payé</p>
+                <p className="text-[11px] text-muted font-medium mt-1">Hôtel payé</p>
               </div>
             ) : null}
           </div>
