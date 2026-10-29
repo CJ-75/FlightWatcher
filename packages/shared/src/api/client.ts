@@ -235,7 +235,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
     getAirports: () =>
       request<{ airports: Airport[] } | Airport[]>('/api/airports', {
-        timeoutMs: 10_000,
+        // Cold backend / first enrich can exceed 10s; picker keeps seed until then.
+        timeoutMs: 25_000,
       }),
 
     getDestinations: (airport: string) =>

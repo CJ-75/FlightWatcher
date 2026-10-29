@@ -19,8 +19,10 @@ import {
   groupAirportsByCity,
   parseAirportCodes,
   resolvePopularCityGroups,
+  seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
+import { getCachedAirports, hasFullAirportsCatalog } from '../lib/airportsCache'
 import { colors, fonts, shadow } from '../theme'
 import { CountryFlag } from './CountryFlag'
 
@@ -37,13 +39,19 @@ const PLACEHOLDER_CITIES = [
   { city: 'Marseille', country: 'France' },
 ] as const
 
+const SEED = seedPopularAirports()
+
 export function CityAirportPicker({ airports, value, onChange }: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
 
-  const groups = useMemo(() => groupAirportsByCity(airports), [airports])
+  const effectiveAirports = airports.length > 0 ? airports : SEED
+  const groups = useMemo(
+    () => groupAirportsByCity(effectiveAirports),
+    [effectiveAirports],
+  )
   const selectedCodes = useMemo(() => parseAirportCodes(value), [value])
   const selectedGroup = useMemo(
     () => findCityGroupByCodes(groups, selectedCodes),
@@ -65,10 +73,11 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
   }, [showPlaceholder])
 
   // Empty query = popular hubs only (instant). Typing = full catalog filter.
-  const popularGroups = useMemo(
-    () => resolvePopularCityGroups(groups, airports),
-    [groups, airports],
-  )
+  const popularGroups = useMemo(() => {
+    const popular = resolvePopularCityGroups(groups, effectiveAirports)
+    if (popular.length) return popular
+    return groups.slice(0, 12)
+  }, [groups, effectiveAirports])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -88,13 +97,18 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
   const exactAirport = useMemo(() => {
     const q = query.trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(q)) return null
-    return airports.find((a) => a.code === q) ?? null
-  }, [airports, query])
+    return effectiveAirports.find((a) => a.code === q) ?? null
+  }, [effectiveAirports, query])
 
   useEffect(() => {
     if (!open) {
       setQuery('')
       Keyboard.dismiss()
+      return
+    }
+    // Opening the sheet: pull full catalog if we still only have the seed.
+    if (!hasFullAirportsCatalog()) {
+      void getCachedAirports()
     }
   }, [open])
 
@@ -317,11 +331,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             ListEmptyComponent={
               exactAirport ? null : (
                 <Text style={styles.empty}>
-                  {query.trim()
-                    ? 'Aucune ville trouvée'
-                    : airports.length
-                      ? 'Aucune ville populaire'
-                      : 'Chargement…'}
+                  {query.trim() ? 'Aucune ville trouvée' : 'Aucune ville disponible'}
                 </Text>
               )
             }

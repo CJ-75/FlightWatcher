@@ -22,7 +22,7 @@ import {
   parseAirportCodes,
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { getCachedAirports } from '../lib/airportsCache'
+import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { apiBase, getApi } from '../lib/client'
 import { DealCard } from '../components/DealCard'
 import { OccasionIcon } from '../components/OccasionIcon'
@@ -57,7 +57,7 @@ export function DealsScreen() {
   const [occasion, setOccasion] = useState<string | null>(null)
   const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
   const configLoadedRef = useRef(false)
@@ -70,45 +70,45 @@ export function DealsScreen() {
     void AsyncStorage.setItem(ORIGIN_LS_KEY, value || '').catch(() => undefined)
   }, [])
 
-  useEffect(() => {
-    getCachedAirports()
-      .then(async (list) => {
-        setAirports(list)
-        if (originHydratedRef.current) return
-        originHydratedRef.current = true
-        const groups = groupAirportsByCity(list)
-        const expandToCity = (encoded: string) => {
-          const codes = parseAirportCodes(encoded)
-          if (!codes.length) return encoded
-          const group = findCityGroupByCodes(groups, codes)
-          if (!group || group.airports.length <= 1) return encoded
-          return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
-        }
-        try {
-          const stored = ((await AsyncStorage.getItem(ORIGIN_LS_KEY)) || '').trim()
-          if (stored) {
-            const expanded = expandToCity(stored)
-            setOrigin(expanded)
-            setQueryOrigin(expanded)
-            if (expanded !== stored) {
-              void AsyncStorage.setItem(ORIGIN_LS_KEY, expanded).catch(() => undefined)
-            }
-            return
-          }
-        } catch {
-          /* ignore */
-        }
-        // Default: Paris + tous ses aéroports
-        const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
-        if (!paris) return
-        const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
-        if (!encoded) return
-        setOrigin(encoded)
-        setQueryOrigin(encoded)
-        void AsyncStorage.setItem(ORIGIN_LS_KEY, encoded).catch(() => undefined)
-      })
-      .catch(() => undefined)
+  useEffect(() => subscribeAirports(setAirports), [])
 
+  useEffect(() => {
+    if (originHydratedRef.current || !airports.length) return
+    originHydratedRef.current = true
+    const groups = groupAirportsByCity(airports)
+    const expandToCity = (encoded: string) => {
+      const codes = parseAirportCodes(encoded)
+      if (!codes.length) return encoded
+      const group = findCityGroupByCodes(groups, codes)
+      if (!group || group.airports.length <= 1) return encoded
+      return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
+    }
+    void (async () => {
+      try {
+        const stored = ((await AsyncStorage.getItem(ORIGIN_LS_KEY)) || '').trim()
+        if (stored) {
+          const expanded = expandToCity(stored)
+          setOrigin(expanded)
+          setQueryOrigin(expanded)
+          if (expanded !== stored) {
+            void AsyncStorage.setItem(ORIGIN_LS_KEY, expanded).catch(() => undefined)
+          }
+          return
+        }
+      } catch {
+        /* ignore */
+      }
+      const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
+      if (!paris) return
+      const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+      if (!encoded) return
+      setOrigin(encoded)
+      setQueryOrigin(encoded)
+      void AsyncStorage.setItem(ORIGIN_LS_KEY, encoded).catch(() => undefined)
+    })()
+  }, [airports])
+
+  useEffect(() => {
     // Config once (not on every deals load)
     void fetch(`${apiBase}/api/config`)
       .then((r) => (r.ok ? r.json() : null))

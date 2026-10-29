@@ -17,8 +17,10 @@ import {
   findCityGroupByKey,
   groupAirportsByCity,
   resolvePopularCityGroups,
+  seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
+import { getCachedAirports, hasFullAirportsCatalog } from '../lib/airportsCache'
 import { colors, fonts, radius, shadow } from '../theme'
 import { CountryFlag } from './CountryFlag'
 
@@ -30,6 +32,8 @@ type Props = {
   emptyLabel?: string
 }
 
+const SEED = seedPopularAirports()
+
 export function CityPicker({
   airports,
   valueKey,
@@ -40,16 +44,17 @@ export function CityPicker({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
 
-  const groups = useMemo(() => groupAirportsByCity(airports), [airports])
+  const effective = airports.length > 0 ? airports : SEED
+  const groups = useMemo(() => groupAirportsByCity(effective), [effective])
   const selected = useMemo(
     () => findCityGroupByKey(groups, valueKey),
     [groups, valueKey],
   )
 
-  const popularGroups = useMemo(
-    () => resolvePopularCityGroups(groups, airports),
-    [groups, airports],
-  )
+  const popularGroups = useMemo(() => {
+    const popular = resolvePopularCityGroups(groups, effective)
+    return popular.length ? popular : groups.slice(0, 12)
+  }, [groups, effective])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -63,7 +68,11 @@ export function CityPicker({
   }, [groups, popularGroups, query])
 
   useEffect(() => {
-    if (!open) setQuery('')
+    if (!open) {
+      setQuery('')
+      return
+    }
+    if (!hasFullAirportsCatalog()) void getCachedAirports()
   }, [open])
 
   const airportsLabel = selected

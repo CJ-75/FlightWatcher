@@ -34,7 +34,7 @@ import {
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
-import { getCachedAirports } from '../lib/airportsCache'
+import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
@@ -77,7 +77,7 @@ export function PlannerScreen() {
   const { viewUser, isGuest } = useAuth()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [trips, setTrips] = useState<PlannedTrip[]>([])
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,11 +85,7 @@ export function PlannerScreen() {
 
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
 
-  React.useEffect(() => {
-    getCachedAirports()
-      .then(setAirports)
-      .catch(() => undefined)
-  }, [])
+  React.useEffect(() => subscribeAirports(setAirports), [])
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -487,16 +483,14 @@ function CreateTripModal({
     dates_retour: [],
   })
   const [showFlexible, setShowFlexible] = useState(false)
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   React.useEffect(() => {
     if (!visible) return
-    getCachedAirports()
-      .then(setAirports)
-      .catch(() => undefined)
+    return subscribeAirports(setAirports)
   }, [visible])
 
   React.useEffect(() => {

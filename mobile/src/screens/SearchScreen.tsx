@@ -35,7 +35,7 @@ import {
   type DatePresetId,
   type FlexibleDates,
 } from '@flightwatcher/shared'
-import { getCachedAirports } from '../lib/airportsCache'
+import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import type { MainTabParamList, RootStackParamList } from '../../App'
 import { CityAirportPicker } from '../components/CityAirportPicker'
@@ -76,7 +76,7 @@ export function SearchScreen() {
     dates_retour: [],
   })
   const [excluded, setExcluded] = useState<string[]>([])
-  const [airports, setAirports] = useState<Airport[]>([])
+  const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [loadingDest, setLoadingDest] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -133,11 +133,7 @@ export function SearchScreen() {
     }
   }, [route.params, navigation])
 
-  useEffect(() => {
-    getCachedAirports()
-      .then(setAirports)
-      .catch(() => undefined)
-  }, [])
+  useEffect(() => subscribeAirports(setAirports), [])
 
   // City-first origin: Paris metro by default; Affiner BVA → all Paris airports
   useEffect(() => {

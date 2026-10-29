@@ -41,40 +41,32 @@ export const POPULAR_AIRPORT_CODES = [
 
 export type PopularAirportCode = (typeof POPULAR_AIRPORT_CODES)[number]
 
-/** Static seed so the city picker opens before /api/airports returns. */
-const SEED_COUNTRY_BY_IATA: Record<string, string> = {
-  CDG: 'France',
-  ORY: 'France',
-  BVA: 'France',
-  LYS: 'France',
-  MRS: 'France',
-  NCE: 'France',
-  TLS: 'France',
-  BOD: 'France',
-  NTE: 'France',
-  LIL: 'France',
-  LHR: 'Royaume-Uni',
-  LGW: 'Royaume-Uni',
-  AMS: 'Pays-Bas',
-  BRU: 'Belgique',
-  CRL: 'Belgique',
-  BCN: 'Espagne',
-  MAD: 'Espagne',
-  FCO: 'Italie',
-  MXP: 'Italie',
-  DUB: 'Irlande',
-}
+/** Static seed so pickers open before /api/airports returns (no CITY_FR dep). */
+const SEED_AIRPORTS: Airport[] = [
+  { code: 'CDG', name: 'Charles de Gaulle', city: 'Paris', country: 'France' },
+  { code: 'ORY', name: 'Orly', city: 'Paris', country: 'France' },
+  { code: 'BVA', name: 'Beauvais', city: 'Paris', country: 'France' },
+  { code: 'LYS', name: 'Lyon', city: 'Lyon', country: 'France' },
+  { code: 'MRS', name: 'Marseille', city: 'Marseille', country: 'France' },
+  { code: 'NCE', name: 'Nice', city: 'Nice', country: 'France' },
+  { code: 'TLS', name: 'Toulouse', city: 'Toulouse', country: 'France' },
+  { code: 'BOD', name: 'Bordeaux', city: 'Bordeaux', country: 'France' },
+  { code: 'NTE', name: 'Nantes', city: 'Nantes', country: 'France' },
+  { code: 'LIL', name: 'Lille', city: 'Lille', country: 'France' },
+  { code: 'LHR', name: 'Heathrow', city: 'Londres', country: 'Royaume-Uni' },
+  { code: 'LGW', name: 'Gatwick', city: 'Londres', country: 'Royaume-Uni' },
+  { code: 'AMS', name: 'Schiphol', city: 'Amsterdam', country: 'Pays-Bas' },
+  { code: 'BRU', name: 'Bruxelles', city: 'Bruxelles', country: 'Belgique' },
+  { code: 'CRL', name: 'Charleroi', city: 'Bruxelles', country: 'Belgique' },
+  { code: 'BCN', name: 'Barcelone', city: 'Barcelone', country: 'Espagne' },
+  { code: 'MAD', name: 'Madrid', city: 'Madrid', country: 'Espagne' },
+  { code: 'FCO', name: 'Fiumicino', city: 'Rome', country: 'Italie' },
+  { code: 'MXP', name: 'Malpensa', city: 'Milan', country: 'Italie' },
+  { code: 'DUB', name: 'Dublin', city: 'Dublin', country: 'Irlande' },
+]
 
 export function seedPopularAirports(): Airport[] {
-  return POPULAR_AIRPORT_CODES.map((code) => {
-    const city = CITY_FR_BY_IATA[code] || code
-    return {
-      code,
-      name: city,
-      city,
-      country: SEED_COUNTRY_BY_IATA[code] || 'Europe',
-    }
-  })
+  return SEED_AIRPORTS.map((a) => ({ ...a }))
 }
 
 /** Resolve popular codes against a loaded airport list (order preserved). */
