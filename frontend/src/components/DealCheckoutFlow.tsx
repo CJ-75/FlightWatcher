@@ -11,6 +11,7 @@ import { getCurrentUser } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { rememberTrip } from '../utils/tripRecovery'
 import { DealComplianceNotice } from './DealComplianceNotice'
+import { PaymentCardMarks } from './PaymentCardMarks'
 
 type Step = 'revalidate' | 'confirm' | 'guests' | 'pay' | 'pending' | 'done' | 'error'
 
@@ -268,7 +269,6 @@ export function DealCheckoutFlow({
     }
   }
 
-  const price = reval?.revalidated_price_pp ?? deal.price_per_person
   const fees = reval?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
   const hotelName =
     reval?.hotel_name || deal.hotel?.name || deal.hotel_name || 'Hôtel'
@@ -333,8 +333,13 @@ export function DealCheckoutFlow({
             {step === 'confirm' && reval ? (
               <div className="space-y-4">
                 <p className="text-sm text-slate-700 font-medium">
-                  Le prix a changé : {Math.round(reval.displayed_price_pp || 0)} € →{' '}
-                  {Math.round(reval.revalidated_price_pp || 0)} € / pers.
+                  Le prix hôtel a changé
+                  {hotelTotal != null
+                    ? ` : ${Math.round(Number(hotelTotal))} €`
+                    : reval.public_hotel_price != null
+                      ? ` : ${Math.round(Number(reval.public_hotel_price))} €`
+                      : ''}
+                  .
                 </p>
                 {reval.hotel_switched ? (
                   <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
@@ -371,9 +376,9 @@ export function DealCheckoutFlow({
                     {fees > 0 ? ` · + ${Math.round(fees)} € taxes sur place` : ''}
                   </p>
                 </div>
-                {!guestMode ? (
+                {hotelTotal != null ? (
                   <p className="text-sm text-slate-600">
-                    Total affiché : <strong>{Math.round(price)} € / pers.</strong>
+                    Total hôtel : <strong>{Math.round(Number(hotelTotal))} €</strong>
                   </p>
                 ) : null}
                 <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 space-y-3 shadow-sm">
@@ -443,6 +448,7 @@ export function DealCheckoutFlow({
                     Continuer vers le paiement
                   </button>
                 </div>
+                <PaymentCardMarks className="pt-1" />
                 {guestMode ? (
                   <p className="text-xs text-slate-500 text-center">
                     Aucun compte requis pour payer. Tu pourras retrouver ce voyage via le
@@ -461,6 +467,7 @@ export function DealCheckoutFlow({
                   </strong>
                 </p>
                 <div ref={payRef} className="min-h-[120px] rounded-xl border border-line p-3" />
+                <PaymentCardMarks className="pt-0.5" />
                 {prebookMeta?.liteapi_env === 'sandbox' ? (
                   <button
                     type="button"

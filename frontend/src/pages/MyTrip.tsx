@@ -3,7 +3,6 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
   airportDisplayNameFr,
-  boardLabelFr,
   computeTripPartyPrice,
   distantAirportLine,
   resolveCarrierBooking,
@@ -13,7 +12,8 @@ import { getCurrentSession } from '../lib/supabase'
 import { rememberTrip } from '../utils/tripRecovery'
 import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
 import { DealCheckoutFlow } from '../components/DealCheckoutFlow'
-import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
+import { PaymentCardMarks } from '../components/PaymentCardMarks'
+import { MyTripHotelPanel } from '../components/MyTripHotelPanel'
 
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '—'
@@ -316,22 +316,6 @@ export default function MyTrip() {
   const isCached = vlevel === 'cached'
   const hotelPhoto = hotelObj?.photo || hotelObj?.thumbnail || payload.image_url || ''
   const hotelId = hotelObj?.id != null ? String(hotelObj.id) : null
-  const hotelSeedPhotos = useMemo(() => {
-    const raw = hotelObj?.photos
-    if (!Array.isArray(raw)) return undefined
-    const urls = raw
-      .map((p) =>
-        typeof p === 'string'
-          ? p
-          : p && typeof p === 'object' && 'url' in p
-            ? String((p as { url?: string }).url || '')
-            : '',
-      )
-      .map((u) => u.trim())
-      .filter(Boolean)
-    return urls.length ? urls : undefined
-  }, [hotelObj?.photos])
-  const board = boardLabelFr(hotelObj?.board || payload.board)
   const wantsCompose =
     composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
 
@@ -752,7 +736,57 @@ export default function MyTrip() {
     `Mon week-end à ${city} : ${typeof window !== 'undefined' ? window.location.href : ''}`,
   )}`
 
-  const priceBreakdown = (
+  /** Hotel payment focus: never cite the flight in the sticky récap. */
+  const hotelPaymentFocus =
+    nextAction.kind === 'hotel' || Boolean(checkoutDeal)
+  const hotelRecapTotal = Math.round(Number(party.hotelTotal) || 0)
+  const hotelRecapPp =
+    adults > 1 && hotelRecapTotal > 0
+      ? Math.round(hotelRecapTotal / adults)
+      : hotelRecapTotal
+
+  const priceBreakdown = hotelPaymentFocus ? (
+    <>
+      {adults === 1 ? (
+        <p className="text-3xl font-black text-primary-600 tracking-tight">
+          Hôtel {hotelRecapTotal} €
+        </p>
+      ) : (
+        <>
+          <p className="text-3xl font-black text-primary-600 tracking-tight">
+            Hôtel {hotelRecapTotal} €{' '}
+            <span className="text-lg font-bold text-slate-600">pour {adults}</span>
+          </p>
+          <p className="text-sm font-semibold text-slate-700 mt-1">
+            {hotelRecapPp} € / pers.
+          </p>
+        </>
+      )}
+      <dl className="mt-3 space-y-1.5 text-sm text-slate-700">
+        <div className="flex justify-between gap-3">
+          <dt>
+            Hôtel
+            {nights > 0 ? (
+              <span className="text-slate-400">
+                {' '}
+                ({nights} nuit{nights > 1 ? 's' : ''})
+              </span>
+            ) : null}
+          </dt>
+          <dd className="font-semibold tabular-nums">{hotelRecapTotal} €</dd>
+        </div>
+      </dl>
+      {party.cityTax != null ? (
+        <p className="text-xs text-slate-500 mt-2">
+          + taxe de séjour à régler à l’hôtel : {party.cityTax} €
+        </p>
+      ) : (
+        <p className="text-xs text-slate-500 mt-2">
+          Taxe de séjour éventuelle à régler à l’hôtel
+        </p>
+      )}
+    </>
+  ) : (
     <>
       {adults === 1 ? (
         <p className="text-3xl font-black text-primary-600 tracking-tight">
@@ -829,14 +863,17 @@ export default function MyTrip() {
     }
     if (nextAction.kind === 'hotel') {
       return (
-        <button
-          type="button"
-          disabled={checkoutLoading}
-          onClick={() => void openHotelCheckout()}
-          className={cls}
-        >
-          {checkoutLoading ? '…' : nextAction.label}
-        </button>
+        <div className="w-full space-y-2">
+          <button
+            type="button"
+            disabled={checkoutLoading}
+            onClick={() => void openHotelCheckout()}
+            className={cls}
+          >
+            {checkoutLoading ? '…' : nextAction.label}
+          </button>
+          {!opts.compact ? <PaymentCardMarks /> : <PaymentCardMarks compact />}
+        </div>
       )
     }
     return (
@@ -1145,55 +1182,30 @@ export default function MyTrip() {
                 )}
               </div>
               {hotelObj?.name ? (
-                <div className="space-y-3">
-                  {hotelId || hotelPhoto ? (
-                    <HotelPhotoGallery
-                      embedded
-                      hotelId={hotelId}
-                      seedPhoto={hotelPhoto ? String(hotelPhoto) : null}
-                      seedPhotos={hotelSeedPhotos}
-                      alt={String(hotelObj.name)}
-                      hotelName={String(hotelObj.name)}
-                      cityLabel={String(city !== '—' ? city : '')}
-                    />
-                  ) : null}
-                  <div className="min-w-0 space-y-1">
-                    <p className="text-sm text-slate-900 font-bold leading-snug">
-                      {String(hotelObj.name)}
-                    </p>
-                    <p className="text-xs text-slate-600">
-                      {hotelObj.stars != null ? `${hotelObj.stars} étoiles` : null}
-                      {hotelObj.stars != null && hotelObj.rating != null ? ' · ' : null}
-                      {hotelObj.rating != null
-                        ? `${Number(hotelObj.rating).toFixed(1).replace('.', ',')}/10`
-                        : null}
-                      {hotelObj.review_count != null
-                        ? ` (${Number(hotelObj.review_count).toLocaleString('fr-FR')} avis)`
-                        : null}
-                    </p>
-                    {board ? <p className="text-xs text-slate-600">{board}</p> : null}
-                    <p className="text-sm font-bold text-slate-800">
-                      {party.hotelTotal} €
-                      {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
-                    </p>
-                    {hotelObj.distance_m != null ? (
-                      <p className="text-xs text-slate-500">
-                        À {Math.round(Number(hotelObj.distance_m) / 100) / 10} km du centre
-                      </p>
-                    ) : null}
-                    {cancelLabel ? (
-                      <p
-                        className={`text-xs font-semibold ${
-                          hotelObj.refundable === false
-                            ? 'text-slate-700'
-                            : 'text-emerald-700'
-                        }`}
-                      >
-                        {cancelLabel}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
+                <MyTripHotelPanel
+                  hotel={hotelObj}
+                  hotelId={hotelId}
+                  cityLabel={String(city !== '—' ? city : '')}
+                  nights={nights}
+                  adults={adults}
+                  hotelTotal={party.hotelTotal}
+                  outLabel={formatDate(outDate)}
+                  retLabel={formatDate(retDate)}
+                  cancelLabel={cancelLabel}
+                  booked={hotelBooked}
+                  checkoutLoading={checkoutLoading}
+                  onBook={() => void openHotelCheckout()}
+                  onChangeHotel={
+                    !wantsCompose && !hotelBooked
+                      ? () => {
+                          setComposeOpen(true)
+                          const next = new URLSearchParams(searchParams)
+                          next.set('compose', '1')
+                          setSearchParams(next, { replace: true })
+                        }
+                      : undefined
+                  }
+                />
               ) : (
                 <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
               )}
@@ -1261,53 +1273,61 @@ export default function MyTrip() {
                     </p>
                   ) : null}
                 </div>
-              ) : !hotelUnavailable ? (
-                <>
-                  <div className="flex flex-col gap-2">
-                    {(draft.deal_key || hotelObj) && (
-                      <button
-                        type="button"
-                        disabled={checkoutLoading}
-                        onClick={() => void openHotelCheckout()}
-                        className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px] lg:bg-white lg:text-primary-700 lg:border lg:border-primary-200 lg:hover:bg-primary-50 disabled:opacity-60"
-                      >
-                        {checkoutLoading
-                          ? '…'
-                          : `Réserver l’hôtel${
-                              party.hotelTotal > 0 ? ` · ${party.hotelTotal} €` : ''
-                            }`}
-                      </button>
-                    )}
-                    {!wantsCompose ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setComposeOpen(true)
-                          const next = new URLSearchParams(searchParams)
-                          next.set('compose', '1')
-                          setSearchParams(next, { replace: true })
-                        }}
-                        className="text-center text-sm font-semibold text-slate-600 underline-offset-2 hover:underline py-2 min-h-[44px]"
-                      >
-                        Changer d’hôtel
-                      </button>
-                    ) : null}
-                  </div>
-                  {hotelObj?.refundable === false && !flightBooked ? (
-                    <p className="text-xs text-slate-500">
-                      Conseil : réserve ton vol d’abord, son prix bouge plus vite.
-                    </p>
-                  ) : null}
-                </>
+              ) : null}
+
+              {!hotelObj?.name && !hotelBooked && !hotelUnavailable ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposeOpen(true)
+                    const next = new URLSearchParams(searchParams)
+                    next.set('compose', '1')
+                    setSearchParams(next, { replace: true })
+                  }}
+                  className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                >
+                  Choisir un hôtel
+                </button>
               ) : null}
             </section>
 
-            <aside className="rounded-2xl border border-slate-100 bg-white/80 px-4 py-3 text-sm text-slate-600 leading-relaxed">
-              <p className="font-bold text-slate-800 mb-1">Comment ça marche</p>
-              <p>
-                Tu réserves ton vol sur le site de la compagnie, puis ton hôtel ici en 2 minutes.
-                Ton hôtel ne dépend pas de ton vol : si la compagnie modifie ton vol, ta
-                réservation d’hôtel reste valable selon ses conditions.
+            <aside className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600 leading-relaxed shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">
+                Réservation en 2 étapes
+              </p>
+              <p className="text-[12px] text-slate-600 mb-3 leading-snug">
+                Pour le week-end complet, réserve les deux : le vol chez la compagnie, puis
+                l’hôtel ici. Tu peux aussi ne prendre que l’hôtel si ton vol est déjà réglé.
+              </p>
+              <ol className="space-y-3">
+                <li className="flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white text-[11px] font-black flex items-center justify-center">
+                    1
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 text-[13px]">Vol auprès de la compagnie</p>
+                    <p className="text-[12px] text-slate-600 mt-0.5 leading-snug">
+                      Réserve et paie ton billet sur le site officiel de la compagnie aérienne
+                      (conseillé en premier : les tarifs vols bougent plus vite).
+                    </p>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white text-[11px] font-black flex items-center justify-center">
+                    2
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 text-[13px]">Hôtel sur FlightWatcher</p>
+                    <p className="text-[12px] text-slate-600 mt-0.5 leading-snug">
+                      Confirme ta chambre ici en quelques minutes. Paiement sécurisé, confirmation
+                      immédiate.
+                    </p>
+                  </div>
+                </li>
+              </ol>
+              <p className="mt-3.5 pt-3 border-t border-slate-100 text-[11px] text-slate-500 leading-snug">
+                Vol et hôtel restent indépendants : une modification de vol par la compagnie
+                n’annule pas ton hôtel — les conditions de l’établissement s’appliquent.
               </p>
             </aside>
           </div>
@@ -1331,7 +1351,22 @@ export default function MyTrip() {
       <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-sm safe-pb">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            {adults === 1 ? (
+            {hotelPaymentFocus ? (
+              adults === 1 ? (
+                <p className="text-lg font-black text-slate-900 tabular-nums leading-tight">
+                  Hôtel {hotelRecapTotal} €
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-slate-800 tabular-nums leading-tight">
+                    {hotelRecapPp} € / pers.
+                  </p>
+                  <p className="text-xs text-slate-500 tabular-nums">
+                    Hôtel {hotelRecapTotal} €
+                  </p>
+                </>
+              )
+            ) : adults === 1 ? (
               <p className="text-lg font-black text-slate-900 tabular-nums leading-tight">
                 Total {party.total} €
               </p>

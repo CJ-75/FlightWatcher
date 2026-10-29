@@ -11,6 +11,7 @@ import {
   type MyTripDraft,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
+import { PaymentCardMarks } from './PaymentCardMarks'
 
 type Props = {
   draft: MyTripDraft
@@ -1240,10 +1241,6 @@ export function MyTripHotelCompose({
   const visibleReviews = reviewsExpanded
     ? guestReviews
     : guestReviews.slice(0, 5)
-  const packPp =
-    selectedPrice && flightPp > 0
-      ? Math.round(selectedPrice.amount + flightPp)
-      : null
 
   const outLabel = formatShortDate(checkin)
   const retLabel = formatShortDate(checkout)
@@ -1718,16 +1715,18 @@ export function MyTripHotelCompose({
               : undefined
           }
         >
-          {packPp != null ? (
+          {nights != null || selectedPrice ? (
             <p className="text-[11px] text-center text-slate-500 mb-2 tabular-nums">
-              Pack ~{packPp} €/pers. avec ton vol
-              {nights != null
-                ? ` · ${nights} nuit${nights > 1 ? 's' : ''}`
-                : ''}
-            </p>
-          ) : nights != null ? (
-            <p className="text-[11px] text-center text-slate-500 mb-2">
-              {nights} nuit{nights > 1 ? 's' : ''}
+              {[
+                nights != null
+                  ? `${nights} nuit${nights > 1 ? 's' : ''}`
+                  : null,
+                selectedPrice
+                  ? `hôtel ${selectedPrice.amount} €/pers.`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
           ) : null}
           <button
@@ -1742,6 +1741,7 @@ export function MyTripHotelCompose({
                 ? `Réserver · ${selectedPrice.amount} € / pers.`
                 : 'Réserver cet hôtel'}
           </button>
+          <PaymentCardMarks className="mt-2.5" />
         </div>
       </div>
     )
