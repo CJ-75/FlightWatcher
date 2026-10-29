@@ -56,6 +56,8 @@ class UpsellFetchRequest(BaseModel):
     participants: int = Field(2, ge=1, le=6)
     flight_pp: Optional[float] = Field(None, ge=0)
     city: Optional[str] = None
+    # MyTrip compose: live LiteAPI, skip rates cache (Séjours only)
+    live: bool = False
 
 
 @router.post("/api/deals/hotel-upsell/lookup")
@@ -96,6 +98,7 @@ async def upsell_fetch(body: UpsellFetchRequest, request: Request):
             rate_bucket=_bucket(request),
             flight_pp=body.flight_pp,
             city=body.city,
+            live=bool(body.live),
         )
         if result.get("status") == "rate_limited":
             raise HTTPException(status_code=429, detail="Trop de demandes hôtel — réessaie plus tard")

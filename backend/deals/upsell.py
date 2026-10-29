@@ -1,9 +1,10 @@
 """
-Hotel upsell for Search / Planner (§9.4).
+Hotel upsell for Search / Planner / MyTrip compose (§9.4).
 
-Sync: catalogue + fenêtre canonique → hotel_rates_cache (0 LiteAPI).
-Miss / dates hors fenêtre : job court → hotel_rates_cache via FREE window.
-Hors catalogue : ensure destination + pool on demand, then fetch.
+Séjours / Search prefetch: catalogue + fenêtre → hotel_rates_cache (0 LiteAPI).
+Miss : job on-demand → peut écrire hotel_rates_cache (FREE window).
+
+MyTrip compose (live=True): toujours LiteAPI, ignore et n'écrit pas le rates cache.
 """
 from __future__ import annotations
 
@@ -855,6 +856,7 @@ def _run_fetch_job(
     flight_pp: Optional[float] = None,
     iata: Optional[str] = None,
     city: Optional[str] = None,
+    persist_cache: bool = True,
 ) -> None:
     # Flight Search first — pause hotel LiteAPI while inspire/scan runs
     _yield_to_search()
@@ -921,20 +923,22 @@ def _run_fetch_job(
                 pool_rows = list(pool.data or [])
                 hotel_ids = [str(h["hotel_id"]) for h in pool_rows if h.get("hotel_id")]
         if not hotel_ids:
-            _mark_upsell_row(
-                supabase,
-                destination_id=destination_id,
-                checkin=checkin,
-                checkout=checkout,
-                adults=adults,
-                status="no_rates",
-                error="empty_pool",
-            )
+            if persist_cache:
+                _mark_upsell_row(
+                    supabase,
+                    destination_id=destination_id,
+                    checkin=checkin,
+                    checkout=checkout,
+                    adults=adults,
+                    status="no_rates",
+                    error="empty_pool",
+                )
             with _jobs_lock:
                 _jobs[job_id] = {
                     **(_jobs.get(job_id) or {}),
                     "status": "no_rates",
                     "done": True,
+                    "reason": "empty_pool",
                 }
             return
 
@@ -961,14 +965,15 @@ def _run_fetch_job(
             top_n=12,
         )
         if not cands:
-            _mark_upsell_row(
-                supabase,
-                destination_id=destination_id,
-                checkin=checkin,
-                checkout=checkout,
-                adults=adults,
-                status="no_rates",
-            )
+            if persist_cache:
+                _mark_upsell_row(
+                    supabase,
+                    destination_id=destination_id,
+                    checkin=checkin,
+                    checkout=checkout,
+                    adults=adults,
+                    status="no_rates",
+                )
             with _jobs_lock:
                 _jobs[job_id] = {
                     **(_jobs.get(job_id) or {}),
@@ -996,18 +1001,19 @@ def _run_fetch_job(
             top_n=8,
             require_photo=True,
         )
-        # Persist full candidate list for later filter by different flight_pp
         offer = options[0] if options else None
-        _mark_upsell_row(
-            supabase,
-            destination_id=destination_id,
-            checkin=checkin,
-            checkout=checkout,
-            adults=adults,
-            status="ok" if offer else "no_rates",
-            offer=offer,
-            top=options or cands[:8],
-        )
+        # Séjours wall only — compose live must not write hotel_rates_cache
+        if persist_cache:
+            _mark_upsell_row(
+                supabase,
+                destination_id=destination_id,
+                checkin=checkin,
+                checkout=checkout,
+                adults=adults,
+                status="ok" if offer else "no_rates",
+                offer=offer,
+                top=options or cands[:8],
+            )
         with _jobs_lock:
             _jobs[job_id] = {
                 **(_jobs.get(job_id) or {}),
@@ -1022,11 +1028,12 @@ def _run_fetch_job(
                 "median_night": meta.get("median_night"),
                 "tier": meta.get("tier"),
                 "nights": nights,
+                "live": not persist_cache,
             }
     except Exception as e:
         logger.warning("upsell_fetch_fail job=%s: %s", job_id, e)
         try:
-            if supabase:
+            if supabase and persist_cache:
                 _mark_upsell_row(
                     supabase,
                     destination_id=destination_id,
@@ -1059,37 +1066,62 @@ def start_upsell_fetch(
     rate_bucket: str = "anon",
     flight_pp: Optional[float] = None,
     city: Optional[str] = None,
+    live: bool = False,
 ) -> Dict[str, Any]:
     """
-    Start async on-demand fetch if needed. Idempotent when pending/fresh.
+    Start async on-demand fetch if needed.
+
+    live=True (MyTrip compose): always call LiteAPI, ignore hotel_rates_cache.
+    Cache writes are skipped — rates cache is for Séjours wall only.
 
     Never blocks on LiteAPI / pool bootstrap — that runs in the upsell worker
     and yields while a client flight Search is in flight.
     """
-    looked = lookup_upsell(
-        supabase,
-        iata=iata,
-        checkin=checkin,
-        checkout=checkout,
-        participants=participants,
-        flight_pp=flight_pp,
-        city=city,
-    )
-    if looked.get("status") == "ready":
-        return {**looked, "job_id": None}
-    if looked.get("status") == "unavailable" and looked.get("reason") == "bad_dates":
-        return looked
-
     cin = _parse_ymd(checkin)
     cout = _parse_ymd(checkout)
-    if not cin or not cout:
-        return {**looked, "status": "unavailable", "reason": "bad_dates"}
+    base = {
+        "iata": (iata or "").upper(),
+        "checkin": checkin[:10] if checkin else None,
+        "checkout": checkout[:10] if checkout else None,
+        "participants": max(1, int(participants or 1)),
+        "flight_pp": float(flight_pp) if flight_pp is not None else None,
+        "city": city,
+        "live": bool(live),
+    }
+    if not cin or not cout or cout <= cin:
+        return {**base, "status": "unavailable", "reason": "bad_dates"}
+
+    looked: Dict[str, Any]
+    if live:
+        # Do not read rates cache — resolve dest id only for the job
+        dest = find_destination_by_iata(supabase, iata)
+        looked = {
+            **base,
+            "status": "miss",
+            "reason": "live_compose",
+            "destination_id": dest["id"] if dest else None,
+            "destination_slug": dest.get("slug") if dest else None,
+            "city": (dest or {}).get("city_name") or city,
+        }
+    else:
+        looked = lookup_upsell(
+            supabase,
+            iata=iata,
+            checkin=checkin,
+            checkout=checkout,
+            participants=participants,
+            flight_pp=flight_pp,
+            city=city,
+        )
+        if looked.get("status") == "ready":
+            return {**looked, "job_id": None, "live": False}
+        if looked.get("status") == "unavailable" and looked.get("reason") == "bad_dates":
+            return looked
+        # Already pending in DB (non-live path)
+        if looked.get("status") == "pending":
+            return {**looked, "job_id": None}
 
     _, adults = rooms_for_participants(participants)
-
-    # Already pending in DB
-    if looked.get("status") == "pending":
-        return {**looked, "job_id": None}
 
     if not check_rate_limit(rate_bucket):
         return {
@@ -1100,7 +1132,6 @@ def start_upsell_fetch(
 
     dest_id = looked.get("destination_id")
     if not dest_id:
-        # Cache-only resolve — no LiteAPI here
         dest = find_destination_by_iata(supabase, iata)
         if dest:
             dest_id = dest["id"]
@@ -1117,7 +1148,8 @@ def start_upsell_fetch(
             "reason": "ensuring_catalogue",
         }
 
-    if dest_id:
+    # Non-live: mark pending row in rates cache. Live compose never touches cache.
+    if dest_id and not live:
         _mark_upsell_row(
             supabase,
             destination_id=str(dest_id),
@@ -1141,6 +1173,7 @@ def start_upsell_fetch(
             "adults_lookup": adults,
             "destination_id": dest_id,
             "flight_pp": float(flight_pp) if flight_pp is not None else None,
+            "live": bool(live),
         }
 
     _executor.submit(
@@ -1153,6 +1186,7 @@ def start_upsell_fetch(
         flight_pp=float(flight_pp) if flight_pp is not None else None,
         iata=(iata or "").upper() or None,
         city=city,
+        persist_cache=not bool(live),
     )
     return {
         **looked,
@@ -1160,6 +1194,8 @@ def start_upsell_fetch(
         "job_id": job_id,
         "destination_id": dest_id,
         "adults_lookup": adults,
+        "live": bool(live),
+        "mode": "live" if live else looked.get("mode") or "ondemand",
     }
 
 

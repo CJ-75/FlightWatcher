@@ -585,6 +585,11 @@ export interface HotelUpsellLookupItem {
   flight_pp?: number
   /** City label — helps ensure destination outside seed catalogue */
   city?: string
+  /**
+   * MyTrip compose: always hit LiteAPI, ignore hotel_rates_cache.
+   * Cache remains for Séjours / deals wall only.
+   */
+  live?: boolean
 }
 
 /** Hotel option for Search combo wizard / Deals. */

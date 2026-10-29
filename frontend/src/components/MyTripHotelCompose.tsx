@@ -54,28 +54,26 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           participants: adults,
           flight_pp: flightPp || undefined,
           city: cityHint,
+          // Compose = live LiteAPI only (rates cache is for Séjours)
+          live: true,
         }
-        let result = (await getApiClient().lookupHotelUpsell([item])).results?.[0]
-        // miss / pending / hors catalogue → fetch (backend ensure dest+pool)
-        if (
-          result?.status === 'miss' ||
-          result?.status === 'pending' ||
-          (result?.status === 'unavailable' &&
-            result?.reason === 'not_in_catalogue')
-        ) {
-          result = await getApiClient().fetchHotelUpsell(item)
-        }
+        let result = await getApiClient().fetchHotelUpsell(item)
         if (result?.status === 'pending' && result.job_id) {
-          for (let i = 0; i < 14; i++) {
+          for (let i = 0; i < 40; i++) {
             await new Promise((r) => setTimeout(r, 1200))
             if (cancelled) return
             const job = await getApiClient().getHotelUpsellJob(result.job_id!)
-            if (job.status === 'ready' || job.status === 'error' || job.status === 'no_rates') {
+            if (
+              job.status === 'ready' ||
+              job.status === 'error' ||
+              job.status === 'no_rates'
+            ) {
               result = {
                 ...result,
                 status: job.status,
                 options: job.options,
                 night_cap: job.night_cap ?? result.night_cap,
+                city: (job as { city?: string }).city || result.city,
               }
               break
             }
