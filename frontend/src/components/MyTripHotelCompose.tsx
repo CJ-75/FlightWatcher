@@ -57,58 +57,126 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           // Compose = live LiteAPI only (rates cache is for Séjours)
           live: true,
         }
-        let result = await getApiClient().fetchHotelUpsell(item)
-        if (result?.status === 'pending' && result.job_id) {
+
+        const pickOpts = (r: {
+          options?: HotelUpsellOption[] | null
+          hotel?: HotelUpsellOption | null
+        }) =>
+          r?.options?.length
+            ? r.options
+            : r?.hotel
+              ? [r.hotel]
+              : []
+
+        const pollJob = async (jobId: string) => {
           for (let i = 0; i < 40; i++) {
             await new Promise((r) => setTimeout(r, 1200))
-            if (cancelled) return
-            const job = await getApiClient().getHotelUpsellJob(result.job_id!)
-            if (
-              job.status === 'ready' ||
-              job.status === 'error' ||
-              job.status === 'no_rates'
-            ) {
+            if (cancelled) return null
+            try {
+              const job = await getApiClient().getHotelUpsellJob(jobId)
+              if (
+                job.status === 'ready' ||
+                job.status === 'error' ||
+                job.status === 'no_rates'
+              ) {
+                return job
+              }
+            } catch {
+              // Job lost (uvicorn reload / in-memory) — caller retries fetch
+              return null
+            }
+          }
+          return null
+        }
+
+        let result = await getApiClient().fetchHotelUpsell(item)
+        // Old server may ignore live and return ready from cache — use it
+        if (result?.status === 'pending') {
+          if (result.job_id) {
+            const job = await pollJob(result.job_id)
+            if (job) {
               result = {
                 ...result,
                 status: job.status,
                 options: job.options,
                 night_cap: job.night_cap ?? result.night_cap,
-                city: (job as { city?: string }).city || result.city,
+                reason: (job as { error?: string }).error || result.reason,
               }
-              break
+            } else if (!cancelled) {
+              // Retry once after lost job / timeout
+              result = await getApiClient().fetchHotelUpsell(item)
+              if (result?.status === 'pending' && result.job_id) {
+                const job2 = await pollJob(result.job_id)
+                if (job2) {
+                  result = {
+                    ...result,
+                    status: job2.status,
+                    options: job2.options,
+                    night_cap: job2.night_cap ?? result.night_cap,
+                    reason: (job2 as { error?: string }).error || result.reason,
+                  }
+                }
+              }
             }
           }
         }
+
         if (cancelled) return
-        const opts =
-          result?.options?.length
-            ? result.options
-            : result?.hotel
-              ? [result.hotel]
-              : []
+        let opts = pickOpts(result || {})
+        // Soft recovery: live miss but Séjours cache has rates for this city/dates
+        if (!opts.length && !cancelled) {
+          try {
+            const cached = (
+              await getApiClient().lookupHotelUpsell([
+                {
+                  iata: destIata,
+                  checkin,
+                  checkout,
+                  participants: adults,
+                  flight_pp: flightPp || undefined,
+                  city: cityHint,
+                },
+              ])
+            ).results?.[0]
+            const cachedOpts = pickOpts(cached || {})
+            if (cachedOpts.length) {
+              opts = cachedOpts
+              result = cached || result
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+
         setOptions(opts)
         if (result?.night_cap != null) setNightCap(Number(result.night_cap))
         if (result?.city) setCityLabel(String(result.city))
-        // Prefer current hotel if still in list
         const curId = String(currentHotel?.id || currentHotel?.hotel_id || '')
         const match = opts.find(
           (h) => String(h.id || h.hotel_id || '') === curId,
         )
         setSelected(match || opts[0] || null)
         if (!opts.length) {
-          const reason = String(result?.reason || '')
+          const reason = String(result?.reason || result?.status || '')
           setError(
             reason === 'not_in_catalogue'
               ? 'Cette destination n’a pas encore d’hôtels — réessaie dans un instant'
               : reason === 'bad_dates'
                 ? 'Dates invalides pour l’hôtel'
-                : reason === 'empty_pool' || reason === 'no_rates'
+                : reason === 'empty_pool' ||
+                    reason === 'no_rates' ||
+                    result?.status === 'no_rates'
                   ? 'Pas de dispo hôtel pour ces dates'
-                  : 'Aucun hôtel disponible pour cette ville / ces dates',
+                  : reason === 'rate_limited'
+                    ? 'Trop de recherches hôtel — réessaie dans un moment'
+                    : 'Aucun hôtel disponible pour cette ville / ces dates',
           )
         }
-      } catch {
-        if (!cancelled) setError('Impossible de charger les hôtels')
+      } catch (e) {
+        if (!cancelled) {
+          console.warn('[MyTripHotelCompose] hotel load failed', e)
+          setError('Impossible de charger les hôtels')
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
