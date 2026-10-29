@@ -310,9 +310,19 @@ export const translations: Record<Language, Record<string, string>> = {
     'card.total': 'par personne · aller-retour',
     'card.departure': 'Aller',
     'card.return': 'Retour',
-    'card.book': '✈️ Réserver',
+    'card.book': 'Réserver',
+    'card.bookRyanair': 'Réserver sur ryanair.com',
+    'card.bookAviasales': 'Voir ce prix sur Aviasales',
+    'card.bookOnSite': 'Réserver sur {site}',
+    'card.airlineSite': 'Site de {airline}',
+    'card.addHotel': 'Ajouter un hôtel',
     'card.addFavorite': 'Ajouter aux favoris',
     'card.removeFavorite': 'Retirer des favoris',
+
+    // Hotel upsell after partner return
+    'upsell.flightBooked': 'Ton vol pour {city} est réservé ?',
+    'upsell.yesHotel': 'Oui, trouver mon hôtel',
+    'upsell.notYet': 'Pas encore',
     
     // Advanced Options
     'advanced.title': 'Options avancées',
@@ -703,9 +713,19 @@ export const translations: Record<Language, Record<string, string>> = {
     'card.total': 'per person · round trip',
     'card.departure': 'Outbound',
     'card.return': 'Return',
-    'card.book': '✈️ Book',
+    'card.book': 'Book',
+    'card.bookRyanair': 'Book on ryanair.com',
+    'card.bookAviasales': 'See this price on Aviasales',
+    'card.bookOnSite': 'Book on {site}',
+    'card.airlineSite': '{airline} website',
+    'card.addHotel': 'Add a hotel',
     'card.addFavorite': 'Add to favorites',
     'card.removeFavorite': 'Remove from favorites',
+
+    // Hotel upsell after partner return
+    'upsell.flightBooked': 'Is your flight to {city} booked?',
+    'upsell.yesHotel': 'Yes, find my hotel',
+    'upsell.notYet': 'Not yet',
     
     // Advanced Options
     'advanced.title': 'Advanced options',

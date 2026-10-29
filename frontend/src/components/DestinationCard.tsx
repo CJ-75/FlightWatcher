@@ -9,6 +9,7 @@ import {
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
 import { CountryFlag } from './CountryFlag';
+import { resolveTripPriceSource } from '../utils/partnerBook';
 
 type CardAction = {
   label: string;
@@ -20,6 +21,8 @@ interface DestinationCardProps {
   trip: EnrichedTripResponse;
   onSaveFavorite: () => void;
   onBook?: () => void;
+  /** Secondary text link — create MyTrip hotel compose (no partner popup). */
+  onAddHotel?: () => void;
   /** Replaces book CTA (e.g. Accept on a planner proposal) */
   primaryAction?: CardAction;
   secondaryAction?: CardAction;
@@ -57,11 +60,20 @@ export function DestinationCard({
   trip,
   onSaveFavorite,
   onBook,
+  onAddHotel,
   primaryAction,
   secondaryAction,
   isFavorite = false,
+  passengers = 1,
 }: DestinationCardProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const priceSource = resolveTripPriceSource(trip, passengers, language);
+  const bookLabel =
+    priceSource.partnerId === 'aviasales'
+      ? t('card.bookAviasales')
+      : priceSource.partnerId === 'ryanair'
+        ? t('card.bookRyanair')
+        : t('card.bookOnSite', { site: priceSource.siteLabel });
 
   const getDayOfWeekMondayBased = (date: Date): number => {
     const jsDay = date.getDay();
@@ -251,7 +263,7 @@ export function DestinationCard({
           </div>
         </div>
 
-        {primaryAction || secondaryAction || onBook ? (
+        {primaryAction || secondaryAction || onBook || onAddHotel ? (
           <div className="mt-auto flex flex-col gap-2">
             {primaryAction ? (
               <motion.button
@@ -274,7 +286,7 @@ export function DestinationCard({
                 transition={springConfig}
                 className="w-full app-btn-primary min-h-[48px] sm:min-h-[52px] text-sm sm:text-base rounded-2xl"
               >
-                {t('card.book')}
+                {bookLabel}
               </motion.button>
             ) : null}
             {secondaryAction ? (
@@ -286,6 +298,25 @@ export function DestinationCard({
               >
                 {secondaryAction.label}
               </button>
+            ) : onAddHotel ? (
+              <button
+                type="button"
+                onClick={onAddHotel}
+                className="w-full text-center text-sm font-semibold text-primary-600 hover:text-primary-700 underline-offset-2 hover:underline min-h-[40px]"
+              >
+                {t('card.addHotel')}
+              </button>
+            ) : null}
+            {priceSource.secondaryUrl && !primaryAction ? (
+              <a
+                href={priceSource.secondaryUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {t('card.airlineSite', { airline: priceSource.airlineName })}
+              </a>
             ) : null}
           </div>
         ) : null}

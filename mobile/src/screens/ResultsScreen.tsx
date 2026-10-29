@@ -6,6 +6,8 @@ import {
   View,
   Pressable,
   Alert,
+  AppState,
+  type AppStateStatus,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -26,11 +28,19 @@ import type { RootStackParamList } from '../../App'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { DestinationCard } from '../components/DestinationCard'
-import { BookingSheet } from '../components/BookingSheet'
 import { SaveSearchModal } from '../components/SaveSearchModal'
 import { RouletteModal } from '../components/RouletteModal'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
+import {
+  clearPendingHotelUpsell,
+  createMyTripComposeFromTrip,
+  openMyTripCompose,
+  openPartnerBookSync,
+  readPendingHotelUpsell,
+  trackPartnerEvent,
+  type PendingHotelUpsell,
+} from '../lib/partnerBook'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>
 const kv = createAsyncKVStore(AsyncStorage)
@@ -49,7 +59,9 @@ export function ResultsScreen({ route }: Props) {
   const { user } = useAuth()
 
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set())
-  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
+  const [hotelUpsell, setHotelUpsell] = useState<PendingHotelUpsell | null>(null)
+  const [hotelUpsellBusy, setHotelUpsellBusy] = useState(false)
+  const leftForPartnerRef = React.useRef(false)
   const [showSave, setShowSave] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showRoulette, setShowRoulette] = useState(false)
@@ -113,6 +125,98 @@ export function ResultsScreen({ route }: Props) {
   const isFavorite = (trip: EnrichedTripResponse) => favoriteKeys.has(tripFavoriteKey(trip))
 
   const passengers = searchInfo?.passengers || 1
+
+  const handlePartnerBook = (trip: EnrichedTripResponse) => {
+    leftForPartnerRef.current = true
+    void openPartnerBookSync({
+      trip,
+      passengers,
+      searchEventId: searchInfo?.searchEventId,
+    })
+    setHotelUpsell(null)
+  }
+
+  const handleAddHotel = async (trip: EnrichedTripResponse) => {
+    await clearPendingHotelUpsell()
+    setHotelUpsell(null)
+    setHotelUpsellBusy(true)
+    try {
+      const draft = await createMyTripComposeFromTrip({
+        trip,
+        passengers,
+        markFlightBooked: false,
+      })
+      await openMyTripCompose(draft.draft_token)
+    } catch {
+      Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
+    } finally {
+      setHotelUpsellBusy(false)
+    }
+  }
+
+  const showUpsellIfPending = useCallback(async () => {
+    if (!leftForPartnerRef.current) return
+    const pending = await readPendingHotelUpsell()
+    if (!pending || pending.skippedBanner) return
+    if (Date.now() - pending.createdAt < 600) return
+    leftForPartnerRef.current = false
+    setHotelUpsell(pending)
+  }, [])
+
+  useEffect(() => {
+    const onChange = (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        leftForPartnerRef.current = true
+      }
+      if (state === 'active') void showUpsellIfPending()
+    }
+    const sub = AppState.addEventListener('change', onChange)
+    return () => sub.remove()
+  }, [showUpsellIfPending])
+
+  const handleHotelUpsellYes = async () => {
+    const pending = hotelUpsell || (await readPendingHotelUpsell())
+    if (!pending?.trip) return
+    setHotelUpsellBusy(true)
+    trackPartnerEvent({
+      trip: pending.trip,
+      partner_id: pending.partnerId,
+      partner_name: pending.partnerName,
+      redirect_url: pending.primaryUrl,
+      action_type: 'hotel_upsell_yes',
+      search_event_id: pending.searchEventId || null,
+    })
+    try {
+      const draft = await createMyTripComposeFromTrip({
+        trip: pending.trip,
+        passengers: pending.passengers || passengers,
+        markFlightBooked: true,
+      })
+      await clearPendingHotelUpsell()
+      setHotelUpsell(null)
+      await openMyTripCompose(draft.draft_token)
+    } catch {
+      Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
+    } finally {
+      setHotelUpsellBusy(false)
+    }
+  }
+
+  const handleHotelUpsellNo = async () => {
+    const pending = hotelUpsell || (await readPendingHotelUpsell())
+    if (pending?.trip) {
+      trackPartnerEvent({
+        trip: pending.trip,
+        partner_id: pending.partnerId,
+        partner_name: pending.partnerName,
+        redirect_url: pending.primaryUrl,
+        action_type: 'hotel_upsell_no',
+        search_event_id: pending.searchEventId || null,
+      })
+    }
+    await clearPendingHotelUpsell()
+    setHotelUpsell(null)
+  }
 
   const availableOrigins = useMemo(() => {
     const set = new Set<string>()
@@ -267,6 +371,31 @@ export function ResultsScreen({ route }: Props) {
         }
         ListHeaderComponent={
           <View style={styles.header}>
+            {hotelUpsell ? (
+              <View style={styles.upsellBanner}>
+                <Text style={styles.upsellTitle}>
+                  Ton vol pour {hotelUpsell.city} est réservé ?
+                </Text>
+                <View style={styles.upsellRow}>
+                  <Pressable
+                    onPress={() => void handleHotelUpsellYes()}
+                    disabled={hotelUpsellBusy}
+                    style={[styles.upsellYes, hotelUpsellBusy && { opacity: 0.6 }]}
+                  >
+                    <Text style={styles.upsellYesText}>
+                      {hotelUpsellBusy ? '…' : 'Oui, trouver mon hôtel'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => void handleHotelUpsellNo()}
+                    disabled={hotelUpsellBusy}
+                    style={styles.upsellNo}
+                  >
+                    <Text style={styles.upsellNoText}>Pas encore</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
             <Text style={styles.title}>{translate('fr', 'results.title')}</Text>
             <Text style={styles.count}>
               {visibleTrips.length} destination{visibleTrips.length > 1 ? 's' : ''}
@@ -371,7 +500,8 @@ export function ResultsScreen({ route }: Props) {
             passengers={passengers}
             isFavorite={isFavorite(item)}
             onFavorite={() => void toggleFavorite(item)}
-            onBook={() => setBookingTrip(item)}
+            onBook={() => handlePartnerBook(item)}
+            onAddHotel={() => void handleAddHotel(item)}
           />
         )}
         showsVerticalScrollIndicator={false}
@@ -382,20 +512,6 @@ export function ResultsScreen({ route }: Props) {
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       ) : null}
-
-      <BookingSheet
-        trip={bookingTrip}
-        passengers={passengers}
-        searchEventId={searchInfo?.searchEventId}
-        onClose={() => setBookingTrip(null)}
-        onSaveFavorite={
-          bookingTrip
-            ? () => {
-                void toggleFavorite(bookingTrip)
-              }
-            : undefined
-        }
-      />
 
       <SaveSearchModal
         visible={showSave}
@@ -416,7 +532,7 @@ export function ResultsScreen({ route }: Props) {
         onClose={() => setShowRoulette(false)}
         onBook={(t) => {
           setShowRoulette(false)
-          setBookingTrip(t)
+          handlePartnerBook(t)
         }}
         onFavorite={(t) => void toggleFavorite(t)}
         isFavorite={isFavorite}
@@ -522,6 +638,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.white,
     textAlign: 'center',
+    includeFontPadding: false,
+  },
+  upsellBanner: {
+    marginBottom: 14,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    padding: 14,
+    gap: 10,
+  },
+  upsellTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
+  upsellRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  upsellYes: {
+    backgroundColor: '#059669',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  upsellYesText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.white,
+    includeFontPadding: false,
+  },
+  upsellNo: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  upsellNoText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
     includeFontPadding: false,
   },
 })

@@ -15,7 +15,7 @@ import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/nativ
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { EnrichedTripResponse, PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
+import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
 import { cityDisplayNameFr, formatDateFr, parseAirportCodes } from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
@@ -31,8 +31,8 @@ import {
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
 import { TravelersSection } from '../components/TravelersSection'
-import { BookingSheet } from '../components/BookingSheet'
 import { Button } from '../components/ui/Button'
+import { openPartnerBookSync } from '../lib/partnerBook'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
@@ -64,7 +64,6 @@ export function TripDetailScreen() {
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [watchBusy, setWatchBusy] = useState(false)
   const [watchInterval, setWatchInterval] = useState(3600)
@@ -431,7 +430,12 @@ export function TripDetailScreen() {
           <DestinationCard
             trip={accepted.trip_data}
             passengers={trip.passengers}
-            onBook={() => setBookingTrip(accepted.trip_data)}
+            onBook={() => {
+              void openPartnerBookSync({
+                trip: accepted.trip_data,
+                passengers: trip.passengers || 1,
+              })
+            }}
           />
         </View>
       ) : null}
@@ -502,11 +506,6 @@ export function TripDetailScreen() {
       ) : null}
     </ScrollView>
 
-      <BookingSheet
-        trip={bookingTrip}
-        passengers={trip.passengers}
-        onClose={() => setBookingTrip(null)}
-      />
     </View>
   )
 }

@@ -1,12 +1,16 @@
 /**
  * Lot C — carrier booking URLs (mirrors DB table `carrier_booking_url`).
- * Prefer deep-link when route+dates known; else homepage + copy hint.
+ * Primary CTA = where the displayed price is bookable (Ryanair vs Aviasales).
  */
 
-import { buildRyanairBookingUrl, toRyanairDate } from '../dates/presets'
+import {
+  buildRyanairBookingUrl,
+  localizeAviasalesBookingUrl,
+  toRyanairDate,
+} from '../dates/presets'
 import { formatAirlineLabel } from '../airlines'
 
-export type CarrierBookingKind = 'deeplink' | 'homepage' | 'fallback'
+export type CarrierBookingKind = 'deeplink' | 'homepage' | 'fallback' | 'affiliate'
 
 export type CarrierBookingRow = {
   carrier_code: string
@@ -143,6 +147,8 @@ export type ResolveCarrierBookingInput = {
   outLocal?: string | null
   inLocal?: string | null
   adults?: number
+  /** App language — FR → aviasales.fr */
+  language?: string | null
   /** Human labels for copy hint */
   originLabel?: string | null
   arrivalLabel?: string | null
@@ -156,7 +162,25 @@ export type ResolvedCarrierBooking = {
   airlineName: string
   /** Shown under CTA when kind !== deeplink */
   copyHint: string | null
+  /** @deprecated use secondaryUrl — kept for older call sites */
   compareUrl: string | null
+  secondaryUrl: string | null
+  secondaryLabel: string | null
+  partnerId: string
+}
+
+/** Search / MyTrip: primary CTA = where the displayed price is bookable. */
+export type PriceSourceBooking = {
+  primaryUrl: string
+  primaryLabel: string
+  secondaryUrl: string | null
+  secondaryLabel: string | null
+  partnerId: string
+  partnerName: string
+  airlineName: string
+  siteLabel: string
+  kind: CarrierBookingKind
+  copyHint: string | null
 }
 
 function formatCopyHint(input: ResolveCarrierBookingInput, adults: number): string {
@@ -184,13 +208,16 @@ function formatCopyHint(input: ResolveCarrierBookingInput, adults: number): stri
   return `À saisir : ${from} → ${to}${dates} · ${pax}`
 }
 
-/**
- * Resolve company booking URL — never empty.
- * Order: non-affiliate booking_url → carrier deep-link → carrier homepage → Ryanair home.
- */
-export function resolveCarrierBooking(
-  input: ResolveCarrierBookingInput,
-): ResolvedCarrierBooking {
+type AirlineResolved = {
+  url: string
+  kind: CarrierBookingKind
+  siteLabel: string
+  airlineName: string
+  copyHint: string | null
+}
+
+/** Resolve airline site only (never Aviasales). */
+function resolveAirlineOnly(input: ResolveCarrierBookingInput): AirlineResolved {
   const adults = Math.min(6, Math.max(1, Math.round(Number(input.adults) || 1)))
   const airlineRaw = input.airline || input.carrier || null
   const row = lookupCarrierBooking(airlineRaw)
@@ -200,17 +227,14 @@ export function resolveCarrierBooking(
     'Compagnie'
   const siteLabel = row?.site_label || 'la compagnie'
   const raw = String(input.bookingUrl || '').trim()
-  const compareUrl = raw.startsWith('http') && isAffiliateUrl(raw) ? raw : null
 
   if (raw.startsWith('http') && !isAffiliateUrl(raw)) {
     return {
       url: raw,
       kind: 'deeplink',
-      ctaLabel: `Réserver sur ${siteLabel}`,
       siteLabel,
       airlineName,
       copyHint: null,
-      compareUrl,
     }
   }
 
@@ -221,21 +245,18 @@ export function resolveCarrierBooking(
 
   if (row?.supports_deeplink === 'ryanair' && origin && dest && out && ret) {
     try {
-      const url = buildRyanairBookingUrl(
-        {
-          aller: { origin, destination: dest, departureTime: out },
-          retour: { departureTime: ret },
-        },
-        adults,
-      )
       return {
-        url,
+        url: buildRyanairBookingUrl(
+          {
+            aller: { origin, destination: dest, departureTime: out },
+            retour: { departureTime: ret },
+          },
+          adults,
+        ),
         kind: 'deeplink',
-        ctaLabel: `Réserver sur ${siteLabel}`,
         siteLabel,
         airlineName,
         copyHint: null,
-        compareUrl,
       }
     } catch {
       /* homepage */
@@ -244,24 +265,20 @@ export function resolveCarrierBooking(
 
   if (row?.supports_deeplink === 'transavia' && origin && dest && out && ret) {
     try {
-      const url = buildTransaviaBookingUrl(origin, dest, out, ret, adults)
       return {
-        url,
+        url: buildTransaviaBookingUrl(origin, dest, out, ret, adults),
         kind: 'deeplink',
-        ctaLabel: `Réserver sur ${siteLabel}`,
         siteLabel,
         airlineName,
         copyHint: null,
-        compareUrl,
       }
     } catch {
       /* homepage */
     }
   }
 
-  // Ryanair deep-link even if airline unknown but provider hints Ryanair
   if (
-    !row &&
+    (!row || row.supports_deeplink === 'ryanair') &&
     /ryanair/i.test(String(input.provider || airlineRaw || '')) &&
     origin &&
     dest &&
@@ -269,21 +286,18 @@ export function resolveCarrierBooking(
     ret
   ) {
     try {
-      const url = buildRyanairBookingUrl(
-        {
-          aller: { origin, destination: dest, departureTime: out },
-          retour: { departureTime: ret },
-        },
-        adults,
-      )
       return {
-        url,
+        url: buildRyanairBookingUrl(
+          {
+            aller: { origin, destination: dest, departureTime: out },
+            retour: { departureTime: ret },
+          },
+          adults,
+        ),
         kind: 'deeplink',
-        ctaLabel: 'Réserver sur ryanair.com',
         siteLabel: 'ryanair.com',
         airlineName: airlineName || 'Ryanair',
         copyHint: null,
-        compareUrl,
       }
     } catch {
       /* fall through */
@@ -294,21 +308,96 @@ export function resolveCarrierBooking(
     return {
       url: row.homepage_url,
       kind: 'homepage',
-      ctaLabel: `Réserver sur ${siteLabel}`,
       siteLabel,
       airlineName,
       copyHint: formatCopyHint(input, adults),
-      compareUrl,
     }
   }
 
   return {
     url: 'https://www.ryanair.com/fr/fr',
     kind: 'fallback',
-    ctaLabel: airlineName ? `Réserver sur ${airlineName}` : 'Réserver mon vol',
     siteLabel: 'ryanair.com',
     airlineName,
     copyHint: formatCopyHint(input, adults),
-    compareUrl,
+  }
+}
+
+/**
+ * Primary CTA = source of the displayed price.
+ * Ryanair price → ryanair.com; Travelpayouts/Aviasales price → Aviasales (+ airline secondary).
+ */
+export function resolvePriceSourceBooking(
+  input: ResolveCarrierBookingInput,
+): PriceSourceBooking {
+  const lang = input.language || 'fr'
+  const raw = String(input.bookingUrl || '').trim()
+  const provider = String(input.provider || '').toLowerCase()
+  const airline = resolveAirlineOnly(input)
+  const isTp =
+    provider === 'travelpayouts' ||
+    provider === 'aviasales' ||
+    (raw.startsWith('http') && isAffiliateUrl(raw))
+
+  if (isTp && raw.startsWith('http') && isAffiliateUrl(raw)) {
+    const primaryUrl = localizeAviasalesBookingUrl(raw, lang)
+    const secondaryUrl =
+      airline.url && airline.url !== primaryUrl ? airline.url : null
+    return {
+      primaryUrl,
+      primaryLabel: 'Voir ce prix sur Aviasales',
+      secondaryUrl,
+      secondaryLabel: secondaryUrl
+        ? `Site de ${airline.airlineName}`
+        : null,
+      partnerId: 'aviasales',
+      partnerName: 'Aviasales',
+      airlineName: airline.airlineName,
+      siteLabel: 'aviasales.fr',
+      kind: 'affiliate',
+      copyHint: null,
+    }
+  }
+
+  // Ryanair organic / other carrier where booking_url is the airline
+  const isRyanair =
+    provider === 'ryanair' ||
+    /ryanair/i.test(airline.airlineName) ||
+    airline.siteLabel === 'ryanair.com'
+
+  return {
+    primaryUrl: airline.url,
+    primaryLabel: isRyanair
+      ? 'Réserver sur ryanair.com'
+      : `Réserver sur ${airline.siteLabel}`,
+    secondaryUrl: null,
+    secondaryLabel: null,
+    partnerId: isRyanair ? 'ryanair' : airline.siteLabel.replace(/\./g, '_'),
+    partnerName: airline.airlineName,
+    airlineName: airline.airlineName,
+    siteLabel: airline.siteLabel,
+    kind: airline.kind,
+    copyHint: airline.copyHint,
+  }
+}
+
+/**
+ * Resolve booking CTA — primary = price source (Aviasales when TP).
+ */
+export function resolveCarrierBooking(
+  input: ResolveCarrierBookingInput,
+): ResolvedCarrierBooking {
+  const ps = resolvePriceSourceBooking(input)
+  return {
+    url: ps.primaryUrl,
+    kind: ps.kind,
+    ctaLabel: ps.primaryLabel,
+    siteLabel: ps.siteLabel,
+    airlineName: ps.airlineName,
+    copyHint: ps.copyHint,
+    compareUrl: ps.secondaryUrl,
+    secondaryUrl: ps.secondaryUrl,
+    secondaryLabel: ps.secondaryLabel,
+    partnerId: ps.partnerId,
   }
 }

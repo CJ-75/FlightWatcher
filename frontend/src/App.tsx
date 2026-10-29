@@ -28,7 +28,6 @@ import { PassengerStepper } from './components/PassengerStepper'
 import type { LikedDeal, TravelDeal } from './types'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
-import { TripComboWizard } from './components/TripComboWizard'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Calendar } from './components/Calendar'
 import { SaveSearchModal } from './components/SaveSearchModal'
@@ -45,6 +44,14 @@ import { getApiClient } from './utils/apiClient'
 import { getAppConfig } from './utils/configCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
+import {
+  clearPendingHotelUpsell,
+  createMyTripComposeFromTrip,
+  openPartnerBookSync,
+  readPendingHotelUpsell,
+  trackPartnerAnalytics,
+  type PendingHotelUpsell,
+} from './utils/partnerBook'
 import {
   buildBookingUrl,
   findCityGroupByCodes,
@@ -75,7 +82,7 @@ function tabFromPath(pathname: string): Tab | null {
 }
 
 function Dashboard() {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const [activeTab, setActiveTabState] = useState<Tab>(() => {
@@ -144,7 +151,8 @@ function Dashboard() {
   const [showRoulette, setShowRoulette] = useState(false)
   const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
-  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
+  const [hotelUpsellBanner, setHotelUpsellBanner] = useState<PendingHotelUpsell | null>(null)
+  const [hotelUpsellBusy, setHotelUpsellBusy] = useState(false)
   const [currentSearchEventId, setCurrentSearchEventId] = useState<string | null>(null) // ID de l'événement de recherche actuel
   const [lastSearchInfo, setLastSearchInfo] = useState<{
     datePreset: string | null
@@ -956,6 +964,122 @@ function Dashboard() {
     }
   }
 
+  const searchPassengersForBook =
+    lastSearchInfo?.passengers || currentRequest?.passengers || 1
+  const leftForPartnerRef = useRef(false)
+
+  const handlePartnerBook = (trip: EnrichedTripResponse) => {
+    openPartnerBookSync({
+      trip,
+      passengers: searchPassengersForBook,
+      language,
+      searchEventId: currentSearchEventId,
+    })
+    setHotelUpsellBanner(null)
+  }
+
+  const handleAddHotel = async (trip: EnrichedTripResponse) => {
+    clearPendingHotelUpsell()
+    setHotelUpsellBanner(null)
+    leftForPartnerRef.current = false
+    setHotelUpsellBusy(true)
+    try {
+      const draft = await createMyTripComposeFromTrip({
+        trip,
+        passengers: searchPassengersForBook,
+        language,
+        markFlightBooked: false,
+      })
+      navigate(`/trip/${draft.draft_token}?compose=1`)
+    } catch {
+      setToastMessage('Impossible de créer le voyage — réessaie')
+      setToastType('error')
+    } finally {
+      setHotelUpsellBusy(false)
+    }
+  }
+
+
+  const showHotelUpsellIfPending = useCallback(() => {
+    if (document.visibilityState !== 'visible') return
+    if (!leftForPartnerRef.current) return
+    const pending = readPendingHotelUpsell()
+    if (!pending || pending.skippedBanner) return
+    if (Date.now() - pending.createdAt < 600) return
+    leftForPartnerRef.current = false
+    setHotelUpsellBanner(pending)
+  }, [])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') {
+        leftForPartnerRef.current = true
+      } else {
+        showHotelUpsellIfPending()
+      }
+    }
+    const onFocus = () => showHotelUpsellIfPending()
+    const onBlur = () => {
+      leftForPartnerRef.current = true
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [showHotelUpsellIfPending])
+
+  const handleHotelUpsellYes = async () => {
+    const pending = hotelUpsellBanner || readPendingHotelUpsell()
+    if (!pending?.trip) return
+    setHotelUpsellBusy(true)
+    trackPartnerAnalytics({
+      trip: pending.trip,
+      partner_id: pending.partnerId,
+      partner_name: pending.partnerName,
+      redirect_url: pending.primaryUrl,
+      action_type: 'hotel_upsell_yes',
+      countdown_seconds: 0,
+      search_event_id: pending.searchEventId || null,
+    })
+    try {
+      const draft = await createMyTripComposeFromTrip({
+        trip: pending.trip,
+        passengers: pending.passengers || searchPassengersForBook,
+        language,
+        markFlightBooked: true,
+      })
+      clearPendingHotelUpsell()
+      setHotelUpsellBanner(null)
+      navigate(`/trip/${draft.draft_token}?compose=1`)
+    } catch {
+      setToastMessage('Impossible de créer le voyage — réessaie')
+      setToastType('error')
+    } finally {
+      setHotelUpsellBusy(false)
+    }
+  }
+
+  const handleHotelUpsellNo = () => {
+    const pending = hotelUpsellBanner || readPendingHotelUpsell()
+    if (pending?.trip) {
+      trackPartnerAnalytics({
+        trip: pending.trip,
+        partner_id: pending.partnerId,
+        partner_name: pending.partnerName,
+        redirect_url: pending.primaryUrl,
+        action_type: 'hotel_upsell_no',
+        countdown_seconds: 0,
+        search_event_id: pending.searchEventId || null,
+      })
+    }
+    clearPendingHotelUpsell()
+    setHotelUpsellBanner(null)
+  }
+
   return (
     <div className="app-shell">
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-24 sm:pb-8">
@@ -1172,6 +1296,32 @@ function Dashboard() {
                   </motion.div>
                 )}
                 
+                {hotelUpsellBanner ? (
+                  <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3 shadow-soft">
+                    <p className="text-sm sm:text-base font-semibold text-slate-800 flex-1">
+                      {t('upsell.flightBooked', { city: hotelUpsellBanner.city })}
+                    </p>
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      <button
+                        type="button"
+                        disabled={hotelUpsellBusy}
+                        onClick={() => void handleHotelUpsellYes()}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold min-h-[44px] disabled:opacity-60"
+                      >
+                        {hotelUpsellBusy ? '…' : t('upsell.yesHotel')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={hotelUpsellBusy}
+                        onClick={handleHotelUpsellNo}
+                        className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 min-h-[44px]"
+                      >
+                        {t('upsell.notYet')}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-4">
                   <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
                     🎯 Destinations trouvées
@@ -1242,11 +1392,10 @@ function Dashboard() {
                     >
                       <DestinationCard
                         trip={trip}
-                        passengers={lastSearchInfo?.passengers || currentRequest?.passengers || 1}
+                        passengers={searchPassengersForBook}
                         onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
-                        onBook={() => {
-                          setBookingTrip(trip)
-                        }}
+                        onBook={() => handlePartnerBook(trip)}
+                        onAddHotel={() => void handleAddHotel(trip)}
                         isFavorite={checkIsFavorite(trip)}
                       />
                     </motion.div>
@@ -1263,7 +1412,7 @@ function Dashboard() {
             onCheckFavorite={handleCheckFavorite}
             onReloadSearch={handleScan}
             formatDateFr={formatDateFr}
-            onBook={(trip) => setBookingTrip(trip)}
+            onBook={handlePartnerBook}
             setToastMessage={setToastMessage}
             setToastType={setToastType}
           />
@@ -1275,7 +1424,7 @@ function Dashboard() {
             onCheckFavorite={handleCheckFavorite}
             onReloadSearch={handleScan}
             formatDateFr={formatDateFr}
-            onBook={(trip) => setBookingTrip(trip)}
+            onBook={handlePartnerBook}
             setToastMessage={setToastMessage}
             setToastType={setToastType}
           />
@@ -1289,26 +1438,11 @@ function Dashboard() {
           budget={rouletteBudget}
           onClose={() => setShowRoulette(false)}
           onSaveFavorite={handleSimpleSaveFavorite}
-          onBook={(trip) => setBookingTrip(trip)}
-          checkIsFavorite={checkIsFavorite}
-        />
-      )}
-
-      {/* Search → combo wizard (vol + hôtel → Mon voyage) */}
-      {bookingTrip && (
-        <TripComboWizard
-          trip={bookingTrip}
-          passengers={lastSearchInfo?.passengers || currentRequest?.passengers || 1}
-          searchBudget={
-            lastSearchInfo?.budget ??
-            currentRequest?.budget_max ??
-            (typeof rouletteBudget === 'number' ? rouletteBudget : null)
-          }
-          onClose={() => setBookingTrip(null)}
-          onSaveFavorite={() => {
-            handleSimpleSaveFavorite(bookingTrip)
-            setBookingTrip(null)
+          onBook={(trip) => {
+            setShowRoulette(false)
+            handlePartnerBook(trip)
           }}
+          checkIsFavorite={checkIsFavorite}
         />
       )}
 
@@ -2117,17 +2251,14 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
     )
   }
 
-  // Fonction pour ouvrir BookingSas avec le favori (comme dans les résultats de recherche)
   const handleBookFavorite = (favorite: SavedFavorite) => {
-    // Convertir TripResponse en EnrichedTripResponse pour BookingSas
     const enrichedTrip: EnrichedTripResponse = {
       ...favorite.trip,
       discount_percent: undefined,
       is_good_deal: undefined,
       image_url: undefined,
-      avg_price_last_month: undefined
+      avg_price_last_month: undefined,
     }
-    // Ouvrir la modal BookingSas (comme dans les résultats de recherche)
     onBook(enrichedTrip)
   }
 

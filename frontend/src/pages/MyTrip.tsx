@@ -226,6 +226,7 @@ export default function MyTrip() {
         outLocal: outDep,
         inLocal: retDep,
         adults,
+        language: 'fr',
         originLabel,
         arrivalLabel,
       }),
@@ -247,7 +248,10 @@ export default function MyTrip() {
   )
 
   const flightUrl = carrier.url
-  const compareUrl = carrier.compareUrl
+  const secondaryUrl = carrier.secondaryUrl || carrier.compareUrl
+  const secondaryLabel =
+    carrier.secondaryLabel ||
+    (secondaryUrl ? `Site de ${carrier.airlineName}` : null)
   const cta = carrier.ctaLabel
   const airlineName = carrier.airlineName
   const distanceLine =
@@ -988,14 +992,14 @@ export default function MyTrip() {
                     </div>
                   ) : null}
 
-                  {compareUrl ? (
+                  {secondaryUrl && secondaryLabel ? (
                     <a
-                      href={compareUrl}
+                      href={secondaryUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block text-center text-xs font-semibold text-slate-500 underline-offset-2 hover:underline"
                     >
-                      Comparer sur Aviasales
+                      {secondaryLabel}
                     </a>
                   ) : null}
 

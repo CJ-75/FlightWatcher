@@ -14,8 +14,8 @@ import { getApiClient, normalizeAirports, destinationsToAirports, normalizeDesti
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
-import { BookingSas } from './BookingSas'
 import { BudgetSlider } from './BudgetSlider'
+import { openPartnerBookSync } from '../utils/partnerBook'
 import { PassengerStepper } from './PassengerStepper'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
@@ -1515,7 +1515,7 @@ function TripDetailView({
   onDeleted: () => void
   onToast: (msg: string) => void
 }) {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
@@ -1527,7 +1527,6 @@ function TripDetailView({
   const [newFirstName, setNewFirstName] = useState('')
   const [newLastName, setNewLastName] = useState('')
   const [newEmail, setNewEmail] = useState('')
-  const [bookingTrip, setBookingTrip] = useState<EnrichedTripResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [scanEmpty, setScanEmpty] = useState<{
     reason: 'budget' | 'no_flights'
@@ -2027,7 +2026,17 @@ function TripDetailView({
                 (trip.members || []).length || 1,
               )}
               onSaveFavorite={() => undefined}
-              onBook={() => setBookingTrip(accepted.trip_data)}
+              onBook={() => {
+                const pax = Math.max(
+                  trip.passengers || 1,
+                  (trip.members || []).length || 1,
+                )
+                openPartnerBookSync({
+                  trip: accepted.trip_data,
+                  passengers: pax,
+                  language,
+                })
+              }}
             />
           </div>
         </section>
@@ -2242,14 +2251,6 @@ function TripDetailView({
         </div>
       ) : null}
 
-      {bookingTrip ? (
-        <BookingSas
-          trip={bookingTrip}
-          passengers={trip.passengers}
-          onClose={() => setBookingTrip(null)}
-          onSaveFavorite={() => undefined}
-        />
-      ) : null}
     </div>
   )
 }

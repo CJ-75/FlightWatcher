@@ -10,7 +10,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import {
-  buildBookingUrl,
   cityDisplayNameFr,
   countryIsoForAirport,
   formatAirlineLabel,
@@ -19,6 +18,7 @@ import {
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'
+import { bookCtaLabel, resolveTripPriceSource } from '../lib/partnerBook'
 
 type CardAction = {
   label: string
@@ -31,6 +31,7 @@ interface Props {
   passengers?: number
   onFavorite?: () => void
   onBook?: () => void
+  onAddHotel?: () => void
   /** Hide default book CTA */
   showBook?: boolean
   /** Replaces book CTA (e.g. Accept on a planner proposal) */
@@ -60,6 +61,7 @@ export function DestinationCard({
   passengers = 1,
   onFavorite,
   onBook,
+  onAddHotel,
   showBook = true,
   primaryAction,
   secondaryAction,
@@ -76,13 +78,15 @@ export function DestinationCard({
     imageUrl: trip.image_url,
   })
   const [failed, setFailed] = useState(false)
+  const priceSource = resolveTripPriceSource(trip, passengers, 'fr')
+  const ctaLabel = bookCtaLabel(priceSource)
 
   const openBook = async () => {
     if (onBook) {
       onBook()
       return
     }
-    await Linking.openURL(buildBookingUrl(trip, passengers))
+    await Linking.openURL(priceSource.primaryUrl)
   }
 
   const airlineLabel = formatAirlineLabel(trip)
@@ -231,12 +235,32 @@ export function DestinationCard({
             ) : null}
           </View>
         ) : showBook ? (
-          <Pressable
-            onPress={openBook}
-            style={({ pressed }) => [styles.bookBtn, pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }]}
-          >
-            <Text style={styles.bookText}>Réserver</Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={() => void openBook()}
+              style={({ pressed }) => [
+                styles.bookBtn,
+                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+              ]}
+            >
+              <Text style={styles.bookText}>{ctaLabel}</Text>
+            </Pressable>
+            {onAddHotel ? (
+              <Pressable onPress={onAddHotel} style={styles.addHotelBtn}>
+                <Text style={styles.addHotelText}>Ajouter un hôtel</Text>
+              </Pressable>
+            ) : null}
+            {priceSource.secondaryUrl ? (
+              <Pressable
+                onPress={() => void Linking.openURL(priceSource.secondaryUrl!)}
+                style={styles.addHotelBtn}
+              >
+                <Text style={styles.addHotelText}>
+                  Site de {priceSource.airlineName}
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
         ) : null}
       </View>
     </View>
@@ -402,6 +426,19 @@ const styles = StyleSheet.create({
   legValue: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
   legPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.inkSoft, marginTop: 2 },
   actionsCol: { gap: 10 },
+  addHotelBtn: {
+    marginTop: 8,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addHotelText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.primary,
+    textDecorationLine: 'underline',
+    includeFontPadding: false,
+  },
   bookBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
