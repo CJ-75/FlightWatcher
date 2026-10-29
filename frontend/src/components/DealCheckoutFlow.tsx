@@ -107,6 +107,7 @@ export function DealCheckoutFlow({
       const res = await getApiClient().revalidateDeal(dealKey, {
         hotel_id: hotelId || deal.hotel?.id,
         displayed_price_pp: deal.price_per_person,
+        draft_token: draftToken || undefined,
       })
       setReval(res)
       if (res.action === 'confirm') setStep('confirm')
@@ -118,7 +119,17 @@ export function DealCheckoutFlow({
       if (/indisponible|unavailable|409/i.test(msg)) onUnavailable?.()
       setStep('error')
     }
-  }, [deal, dealKey, guestMode, hotelId, onClose, onNeedLogin, onUnavailable, t])
+  }, [
+    deal,
+    dealKey,
+    draftToken,
+    guestMode,
+    hotelId,
+    onClose,
+    onNeedLogin,
+    onUnavailable,
+    t,
+  ])
 
   useEffect(() => {
     void runRevalidate()

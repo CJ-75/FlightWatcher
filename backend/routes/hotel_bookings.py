@@ -44,6 +44,8 @@ def _now() -> str:
 class RevalidateRequest(BaseModel):
     hotel_id: Optional[str] = None
     displayed_price_pp: Optional[float] = None
+    # Mon voyage without community deal_key — load stay from draft
+    draft_token: Optional[str] = None
 
 
 class GuestInput(BaseModel):
@@ -132,6 +134,7 @@ async def revalidate(deal_key: str, body: RevalidateRequest, request: Request):
             deal_key,
             hotel_id=body.hotel_id,
             displayed_price_pp=body.displayed_price_pp,
+            draft_token=body.draft_token,
             cfg=cfg,
         )
         if not result.get("ok"):

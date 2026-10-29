@@ -147,17 +147,74 @@ def calage_margin_offer(
     }
 
 
+def _deal_from_my_trip_draft(
+    row: Dict[str, Any],
+    *,
+    hotel_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Synthetic deal shape for guest Mon voyage checkout (no community deal_key)."""
+    if not row:
+        return None
+    payload = row.get("payload") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    flight = payload.get("flight") or {}
+    hotel = payload.get("hotel") or {}
+    if not isinstance(hotel, dict):
+        hotel = {}
+    if hotel_id:
+        hotel = {**hotel, "id": str(hotel_id)}
+    dates = payload.get("dates") or {}
+    out = row.get("out_date") or dates.get("outbound")
+    inn = row.get("ret_date") or dates.get("inbound")
+    if not out or not inn:
+        return None
+    hid = str(hotel.get("id") or hotel.get("hotel_id") or "").strip()
+    if not hid:
+        return None
+    hotel = {**hotel, "id": hid}
+    token = str(row.get("draft_token") or "")
+    adults = int(row.get("adults") or payload.get("adults") or 2)
+    flight_pp = float(
+        (flight or {}).get("price_pp")
+        or (payload.get("price_breakdown") or {}).get("flight_pp")
+        or 0
+    )
+    hotel_total = hotel.get("public_hotel_price")
+    if hotel_total is None:
+        hotel_total = (payload.get("price_breakdown") or {}).get("hotel_public_total")
+    pp = payload.get("price_per_person")
+    if pp is None and hotel_total is not None:
+        pp = round(price_per_person(flight_pp, float(hotel_total), adults), 2)
+    return {
+        "deal_key": f"mytrip-{token}" if token else "mytrip",
+        "dates": {"outbound": str(out)[:10], "inbound": str(inn)[:10]},
+        "adults": adults,
+        "flight": flight if isinstance(flight, dict) else {},
+        "hotel": hotel,
+        "city": row.get("city_name") or payload.get("city"),
+        "price_per_person": pp,
+        "price_breakdown": payload.get("price_breakdown")
+        or {
+            "flight_pp": flight_pp,
+            "hotel_public_total": float(hotel_total) if hotel_total is not None else None,
+        },
+    }
+
+
 def revalidate_deal(
     supabase: Any,
     deal_key: str,
     *,
     hotel_id: Optional[str] = None,
     displayed_price_pp: Optional[float] = None,
+    draft_token: Optional[str] = None,
     client: Optional[LiteApiClient] = None,
     cfg: Optional[DealsConfig] = None,
 ) -> Dict[str, Any]:
     """
     Live revalidation for checkout. May call LiteAPI (unlike GET /api/deals).
+    Supports Mon voyage drafts via draft_token / mytrip-* deal_key when no community deal.
     """
     cfg = cfg or load_deals_config()
     owns = client is None
@@ -166,17 +223,29 @@ def revalidate_deal(
         raise LiteApiError("LiteAPI API key required for revalidate")
 
     try:
+        deal: Optional[Dict[str, Any]] = None
         parsed = parse_deal_key(deal_key)
-        if not parsed:
-            return {"ok": False, "reason": "invalid_deal_key"}
+        if parsed:
+            deal = get_deal_from_caches(supabase, deal_key)
 
-        deal = get_deal_from_caches(supabase, deal_key)
+        token = (draft_token or "").strip() or None
+        if not token and str(deal_key or "").startswith("mytrip-"):
+            token = str(deal_key)[len("mytrip-") :].strip() or None
+
+        if not deal and token:
+            from deals.my_trips import get_draft
+
+            row = get_draft(supabase, token)
+            deal = _deal_from_my_trip_draft(row or {}, hotel_id=hotel_id)
+
         if not deal:
+            if not parsed and not token:
+                return {"ok": False, "reason": "invalid_deal_key"}
             return {"ok": False, "reason": "deal_not_found"}
 
         checkin = deal["dates"]["outbound"]
         checkout = deal["dates"]["inbound"]
-        adults = int(deal.get("adults") or parsed["adults"] or 2)
+        adults = int(deal.get("adults") or (parsed or {}).get("adults") or 2)
         flight_pp = float(
             (deal.get("price_breakdown") or {}).get("flight_pp")
             or (deal.get("flight") or {}).get("price_pp")

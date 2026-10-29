@@ -453,94 +453,118 @@ export default function MyTrip() {
     }
   }
 
-  const buildDealFromDraft = useCallback((): TravelDeal | null => {
-    if (!draft) return null
-    const key = String(draft.deal_key || payload.deal_key || '')
-    if (!key) return null
-    const hotel = hotelObj
-      ? {
-          id: String(hotelObj.id || 'hotel'),
-          name: hotelObj.name ? String(hotelObj.name) : undefined,
-          stars: hotelObj.stars != null ? Number(hotelObj.stars) : undefined,
-          rating: hotelObj.rating != null ? Number(hotelObj.rating) : undefined,
-          review_count:
-            hotelObj.review_count != null ? Number(hotelObj.review_count) : undefined,
-          distance_m:
-            hotelObj.distance_m != null ? Number(hotelObj.distance_m) : undefined,
-          photo: hotelPhoto ? String(hotelPhoto) : undefined,
-          board: hotelObj.board != null ? String(hotelObj.board) : undefined,
-          refundable:
-            typeof hotelObj.refundable === 'boolean' ? hotelObj.refundable : undefined,
-          cancel_deadline: hotelObj.cancel_deadline
-            ? String(hotelObj.cancel_deadline)
-            : null,
-          public_hotel_price:
-            hotelObj.public_hotel_price != null
-              ? Number(hotelObj.public_hotel_price)
-              : party.hotelTotal || undefined,
-        }
-      : undefined
-    return {
-      id: key,
-      deal_key: key,
-      title: `Week-end à ${city}`,
-      city: String(city),
-      country: '',
-      image_url: hotelPhoto ? String(hotelPhoto) : '',
-      price_per_person: party.perPerson || Number(payload.price_per_person) || 0,
-      currency: 'EUR',
-      nights: nights || 0,
-      departure_airport: originIata || '',
-      dates: {
-        outbound: String(outDate || '').slice(0, 10),
-        inbound: String(retDate || '').slice(0, 10),
-      },
-      hotel_name: hotel?.name,
-      hotel_stars: hotel?.stars,
-      board: hotel?.board,
-      highlights: [],
-      description: '',
-      provider: 'liteapi',
-      booking_url: '',
-      adults,
-      origin_iata: originIata || undefined,
-      destination: destIata || undefined,
-      flight: {
-        price_pp: party.flightPp,
-        outbound_local: outDep ? String(outDep) : undefined,
-        inbound_local: retDep ? String(retDep) : undefined,
-        airline: flight.airline || flight.carrier,
-        booking_url: flight.booking_url || payload.booking_url,
-        origin_iata: originIata || undefined,
-        destination_iata: destIata || undefined,
-        direct: flight.direct,
-        provider: flight.provider,
-      },
-      hotel,
-      price_breakdown: {
-        flight_pp: party.flightPp,
-        hotel_public_total: party.hotelTotal,
-        total_pp: party.perPerson,
-        excluded_fees: party.cityTax ?? undefined,
-      },
-    } as TravelDeal
-  }, [
-    adults,
-    city,
-    destIata,
-    draft,
-    flight,
-    hotelObj,
-    hotelPhoto,
-    nights,
-    originIata,
-    outDate,
-    outDep,
-    party,
-    payload,
-    retDate,
-    retDep,
-  ])
+  const buildDealFromMyTrip = useCallback(
+    (d: MyTripDraft): TravelDeal | null => {
+      const pl = (d.payload || {}) as Record<string, any>
+      const fl = (pl.flight || {}) as Record<string, any>
+      const hRaw =
+        (pl.hotel as Record<string, any> | undefined) ||
+        (d.hotel as Record<string, any> | undefined) ||
+        null
+      const out = String(d.out_date || pl.dates?.outbound || '').slice(0, 10)
+      const inn = String(d.ret_date || pl.dates?.inbound || '').slice(0, 10)
+      if (!out || !inn) return null
+      const pax = Math.max(1, Number(d.adults || pl.adults || 2))
+      const cityName = String(d.city_name || pl.city || city || 'Séjour')
+      const flightPp =
+        fl.price_pp != null
+          ? Number(fl.price_pp)
+          : pl.price_breakdown?.flight_pp != null
+            ? Number(pl.price_breakdown.flight_pp)
+            : Number(party.flightPp) || 0
+      const hotelTotal =
+        hRaw?.public_hotel_price != null
+          ? Number(hRaw.public_hotel_price)
+          : pl.price_breakdown?.hotel_public_total != null
+            ? Number(pl.price_breakdown.hotel_public_total)
+            : Number(party.hotelTotal) || 0
+      const perPerson =
+        Number(pl.price_per_person) ||
+        Math.round(flightPp + hotelTotal / pax) ||
+        Number(party.perPerson) ||
+        0
+      const key =
+        String(d.deal_key || pl.deal_key || '').trim() ||
+        `mytrip-${d.draft_token}`
+      const photo = hRaw?.photo || hRaw?.thumbnail || pl.image_url || ''
+      const nightCount =
+        Number(pl.nights) ||
+        Math.max(
+          1,
+          Math.round(
+            (new Date(inn + 'T12:00:00').getTime() -
+              new Date(out + 'T12:00:00').getTime()) /
+              86400000,
+          ),
+        )
+      const hotel = hRaw
+        ? {
+            id: String(hRaw.id || hRaw.hotel_id || ''),
+            name: hRaw.name ? String(hRaw.name) : undefined,
+            stars: hRaw.stars != null ? Number(hRaw.stars) : undefined,
+            rating: hRaw.rating != null ? Number(hRaw.rating) : undefined,
+            review_count:
+              hRaw.review_count != null ? Number(hRaw.review_count) : undefined,
+            distance_m:
+              hRaw.distance_m != null ? Number(hRaw.distance_m) : undefined,
+            photo: photo ? String(photo) : undefined,
+            board: hRaw.board != null ? String(hRaw.board) : undefined,
+            refundable:
+              typeof hRaw.refundable === 'boolean' ? hRaw.refundable : undefined,
+            cancel_deadline: hRaw.cancel_deadline
+              ? String(hRaw.cancel_deadline)
+              : null,
+            public_hotel_price: hotelTotal || undefined,
+          }
+        : undefined
+      if (hotel && !hotel.id) return null
+      return {
+        id: key,
+        deal_key: key,
+        title: `Week-end à ${cityName}`,
+        city: cityName,
+        country: '',
+        image_url: photo ? String(photo) : '',
+        price_per_person: perPerson,
+        currency: 'EUR',
+        nights: nightCount,
+        departure_airport: String(
+          d.origin_iata || pl.origin_iata || fl.origin_iata || originIata || '',
+        ),
+        dates: { outbound: out, inbound: inn },
+        hotel_name: hotel?.name,
+        hotel_stars: hotel?.stars,
+        board: hotel?.board,
+        highlights: [],
+        description: '',
+        provider: 'liteapi',
+        booking_url: '',
+        adults: pax,
+        origin_iata:
+          String(d.origin_iata || pl.origin_iata || fl.origin_iata || originIata || '') ||
+          undefined,
+        destination:
+          String(d.dest_iata || pl.destination || fl.destination_iata || destIata || '') ||
+          undefined,
+        flight: {
+          price_pp: flightPp,
+          airline: fl.airline || fl.carrier,
+          booking_url: fl.booking_url || pl.booking_url,
+          origin_iata: fl.origin_iata,
+          destination_iata: fl.destination_iata,
+          direct: fl.direct,
+          provider: fl.provider,
+        },
+        hotel,
+        price_breakdown: {
+          flight_pp: flightPp,
+          hotel_public_total: hotelTotal,
+          total_pp: perPerson,
+        },
+      } as TravelDeal
+    },
+    [city, destIata, originIata, party.flightPp, party.hotelTotal, party.perPerson],
+  )
 
   const openHotelCheckout = useCallback(
     async (overrideDraft?: MyTripDraft | null) => {
@@ -551,56 +575,59 @@ export default function MyTrip() {
         (pl.hotel as Record<string, unknown> | undefined) ||
         (d.hotel as Record<string, unknown> | undefined) ||
         null
+      if (!hotel?.id && !hotel?.hotel_id) {
+        setError('Choisis un hôtel avant de payer')
+        return
+      }
       setCheckoutLoading(true)
       setError(null)
       setHotelUnavailable(false)
       try {
         let deal: TravelDeal | null = null
-        const key = String(d.deal_key || pl.deal_key || payload.deal_key || '')
-        if (key) {
+        const key = String(d.deal_key || pl.deal_key || '').trim()
+        if (key && !key.startsWith('mytrip-')) {
           try {
             deal = await getApiClient().getDeal(key)
           } catch {
             deal = null
           }
         }
-        if (!deal) deal = buildDealFromDraft()
+        if (!deal) deal = buildDealFromMyTrip(d)
         if (!deal) {
           setError('Impossible d’ouvrir la réservation hôtel')
           return
         }
-        if (hotel?.id) {
-          const hid = String(hotel.id)
-          const pub =
-            hotel.public_hotel_price != null
-              ? Number(hotel.public_hotel_price)
-              : undefined
+        const hid = String(hotel?.id || hotel?.hotel_id || deal.hotel?.id || '')
+        const pub =
+          hotel?.public_hotel_price != null
+            ? Number(hotel.public_hotel_price)
+            : deal.hotel?.public_hotel_price
+        if (hid) {
           deal = {
             ...deal,
             hotel: {
               ...(deal.hotel || { id: hid }),
               id: hid,
-              name: hotel.name ? String(hotel.name) : deal.hotel?.name,
+              name: hotel?.name ? String(hotel.name) : deal.hotel?.name,
               stars:
-                hotel.stars != null ? Number(hotel.stars) : deal.hotel?.stars,
+                hotel?.stars != null ? Number(hotel.stars) : deal.hotel?.stars,
               rating:
-                hotel.rating != null
+                hotel?.rating != null
                   ? Number(hotel.rating)
                   : deal.hotel?.rating,
-              photo: hotel.photo
+              photo: hotel?.photo
                 ? String(hotel.photo)
                 : deal.hotel?.photo,
-              board: hotel.board
+              board: hotel?.board
                 ? String(hotel.board)
                 : deal.hotel?.board,
               refundable:
-                typeof hotel.refundable === 'boolean'
+                typeof hotel?.refundable === 'boolean'
                   ? hotel.refundable
                   : deal.hotel?.refundable,
-              public_hotel_price:
-                pub ?? deal.hotel?.public_hotel_price,
+              public_hotel_price: pub ?? deal.hotel?.public_hotel_price,
             },
-            hotel_name: hotel.name
+            hotel_name: hotel?.name
               ? String(hotel.name)
               : deal.hotel_name,
             price_breakdown: {
@@ -610,7 +637,10 @@ export default function MyTrip() {
             },
           }
         }
-        track('hotel_checkout_open', { deal_key: key || null })
+        track('hotel_checkout_open', {
+          deal_key: deal.deal_key || key || null,
+          draft_token: d.draft_token || null,
+        })
         setCheckoutDeal(deal)
         const next = new URLSearchParams(searchParams)
         next.delete('book_hotel')
@@ -620,10 +650,9 @@ export default function MyTrip() {
       }
     },
     [
-      buildDealFromDraft,
+      buildDealFromMyTrip,
       draft,
       hotelBooked,
-      payload.deal_key,
       searchParams,
       setSearchParams,
       track,

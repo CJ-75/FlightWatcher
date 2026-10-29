@@ -714,6 +714,8 @@ export type RevalidateAction = 'silent' | 'confirm' | 'fallback'
 export interface DealRevalidateRequest {
   hotel_id?: string
   displayed_price_pp?: number
+  /** Mon voyage guest path when there is no community deal_key */
+  draft_token?: string
 }
 
 export interface DealRevalidateResponse {
