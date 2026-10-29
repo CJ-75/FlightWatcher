@@ -13,6 +13,11 @@ import {
   readBookingsCache,
   writeBookingsCache,
 } from '../utils/bookingsCache'
+import {
+  latestTripDraft,
+  listRememberedTrips,
+  rememberTrip,
+} from '../utils/tripRecovery'
 import { SiteFooter } from '../components/SiteFooter'
 
 type FilterTab = 'upcoming' | 'past' | 'all'
@@ -493,12 +498,21 @@ function BookingCard({
 export default function MyBookings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const focusId = searchParams.get('id')
+  const draftFromUrl = searchParams.get('draft')
+  const guestDraft = useMemo(
+    () => draftFromUrl || latestTripDraft(),
+    [draftFromUrl],
+  )
+  const remembered = useMemo(() => listRememberedTrips(), [])
   const cached = useMemo(() => readBookingsCache(), [])
   const [bookings, setBookings] = useState<HotelBooking[]>(() => cached || [])
   const [loading, setLoading] = useState(() => !cached)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [authed, setAuthed] = useState(true)
+  const [guestMode, setGuestMode] = useState(
+    () => Boolean(draftFromUrl || latestTripDraft()),
+  )
   const [tab, setTab] = useState<FilterTab>('upcoming')
   const [expandedId, setExpandedId] = useState<string | null>(focusId)
 
@@ -510,19 +524,49 @@ export default function MyBookings() {
     else setLoading(true)
     setError(null)
     try {
-      // getSession = local (fast). Avoid getUser() network round-trip on paint.
       const session = await getCurrentSession()
-      if (!session?.user) {
-        setAuthed(false)
+      const draft = draftFromUrl || latestTripDraft()
+
+      if (session?.user) {
+        setAuthed(true)
+        setGuestMode(false)
+        if (draft) {
+          try {
+            await getApiClient().claimMyTrip(draft)
+          } catch {
+            /* already claimed / expired */
+          }
+        }
+        const list = await getApiClient().listHotelBookings(
+          draft ? { draft_token: draft } : undefined,
+        )
+        const next = Array.isArray(list) ? list : []
+        setBookings(next)
+        writeBookingsCache(next)
+        return
+      }
+
+      setAuthed(false)
+      if (!draft) {
+        setGuestMode(false)
         setBookings([])
         writeBookingsCache([])
         return
       }
-      setAuthed(true)
-      const list = await getApiClient().listHotelBookings()
+
+      setGuestMode(true)
+      const list = await getApiClient().listHotelBookings({ draft_token: draft })
       const next = Array.isArray(list) ? list : []
       setBookings(next)
-      writeBookingsCache(next)
+      for (const b of next) {
+        if (b.draft_token) {
+          rememberTrip({
+            draft_token: b.draft_token,
+            booking_id: b.id,
+            city: b.city,
+          })
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       if (!background) setBookings([])
@@ -530,7 +574,7 @@ export default function MyBookings() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [draftFromUrl])
 
   useEffect(() => {
     // Cache → paint now; always revalidate in background
@@ -582,19 +626,51 @@ export default function MyBookings() {
           </Link>
         </div>
 
-        {!authed ? (
-          <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center">
-            <p className="font-bold text-ink mb-2">Connexion requise</p>
-            <p className="text-sm text-muted mb-4">
-              Connecte-toi pour retrouver tes confirmations hôtel sur tous tes
-              appareils.
-            </p>
-            <Link
-              to="/login?redirect=/bookings"
-              className="inline-flex app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
-            >
-              Se connecter
-            </Link>
+        {!authed && !guestMode ? (
+          <div className="bg-white rounded-3xl border border-line shadow-soft p-8 text-center space-y-4">
+            <div>
+              <p className="font-bold text-ink mb-2">Connexion requise</p>
+              <p className="text-sm text-muted mb-4">
+                Connecte-toi pour retrouver tes confirmations hôtel sur tous tes
+                appareils — ou ouvre le lien Mon voyage reçu après réservation.
+              </p>
+              <Link
+                to={`/login?redirect=${encodeURIComponent(
+                  guestDraft ? `/bookings?draft=${guestDraft}` : '/bookings',
+                )}`}
+                className="inline-flex app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
+              >
+                Se connecter
+              </Link>
+            </div>
+            {remembered.length ? (
+              <div className="text-left border-t border-line pt-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                  Voyages récents sur cet appareil
+                </p>
+                <ul className="space-y-2">
+                  {remembered.slice(0, 5).map((t) => (
+                    <li key={t.draft_token}>
+                      <Link
+                        to={`/bookings?draft=${encodeURIComponent(t.draft_token)}`}
+                        className="block rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink hover:bg-slate-50"
+                      >
+                        {t.city ? `Voyage à ${t.city}` : 'Mon voyage'}
+                        <span className="block text-xs font-medium text-muted mt-0.5">
+                          Ouvrir les réservations
+                        </span>
+                      </Link>
+                      <Link
+                        to={`/trip/${t.draft_token}`}
+                        className="inline-block mt-1 text-xs font-bold text-primary-600 hover:underline"
+                      >
+                        Voir le trip →
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         ) : loading ? (
           <div className="space-y-4" aria-busy="true" aria-label="Chargement">
@@ -623,6 +699,14 @@ export default function MyBookings() {
               Quand tu réserves un hôtel depuis un deal ou Mon voyage, la
               confirmation et le code apparaissent ici.
             </p>
+            {guestMode && guestDraft ? (
+              <Link
+                to={`/trip/${guestDraft}`}
+                className="inline-flex justify-center app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
+              >
+                Retour à mon voyage
+              </Link>
+            ) : null}
             <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
               <Link
                 to="/sejours"
@@ -640,6 +724,27 @@ export default function MyBookings() {
           </div>
         ) : (
           <>
+            {guestMode && guestDraft ? (
+              <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm text-amber-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p>
+                  Affichage via ton voyage (sans compte).{' '}
+                  <Link
+                    to={`/trip/${guestDraft}`}
+                    className="font-bold underline-offset-2 hover:underline"
+                  >
+                    Ouvrir Mon voyage
+                  </Link>
+                </p>
+                <Link
+                  to={`/login?redirect=${encodeURIComponent(
+                    `/bookings?draft=${guestDraft}`,
+                  )}`}
+                  className="shrink-0 font-bold text-amber-900 underline-offset-2 hover:underline"
+                >
+                  Sauver sur mon compte →
+                </Link>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div
                 className="inline-flex rounded-2xl border border-line bg-white p-1 text-sm font-bold"

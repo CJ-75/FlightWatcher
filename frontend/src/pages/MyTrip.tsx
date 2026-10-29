@@ -9,6 +9,8 @@ import {
   resolveCarrierBooking,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
+import { getCurrentSession } from '../lib/supabase'
+import { rememberTrip } from '../utils/tripRecovery'
 import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
 import { DealCheckoutFlow } from '../components/DealCheckoutFlow'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
@@ -106,6 +108,13 @@ export default function MyTrip() {
     try {
       const row = await getApiClient().getMyTrip(token)
       setDraft(row)
+      rememberTrip({
+        draft_token: token,
+        city: row.city_name || (row.payload as { city?: string } | undefined)?.city,
+        booking_id:
+          (row.payload as { hotel_booking_id?: string } | undefined)?.hotel_booking_id ||
+          null,
+      })
       if (!trackedView.current) {
         trackedView.current = true
         void getApiClient()
@@ -123,6 +132,29 @@ export default function MyTrip() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // After login (?claim=1) attach draft + hotel bookings to the account
+  useEffect(() => {
+    if (!token || searchParams.get('claim') !== '1') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const session = await getCurrentSession()
+        if (!session?.user || cancelled) return
+        await getApiClient().claimMyTrip(token)
+        if (cancelled) return
+        const next = new URLSearchParams(searchParams)
+        next.delete('claim')
+        setSearchParams(next, { replace: true })
+        await load()
+      } catch {
+        /* guest / already claimed */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, searchParams, setSearchParams, load])
 
   const payload = (draft?.payload || {}) as Record<string, any>
   const flight = payload.flight || {}
@@ -805,9 +837,9 @@ export default function MyTrip() {
   })()
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 to-white pb-28 lg:pb-10">
+    <div className="min-h-screen bg-[#F7F7F7] pb-28 lg:pb-10">
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm">
-        <div className="max-w-[1080px] mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <div className="w-[92%] max-w-[1500px] mx-auto px-2 sm:px-4 h-14 flex items-center justify-between gap-3">
           <Link
             to={backHref}
             className="text-sm font-bold text-slate-700 hover:text-primary-600 shrink-0"
@@ -859,8 +891,8 @@ export default function MyTrip() {
         </div>
       </header>
 
-      <div className="max-w-[1080px] mx-auto px-4 py-8">
-        <div className="mb-6 lg:mb-8">
+      <div className="w-[92%] max-w-[1500px] mx-auto px-2 sm:px-4 py-6 sm:py-8">
+        <div className="mb-5 lg:mb-7">
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">
             {flightBooked && hotelBooked
               ? `Ton voyage à ${city} est prêt`
@@ -880,16 +912,13 @@ export default function MyTrip() {
         </div>
 
         {wantsCompose && token && draft ? (
-          <div className="mb-8">
-            <MyTripHotelCompose
-              draft={draft}
-              token={token}
-              onUpdated={(row) => setDraft(row)}
-              onDone={closeCompose}
-            />
-          </div>
-        ) : null}
-
+          <MyTripHotelCompose
+            draft={draft}
+            token={token}
+            onUpdated={(row) => setDraft(row)}
+            onDone={closeCompose}
+          />
+        ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
           {/* Colonne gauche */}
           <div className="space-y-6 min-w-0">
@@ -1239,9 +1268,11 @@ export default function MyTrip() {
             </div>
           </aside>
         </div>
+        )}
       </div>
 
       {/* Barre basse mobile */}
+      {!wantsCompose ? (
       <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-sm safe-pb">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
           <div className="min-w-0 flex-1">
@@ -1267,6 +1298,7 @@ export default function MyTrip() {
           </div>
         </div>
       </div>
+      ) : null}
 
       {checkoutDeal && token ? (
         <DealCheckoutFlow

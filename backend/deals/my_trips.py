@@ -111,18 +111,26 @@ def claim_draft(supabase, draft_token: str, user_id: str) -> Optional[Dict[str, 
         return None
     if row.get("user_id") and row["user_id"] != user_id:
         return None
+    now = _now().isoformat()
     res = (
         supabase.table("my_trip_drafts")
         .update(
             {
                 "user_id": user_id,
                 "status": "active",
-                "updated_at": _now().isoformat(),
+                "updated_at": now,
             }
         )
         .eq("id", row["id"])
         .execute()
     )
+    # Attach guest hotel bookings so they appear on /bookings after login
+    try:
+        supabase.table("hotel_bookings").update({"user_id": user_id}).eq(
+            "draft_token", draft_token
+        ).is_("user_id", "null").execute()
+    except Exception as e:
+        logger.warning("claim_draft attach bookings: %s", e)
     return (res.data or [row])[0]
 
 
@@ -359,10 +367,11 @@ def mark_hotel_booked(
     row = get_draft(supabase, draft_token)
     if not row:
         return None
-    now = _now().isoformat()
+    now = _now()
+    now_iso = now.isoformat()
     extra: Dict[str, Any] = {
         "hotel_booked": True,
-        "hotel_booked_at": now,
+        "hotel_booked_at": now_iso,
     }
     if booking_id:
         extra["hotel_booking_id"] = str(booking_id)
@@ -371,10 +380,26 @@ def mark_hotel_booked(
     if holder_email:
         extra["hotel_holder_email"] = str(holder_email).strip().lower()
     payload = _merge_payload(row, extra)
+    # Keep paid trips findable — don't archive after the default 7-day draft TTL
+    expires = now + timedelta(days=90)
+    ret = row.get("ret_date")
+    if ret:
+        try:
+            from datetime import date as date_cls
+
+            expires = datetime.combine(
+                date_cls.fromisoformat(str(ret)[:10]),
+                datetime.min.time(),
+                tzinfo=timezone.utc,
+            ) + timedelta(days=60)
+        except Exception:
+            pass
     update: Dict[str, Any] = {
         "payload": payload,
-        "updated_at": now,
-        "hotel_booked_at": now,
+        "updated_at": now_iso,
+        "hotel_booked_at": now_iso,
+        "status": "active",
+        "expires_at": expires.isoformat(),
     }
     try:
         res = (
@@ -386,13 +411,29 @@ def mark_hotel_booked(
         return (res.data or [{**row, **update}])[0]
     except Exception as e:
         logger.warning("mark_hotel_booked columns: %s", e)
-        res = (
-            supabase.table("my_trip_drafts")
-            .update({"payload": payload, "updated_at": now})
-            .eq("id", row["id"])
-            .execute()
-        )
-        return (res.data or [{**row, "payload": payload}])[0]
+        soft = {
+            "payload": payload,
+            "updated_at": now_iso,
+            "status": "active",
+            "expires_at": expires.isoformat(),
+        }
+        try:
+            res = (
+                supabase.table("my_trip_drafts")
+                .update(soft)
+                .eq("id", row["id"])
+                .execute()
+            )
+            return (res.data or [{**row, **soft}])[0]
+        except Exception as e2:
+            logger.warning("mark_hotel_booked soft: %s", e2)
+            res = (
+                supabase.table("my_trip_drafts")
+                .update({"payload": payload, "updated_at": now_iso})
+                .eq("id", row["id"])
+                .execute()
+            )
+            return (res.data or [{**row, "payload": payload}])[0]
 
 
 def send_draft_email(

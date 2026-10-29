@@ -9,6 +9,7 @@ import type {
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
+import { rememberTrip } from '../utils/tripRecovery'
 import { DealComplianceNotice } from './DealComplianceNotice'
 
 type Step = 'revalidate' | 'confirm' | 'guests' | 'pay' | 'pending' | 'done' | 'error'
@@ -152,6 +153,13 @@ export function DealCheckoutFlow({
         liteapi_env: pb.liteapi_env,
         charged_price: pb.charged_price,
       })
+      if (draftToken) {
+        rememberTrip({
+          draft_token: draftToken,
+          booking_id: pb.booking_id,
+          city: deal.city,
+        })
+      }
       setStep('pay')
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('app.error')
@@ -224,6 +232,11 @@ export function DealCheckoutFlow({
       setBooking(final)
 
       if (draftToken) {
+        rememberTrip({
+          draft_token: draftToken,
+          booking_id: final.id,
+          city: deal.city,
+        })
         try {
           await getApiClient().markMyTripHotelBooked(draftToken, {
             booking_id: final.id,
@@ -407,17 +420,33 @@ export function DealCheckoutFlow({
                     </span>
                   </label>
                 </div>
-                <button
-                  type="button"
-                  disabled={!firstName || !lastName || !email}
-                  onClick={() => void doPrebook()}
-                  className="w-full bg-primary-500 disabled:bg-slate-200 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
-                >
-                  Continuer vers le paiement
-                </button>
+                <div className="flex flex-col-reverse sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (reval?.action === 'confirm' || reval?.hotel_switched) {
+                        setStep('confirm')
+                        return
+                      }
+                      onClose()
+                    }}
+                    className="sm:w-auto px-4 border border-line font-bold py-3 rounded-xl min-h-[48px] text-slate-700"
+                  >
+                    Précédent
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!firstName || !lastName || !email}
+                    onClick={() => void doPrebook()}
+                    className="flex-1 bg-primary-500 disabled:bg-slate-200 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                  >
+                    Continuer vers le paiement
+                  </button>
+                </div>
                 {guestMode ? (
                   <p className="text-xs text-slate-500 text-center">
-                    Aucun compte requis pour payer.
+                    Aucun compte requis pour payer. Tu pourras retrouver ce voyage via le
+                    lien /trip ou Mes réservations.
                   </p>
                 ) : null}
               </div>
@@ -447,6 +476,13 @@ export function DealCheckoutFlow({
                     LITEAPI_PAYMENT_PUBLIC_KEY_*.
                   </p>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => setStep('guests')}
+                  className="w-full border border-line font-bold py-3 rounded-xl min-h-[48px] text-slate-700"
+                >
+                  Précédent — modifier les coordonnées
+                </button>
               </div>
             ) : null}
 
@@ -470,17 +506,18 @@ export function DealCheckoutFlow({
                   </p>
                 ) : null}
 
-                {showAccountCta ? (
+                {showAccountCta && draftToken ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
                     <p className="text-sm font-semibold text-slate-800">
                       Retrouve ce voyage sur tous tes appareils
                     </p>
                     <p className="text-xs text-slate-500">
-                      Optionnel — tu peux refuser sans conséquence.
+                      Optionnel — sans compte, garde le lien Mon voyage ou Mes
+                      réservations sur cet appareil.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-2">
                       <Link
-                        to={`/login?email=${encodeURIComponent(email)}`}
+                        to={`/login?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent(`/trip/${draftToken}?claim=1`)}`}
                         onClick={() => onAccountCta?.()}
                         className="flex-1 text-center bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[44px]"
                       >
@@ -497,21 +534,40 @@ export function DealCheckoutFlow({
                   </div>
                 ) : null}
 
-                {!guestMode ? (
-                  <a
-                    href={`/bookings?id=${encodeURIComponent(booking.id)}`}
+                <div className="flex flex-col gap-2">
+                  {draftToken ? (
+                    <Link
+                      to={`/trip/${draftToken}`}
+                      onClick={onClose}
+                      className="block text-center bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
+                    >
+                      Retour à mon voyage
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="w-full bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
+                    >
+                      Fermer
+                    </button>
+                  )}
+                  <Link
+                    to={
+                      draftToken
+                        ? `/bookings?draft=${encodeURIComponent(draftToken)}${
+                            booking.id
+                              ? `&id=${encodeURIComponent(booking.id)}`
+                              : ''
+                          }`
+                        : `/bookings?id=${encodeURIComponent(booking.id)}`
+                    }
+                    onClick={onClose}
                     className="block text-center border border-line font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px]"
                   >
                     Mes réservations
-                  </a>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full bg-primary-500 text-white font-bold py-3 rounded-xl min-h-[48px]"
-                >
-                  Fermer
-                </button>
+                  </Link>
+                </div>
               </div>
             ) : null}
 

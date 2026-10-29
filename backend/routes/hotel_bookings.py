@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from deals.liteapi_client import LiteApiClient, LiteApiError
@@ -372,17 +372,61 @@ async def book(booking_id: str, body: BookRequest, request: Request):
 
 @router.get("/api/hotel-bookings")
 @optional_auth
-async def list_bookings(request: Request):
-    user_id = _require_user(request)
+async def list_bookings(
+    request: Request,
+    draft_token: Optional[str] = Query(None),
+):
+    """
+    Logged-in: bookings for user_id (optionally union draft_token rows).
+    Guest: draft_token required — same proof as get_booking (valid my_trip).
+    """
+    user_id = get_user_id_from_token(request)
+    token = (draft_token or "").strip() or None
     supabase = _svc()
-    result = (
-        supabase.table("hotel_bookings")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", desc=True)
-        .execute()
+    by_id: Dict[str, Dict[str, Any]] = {}
+
+    if user_id:
+        result = (
+            supabase.table("hotel_bookings")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        for r in result.data or []:
+            if r.get("id"):
+                by_id[str(r["id"])] = r
+    elif not token:
+        raise HTTPException(
+            status_code=401, detail="Authentification ou voyage requis"
+        )
+
+    if token:
+        from deals.my_trips import get_draft
+
+        if not get_draft(supabase, token):
+            if not user_id:
+                raise HTTPException(
+                    status_code=401, detail="Voyage introuvable ou expiré"
+                )
+        else:
+            result = (
+                supabase.table("hotel_bookings")
+                .select("*")
+                .eq("draft_token", token)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            for r in result.data or []:
+                if r.get("id"):
+                    by_id[str(r["id"])] = r
+
+    rows = sorted(
+        by_id.values(),
+        key=lambda r: str(r.get("created_at") or ""),
+        reverse=True,
     )
-    return [_public_booking(r) for r in (result.data or [])]
+    return [_public_booking(r) for r in rows]
 
 
 @router.get("/api/hotel-bookings/{booking_id}")

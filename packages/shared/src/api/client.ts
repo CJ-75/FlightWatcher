@@ -522,7 +522,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify(body) },
       ),
 
-    listHotelBookings: () => request<HotelBooking[]>('/api/hotel-bookings'),
+    listHotelBookings: (opts?: { draft_token?: string | null }) => {
+      const q =
+        opts?.draft_token != null && opts.draft_token !== ''
+          ? `?draft_token=${encodeURIComponent(opts.draft_token)}`
+          : ''
+      return request<HotelBooking[]>(`/api/hotel-bookings${q}`)
+    },
 
     getHotelBooking: (id: string, opts?: { draft_token?: string | null }) => {
       const q =

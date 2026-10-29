@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import {
   boardLabelFr,
   type HotelUpsellOption,
@@ -16,8 +16,6 @@ type Props = {
 }
 
 type SortKey = 'price' | 'rating' | 'distance'
-
-const spring = { type: 'spring' as const, stiffness: 340, damping: 30, mass: 0.55 }
 
 function hotelKey(h: HotelUpsellOption, idx = 0) {
   return String(h.id || h.hotel_id || idx)
@@ -64,9 +62,20 @@ function formatDistance(m?: number | null) {
   return `${(n / 1000).toFixed(1)} km du centre`
 }
 
-function mapsUrl(name: string, city?: string | null) {
-  const q = [name, city].filter(Boolean).join(', ')
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+function mapsQuery(name: string, city?: string | null) {
+  return [name, city].filter(Boolean).join(', ')
+}
+
+function mapsSearchUrl(name: string, city?: string | null) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    mapsQuery(name, city),
+  )}`
+}
+
+function mapsEmbedUrl(name: string, city?: string | null) {
+  return `https://maps.google.com/maps?q=${encodeURIComponent(
+    mapsQuery(name, city),
+  )}&z=15&output=embed`
 }
 
 function StarRow({ stars }: { stars?: number | null }) {
@@ -79,12 +88,33 @@ function StarRow({ stars }: { stars?: number | null }) {
   )
 }
 
-function Signal({ children }: { children: ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full bg-white/95 text-ink text-[11px] font-bold px-2.5 py-1 shadow-sm">
-      {children}
-    </span>
-  )
+function ratingLabel(rating?: number | null) {
+  if (rating == null || Number.isNaN(Number(rating))) return null
+  const r = Number(rating)
+  if (r >= 9) return 'Exceptionnel'
+  if (r >= 8.5) return 'Excellent'
+  if (r >= 8) return 'Très bien'
+  if (r >= 7) return 'Bien'
+  return 'Correct'
+}
+
+function hotelAdvantages(h: HotelUpsellOption): string[] {
+  const out: string[] = []
+  const board = boardLabelFr(h.board)
+  if (board) out.push(board)
+  if (h.refundable) out.push('Annulation flexible')
+  const dist = formatDistance(h.distance_m)
+  if (dist) out.push(dist)
+  if (h.stars != null && Number(h.stars) >= 4) {
+    out.push(`${Math.round(Number(h.stars))} étoiles`)
+  }
+  if (h.rating != null && Number(h.rating) >= 8) {
+    out.push(`Note voyageurs ${Number(h.rating).toFixed(1)}/10`)
+  }
+  if (h.review_count != null && Number(h.review_count) >= 200) {
+    out.push(`${Number(h.review_count).toLocaleString('fr-FR')} avis`)
+  }
+  return out
 }
 
 export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
@@ -102,14 +132,14 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
 
   const [options, setOptions] = useState<HotelUpsellOption[]>([])
   const [selected, setSelected] = useState<HotelUpsellOption | null>(null)
-  const [compareIds, setCompareIds] = useState<string[]>([])
-  const [detail, setDetail] = useState<HotelUpsellOption | null>(null)
   const [sort, setSort] = useState<SortKey>('price')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nightCap, setNightCap] = useState<number | null>(null)
   const [cityLabel, setCityLabel] = useState<string | null>(null)
+  const [description, setDescription] = useState<string | null>(null)
+  const detailRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -270,7 +300,6 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
       }
 
       try {
-        // 1) Trip snapshot first (exact hotels shown initially)
         const snapCap =
           payload.compose_night_cap != null
             ? Number(payload.compose_night_cap)
@@ -279,7 +308,6 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           applyOpts(snapshot, { night_cap: snapCap, city: cityHint })
           setLoading(false)
         } else {
-          // First visit fallback: rates cache while live loads
           const cached = await loadCached()
           if (cancelled) return
           if (cached.opts.length) {
@@ -288,7 +316,6 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           }
         }
 
-        // 2) Live revalidate — keep snapshot order, drop unavailable
         let result: Awaited<
           ReturnType<ReturnType<typeof getApiClient>['fetchHotelUpsell']>
         > | null = null
@@ -314,12 +341,10 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
 
         if (snapshot.length && liveOpts.length) {
           opts = revalidateSnapshot(snapshot, liveOpts)
-          // All previous hotels gone → fall back to new live set
           if (!opts.length) opts = liveOpts
         } else if (liveOpts.length) {
           opts = liveOpts
         } else if (snapshot.length) {
-          // Live empty / error status — keep snapshot (may be briefly stale)
           opts = snapshot
         } else {
           const again = await loadCached()
@@ -336,7 +361,6 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
           }
           applyOpts(opts, meta)
           setError(null)
-          // Snapshot (or refresh prices / drop unavailable) on the draft
           await persistSnapshot(opts, meta)
         } else {
           setError(
@@ -379,6 +403,30 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destIata, checkin, checkout, adults, flightPp, token])
 
+  useEffect(() => {
+    const id = hotelIdOf(selected)
+    if (!id) {
+      setDescription(null)
+      return
+    }
+    let cancelled = false
+    setDescription(null)
+    void getApiClient()
+      .getHotelGallery(id, { language: 'fr' })
+      .then((g) => {
+        if (!cancelled) {
+          const d = typeof g.description === 'string' ? g.description.trim() : ''
+          setDescription(d || null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDescription(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
   const sorted = useMemo(() => {
     const list = [...options]
     list.sort((a, b) => {
@@ -394,23 +442,6 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
     })
     return list
   }, [options, sort])
-
-  const compareHotels = useMemo(
-    () =>
-      compareIds
-        .map((id) => options.find((h, i) => hotelKey(h, i) === id))
-        .filter(Boolean) as HotelUpsellOption[],
-    [compareIds, options],
-  )
-
-  const toggleCompare = (h: HotelUpsellOption, idx: number) => {
-    const id = hotelKey(h, idx)
-    setCompareIds((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id)
-      if (prev.length >= 3) return [...prev.slice(1), id]
-      return [...prev, id]
-    })
-  }
 
   const confirm = async (hotel?: HotelUpsellOption | null) => {
     const pick = hotel || selected
@@ -437,7 +468,6 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
         price_per_person: totalPp,
       })
       onUpdated(row)
-      setDetail(null)
       onDone()
     } catch {
       setError('Impossible d’enregistrer l’hôtel')
@@ -449,517 +479,345 @@ export function MyTripHotelCompose({ draft, token, onUpdated, onDone }: Props) {
   const packTotal = (h: HotelUpsellOption) =>
     Math.round(flightPp + Number(h.hotel_pp || 0))
 
+  const selectHotel = (h: HotelUpsellOption) => {
+    setSelected(h)
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      requestAnimationFrame(() => {
+        detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+  }
+
+  const advantages = selected ? hotelAdvantages(selected) : []
+  const rLabel = selected ? ratingLabel(selected.rating) : null
+
   return (
-    <section className="relative rounded-3xl border border-line bg-gradient-to-b from-primary-50/80 via-white to-canvas overflow-hidden shadow-soft">
-      {/* Hero header */}
-      <div className="relative px-5 sm:px-7 pt-6 pb-5 border-b border-line/80">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{
-            background:
-              'radial-gradient(ellipse 80% 60% at 10% 0%, rgba(14,165,233,0.18), transparent 55%)',
-          }}
-          aria-hidden
-        />
-        <div className="relative">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-700/80">
+    <section className="w-full">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF385C]">
             Composer le voyage
           </p>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight mt-1">
-            {cityLabel ? `Trouve ton hôtel à ${cityLabel}` : 'Choisis ton hôtel'}
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+            {cityLabel ? `Choisis ton hôtel à ${cityLabel}` : 'Choisis ton hôtel'}
           </h2>
-          <p className="text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
-            Compare photos, note, distance et pension — le vol reste fixe
-            {flightPp > 0 ? ` (${Math.round(flightPp)} € / pers.)` : ''}.
-            {nightCap != null
-              ? ` Gamme confort ≤ ~${Math.round(nightCap)} €/nuit.`
-              : ''}
+          <p className="text-sm text-slate-600 mt-1.5 max-w-2xl">
+            Sélectionne à gauche — le détail s’affiche à droite
+            {flightPp > 0 ? ` · vol fixe ${Math.round(flightPp)} € / pers.` : ''}
+            {nightCap != null ? ` · confort ≤ ~${Math.round(nightCap)} €/nuit` : ''}.
           </p>
-
-          {!loading && options.length > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {(
-                [
-                  ['price', 'Meilleur prix'],
-                  ['rating', 'Mieux notés'],
-                  ['distance', 'Plus proches'],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setSort(key)}
-                  className={`rounded-full px-3.5 py-2 text-xs font-bold min-h-[40px] transition-colors ${
-                    sort === key
-                      ? 'bg-primary-500 text-white shadow-sm'
-                      : 'bg-white text-ink-soft border border-line hover:border-primary-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-              <span className="text-xs font-semibold text-slate-400 ml-1">
-                {options.length} option{options.length > 1 ? 's' : ''}
-                {compareIds.length
-                  ? ` · ${compareIds.length} en comparaison`
-                  : ' · coche pour comparer'}
-              </span>
-            </div>
-          ) : null}
         </div>
+        <button
+          type="button"
+          onClick={onDone}
+          className="self-start sm:self-auto text-sm font-semibold text-slate-500 hover:text-slate-900 min-h-[40px]"
+        >
+          Plus tard
+        </button>
       </div>
 
-      <div className="p-5 sm:p-7 space-y-5">
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-64 rounded-3xl bg-gradient-to-r from-primary-100 via-white to-primary-100 bg-[length:200%_100%] animate-[shimmer_2s_infinite]"
-              />
-            ))}
-          </div>
-        ) : null}
+      {!loading && options.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          {(
+            [
+              ['price', 'Meilleur prix'],
+              ['rating', 'Mieux notés'],
+              ['distance', 'Plus proches'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSort(key)}
+              className={`rounded-full px-3.5 py-2 text-xs font-bold min-h-[40px] transition-colors ${
+                sort === key
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-400'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="text-xs font-semibold text-slate-400 ml-1">
+            {options.length} logement{options.length > 1 ? 's' : ''}
+          </span>
+        </div>
+      ) : null}
 
-        {error ? (
-          <p className="text-sm text-amber-900 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">
-            {error}
-          </p>
-        ) : null}
+      {error ? (
+        <p className="mb-4 text-sm text-amber-900 bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">
+          {error}
+        </p>
+      ) : null}
 
-        {!loading && sorted.length > 0 ? (
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {sorted.map((h, idx) => {
-              const id = hotelKey(h, idx)
-              const active =
-                String(selected?.id || selected?.hotel_id || '') ===
-                String(h.id || h.hotel_id || '')
-              const inCompare = compareIds.includes(id)
-              const dist = formatDistance(h.distance_m)
-              const board = boardLabelFr(h.board)
-              const total = packTotal(h)
-              const photo = h.photo || h.thumbnail
+      <div className="lg:grid lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.35fr)] lg:gap-8 lg:items-start">
+        {/* Liste */}
+        <div className="min-w-0">
+          {loading ? (
+            <ul className="space-y-3">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <li
+                  key={i}
+                  className="h-[108px] rounded-2xl bg-gradient-to-r from-slate-100 via-white to-slate-100 bg-[length:200%_100%] animate-[shimmer_2s_infinite] border border-slate-100"
+                />
+              ))}
+            </ul>
+          ) : null}
 
-              return (
-                <li key={id}>
-                  <motion.article
-                    layout
-                    whileHover={{ y: -3 }}
-                    transition={spring}
-                    className={`group relative flex flex-col h-full rounded-3xl overflow-hidden border-2 bg-white transition-shadow ${
-                      active
-                        ? 'border-primary-500 shadow-lift'
-                        : 'border-line hover:border-primary-200 shadow-soft'
-                    }`}
-                  >
+          {!loading && sorted.length > 0 ? (
+            <ul className="space-y-2.5 max-h-[none] lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto lg:pr-1 lg:scroll-smooth">
+              {sorted.map((h, idx) => {
+                const id = hotelKey(h, idx)
+                const active = hotelIdOf(selected) === hotelIdOf(h)
+                const dist = formatDistance(h.distance_m)
+                const board = boardLabelFr(h.board)
+                const total = packTotal(h)
+                const photo = h.photo || h.thumbnail
+
+                return (
+                  <li key={id}>
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelected(h)
-                        setDetail(h)
-                      }}
-                      className="relative block w-full text-left"
+                      onClick={() => selectHotel(h)}
+                      className={`w-full text-left flex gap-3 rounded-2xl border bg-white p-2.5 sm:p-3 transition-all ${
+                        active
+                          ? 'border-slate-900 shadow-[0_0_0_1px_#111827]'
+                          : 'border-slate-200 hover:border-slate-400 hover:shadow-sm'
+                      }`}
                     >
-                      <div className="relative h-44 sm:h-48 bg-slate-100 overflow-hidden">
+                      <div className="relative w-[104px] sm:w-[120px] h-[96px] shrink-0 rounded-xl overflow-hidden bg-slate-100">
                         {photo ? (
                           <img
                             src={photo}
                             alt=""
-                            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                            className="absolute inset-0 h-full w-full object-cover"
                             loading="lazy"
                           />
                         ) : (
-                          <div className="absolute inset-0 bg-gradient-to-br from-primary-400 to-primary-700" />
+                          <div className="absolute inset-0 bg-gradient-to-br from-slate-300 to-slate-500" />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/10 to-transparent" />
-                        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                          {h.rating != null ? (
-                            <Signal>{Number(h.rating).toFixed(1)}/10</Signal>
-                          ) : null}
-                          {h.refundable ? <Signal>Annul. flexible</Signal> : null}
-                        </div>
-                        <div className="absolute bottom-3 left-3 right-3">
-                          <p className="text-white font-extrabold text-lg leading-tight line-clamp-2 drop-shadow">
+                      </div>
+                      <div className="min-w-0 flex-1 flex flex-col py-0.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-bold text-slate-900 text-sm sm:text-[15px] leading-snug line-clamp-2">
                             {h.name || 'Hôtel'}
                           </p>
-                          <p className="text-white/90 text-xs font-semibold mt-1 flex items-center gap-2">
-                            <StarRow stars={h.stars} />
-                            {h.review_count != null && h.review_count > 0 ? (
-                              <span>{h.review_count} avis</span>
-                            ) : null}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="flex flex-col flex-1 p-4 gap-3">
-                      <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold text-slate-600">
-                        {board ? (
-                          <span className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1">
-                            {board}
-                          </span>
-                        ) : null}
-                        {dist ? (
-                          <span className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1">
-                            {dist}
-                          </span>
-                        ) : null}
-                        {h.hotel_pp != null ? (
-                          <span className="rounded-lg bg-slate-50 border border-slate-100 px-2 py-1">
-                            Hôtel {Math.round(Number(h.hotel_pp))} € / pers.
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-auto flex items-end justify-between gap-3">
-                        <div>
-                          <p className="text-2xl font-black text-primary-600 tabular-nums leading-none">
+                          <p className="shrink-0 text-base font-extrabold text-slate-900 tabular-nums">
                             {total} €
                           </p>
-                          <p className="text-[11px] font-semibold text-slate-400 mt-1">
-                            / pers. vol + hôtel
-                          </p>
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <label className="inline-flex items-center gap-2 text-xs font-bold text-ink-soft cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={inCompare}
-                              onChange={() => toggleCompare(h, idx)}
-                              className="rounded border-line text-primary-500 focus:ring-primary-300"
-                            />
-                            Comparer
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelected(h)
-                              setDetail(h)
-                            }}
-                            className="text-xs font-bold text-primary-700 hover:underline underline-offset-2"
-                          >
-                            Voir photos & détail
-                          </button>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelected(h)
-                          void confirm(h)
-                        }}
-                        disabled={saving}
-                        className={`w-full rounded-2xl min-h-[44px] text-sm font-bold transition-colors disabled:opacity-50 ${
-                          active
-                            ? 'bg-primary-500 text-white hover:bg-primary-600'
-                            : 'bg-primary-50 text-primary-800 hover:bg-primary-100'
-                        }`}
-                      >
-                        {active ? 'Choisir cet hôtel' : 'Sélectionner'}
-                      </button>
-                    </div>
-                  </motion.article>
-                </li>
-              )
-            })}
-          </ul>
-        ) : null}
-
-        {/* Compare strip */}
-        <AnimatePresence>
-          {compareHotels.length >= 2 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              className="rounded-3xl border border-primary-200 bg-white p-4 sm:p-5 shadow-soft"
-            >
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <h3 className="font-extrabold text-ink text-lg">Comparaison</h3>
-                <button
-                  type="button"
-                  onClick={() => setCompareIds([])}
-                  className="text-xs font-bold text-slate-500 hover:text-ink"
-                >
-                  Effacer
-                </button>
-              </div>
-              <div
-                className={`grid gap-3 ${
-                  compareHotels.length === 2
-                    ? 'grid-cols-1 sm:grid-cols-2'
-                    : 'grid-cols-1 sm:grid-cols-3'
-                }`}
-              >
-                {compareHotels.map((h, i) => {
-                  const photo = h.photo || h.thumbnail
-                  const total = packTotal(h)
-                  return (
-                    <div
-                      key={hotelKey(h, i)}
-                      className="rounded-2xl border border-line overflow-hidden flex flex-col"
-                    >
-                      <div className="h-28 bg-slate-100 relative">
-                        {photo ? (
-                          <img
-                            src={photo}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                        ) : null}
-                      </div>
-                      <div className="p-3 space-y-2 flex-1 flex flex-col">
-                        <p className="font-bold text-sm text-ink line-clamp-2">
-                          {h.name}
+                        <p className="text-[11px] text-slate-500 font-medium mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <StarRow stars={h.stars} />
+                          {h.rating != null ? (
+                            <span>
+                              {Number(h.rating).toFixed(1)}/10
+                              {h.review_count != null && h.review_count > 0
+                                ? ` · ${Number(h.review_count).toLocaleString('fr-FR')} avis`
+                                : ''}
+                            </span>
+                          ) : null}
                         </p>
-                        <dl className="text-[11px] space-y-1 text-slate-600 flex-1">
-                          <div className="flex justify-between gap-2">
-                            <dt>Note</dt>
-                            <dd className="font-bold text-ink">
-                              {h.rating != null
-                                ? `${Number(h.rating).toFixed(1)}/10`
-                                : '—'}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <dt>Étoiles</dt>
-                            <dd className="font-bold text-ink">
-                              {h.stars != null ? `${Math.round(Number(h.stars))}★` : '—'}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <dt>Distance</dt>
-                            <dd className="font-bold text-ink text-right">
-                              {formatDistance(h.distance_m)?.replace(' du centre', '') ||
-                                '—'}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <dt>Pension</dt>
-                            <dd className="font-bold text-ink">
-                              {boardLabelFr(h.board) || '—'}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between gap-2">
-                            <dt>Annulation</dt>
-                            <dd className="font-bold text-ink">
-                              {h.refundable ? 'Flexible' : 'Non flexible'}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between gap-2 pt-1 border-t border-slate-100">
-                            <dt>Pack / pers.</dt>
-                            <dd className="font-black text-primary-600">{total} €</dd>
-                          </div>
-                        </dl>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelected(h)
-                            setDetail(h)
-                          }}
-                          className="w-full mt-1 rounded-xl bg-primary-500 text-white text-xs font-bold min-h-[40px] hover:bg-primary-600"
-                        >
-                          Voir & choisir
-                        </button>
+                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
+                          {[board, dist].filter(Boolean).join(' · ') || '—'}
+                        </p>
+                        <p className="mt-auto pt-1 text-[10px] font-semibold text-slate-400">
+                          / pers. vol + hôtel
+                          {h.hotel_pp != null
+                            ? ` · hôtel ${Math.round(Number(h.hotel_pp))} €`
+                            : ''}
+                        </p>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </motion.div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           ) : null}
-        </AnimatePresence>
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center pt-1">
-          <button
-            type="button"
-            disabled={!selected || saving}
-            onClick={() => void confirm()}
-            className="flex-1 rounded-2xl bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 min-h-[48px] disabled:opacity-50"
-          >
-            {saving
-              ? '…'
-              : selected
-                ? `Valider · ${packTotal(selected)} € / pers.`
-                : 'Valider cet hôtel'}
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            className="sm:w-auto px-4 text-sm font-semibold text-slate-500 hover:text-ink min-h-[44px]"
-          >
-            Plus tard
-          </button>
+          {!loading && !sorted.length && !error ? (
+            <p className="text-sm text-slate-500 py-8 text-center">
+              Aucun hôtel pour ces dates.
+            </p>
+          ) : null}
         </div>
-      </div>
 
-      {/* Detail lightbox */}
-      <AnimatePresence>
-        {detail ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-ink/55 backdrop-blur-[2px] p-0 sm:p-6"
-            onClick={() => setDetail(null)}
-            role="presentation"
-          >
+        {/* Fiche détail */}
+        <aside
+          ref={detailRef}
+          className="mt-8 lg:mt-0 min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto scroll-mt-20"
+        >
+          {selected ? (
             <motion.div
-              initial={{ y: 48, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 28, opacity: 0 }}
-              transition={spring}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-line shadow-lift"
-              role="dialog"
-              aria-modal="true"
-              aria-label={detail.name || 'Détail hôtel'}
+              key={hotelIdOf(selected)}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22 }}
+              className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden"
             >
-              <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 bg-white/95 backdrop-blur border-b border-line">
-                <div className="min-w-0">
-                  <p className="font-extrabold text-ink truncate">
-                    {detail.name || 'Hôtel'}
-                  </p>
-                  <p className="text-xs text-slate-500 font-semibold truncate">
-                    {[
-                      detail.rating != null
-                        ? `${Number(detail.rating).toFixed(1)}/10`
-                        : null,
-                      formatDistance(detail.distance_m),
-                      boardLabelFr(detail.board),
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDetail(null)}
-                  className="shrink-0 w-10 h-10 rounded-full border border-line font-bold text-ink-soft hover:bg-canvas"
-                  aria-label="Fermer"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="p-4 sm:p-5 space-y-4">
+              <div className="p-4 sm:p-5 space-y-5">
                 <HotelPhotoGallery
-                  hotelId={String(detail.hotel_id || detail.id || '')}
-                  seedPhoto={detail.photo || detail.thumbnail}
-                  alt={detail.name || 'Hôtel'}
-                  hotelName={detail.name}
+                  hotelId={hotelIdOf(selected)}
+                  seedPhoto={selected.photo || selected.thumbnail}
+                  alt={selected.name || 'Hôtel'}
+                  hotelName={selected.name}
                   cityLabel={cityLabel || undefined}
                   embedded
                 />
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    {
-                      label: 'Note',
-                      value:
-                        detail.rating != null
-                          ? `${Number(detail.rating).toFixed(1)}/10`
-                          : '—',
-                    },
-                    {
-                      label: 'Étoiles',
-                      value:
-                        detail.stars != null
-                          ? `${Math.round(Number(detail.stars))}★`
-                          : '—',
-                    },
-                    {
-                      label: 'Distance',
-                      value:
-                        formatDistance(detail.distance_m)?.replace(
-                          ' du centre',
-                          '',
-                        ) || '—',
-                    },
-                    {
-                      label: 'Pack',
-                      value: `${packTotal(detail)} €`,
-                    },
-                  ].map((cell) => (
-                    <div
-                      key={cell.label}
-                      className="rounded-2xl bg-slate-50 border border-slate-100 px-3 py-2.5"
-                    >
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                        {cell.label}
-                      </p>
-                      <p className="text-sm font-extrabold text-ink mt-0.5">
-                        {cell.value}
+                <div>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                        {selected.name || 'Hôtel'}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <StarRow stars={selected.stars} />
+                        {formatDistance(selected.distance_m) ? (
+                          <span>{formatDistance(selected.distance_m)}</span>
+                        ) : null}
+                        {cityLabel ? <span>· {cityLabel}</span> : null}
                       </p>
                     </div>
-                  ))}
+                    <div className="text-right shrink-0">
+                      <p className="text-2xl font-black text-slate-900 tabular-nums leading-none">
+                        {packTotal(selected)} €
+                      </p>
+                      <p className="text-[11px] font-semibold text-slate-400 mt-1">
+                        / pers. vol + hôtel
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="rounded-2xl border border-line bg-canvas/60 px-4 py-3 space-y-2 text-sm">
-                  <p className="font-bold text-ink">Ce que propose l’offre</p>
-                  <ul className="space-y-1.5 text-slate-600">
-                    <li>
-                      · Pension :{' '}
-                      <span className="font-semibold text-ink">
-                        {boardLabelFr(detail.board) || 'Non précisée'}
-                      </span>
-                    </li>
-                    <li>
-                      · Annulation :{' '}
-                      <span className="font-semibold text-ink">
-                        {detail.refundable
-                          ? 'Flexible (selon conditions partenaire)'
-                          : 'Non flexible'}
-                      </span>
-                    </li>
-                    <li>
-                      · Hôtel seul :{' '}
-                      <span className="font-semibold text-ink">
-                        {detail.hotel_pp != null
-                          ? `${Math.round(Number(detail.hotel_pp))} € / pers.`
-                          : '—'}
-                      </span>
-                    </li>
-                    {detail.review_count != null && detail.review_count > 0 ? (
-                      <li>
-                        ·{' '}
-                        <span className="font-semibold text-ink">
-                          {detail.review_count} avis voyageurs
+                {/* Avis */}
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3.5 flex gap-4 items-center">
+                  <div className="shrink-0 w-14 h-14 rounded-2xl bg-slate-900 text-white flex flex-col items-center justify-center">
+                    <span className="text-lg font-black tabular-nums leading-none">
+                      {selected.rating != null
+                        ? Number(selected.rating).toFixed(1)
+                        : '—'}
+                    </span>
+                    <span className="text-[9px] font-bold uppercase tracking-wide opacity-70 mt-0.5">
+                      /10
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-slate-900">
+                      {rLabel || 'Avis voyageurs'}
+                    </p>
+                    <p className="text-sm text-slate-600 mt-0.5">
+                      {selected.review_count != null && selected.review_count > 0
+                        ? `Basé sur ${Number(selected.review_count).toLocaleString('fr-FR')} avis`
+                        : 'Note moyenne des voyageurs'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Avantages */}
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-900 mb-2.5">
+                    Ce qui est inclus
+                  </h4>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {advantages.length ? (
+                      advantages.map((a) => (
+                        <li
+                          key={a}
+                          className="flex items-start gap-2 text-sm text-slate-700 rounded-xl border border-slate-100 bg-white px-3 py-2.5"
+                        >
+                          <span
+                            className="mt-0.5 text-[#FF385C] font-bold"
+                            aria-hidden
+                          >
+                            ✓
+                          </span>
+                          <span className="font-medium">{a}</span>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-slate-500 col-span-full">
+                        Détails de l’offre à confirmer à la réservation.
+                      </li>
+                    )}
+                    {selected.hotel_pp != null ? (
+                      <li className="flex items-start gap-2 text-sm text-slate-700 rounded-xl border border-slate-100 bg-white px-3 py-2.5">
+                        <span className="mt-0.5 text-[#FF385C] font-bold" aria-hidden>
+                          ✓
+                        </span>
+                        <span className="font-medium">
+                          Hôtel {Math.round(Number(selected.hotel_pp))} € / pers. pour
+                          le séjour
                         </span>
                       </li>
                     ) : null}
                   </ul>
-                  {detail.name ? (
-                    <a
-                      href={mapsUrl(detail.name, cityLabel)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex mt-2 text-sm font-bold text-primary-700 hover:underline underline-offset-2"
-                    >
-                      Voir sur la carte →
-                    </a>
-                  ) : null}
                 </div>
+
+                {description ? (
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900 mb-2">
+                      À propos
+                    </h4>
+                    <p className="text-sm text-slate-600 leading-relaxed line-clamp-6 whitespace-pre-line">
+                      {description}
+                    </p>
+                  </div>
+                ) : null}
+
+                {/* Maps */}
+                {selected.name ? (
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <h4 className="text-sm font-extrabold text-slate-900">
+                        Emplacement
+                      </h4>
+                      <a
+                        href={mapsSearchUrl(selected.name, cityLabel)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-[#FF385C] hover:underline underline-offset-2"
+                      >
+                        Ouvrir dans Maps →
+                      </a>
+                    </div>
+                    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 aspect-[16/10] sm:aspect-[2/1]">
+                      <iframe
+                        title={`Carte — ${selected.name}`}
+                        src={mapsEmbedUrl(selected.name, cityLabel)}
+                        className="w-full h-full border-0"
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    </div>
+                    {formatDistance(selected.distance_m) ? (
+                      <p className="text-xs text-slate-500 mt-2 font-medium">
+                        {formatDistance(selected.distance_m)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => {
-                    setSelected(detail)
-                    void confirm(detail)
-                  }}
-                  className="w-full rounded-2xl bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 min-h-[48px] disabled:opacity-50"
+                  onClick={() => void confirm(selected)}
+                  className="w-full rounded-2xl bg-[#FF385C] hover:bg-[#E31C5F] text-white font-bold py-3.5 min-h-[52px] disabled:opacity-50 shadow-sm transition-colors"
                 >
                   {saving
                     ? '…'
-                    : `Choisir cet hôtel · ${packTotal(detail)} € / pers.`}
+                    : `Choisir cet hôtel · ${packTotal(selected)} € / pers.`}
                 </button>
               </div>
             </motion.div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 px-6 py-16 text-center text-sm text-slate-500">
+              {loading
+                ? 'Chargement des hôtels…'
+                : 'Sélectionne un hôtel dans la liste'}
+            </div>
+          )}
+        </aside>
+      </div>
     </section>
   )
 }

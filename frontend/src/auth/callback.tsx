@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSupabaseClient } from '../lib/supabase'
 import { apiUrl } from '../utils/apiBase'
+import { getApiClient } from '../utils/apiClient'
 
 function buildAppDeepLink(
   appRedirect: string,
@@ -126,6 +127,16 @@ export default function AuthCallback() {
         const postLogin = sessionStorage.getItem('fw_post_login_redirect')
         if (postLogin && postLogin.startsWith('/')) {
           sessionStorage.removeItem('fw_post_login_redirect')
+          const tripMatch = postLogin.match(/^\/trip\/([^/?#]+)/)
+          const draftMatch = postLogin.match(/[?&]draft=([^&]+)/)
+          const claimToken = tripMatch?.[1] || (draftMatch ? decodeURIComponent(draftMatch[1]) : null)
+          if (claimToken) {
+            try {
+              await getApiClient().claimMyTrip(claimToken)
+            } catch {
+              /* already claimed / expired */
+            }
+          }
           navigate(postLogin)
           return
         }
