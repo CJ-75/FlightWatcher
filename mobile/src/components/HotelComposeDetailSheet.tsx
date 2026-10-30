@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Linking,
   Image,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -199,11 +198,6 @@ function reviewMeta(r: HotelGuestReview) {
   return [r.name?.trim() || null, formatReviewCountry(r.country), formatReviewType(r.type), formatReviewDate(r.date)]
     .filter(Boolean)
     .join(' · ')
-}
-
-function mapsSearchUrl(name: string, city?: string | null) {
-  const q = [name, city].filter(Boolean).join(', ')
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
 }
 
 export function HotelComposeDetailSheet({
@@ -542,20 +536,14 @@ export function HotelComposeDetailSheet({
             <View>
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionTitle}>Emplacement</Text>
-                <Pressable
-                  onPress={() =>
-                    void Linking.openURL(mapsSearchUrl(hotel.name || '', cityLabel))
-                  }
-                  hitSlop={8}
-                >
-                  <Text style={styles.link}>Ouvrir Maps</Text>
-                </Pressable>
               </View>
               {hotelAddress ? (
                 <Text style={styles.address}>
                   {hotelAddress}
                   {cityLabel ? `, ${cityLabel}` : ''}
                 </Text>
+              ) : cityLabel ? (
+                <Text style={styles.address}>{cityLabel}</Text>
               ) : null}
               {hotel.stations && hotel.stations.length > 0
                 ? hotel.stations.slice(0, 2).map((s, idx) => {

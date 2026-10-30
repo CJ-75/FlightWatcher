@@ -5,17 +5,18 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
-  Linking,
+  Share,
   ActivityIndicator,
   Alert,
   Dimensions,
 } from 'react-native'
-import * as WebBrowser from 'expo-web-browser'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
 import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
+import { openInAppBrowser } from '../lib/openInApp'
+import { rememberTrip } from '../lib/tripRecovery'
 import { HeartIcon } from '../components/HeartIcon'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { useLikedDeals } from '../hooks/useLikedDeals'
@@ -152,11 +153,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
 
-  const openUrl = async (url: string) => {
-    if (!url) return
-    await Linking.openURL(url)
-  }
-
   const openFlight = async () => {
     let url = flightUrl
     const key = deal.deal_key || deal.id
@@ -168,7 +164,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
         /* keep */
       }
     }
-    if (url) await openUrl(url)
+    if (url) openInAppBrowser(navigation, url, 'Réserver le vol')
   }
 
   const buildDraftPayload = async (opts?: { composeHotel?: boolean }) => {
@@ -218,20 +214,27 @@ export function DealDetailScreen({ route, navigation }: Props) {
     }
   }
 
-  const openDraftWeb = async () => {
-    const draft = await getApi().createMyTrip(await buildDraftPayload({ composeHotel: false }))
-    const url = `${getWebOrigin()}/trip/${draft.draft_token}`
-    await WebBrowser.openBrowserAsync(url, {
-      presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-    })
-  }
-
   const startMyTrip = async () => {
     setStartingTrip(true)
     try {
-      await openDraftWeb()
+      const hotel = selected || deal.hotel
+      const draft = await getApi().createMyTrip(
+        await buildDraftPayload({ composeHotel: !hotel?.id }),
+      )
+      await rememberTrip({
+        draft_token: draft.draft_token,
+        city: draft.city_name || deal.city,
+      })
+      if (hotel?.id) {
+        navigation.navigate('DealCheckout', {
+          draftToken: draft.draft_token,
+          hotelId: hotel.id,
+        })
+      } else {
+        navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
+      }
     } catch {
-      if (flightUrl) await openUrl(flightUrl)
+      if (flightUrl) openInAppBrowser(navigation, flightUrl, 'Réserver le vol')
     } finally {
       setStartingTrip(false)
     }
@@ -243,6 +246,10 @@ export function DealDetailScreen({ route, navigation }: Props) {
       const draft = await getApi().createMyTrip(
         await buildDraftPayload({ composeHotel: true }),
       )
+      await rememberTrip({
+        draft_token: draft.draft_token,
+        city: draft.city_name || deal.city,
+      })
       navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
       Alert.alert('Erreur', 'Impossible d’ouvrir la composition hôtel — réessaie')
@@ -503,13 +510,11 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 ]
                   .filter(Boolean)
                   .join(' — ')
-                void Linking.openURL(
-                  `https://wa.me/?text=${encodeURIComponent(text)}`,
-                )
+                void Share.share({ message: text })
               }}
               hitSlop={8}
             >
-              <Text style={styles.linkText}>Partager sur WhatsApp</Text>
+              <Text style={styles.linkText}>Partager</Text>
             </Pressable>
             <Pressable
               onPress={() => {
@@ -540,7 +545,12 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 <Text style={styles.linkText}>Réserver l’hôtel seul</Text>
               </Pressable>
             ) : hasPartnerUrl ? (
-              <Pressable onPress={() => void openUrl(deal.booking_url)} hitSlop={8}>
+              <Pressable
+                onPress={() =>
+                  openInAppBrowser(navigation, deal.booking_url!, 'Voir l’offre')
+                }
+                hitSlop={8}
+              >
                 <Text style={styles.linkText}>Voir l’offre</Text>
               </Pressable>
             ) : null}

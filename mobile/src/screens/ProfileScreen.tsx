@@ -36,7 +36,8 @@ export function ProfileScreen() {
   }
 
   const openBookings = () => {
-    navigation.dispatch(CommonActions.navigate({ name: 'Bookings' }))
+    const root = navigation.getParent() ?? navigation
+    root.dispatch(CommonActions.navigate({ name: 'Bookings' }))
   }
 
   // Logged-out landing (real guest landings) for preview / no user
@@ -79,6 +80,14 @@ export function ProfileScreen() {
                 <Text style={styles.googleLabel}>Continuer avec Google</Text>
               </>
             )}
+          </Pressable>
+
+          <Pressable
+            onPress={openBookings}
+            style={({ pressed }) => [styles.guestBookings, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.guestBookingsLabel}>Mes réservations</Text>
+            <Text style={styles.guestBookingsChevron}>›</Text>
           </Pressable>
 
           {__DEV__ && appearLoggedOut ? (
@@ -135,33 +144,32 @@ export function ProfileScreen() {
           <Text style={styles.email}>{viewUser!.email}</Text>
         </View>
 
+        <Pressable
+          onPress={openBookings}
+          style={({ pressed }) => [
+            styles.securityRow,
+            shadow.soft,
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={styles.securityRowLabel}>Mes réservations</Text>
+          <Text style={styles.securityRowChevron}>›</Text>
+        </Pressable>
+
         {!isGuest ? (
-          <>
-            <Pressable
-              onPress={openBookings}
-              style={({ pressed }) => [
-                styles.securityRow,
-                shadow.soft,
-                pressed && { opacity: 0.9 },
-              ]}
-            >
-              <Text style={styles.securityRowLabel}>Mes réservations</Text>
-              <Text style={styles.securityRowChevron}>›</Text>
-            </Pressable>
-            <Pressable
-              onPress={openSecurity}
-              style={({ pressed }) => [
-                styles.securityRow,
-                shadow.soft,
-                pressed && { opacity: 0.9 },
-              ]}
-            >
-              <Text style={styles.securityRowLabel}>
-                {translate('fr', 'auth.security.title')}
-              </Text>
-              <Text style={styles.securityRowChevron}>›</Text>
-            </Pressable>
-          </>
+          <Pressable
+            onPress={openSecurity}
+            style={({ pressed }) => [
+              styles.securityRow,
+              shadow.soft,
+              pressed && { opacity: 0.9 },
+            ]}
+          >
+            <Text style={styles.securityRowLabel}>
+              {translate('fr', 'auth.security.title')}
+            </Text>
+            <Text style={styles.securityRowChevron}>›</Text>
+          </Pressable>
         ) : null}
 
         <View style={[styles.infoCard, shadow.soft]}>
@@ -331,6 +339,31 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textAlign: 'center',
     includeFontPadding: false,
+  },
+  guestBookings: {
+    marginTop: 20,
+    width: '100%',
+    maxWidth: 320,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  guestBookingsLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  guestBookingsChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 22,
+    color: colors.muted,
+    lineHeight: 24,
   },
   guestBody: {
     marginTop: 10,

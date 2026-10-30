@@ -5,8 +5,9 @@ import {
   Image,
   Pressable,
   StyleSheet,
-  Linking,
 } from 'react-native'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { EnrichedTripResponse } from '@flightwatcher/shared'
 import {
@@ -19,6 +20,8 @@ import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'
 import { bookCtaLabel, resolveTripPriceSource } from '../lib/partnerBook'
+import { openInAppBrowser } from '../lib/openInApp'
+import type { RootStackParamList } from '../../App'
 
 type CardAction = {
   label: string
@@ -69,6 +72,7 @@ export function DestinationCard({
   secondaryAction,
   isFavorite,
 }: Props) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const destCode = trip.aller.destination || trip.destination_code
   const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull)
   const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)
@@ -87,7 +91,7 @@ export function DestinationCard({
       onBook()
       return
     }
-    await Linking.openURL(priceSource.primaryUrl)
+    openInAppBrowser(navigation, priceSource.primaryUrl, 'Réserver le vol')
   }
 
   const airlineLabel = formatAirlineLabel(trip)

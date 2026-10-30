@@ -74,6 +74,7 @@ export type RootStackParamList = {
   Bookings: undefined
   HotelCompose: { draftToken: string }
   DealCheckout: { dealId?: string; draftToken?: string; hotelId?: string }
+  InAppBrowser: { url: string; title?: string }
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -156,6 +157,9 @@ const DealCheckoutScreen = lazyScreen(() =>
 )
 const HotelComposeScreen = lazyScreen(() =>
   import('./src/screens/HotelComposeScreen').then((m) => ({ default: m.HotelComposeScreen })),
+)
+const InAppBrowserScreen = lazyScreen(() =>
+  import('./src/screens/InAppBrowserScreen').then((m) => ({ default: m.InAppBrowserScreen })),
 )
 const SecurityScreen = lazyScreen(() =>
   import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
@@ -356,6 +360,15 @@ function RootNavigator() {
               },
               headerShadowVisible: false,
               headerBackTitle: 'Retour',
+            }}
+          />
+          <Stack.Screen
+            name="InAppBrowser"
+            component={InAppBrowserScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
             }}
           />
         </>

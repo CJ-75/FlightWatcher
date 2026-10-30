@@ -10,6 +10,7 @@ import {
   type AppStateStatus,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { EnrichedTripResponse, SavedFavorite, ScanRequest } from '@flightwatcher/shared'
 import {
@@ -35,11 +36,13 @@ import { colors, fonts, shadow, spacing, type } from '../theme'
 import {
   clearPendingHotelUpsell,
   createMyTripComposeFromTrip,
-  openPartnerBookSync,
+  preparePartnerBook,
   readPendingHotelUpsell,
   trackPartnerEvent,
-  type PendingHotelUpsell,
 } from '../lib/partnerBook'
+import { PostBookLightbox } from '../components/PostBookLightbox'
+import { openInAppBrowser } from '../lib/openInApp'
+import { rememberTrip } from '../lib/tripRecovery'
 import { peekInspireLive, subscribeInspireLive } from '../lib/inspireLive'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>
@@ -61,7 +64,7 @@ export function ResultsScreen({ route, navigation }: Props) {
     () => route.params.trips || [],
   )
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set())
-  const [hotelUpsell, setHotelUpsell] = useState<PendingHotelUpsell | null>(null)
+  const [postBookTrip, setPostBookTrip] = useState<EnrichedTripResponse | null>(null)
   const [hotelUpsellBusy, setHotelUpsellBusy] = useState(false)
   const leftForPartnerRef = React.useRef(false)
   const [showSave, setShowSave] = useState(false)
@@ -153,26 +156,33 @@ export function ResultsScreen({ route, navigation }: Props) {
   const passengers = searchInfo?.passengers || 1
 
   const handlePartnerBook = (trip: EnrichedTripResponse) => {
+    // In-app WebView for partner — lightbox when user closes it
     leftForPartnerRef.current = true
-    void openPartnerBookSync({
+    void preparePartnerBook({
       trip,
       passengers,
       searchEventId: searchInfo?.searchEventId,
-    }).then(async () => {
-      const pending = await readPendingHotelUpsell()
-      if (pending) setHotelUpsell(pending)
+    }).then((ps) => {
+      openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
     })
   }
 
   const handleAddHotel = async (trip: EnrichedTripResponse) => {
     await clearPendingHotelUpsell()
-    setHotelUpsell(null)
+    setPostBookTrip(null)
     setHotelUpsellBusy(true)
     try {
       const draft = await createMyTripComposeFromTrip({
         trip,
         passengers,
         markFlightBooked: false,
+      })
+      await rememberTrip({
+        draft_token: draft.draft_token,
+        city: cityDisplayNameFr(
+          trip.destination_code,
+          trip.aller?.destinationFull?.split(',')[0]?.trim(),
+        ),
       })
       navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
@@ -185,11 +195,18 @@ export function ResultsScreen({ route, navigation }: Props) {
   const showUpsellIfPending = useCallback(async () => {
     if (!leftForPartnerRef.current) return
     const pending = await readPendingHotelUpsell()
-    if (!pending || pending.skippedBanner) return
-    if (Date.now() - pending.createdAt < 600) return
+    if (!pending || pending.skippedBanner || !pending.trip) return
+    if (Date.now() - pending.createdAt < 400) return
     leftForPartnerRef.current = false
-    setHotelUpsell(pending)
+    setPostBookTrip(pending.trip)
   }, [])
+
+  // After closing InAppBrowser (partner), show hotel lightbox
+  useFocusEffect(
+    useCallback(() => {
+      void showUpsellIfPending()
+    }, [showUpsellIfPending]),
+  )
 
   useEffect(() => {
     const onChange = (state: AppStateStatus) => {
@@ -202,26 +219,34 @@ export function ResultsScreen({ route, navigation }: Props) {
     return () => sub.remove()
   }, [showUpsellIfPending])
 
-  const handleHotelUpsellYes = async () => {
-    const pending = hotelUpsell || (await readPendingHotelUpsell())
-    if (!pending?.trip) return
+  const handlePostBookOpenTrip = async () => {
+    const trip = postBookTrip
+    if (!trip) return
+    const pending = await readPendingHotelUpsell()
     setHotelUpsellBusy(true)
     trackPartnerEvent({
-      trip: pending.trip,
-      partner_id: pending.partnerId,
-      partner_name: pending.partnerName,
-      redirect_url: pending.primaryUrl,
+      trip,
+      partner_id: pending?.partnerId || 'unknown',
+      partner_name: pending?.partnerName || 'unknown',
+      redirect_url: pending?.primaryUrl || '',
       action_type: 'hotel_upsell_yes',
-      search_event_id: pending.searchEventId || null,
+      search_event_id: pending?.searchEventId || searchInfo?.searchEventId || null,
     })
     try {
       const draft = await createMyTripComposeFromTrip({
-        trip: pending.trip,
-        passengers: pending.passengers || passengers,
+        trip,
+        passengers: pending?.passengers || passengers,
         markFlightBooked: true,
       })
+      await rememberTrip({
+        draft_token: draft.draft_token,
+        city: cityDisplayNameFr(
+          trip.destination_code,
+          trip.aller?.destinationFull?.split(',')[0]?.trim(),
+        ),
+      })
       await clearPendingHotelUpsell()
-      setHotelUpsell(null)
+      setPostBookTrip(null)
       navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
       Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
@@ -230,20 +255,21 @@ export function ResultsScreen({ route, navigation }: Props) {
     }
   }
 
-  const handleHotelUpsellNo = async () => {
-    const pending = hotelUpsell || (await readPendingHotelUpsell())
-    if (pending?.trip) {
+  const handlePostBookDismiss = async () => {
+    const trip = postBookTrip
+    const pending = await readPendingHotelUpsell()
+    if (trip) {
       trackPartnerEvent({
-        trip: pending.trip,
-        partner_id: pending.partnerId,
-        partner_name: pending.partnerName,
-        redirect_url: pending.primaryUrl,
+        trip,
+        partner_id: pending?.partnerId || 'unknown',
+        partner_name: pending?.partnerName || 'unknown',
+        redirect_url: pending?.primaryUrl || '',
         action_type: 'hotel_upsell_no',
-        search_event_id: pending.searchEventId || null,
+        search_event_id: pending?.searchEventId || searchInfo?.searchEventId || null,
       })
     }
     await clearPendingHotelUpsell()
-    setHotelUpsell(null)
+    setPostBookTrip(null)
   }
 
   const availableOrigins = useMemo(() => {
@@ -399,31 +425,6 @@ export function ResultsScreen({ route, navigation }: Props) {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            {hotelUpsell ? (
-              <View style={styles.upsellBanner}>
-                <Text style={styles.upsellTitle}>
-                  Ton vol pour {hotelUpsell.city} est réservé ?
-                </Text>
-                <View style={styles.upsellRow}>
-                  <Pressable
-                    onPress={() => void handleHotelUpsellYes()}
-                    disabled={hotelUpsellBusy}
-                    style={[styles.upsellYes, hotelUpsellBusy && { opacity: 0.6 }]}
-                  >
-                    <Text style={styles.upsellYesText}>
-                      {hotelUpsellBusy ? '…' : 'Oui, trouver mon hôtel'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => void handleHotelUpsellNo()}
-                    disabled={hotelUpsellBusy}
-                    style={styles.upsellNo}
-                  >
-                    <Text style={styles.upsellNoText}>Pas encore</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
             <Text style={styles.title}>{translate('fr', 'results.title')}</Text>
             <Text style={styles.count}>
               {visibleTrips.length} destination{visibleTrips.length > 1 ? 's' : ''}
@@ -541,6 +542,15 @@ export function ResultsScreen({ route, navigation }: Props) {
         <View style={[styles.toast, { bottom: insets.bottom + 16 }]}>
           <Text style={styles.toastText}>{toast}</Text>
         </View>
+      ) : null}
+
+      {postBookTrip ? (
+        <PostBookLightbox
+          trip={postBookTrip}
+          busy={hotelUpsellBusy}
+          onOpenTrip={() => void handlePostBookOpenTrip()}
+          onClose={() => void handlePostBookDismiss()}
+        />
       ) : null}
 
       <SaveSearchModal
@@ -668,52 +678,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.white,
     textAlign: 'center',
-    includeFontPadding: false,
-  },
-  upsellBanner: {
-    marginBottom: 14,
-    backgroundColor: '#ecfdf5',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    padding: 14,
-    gap: 10,
-  },
-  upsellTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  upsellRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  upsellYes: {
-    backgroundColor: '#059669',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  upsellYesText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.white,
-    includeFontPadding: false,
-  },
-  upsellNo: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  upsellNoText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.inkSoft,
     includeFontPadding: false,
   },
 })

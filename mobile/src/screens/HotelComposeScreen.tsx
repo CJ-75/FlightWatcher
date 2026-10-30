@@ -13,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { type HotelUpsellOption, type MyTripDraft } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { openInAppBrowser } from '../lib/openInApp'
 import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
@@ -72,16 +73,57 @@ function hotelPriceSortKey(h: HotelUpsellOption, adults = 2): number {
   return Number.POSITIVE_INFINITY
 }
 
-function reasonError(reason: string, status?: string) {
-  return reason === 'not_in_catalogue'
-    ? 'Cette destination n’a pas encore d’hôtels — réessaie dans un instant'
-    : reason === 'bad_dates'
-      ? 'Dates invalides pour l’hôtel'
-      : reason === 'empty_pool' || reason === 'no_rates' || status === 'no_rates'
-        ? 'Pas de dispo hôtel pour ces dates'
-        : reason === 'rate_limited' || reason === 'too_many_fetches'
-          ? 'Trop de recherches hôtel — réessaie dans un moment'
-          : 'Aucun hôtel disponible pour cette ville / ces dates'
+type EmptyKind = 'none' | 'catalogue' | 'dates' | 'rate_limit' | 'load' | 'fatal'
+
+function emptyKindFromReason(reason: string, status?: string): EmptyKind {
+  if (reason === 'not_in_catalogue') return 'catalogue'
+  if (reason === 'bad_dates') return 'dates'
+  if (
+    reason === 'empty_pool' ||
+    reason === 'no_rates' ||
+    status === 'no_rates' ||
+    status === 'unavailable'
+  ) {
+    return 'dates'
+  }
+  if (reason === 'rate_limited' || reason === 'too_many_fetches') return 'rate_limit'
+  return 'none'
+}
+
+function emptyCopy(kind: EmptyKind, city?: string | null) {
+  const place = city?.trim() ? city.trim() : 'cette destination'
+  switch (kind) {
+    case 'catalogue':
+      return {
+        title: `Hôtels bientôt à ${place}`,
+        body: 'On n’a pas encore de chambres pour cette ville. Réessaie dans un instant, ou continue avec ton vol.',
+      }
+    case 'dates':
+      return {
+        title: 'Pas de chambre pour ces dates',
+        body: `Aucun logement dispo à ${place} sur ce séjour. Réessaie, ou repars sur une autre offre.`,
+      }
+    case 'rate_limit':
+      return {
+        title: 'Un peu trop de recherches',
+        body: 'Attends quelques secondes puis réessaie — ou continue sans hôtel pour l’instant.',
+      }
+    case 'load':
+      return {
+        title: 'Chargement interrompu',
+        body: 'La recherche hôtel n’a pas abouti. Réessaie, ou reviens aux résultats.',
+      }
+    case 'fatal':
+      return {
+        title: 'Voyage introuvable',
+        body: 'Ce brouillon a expiré ou est inaccessible. Repars depuis les résultats.',
+      }
+    default:
+      return {
+        title: `On cherche encore pour ${place}`,
+        body: 'Pas de résultat pour l’instant. Réessaie, change d’offre, ou continue avec ton vol seul.',
+      }
+  }
 }
 
 export function HotelComposeScreen({ route, navigation }: Props) {
@@ -93,8 +135,9 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   const [selected, setSelected] = useState<HotelUpsellOption | null>(null)
   const [sort, setSort] = useState<SortKey>('price')
   const [loading, setLoading] = useState(true)
+  const [revalidating, setRevalidating] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [emptyKind, setEmptyKind] = useState<EmptyKind | null>(null)
   const [cityLabel, setCityLabel] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -102,6 +145,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   const payload = (draft?.payload || {}) as Record<string, unknown>
   const flight = (payload.flight || {}) as Record<string, unknown>
   const flightPp = Number(flight.price_pp || 0)
+  const flightUrl = String(flight.booking_url || payload.booking_url || '').trim()
   const checkin = String(
     draft?.out_date || (payload.dates as { outbound?: string } | undefined)?.outbound || '',
   ).slice(0, 10)
@@ -114,14 +158,14 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     let cancelled = false
     ;(async () => {
       setLoading(true)
-      setError(null)
+      setEmptyKind(null)
       try {
         const row = await getApi().getMyTrip(draftToken)
         if (cancelled) return
         setDraft(row)
-      } catch (e) {
+      } catch {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Voyage introuvable')
+          setEmptyKind('fatal')
           setLoading(false)
         }
       }
@@ -155,13 +199,13 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       const snapshot = readSnapshot(pl)
 
       if (!dest || !cin || !cout) {
-        setError('Destination ou dates manquantes')
+        setEmptyKind('dates')
         setLoading(false)
         return
       }
 
       setLoading(true)
-      setError(null)
+      setEmptyKind(null)
 
       const lookupItem = {
         iata: dest,
@@ -181,6 +225,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       const applyOpts = (
         opts: HotelUpsellOption[],
         meta?: { night_cap?: number | null; city?: string | null },
+        optsFlags?: { paint?: boolean; stillLive?: boolean },
       ) => {
         const byPrice = [...opts].sort(
           (a, b) => hotelPriceSortKey(a, pax) - hotelPriceSortKey(b, pax),
@@ -191,6 +236,11 @@ export function HotelComposeScreen({ route, navigation }: Props) {
         const curId = hotelIdOf(currentHotel)
         const match = byPrice.find((h) => hotelIdOf(h) === curId)
         setSelected(match || byPrice[0] || null)
+        // Paint list ASAP (cache/snapshot) while live rates may still run
+        if (optsFlags?.paint && byPrice.length) {
+          setLoading(false)
+          setRevalidating(Boolean(optsFlags.stillLive))
+        }
       }
 
       const persistSnapshot = async (
@@ -271,28 +321,43 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       try {
         const snapCap =
           pl.compose_night_cap != null ? Number(pl.compose_night_cap) : null
+
+        // Live in parallel with cache so first paint isn't blocked by job poll
+        const livePromise = fetchLive()
+
         if (snapshot.length) {
-          applyOpts(snapshot, { night_cap: snapCap, city: cityHint })
+          applyOpts(snapshot, { night_cap: snapCap, city: cityHint }, {
+            paint: true,
+            stillLive: true,
+          })
         } else {
           const cached = await loadCached()
           if (cancelled) return
-          if (cached.opts.length) applyOpts(cached.opts, cached)
+          if (cached.opts.length) {
+            applyOpts(cached.opts, cached, { paint: true, stillLive: true })
+          }
         }
 
         let result: Awaited<ReturnType<ReturnType<typeof getApi>['fetchHotelUpsell']>> | null =
           null
         try {
-          result = await fetchLive()
+          result = await livePromise
         } catch (e) {
           if (snapshot.length) {
-            if (!cancelled) setLoading(false)
+            if (!cancelled) {
+              setLoading(false)
+              setRevalidating(false)
+            }
             return
           }
           const cached = await loadCached()
           if (cached.opts.length) {
-            applyOpts(cached.opts, cached)
+            applyOpts(cached.opts, cached, { paint: true, stillLive: false })
             await persistSnapshot(cached.opts, cached)
-            if (!cancelled) setLoading(false)
+            if (!cancelled) {
+              setLoading(false)
+              setRevalidating(false)
+            }
             return
           }
           throw e
@@ -318,36 +383,46 @@ export function HotelComposeScreen({ route, navigation }: Props) {
             night_cap: result?.night_cap ?? snapCap,
             city: result?.city ?? cityHint,
           }
-          applyOpts(opts, meta)
-          setError(null)
+          applyOpts(opts, meta, { paint: true, stillLive: false })
+          setEmptyKind(null)
           await persistSnapshot(opts, meta)
         } else {
-          setError(
-            reasonError(String(result?.reason || result?.status || ''), result?.status),
+          setEmptyKind(
+            emptyKindFromReason(
+              String(result?.reason || result?.status || ''),
+              result?.status,
+            ),
           )
         }
       } catch {
         if (!cancelled) {
           if (snapshot.length) {
-            applyOpts(snapshot, {
-              night_cap:
-                pl.compose_night_cap != null ? Number(pl.compose_night_cap) : null,
-              city: cityHint,
-            })
-            setError(null)
+            applyOpts(
+              snapshot,
+              {
+                night_cap:
+                  pl.compose_night_cap != null ? Number(pl.compose_night_cap) : null,
+                city: cityHint,
+              },
+              { paint: true, stillLive: false },
+            )
+            setEmptyKind(null)
           } else {
             const again = await loadCached()
             if (again.opts.length) {
-              applyOpts(again.opts, again)
+              applyOpts(again.opts, again, { paint: true, stillLive: false })
               await persistSnapshot(again.opts, again)
-              setError(null)
+              setEmptyKind(null)
             } else {
-              setError('Impossible de charger les hôtels')
+              setEmptyKind('load')
             }
           }
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setRevalidating(false)
+        }
       }
     })()
     return () => {
@@ -372,7 +447,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   const confirm = async () => {
     if (!selected) return
     setSaving(true)
-    setError(null)
+    setEmptyKind(null)
     try {
       const hotelPp = Number(selected.hotel_pp || 0)
       const totalPp = Math.round(flightPp + hotelPp)
@@ -411,6 +486,15 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     setSheetOpen(true)
   }
 
+  const empty = emptyKind != null ? emptyCopy(emptyKind, cityLabel) : null
+  const retryHotels = () => {
+    setOptions([])
+    setSelected(null)
+    setEmptyKind(null)
+    setDraft(null)
+    setReloadKey((k) => k + 1)
+  }
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -419,18 +503,39 @@ export function HotelComposeScreen({ route, navigation }: Props) {
           <ActivityIndicator color={colors.primary} size="large" />
           <Text style={styles.hint}>Recherche d’hôtels…</Text>
         </View>
-      ) : error && !options.length ? (
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable
-            style={styles.retry}
-            onPress={() => {
-              setDraft(null)
-              setReloadKey((k) => k + 1)
-            }}
-          >
-            <Text style={styles.retryText}>Réessayer</Text>
-          </Pressable>
+      ) : emptyKind && !options.length ? (
+        <View style={[styles.emptyWrap, { paddingBottom: insets.bottom + 24 }]}>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyKicker}>FlightWatcher</Text>
+            <Text style={styles.emptyTitle}>{empty?.title}</Text>
+            <Text style={styles.emptyBody}>{empty?.body}</Text>
+
+            {emptyKind !== 'fatal' ? (
+              <Pressable style={styles.emptyPrimary} onPress={retryHotels}>
+                <Text style={styles.emptyPrimaryText}>Réessayer</Text>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              style={styles.emptySecondary}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.emptySecondaryText}>
+                {emptyKind === 'fatal' ? 'Retour aux résultats' : 'Continuer sans hôtel'}
+              </Text>
+            </Pressable>
+
+            {flightUrl && emptyKind !== 'fatal' ? (
+              <Pressable
+                style={styles.emptyLink}
+                onPress={() =>
+                  openInAppBrowser(navigation, flightUrl, 'Réserver le vol')
+                }
+              >
+                <Text style={styles.emptyLinkText}>Ouvrir la réservation vol</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       ) : (
         <>
@@ -453,6 +558,13 @@ export function HotelComposeScreen({ route, navigation }: Props) {
               </Pressable>
             ))}
           </View>
+
+          {revalidating ? (
+            <View style={styles.revalBar}>
+              <ActivityIndicator color={colors.primary} size="small" />
+              <Text style={styles.revalText}>Mise à jour des prix…</Text>
+            </View>
+          ) : null}
 
           <FlatList
             data={sorted}
@@ -508,7 +620,6 @@ export function HotelComposeScreen({ route, navigation }: Props) {
           />
 
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            {error ? <Text style={styles.footerError}>{error}</Text> : null}
             <Pressable style={styles.later} onPress={() => navigation.goBack()}>
               <Text style={styles.laterText}>Plus tard</Text>
             </Pressable>
@@ -541,20 +652,64 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hint: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
-  error: {
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    color: colors.danger,
-    textAlign: 'center',
+  emptyWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
   },
-  retry: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+  emptyCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    gap: 10,
+  },
+  emptyKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: colors.primary,
+  },
+  emptyTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.ink,
+    letterSpacing: -0.3,
+    lineHeight: 28,
+  },
+  emptyBody: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.muted,
+    lineHeight: 21,
+    marginBottom: 6,
+  },
+  emptyPrimary: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  retryText: { fontFamily: fonts.bold, color: colors.white },
+  emptyPrimaryText: { fontFamily: fonts.bold, color: colors.white, fontSize: 15 },
+  emptySecondary: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+  },
+  emptySecondaryText: { fontFamily: fonts.semibold, color: colors.ink, fontSize: 15 },
+  emptyLink: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyLinkText: { fontFamily: fonts.bold, fontSize: 13, color: colors.primary },
   sortRow: {
     flexDirection: 'row',
     gap: 8,
@@ -575,6 +730,14 @@ const styles = StyleSheet.create({
   },
   sortText: { fontFamily: fonts.medium, fontSize: 13, color: colors.inkSoft },
   sortTextOn: { color: colors.primaryInk, fontFamily: fonts.bold },
+  revalBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  revalText: { fontFamily: fonts.medium, fontSize: 12, color: colors.muted },
   city: {
     fontFamily: fonts.semibold,
     fontSize: 15,
@@ -620,13 +783,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.canvas,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.line,
-  },
-  footerError: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.danger,
-    marginBottom: 6,
-    textAlign: 'center',
   },
   later: {
     minHeight: 44,

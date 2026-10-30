@@ -7,7 +7,6 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
-  Linking,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type {
@@ -16,6 +15,8 @@ import type {
   TravelDeal,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { openInAppBrowser } from '../lib/openInApp'
+import { rememberTrip } from '../lib/tripRecovery'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, spacing } from '../theme'
@@ -199,7 +200,18 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
         draftToken && !String(deal.deal_key || '').startsWith('mytrip-')
           ? `mytrip-${draftToken}`
           : deal.deal_key || deal.id || (draftToken ? `mytrip-${draftToken}` : '')
-      const hotelCharge = reval.public_hotel_price ?? 0
+      const hotelCharge =
+        reval.public_hotel_price ??
+        deal.price_breakdown?.hotel_public_total ??
+        reval.revalidated_price_pp ??
+        0
+      const baseSnap = (reval.deal_snapshot || deal) as TravelDeal
+      const snapHotel = {
+        ...(baseSnap.hotel || {}),
+        refundable: reval.refundable ?? baseSnap.hotel?.refundable ?? null,
+        cancel_deadline:
+          reval.cancel_deadline ?? baseSnap.hotel?.cancel_deadline ?? null,
+      }
       const pb = await getApi().prebookHotel({
         deal_key: key,
         offer_id: reval.offer_id,
@@ -208,23 +220,42 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
         charged_price: hotelCharge,
         margin_pct_used: reval.margin_pct_used,
         ssp_at_booking: reval.ssp_total,
-        deal_snapshot: reval.deal_snapshot || deal,
+        deal_snapshot: {
+          ...baseSnap,
+          hotel: snapHotel,
+          refundable: snapHotel.refundable,
+          cancel_deadline: snapHotel.cancel_deadline,
+        } as TravelDeal,
+        draft_token: draftToken || undefined,
       })
-      const booked = await getApi().bookHotel(pb.booking_id, {
+      let booked = await getApi().bookHotel(pb.booking_id, {
         holder: { firstName, lastName, email },
         guests: [{ firstName, lastName, email, occupancyNumber: 1 }],
         payment_status: 'succeeded',
+        draft_token: draftToken || undefined,
+        sandbox_simulate: true,
       })
+      if (booked.status === 'booking_pending') {
+        await new Promise((r) => setTimeout(r, 1500))
+        booked = await getApi().getHotelBooking(pb.booking_id, {
+          draft_token: draftToken || undefined,
+        })
+      }
       if (draftToken) {
         try {
           await getApi().markMyTripHotelBooked(draftToken, {
-            booking_id: pb.booking_id,
+            booking_id: booked.id || pb.booking_id,
             confirmation_code: booked.confirmation_code || null,
             holder_email: email,
           })
         } catch {
           /* non-blocking */
         }
+        await rememberTrip({
+          draft_token: draftToken,
+          booking_id: booked.id || pb.booking_id,
+          city: deal.city,
+        })
       }
       setConfirmation(booked.confirmation_code || booked.status)
       setStep('done')
@@ -296,7 +327,13 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
             {deal?.flight?.booking_url ? (
               <Pressable
                 style={styles.btnSecondary}
-                onPress={() => void Linking.openURL(deal.flight!.booking_url!)}
+                onPress={() =>
+                  openInAppBrowser(
+                    navigation,
+                    deal.flight!.booking_url!,
+                    'Réserver le vol',
+                  )
+                }
               >
                 <Text style={styles.btnSecondaryText}>Réserver le vol</Text>
               </Pressable>

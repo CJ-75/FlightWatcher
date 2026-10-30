@@ -32,7 +32,8 @@ import {
 import { DestinationCard } from '../components/DestinationCard'
 import { TravelersSection } from '../components/TravelersSection'
 import { Button } from '../components/ui/Button'
-import { openPartnerBookSync } from '../lib/partnerBook'
+import { preparePartnerBook } from '../lib/partnerBook'
+import { openInAppBrowser } from '../lib/openInApp'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing } from '../theme'
@@ -431,9 +432,11 @@ export function TripDetailScreen() {
             trip={accepted.trip_data}
             passengers={trip.passengers}
             onBook={() => {
-              void openPartnerBookSync({
+              void preparePartnerBook({
                 trip: accepted.trip_data,
                 passengers: trip.passengers || 1,
+              }).then((ps) => {
+                openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
               })
             }}
           />

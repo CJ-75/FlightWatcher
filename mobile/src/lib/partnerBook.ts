@@ -1,7 +1,7 @@
 /**
- * Mobile Search: sync partner open + hotel upsell pending (AsyncStorage).
+ * Mobile Search: partner book prep + hotel upsell pending (AsyncStorage).
+ * Partner URLs open via InAppBrowser — never system browser tabs.
  */
-import { Linking } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   cityDisplayNameFr,
@@ -100,9 +100,10 @@ export function trackPartnerEvent(body: Record<string, unknown>): void {
 }
 
 /**
- * Open partner URL immediately, then store pending hotel upsell.
+ * Resolve partner URL + store pending hotel upsell (no browser open).
+ * Caller opens `ps.primaryUrl` via InAppBrowser.
  */
-export async function openPartnerBookSync(opts: {
+export async function preparePartnerBook(opts: {
   trip: EnrichedTripResponse
   passengers: number
   searchEventId?: string | null
@@ -110,7 +111,6 @@ export async function openPartnerBookSync(opts: {
 }): Promise<PriceSourceBooking> {
   const { trip, passengers, searchEventId, skipReturnBanner } = opts
   const ps = resolveTripPriceSource(trip, passengers, 'fr')
-  await Linking.openURL(ps.primaryUrl)
 
   trackPartnerEvent({
     trip,
@@ -140,6 +140,9 @@ export async function openPartnerBookSync(opts: {
   })
   return ps
 }
+
+/** @deprecated use preparePartnerBook + InAppBrowser */
+export const openPartnerBookSync = preparePartnerBook
 
 export async function createMyTripComposeFromTrip(opts: {
   trip: EnrichedTripResponse
