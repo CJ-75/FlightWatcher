@@ -533,6 +533,14 @@ def _require_organizer(supabase, trip_id: str, user_id: str) -> dict:
     return trip.data[0]
 
 
+_TRIPS_LIST_SELECT = (
+    "id,organizer_id,name,departure_airport,arrival_airport,passengers,direct,"
+    "dates_depart,dates_retour,budget_max,invite_token,status,"
+    "auto_scan_enabled,auto_scan_interval_seconds,last_scan_at,"
+    "last_notified_at,last_notified_cheapest,created_at,updated_at"
+)
+
+
 @router.get("/api/planner/trips")
 @optional_auth
 async def list_trips(request: Request):
@@ -541,7 +549,7 @@ async def list_trips(request: Request):
 
     owned = (
         supabase.table("planned_trips")
-        .select("*")
+        .select(_TRIPS_LIST_SELECT)
         .eq("organizer_id", user_id)
         .order("created_at", desc=True)
         .execute()
@@ -557,7 +565,7 @@ async def list_trips(request: Request):
     if member_ids:
         mt = (
             supabase.table("planned_trips")
-            .select("*")
+            .select(_TRIPS_LIST_SELECT)
             .in_("id", member_ids)
             .order("created_at", desc=True)
             .execute()
@@ -570,6 +578,7 @@ async def list_trips(request: Request):
 
     trip_ids = list(by_id.keys())
     members_by_trip: Dict[str, list] = {tid: [] for tid in trip_ids}
+    proposal_counts: Dict[str, int] = {tid: 0 for tid in trip_ids}
     if trip_ids:
         mem_res = (
             supabase.table("trip_members")
@@ -581,6 +590,20 @@ async def list_trips(request: Request):
             tid = m.get("trip_id")
             if tid in members_by_trip:
                 members_by_trip[tid].append(m)
+        # One query for all proposal counts (was N+1 per trip)
+        try:
+            prop_res = (
+                supabase.table("trip_proposals")
+                .select("trip_id")
+                .in_("trip_id", trip_ids)
+                .execute()
+            )
+            for p in prop_res.data or []:
+                tid = p.get("trip_id")
+                if tid in proposal_counts:
+                    proposal_counts[tid] += 1
+        except Exception as e:
+            print(f"⚠️ Proposal counts batch: {e}")
 
     organizer_ids = list({row["organizer_id"] for row in by_id.values() if row.get("organizer_id")})
     profiles_by_id: Dict[str, dict] = {}
@@ -600,16 +623,10 @@ async def list_trips(request: Request):
 
     out = []
     for row in by_id.values():
-        count_res = (
-            supabase.table("trip_proposals")
-            .select("id", count="exact")
-            .eq("trip_id", row["id"])
-            .execute()
-        )
         out.append(
             _row_to_trip(
                 row,
-                proposals_count=count_res.count or 0,
+                proposals_count=proposal_counts.get(row["id"], 0),
                 members=members_by_trip.get(row["id"], []),
                 organizer_profile=profiles_by_id.get(row["organizer_id"]),
             )

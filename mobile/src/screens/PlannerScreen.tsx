@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -72,6 +72,8 @@ const STATUS_LABEL: Record<string, string> = {
   locked: 'Confirmé',
 }
 
+const TRIPS_STALE_MS = 60_000
+
 export function PlannerScreen() {
   const insets = useSafeAreaInsets()
   const { viewUser, isGuest } = useAuth()
@@ -82,21 +84,34 @@ export function PlannerScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const lastFetchAtRef = useRef(0)
+  const tripsLenRef = useRef(0)
+  tripsLenRef.current = trips.length
 
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
 
   React.useEffect(() => subscribeAirports(setAirports), [])
 
   const load = useCallback(
-    async (isRefresh = false) => {
+    async (opts?: { refresh?: boolean; force?: boolean }) => {
+      const isRefresh = Boolean(opts?.refresh)
+      const force = Boolean(opts?.force)
       if (!viewUser) {
         setTrips([])
         setLoading(false)
         setRefreshing(false)
         return
       }
+      if (
+        !force &&
+        !isRefresh &&
+        lastFetchAtRef.current > 0 &&
+        Date.now() - lastFetchAtRef.current < TRIPS_STALE_MS
+      ) {
+        return
+      }
       if (isRefresh) setRefreshing(true)
-      else setLoading(true)
+      else if (tripsLenRef.current === 0) setLoading(true)
       setError(null)
       try {
         if (__DEV__ && isGuest) {
@@ -105,9 +120,10 @@ export function PlannerScreen() {
           const list = await getApi().listPlannedTrips()
           setTrips(Array.isArray(list) ? list : [])
         }
+        lastFetchAtRef.current = Date.now()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les voyages')
-        setTrips([])
+        if (tripsLenRef.current === 0) setTrips([])
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -148,7 +164,7 @@ export function PlannerScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => void load(true)}
+              onRefresh={() => void load({ refresh: true, force: true })}
               tintColor={colors.primary}
             />
           }
@@ -167,7 +183,10 @@ export function PlannerScreen() {
                 <>
                   <Text style={styles.emptyTitle}>Oups</Text>
                   <Text style={styles.emptyBody}>{error}</Text>
-                  <Pressable onPress={() => void load()} style={styles.retryBtn}>
+                  <Pressable
+                    onPress={() => void load({ force: true })}
+                    style={styles.retryBtn}
+                  >
                     <Text style={styles.retryText}>Réessayer</Text>
                   </Pressable>
                 </>
@@ -329,7 +348,7 @@ export function PlannerScreen() {
         onClose={() => setShowCreate(false)}
         onCreated={(id) => {
           setShowCreate(false)
-          void load()
+          void load({ force: true })
           navigation.navigate('TripDetail', { tripId: id, autoScan: true })
         }}
       />

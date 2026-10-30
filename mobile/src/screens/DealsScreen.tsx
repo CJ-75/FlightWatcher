@@ -145,7 +145,7 @@ export function DealsScreen() {
         if (age < STALE_MS) return
       }
       if (isRefresh) setRefreshing(true)
-      else if (deals.length === 0) setLoading(true)
+      else setLoading(true)
       setError(null)
       try {
         if (uiEnabled === false) {
@@ -199,7 +199,7 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, queryOrigin, queryDestination, queryAdults, occasion, durationTab, deals.length, uiEnabled],
+    [refreshLikes, queryOrigin, queryDestination, queryAdults, occasion, durationTab, uiEnabled],
   )
 
   // Filter changes → always refetch
@@ -282,10 +282,10 @@ export function DealsScreen() {
     <View style={styles.root}>
       <ScreenBackground />
 
-      {loading && deals.length === 0 ? (
+      {loading && !refreshing ? (
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Chargement des deals…</Text>
+          <Text style={styles.loadingText}>Chargement des séjours…</Text>
         </View>
       ) : (
         <FlatList
