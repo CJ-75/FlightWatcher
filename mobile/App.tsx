@@ -2,7 +2,7 @@ import React, { Suspense, useCallback, useEffect, useState } from 'react'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { ActivityIndicator, View, StyleSheet } from 'react-native'
+import { ActivityIndicator, Text, View, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -93,7 +93,9 @@ const navTheme = {
 function BootSpinner() {
   return (
     <View style={styles.boot}>
-      <ActivityIndicator color={colors.primary} size="large" />
+      {/* System font — Sora may not be loaded yet */}
+      <Text style={styles.bootBrand}>FlightWatcher</Text>
+      <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
     </View>
   )
 }
@@ -374,6 +376,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.canvas,
+    backgroundColor: '#0A0604',
+    paddingHorizontal: 28,
+  },
+  bootBrand: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    color: '#FFF9F5',
   },
 })
