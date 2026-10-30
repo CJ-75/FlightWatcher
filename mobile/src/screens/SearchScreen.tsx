@@ -29,6 +29,7 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   isValidAirportSelection,
+  mergeStreamTrips,
   normalizeDestinations,
   parseAirportCodes,
   translate,
@@ -37,6 +38,7 @@ import {
 } from '@flightwatcher/shared'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
+import { beginInspireLive, publishInspireLive } from '../lib/inspireLive'
 import type { MainTabParamList, RootStackParamList } from '../../App'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
@@ -280,10 +282,13 @@ export function SearchScreen() {
 
     setLoading(true)
     setLoadingMsg(LOADING_MESSAGES[0])
+    /** Same floor as web — first paint after TP, Ryanair can still append. */
     const MIN_LOADING_MS = 2000
     const startedAt = Date.now()
+    const liveToken = beginInspireLive()
+    const abort = new AbortController()
     try {
-      const result = await getApi().inspire({
+      const request = {
         budget,
         date_preset: preset,
         departure: airport.trim().toUpperCase(),
@@ -294,48 +299,102 @@ export function SearchScreen() {
           dates_retour: activeDates.dates_retour,
         },
         ...(excluded.length > 0 ? { destinations_exclues: excluded } : {}),
-      })
-
-      // Floor 2s so slower providers (Ryanair) are more likely in the first paint
-      const wait = Math.max(0, MIN_LOADING_MS - (Date.now() - startedAt))
-      if (wait > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, wait))
+        limite_allers: 0,
       }
 
-      let searchEventId: string | null = null
+      const searchInfoBase = {
+        airport,
+        budget,
+        passengers,
+        datePreset: preset,
+        datesDepart: activeDates.dates_depart,
+        datesRetour: activeDates.dates_retour,
+        excludedDestinations: excluded,
+      }
+
+      let accumulated: EnrichedTripResponse[] = []
+      let revealed = false
+      let nombreRequetes = 0
+      let streamError: string | null = null
+
+      const revealResults = () => {
+        if (revealed) return
+        revealed = true
+        publishInspireLive(liveToken, accumulated)
+        setLoading(false)
+        navigation.navigate('Results', {
+          trips: [...accumulated],
+          title: `${departureShort} · ${budget}€/pers · ${passengers}p`,
+          searchInfo: { ...searchInfoBase, searchEventId: null },
+        })
+      }
+
+      const revealTimer = setTimeout(revealResults, MIN_LOADING_MS)
+
       try {
-        const data = (await getApi().trackSearchEvent({
+        await getApi().inspireStream(
+          request,
+          (ev) => {
+            if (ev.type === 'error') {
+              streamError = ev.message || translate('fr', 'app.error')
+              return
+            }
+            if (ev.type === 'batch' && Array.isArray(ev.resultats) && ev.resultats.length) {
+              accumulated = mergeStreamTrips(accumulated, ev.resultats)
+              publishInspireLive(liveToken, accumulated)
+            }
+            if (ev.type === 'done') {
+              nombreRequetes = ev.nombre_requetes || nombreRequetes
+            }
+          },
+          { signal: abort.signal },
+        )
+      } catch (streamErr) {
+        // ReadableStream unavailable on some RN builds → blocking inspire
+        const msg = streamErr instanceof Error ? streamErr.message : String(streamErr)
+        if (/Stream inspire|body|getReader|ReadableStream/i.test(msg)) {
+          const result = await getApi().inspire(request)
+          accumulated = (result.resultats || []) as EnrichedTripResponse[]
+          nombreRequetes = result.nombre_requetes || 0
+          publishInspireLive(liveToken, accumulated)
+        } else if (!accumulated.length) {
+          throw streamErr
+        }
+        // Partial stream batches already published — keep them
+      }
+
+      if (streamError && !accumulated.length) {
+        clearTimeout(revealTimer)
+        throw new Error(streamError)
+      }
+
+      if (!revealed) {
+        const wait = Math.max(0, MIN_LOADING_MS - (Date.now() - startedAt))
+        if (wait > 0) await new Promise<void>((r) => setTimeout(r, wait))
+        clearTimeout(revealTimer)
+        revealResults()
+      } else {
+        clearTimeout(revealTimer)
+        publishInspireLive(liveToken, accumulated)
+      }
+
+      void getApi()
+        .trackSearchEvent({
           departure_airport: airport,
           date_preset: preset,
           budget,
           dates_depart: activeDates.dates_depart,
           dates_retour: activeDates.dates_retour,
           destinations_exclues: excluded,
-          results_count: result.resultats.length,
-          results: result.resultats.slice(0, 10),
-          api_requests_count: result.nombre_requetes,
+          results_count: accumulated.length,
+          results: accumulated.slice(0, 10),
+          api_requests_count: nombreRequetes,
+          search_duration_ms: Math.max(0, Date.now() - startedAt),
           source: 'mobile',
-        })) as { status?: string; id?: string }
-        if (data?.status === 'success' && data.id) searchEventId = data.id
-      } catch {
-        /* non-bloquant */
-      }
-
-      navigation.navigate('Results', {
-        trips: result.resultats as EnrichedTripResponse[],
-        title: `${departureShort} · ${budget}€/pers · ${passengers}p`,
-        searchInfo: {
-          airport,
-          budget,
-          passengers,
-          datePreset: preset,
-          datesDepart: activeDates.dates_depart,
-          datesRetour: activeDates.dates_retour,
-          excludedDestinations: excluded,
-          searchEventId,
-        },
-      })
+        })
+        .catch(() => undefined)
     } catch (e) {
+      abort.abort()
       const raw = e instanceof Error ? e.message : String(e)
       if (/timeout|timed out|aborted|network request failed|trop de temps/i.test(raw)) {
         setError(
@@ -344,7 +403,6 @@ export function SearchScreen() {
       } else {
         setError(raw || translate('fr', 'app.error'))
       }
-    } finally {
       setLoading(false)
     }
   }

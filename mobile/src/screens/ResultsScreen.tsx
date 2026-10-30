@@ -41,6 +41,7 @@ import {
   trackPartnerEvent,
   type PendingHotelUpsell,
 } from '../lib/partnerBook'
+import { peekInspireLive, subscribeInspireLive } from '../lib/inspireLive'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>
 const kv = createAsyncKVStore(AsyncStorage)
@@ -53,11 +54,13 @@ const PRESET_LABELS: Record<string, string> = {
 }
 
 export function ResultsScreen({ route }: Props) {
-  const trips = route.params.trips || []
   const searchInfo = route.params.searchInfo
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
 
+  const [trips, setTrips] = useState<EnrichedTripResponse[]>(
+    () => route.params.trips || [],
+  )
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set())
   const [hotelUpsell, setHotelUpsell] = useState<PendingHotelUpsell | null>(null)
   const [hotelUpsellBusy, setHotelUpsellBusy] = useState(false)
@@ -67,6 +70,30 @@ export function ResultsScreen({ route }: Props) {
   const [showRoulette, setShowRoulette] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
+  const [streaming, setStreaming] = useState(false)
+
+  // Progressive inspire — same as web: Ryanair/TP batches append after first paint
+  useEffect(() => {
+    const initial = route.params.trips || []
+    setTrips(initial)
+    const session = peekInspireLive()
+    if (session.trips.length > initial.length) {
+      setTrips(session.trips)
+    }
+    let quietTimer: ReturnType<typeof setTimeout> | null = null
+    const unsub = subscribeInspireLive((live) => {
+      if (!live.length) return
+      setTrips(live)
+      setStreaming(true)
+      if (quietTimer) clearTimeout(quietTimer)
+      quietTimer = setTimeout(() => setStreaming(false), 2500)
+    })
+    return () => {
+      unsub()
+      if (quietTimer) clearTimeout(quietTimer)
+      setStreaming(false)
+    }
+  }, [route.params.trips])
 
   const loadFavorites = useCallback(async () => {
     try {
@@ -402,6 +429,7 @@ export function ResultsScreen({ route }: Props) {
             <Text style={styles.count}>
               {visibleTrips.length} destination{visibleTrips.length > 1 ? 's' : ''}
               {visibleTrips.length !== trips.length ? ` / ${trips.length}` : ''}
+              {streaming ? ' · nouvelles offres…' : ''}
             </Text>
 
             {availableOrigins.length > 1 ? (

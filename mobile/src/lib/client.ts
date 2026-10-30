@@ -256,6 +256,10 @@ export const auth = createSupabaseAuth({
 function mobileFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url =
     typeof input === 'string' ? input : input instanceof URL ? input.href : String(input.url)
+  // NDJSON stream needs ReadableStream — XHR only resolves when complete.
+  if (/\/api\/inspire\/stream(?:\?|$)/.test(url)) {
+    return fetch(input, init)
+  }
   const method = (init?.method || 'GET').toUpperCase()
   const timeoutMs = 300_000
 
