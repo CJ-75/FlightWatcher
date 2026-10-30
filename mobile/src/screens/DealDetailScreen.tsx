@@ -108,6 +108,23 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const selected =
     hotelOptions.find((h) => h.id === (hotelId || hotelOptions[0]?.id)) || hotelOptions[0]
 
+  const hotelPhoto = (
+    selected?.photo ||
+    deal?.hotel?.photo ||
+    deal?.image_url ||
+    ''
+  ).trim()
+
+  // Must run before any early return — otherwise hooks count changes after load.
+  const seedPhotos = useMemo(
+    () =>
+      [
+        ...(selected?.photos || deal?.hotel?.photos || []),
+        hotelPhoto,
+      ].filter((u, i, arr) => Boolean(u) && arr.indexOf(u) === i) as string[],
+    [selected?.photos, deal?.hotel?.photos, hotelPhoto],
+  )
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -133,20 +150,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const fees = selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
-  const hotelPhoto = (
-    selected?.photo ||
-    deal.hotel?.photo ||
-    deal.image_url ||
-    ''
-  ).trim()
-  const seedPhotos = useMemo(
-    () =>
-      [
-        ...(selected?.photos || deal.hotel?.photos || []),
-        hotelPhoto,
-      ].filter((u, i, arr) => u && arr.indexOf(u) === i),
-    [selected?.photos, deal.hotel?.photos, hotelPhoto],
-  )
 
   const openUrl = async (url: string) => {
     if (!url) return

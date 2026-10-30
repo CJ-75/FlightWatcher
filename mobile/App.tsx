@@ -90,12 +90,22 @@ const navTheme = {
   },
 }
 
-function BootSpinner() {
+/** App cold start only — branded splash. */
+function AppSplash() {
   return (
     <View style={styles.boot}>
       {/* System font — Sora may not be loaded yet */}
       <Text style={styles.bootBrand}>FlightWatcher</Text>
       <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+    </View>
+  )
+}
+
+/** In-app loads (lazy routes, auth) — spinner only, no brand. */
+function RouteSpinner() {
+  return (
+    <View style={styles.routeSpin}>
+      <ActivityIndicator color={colors.primary} size="large" />
     </View>
   )
 }
@@ -107,7 +117,7 @@ function lazyScreen<P extends object>(
   const Lazy = React.lazy(loader)
   function Wrapped(props: P) {
     return (
-      <Suspense fallback={<BootSpinner />}>
+      <Suspense fallback={<RouteSpinner />}>
         <Lazy {...props} />
       </Suspense>
     )
@@ -227,7 +237,7 @@ function RootNavigator() {
   const { user, loading, isGuest } = useAuth()
 
   if (loading) {
-    return <BootSpinner />
+    return <RouteSpinner />
   }
 
   const signedIn = !!user || isGuest
@@ -356,7 +366,7 @@ export default function App() {
   const ready = fontsLoaded || fontsTimedOut
 
   if (!ready) {
-    return <BootSpinner />
+    return <AppSplash />
   }
 
   return (
@@ -384,5 +394,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.8,
     color: '#FFF9F5',
+  },
+  routeSpin: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
   },
 })
