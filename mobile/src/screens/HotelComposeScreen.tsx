@@ -11,13 +11,9 @@ import {
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import {
-  hotelCancelLabel,
-  type HotelUpsellOption,
-  type MyTripDraft,
-} from '@flightwatcher/shared'
+import { type HotelUpsellOption, type MyTripDraft } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
-import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
+import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, spacing } from '../theme'
@@ -90,10 +86,18 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [cityLabel, setCityLabel] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const payload = (draft?.payload || {}) as Record<string, unknown>
   const flight = (payload.flight || {}) as Record<string, unknown>
   const flightPp = Number(flight.price_pp || 0)
+  const checkin = String(
+    draft?.out_date || (payload.dates as { outbound?: string } | undefined)?.outbound || '',
+  ).slice(0, 10)
+  const checkout = String(
+    draft?.ret_date || (payload.dates as { inbound?: string } | undefined)?.inbound || '',
+  ).slice(0, 10)
+  const adults = Number(draft?.adults || payload.adults || 2)
 
   useEffect(() => {
     let cancelled = false
@@ -387,15 +391,11 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   }
 
   const selectedId = hotelIdOf(selected)
-  const cancelLabel = selected
-    ? hotelCancelLabel(
-        {
-          refundable: selected.refundable,
-          cancel_deadline: selected.cancel_deadline,
-        },
-        { short: true },
-      )
-    : null
+
+  const openSheet = (item: HotelUpsellOption) => {
+    setSelected(item)
+    setSheetOpen(true)
+  }
 
   return (
     <View style={styles.root}>
@@ -440,30 +440,19 @@ export function HotelComposeScreen({ route, navigation }: Props) {
             ))}
           </View>
 
-          {selected ? (
-            <View style={styles.heroWrap}>
-              <HotelPhotoGallery
-                hotelId={selectedId}
-                seedPhoto={selected.photo || selected.thumbnail}
-                alt={selected.name || 'Hôtel'}
-                hotelName={selected.name}
-                cityLabel={cityLabel || undefined}
-                height={180}
-              />
-            </View>
-          ) : null}
-
           <FlatList
             data={sorted}
             keyExtractor={(item, idx) => hotelIdOf(item) || `h-${idx}`}
             contentContainerStyle={{
               paddingHorizontal: spacing.lg,
-              paddingBottom: insets.bottom + 120,
+              paddingBottom: insets.bottom + 100,
             }}
             ListHeaderComponent={
               cityLabel ? (
                 <Text style={styles.city}>Hôtels à {cityLabel}</Text>
-              ) : null
+              ) : (
+                <Text style={styles.city}>Touche un hôtel pour voir la fiche</Text>
+              )
             }
             renderItem={({ item }) => {
               const id = hotelIdOf(item)
@@ -472,7 +461,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
               const thumb = item.photo || item.thumbnail
               return (
                 <Pressable
-                  onPress={() => setSelected(item)}
+                  onPress={() => openSheet(item)}
                   style={[styles.row, on && styles.rowOn]}
                 >
                   {thumb ? (
@@ -506,22 +495,22 @@ export function HotelComposeScreen({ route, navigation }: Props) {
 
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             {error ? <Text style={styles.footerError}>{error}</Text> : null}
-            {selected && cancelLabel ? (
-              <Text style={styles.cancelHint}>{cancelLabel}</Text>
-            ) : null}
-            <Pressable
-              style={[styles.cta, (!selected || saving) && styles.ctaDisabled]}
-              disabled={!selected || saving}
-              onPress={() => void confirm()}
-            >
-              <Text style={styles.ctaText}>
-                {saving ? '…' : 'Réserver cet hôtel'}
-              </Text>
-            </Pressable>
             <Pressable style={styles.later} onPress={() => navigation.goBack()}>
               <Text style={styles.laterText}>Plus tard</Text>
             </Pressable>
           </View>
+
+          <HotelComposeDetailSheet
+            visible={sheetOpen && !!selected}
+            hotel={selected}
+            cityLabel={cityLabel}
+            checkin={checkin || null}
+            checkout={checkout || null}
+            adults={adults}
+            saving={saving}
+            onClose={() => setSheetOpen(false)}
+            onConfirm={() => void confirm()}
+          />
         </>
       )}
     </View>
@@ -572,7 +561,6 @@ const styles = StyleSheet.create({
   },
   sortText: { fontFamily: fonts.medium, fontSize: 13, color: colors.inkSoft },
   sortTextOn: { color: colors.primaryInk, fontFamily: fonts.bold },
-  heroWrap: { marginBottom: spacing.sm },
   city: {
     fontFamily: fonts.semibold,
     fontSize: 15,
@@ -624,27 +612,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.danger,
     marginBottom: 6,
+    textAlign: 'center',
   },
-  cancelHint: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 6,
-  },
-  cta: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctaDisabled: { backgroundColor: colors.line },
-  ctaText: { fontFamily: fonts.bold, color: colors.white, fontSize: 15 },
   later: {
-    minHeight: 40,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
   },
   laterText: { fontFamily: fonts.medium, fontSize: 14, color: colors.inkSoft },
 })
