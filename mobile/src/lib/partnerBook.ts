@@ -10,8 +10,7 @@ import {
   type EnrichedTripResponse,
   type PriceSourceBooking,
 } from '@flightwatcher/shared'
-import { getApi, getWebOrigin } from './client'
-import * as WebBrowser from 'expo-web-browser'
+import { getApi } from './client'
 
 export const PENDING_HOTEL_UPSELL_KEY = 'fw_pending_hotel_upsell'
 
@@ -188,11 +187,6 @@ export async function createMyTripComposeFromTrip(opts: {
     }
   }
   return draft
-}
-
-export async function openMyTripCompose(draftToken: string): Promise<void> {
-  const url = `${getWebOrigin()}/trip/${draftToken}?compose=1`
-  await WebBrowser.openBrowserAsync(url)
 }
 
 export function bookCtaLabel(_ps?: PriceSourceBooking): string {

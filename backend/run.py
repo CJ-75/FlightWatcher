@@ -1,11 +1,23 @@
 """
 Script de démarrage pour le serveur FastAPI avec gestion propre de l'arrêt
 """
-import uvicorn
+import os
 import signal
 import sys
-import os
 import platform
+
+# Cursor / some Windows tools set SSLKEYLOGFILE to a virtual volume path that
+# ssl/httpx/requests cannot write → PermissionError on import. Clear before SSL use.
+_ssl_keylog = os.environ.get("SSLKEYLOGFILE", "")
+if _ssl_keylog and (
+    "virtual_file.log" in _ssl_keylog
+    or _ssl_keylog.startswith("\\\\?\\Volume{")
+    or not os.access(os.path.dirname(_ssl_keylog) or ".", os.W_OK)
+):
+    os.environ.pop("SSLKEYLOGFILE", None)
+
+import uvicorn
+
 
 def signal_handler(sig, frame):
     """Gère proprement l'arrêt du serveur"""

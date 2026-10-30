@@ -32,6 +32,7 @@ interface Props {
   onFavorite?: () => void
   onBook?: () => void
   onAddHotel?: () => void
+  addHotelBusy?: boolean
   /** Hide default book CTA */
   showBook?: boolean
   /** Replaces book CTA (e.g. Accept on a planner proposal) */
@@ -62,6 +63,7 @@ export function DestinationCard({
   onFavorite,
   onBook,
   onAddHotel,
+  addHotelBusy = false,
   showBook = true,
   primaryAction,
   secondaryAction,
@@ -243,8 +245,14 @@ export function DestinationCard({
               <Text style={styles.bookText}>{ctaLabel}</Text>
             </Pressable>
             {onAddHotel ? (
-              <Pressable onPress={onAddHotel} style={styles.addHotelBtn}>
-                <Text style={styles.addHotelText}>Ajouter un hôtel</Text>
+              <Pressable
+                onPress={onAddHotel}
+                disabled={addHotelBusy}
+                style={[styles.addHotelBtn, addHotelBusy && { opacity: 0.55 }]}
+              >
+                <Text style={styles.addHotelText}>
+                  {addHotelBusy ? '…' : 'Ajouter un hôtel'}
+                </Text>
               </Pressable>
             ) : null}
           </>

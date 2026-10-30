@@ -35,7 +35,6 @@ import { colors, fonts, shadow, spacing, type } from '../theme'
 import {
   clearPendingHotelUpsell,
   createMyTripComposeFromTrip,
-  openMyTripCompose,
   openPartnerBookSync,
   readPendingHotelUpsell,
   trackPartnerEvent,
@@ -53,7 +52,7 @@ const PRESET_LABELS: Record<string, string> = {
   flexible: 'Dates flexibles',
 }
 
-export function ResultsScreen({ route }: Props) {
+export function ResultsScreen({ route, navigation }: Props) {
   const searchInfo = route.params.searchInfo
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
@@ -175,7 +174,7 @@ export function ResultsScreen({ route }: Props) {
         passengers,
         markFlightBooked: false,
       })
-      await openMyTripCompose(draft.draft_token)
+      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
       Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
     } finally {
@@ -223,7 +222,7 @@ export function ResultsScreen({ route }: Props) {
       })
       await clearPendingHotelUpsell()
       setHotelUpsell(null)
-      await openMyTripCompose(draft.draft_token)
+      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
       Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
     } finally {
@@ -532,6 +531,7 @@ export function ResultsScreen({ route }: Props) {
             onFavorite={() => void toggleFavorite(item)}
             onBook={() => handlePartnerBook(item)}
             onAddHotel={() => void handleAddHotel(item)}
+            addHotelBusy={hotelUpsellBusy}
           />
         )}
         showsVerticalScrollIndicator={false}

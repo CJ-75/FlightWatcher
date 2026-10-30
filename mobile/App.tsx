@@ -72,7 +72,8 @@ export type RootStackParamList = {
   }
   Security: undefined
   Bookings: undefined
-  DealCheckout: { dealId: string; hotelId?: string }
+  HotelCompose: { draftToken: string }
+  DealCheckout: { dealId?: string; draftToken?: string; hotelId?: string }
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -152,6 +153,9 @@ const BookingsScreen = lazyScreen(() =>
 )
 const DealCheckoutScreen = lazyScreen(() =>
   import('./src/screens/DealCheckoutScreen').then((m) => ({ default: m.DealCheckoutScreen })),
+)
+const HotelComposeScreen = lazyScreen(() =>
+  import('./src/screens/HotelComposeScreen').then((m) => ({ default: m.HotelComposeScreen })),
 )
 const SecurityScreen = lazyScreen(() =>
   import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
@@ -319,6 +323,23 @@ function RootNavigator() {
             name="Bookings"
             component={BookingsScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="HotelCompose"
+            component={HotelComposeScreen}
+            options={{
+              headerShown: true,
+              title: 'Choisir un hôtel',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
           />
           <Stack.Screen
             name="DealCheckout"

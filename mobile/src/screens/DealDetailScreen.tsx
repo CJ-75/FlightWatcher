@@ -7,6 +7,7 @@ import {
   Pressable,
   Linking,
   ActivityIndicator,
+  Alert,
   Dimensions,
 } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
@@ -170,28 +171,56 @@ export function DealDetailScreen({ route, navigation }: Props) {
     if (url) await openUrl(url)
   }
 
-  const buildDraftPayload = (opts?: { composeHotel?: boolean }) => ({
-    deal_key: deal.deal_key || deal.id,
-    origin_iata: deal.origin_iata || deal.departure_airport,
-    departure_airport: deal.origin_airport_label || deal.departure_airport,
-    destination: deal.destination,
-    city: deal.city,
-    dates: deal.dates,
-    adults,
-    flight: deal.flight,
-    hotel: selected || deal.hotel,
-    price_per_person: pricePp,
-    booking_url: flightUrl || deal.booking_url,
-    baggage_line: deal.baggage_line,
-    route_hint: deal.route_hint,
-    price_pax_note: deal.price_pax_note,
-    compose_hotel: Boolean(opts?.composeHotel),
-  })
+  const buildDraftPayload = async (opts?: { composeHotel?: boolean }) => {
+    let booking = flightUrl || deal.booking_url
+    let flightPpLive = deal.flight?.price_pp
+    let priceNote: string | null = deal.price_pax_note || null
+    const key = deal.deal_key || deal.id
+    if (adults > 2 && key) {
+      try {
+        const rv = await getApi().revalidateDealFlight(key, adults)
+        if (rv.booking_url) booking = rv.booking_url
+        if (rv.checked_pp != null) flightPpLive = rv.checked_pp
+        if (rv.price_note) priceNote = rv.price_note
+        else if (rv.available === false) {
+          priceNote = 'Vol à confirmer pour ce nombre de voyageurs'
+        } else if (rv.delta_pct != null && Math.abs(rv.delta_pct) >= 3) {
+          priceNote = `Prix vérifié pour ${adults} voyageurs`
+        }
+      } catch {
+        /* keep displayed */
+      }
+    }
+    const dest =
+      deal.destination || deal.flight?.destination_iata || undefined
+    return {
+      deal_key: key,
+      origin_iata: deal.origin_iata || deal.departure_airport,
+      departure_airport: deal.origin_airport_label || deal.departure_airport,
+      destination: dest,
+      city: deal.city,
+      dates: deal.dates,
+      adults,
+      flight: {
+        ...deal.flight,
+        price_pp: flightPpLive ?? deal.flight?.price_pp,
+        booking_url: booking,
+        destination_iata:
+          deal.flight?.destination_iata || deal.destination || undefined,
+      },
+      hotel: selected || deal.hotel,
+      price_per_person: pricePp,
+      booking_url: booking,
+      baggage_line: deal.baggage_line,
+      route_hint: deal.route_hint,
+      price_pax_note: priceNote,
+      compose_hotel: Boolean(opts?.composeHotel),
+    }
+  }
 
-  const openDraft = async (composeHotel?: boolean) => {
-    const draft = await getApi().createMyTrip(buildDraftPayload({ composeHotel }))
-    const q = composeHotel ? '?compose=1' : ''
-    const url = `${getWebOrigin()}/trip/${draft.draft_token}${q}`
+  const openDraftWeb = async () => {
+    const draft = await getApi().createMyTrip(await buildDraftPayload({ composeHotel: false }))
+    const url = `${getWebOrigin()}/trip/${draft.draft_token}`
     await WebBrowser.openBrowserAsync(url, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     })
@@ -200,7 +229,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const startMyTrip = async () => {
     setStartingTrip(true)
     try {
-      await openDraft(false)
+      await openDraftWeb()
     } catch {
       if (flightUrl) await openUrl(flightUrl)
     } finally {
@@ -211,9 +240,12 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const startComposeHotel = async () => {
     setComposingHotel(true)
     try {
-      await openDraft(true)
+      const draft = await getApi().createMyTrip(
+        await buildDraftPayload({ composeHotel: true }),
+      )
+      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
-      /* ignore — user can retry */
+      Alert.alert('Erreur', 'Impossible d’ouvrir la composition hôtel — réessaie')
     } finally {
       setComposingHotel(false)
     }

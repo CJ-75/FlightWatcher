@@ -337,11 +337,43 @@ export function getApi(): ApiClient {
 
 export { apiBase }
 
-/** Public web origin for invite share links. */
+function isLocalApiHost(url: string): boolean {
+  try {
+    const h = new URL(url).hostname
+    return (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h === '10.0.2.2' ||
+      /^192\.168\.\d+\.\d+$/.test(h) ||
+      /^10\.\d+\.\d+\.\d+$/.test(h) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(h)
+    )
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Public web origin for invite links + MyTrip hotel compose (?compose=1).
+ * Prefer EXPO_PUBLIC_WEB_ORIGIN. Do NOT use AUTH_CALLBACK_ORIGIN (OAuth tunnel ≠ SPA).
+ * When API is the same deployed host (Vercel), reuse that origin.
+ */
 export function getWebOrigin(): string {
-  const fromEnv =
-    env('EXPO_PUBLIC_WEB_ORIGIN') || env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN') || ''
-  return (fromEnv || 'http://localhost:5173').replace(/\/$/, '')
+  const fromEnv = env('EXPO_PUBLIC_WEB_ORIGIN')?.replace(/\/$/, '')
+  if (fromEnv) return fromEnv
+
+  if (apiBase && !isLocalApiHost(apiBase)) {
+    try {
+      return new URL(apiBase).origin
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const host = metroHost()
+  if (host) return `http://${host}:5173`
+
+  return 'http://localhost:5173'
 }
 
 export function plannerInviteUrl(token: string): string {
