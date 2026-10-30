@@ -101,9 +101,34 @@ def photos_map_from_pool(
     if not ids or not supabase:
         return {}
     out: Dict[str, str] = {}
+    need_raw: List[str] = []
     try:
         for i in range(0, len(ids), 80):
             chunk = ids[i : i + 80]
+            # Slim first pass — skip bulky `raw` when columns already have a photo
+            res = (
+                supabase.table("hotel_pool")
+                .select("hotel_id,main_photo,thumbnail")
+                .in_("hotel_id", chunk)
+                .execute()
+            )
+            seen_chunk: set = set()
+            for row in res.data or []:
+                hid = str(row.get("hotel_id") or "")
+                if not hid or hid in out:
+                    continue
+                seen_chunk.add(hid)
+                photo = extract_main_photo(row)
+                if photo:
+                    out[hid] = photo
+                else:
+                    need_raw.append(hid)
+            for hid in chunk:
+                if hid not in seen_chunk and hid not in out:
+                    need_raw.append(hid)
+        # Second pass only for hotels still missing a cover
+        for i in range(0, len(need_raw), 80):
+            chunk = need_raw[i : i + 80]
             res = (
                 supabase.table("hotel_pool")
                 .select("hotel_id,main_photo,thumbnail,raw")

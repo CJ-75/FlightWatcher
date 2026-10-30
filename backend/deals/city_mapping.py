@@ -8,10 +8,27 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger("deals.city_mapping")
+
+# In-process TTL for mapping tables (seed/link jobs call invalidate).
+_MAPPING_TTL_S = 300.0
+_mapping_lock = threading.Lock()
+_served_by_iata: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
+_iatas_by_city: Dict[str, Tuple[float, List[str]]] = {}
+_dest_by_iata: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
+
+
+def invalidate_city_mapping_cache() -> None:
+    """Call after seed / link_destinations jobs."""
+    with _mapping_lock:
+        _served_by_iata.clear()
+        _iatas_by_city.clear()
+        _dest_by_iata.clear()
 
 
 def _slugify(name: str) -> str:
@@ -95,6 +112,7 @@ def build_mapping_rows_from_city_dict() -> Tuple[List[Dict[str, Any]], List[Dict
 
 def upsert_city_mapping(supabase) -> Dict[str, Any]:
     """Upsert served_cities + airport_city_mapping from CITY_FR_BY_IATA."""
+    invalidate_city_mapping_cache()
     cities, _ = build_mapping_rows_from_city_dict()
     inserted_cities = 0
     inserted_maps = 0
@@ -188,6 +206,25 @@ def upsert_city_mapping(supabase) -> Dict[str, Any]:
     }
 
 
+def _parse_served_mapping_row(code: str, row: Dict[str, Any]) -> Dict[str, Any]:
+    city = row.get("served_cities") or {}
+    if isinstance(city, list):
+        city = city[0] if city else {}
+    return {
+        "iata": code,
+        "mapping_verified": bool(row.get("verified")),
+        "served_city_id": row.get("served_city_id") or city.get("id"),
+        "city_name": city.get("city_name") or code,
+        "country_code": city.get("country_code") or "",
+        "slug": city.get("slug"),
+        "primary_iata": city.get("primary_iata") or code,
+        "center_lat": city.get("center_lat"),
+        "center_lng": city.get("center_lng"),
+        "timezone": city.get("timezone") or "Europe/Paris",
+        "verified": bool(city.get("verified") and row.get("verified")),
+    }
+
+
 def resolve_served_city(
     supabase,
     iata: str,
@@ -198,6 +235,16 @@ def resolve_served_city(
     code = (iata or "").strip().upper()
     if len(code) != 3:
         return None
+    now = time.monotonic()
+    with _mapping_lock:
+        hit = _served_by_iata.get(code)
+        if hit and now - hit[0] < _MAPPING_TTL_S:
+            cached = hit[1]
+            if cached is None:
+                return None
+            if require_verified and not cached.get("verified"):
+                return None
+            return dict(cached)
     try:
         m = (
             supabase.table("airport_city_mapping")
@@ -207,28 +254,15 @@ def resolve_served_city(
             .execute()
         )
         if not m.data:
+            with _mapping_lock:
+                _served_by_iata[code] = (now, None)
             return None
-        row = m.data[0]
-        city = row.get("served_cities") or {}
-        if isinstance(city, list):
-            city = city[0] if city else {}
-        if require_verified and not (
-            row.get("verified") and city.get("verified")
-        ):
+        parsed = _parse_served_mapping_row(code, m.data[0])
+        with _mapping_lock:
+            _served_by_iata[code] = (now, parsed)
+        if require_verified and not parsed.get("verified"):
             return None
-        return {
-            "iata": code,
-            "mapping_verified": bool(row.get("verified")),
-            "served_city_id": row.get("served_city_id") or city.get("id"),
-            "city_name": city.get("city_name") or code,
-            "country_code": city.get("country_code") or "",
-            "slug": city.get("slug"),
-            "primary_iata": city.get("primary_iata") or code,
-            "center_lat": city.get("center_lat"),
-            "center_lng": city.get("center_lng"),
-            "timezone": city.get("timezone") or "Europe/Paris",
-            "verified": bool(city.get("verified") and row.get("verified")),
-        }
+        return dict(parsed)
     except Exception as e:
         logger.warning("resolve_served_city %s: %s", code, e)
         return None
@@ -247,23 +281,185 @@ def city_name_for_iata(supabase, iata: str, fallback: Optional[str] = None) -> s
         return fallback or (iata or "").upper()
 
 
-def iatas_for_served_city(supabase, served_city_id: str) -> List[str]:
-    try:
-        res = (
-            supabase.table("airport_city_mapping")
-            .select("iata")
-            .eq("served_city_id", served_city_id)
-            .execute()
-        )
-        return [str(r["iata"]).upper() for r in (res.data or []) if r.get("iata")]
-    except Exception:
-        return []
-
-
 _DEST_SELECT = (
     "id,slug,city_name,iata_arrival,timezone,pool_radius_m,active,"
     "served_city_id,center_lat,center_lng,country_code,priority"
 )
+
+
+def iatas_for_served_city(supabase, served_city_id: str) -> List[str]:
+    scid = str(served_city_id or "")
+    if not scid:
+        return []
+    now = time.monotonic()
+    with _mapping_lock:
+        hit = _iatas_by_city.get(scid)
+        if hit and now - hit[0] < _MAPPING_TTL_S:
+            return list(hit[1])
+    try:
+        res = (
+            supabase.table("airport_city_mapping")
+            .select("iata")
+            .eq("served_city_id", scid)
+            .execute()
+        )
+        out = [str(r["iata"]).upper() for r in (res.data or []) if r.get("iata")]
+        with _mapping_lock:
+            _iatas_by_city[scid] = (now, out)
+        return list(out)
+    except Exception:
+        return []
+
+
+def batch_destinations_for_iatas(
+    supabase, iatas: Sequence[str]
+) -> Dict[str, Dict[str, Any]]:
+    """
+    True-batch IATA → deal_destinations row (city-axis).
+
+    Returns iata → destination dict with id / city_name / served_city_id
+    (same shape batch_load_destinations expects). O(1–3) RT, not O(N).
+    """
+    codes = []
+    seen: set = set()
+    for raw in iatas:
+        code = (raw or "").strip().upper()
+        if len(code) != 3 or code in seen:
+            continue
+        seen.add(code)
+        codes.append(code)
+    if not codes or not supabase:
+        return {}
+
+    now = time.monotonic()
+    out: Dict[str, Dict[str, Any]] = {}
+    missing: List[str] = []
+    with _mapping_lock:
+        for code in codes:
+            hit = _dest_by_iata.get(code)
+            if hit and now - hit[0] < _MAPPING_TTL_S:
+                if hit[1]:
+                    out[code] = dict(hit[1])
+            else:
+                missing.append(code)
+    if not missing:
+        return out
+
+    # 1) airport_city_mapping for all missing IATAs
+    served_by_code: Dict[str, Dict[str, Any]] = {}
+    try:
+        for i in range(0, len(missing), 80):
+            chunk = missing[i : i + 80]
+            res = (
+                supabase.table("airport_city_mapping")
+                .select("iata, verified, served_city_id, served_cities(*)")
+                .in_("iata", chunk)
+                .execute()
+            )
+            for row in res.data or []:
+                code = str(row.get("iata") or "").upper()
+                if len(code) != 3:
+                    continue
+                parsed = _parse_served_mapping_row(code, row)
+                served_by_code[code] = parsed
+                with _mapping_lock:
+                    _served_by_iata[code] = (now, parsed)
+    except Exception as e:
+        logger.warning("batch_destinations mapping: %s", e)
+
+    scids = []
+    scid_seen: set = set()
+    for code in missing:
+        sc = served_by_code.get(code) or {}
+        scid = sc.get("served_city_id")
+        if scid and str(scid) not in scid_seen:
+            scid_seen.add(str(scid))
+            scids.append(str(scid))
+
+    # 2) deal_destinations by served_city_id
+    dest_by_scid: Dict[str, Dict[str, Any]] = {}
+    if scids:
+        try:
+            for i in range(0, len(scids), 40):
+                chunk = scids[i : i + 40]
+                res = (
+                    supabase.table("deal_destinations")
+                    .select(_DEST_SELECT)
+                    .in_("served_city_id", chunk)
+                    .eq("active", True)
+                    .execute()
+                )
+                for dest in res.data or []:
+                    scid = str(dest.get("served_city_id") or "")
+                    if scid and scid not in dest_by_scid:
+                        dest_by_scid[scid] = dest
+        except Exception as e:
+            # served_city_id column may be missing
+            logger.warning("batch_destinations by served_city: %s", e)
+
+    # 3) Fallback: exact iata_arrival for still-unresolved codes
+    still: List[str] = []
+    for code in missing:
+        sc = served_by_code.get(code) or {}
+        scid = str(sc.get("served_city_id") or "")
+        dest = dest_by_scid.get(scid) if scid else None
+        if not dest:
+            primary = str(sc.get("primary_iata") or "").upper()
+            if primary and primary != code:
+                still.append(primary)
+            still.append(code)
+        else:
+            enriched = dict(dest)
+            if sc.get("city_name"):
+                enriched["city_name"] = sc["city_name"]
+            if sc.get("served_city_id"):
+                enriched["served_city_id"] = sc["served_city_id"]
+            out[code] = enriched
+            with _mapping_lock:
+                _dest_by_iata[code] = (now, enriched)
+
+    still = [c for c in dict.fromkeys(still) if c not in out]
+    dest_by_iata_exact: Dict[str, Dict[str, Any]] = {}
+    if still:
+        try:
+            for i in range(0, len(still), 80):
+                chunk = still[i : i + 80]
+                res = (
+                    supabase.table("deal_destinations")
+                    .select(_DEST_SELECT)
+                    .in_("iata_arrival", chunk)
+                    .eq("active", True)
+                    .execute()
+                )
+                for dest in res.data or []:
+                    ia = str(dest.get("iata_arrival") or "").upper()
+                    if ia and ia not in dest_by_iata_exact:
+                        dest_by_iata_exact[ia] = dest
+        except Exception as e:
+            logger.warning("batch_destinations by iata: %s", e)
+
+    for code in missing:
+        if code in out:
+            continue
+        sc = served_by_code.get(code) or {}
+        primary = str(sc.get("primary_iata") or "").upper()
+        dest = dest_by_iata_exact.get(code) or (
+            dest_by_iata_exact.get(primary) if primary else None
+        )
+        if not dest:
+            with _mapping_lock:
+                _dest_by_iata[code] = (now, None)
+            continue
+        enriched = dict(dest)
+        if sc.get("city_name"):
+            enriched["city_name"] = sc["city_name"]
+        if sc.get("served_city_id"):
+            enriched["served_city_id"] = sc["served_city_id"]
+        out[code] = enriched
+        with _mapping_lock:
+            _dest_by_iata[code] = (now, enriched)
+
+    return out
 
 
 def _destination_row(supabase, **filters: Any) -> Optional[Dict[str, Any]]:
@@ -451,6 +647,7 @@ def link_destinations_to_served_cities(supabase) -> Dict[str, Any]:
     Set deal_destinations.served_city_id from served_cities
     (slug / primary_iata / city_name). Safe to re-run.
     """
+    invalidate_city_mapping_cache()
     linked = 0
     skipped = 0
     try:

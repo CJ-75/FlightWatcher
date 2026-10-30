@@ -113,23 +113,13 @@ def batch_load_destinations(
     supabase: Any, iatas: Sequence[str]
 ) -> Dict[str, Dict[str, Any]]:
     """Map each arrival IATA → hotel destination via served city (city-axis)."""
-    from deals.city_mapping import resolve_hotel_destination
+    from deals.city_mapping import batch_destinations_for_iatas
 
-    out: Dict[str, Dict[str, Any]] = {}
-    # Cache by destination_id so CIA/FCO share one dest object
+    raw_map = batch_destinations_for_iatas(supabase, iatas)
+    # Share one dest object per destination_id (CIA/FCO)
     by_dest_id: Dict[str, Dict[str, Any]] = {}
-    for raw in iatas:
-        code = (raw or "").strip().upper()
-        if not code or code in out:
-            continue
-        resolved = resolve_hotel_destination(supabase, iata=code)
-        if not resolved or not resolved.get("destination"):
-            continue
-        dest = dict(resolved["destination"])
-        if resolved.get("city_name"):
-            dest["city_name"] = resolved["city_name"]
-        if resolved.get("served_city_id"):
-            dest["served_city_id"] = resolved["served_city_id"]
+    out: Dict[str, Dict[str, Any]] = {}
+    for code, dest in raw_map.items():
         did = str(dest.get("id") or "")
         if did and did in by_dest_id:
             out[code] = by_dest_id[did]
@@ -199,17 +189,20 @@ def batch_pool_by_dest(
         for i in range(0, len(ids), 40):
             chunk = ids[i : i + 40]
             # Fetch a wide slice then bucket per dest (PostgREST can't LIMIT PER GROUP)
+            # Prefer slim columns; only pull `raw` for rows still missing a photo.
             res = (
                 supabase.table("hotel_pool")
                 .select(
                     "destination_id,hotel_id,name,stars,rating,review_count,"
-                    "distance_m,main_photo,thumbnail,pool_rank,raw"
+                    "distance_m,main_photo,thumbnail,pool_rank"
                 )
                 .in_("destination_id", chunk)
                 .order("pool_rank")
                 .limit(max(limit_per_dest * len(chunk), 48))
                 .execute()
             )
+            need_raw: List[str] = []
+            pending_by_hid: Dict[str, Dict[str, Any]] = {}
             for h in res.data or []:
                 did = str(h.get("destination_id") or "")
                 if did not in out:
@@ -217,26 +210,62 @@ def batch_pool_by_dest(
                 if len(out[did]) >= limit_per_dest:
                     continue
                 photo = extract_main_photo(h)
-                if not photo:
-                    continue
                 hid = h.get("hotel_id")
+                hid_s = str(hid) if hid is not None else ""
+                if not photo:
+                    if hid_s:
+                        need_raw.append(hid_s)
+                        pending_by_hid[hid_s] = h
+                    continue
                 out[did].append(
                     {
-                        "id": str(hid) if hid is not None else "",
+                        "id": hid_s,
                         "hotel_id": hid,
                         "name": h.get("name"),
                         "stars": h.get("stars"),
                         "rating": h.get("rating"),
                         "review_count": h.get("review_count"),
                         "distance_m": h.get("distance_m"),
-                        # board lives on rates offers, not hotel_pool
                         "board": None,
                         "photo": photo,
                         "thumbnail": photo,
                         "main_photo": photo,
-                        # no public_hotel_price → soft fill at read
                     }
                 )
+            if need_raw:
+                try:
+                    raw_res = (
+                        supabase.table("hotel_pool")
+                        .select("hotel_id,destination_id,main_photo,thumbnail,raw")
+                        .in_("hotel_id", need_raw[:80])
+                        .execute()
+                    )
+                    for rh in raw_res.data or []:
+                        hid_s = str(rh.get("hotel_id") or "")
+                        base = pending_by_hid.get(hid_s) or rh
+                        did = str(base.get("destination_id") or rh.get("destination_id") or "")
+                        if did not in out or len(out[did]) >= limit_per_dest:
+                            continue
+                        photo = extract_main_photo({**base, **rh})
+                        if not photo:
+                            continue
+                        out[did].append(
+                            {
+                                "id": hid_s,
+                                "hotel_id": rh.get("hotel_id"),
+                                "name": base.get("name"),
+                                "stars": base.get("stars"),
+                                "rating": base.get("rating"),
+                                "review_count": base.get("review_count"),
+                                "distance_m": base.get("distance_m"),
+                                "board": None,
+                                "photo": photo,
+                                "thumbnail": photo,
+                                "main_photo": photo,
+                            }
+                        )
+                except Exception as e2:
+                    logger.debug("batch_pool_by_dest raw fallback: %s", e2)
     except Exception as e:
         logger.warning("batch_pool_by_dest: %s", e)
     return out

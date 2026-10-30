@@ -436,6 +436,16 @@ def _row_has_hotel(row: Dict[str, Any]) -> bool:
     return bool(isinstance(hotels, list) and len(hotels) > 0)
 
 
+# Columns needed by row_to_travel_deal / enrich / diversify (no select *)
+# Keep in sync with deals_active schema (no window_kind column).
+_DEALS_ACTIVE_LIST_SELECT = (
+    "deal_key,origin_iata,dest_iata,out_date,ret_date,nights,"
+    "deal_score,status,last_verified_at,verification_level,"
+    "flight_snapshot,baseline_snapshot,hotel_top3,occasion_tags,"
+    "served_city_id,discount_pct,trip_type,source_mix"
+)
+
+
 def _fetch_active_rows(
     supabase,
     *,
@@ -445,7 +455,7 @@ def _fetch_active_rows(
 ) -> List[Dict[str, Any]]:
     q = (
         supabase.table("deals_active")
-        .select("*")
+        .select(_DEALS_ACTIVE_LIST_SELECT)
         .eq("status", "active")
         .order("deal_score", desc=True)
         .limit(limit)
@@ -464,8 +474,33 @@ def _fetch_active_rows(
     try:
         res = q.execute()
         return list(res.data or [])
-    except Exception:
-        return []
+    except Exception as e:
+        # Fallback if a listed column is missing on older DBs
+        import logging
+
+        logging.getLogger("deals.community_list").warning(
+            "_fetch_active_rows slim select failed (%s) — fallback *", e
+        )
+        try:
+            q2 = (
+                supabase.table("deals_active")
+                .select("*")
+                .eq("status", "active")
+                .order("deal_score", desc=True)
+                .limit(limit)
+            )
+            if codes and len(codes) == 1:
+                q2 = q2.eq("origin_iata", codes[0])
+            elif codes and len(codes) > 1:
+                q2 = q2.in_("origin_iata", codes)
+            if occasion_slug:
+                try:
+                    q2 = q2.contains("occasion_tags", [occasion_slug])
+                except Exception:
+                    pass
+            return list((q2.execute().data) or [])
+        except Exception:
+            return []
 
 
 def _is_weekend_outbound(out_date: str, window_kind: Optional[str] = None) -> bool:
@@ -646,6 +681,19 @@ def _diversify_primary_hotels(
         _hotel_id,
     )
 
+    # Short-circuit: every row already has a unique primary + photo → no dest/pool I/O
+    seen_prim: set = set()
+    all_clean = True
+    for r in rows:
+        hotels = r.get("hotel_top3") if isinstance(r.get("hotel_top3"), list) else []
+        prim = primary_hotel_id(hotels)
+        if (not prim) or (prim in seen_prim) or (not _hotel_top3_has_photo(hotels)):
+            all_clean = False
+            break
+        seen_prim.add(prim)
+    if all_clean:
+        return rows
+
     all_iatas = [
         str(r.get("dest_iata") or "").upper()
         for r in rows
@@ -743,15 +791,27 @@ def _enrich_rows_to_deals(
         # Fill missing + force unique primary hotel across the wall response
         rows = _diversify_primary_hotels(supabase, rows)
 
-    # Card photo SoT = hotel_pool (batch)
+    # Card photo SoT = hotel_pool (batch) — skip I/O when every primary already has a photo
     all_ids: List[str] = []
+    missing_photo_ids: List[str] = []
     for r in rows:
         for h in r.get("hotel_top3") or []:
-            if isinstance(h, dict):
-                hid = h.get("hotel_id") or h.get("id")
-                if hid:
-                    all_ids.append(str(hid))
-    photo_map = _photos_from_pool(supabase, all_ids) if (all_ids and supabase) else {}
+            if not isinstance(h, dict):
+                continue
+            hid = h.get("hotel_id") or h.get("id")
+            if not hid:
+                continue
+            hid_s = str(hid)
+            all_ids.append(hid_s)
+            if not _hotel_photo(h):
+                missing_photo_ids.append(hid_s)
+    fetch_ids = missing_photo_ids if missing_photo_ids else []
+    # If some lack photos, fetch those; if all have photos, skip pool entirely
+    photo_map = (
+        _photos_from_pool(supabase, fetch_ids)
+        if (fetch_ids and supabase)
+        else {}
+    )
     rows = _overlay_pool_photos_on_rows(rows, photo_map)
 
     # Re-rank / drop hotels over 2.5× flight_pp (CPU only — no I/O)
@@ -1472,3 +1532,48 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         return deal
     except Exception:
         return None
+
+
+def warm_deals_wall() -> None:
+    """Startup warm-up: populate L1+L2 for default weekend wall before first client."""
+    import logging
+
+    log = logging.getLogger("deals.community_list")
+    try:
+        from supabase_deps import get_supabase_client, get_supabase_service_client
+
+        sb = get_supabase_service_client() or get_supabase_client()
+        if not sb:
+            log.warning("warm_deals_wall: no supabase")
+            return
+        t0 = time.monotonic()
+        # Default wall (no duration) + weekend tab — peupler L1/L2 avant 1er tap
+        deals = list_community_deals(
+            sb,
+            origin=None,
+            destination=None,
+            adults=2,
+            duration=None,
+            limit=36,
+        )
+        weekend = list_community_deals(
+            sb,
+            origin=None,
+            destination=None,
+            adults=2,
+            duration="weekend",
+            limit=36,
+        )
+        log.info(
+            "warm_deals_wall default=%s weekend=%s ms=%.0f",
+            len(deals or []),
+            len(weekend or []),
+            (time.monotonic() - t0) * 1000,
+        )
+        print(
+            f"✅ Deals wall warm: {len(deals or [])} "
+            f"(weekend {len(weekend or [])})"
+        )
+    except Exception as e:
+        log.warning("warm_deals_wall: %s", e)
+        print(f"⚠️  Deals wall warm-up: {e}")
