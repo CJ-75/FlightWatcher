@@ -61,6 +61,17 @@ function formatDistance(m?: number | null) {
   return `${(n / 1000).toFixed(1)} km`
 }
 
+/** Sort key: hotel_pp first, else public total / adults. Missing → end. */
+function hotelPriceSortKey(h: HotelUpsellOption, adults = 2): number {
+  if (h.hotel_pp != null && !Number.isNaN(Number(h.hotel_pp))) {
+    return Number(h.hotel_pp)
+  }
+  if (h.public_hotel_price != null && !Number.isNaN(Number(h.public_hotel_price))) {
+    return Number(h.public_hotel_price) / Math.max(1, adults)
+  }
+  return Number.POSITIVE_INFINITY
+}
+
 function reasonError(reason: string, status?: string) {
   return reason === 'not_in_catalogue'
     ? 'Cette destination n’a pas encore d’hôtels — réessaie dans un instant'
@@ -171,12 +182,15 @@ export function HotelComposeScreen({ route, navigation }: Props) {
         opts: HotelUpsellOption[],
         meta?: { night_cap?: number | null; city?: string | null },
       ) => {
-        setOptions(opts)
+        const byPrice = [...opts].sort(
+          (a, b) => hotelPriceSortKey(a, pax) - hotelPriceSortKey(b, pax),
+        )
+        setOptions(byPrice)
         if (meta?.city) setCityLabel(String(meta.city))
         else if (cityHint) setCityLabel(cityHint)
         const curId = hotelIdOf(currentHotel)
-        const match = opts.find((h) => hotelIdOf(h) === curId)
-        setSelected(match || opts[0] || null)
+        const match = byPrice.find((h) => hotelIdOf(h) === curId)
+        setSelected(match || byPrice[0] || null)
       }
 
       const persistSnapshot = async (
@@ -350,10 +364,10 @@ export function HotelComposeScreen({ route, navigation }: Props) {
         const db = b.distance_m == null ? 1e9 : Number(b.distance_m)
         return da - db
       }
-      return (Number(a.hotel_pp) || 0) - (Number(b.hotel_pp) || 0)
+      return hotelPriceSortKey(a, adults) - hotelPriceSortKey(b, adults)
     })
     return list
-  }, [options, sort])
+  }, [options, sort, adults])
 
   const confirm = async () => {
     if (!selected) return
