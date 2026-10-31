@@ -119,7 +119,7 @@ export function ResultsScreen({ route, navigation }: Props) {
   }, [toast])
 
   // Après paint vols : warm cache hôtel (lookup only — pas de LiteAPI)
-  useEffect(() => {
+  const prefetchHotelUpsell = useCallback(() => {
     if (!trips.length) return
     const seen = new Set<string>()
     const items: {
@@ -131,7 +131,7 @@ export function ResultsScreen({ route, navigation }: Props) {
     }[] = []
     const pax = searchInfo?.passengers || 1
     for (const t of trips) {
-      if (items.length >= 6) break
+      if (items.length >= 8) break
       const iata = (t.destination_code || '').trim().toUpperCase()
       const checkin = dateFromFlightIso(t.aller?.departureTime)
       const checkout = dateFromFlightIso(t.retour?.departureTime)
@@ -150,6 +150,16 @@ export function ResultsScreen({ route, navigation }: Props) {
     if (!items.length) return
     void getApi().lookupHotelUpsell(items).catch(() => undefined)
   }, [trips, searchInfo?.passengers])
+
+  useEffect(() => {
+    prefetchHotelUpsell()
+  }, [prefetchHotelUpsell])
+
+  useFocusEffect(
+    useCallback(() => {
+      prefetchHotelUpsell()
+    }, [prefetchHotelUpsell]),
+  )
 
   const isFavorite = (trip: EnrichedTripResponse) => favoriteKeys.has(tripFavoriteKey(trip))
 

@@ -379,3 +379,13 @@ export function getWebOrigin(): string {
 export function plannerInviteUrl(token: string): string {
   return `${getWebOrigin()}/planner/invite/${token}`
 }
+
+/** Extract invite token from flightwatcher:// or HTTPS planner invite URLs. */
+export function parsePlannerInviteToken(url: string): string | null {
+  const raw = String(url || '').trim()
+  if (!raw) return null
+  const m = raw.match(
+    /(?:flightwatcher:\/\/|https?:\/\/[^/]+\/)?planner\/invite\/([^/?#]+)/i,
+  )
+  return m?.[1] ? decodeURIComponent(m[1]) : null
+}

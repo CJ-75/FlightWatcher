@@ -185,9 +185,10 @@ export function TripDetailScreen() {
   const shareInvite = async () => {
     if (!trip) return
     const url = plannerInviteUrl(trip.invite_token)
+    const appLink = `flightwatcher://planner/invite/${trip.invite_token}`
     try {
       await Share.share({
-        message: `Rejoins mon voyage « ${trip.name} » sur FlightWatcher : ${url}`,
+        message: `Rejoins mon voyage « ${trip.name} » sur FlightWatcher :\n${url}\n\nSi tu as l’app : ${appLink}`,
         url,
       })
     } catch {

@@ -17,6 +17,7 @@ import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
+import { warmHotelUpsell } from '../lib/partnerBook'
 import { HeartIcon } from '../components/HeartIcon'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { useLikedDeals } from '../hooks/useLikedDeals'
@@ -225,14 +226,14 @@ export function DealDetailScreen({ route, navigation }: Props) {
         draft_token: draft.draft_token,
         city: draft.city_name || deal.city,
       })
-      if (hotel?.id) {
-        navigation.navigate('DealCheckout', {
-          draftToken: draft.draft_token,
-          hotelId: hotel.id,
-        })
-      } else {
-        navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
-      }
+      warmHotelUpsell({
+        iata: draft.dest_iata || deal.destination,
+        checkin: draft.out_date || deal.dates?.outbound,
+        checkout: draft.ret_date || deal.dates?.inbound,
+        participants: adults,
+        flight_pp: deal.flight?.price_pp,
+      })
+      navigation.navigate('TripSummary', { draftToken: draft.draft_token })
     } catch {
       if (flightUrl) openInAppBrowser(navigation, flightUrl, 'Réserver le vol')
     } finally {
@@ -249,6 +250,13 @@ export function DealDetailScreen({ route, navigation }: Props) {
       await rememberTrip({
         draft_token: draft.draft_token,
         city: draft.city_name || deal.city,
+      })
+      warmHotelUpsell({
+        iata: draft.dest_iata || deal.destination,
+        checkin: draft.out_date || deal.dates?.outbound,
+        checkout: draft.ret_date || deal.dates?.inbound,
+        participants: adults,
+        flight_pp: deal.flight?.price_pp,
       })
       navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {

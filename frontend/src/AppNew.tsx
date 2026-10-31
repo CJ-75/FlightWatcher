@@ -15,6 +15,7 @@ import ResetPassword from './pages/ResetPassword'
 import Security from './pages/Security'
 import MyBookings from './pages/MyBookings'
 import MyTrip from './pages/MyTrip'
+import HotelPay from './pages/HotelPay'
 import { AdminLogin } from './admin/AdminLogin'
 import { AdminLayout } from './admin/AdminLayout'
 import { AdminRoute } from './admin/AdminApp'
@@ -47,6 +48,7 @@ function App() {
         <Route path="/planner/invite/:token" element={<PlannerInvite />} />
         <Route path="/bookings" element={<MyBookings />} />
         <Route path="/trip/:token" element={<MyTrip />} />
+        <Route path="/pay/hotel" element={<HotelPay />} />
         
         {/* Routes admin */}
         <Route path="/admin/login" element={<AdminLogin />} />

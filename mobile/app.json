@@ -30,6 +30,20 @@
             "BROWSABLE",
             "DEFAULT"
           ]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "flightwatcher",
+              "host": "planner",
+              "pathPrefix": "/invite"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },

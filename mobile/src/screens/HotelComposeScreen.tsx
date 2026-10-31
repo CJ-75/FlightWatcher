@@ -282,8 +282,8 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       }
 
       const pollJob = async (jobId: string) => {
-        for (let i = 0; i < 40; i++) {
-          await new Promise((r) => setTimeout(r, 1200))
+        for (let i = 0; i < 30; i++) {
+          await new Promise((r) => setTimeout(r, i === 0 ? 600 : 1000))
           if (cancelled) return null
           try {
             const job = await getApi().getHotelUpsellJob(jobId)
@@ -518,7 +518,11 @@ export function HotelComposeScreen({ route, navigation }: Props) {
 
             <Pressable
               style={styles.emptySecondary}
-              onPress={() => navigation.goBack()}
+              onPress={() =>
+                emptyKind === 'fatal'
+                  ? navigation.goBack()
+                  : navigation.replace('TripSummary', { draftToken })
+              }
             >
               <Text style={styles.emptySecondaryText}>
                 {emptyKind === 'fatal' ? 'Retour aux résultats' : 'Continuer sans hôtel'}
@@ -620,7 +624,10 @@ export function HotelComposeScreen({ route, navigation }: Props) {
           />
 
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-            <Pressable style={styles.later} onPress={() => navigation.goBack()}>
+            <Pressable
+              style={styles.later}
+              onPress={() => navigation.replace('TripSummary', { draftToken })}
+            >
               <Text style={styles.laterText}>Plus tard</Text>
             </Pressable>
           </View>

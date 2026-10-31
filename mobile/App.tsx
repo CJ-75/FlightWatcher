@@ -73,7 +73,26 @@ export type RootStackParamList = {
   Security: undefined
   Bookings: undefined
   HotelCompose: { draftToken: string }
-  DealCheckout: { dealId?: string; draftToken?: string; hotelId?: string }
+  TripSummary: { draftToken: string }
+  PlannerInvite: { token: string }
+  DealCheckout: {
+    dealId?: string
+    draftToken?: string
+    hotelId?: string
+    payResult?: { confirmation: string; bookingId?: string }
+  }
+  HotelPayWebView: {
+    bookingId: string
+    publicKey: string
+    secretKey: string
+    draftToken?: string
+    firstName: string
+    lastName: string
+    email: string
+    liteapiEnv?: string
+    returnDealId?: string
+    returnHotelId?: string
+  }
   InAppBrowser: { url: string; title?: string }
 }
 
@@ -157,6 +176,17 @@ const DealCheckoutScreen = lazyScreen(() =>
 )
 const HotelComposeScreen = lazyScreen(() =>
   import('./src/screens/HotelComposeScreen').then((m) => ({ default: m.HotelComposeScreen })),
+)
+const TripSummaryScreen = lazyScreen(() =>
+  import('./src/screens/TripSummaryScreen').then((m) => ({ default: m.TripSummaryScreen })),
+)
+const PlannerInviteScreen = lazyScreen(() =>
+  import('./src/screens/PlannerInviteScreen').then((m) => ({ default: m.PlannerInviteScreen })),
+)
+const HotelPayWebViewScreen = lazyScreen(() =>
+  import('./src/screens/HotelPayWebViewScreen').then((m) => ({
+    default: m.HotelPayWebViewScreen,
+  })),
 )
 const InAppBrowserScreen = lazyScreen(() =>
   import('./src/screens/InAppBrowserScreen').then((m) => ({ default: m.InAppBrowserScreen })),
@@ -346,6 +376,40 @@ function RootNavigator() {
             }}
           />
           <Stack.Screen
+            name="TripSummary"
+            component={TripSummaryScreen}
+            options={{
+              headerShown: true,
+              title: 'Mon voyage',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
+          />
+          <Stack.Screen
+            name="PlannerInvite"
+            component={PlannerInviteScreen}
+            options={{
+              headerShown: true,
+              title: 'Invitation',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
+          />
+          <Stack.Screen
             name="DealCheckout"
             component={DealCheckoutScreen}
             options={{
@@ -363,6 +427,15 @@ function RootNavigator() {
             }}
           />
           <Stack.Screen
+            name="HotelPayWebView"
+            component={HotelPayWebViewScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+            }}
+          />
+          <Stack.Screen
             name="InAppBrowser"
             component={InAppBrowserScreen}
             options={{
@@ -373,10 +446,47 @@ function RootNavigator() {
           />
         </>
       ) : (
-        <Stack.Screen name="Login" component={LoginScreen} />
+        <>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen
+            name="PlannerInvite"
+            component={PlannerInviteScreen}
+            options={{
+              headerShown: true,
+              title: 'Invitation',
+              headerStyle: { backgroundColor: colors.canvas },
+              headerTintColor: colors.primary,
+              headerTitleStyle: {
+                fontFamily: fonts.bold,
+                color: colors.ink,
+                fontSize: 18,
+              },
+              headerShadowVisible: false,
+              headerBackTitle: 'Retour',
+            }}
+          />
+        </>
       )}
     </Stack.Navigator>
   )
+}
+
+const linking = {
+  prefixes: ['flightwatcher://'],
+  config: {
+    screens: {
+      PlannerInvite: 'planner/invite/:token',
+      Main: {
+        screens: {
+          Search: 'vols',
+          Deals: 'sejours',
+          Planner: 'planner',
+          Favorites: 'favoris',
+          Profile: 'profil',
+        },
+      },
+    },
+  },
 }
 
 const FONT_GATE_MS = 1500
@@ -406,7 +516,7 @@ export default function App() {
   return (
     <SafeAreaProvider onLayout={onLayoutRoot}>
       <AuthProvider>
-        <NavigationContainer theme={navTheme}>
+        <NavigationContainer theme={navTheme} linking={linking as any}>
           <StatusBar style="dark" />
           <RootNavigator />
         </NavigationContainer>

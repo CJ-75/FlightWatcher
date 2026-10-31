@@ -126,17 +126,37 @@ function buildDealFromMyTrip(d: MyTripDraft): TravelDeal | null {
 }
 
 export function DealCheckoutScreen({ route, navigation }: Props) {
-  const { dealId, draftToken, hotelId } = route.params
+  const { dealId, draftToken, hotelId, payResult } = route.params
   const [deal, setDeal] = useState<TravelDeal | null>(null)
   const [reval, setReval] = useState<DealRevalidateResponse | null>(null)
-  const [step, setStep] = useState<'load' | 'confirm' | 'guests' | 'done' | 'error'>(
-    'load',
-  )
+  const [step, setStep] = useState<
+    'load' | 'confirm' | 'guests' | 'pay' | 'done' | 'error'
+  >('load')
   const [error, setError] = useState<string | null>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [confirmation, setConfirmation] = useState<string | null>(null)
+  const [bookingId, setBookingId] = useState<string | null>(null)
+  const [payMeta, setPayMeta] = useState<{
+    secret_key: string
+    payment_public_key: string
+    liteapi_env?: string
+  } | null>(null)
+  const [paying, setPaying] = useState(false)
+
+  useEffect(() => {
+    if (!payResult?.confirmation) return
+    setConfirmation(payResult.confirmation)
+    setStep('done')
+    if (draftToken) {
+      void rememberTrip({
+        draft_token: draftToken,
+        booking_id: payResult.bookingId,
+        city: deal?.city,
+      })
+    }
+  }, [payResult, draftToken, deal?.city])
 
   useEffect(() => {
     let cancelled = false
@@ -192,9 +212,10 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
     }
   }, [dealId, draftToken, hotelId])
 
-  const payAndBook = async () => {
+  const startPrebook = async () => {
     if (!deal || !reval?.offer_id || !reval.hotel_id) return
     setError(null)
+    setPaying(true)
     try {
       const key =
         draftToken && !String(deal.deal_key || '').startsWith('mytrip-')
@@ -228,41 +249,71 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
         } as TravelDeal,
         draft_token: draftToken || undefined,
       })
-      let booked = await getApi().bookHotel(pb.booking_id, {
-        holder: { firstName, lastName, email },
-        guests: [{ firstName, lastName, email, occupancyNumber: 1 }],
-        payment_status: 'succeeded',
-        draft_token: draftToken || undefined,
-        sandbox_simulate: true,
-      })
-      if (booked.status === 'booking_pending') {
-        await new Promise((r) => setTimeout(r, 1500))
-        booked = await getApi().getHotelBooking(pb.booking_id, {
-          draft_token: draftToken || undefined,
+      setBookingId(pb.booking_id)
+      if (pb.secret_key && pb.payment_public_key) {
+        setPayMeta({
+          secret_key: pb.secret_key,
+          payment_public_key: pb.payment_public_key,
+          liteapi_env: pb.liteapi_env,
         })
-      }
-      if (draftToken) {
-        try {
-          await getApi().markMyTripHotelBooked(draftToken, {
-            booking_id: booked.id || pb.booking_id,
-            confirmation_code: booked.confirmation_code || null,
-            holder_email: email,
-          })
-        } catch {
-          /* non-blocking */
-        }
-        await rememberTrip({
-          draft_token: draftToken,
-          booking_id: booked.id || pb.booking_id,
-          city: deal.city,
+        setStep('pay')
+        navigation.navigate('HotelPayWebView', {
+          bookingId: pb.booking_id,
+          publicKey: pb.payment_public_key,
+          secretKey: pb.secret_key,
+          draftToken: draftToken || undefined,
+          firstName,
+          lastName,
+          email,
+          liteapiEnv: pb.liteapi_env,
+          returnDealId: dealId,
+          returnHotelId: hotelId,
         })
+      } else if (pb.liteapi_env === 'sandbox') {
+        await sandboxBook(pb.booking_id)
+      } else {
+        throw new Error('Paiement indisponible — réessaie')
       }
-      setConfirmation(booked.confirmation_code || booked.status)
-      setStep('done')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       setStep('error')
+    } finally {
+      setPaying(false)
     }
+  }
+
+  const sandboxBook = async (id: string) => {
+    let booked = await getApi().bookHotel(id, {
+      holder: { firstName, lastName, email },
+      guests: [{ firstName, lastName, email, occupancyNumber: 1 }],
+      payment_status: 'succeeded',
+      draft_token: draftToken || undefined,
+      sandbox_simulate: true,
+    })
+    if (booked.status === 'booking_pending') {
+      await new Promise((r) => setTimeout(r, 1500))
+      booked = await getApi().getHotelBooking(id, {
+        draft_token: draftToken || undefined,
+      })
+    }
+    if (draftToken) {
+      try {
+        await getApi().markMyTripHotelBooked(draftToken, {
+          booking_id: booked.id || id,
+          confirmation_code: booked.confirmation_code || null,
+          holder_email: email,
+        })
+      } catch {
+        /* non-blocking */
+      }
+      await rememberTrip({
+        draft_token: draftToken,
+        booking_id: booked.id || id,
+        city: deal?.city,
+      })
+    }
+    setConfirmation(booked.confirmation_code || booked.status)
+    setStep('done')
   }
 
   return (
@@ -288,7 +339,8 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
           <View style={styles.card}>
             <Text style={styles.title}>Coordonnées</Text>
             <Text style={styles.notice}>
-              Deux réservations distinctes. Paiement sandbox = simulation après prebook.
+              Deux réservations distinctes. Tu paies l’hôtel ici ; le vol chez le
+              transporteur.
             </Text>
             <TextInput
               style={styles.input}
@@ -311,12 +363,58 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
               onChangeText={setEmail}
             />
             <Pressable
-              style={[styles.btn, (!firstName || !lastName || !email) && styles.btnDisabled]}
-              disabled={!firstName || !lastName || !email}
-              onPress={() => void payAndBook()}
+              style={[
+                styles.btn,
+                (!firstName || !lastName || !email || paying) && styles.btnDisabled,
+              ]}
+              disabled={!firstName || !lastName || !email || paying}
+              onPress={() => void startPrebook()}
             >
-              <Text style={styles.btnText}>Prebook + payer (sandbox)</Text>
+              <Text style={styles.btnText}>
+                {paying ? '…' : 'Continuer vers le paiement'}
+              </Text>
             </Pressable>
+          </View>
+        ) : null}
+
+        {step === 'pay' ? (
+          <View style={styles.card}>
+            <Text style={styles.title}>Paiement</Text>
+            <Text style={styles.body}>
+              Finalise le paiement dans la feuille ouverte. Si tu l’as fermée,
+              relance-la ci-dessous.
+            </Text>
+            {payMeta && bookingId ? (
+              <Pressable
+                style={styles.btn}
+                onPress={() =>
+                  navigation.navigate('HotelPayWebView', {
+                    bookingId,
+                    publicKey: payMeta.payment_public_key,
+                    secretKey: payMeta.secret_key,
+                    draftToken: draftToken || undefined,
+                    firstName,
+                    lastName,
+                    email,
+                    liteapiEnv: payMeta.liteapi_env,
+                    returnDealId: dealId,
+                    returnHotelId: hotelId,
+                  })
+                }
+              >
+                <Text style={styles.btnText}>Ouvrir le paiement</Text>
+              </Pressable>
+            ) : null}
+            {payMeta?.liteapi_env === 'sandbox' && bookingId ? (
+              <Pressable
+                style={styles.btnSecondary}
+                onPress={() => void sandboxBook(bookingId)}
+              >
+                <Text style={styles.btnSecondaryText}>
+                  Simuler un paiement (sandbox)
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 

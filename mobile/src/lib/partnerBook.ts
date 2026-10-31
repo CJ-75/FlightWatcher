@@ -189,7 +189,44 @@ export async function createMyTripComposeFromTrip(opts: {
       /* non-blocking */
     }
   }
+  // Warm hotel compose job before HotelCompose mounts
+  void getApi()
+    .fetchHotelUpsell({
+      iata: trip.destination_code,
+      checkin,
+      checkout,
+      participants: pax,
+      flight_pp: flightPp,
+      live: true,
+    })
+    .catch(() => undefined)
   return draft
+}
+
+/** Fire-and-forget warm fetch when dest/dates known after createMyTrip. */
+export function warmHotelUpsell(opts: {
+  iata?: string | null
+  checkin?: string | null
+  checkout?: string | null
+  participants?: number
+  flight_pp?: number
+}) {
+  const iata = String(opts.iata || '')
+    .trim()
+    .toUpperCase()
+  const checkin = String(opts.checkin || '').slice(0, 10)
+  const checkout = String(opts.checkout || '').slice(0, 10)
+  if (!iata || !checkin || !checkout || checkout <= checkin) return
+  void getApi()
+    .fetchHotelUpsell({
+      iata,
+      checkin,
+      checkout,
+      participants: Math.max(1, opts.participants || 2),
+      flight_pp: Number(opts.flight_pp) || 0,
+      live: true,
+    })
+    .catch(() => undefined)
 }
 
 export function bookCtaLabel(_ps?: PriceSourceBooking): string {
