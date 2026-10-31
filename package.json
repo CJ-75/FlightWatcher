@@ -14,5 +14,11 @@
     "typecheck:all": "npm run typecheck && npm run typecheck -w flightwatcher-mobile --if-present",
     "dev:web": "npm run dev -w flightwatcher-frontend",
     "dev:mobile": "npm run start -w flightwatcher-mobile --if-present"
+  },
+  "overrides": {
+    "ws": "8.22.0"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
   }
 }
