@@ -176,11 +176,11 @@ function offerChips(hotel: HotelLike, facilities: string[]) {
     out.push({ key: 'hb', label: 'Demi-pension', tone: 'in' })
   } else if (board === 'Pension complète' || code === 'FB') {
     out.push({ key: 'fb', label: 'Pension complète', tone: 'in' })
-  } else if (board === 'All inclusive' || code === 'AI') {
-    out.push({ key: 'ai', label: 'All inclusive', tone: 'in' })
+  } else if (board === 'Tout compris' || board === 'All inclusive' || code === 'AI') {
+    out.push({ key: 'ai', label: 'Tout compris', tone: 'in' })
   } else if (board === 'Chambre seule' || code === 'RO') {
     out.push({ key: 'ro', label: 'Chambre seule', tone: 'neu' })
-    if (hasBf) out.push({ key: 'bf-opt', label: 'Petit-déj. en option', tone: 'opt' })
+    if (hasBf) out.push({ key: 'bf-opt', label: 'Petit-déjeuner en option', tone: 'opt' })
   } else if (board) {
     out.push({ key: 'board', label: board, tone: 'in' })
   } else if (hasBf) {
@@ -266,7 +266,18 @@ export function MyTripHotelPanel({
       .getHotelReviews(id, { language: 'fr', limit: 10 })
       .then((r) => {
         if (cancelled) return
-        setReviews(Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : [])
+        const rows = Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : []
+        setReviews(
+          [...rows].sort((a, b) => {
+            const rank = (x: { language?: string | null }) => {
+              const lang = String(x.language || '').toLowerCase()
+              if (lang.startsWith('fr')) return 0
+              if (!lang) return 1
+              return 2
+            }
+            return rank(a) - rank(b)
+          }),
+        )
       })
       .catch(() => {
         if (!cancelled) setReviews([])
@@ -289,7 +300,8 @@ export function MyTripHotelPanel({
     return out
   }, [chips, facilities])
 
-  const visibleReviews = reviewsExpanded ? reviews : reviews.slice(0, 5)
+  const REVIEW_PREVIEW = 3
+  const visibleReviews = reviewsExpanded ? reviews : reviews.slice(0, REVIEW_PREVIEW)
   const rLabel = ratingLabel(rating)
   const distLabel =
     distanceM != null && !Number.isNaN(distanceM)
@@ -510,16 +522,23 @@ export function MyTripHotelPanel({
             <p className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
               Avis
             </p>
-            {reviewCount != null && reviewCount > 0 ? (
-              <p className="text-[10px] font-semibold text-slate-400 tabular-nums">
-                {reviewCount.toLocaleString('fr-FR')} avis
-              </p>
-            ) : null}
+            <p className="text-[10px] font-semibold text-slate-400 tabular-nums">
+              {[
+                reviewCount != null && reviewCount > 0
+                  ? `${reviewCount.toLocaleString('fr-FR')} avis`
+                  : null,
+                'en français',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
           </div>
           <ul className="space-y-2">
             {visibleReviews.map((r, i) => {
               const meta = reviewMeta(r)
-              const excerpt = r.pros || r.text || r.headline || r.cons || ''
+              const excerpt = [r.headline, r.pros, r.text, r.cons]
+                .filter(Boolean)
+                .join('\n\n')
               return (
                 <li
                   key={`${r.name || 'avis'}-${r.date || i}`}
@@ -533,8 +552,8 @@ export function MyTripHotelPanel({
                   </div>
                   {excerpt ? (
                     <p
-                      className={`text-[11px] text-slate-700 leading-relaxed mt-1.5 ${
-                        reviewsExpanded ? '' : 'line-clamp-2'
+                      className={`text-[11px] text-slate-700 leading-relaxed mt-1.5 whitespace-pre-line ${
+                        reviewsExpanded ? '' : 'line-clamp-3'
                       }`}
                     >
                       {excerpt}
@@ -544,15 +563,15 @@ export function MyTripHotelPanel({
               )
             })}
           </ul>
-          {reviews.length > 5 ? (
+          {reviews.length > REVIEW_PREVIEW ? (
             <button
               type="button"
               onClick={() => setReviewsExpanded((v) => !v)}
               className="mt-2.5 w-full rounded-xl border border-slate-200 bg-white py-2.5 min-h-[44px] text-[12px] font-bold text-slate-800"
             >
               {reviewsExpanded
-                ? 'Voir moins'
-                : `Voir plus · ${reviews.length - 5} avis`}
+                ? 'Réduire'
+                : `Voir tout · ${reviews.length} avis`}
             </button>
           ) : null}
         </div>

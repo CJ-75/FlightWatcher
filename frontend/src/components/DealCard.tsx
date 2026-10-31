@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  boardLabelFr,
   dealAdults,
   dealBadgeLabels,
   dealCornerBadgeParts,
@@ -54,17 +55,6 @@ function formatClock(iso?: string | null) {
   if (!iso) return null
   const m = String(iso).match(/T(\d{2}):(\d{2})/)
   return m ? `${m[1]}:${m[2]}` : null
-}
-
-function boardLabel(board?: string | null) {
-  if (!board) return null
-  const b = board.toUpperCase()
-  if (b.includes('BI') || /breakfast|petit/i.test(board)) return 'Petit-déj'
-  if (b.includes('HB') || /half|demi/i.test(board)) return 'Demi-pension'
-  if (b.includes('FB') || /full|pension compl/i.test(board)) return 'Pension complète'
-  if (b.includes('AI') || /all.?inclusive/i.test(board)) return 'All inclusive'
-  if (b.includes('RO') || /room only|chambre seule/i.test(board)) return null
-  return board
 }
 
 function distanceLabel(deal: TravelDeal) {
@@ -297,7 +287,7 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
 
   const outTime = formatClock(deal.flight?.outbound_local || deal.flight?.out_dep_local)
   const retTime = formatClock(deal.flight?.inbound_local || deal.flight?.ret_dep_local)
-  const board = boardLabel(deal.board || deal.hotel?.board)
+  const board = boardLabelFr(deal.board || deal.hotel?.board)
   const dist = distanceLabel(deal)
   const rating =
     deal.hotel?.rating != null ? Number(deal.hotel.rating).toFixed(1) : null

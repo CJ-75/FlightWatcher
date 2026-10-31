@@ -4,6 +4,13 @@ export function dealAdults(deal: TravelDeal): number {
   return Math.max(1, deal.adults ?? 2)
 }
 
+/** Hotel star rating as ★★★ (1–5). Empty if unknown. */
+export function hotelStarsLabel(stars?: number | null): string {
+  const n = Math.round(Number(stars))
+  if (!Number.isFinite(n) || n <= 0) return ''
+  return '★'.repeat(Math.min(5, n))
+}
+
 /** YYYY-MM-DD from ISO flight timestamp. */
 export function dateFromFlightIso(iso?: string | null): string | null {
   if (!iso) return null

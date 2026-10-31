@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   boardLabelFr,
   hotelCancelLabel,
+  hotelStarsLabel,
   resolveCarrierBooking,
   type HotelGalleryPhoto,
   type MyTripDraft,
@@ -397,10 +398,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
               ) : null}
 
               <Pressable onPress={() => setHotelSheet(true)}>
+                {hotelStarsLabel(hotelOpt.stars) ? (
+                  <Text style={styles.stars}>{hotelStarsLabel(hotelOpt.stars)}</Text>
+                ) : null}
                 <Text style={styles.cardBody} numberOfLines={2}>
-                  {hotelOpt.stars
-                    ? `${'★'.repeat(Math.min(5, Math.round(Number(hotelOpt.stars))))} `
-                    : ''}
                   {hotelName}
                 </Text>
                 <Text style={styles.cardMeta} numberOfLines={2}>
@@ -549,6 +550,12 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 14,
     gap: 8,
+  },
+  stars: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    letterSpacing: 1,
+    color: '#D97706',
   },
   cardBody: { fontFamily: fonts.semibold, fontSize: 16, color: colors.ink },
   cardMeta: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, lineHeight: 19 },

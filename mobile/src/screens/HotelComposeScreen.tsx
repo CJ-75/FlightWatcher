@@ -581,7 +581,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
               cityLabel ? (
                 <Text style={styles.city}>Hôtels à {cityLabel}</Text>
               ) : (
-                <Text style={styles.city}>Touche un hôtel pour voir la fiche</Text>
+                <Text style={styles.city}>Touche un hôtel pour voir le détail</Text>
               )
             }
             renderItem={({ item }) => {
@@ -602,8 +602,12 @@ export function HotelComposeScreen({ route, navigation }: Props) {
                   <View style={styles.rowBody}>
                     <Text style={styles.name} numberOfLines={2}>
                       {item.name || 'Hôtel'}
-                      {item.stars ? ` · ${item.stars}★` : ''}
                     </Text>
+                    {item.stars != null && Number(item.stars) > 0 ? (
+                      <Text style={styles.stars}>
+                        {'★'.repeat(Math.min(5, Math.round(Number(item.stars))))}
+                      </Text>
+                    ) : null}
                     <Text style={styles.meta} numberOfLines={1}>
                       {[
                         item.rating != null ? `${Number(item.rating).toFixed(1)}/10` : null,
@@ -772,6 +776,13 @@ const styles = StyleSheet.create({
   thumbEmpty: { backgroundColor: colors.line },
   rowBody: { flex: 1, minWidth: 0 },
   name: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  stars: {
+    marginTop: 2,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    letterSpacing: 1,
+    color: '#D97706',
+  },
   meta: {
     marginTop: 4,
     fontFamily: fonts.regular,

@@ -74,16 +74,38 @@ export function computeTripPartyPrice(input: {
   }
 }
 
-/** Board code → French words (never show RO / BI raw). */
+/** Board code → French words in full (never show RO / BI / HB raw). */
 export function boardLabelFr(board?: string | null): string | null {
   if (!board) return null
   const raw = String(board).trim()
-  const b = raw.toUpperCase()
-  if (b === 'RO' || /room.?only|chambre seule/i.test(raw)) return 'Chambre seule'
-  if (b === 'BI' || /breakfast|petit/i.test(raw)) return 'Petit-déjeuner inclus'
-  if (b === 'HB' || /half|demi/i.test(raw)) return 'Demi-pension'
-  if (b === 'FB' || /full|pension compl/i.test(raw)) return 'Pension complète'
-  if (b === 'AI' || /all.?inclusive/i.test(raw)) return 'All inclusive'
-  if (/^[A-Z]{2}$/.test(b)) return null
+  if (!raw) return null
+  const b = raw.toUpperCase().replace(/[^A-Z]/g, '')
+  // Prefer exact / leading codes from LiteAPI-style values ("RO", "BI", "RO - …")
+  if (
+    b === 'RO' ||
+    (b.startsWith('RO') && b.length <= 4) ||
+    /room.?only|chambre seule/i.test(raw)
+  ) {
+    return 'Chambre seule'
+  }
+  if (
+    b === 'BI' ||
+    b === 'BB' ||
+    /breakfast|petit[-\s]?d[eé]j/i.test(raw)
+  ) {
+    return 'Petit-déjeuner inclus'
+  }
+  if (b === 'HB' || /half.?board|demi[-\s]?pension/i.test(raw)) {
+    return 'Demi-pension'
+  }
+  if (b === 'FB' || /full.?board|pension compl/i.test(raw)) {
+    return 'Pension complète'
+  }
+  if (b === 'AI' || /all.?inclusive|tout compris/i.test(raw)) {
+    return 'Tout compris'
+  }
+  // Unknown short codes: hide rather than show jargon
+  if (/^[A-Z]{1,3}$/.test(b)) return null
+  // Already French / descriptive text
   return raw
 }

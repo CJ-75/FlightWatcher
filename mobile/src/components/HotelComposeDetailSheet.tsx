@@ -120,11 +120,11 @@ function stayOfferLabels(h: HotelUpsellOption, facilities: string[]): string[] {
     out.push('Demi-pension')
   } else if (boardFr === 'Pension complète' || code === 'FB') {
     out.push('Pension complète')
-  } else if (boardFr === 'All inclusive' || code === 'AI') {
-    out.push('All inclusive')
+  } else if (boardFr === 'Tout compris' || boardFr === 'All inclusive' || code === 'AI') {
+    out.push('Tout compris')
   } else if (boardFr === 'Chambre seule' || code === 'RO' || /room.?only/i.test(raw)) {
     out.push('Chambre seule')
-    if (facilityBreakfast) out.push('Petit-déj. en option')
+    if (facilityBreakfast) out.push('Petit-déjeuner en option')
   } else if (boardFr) {
     out.push(boardFr)
   } else if (facilityBreakfast) {
@@ -201,6 +201,22 @@ function reviewMeta(r: HotelGuestReview) {
   return [r.name?.trim() || null, formatReviewCountry(r.country), formatReviewType(r.type), formatReviewDate(r.date)]
     .filter(Boolean)
     .join(' · ')
+}
+
+function preferFrenchReviews(list: HotelGuestReview[]): HotelGuestReview[] {
+  return [...list].sort((a, b) => {
+    const rank = (r: HotelGuestReview) => {
+      const lang = String(r.language || '').toLowerCase()
+      if (lang.startsWith('fr')) return 0
+      if (!lang) return 1
+      return 2
+    }
+    return rank(a) - rank(b)
+  })
+}
+
+function reviewExcerpt(r: HotelGuestReview): string {
+  return [r.headline, r.pros, r.text, r.cons].filter(Boolean).join('\n\n')
 }
 
 export function HotelComposeDetailSheet({
@@ -298,7 +314,8 @@ export function HotelComposeDetailSheet({
       .getHotelReviews(hotelId, { language: 'fr', limit: 10 })
       .then((r) => {
         if (cancelled) return
-        setGuestReviews(Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : [])
+        const rows = Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : []
+        setGuestReviews(preferFrenchReviews(rows))
       })
       .catch(() => {
         if (!cancelled) setGuestReviews([])
@@ -342,6 +359,7 @@ export function HotelComposeDetailSheet({
       'Demi-pension',
       'Pension complète',
       'All inclusive',
+      'Tout compris',
     ])
     const boardFr = boardLabelFr(hotel.board)
     if (boardFr) skip.add(boardFr)
@@ -369,7 +387,10 @@ export function HotelComposeDetailSheet({
     [galleryPhotos],
   )
   const mosaicExtra = Math.max(0, galleryPhotos.length - 1 - bodyPhotos.length)
-  const visibleReviews = reviewsExpanded ? guestReviews : guestReviews.slice(0, 5)
+  const REVIEW_PREVIEW = 3
+  const visibleReviews = reviewsExpanded
+    ? guestReviews
+    : guestReviews.slice(0, REVIEW_PREVIEW)
   const rLabel = hotel ? ratingLabel(hotel.rating) : null
   const outLabel = formatShortDate(checkin)
   const retLabel = formatShortDate(checkout)
@@ -575,11 +596,16 @@ export function HotelComposeDetailSheet({
               <View style={styles.reviewsBlock}>
                 <View style={styles.sectionHead}>
                   <Text style={styles.sectionTitle}>Avis</Text>
-                  {hotel.review_count != null && hotel.review_count > 0 ? (
-                    <Text style={styles.reviewCount}>
-                      {Number(hotel.review_count).toLocaleString('fr-FR')} avis
-                    </Text>
-                  ) : null}
+                  <Text style={styles.reviewCount}>
+                    {[
+                      hotel.review_count != null && hotel.review_count > 0
+                        ? `${Number(hotel.review_count).toLocaleString('fr-FR')} avis`
+                        : null,
+                      'en français',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
                 </View>
                 {reviewsLoading && guestReviews.length === 0 ? (
                   <ActivityIndicator color={colors.primary} />
@@ -587,7 +613,7 @@ export function HotelComposeDetailSheet({
                   <>
                     {visibleReviews.map((r, i) => {
                       const meta = reviewMeta(r)
-                      const excerpt = r.pros || r.text || r.headline || r.cons || ''
+                      const excerpt = reviewExcerpt(r)
                       return (
                         <View key={`${r.name || 'avis'}-${r.date || i}`} style={styles.reviewCard}>
                           <View style={styles.reviewTop}>
@@ -607,27 +633,21 @@ export function HotelComposeDetailSheet({
                               style={styles.reviewText}
                               numberOfLines={reviewsExpanded ? undefined : 3}
                             >
-                              {r.headline && r.headline !== excerpt ? (
-                                <Text style={styles.reviewHeadline}>{r.headline} · </Text>
-                              ) : null}
                               {excerpt}
                             </Text>
                           ) : null}
                         </View>
                       )
                     })}
-                    {guestReviews.length > 5 ||
-                    guestReviews.some((r) => String(r.pros || r.text || '').length > 120) ? (
+                    {guestReviews.length > REVIEW_PREVIEW ? (
                       <Pressable
                         style={styles.moreReviews}
                         onPress={() => setReviewsExpanded((v) => !v)}
                       >
                         <Text style={styles.moreReviewsText}>
                           {reviewsExpanded
-                            ? 'Voir moins'
-                            : guestReviews.length > 5
-                              ? `Voir plus · ${guestReviews.length - 5} avis`
-                              : 'Voir plus'}
+                            ? 'Réduire'
+                            : `Voir tout · ${guestReviews.length} avis`}
                         </Text>
                       </Pressable>
                     ) : null}

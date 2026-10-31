@@ -13,7 +13,12 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
-import { dealAdults, pricePpWithHotel } from '@flightwatcher/shared'
+import {
+  boardLabelFr,
+  dealAdults,
+  hotelStarsLabel,
+  pricePpWithHotel,
+} from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -188,6 +193,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const fees = selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
+  const selectedStars = hotelStarsLabel(selected?.stars || deal.hotel_stars)
 
   const openFlight = async () => {
     let url = flightUrl
@@ -408,6 +414,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
               {hotelOptions.map((h) => {
                 const active = h.id === selected?.id
                 const hPp = pricePpWithHotel(deal, h.public_hotel_price ?? hotelTotal)
+                const stars = hotelStarsLabel(h.stars)
                 return (
                   <Pressable
                     key={h.id}
@@ -420,10 +427,14 @@ export function DealDetailScreen({ route, navigation }: Props) {
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.hotelOptionName} numberOfLines={1}>
-                        {h.name}
+                        {stars ? `${stars}  ${h.name}` : h.name}
                       </Text>
                       <Text style={styles.hotelOptionMeta} numberOfLines={1}>
-                        {[h.board, h.refundable ? 'Annul. OK' : null, h.rating != null ? `${h.rating}/10` : null]
+                        {[
+                          boardLabelFr(h.board),
+                          h.refundable ? 'Annulation flexible' : null,
+                          h.rating != null ? `${h.rating}/10` : null,
+                        ]
                           .filter(Boolean)
                           .join(' · ')}
                       </Text>
@@ -435,7 +446,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
                         }}
                         hitSlop={6}
                       >
-                        <Text style={styles.optionFiche}>Fiche</Text>
+                        <Text style={styles.optionFiche}>Voir le détail</Text>
                       </Pressable>
                     </View>
                     <Text style={styles.hotelOptionPrice}>{Math.round(hPp)} €</Text>
@@ -458,14 +469,16 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 setHotelSheetOpen(true)
               }}
             >
+              {selectedStars ? (
+                <Text style={styles.hotelStars}>{selectedStars}</Text>
+              ) : null}
               <Text style={styles.hotelTitle}>
-                {selected?.stars || deal.hotel_stars
-                  ? `${'★'.repeat(Math.min(5, Math.round(Number(selected?.stars || deal.hotel_stars))))} `
-                  : ''}
                 {selected?.name || deal.hotel_name || '—'}
               </Text>
-              {(selected?.board || deal.board) ? (
-                <Text style={styles.hotelMeta}>{String(selected?.board || deal.board)}</Text>
+              {boardLabelFr(selected?.board || deal.board) ? (
+                <Text style={styles.hotelMeta}>
+                  {boardLabelFr(selected?.board || deal.board)}
+                </Text>
               ) : null}
               {selected?.rating != null ? (
                 <Text style={styles.hotelMeta}>
@@ -839,6 +852,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     color: colors.ink,
+  },
+  hotelStars: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    letterSpacing: 1,
+    color: '#D97706',
+    marginBottom: 2,
   },
   hotelTitle: {
     fontFamily: fonts.bold,

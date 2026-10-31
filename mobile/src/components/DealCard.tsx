@@ -14,9 +14,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
 import {
+  boardLabelFr,
   dealAdults,
   dealBadgeLabels,
   dealCornerBadgeParts,
+  hotelStarsLabel,
 } from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
 import { CountryFlag } from './CountryFlag'
@@ -65,17 +67,6 @@ function formatClock(iso?: string | null) {
   if (!iso) return null
   const m = String(iso).match(/T(\d{2}):(\d{2})/)
   return m ? `${m[1]}:${m[2]}` : null
-}
-
-function boardLabel(board?: string | null) {
-  if (!board) return null
-  const b = board.toUpperCase()
-  if (b.includes('BI') || /breakfast|petit/i.test(board)) return 'Petit-déj'
-  if (b.includes('HB') || /half|demi/i.test(board)) return 'Demi-pension'
-  if (b.includes('FB') || /full|pension compl/i.test(board)) return 'Pension complète'
-  if (b.includes('AI') || /all.?inclusive/i.test(board)) return 'All inclusive'
-  if (b.includes('RO')) return null
-  return board
 }
 
 function distanceLabel(deal: TravelDeal) {
@@ -172,7 +163,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const didSwipeRef = useRef(false)
 
   const adults = dealAdults(deal)
-  const stars = Number(deal.hotel_stars || deal.hotel?.stars || 0)
+  const starsLabel = hotelStarsLabel(deal.hotel_stars || deal.hotel?.stars)
   const hotelName = deal.hotel_name || deal.hotel?.name || 'Hôtel'
   const originCity = (deal.origin_city || '').trim()
   const origin =
@@ -197,7 +188,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
   const outTime = formatClock(deal.flight?.outbound_local || deal.flight?.out_dep_local)
   const retTime = formatClock(deal.flight?.inbound_local || deal.flight?.ret_dep_local)
-  const board = boardLabel(deal.board || deal.hotel?.board)
+  const board = boardLabelFr(deal.board || deal.hotel?.board)
   const dist = distanceLabel(deal)
   const rating =
     deal.hotel?.rating != null ? Number(deal.hotel.rating).toFixed(1) : null
@@ -421,7 +412,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
           <View>
             <Text style={styles.hotel} numberOfLines={1}>
-              {stars > 0 ? `${'★'.repeat(Math.min(5, Math.round(stars)))} ` : ''}
+              {starsLabel ? `${starsLabel}  ` : ''}
               {hotelName}
             </Text>
             {hotelMeta ? (

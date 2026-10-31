@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
+  boardLabelFr,
   dealAdults,
   formatFetchedAt,
   hotelCancelLabel,
@@ -286,18 +287,7 @@ export function DealDetailModal({
   const distanceM = selected?.distance_m ?? deal.hotel?.distance_m
   const rating = selected?.rating
   const cancelLabel = hotelCancelLabel(selected || deal.hotel)
-  const boardRaw = selected?.board || deal.board
-  const board = (() => {
-    if (!boardRaw) return null
-    const b = String(boardRaw).toUpperCase()
-    if (b === 'RO' || /room.?only/i.test(String(boardRaw))) return 'Chambre seule'
-    if (b === 'BI' || /breakfast|petit/i.test(String(boardRaw))) return 'Petit-déjeuner inclus'
-    if (b === 'HB') return 'Demi-pension'
-    if (b === 'FB') return 'Pension complète'
-    if (b === 'AI') return 'All inclusive'
-    if (b === 'FR') return null // not a board code when alone
-    return String(boardRaw)
-  })()
+  const board = boardLabelFr(selected?.board || deal.board)
   const { out: outTime, ret: inTime } = flightLegTimes(deal.flight)
   const totalForParty = Math.round(pricePp * adults)
 
@@ -753,7 +743,7 @@ export function DealDetailModal({
                             </p>
                             <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                               {[
-                                h.board,
+                                boardLabelFr(h.board),
                                 hotelCancelLabel(h, { short: true }),
                                 h.rating != null ? `${Number(h.rating).toFixed(1)}/10` : null,
                                 h.distance_m != null

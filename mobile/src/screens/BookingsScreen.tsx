@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   boardLabelFr,
   hotelCancelLabel,
+  hotelStarsLabel,
   type HotelBooking,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
@@ -118,6 +119,15 @@ function bookingPhoto(b: HotelBooking): string | null {
     | { image_url?: string; hotel?: { photo?: string } }
     | undefined
   return b.hotel_photo || snap?.hotel?.photo || snap?.image_url || null
+}
+
+function bookingStars(b: HotelBooking): number | null {
+  if (b.hotel_stars != null && Number(b.hotel_stars) > 0) return Number(b.hotel_stars)
+  const snap = b.deal_snapshot as
+    | { hotel_stars?: number; hotel?: { stars?: number } }
+    | undefined
+  const n = snap?.hotel?.stars ?? snap?.hotel_stars
+  return n != null && Number(n) > 0 ? Number(n) : null
 }
 
 function bookingPrice(b: HotelBooking): number | null {
@@ -305,6 +315,7 @@ export function BookingsScreen() {
     )
     const nights = nightsBetween(item.dates?.outbound, item.dates?.inbound, item.nights)
     const price = bookingPrice(item)
+    const stars = hotelStarsLabel(bookingStars(item))
     const details = [board, nights, item.adults ? `${item.adults} pers.` : null, cancel]
       .filter(Boolean)
       .join(' · ')
@@ -337,6 +348,7 @@ export function BookingsScreen() {
             </View>
           </View>
 
+          {stars ? <Text style={styles.stars}>{stars}</Text> : null}
           <Text style={styles.hotel} numberOfLines={1}>
             {item.hotel_name || 'Hôtel'}
           </Text>
@@ -716,8 +728,15 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 10,
   },
-  hotel: {
+  stars: {
     marginTop: 4,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    letterSpacing: 1,
+    color: '#D97706',
+  },
+  hotel: {
+    marginTop: 2,
     fontFamily: fonts.bold,
     fontSize: 16,
     letterSpacing: -0.3,

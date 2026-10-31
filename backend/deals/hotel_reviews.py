@@ -132,6 +132,17 @@ def get_hotel_reviews(
             n = _normalize_review(raw)
             if n:
                 reviews.append(n)
+
+        # Prefer French-flagged reviews first (LiteAPI may mix locales).
+        def _fr_rank(r: Dict[str, Any]) -> int:
+            lang = str(r.get("language") or "").strip().lower()
+            if lang.startswith("fr"):
+                return 0
+            if not lang:
+                return 1
+            return 2
+
+        reviews.sort(key=_fr_rank)
         out["reviews"] = reviews
         out["count"] = len(reviews)
     except LiteApiError as e:

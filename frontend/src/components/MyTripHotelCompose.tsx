@@ -254,10 +254,10 @@ function stayOfferChips(
       tone: 'included',
       icon: 'utensils',
     })
-  } else if (boardFr === 'All inclusive' || code === 'AI') {
+  } else if (boardFr === 'Tout compris' || boardFr === 'All inclusive' || code === 'AI') {
     out.push({
       key: 'ai',
-      label: 'All inclusive',
+      label: 'Tout compris',
       tone: 'included',
       icon: 'utensils',
     })
@@ -275,7 +275,7 @@ function stayOfferChips(
     if (facilityBreakfast) {
       out.push({
         key: 'bf-opt',
-        label: 'Petit-déj. en option',
+        label: 'Petit-déjeuner en option',
         tone: 'available',
         icon: 'coffee',
       })
@@ -290,7 +290,7 @@ function stayOfferChips(
   } else if (facilityBreakfast) {
     out.push({
       key: 'bf-hotel',
-      label: 'Petit-déj. à l’hôtel',
+      label: 'Petit-déjeuner à l’hôtel',
       tone: 'available',
       icon: 'coffee',
     })
@@ -1078,7 +1078,18 @@ export function MyTripHotelCompose({
       .getHotelReviews(id, { language: 'fr', limit: 10 })
       .then((r) => {
         if (cancelled) return
-        setGuestReviews(Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : [])
+        const rows = Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : []
+        setGuestReviews(
+          [...rows].sort((a, b) => {
+            const rank = (x: { language?: string | null }) => {
+              const lang = String(x.language || '').toLowerCase()
+              if (lang.startsWith('fr')) return 0
+              if (!lang) return 1
+              return 2
+            }
+            return rank(a) - rank(b)
+          }),
+        )
       })
       .catch(() => {
         if (!cancelled) setGuestReviews([])
@@ -1221,12 +1232,15 @@ export function MyTripHotelCompose({
       'Petit-déjeuner',
       'Petit-déjeuner inclus',
       'Petit-déj. en option',
+      'Petit-déjeuner en option',
       'Petit-déj. à l’hôtel',
+      'Petit-déjeuner à l’hôtel',
       'Restaurant',
       'Chambre seule',
       'Demi-pension',
       'Pension complète',
       'All inclusive',
+      'Tout compris',
     ])
     const boardFr = boardLabelFr(selected?.board)
     if (boardFr) skip.add(boardFr)
@@ -1243,9 +1257,10 @@ export function MyTripHotelCompose({
     }
     return out
   }, [advantages, facilities, offerChips, selected?.board])
+  const REVIEW_PREVIEW = 3
   const visibleReviews = reviewsExpanded
     ? guestReviews
-    : guestReviews.slice(0, 5)
+    : guestReviews.slice(0, REVIEW_PREVIEW)
 
   const outLabel = formatShortDate(checkin)
   const retLabel = formatShortDate(checkout)
@@ -1643,11 +1658,16 @@ export function MyTripHotelCompose({
                 <h4 className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
                   Avis
                 </h4>
-                {selected.review_count != null && selected.review_count > 0 ? (
-                  <p className="text-[10px] font-semibold text-slate-400 tabular-nums">
-                    {Number(selected.review_count).toLocaleString('fr-FR')} avis
-                  </p>
-                ) : null}
+                <p className="text-[10px] font-semibold text-slate-400 tabular-nums">
+                  {[
+                    selected.review_count != null && selected.review_count > 0
+                      ? `${Number(selected.review_count).toLocaleString('fr-FR')} avis`
+                      : null,
+                    'en français',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
               </div>
               {reviewsLoading && guestReviews.length === 0 ? (
                 <p className="text-[11px] text-slate-400">Chargement…</p>
@@ -1656,8 +1676,9 @@ export function MyTripHotelCompose({
                   <ul className="space-y-2">
                     {visibleReviews.map((r, i) => {
                       const meta = reviewMeta(r)
-                      const excerpt =
-                        r.pros || r.text || r.headline || r.cons || ''
+                      const excerpt = [r.headline, r.pros, r.text, r.cons]
+                        .filter(Boolean)
+                        .join('\n\n')
                       return (
                         <li
                           key={`${r.name || 'avis'}-${r.date || i}`}
@@ -1673,16 +1694,10 @@ export function MyTripHotelCompose({
                           </div>
                           {excerpt ? (
                             <p
-                              className={`text-[11px] text-slate-700 leading-relaxed mt-1.5 ${
-                                reviewsExpanded ? '' : 'line-clamp-2'
+                              className={`text-[11px] text-slate-700 leading-relaxed mt-1.5 whitespace-pre-line ${
+                                reviewsExpanded ? '' : 'line-clamp-3'
                               }`}
                             >
-                              {r.headline && r.headline !== excerpt ? (
-                                <span className="font-bold text-slate-900">
-                                  {r.headline}
-                                  {' · '}
-                                </span>
-                              ) : null}
                               {excerpt}
                             </p>
                           ) : null}
@@ -1690,20 +1705,15 @@ export function MyTripHotelCompose({
                       )
                     })}
                   </ul>
-                  {guestReviews.length > 5 ||
-                  guestReviews.some(
-                    (r) => String(r.pros || r.text || '').length > 120,
-                  ) ? (
+                  {guestReviews.length > REVIEW_PREVIEW ? (
                     <button
                       type="button"
                       onClick={() => setReviewsExpanded((v) => !v)}
                       className="mt-2.5 w-full rounded-xl border border-slate-200 bg-white py-2.5 min-h-[44px] text-[12px] font-bold text-slate-800 active:scale-[0.99] transition"
                     >
                       {reviewsExpanded
-                        ? 'Voir moins'
-                        : guestReviews.length > 5
-                          ? `Voir plus · ${guestReviews.length - 5} avis`
-                          : 'Voir plus'}
+                        ? 'Réduire'
+                        : `Voir tout · ${guestReviews.length} avis`}
                     </button>
                   ) : null}
                 </>
