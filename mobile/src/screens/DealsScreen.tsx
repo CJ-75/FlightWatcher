@@ -30,7 +30,7 @@ import { CityAirportPicker } from '../components/CityAirportPicker'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const STALE_MS = 90_000

@@ -24,7 +24,7 @@ import {
   TipIcon,
   UsersIcon,
 } from '../components/UiIcons'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DealCheckout'>

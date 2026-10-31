@@ -1,5 +1,5 @@
 import type { NavigationProp } from '@react-navigation/native'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 
 type Nav = NavigationProp<RootStackParamList>
 

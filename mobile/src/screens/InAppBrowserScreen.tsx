@@ -9,7 +9,7 @@ import {
 import { WebView } from 'react-native-webview'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { ModalScreenHeader } from '../components/ModalScreenHeader'
 import { colors, fonts, spacing } from '../theme'
 

@@ -370,7 +370,8 @@ export function CheckIcon({ size = 18, color = colors.success }: IconProps) {
           borderLeftWidth: Math.max(2, s * 0.12),
           borderBottomWidth: Math.max(2, s * 0.12),
           borderColor: colors.white,
-          transform: [{ rotate: '-45deg' }, { translateY: -s * 0.04 }],
+          marginTop: -s * 0.06,
+          transform: [{ rotate: '-45deg' }],
         }}
       />
     </View>
@@ -378,7 +379,7 @@ export function CheckIcon({ size = 18, color = colors.success }: IconProps) {
 }
 
 type ChipProps = {
-  icon: React.ReactNode
+  icon: React.ReactElement
   label: string
   style?: StyleProp<ViewStyle>
   /** Softer uppercase section label */
@@ -389,7 +390,10 @@ type ChipProps = {
 export function IconLabel({ icon, label, style, section }: ChipProps) {
   return (
     <View style={[styles.labelRow, style]}>
-      <View style={styles.chip}>{icon}</View>
+      <View style={styles.chip}>
+        {/* Fragment avoids dual @types/react View children clash */}
+        <>{icon}</>
+      </View>
       <Text style={section ? styles.sectionText : styles.labelText}>{label}</Text>
     </View>
   )

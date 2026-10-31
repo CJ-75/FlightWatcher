@@ -28,7 +28,7 @@ import { DealCard } from '../components/DealCard'
 import { HeartIcon } from '../components/HeartIcon'
 import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function FavoritesScreen() {

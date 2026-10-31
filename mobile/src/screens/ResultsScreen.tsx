@@ -25,7 +25,7 @@ import {
   tripFavoriteKey,
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { DestinationCard } from '../components/DestinationCard'

@@ -35,7 +35,7 @@ import { Button } from '../components/ui/Button'
 import { preparePartnerBook } from '../lib/partnerBook'
 import { openInAppBrowser } from '../lib/openInApp'
 import { ScreenBackground } from '../components/ScreenBackground'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, shadow, spacing } from '../theme'
 
 function departureRouteLabel(value: string | null | undefined): string {

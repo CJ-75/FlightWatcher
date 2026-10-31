@@ -39,7 +39,7 @@ import {
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import { beginInspireLive, publishInspireLive } from '../lib/inspireLive'
-import type { MainTabParamList, RootStackParamList } from '../../App'
+import type { MainTabParamList, RootStackParamList } from '../navigation/types'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'

@@ -38,7 +38,7 @@ import {
   TicketIcon,
   UsersIcon,
 } from '../components/UiIcons'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripSummary'>

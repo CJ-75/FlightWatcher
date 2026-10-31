@@ -1,9 +1,9 @@
 import React from 'react'
 import { Image, StyleSheet, View } from 'react-native'
 
-/** Official Google « G » product mark (PNG — RN Image). */
+/** Classic Google « G » logo used in Sign-In branding docs. */
 const GOOGLE_G_PNG =
-  'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png'
+  'https://developers.google.com/identity/images/g-logo.png'
 
 type Props = {
   size?: number
@@ -22,7 +22,6 @@ export function GoogleGIcon({ size = 22 }: Props) {
   )
 }
 
-/** Prefetch so the login CTA paints with the mark ready. */
 export function prefetchGoogleG() {
   void Image.prefetch(GOOGLE_G_PNG)
 }

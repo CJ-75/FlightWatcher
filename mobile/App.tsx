@@ -16,86 +16,16 @@ import {
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
-import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
 import { stackHeaderOptions } from './src/navigation/stackHeader'
+import type { MainTabParamList, RootStackParamList } from './src/navigation/types'
 
-export type SearchInfo = {
-  airport: string
-  budget: number
-  passengers?: number
-  datePreset: DatePresetId
-  datesDepart: DateAvecHoraire[]
-  datesRetour: DateAvecHoraire[]
-  excludedDestinations: string[]
-  searchEventId?: string | null
-}
-
-export type MainTabParamList = {
-  Search:
-    | {
-        origin?: string
-        adults?: number
-        destination?: string
-        city?: string
-        outbound?: string
-        inbound?: string
-        autoSearch?: boolean
-      }
-    | undefined
-  Deals: undefined
-  Planner: undefined
-  Favorites: undefined
-  Profile: undefined
-}
-
-export type RootStackParamList = {
-  Login: undefined
-  Main:
-    | undefined
-    | {
-        screen?: keyof MainTabParamList
-        params?: MainTabParamList[keyof MainTabParamList]
-      }
-  Results: {
-    trips: EnrichedTripResponse[]
-    title?: string
-    searchInfo?: SearchInfo
-  }
-  DealDetail: {
-    dealId: string
-  }
-  TripDetail: {
-    tripId: string
-    /** Création → lancer le scan immédiatement */
-    autoScan?: boolean
-  }
-  Security: undefined
-  Bookings: undefined
-  HotelCompose: { draftToken: string }
-  TripSummary: { draftToken: string }
-  PlannerInvite: { token: string }
-  DealCheckout: {
-    dealId?: string
-    draftToken?: string
-    hotelId?: string
-    payResult?: { confirmation: string; bookingId?: string }
-  }
-  HotelPayWebView: {
-    bookingId: string
-    publicKey: string
-    secretKey: string
-    draftToken?: string
-    firstName: string
-    lastName: string
-    email: string
-    liteapiEnv?: string
-    returnDealId?: string
-    returnHotelId?: string
-  }
-  InAppBrowser: { url: string; title?: string }
-}
+export type {
+  SearchInfo,
+  MainTabParamList,
+  RootStackParamList,
+} from './src/navigation/types'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator<MainTabParamList>()
@@ -170,7 +100,9 @@ const TripDetailScreen = lazyScreen(() =>
   import('./src/screens/TripDetailScreen').then((m) => ({ default: m.TripDetailScreen })),
 )
 const BookingsScreen = lazyScreen(() =>
-  import('./src/screens/BookingsScreen').then((m) => ({ default: m.BookingsScreen })),
+  import('./src/screens/BookingsScreen').then((m) => ({
+    default: m.BookingsScreen ?? (m as { default: typeof m.BookingsScreen }).default,
+  })),
 )
 const DealCheckoutScreen = lazyScreen(() =>
   import('./src/screens/DealCheckoutScreen').then((m) => ({ default: m.DealCheckoutScreen })),
@@ -318,7 +250,12 @@ function RootNavigator() {
           <Stack.Screen
             name="Bookings"
             component={BookingsScreen}
-            options={stackHeaderOptions('Mes réservations')}
+            options={{
+              ...stackHeaderOptions(''),
+              headerTransparent: true,
+              headerTitle: '',
+              headerTintColor: '#FFF9F5',
+            }}
           />
           <Stack.Screen
             name="HotelCompose"

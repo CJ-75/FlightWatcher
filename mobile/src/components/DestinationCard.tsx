@@ -21,7 +21,7 @@ import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'
 import { bookCtaLabel, resolveTripPriceSource } from '../lib/partnerBook'
 import { openInAppBrowser } from '../lib/openInApp'
-import type { RootStackParamList } from '../../App'
+import type { RootStackParamList } from '../navigation/types'
 
 type CardAction = {
   label: string
