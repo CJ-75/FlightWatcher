@@ -18,6 +18,12 @@ import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import { ScreenBackground } from '../components/ScreenBackground'
+import {
+  CardIcon,
+  PlaneIcon,
+  TipIcon,
+  UsersIcon,
+} from '../components/UiIcons'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, spacing } from '../theme'
 
@@ -324,10 +330,10 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
 
         {step === 'confirm' && reval ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Prix mis à jour</Text>
+            <Text style={styles.title}>Nouveau prix</Text>
             <Text style={styles.body}>
-              {Math.round(reval.displayed_price_pp || 0)} € →{' '}
-              {Math.round(reval.revalidated_price_pp || 0)} € / pers.
+              Le tarif vient de bouger : {Math.round(reval.displayed_price_pp || 0)} € →{' '}
+              {Math.round(reval.revalidated_price_pp || 0)} € par personne.
             </Text>
             <Pressable style={styles.btn} onPress={() => setStep('guests')}>
               <Text style={styles.btnText}>Continuer</Text>
@@ -337,11 +343,17 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
 
         {step === 'guests' ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Coordonnées</Text>
-            <Text style={styles.notice}>
-              Deux réservations distinctes. Tu paies l’hôtel ici ; le vol chez le
-              transporteur.
-            </Text>
+            <View style={styles.titleRow}>
+              <UsersIcon size={18} />
+              <Text style={styles.title}>Tes infos</Text>
+            </View>
+            <View style={styles.noticeRow}>
+              <TipIcon size={15} />
+              <Text style={styles.notice}>
+                Ici tu paies seulement l’hôtel. Le vol, tu le réserves ensuite sur
+                le site de la compagnie.
+              </Text>
+            </View>
             <TextInput
               style={styles.input}
               placeholder="Prénom"
@@ -370,19 +382,25 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
               disabled={!firstName || !lastName || !email || paying}
               onPress={() => void startPrebook()}
             >
-              <Text style={styles.btnText}>
-                {paying ? '…' : 'Continuer vers le paiement'}
-              </Text>
+              <View style={styles.btnInner}>
+                <CardIcon size={16} color={colors.white} />
+                <Text style={styles.btnText}>
+                  {paying ? '…' : 'Payer l’hôtel'}
+                </Text>
+              </View>
             </Pressable>
           </View>
         ) : null}
 
         {step === 'pay' ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Paiement</Text>
+            <View style={styles.titleRow}>
+              <CardIcon size={18} />
+              <Text style={styles.title}>Payer l’hôtel</Text>
+            </View>
             <Text style={styles.body}>
-              Finalise le paiement dans la feuille ouverte. Si tu l’as fermée,
-              relance-la ci-dessous.
+              Entre ta carte pour confirmer la chambre. Si tu as fermé l’écran,
+              rouvre-le ci-dessous.
             </Text>
             {payMeta && bookingId ? (
               <Pressable
@@ -402,7 +420,7 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
                   })
                 }
               >
-                <Text style={styles.btnText}>Ouvrir le paiement</Text>
+                <Text style={styles.btnText}>Reprendre le paiement</Text>
               </Pressable>
             ) : null}
             {payMeta?.liteapi_env === 'sandbox' && bookingId ? (
@@ -420,8 +438,12 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
 
         {step === 'done' ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Réservation enregistrée</Text>
-            <Text style={styles.body}>{confirmation}</Text>
+            <Text style={styles.title}>Chambre confirmée</Text>
+            <Text style={styles.body}>
+              {confirmation
+                ? `Code : ${confirmation}`
+                : 'Ta réservation hôtel est enregistrée.'}
+            </Text>
             {deal?.flight?.booking_url ? (
               <Pressable
                 style={styles.btnSecondary}
@@ -433,7 +455,12 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
                   )
                 }
               >
-                <Text style={styles.btnSecondaryText}>Réserver le vol</Text>
+                <View style={styles.btnInner}>
+                  <PlaneIcon size={15} />
+                  <Text style={styles.btnSecondaryText}>
+                    Réserver mon vol maintenant
+                  </Text>
+                </View>
               </Pressable>
             ) : null}
             <Pressable style={styles.btn} onPress={() => navigation.navigate('Bookings')}>
@@ -465,14 +492,32 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
-  title: { fontFamily: fonts.bold, fontSize: 20, color: colors.ink, marginBottom: 8 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  title: { fontFamily: fonts.bold, fontSize: 20, color: colors.ink },
   body: { fontFamily: fonts.medium, fontSize: 14, color: colors.inkSoft, marginBottom: 16 },
+  noticeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 12,
+  },
   notice: {
+    flex: 1,
     fontFamily: fonts.regular,
     fontSize: 12,
     color: colors.muted,
-    marginBottom: 12,
     lineHeight: 18,
+  },
+  btnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
@@ -503,6 +548,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
+    paddingHorizontal: 12,
   },
   btnSecondaryText: { fontFamily: fonts.bold, color: colors.ink },
   error: { fontFamily: fonts.medium, color: '#b91c1c', marginBottom: 12 },

@@ -44,6 +44,7 @@ import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { Button } from '../components/ui/Button'
+import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
@@ -450,9 +451,7 @@ function PlannerGuestLanding({
             <ActivityIndicator color={colors.ink} />
           ) : (
             <>
-              <View style={styles.gMark}>
-                <Text style={styles.gLetter}>G</Text>
-              </View>
+              <GoogleGIcon size={22} />
               <Text style={styles.googleLabel}>Continuer avec Google</Text>
             </>
           )}

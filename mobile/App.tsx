@@ -19,6 +19,7 @@ import { SearchScreen } from './src/screens/SearchScreen'
 import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
+import { stackHeaderOptions } from './src/navigation/stackHeader'
 
 export type SearchInfo = {
   airport: string
@@ -218,6 +219,7 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
+      initialRouteName="Search"
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerStyle: {
@@ -274,157 +276,69 @@ function MainTabs() {
 function RootNavigator() {
   const { user, loading, isGuest } = useAuth()
 
+  // Auth boot: branded carousel — 1100ms hold if session, then Main → Search
   if (loading) {
-    return <RouteSpinner />
+    return <LoginScreen />
   }
 
   const signedIn = !!user || isGuest
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName={signedIn ? 'Main' : 'Login'}
+    >
       {signedIn ? (
         <>
-          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Screen
+            name="Main"
+            component={MainTabs}
+            initialParams={{ screen: 'Search' }}
+          />
           <Stack.Screen
             name="Results"
             component={ResultsScreen}
-            options={{
-              headerShown: true,
-              title: 'Résultats',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Résultats')}
           />
           <Stack.Screen
             name="DealDetail"
             component={DealDetailScreen}
-            options={{
-              headerShown: true,
-              title: 'Deal',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Deal')}
           />
           <Stack.Screen
             name="TripDetail"
             component={TripDetailScreen}
-            options={{
-              headerShown: true,
-              title: 'Voyage',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Voyage')}
           />
           <Stack.Screen
             name="Security"
             component={SecurityScreen}
-            options={{
-              headerShown: true,
-              title: 'Sécurité',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Sécurité')}
           />
           <Stack.Screen
             name="Bookings"
             component={BookingsScreen}
-            options={{ headerShown: false }}
+            options={stackHeaderOptions('Mes réservations')}
           />
           <Stack.Screen
             name="HotelCompose"
             component={HotelComposeScreen}
-            options={{
-              headerShown: true,
-              title: 'Choisir un hôtel',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Choisir un hôtel')}
           />
           <Stack.Screen
             name="TripSummary"
             component={TripSummaryScreen}
-            options={{
-              headerShown: true,
-              title: 'Mon voyage',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Mon voyage')}
           />
           <Stack.Screen
             name="PlannerInvite"
             component={PlannerInviteScreen}
-            options={{
-              headerShown: true,
-              title: 'Invitation',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Invitation')}
           />
           <Stack.Screen
             name="DealCheckout"
             component={DealCheckoutScreen}
-            options={{
-              headerShown: true,
-              title: 'Réservation hôtel',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Payer l’hôtel')}
           />
           <Stack.Screen
             name="HotelPayWebView"
@@ -451,19 +365,7 @@ function RootNavigator() {
           <Stack.Screen
             name="PlannerInvite"
             component={PlannerInviteScreen}
-            options={{
-              headerShown: true,
-              title: 'Invitation',
-              headerStyle: { backgroundColor: colors.canvas },
-              headerTintColor: colors.primary,
-              headerTitleStyle: {
-                fontFamily: fonts.bold,
-                color: colors.ink,
-                fontSize: 18,
-              },
-              headerShadowVisible: false,
-              headerBackTitle: 'Retour',
-            }}
+            options={stackHeaderOptions('Invitation')}
           />
         </>
       )}

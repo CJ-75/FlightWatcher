@@ -501,7 +501,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       {loading && !options.length ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Text style={styles.hint}>Recherche d’hôtels…</Text>
+          <Text style={styles.hint}>On cherche les meilleures chambres…</Text>
         </View>
       ) : emptyKind && !options.length ? (
         <View style={[styles.emptyWrap, { paddingBottom: insets.bottom + 24 }]}>
@@ -566,7 +566,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
           {revalidating ? (
             <View style={styles.revalBar}>
               <ActivityIndicator color={colors.primary} size="small" />
-              <Text style={styles.revalText}>Mise à jour des prix…</Text>
+              <Text style={styles.revalText}>On actualise les tarifs…</Text>
             </View>
           ) : null}
 

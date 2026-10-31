@@ -29,8 +29,11 @@ type Props = {
   checkout?: string | null
   adults?: number
   saving?: boolean
+  /** Hide / customize primary CTA — omit for view-only fiche. */
+  onConfirm?: () => void
+  confirmLabel?: string
+  closeLabel?: string
   onClose: () => void
-  onConfirm: () => void
 }
 
 function hotelIdOf(h: HotelUpsellOption | null) {
@@ -210,6 +213,8 @@ export function HotelComposeDetailSheet({
   saving = false,
   onClose,
   onConfirm,
+  confirmLabel = 'Choisir cet hôtel',
+  closeLabel,
 }: Props) {
   const insets = useSafeAreaInsets()
   const hotelId = hotelIdOf(hotel)
@@ -387,7 +392,9 @@ export function HotelComposeDetailSheet({
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable onPress={onClose} style={styles.backBtn} hitSlop={8}>
-            <Text style={styles.backText}>‹ Liste</Text>
+            <Text style={styles.backText}>
+              {closeLabel || (onConfirm ? '‹ Liste' : 'Fermer')}
+            </Text>
           </Pressable>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {hotel.name || 'Hôtel'}
@@ -632,15 +639,19 @@ export function HotelComposeDetailSheet({
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Pressable
-            style={[styles.cta, saving && styles.ctaDisabled]}
-            disabled={saving}
-            onPress={onConfirm}
-          >
-            <Text style={styles.ctaText}>
-              {saving ? '…' : 'Réserver cet hôtel'}
-            </Text>
-          </Pressable>
+          {onConfirm ? (
+            <Pressable
+              style={[styles.cta, saving && styles.ctaDisabled]}
+              disabled={saving}
+              onPress={onConfirm}
+            >
+              <Text style={styles.ctaText}>{saving ? '…' : confirmLabel}</Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.ctaSecondary} onPress={onClose}>
+              <Text style={styles.ctaSecondaryText}>Fermer</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>
@@ -853,4 +864,18 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: { backgroundColor: colors.line },
   ctaText: { fontFamily: fonts.bold, color: colors.white, fontSize: 15 },
+  ctaSecondary: {
+    borderRadius: radius.md,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+  },
+  ctaSecondaryText: {
+    fontFamily: fonts.bold,
+    color: colors.primaryDeep,
+    fontSize: 15,
+  },
 })

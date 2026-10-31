@@ -45,32 +45,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true
     /** Never block the UI on a slow Supabase storage read. */
     const AUTH_BOOT_MS = 1200
+    /** Returning user: short carousel then Main → Search. */
+    const LOGGED_IN_SPLASH_MS = 1100
+    let splashTimer: ReturnType<typeof setTimeout> | null = null
+    let bootPending = true
 
-    const applySession = (s: Session | null) => {
+    const finishLoading = () => {
+      bootPending = false
+      if (mounted) setLoading(false)
+    }
+
+    const applySession = (s: Session | null, fromBoot = false) => {
       if (!mounted) return
       setSession(s)
       setUser(s?.user ?? null)
       if (s?.user) setIsGuest(false)
-      setLoading(false)
+
+      // After first boot, never re-enter splash delay
+      if (!bootPending && !fromBoot) return
+
+      if (splashTimer) {
+        clearTimeout(splashTimer)
+        splashTimer = null
+      }
+      if (s?.user) {
+        splashTimer = setTimeout(finishLoading, LOGGED_IN_SPLASH_MS)
+      } else {
+        finishLoading()
+      }
     }
 
     const bootTimer = setTimeout(() => {
-      if (mounted) setLoading(false)
+      if (mounted && bootPending) finishLoading()
     }, AUTH_BOOT_MS)
 
     ;(async () => {
       try {
         const s = await auth.getCurrentSession()
-        applySession(s)
-      } catch {
-        if (mounted) setLoading(false)
-      } finally {
         clearTimeout(bootTimer)
+        applySession(s, true)
+      } catch {
+        clearTimeout(bootTimer)
+        if (mounted) finishLoading()
       }
     })()
 
     const unsub = auth.onAuthStateChange((_event, s) => {
-      applySession(s)
+      applySession(s, false)
     })
 
     const handleUrl = async (url: string | null) => {
@@ -109,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false
       clearTimeout(bootTimer)
+      if (splashTimer) clearTimeout(splashTimer)
       unsub()
       linkSub.remove()
     }

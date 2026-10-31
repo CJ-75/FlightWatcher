@@ -10,6 +10,7 @@ import { WebView } from 'react-native-webview'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { RootStackParamList } from '../../App'
+import { ModalScreenHeader } from '../components/ModalScreenHeader'
 import { colors, fonts, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'InAppBrowser'>
@@ -24,19 +25,10 @@ export function InAppBrowserScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => navigation.goBack()}
-          style={styles.done}
-          hitSlop={8}
-        >
-          <Text style={styles.doneText}>Fermer</Text>
-        </Pressable>
-        <Text style={styles.title} numberOfLines={1}>
-          {title || 'FlightWatcher'}
-        </Text>
-        <View style={{ width: 64 }} />
-      </View>
+      <ModalScreenHeader
+        title={title || 'FlightWatcher'}
+        onClose={() => navigation.goBack()}
+      />
 
       {failed ? (
         <View style={styles.center}>
@@ -81,28 +73,10 @@ export function InAppBrowserScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  done: { minWidth: 64, minHeight: 40, justifyContent: 'center' },
-  doneText: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.ink,
-  },
   webWrap: { flex: 1 },
   web: { flex: 1, backgroundColor: colors.white },
   loading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,

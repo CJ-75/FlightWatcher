@@ -90,9 +90,6 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
           paddingBottom: insets.bottom + 40,
         }}
       >
-        <Text style={styles.kicker}>Planner</Text>
-        <Text style={styles.title}>Invitation voyage</Text>
-
         {loading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
         ) : error && !preview ? (
@@ -146,22 +143,8 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  kicker: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.primary,
-  },
-  title: {
-    marginTop: 6,
-    marginBottom: 20,
-    fontFamily: fonts.extrabold,
-    fontSize: 28,
-    color: colors.ink,
-    letterSpacing: -0.8,
-  },
   card: {
+    marginTop: 4,
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: 22,

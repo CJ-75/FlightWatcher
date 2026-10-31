@@ -1,17 +1,12 @@
 import React, { useMemo, useState } from 'react'
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ActivityIndicator,
-} from 'react-native'
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getWebOrigin } from '../lib/client'
+import { ModalScreenHeader } from '../components/ModalScreenHeader'
 import type { RootStackParamList } from '../../App'
-import { colors, fonts, spacing } from '../theme'
+import { colors, fonts } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HotelPayWebView'>
 
@@ -88,13 +83,7 @@ export function HotelPayWebViewScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.done} hitSlop={8}>
-          <Text style={styles.doneText}>Fermer</Text>
-        </Pressable>
-        <Text style={styles.title}>Paiement</Text>
-        <View style={{ width: 64 }} />
-      </View>
+      <ModalScreenHeader title="Payer ta chambre" onClose={() => navigation.goBack()} />
       {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
       <View style={styles.webWrap}>
         {loading ? (
@@ -117,24 +106,6 @@ export function HotelPayWebViewScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  done: { minWidth: 64, minHeight: 40, justifyContent: 'center' },
-  doneText: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
-  title: {
-    flex: 1,
-    textAlign: 'center',
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.ink,
-  },
   errorBanner: {
     padding: 10,
     fontFamily: fonts.medium,

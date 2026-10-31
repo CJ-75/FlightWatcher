@@ -163,15 +163,16 @@ export default function HotelPay() {
         <p className="text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
           FlightWatcher
         </p>
-        <h1 className="text-xl font-extrabold tracking-tight">Paiement hôtel</h1>
+        <h1 className="text-xl font-extrabold tracking-tight">Payer ta chambre</h1>
         <p className="text-sm text-slate-500">
-          Paiement sécurisé. Le vol se réserve séparément chez le transporteur.
+          Paiement sécurisé pour l’hôtel. Ton vol se réserve à part, sur le site de
+          la compagnie.
         </p>
 
         {done ? (
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-            <p className="font-bold text-emerald-900">Réservation confirmée</p>
-            <p className="text-sm text-emerald-800 mt-1">Tu peux fermer cette fenêtre.</p>
+            <p className="font-bold text-emerald-900">Chambre confirmée</p>
+            <p className="text-sm text-emerald-800 mt-1">Tu peux fermer cet écran.</p>
           </div>
         ) : (
           <>
@@ -180,7 +181,7 @@ export default function HotelPay() {
               className="rounded-2xl border border-slate-200 bg-white p-3 min-h-[180px]"
             />
             {pending ? (
-              <p className="text-sm text-slate-500 text-center">Confirmation en cours…</p>
+              <p className="text-sm text-slate-500 text-center">On confirme ta chambre…</p>
             ) : null}
             {isSandbox ? (
               <button

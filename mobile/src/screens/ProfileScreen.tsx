@@ -14,6 +14,7 @@ import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { apiBase } from '../lib/client'
 import { Button } from '../components/ui/Button'
+import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 
@@ -74,9 +75,7 @@ export function ProfileScreen() {
               <ActivityIndicator color={colors.ink} />
             ) : (
               <>
-                <View style={styles.gMark}>
-                  <Text style={styles.gLetter}>G</Text>
-                </View>
+                <GoogleGIcon size={22} />
                 <Text style={styles.googleLabel}>Continuer avec Google</Text>
               </>
             )}

@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
+import { GoogleGIcon, prefetchGoogleG } from '../components/GoogleGIcon'
 import { colors } from '../theme'
 import * as WebBrowser from 'expo-web-browser'
 
@@ -27,7 +28,9 @@ WebBrowser.maybeCompleteAuthSession()
 
 const { width: W } = Dimensions.get('window')
 const HERO_W = Math.min(2000, Math.round(Math.max(W, 390) * Math.min(PixelRatio.get(), 3)))
-const HOLD_MS = 8500
+const HOLD_MS = 4100
+/** Returning / already-logged-in boot splash — faster carousel. */
+const HOLD_MS_LOGGED_IN = 1100
 const SWIPE_DX = 56
 
 type Slide = { city: string; country: string; id: string }
@@ -47,13 +50,18 @@ function uri(id: string) {
 const URIS = SLIDES.map((s) => uri(s.id))
 
 export function LoginScreen() {
-  const { signInWithGoogle, continueAsGuest } = useAuth()
+  const { signInWithGoogle, continueAsGuest, user, session } = useAuth()
   const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
   const [slide, setSlide] = useState(0)
 
+  const loggedIn = Boolean(user || session)
+  const holdMs = loggedIn ? HOLD_MS_LOGGED_IN : HOLD_MS
+
   const slideRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holdMsRef = useRef(holdMs)
+  holdMsRef.current = holdMs
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -62,22 +70,25 @@ export function LoginScreen() {
     }
   }
 
-  const armTimer = () => {
+  const armTimer = useCallback(() => {
     clearTimer()
     timerRef.current = setTimeout(() => {
       goRef.current(1)
-    }, HOLD_MS)
-  }
-
-  const go = useCallback((dirOrIndex: number, absolute = false) => {
-    const next = absolute
-      ? dirOrIndex
-      : (slideRef.current + dirOrIndex + SLIDES.length) % SLIDES.length
-    if (next === slideRef.current) return
-    slideRef.current = next
-    setSlide(next)
-    armTimer()
+    }, holdMsRef.current)
   }, [])
+
+  const go = useCallback(
+    (dirOrIndex: number, absolute = false) => {
+      const next = absolute
+        ? dirOrIndex
+        : (slideRef.current + dirOrIndex + SLIDES.length) % SLIDES.length
+      if (next === slideRef.current) return
+      slideRef.current = next
+      setSlide(next)
+      armTimer()
+    },
+    [armTimer],
+  )
 
   const goRef = useRef(go)
   goRef.current = go
@@ -86,12 +97,13 @@ export function LoginScreen() {
     URIS.forEach((u) => {
       void Image.prefetch(u)
     })
+    prefetchGoogleG()
   }, [])
 
   useEffect(() => {
     armTimer()
     return () => clearTimer()
-  }, [])
+  }, [armTimer, holdMs])
 
   const panResponder = useRef(
     PanResponder.create({
@@ -163,40 +175,45 @@ export function LoginScreen() {
             ))}
           </View>
 
-          <View style={styles.cta}>
-            <Pressable
-              onPress={() => void onLogin()}
-              disabled={loading}
-              style={({ pressed }) => [
-                styles.googleBtn,
-                pressed && styles.googlePressed,
-                loading && styles.googleDisabled,
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.ink} />
-              ) : (
-                <>
-                  <View style={styles.gMark}>
-                    <Text style={styles.gLetter}>G</Text>
-                  </View>
-                  <Text style={styles.googleLabel}>Continuer avec Google</Text>
-                </>
-              )}
-            </Pressable>
-
-            {__DEV__ ? (
+          {loggedIn ? (
+            <View style={styles.ctaBoot}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={styles.bootHint}>Ouverture de ta recherche…</Text>
+            </View>
+          ) : (
+            <View style={styles.cta}>
               <Pressable
-                onPress={continueAsGuest}
-                style={({ pressed }) => [styles.guestBtn, pressed && { opacity: 0.65 }]}
-                hitSlop={10}
+                onPress={() => void onLogin()}
+                disabled={loading}
+                style={({ pressed }) => [
+                  styles.googleBtn,
+                  pressed && styles.googlePressed,
+                  loading && styles.googleDisabled,
+                ]}
               >
-                <Text style={styles.guestLabel}>Continuer sans compte</Text>
+                {loading ? (
+                  <ActivityIndicator color={colors.ink} />
+                ) : (
+                  <>
+                    <GoogleGIcon size={22} />
+                    <Text style={styles.googleLabel}>Continuer avec Google</Text>
+                  </>
+                )}
               </Pressable>
-            ) : (
-              <Text style={styles.legal}>Connexion sécurisée · recherche gratuite</Text>
-            )}
-          </View>
+
+              {__DEV__ ? (
+                <Pressable
+                  onPress={continueAsGuest}
+                  style={({ pressed }) => [styles.guestBtn, pressed && { opacity: 0.65 }]}
+                  hitSlop={10}
+                >
+                  <Text style={styles.guestLabel}>Continuer sans compte</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.legal}>Connexion sécurisée · recherche gratuite</Text>
+              )}
+            </View>
+          )}
         </LinearGradient>
       </ImageBackground>
     </View>
@@ -279,8 +296,21 @@ const styles = StyleSheet.create({
   },
   cta: {
     gap: 10,
+    alignSelf: 'stretch',
+  },
+  ctaBoot: {
+    gap: 10,
+    alignItems: 'center',
+    alignSelf: 'stretch',
+  },
+  bootHint: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
   },
   googleBtn: {
+    alignSelf: 'stretch',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -289,26 +319,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.08)',
   },
   googlePressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
   googleDisabled: { opacity: 0.7 },
-  gMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#F3F6FB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gLetter: {
-    fontWeight: '800',
-    color: '#4285F4',
-    fontSize: 14,
-  },
   googleLabel: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.ink,
+    letterSpacing: -0.2,
   },
   guestBtn: {
     height: 40,

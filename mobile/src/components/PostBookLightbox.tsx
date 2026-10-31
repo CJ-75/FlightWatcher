@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { cityDisplayNameFr, type EnrichedTripResponse } from '@flightwatcher/shared'
+import { BedIcon, PlaneIcon } from './UiIcons'
 import { colors, fonts, radius, spacing } from '../theme'
 
 type Props = {
@@ -40,10 +41,13 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
           onPress={(e) => e.stopPropagation()}
         >
           <View style={styles.handle} />
-          <Text style={styles.brand}>FlightWatcher</Text>
-          <Text style={styles.title}>Ton vol pour {city} est réservé ?</Text>
+          <View style={styles.brandRow}>
+            <PlaneIcon size={16} />
+            <Text style={styles.brand}>FlightWatcher</Text>
+          </View>
+          <Text style={styles.title}>Vol pour {city} réservé ?</Text>
           <Text style={styles.hint}>
-            Pendant que tu finalises sur le site partenaire, prépare ton hôtel ici.
+            Super — trouve maintenant un hôtel pour compléter ton séjour.
           </Text>
 
           <Pressable
@@ -54,7 +58,10 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             {busy ? (
               <ActivityIndicator color={colors.white} />
             ) : (
-              <Text style={styles.ctaText}>Oui, trouver mon hôtel</Text>
+              <View style={styles.ctaInner}>
+                <BedIcon size={16} color={colors.white} />
+                <Text style={styles.ctaText}>Oui, choisir mon hôtel</Text>
+              </View>
             )}
           </Pressable>
 
@@ -64,7 +71,7 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             onPress={onClose}
             hitSlop={8}
           >
-            <Text style={styles.dismissText}>Pas encore</Text>
+            <Text style={styles.dismissText}>Plus tard</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -94,6 +101,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
     marginBottom: 4,
   },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brand: {
     fontFamily: fonts.bold,
     fontSize: 11,
@@ -123,6 +131,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ctaDisabled: { opacity: 0.6 },
+  ctaInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   ctaText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
   dismiss: {
     minHeight: 44,

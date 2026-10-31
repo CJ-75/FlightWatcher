@@ -20,8 +20,16 @@ import { rememberTrip } from '../lib/tripRecovery'
 import { warmHotelUpsell } from '../lib/partnerBook'
 import { HeartIcon } from '../components/HeartIcon'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
+import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
+import { toUpsellHotel } from '../lib/hotelUpsell'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
+import {
+  BedIcon,
+  IconLabel,
+  PlaneIcon,
+  TipIcon,
+} from '../components/UiIcons'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
@@ -54,6 +62,8 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [startingTrip, setStartingTrip] = useState(false)
   const [composingHotel, setComposingHotel] = useState(false)
+  const [hotelSheetOpen, setHotelSheetOpen] = useState(false)
+  const [sheetHotelId, setSheetHotelId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -80,6 +90,31 @@ export function DealDetailScreen({ route, navigation }: Props) {
       cancelled = true
     }
   }, [dealId, refreshLikes])
+
+  const dealLiked = deal ? isLiked(deal.id) : false
+  useEffect(() => {
+    if (!deal) {
+      navigation.setOptions({ headerRight: undefined })
+      return
+    }
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => void toggleLike(deal)}
+          hitSlop={10}
+          style={styles.headerLike}
+          accessibilityRole="button"
+          accessibilityLabel={dealLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+        >
+          <HeartIcon
+            size={22}
+            filled={dealLiked}
+            color={dealLiked ? colors.primary : colors.ink}
+          />
+        </Pressable>
+      ),
+    })
+  }, [deal, dealLiked, navigation, toggleLike])
 
   const hotelOptions = useMemo(() => {
     if (!deal) return [] as TravelDealHotel[]
@@ -286,19 +321,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
           hotelName={selected?.name || deal.hotel_name}
           cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
           height={heroH}
-          topRight={
-            <Pressable
-              onPress={() => void toggleLike(deal)}
-              hitSlop={10}
-              style={[styles.likeBtn, { marginTop: Math.max(insets.top, 12) + 8 }]}
-            >
-              <HeartIcon
-                size={22}
-                filled={isLiked(deal.id)}
-                color={isLiked(deal.id) ? colors.primary : colors.ink}
-              />
-            </Pressable>
-          }
           bottomLeft={
             <View>
               {deal.badge ? (
@@ -317,24 +339,32 @@ export function DealDetailScreen({ route, navigation }: Props) {
           <Text style={styles.priceHint}>
             {deal.price_pax_note
               ? deal.price_pax_note
-              : `/ pers. · ${deal.nights} nuits · ${adults} ad.`}
+              : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} voyageur${adults > 1 ? 's' : ''}`}
             {flightPp > 0 || hotelPp > 0
-              ? ` · vol ${flightPp || '—'} + hôtel ${hotelPp || '—'}`
+              ? ` · dont vol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
               : ''}
           </Text>
           {fees > 0 ? (
-            <Text style={styles.tax}>+ {Math.round(fees)} € taxe de séjour sur place</Text>
+            <Text style={styles.tax}>
+              + {Math.round(fees)} € de taxes à régler à l’hôtel
+            </Text>
           ) : null}
 
           <View style={styles.notice}>
+            <TipIcon size={16} />
             <Text style={styles.noticeText}>
-              Deux réservations : vol (compagnie) + hôtel (FlightWatcher).
+              Tu réserves le vol et l’hôtel en deux étapes simples — chacun de son côté.
             </Text>
           </View>
 
           {/* Vol — full names wrap, times visible without horizontal scroll */}
           <View style={[styles.infoCard, shadow.soft]}>
-            <Text style={styles.cardSectionLabel}>Vol</Text>
+            <IconLabel
+              section
+              label="Vol"
+              icon={<PlaneIcon size={14} />}
+              style={{ marginBottom: 8 }}
+            />
             <Text style={styles.airportLine}>
               {deal.origin_airport_label || deal.departure_airport || '—'}
             </Text>
@@ -382,6 +412,10 @@ export function DealDetailScreen({ route, navigation }: Props) {
                   <Pressable
                     key={h.id}
                     onPress={() => setHotelId(h.id)}
+                    onLongPress={() => {
+                      setSheetHotelId(h.id)
+                      setHotelSheetOpen(true)
+                    }}
                     style={[styles.hotelOption, active && styles.hotelOptionActive]}
                   >
                     <View style={{ flex: 1 }}>
@@ -393,6 +427,16 @@ export function DealDetailScreen({ route, navigation }: Props) {
                           .filter(Boolean)
                           .join(' · ')}
                       </Text>
+                      <Pressable
+                        onPress={() => {
+                          setHotelId(h.id)
+                          setSheetHotelId(h.id)
+                          setHotelSheetOpen(true)
+                        }}
+                        hitSlop={6}
+                      >
+                        <Text style={styles.optionFiche}>Fiche</Text>
+                      </Pressable>
                     </View>
                     <Text style={styles.hotelOptionPrice}>{Math.round(hPp)} €</Text>
                   </Pressable>
@@ -402,16 +446,37 @@ export function DealDetailScreen({ route, navigation }: Props) {
           ) : null}
 
           <View style={[styles.infoCard, shadow.soft]}>
-            <Text style={styles.cardSectionLabel}>Hôtel</Text>
-            <Text style={styles.hotelTitle}>
-              {selected?.stars || deal.hotel_stars
-                ? `${'★'.repeat(Math.min(5, Math.round(Number(selected?.stars || deal.hotel_stars))))} `
-                : ''}
-              {selected?.name || deal.hotel_name || '—'}
-            </Text>
-            {(selected?.board || deal.board) ? (
-              <Text style={styles.hotelMeta}>{String(selected?.board || deal.board)}</Text>
-            ) : null}
+            <IconLabel
+              section
+              label="Hôtel"
+              icon={<BedIcon size={14} />}
+              style={{ marginBottom: 8 }}
+            />
+            <Pressable
+              onPress={() => {
+                setSheetHotelId(selected?.id || deal.hotel?.id || null)
+                setHotelSheetOpen(true)
+              }}
+            >
+              <Text style={styles.hotelTitle}>
+                {selected?.stars || deal.hotel_stars
+                  ? `${'★'.repeat(Math.min(5, Math.round(Number(selected?.stars || deal.hotel_stars))))} `
+                  : ''}
+                {selected?.name || deal.hotel_name || '—'}
+              </Text>
+              {(selected?.board || deal.board) ? (
+                <Text style={styles.hotelMeta}>{String(selected?.board || deal.board)}</Text>
+              ) : null}
+              {selected?.rating != null ? (
+                <Text style={styles.hotelMeta}>
+                  {Number(selected.rating).toFixed(1)}/10
+                  {selected.review_count != null
+                    ? ` · ${selected.review_count} avis`
+                    : ''}
+                </Text>
+              ) : null}
+              <Text style={styles.ficheLink}>Voir photos et détails →</Text>
+            </Pressable>
             <Pressable
               onPress={() => void startComposeHotel()}
               disabled={composingHotel || startingTrip}
@@ -421,8 +486,9 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 (composingHotel || startingTrip) && { opacity: 0.55 },
               ]}
             >
+              <BedIcon size={15} />
               <Text style={styles.composeBtnText}>
-                {composingHotel ? '…' : 'Modifier l’hôtel · composer'}
+                {composingHotel ? '…' : 'Changer d’hôtel'}
               </Text>
             </Pressable>
           </View>
@@ -550,7 +616,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 }
                 hitSlop={8}
               >
-                <Text style={styles.linkText}>Réserver l’hôtel seul</Text>
+                <Text style={styles.linkText}>Réserver seulement l’hôtel</Text>
               </Pressable>
             ) : hasPartnerUrl ? (
               <Pressable
@@ -593,9 +659,33 @@ export function DealDetailScreen({ route, navigation }: Props) {
             (startingTrip || composingHotel) && { opacity: 0.6 },
           ]}
         >
-          <Text style={styles.ctaText}>{startingTrip ? '…' : 'Continuer'}</Text>
+          <PlaneIcon size={16} color={colors.white} />
+          <Text style={styles.ctaText}>
+            {startingTrip ? '…' : 'Organiser mon séjour'}
+          </Text>
         </Pressable>
       </View>
+
+      <HotelComposeDetailSheet
+        visible={hotelSheetOpen}
+        hotel={toUpsellHotel(
+          hotelOptions.find((h) => h.id === (sheetHotelId || selected?.id)) ||
+            selected ||
+            deal.hotel,
+        )}
+        cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
+        checkin={deal.dates?.outbound}
+        checkout={deal.dates?.inbound}
+        adults={adults}
+        closeLabel="Fermer"
+        confirmLabel="Garder cet hôtel"
+        onClose={() => setHotelSheetOpen(false)}
+        onConfirm={() => {
+          const id = sheetHotelId || selected?.id
+          if (id) setHotelId(id)
+          setHotelSheetOpen(false)
+        }}
+      />
     </View>
   )
 }
@@ -617,11 +707,13 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
-  likeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+  headerLike: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -675,8 +767,12 @@ const styles = StyleSheet.create({
     padding: 10,
     marginTop: 12,
     marginBottom: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
   },
   noticeText: {
+    flex: 1,
     fontFamily: fonts.medium,
     fontSize: 12,
     lineHeight: 17,
@@ -750,6 +846,18 @@ const styles = StyleSheet.create({
     color: colors.ink,
     lineHeight: 21,
   },
+  ficheLink: {
+    marginTop: 8,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.primaryDeep,
+  },
+  optionFiche: {
+    marginTop: 4,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.primaryDeep,
+  },
   hotelMeta: {
     marginTop: 4,
     fontFamily: fonts.medium,
@@ -765,6 +873,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
     paddingHorizontal: 12,
   },
   composeBtnText: {
@@ -857,6 +967,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   ctaText: { ...type.button, color: colors.white },
 })

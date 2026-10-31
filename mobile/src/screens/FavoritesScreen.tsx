@@ -26,6 +26,7 @@ import {
 import { DestinationCard } from '../components/DestinationCard'
 import { DealCard } from '../components/DealCard'
 import { HeartIcon } from '../components/HeartIcon'
+import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../../App'
 import { colors, fonts, shadow, spacing, type } from '../theme'
@@ -290,9 +291,7 @@ function FavoritesGuestLanding({
             <ActivityIndicator color={colors.ink} />
           ) : (
             <>
-              <View style={styles.gMark}>
-                <Text style={styles.gLetter}>G</Text>
-              </View>
+              <GoogleGIcon size={22} />
               <Text style={styles.googleLabel}>Continuer avec Google</Text>
             </>
           )}
