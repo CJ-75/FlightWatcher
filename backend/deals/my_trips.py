@@ -321,6 +321,7 @@ ALLOWED_TRIP_EVENTS = frozenset(
         "hotel_checkout_open",
         "hotel_paid",
         "account_cta",
+        "share",
     }
 )
 

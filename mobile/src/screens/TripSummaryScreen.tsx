@@ -80,7 +80,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         draft_token: draftToken,
         city: row.city_name || null,
       })
-      void getApi().trackMyTripEvent(draftToken, 'trip_view', { source: 'mobile' })
+      void getApi().trackMyTripEvent(draftToken, 'view', { source: 'mobile' })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       setDraft(null)
@@ -192,7 +192,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       return { label: 'Payer ma chambre', action: 'pay' as const }
     }
     if (!hotelId) {
-      return { label: 'Choisir mon hôtel', action: 'compose' as const }
+      return { label: 'Réserver mon hôtel', action: 'compose' as const }
     }
     if (!flightBooked && flightUrl) {
       return { label: 'Réserver mon vol', action: 'flight' as const }
@@ -221,8 +221,9 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const openFlight = () => {
     if (!flightUrl) return
     leftForFlight.current = true
-    void getApi().trackMyTripEvent(draftToken, 'flight_cta', {
+    void getApi().trackMyTripEvent(draftToken, 'company_click', {
       site: carrier.siteLabel,
+      source: 'mobile',
     })
     openInAppBrowser(
       navigation,
@@ -447,23 +448,9 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             >
               <BedIcon size={15} />
               <Text style={styles.secondaryBtnText}>
-                {hotelId ? 'Changer d’hôtel' : 'Choisir mon hôtel'}
+                {hotelId ? 'Changer d’hôtel' : 'Réserver mon hôtel'}
               </Text>
             </Pressable>
-            {hotelId && !hotelBooked ? (
-              <Pressable
-                style={styles.secondaryBtn}
-                onPress={() =>
-                  navigation.navigate('DealCheckout', {
-                    draftToken,
-                    hotelId,
-                  })
-                }
-              >
-                <CardIcon size={15} />
-                <Text style={styles.secondaryBtnText}>Payer ma chambre</Text>
-              </Pressable>
-            ) : null}
           </View>
         </View>
       </ScrollView>

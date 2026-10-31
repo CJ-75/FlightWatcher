@@ -6,8 +6,8 @@ import { colors, fonts } from '../theme'
 import { TabBarIcon } from './TabIcons'
 
 const LABELS: Record<string, string> = {
-  Search: 'Chercher',
-  Deals: 'Deals',
+  Search: 'Vols',
+  Deals: 'Séjours',
   Planner: 'Planner',
   Favorites: 'Favoris',
   Profile: 'Compte',
