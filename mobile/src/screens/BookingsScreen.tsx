@@ -9,10 +9,7 @@ import {
   Pressable,
   Image,
   Share,
-  ScrollView,
-  Dimensions,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -30,66 +27,31 @@ import {
   rememberTrip,
   type TripRecovery,
 } from '../lib/tripRecovery'
-import { ScreenBackground } from '../components/ScreenBackground'
+import { BedIcon, PlaneIcon, ShareIcon } from '../components/UiIcons'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, spacing } from '../theme'
 
 const CACHE_KEY = 'fw_bookings_cache_v1'
-const { width: SCREEN_W } = Dimensions.get('window')
+const BOOKINGS_TIMEOUT_MS = 8_000
 
 type TabKey = 'upcoming' | 'past'
 
-function statusMeta(status: string): {
-  label: string
-  tone: string
-  soft: string
-  hint: string
-} {
+function statusMeta(status: string): { label: string; tone: string; soft: string } {
   switch (status) {
     case 'confirmed':
-      return {
-        label: 'Confirmée',
-        tone: '#0F8A5F',
-        soft: 'rgba(15,138,95,0.14)',
-        hint: 'Présente le code à l’arrivée.',
-      }
+      return { label: 'Confirmée', tone: colors.success, soft: colors.successSoft }
     case 'booking_pending':
     case 'payment_succeeded':
-      return {
-        label: 'En cours',
-        tone: '#C2410C',
-        soft: 'rgba(194,65,12,0.12)',
-        hint: 'Confirmation en cours.',
-      }
+      return { label: 'En cours', tone: colors.primaryDeep, soft: colors.primarySoft }
     case 'payment_pending':
     case 'prebooked':
-      return {
-        label: 'À payer',
-        tone: '#C2410C',
-        soft: 'rgba(194,65,12,0.12)',
-        hint: 'La chambre n’est pas encore garantie.',
-      }
+      return { label: 'À payer', tone: colors.primaryDeep, soft: colors.primarySoft }
     case 'failed':
-      return {
-        label: 'Échouée',
-        tone: colors.danger,
-        soft: colors.dangerSoft,
-        hint: 'Aucune réservation active.',
-      }
+      return { label: 'Échouée', tone: colors.danger, soft: colors.dangerSoft }
     case 'cancelled':
-      return {
-        label: 'Annulée',
-        tone: colors.muted,
-        soft: 'rgba(138,106,88,0.12)',
-        hint: 'Plus active.',
-      }
+      return { label: 'Annulée', tone: colors.muted, soft: 'rgba(138,106,88,0.12)' }
     default:
-      return {
-        label: 'En cours',
-        tone: colors.muted,
-        soft: colors.primarySoft,
-        hint: '',
-      }
+      return { label: 'En cours', tone: colors.muted, soft: colors.primarySoft }
   }
 }
 
@@ -105,12 +67,8 @@ function formatDate(dateStr?: string | null) {
   )
 }
 
-function formatDateLong(dateStr?: string | null) {
-  if (!dateStr) return '—'
-  return new Date(String(dateStr).slice(0, 10) + 'T12:00:00').toLocaleDateString(
-    'fr-FR',
-    { weekday: 'short', day: 'numeric', month: 'long' },
-  )
+function formatRange(out?: string | null, inn?: string | null) {
+  return `${formatDate(out)} → ${formatDate(inn)}`
 }
 
 function nightsBetween(out?: string | null, inn?: string | null, nights?: number | null) {
@@ -168,6 +126,25 @@ function bookingPrice(b: HotelBooking): number | null {
   return null
 }
 
+function withTimeout<T>(promise: Promise<T>, ms = BOOKINGS_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('Le service de réservations est momentanément inaccessible.')),
+      ms,
+    )
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (reason) => {
+        clearTimeout(timer)
+        reject(reason)
+      },
+    )
+  })
+}
+
 export function BookingsScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -201,33 +178,32 @@ export function BookingsScreen() {
         const draft = await latestTripDraft()
         const remembered = await listRememberedTrips()
         setOpenTrips(remembered)
+        if (!isRefresh) setLoading(false)
+
         const api = getApi()
         let list: HotelBooking[] = []
 
         if (user && !isGuest) {
           if (draft) {
-            try {
-              await api.claimMyTrip(draft)
-            } catch {
-              /* already claimed / expired */
-            }
+            void withTimeout(api.claimMyTrip(draft), 4_000).catch(() => {})
           }
-          list = await api.listHotelBookings(
-            draft ? { draft_token: draft } : undefined,
+          list = await withTimeout(
+            api.listHotelBookings(draft ? { draft_token: draft } : undefined),
           )
         } else {
           const tokens = remembered.map((t) => t.draft_token).filter(Boolean)
           if (!tokens.length && draft) tokens.push(draft)
-          const chunks = await Promise.all(
-            tokens.slice(0, 6).map(async (token) => {
-              try {
-                return await api.listHotelBookings({ draft_token: token })
-              } catch {
-                return [] as HotelBooking[]
-              }
-            }),
+          const results = await Promise.allSettled(
+            tokens.slice(0, 6).map((token) =>
+              withTimeout(api.listHotelBookings({ draft_token: token })),
+            ),
           )
-          list = chunks.flat()
+          if (tokens.length && results.every((result) => result.status === 'rejected')) {
+            throw new Error('Le service de réservations est momentanément inaccessible.')
+          }
+          list = results.flatMap((result) =>
+            result.status === 'fulfilled' ? result.value : [],
+          )
         }
 
         const next = dedupeBookings(Array.isArray(list) ? list : [])
@@ -248,7 +224,6 @@ export function BookingsScreen() {
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erreur')
-        setBookings([])
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -272,10 +247,7 @@ export function BookingsScreen() {
     () => bookings.filter((b) => isPast(b, today)),
     [bookings, today],
   )
-
-  const featured = tab === 'upcoming' ? upcoming[0] : null
-  const listRest =
-    tab === 'upcoming' ? upcoming.slice(featured ? 1 : 0) : past
+  const activeList = tab === 'upcoming' ? upcoming : past
 
   const bookedTokens = useMemo(() => {
     const s = new Set<string>()
@@ -293,8 +265,7 @@ export function BookingsScreen() {
   }, [bookings])
 
   const openOnly = useMemo(
-    () =>
-      openTrips.filter((t) => t.draft_token && !bookedTokens.has(t.draft_token)),
+    () => openTrips.filter((t) => t.draft_token && !bookedTokens.has(t.draft_token)),
     [openTrips, bookedTokens],
   )
 
@@ -304,9 +275,7 @@ export function BookingsScreen() {
     const message = [
       `FlightWatcher — ${b.hotel_name || 'Hôtel'}`,
       b.city ? `à ${b.city}` : null,
-      b.dates
-        ? `${formatDate(b.dates.outbound)} → ${formatDate(b.dates.inbound)}`
-        : null,
+      b.dates ? formatRange(b.dates.outbound, b.dates.inbound) : null,
       meta.label,
       b.confirmation_code ? `Code : ${b.confirmation_code}` : null,
       price != null ? `${price} €` : null,
@@ -326,129 +295,91 @@ export function BookingsScreen() {
     navigation.navigate('TripSummary', { draftToken: token })
   }
 
-  const renderStayCard = (item: HotelBooking, featuredCard: boolean) => {
+  const renderStay = (item: HotelBooking) => {
     const meta = statusMeta(String(item.status))
     const photo = bookingPhoto(item)
     const board = boardLabelFr(item.board)
     const cancel = hotelCancelLabel(
-      {
-        refundable: item.refundable,
-        cancel_deadline: item.cancel_deadline,
-      },
+      { refundable: item.refundable, cancel_deadline: item.cancel_deadline },
       { includeNonRefundable: true, short: true },
     )
-    const nights = nightsBetween(
-      item.dates?.outbound,
-      item.dates?.inbound,
-      item.nights,
-    )
+    const nights = nightsBetween(item.dates?.outbound, item.dates?.inbound, item.nights)
     const price = bookingPrice(item)
-    const heroH = featuredCard ? Math.min(280, SCREEN_W * 0.72) : 168
+    const details = [board, nights, item.adults ? `${item.adults} pers.` : null, cancel]
+      .filter(Boolean)
+      .join(' · ')
 
     return (
       <Pressable
         key={item.id}
-        style={[styles.stay, featuredCard && styles.stayFeatured]}
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         onPress={() => {
           if (item.draft_token) openTrip(item.draft_token)
         }}
       >
-        <View style={[styles.stayHero, { height: heroH }]}>
+        <View style={styles.thumb}>
           {photo ? (
-            <Image source={{ uri: String(photo) }} style={styles.stayImage} />
+            <Image source={{ uri: String(photo) }} style={styles.thumbImage} />
           ) : (
-            <View style={[styles.stayImage, styles.stayImageEmpty]} />
-          )}
-          <LinearGradient
-            colors={['transparent', 'rgba(26,18,14,0.15)', 'rgba(26,18,14,0.92)']}
-            locations={[0.25, 0.55, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[styles.stamp, { backgroundColor: meta.soft }]}>
-            <Text style={[styles.stampText, { color: meta.tone }]}>
-              {meta.label}
-            </Text>
-          </View>
-          {price != null ? (
-            <View style={styles.priceBadge}>
-              <Text style={styles.priceBadgeValue}>{price} €</Text>
+            <View style={styles.thumbEmpty}>
+              <BedIcon size={22} color={colors.faint} />
             </View>
-          ) : null}
-          <View style={styles.stayHeroCopy}>
-            <Text style={styles.stayCity}>
-              {(item.city || 'Séjour').toUpperCase()}
-            </Text>
-            <Text style={styles.stayHotel} numberOfLines={2}>
-              {item.hotel_name || 'Hôtel'}
-            </Text>
-            <Text style={styles.stayDates}>
-              {formatDateLong(item.dates?.outbound)}
-              {'  →  '}
-              {formatDate(item.dates?.inbound)}
-              {nights ? `  ·  ${nights}` : ''}
-            </Text>
-          </View>
+          )}
         </View>
 
-        <View style={styles.stayBody}>
-          <View style={styles.metaRow}>
-            {[board, cancel, item.adults ? `${item.adults} pers.` : null]
-              .filter(Boolean)
-              .map((label) => (
-                <Text key={String(label)} style={styles.metaPill}>
-                  {label}
-                </Text>
-              ))}
+        <View style={styles.rowBody}>
+          <View style={styles.rowTop}>
+            <Text style={styles.city} numberOfLines={1}>
+              {item.city || 'Séjour'}
+            </Text>
+            <View style={[styles.badge, { backgroundColor: meta.soft }]}>
+              <Text style={[styles.badgeText, { color: meta.tone }]}>{meta.label}</Text>
+            </View>
           </View>
 
-          {meta.hint ? <Text style={styles.hint}>{meta.hint}</Text> : null}
+          <Text style={styles.hotel} numberOfLines={1}>
+            {item.hotel_name || 'Hôtel'}
+          </Text>
+          <Text style={styles.dates} numberOfLines={1}>
+            {formatRange(item.dates?.outbound, item.dates?.inbound)}
+          </Text>
+          {details ? (
+            <Text style={styles.details} numberOfLines={1}>
+              {details}
+            </Text>
+          ) : null}
 
           {item.confirmation_code ? (
-            <View style={styles.ticket}>
-              <View style={styles.ticketNotchL} />
-              <View style={styles.ticketNotchR} />
-              <Text style={styles.ticketLabel}>Code hôtel</Text>
-              <View style={styles.ticketRow}>
-                <Text style={styles.ticketCode}>{item.confirmation_code}</Text>
-                <Pressable
-                  onPress={() => void shareBooking(item)}
-                  hitSlop={8}
-                  style={styles.ticketShare}
-                >
-                  <Text style={styles.ticketShareText}>
-                    {sharedId === item.id ? 'OK' : 'Partager'}
-                  </Text>
-                </Pressable>
-              </View>
+            <View style={styles.codeRow}>
+              <Text style={styles.codeLabel}>Réf.</Text>
+              <Text style={styles.codeValue} numberOfLines={1}>
+                {item.confirmation_code}
+              </Text>
             </View>
           ) : null}
 
-          <View style={styles.stayActions}>
-            {item.draft_token ? (
+          <View style={styles.rowFooter}>
+            {price != null ? <Text style={styles.price}>{price} €</Text> : <View />}
+            <View style={styles.rowActions}>
               <Pressable
-                style={styles.ctaInk}
-                onPress={() => openTrip(item.draft_token!)}
-              >
-                <Text style={styles.ctaInkText}>Voir mon voyage</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                style={styles.ctaInk}
+                hitSlop={8}
                 onPress={() => void shareBooking(item)}
+                style={styles.iconBtn}
               >
-                <Text style={styles.ctaInkText}>Partager</Text>
+                <ShareIcon
+                  size={15}
+                  color={sharedId === item.id ? colors.success : colors.muted}
+                />
               </Pressable>
-            )}
-            {item.draft_token ? (
-              <Pressable
-                style={styles.ctaGhost}
-                onPress={() => void shareBooking(item)}
-              >
-                <Text style={styles.ctaGhostText}>
-                  {sharedId === item.id ? 'Partagé' : 'Partager'}
-                </Text>
-              </Pressable>
-            ) : null}
+              {item.draft_token ? (
+                <Pressable
+                  onPress={() => openTrip(item.draft_token!)}
+                  style={styles.linkBtn}
+                >
+                  <Text style={styles.linkBtnText}>Ouvrir</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         </View>
       </Pressable>
@@ -457,17 +388,17 @@ export function BookingsScreen() {
 
   return (
     <View style={styles.root}>
-      <ScreenBackground />
       {loading && bookings.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : (
         <FlatList
-          data={listRest}
+          data={activeList}
           keyExtractor={(b) => b.id}
           contentContainerStyle={{
-            paddingBottom: insets.bottom + 48,
+            paddingHorizontal: spacing.xl,
+            paddingBottom: insets.bottom + 40,
           }}
           refreshControl={
             <RefreshControl
@@ -476,124 +407,112 @@ export function BookingsScreen() {
               tintColor={colors.primary}
             />
           }
+          ItemSeparatorComponent={() => <View style={styles.sep} />}
           ListHeaderComponent={
-            <View>
-              <LinearGradient
-                colors={['#2A1A12', '#1A120E', '#3D2418']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.masthead, { paddingTop: insets.top + 44 }]}
-              >
-                <View style={styles.mastOrb} />
-                <Text style={styles.mastKicker}>FlightWatcher</Text>
-                <Text style={styles.mastTitle}>Tes séjours</Text>
-                <Text style={styles.mastSub}>
-                  {upcoming.length > 0
-                    ? `${upcoming.length} à venir · codes & chambres au même endroit`
-                    : 'Tes chambres confirmées et voyages en cours'}
-                </Text>
+            <View style={styles.header}>
+              <Text style={styles.title}>Réservations</Text>
+              <Text style={styles.subtitle}>
+                {upcoming.length > 0
+                  ? `${upcoming.length} séjour${upcoming.length > 1 ? 's' : ''} à venir`
+                  : 'Vos séjours et références hôtel'}
+              </Text>
 
-                {openOnly.length > 0 ? (
-                  <View style={styles.openBlock}>
-                    <Text style={styles.openLabel}>À finir</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.openScroll}
-                    >
-                      {openOnly.slice(0, 6).map((t) => (
-                        <Pressable
-                          key={t.draft_token}
-                          style={styles.openChip}
-                          onPress={() => openTrip(t.draft_token)}
-                        >
-                          <Text style={styles.openChipCity} numberOfLines={1}>
-                            {t.city || 'Voyage'}
-                          </Text>
-                          <Text style={styles.openChipCta}>Continuer →</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                ) : null}
-              </LinearGradient>
-
-              <View style={styles.sheet}>
-                <View style={styles.tabs}>
-                  {(
-                    [
-                      ['upcoming', 'À venir', upcoming.length],
-                      ['past', 'Souvenirs', past.length],
-                    ] as const
-                  ).map(([key, label, count]) => {
-                    const on = tab === key
-                    return (
-                      <Pressable
-                        key={key}
-                        onPress={() => setTab(key)}
-                        style={styles.tab}
-                      >
-                        <Text style={[styles.tabText, on && styles.tabTextOn]}>
-                          {label}
-                        </Text>
-                        <Text style={[styles.tabCount, on && styles.tabCountOn]}>
-                          {count}
-                        </Text>
-                        {on ? <View style={styles.tabUnderline} /> : null}
-                      </Pressable>
-                    )
-                  })}
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>{error}</Text>
                 </View>
+              ) : null}
 
-                {featured ? (
-                  <View style={styles.featuredWrap}>
-                    <Text style={styles.featuredLabel}>Prochain séjour</Text>
-                    {renderStayCard(featured, true)}
+              {openOnly.length > 0 ? (
+                <View style={styles.resumeBlock}>
+                  <View style={styles.resumeHead}>
+                    <View style={styles.resumeIcon}>
+                      <PlaneIcon size={18} color={colors.white} />
+                    </View>
+                    <View style={styles.resumeHeadCopy}>
+                      <Text style={styles.resumeKicker}>EN ATTENTE</Text>
+                      <Text style={styles.resumeTitle}>
+                        {openOnly.length} voyage
+                        {openOnly.length > 1 ? 's' : ''} à reprendre
+                      </Text>
+                    </View>
                   </View>
-                ) : null}
+
+                  <View style={styles.resumeList}>
+                    {openOnly.slice(0, 4).map((t) => (
+                      <Pressable
+                        key={t.draft_token}
+                        style={({ pressed }) => [
+                          styles.resumeCard,
+                          pressed && styles.resumeCardPressed,
+                        ]}
+                        onPress={() => openTrip(t.draft_token)}
+                      >
+                        <View style={styles.resumeCardCopy}>
+                          <Text style={styles.resumeCity} numberOfLines={1}>
+                            {t.city || 'Voyage en cours'}
+                          </Text>
+                          <Text style={styles.resumeHint}>
+                            Continuer l’itinéraire · hôtel & vols
+                          </Text>
+                        </View>
+                        <View style={styles.resumeCta}>
+                          <Text style={styles.resumeCtaText}>Reprendre</Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              <View style={styles.tabs}>
+                {(
+                  [
+                    ['upcoming', 'À venir', upcoming.length],
+                    ['past', 'Passés', past.length],
+                  ] as const
+                ).map(([key, label, count]) => {
+                  const on = tab === key
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => setTab(key)}
+                      style={[styles.tab, on && styles.tabOn]}
+                    >
+                      <Text style={[styles.tabText, on && styles.tabTextOn]}>
+                        {label}
+                      </Text>
+                      <Text style={[styles.tabCount, on && styles.tabCountOn]}>
+                        {count}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
               </View>
             </View>
           }
           ListEmptyComponent={
-            featured ? null : (
-              <View style={styles.emptyWrap}>
-                <LinearGradient
-                  colors={['#FF6B35', '#E85A28', '#C2410C']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.emptyHero}
-                >
-                  <Text style={styles.emptyKicker}>Rien ici… encore</Text>
-                  <Text style={styles.emptyTitle}>
-                    {error
-                      ? error
-                      : tab === 'upcoming'
-                        ? 'Ton prochain week-end commence par une recherche'
-                        : 'Les séjours passés apparaîtront ici'}
-                  </Text>
-                  <Pressable
-                    style={styles.emptyCta}
-                    onPress={() =>
-                      navigation.navigate('Main', { screen: 'Deals' })
-                    }
-                  >
-                    <Text style={styles.emptyCtaText}>Voir les séjours</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() =>
-                      navigation.navigate('Main', { screen: 'Search' })
-                    }
-                    hitSlop={8}
-                  >
-                    <Text style={styles.emptyLink}>Chercher un vol →</Text>
-                  </Pressable>
-                </LinearGradient>
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <BedIcon size={24} color={colors.primaryDeep} />
               </View>
-            )
+              <Text style={styles.emptyTitle}>
+                {tab === 'upcoming' ? 'Aucun séjour à venir' : 'Aucun séjour passé'}
+              </Text>
+              <Text style={styles.emptySub}>
+                {error
+                  ? 'Réessayez plus tard ou reconnectez-vous au Wi‑Fi.'
+                  : 'Cherchez un séjour pour démarrer votre prochain voyage.'}
+              </Text>
+              <Pressable
+                style={styles.emptyCta}
+                onPress={() => navigation.navigate('Main', { screen: 'Deals' })}
+              >
+                <Text style={styles.emptyCtaText}>Explorer les séjours</Text>
+              </Pressable>
+            </View>
           }
-          renderItem={({ item }) => (
-            <View style={styles.listPad}>{renderStayCard(item, false)}</View>
-          )}
+          renderItem={({ item }) => renderStay(item)}
         />
       )}
     </View>
@@ -606,332 +525,310 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  masthead: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 28,
-    overflow: 'hidden',
+  header: {
+    paddingTop: 18,
+    paddingBottom: 8,
   },
-  mastOrb: {
-    position: 'absolute',
-    top: -40,
-    right: -30,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,107,53,0.22)',
-  },
-  mastKicker: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: colors.primary,
-    marginBottom: 8,
-  },
-  mastTitle: {
+  title: {
     fontFamily: fonts.extrabold,
-    fontSize: 36,
-    letterSpacing: -1.4,
-    color: '#FFF9F5',
-    lineHeight: 40,
+    fontSize: 28,
+    letterSpacing: -0.8,
+    color: colors.ink,
+    lineHeight: 34,
   },
-  mastSub: {
-    marginTop: 8,
-    fontFamily: fonts.medium,
+  subtitle: {
+    marginTop: 6,
+    fontFamily: fonts.regular,
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(255,249,245,0.72)',
-    maxWidth: 300,
-  },
-
-  openBlock: { marginTop: 22, gap: 10 },
-  openLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: 'rgba(255,249,245,0.55)',
-  },
-  openScroll: { gap: 10, paddingRight: 8 },
-  openChip: {
-    minWidth: 132,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,249,245,0.1)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,107,53,0.35)',
-    gap: 4,
-  },
-  openChipCity: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: '#FFF9F5',
-  },
-  openChipCta: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.primaryMuted,
-  },
-
-  sheet: {
-    marginTop: -14,
-    backgroundColor: colors.canvas,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 18,
-    paddingHorizontal: spacing.xl,
-    minHeight: 80,
-  },
-  tabs: {
-    flexDirection: 'row',
-    gap: 22,
-    marginBottom: 18,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  tab: {
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-  },
-  tabText: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: colors.faint,
-  },
-  tabTextOn: { color: colors.ink },
-  tabCount: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.faint,
-  },
-  tabCountOn: { color: colors.primary },
-  tabUnderline: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: -1,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
-
-  featuredWrap: { marginBottom: 8, gap: 10 },
-  featuredLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.primaryDeep,
-  },
-  listPad: { paddingHorizontal: spacing.xl },
-
-  stay: {
-    backgroundColor: colors.white,
-    borderRadius: radius.xl,
-    overflow: 'hidden',
-    marginBottom: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  stayFeatured: {
-    borderColor: colors.primaryMuted,
-  },
-  stayHero: {
-    width: '100%',
-    backgroundColor: '#2A1A12',
-    overflow: 'hidden',
-  },
-  stayImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  stayImageEmpty: { backgroundColor: '#3D2418' },
-  stamp: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  stampText: { fontFamily: fonts.bold, fontSize: 11, letterSpacing: 0.3 },
-  priceBadge: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    backgroundColor: 'rgba(255,249,245,0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-  },
-  priceBadgeValue: {
-    fontFamily: fonts.extrabold,
-    fontSize: 16,
-    color: colors.ink,
-    letterSpacing: -0.4,
-  },
-  stayHeroCopy: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
-    gap: 4,
-  },
-  stayCity: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.6,
-    color: colors.primaryMuted,
-  },
-  stayHotel: {
-    fontFamily: fonts.extrabold,
-    fontSize: 24,
-    letterSpacing: -0.6,
-    color: '#FFF9F5',
-    lineHeight: 28,
-  },
-  stayDates: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: 'rgba(255,249,245,0.82)',
-  },
-
-  stayBody: { padding: 16, gap: 12 },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  metaPill: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.inkSoft,
-    backgroundColor: colors.primarySoft,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-  },
-  hint: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
     color: colors.muted,
+  },
+
+  errorBanner: {
+    marginTop: 14,
+    backgroundColor: colors.dangerSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.danger,
     lineHeight: 18,
   },
 
-  ticket: {
-    backgroundColor: '#1A120E',
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    overflow: 'hidden',
+  resumeBlock: {
+    marginTop: 18,
+    backgroundColor: colors.ink,
+    borderRadius: radius.lg,
+    padding: 14,
+    gap: 12,
   },
-  ticketNotchL: {
-    position: 'absolute',
-    left: -8,
-    top: 28,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.white,
+  resumeHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  ticketNotchR: {
-    position: 'absolute',
-    right: -8,
-    top: 28,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.white,
+  resumeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  ticketLabel: {
+  resumeHeadCopy: { flex: 1, gap: 2 },
+  resumeKicker: {
     fontFamily: fonts.bold,
     fontSize: 10,
     letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.primary,
-    marginBottom: 6,
+    color: colors.primaryMuted,
   },
-  ticketRow: {
+  resumeTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    letterSpacing: -0.2,
+    color: colors.white,
+  },
+  resumeList: { gap: 8 },
+  resumeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
+    backgroundColor: 'rgba(255,249,245,0.08)',
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,107,53,0.35)',
   },
-  ticketCode: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
-    letterSpacing: 1.4,
-    color: '#FFF9F5',
-    flexShrink: 1,
+  resumeCardPressed: {
+    backgroundColor: 'rgba(255,249,245,0.14)',
   },
-  ticketShare: {
+  resumeCardCopy: { flex: 1, minWidth: 0, gap: 3 },
+  resumeCity: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  resumeHint: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: 'rgba(255,249,245,0.68)',
+  },
+  resumeCta: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: radius.full,
-    backgroundColor: colors.primary,
   },
-  ticketShareText: {
+  resumeCtaText: {
     fontFamily: fonts.bold,
     fontSize: 12,
     color: colors.white,
   },
 
-  stayActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  ctaInk: {
+  tabs: {
+    marginTop: 20,
+    marginBottom: 18,
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderRadius: radius.full,
+    padding: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  tab: {
     flex: 1,
-    backgroundColor: colors.ink,
-    borderRadius: radius.md,
-    paddingVertical: 13,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.full,
   },
-  ctaInkText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: '#FFF9F5',
+  tabOn: {
+    backgroundColor: colors.primarySoft,
   },
-  ctaGhost: { paddingHorizontal: 8, paddingVertical: 12 },
-  ctaGhostText: {
+  tabText: {
     fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.primaryDeep,
+    fontSize: 14,
+    color: colors.faint,
+  },
+  tabTextOn: { color: colors.ink },
+  tabCount: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.faint,
+  },
+  tabCountOn: { color: colors.primaryDeep },
+
+  sep: { height: 10 },
+
+  row: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: 12,
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  rowPressed: { opacity: 0.92 },
+
+  thumb: {
+    width: 92,
+    height: 112,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: colors.primarySoft,
+  },
+  thumbImage: { width: '100%', height: '100%' },
+  thumbEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
   },
 
-  emptyWrap: { paddingHorizontal: spacing.xl, paddingTop: 4 },
-  emptyHero: {
-    borderRadius: radius.xl,
-    padding: 28,
-    gap: 12,
-    overflow: 'hidden',
+  rowBody: { flex: 1, minWidth: 0, justifyContent: 'space-between' },
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  emptyKicker: {
+  city: {
+    flex: 1,
     fontFamily: fonts.bold,
     fontSize: 11,
-    letterSpacing: 1.6,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
-    color: 'rgba(255,249,245,0.75)',
+    color: colors.primaryDeep,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  badgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+  },
+  hotel: {
+    marginTop: 4,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    letterSpacing: -0.3,
+    color: colors.ink,
+  },
+  dates: {
+    marginTop: 3,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.inkSoft,
+  },
+  details: {
+    marginTop: 3,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.muted,
+  },
+
+  codeRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  codeLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.faint,
+  },
+  codeValue: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    letterSpacing: 0.4,
+    color: colors.ink,
+  },
+
+  rowFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  price: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    letterSpacing: -0.3,
+    color: colors.ink,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+  },
+  linkBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.primary,
+  },
+  linkBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.white,
+  },
+
+  empty: {
+    marginTop: 28,
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  emptyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
   },
   emptyTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 26,
-    letterSpacing: -0.8,
-    lineHeight: 32,
-    color: '#FFF9F5',
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    letterSpacing: -0.3,
+    color: colors.ink,
+  },
+  emptySub: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.muted,
+    maxWidth: 300,
   },
   emptyCta: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: '#FFF9F5',
+    marginTop: 6,
+    backgroundColor: colors.primary,
+    borderRadius: radius.full,
     paddingHorizontal: 18,
     paddingVertical: 12,
-    borderRadius: radius.md,
   },
   emptyCtaText: {
     fontFamily: fonts.bold,
     fontSize: 14,
-    color: colors.primaryInk,
-  },
-  emptyLink: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: 'rgba(255,249,245,0.9)',
-    marginTop: 4,
+    color: colors.white,
   },
 })

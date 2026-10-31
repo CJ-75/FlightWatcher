@@ -250,12 +250,7 @@ function RootNavigator() {
           <Stack.Screen
             name="Bookings"
             component={BookingsScreen}
-            options={{
-              ...stackHeaderOptions(''),
-              headerTransparent: true,
-              headerTitle: '',
-              headerTintColor: '#FFF9F5',
-            }}
+            options={stackHeaderOptions('')}
           />
           <Stack.Screen
             name="HotelCompose"
