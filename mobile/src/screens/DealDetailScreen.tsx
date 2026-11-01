@@ -8,7 +8,7 @@ import {
   Share,
   ActivityIndicator,
   Alert,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -48,7 +48,8 @@ import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DealDetail'>
 
-const width = Dimensions.get('window').width
+/** Room below hero for price + vol + 1er hôtel (then scroll). */
+const ABOVE_FOLD_BELOW_HERO = 360
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('fr-FR', {
@@ -68,7 +69,17 @@ function formatClock(iso?: string | null) {
 export function DealDetailScreen({ route, navigation }: Props) {
   const { dealId } = route.params
   const insets = useSafeAreaInsets()
+  const { width: winW, height: winH } = useWindowDimensions()
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
+
+  // Large gallery (as before); shrink only on very short phones so 1er hôtel can peek.
+  const ctaH = 64 + Math.max(insets.bottom, 12)
+  const headerH = 52 + insets.top
+  const foldBudget = Math.max(420, winH - ctaH - headerH)
+  const preferredHero = Math.min(240, Math.round(winW * 0.52))
+  const heroH = Math.round(
+    Math.max(168, Math.min(preferredHero, foldBudget - ABOVE_FOLD_BELOW_HERO)),
+  )
   const [deal, setDeal] = useState<TravelDeal | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -397,21 +408,108 @@ export function DealDetailScreen({ route, navigation }: Props) {
         />
 
         <View style={styles.content}>
-          <View style={styles.priceBlock}>
-            <Text style={styles.price}>{Math.round(pricePp)} €</Text>
-            <Text style={styles.priceHint}>
-              {deal.price_pax_note
-                ? deal.price_pax_note
-                : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} voyageur${adults > 1 ? 's' : ''}`}
-              {flightPp > 0 || hotelPp > 0
-                ? ` · dont vol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
-                : ''}
-            </Text>
-            {fees > 0 ? (
-              <Text style={styles.tax}>
-                + {Math.round(fees)} € de taxes à régler à l’hôtel
+          {/* Above the fold: prix + vol + 1er hôtel — puis scroll */}
+          <View style={styles.aboveFold}>
+            <View style={styles.priceBlock}>
+              <Text style={styles.price}>{Math.round(pricePp)} €</Text>
+              <Text style={styles.priceHint} numberOfLines={2}>
+                {deal.price_pax_note
+                  ? deal.price_pax_note
+                  : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} voyageur${adults > 1 ? 's' : ''}`}
+                {flightPp > 0 || hotelPp > 0
+                  ? ` · vol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
+                  : ''}
               </Text>
-            ) : null}
+              {fees > 0 ? (
+                <Text style={styles.tax}>
+                  + {Math.round(fees)} € de taxes à régler à l’hôtel
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={[styles.infoCard, styles.flightCard, shadow.soft]}>
+              <IconLabel
+                section
+                label="Vol"
+                icon={<PlaneIcon size={14} />}
+                style={{ marginBottom: 6 }}
+              />
+              <Text style={styles.airportLine} numberOfLines={2}>
+                {deal.origin_airport_label || deal.departure_airport || '—'}
+                <Text style={styles.airportArrowInline}> → </Text>
+                {deal.arrival_airport_label || deal.city}
+              </Text>
+              <View style={styles.legRow}>
+                <Text style={styles.legLabel}>Aller</Text>
+                <Text style={styles.legValue}>
+                  {formatDate(deal.dates.outbound)}
+                  {outTime ? ` · ${outTime}` : ''}
+                </Text>
+              </View>
+              <View style={styles.legRow}>
+                <Text style={styles.legLabel}>Retour</Text>
+                <Text style={styles.legValue}>
+                  {formatDate(deal.dates.inbound)}
+                  {inTime ? ` · ${inTime}` : ''}
+                </Text>
+              </View>
+              {flightDurationLabel ? (
+                <View style={styles.legRow}>
+                  <Text style={styles.legLabel}>Durée</Text>
+                  <Text style={[styles.legValue, styles.durationValue]}>
+                    {deal.flight?.direct
+                      ? `Vol direct · ${flightDurationLabel}`
+                      : flightDurationLabel}
+                  </Text>
+                </View>
+              ) : directLabel ? (
+                <Text style={styles.directHint}>{directLabel}</Text>
+              ) : null}
+              {deal.baggage_line ? (
+                <Text style={styles.baggage} numberOfLines={2}>
+                  {deal.baggage_line}
+                </Text>
+              ) : null}
+              {flightPp > 0 ? (
+                <Text style={styles.flightPriceLine}>{flightPp} € / pers. vol A/R</Text>
+              ) : null}
+            </View>
+
+            <View style={[styles.infoCard, styles.hotelCard, shadow.soft]}>
+              <IconLabel
+                section
+                label="Hôtel"
+                icon={<BedIcon size={14} />}
+                style={{ marginBottom: 6 }}
+              />
+              <Pressable
+                onPress={() => {
+                  setSheetHotelId(selected?.id || deal.hotel?.id || null)
+                  setHotelSheetOpen(true)
+                }}
+              >
+                {selectedStars ? (
+                  <Text style={styles.hotelStars}>{selectedStars}</Text>
+                ) : null}
+                <Text style={styles.hotelTitle} numberOfLines={2}>
+                  {selected?.name || deal.hotel_name || '—'}
+                </Text>
+                {boardLabelFr(selected?.board || deal.board) ? (
+                  <Text style={styles.hotelMeta}>
+                    {boardLabelFr(selected?.board || deal.board)}
+                  </Text>
+                ) : null}
+                {selected?.rating != null ? (
+                  <Text style={styles.hotelMeta}>
+                    {Number(selected.rating).toFixed(1)}/10
+                    {selected.review_count != null
+                      ? ` · ${selected.review_count} avis`
+                      : ''}
+                  </Text>
+                ) : null}
+                <Text style={styles.ficheLink}>Voir photos et détails →</Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.stack}>
@@ -420,58 +518,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
             <Text style={styles.noticeText}>
               Tu réserves le vol et l’hôtel en deux étapes simples — chacun de son côté.
             </Text>
-          </View>
-
-          {/* Vol — full names wrap, times visible without horizontal scroll */}
-          <View style={[styles.infoCard, shadow.soft]}>
-            <IconLabel
-              section
-              label="Vol"
-              icon={<PlaneIcon size={14} />}
-              style={{ marginBottom: 8 }}
-            />
-            <Text style={styles.airportLine}>
-              {deal.origin_airport_label || deal.departure_airport || '—'}
-            </Text>
-            <Text style={styles.airportArrow}>↓</Text>
-            <Text style={styles.airportLine}>
-              {deal.arrival_airport_label || deal.city}
-            </Text>
-            <View style={styles.legRow}>
-              <Text style={styles.legLabel}>Aller</Text>
-              <Text style={styles.legValue}>
-                {formatDate(deal.dates.outbound)}
-                {outTime ? ` · ${outTime}` : ''}
-              </Text>
-            </View>
-            <View style={styles.legRow}>
-              <Text style={styles.legLabel}>Retour</Text>
-              <Text style={styles.legValue}>
-                {formatDate(deal.dates.inbound)}
-                {inTime ? ` · ${inTime}` : ''}
-              </Text>
-            </View>
-            {flightDurationLabel ? (
-              <View style={styles.legRow}>
-                <Text style={styles.legLabel}>Durée</Text>
-                <Text style={[styles.legValue, styles.durationValue]}>
-                  {deal.flight?.direct
-                    ? `Vol direct · ${flightDurationLabel}`
-                    : flightDurationLabel}
-                </Text>
-              </View>
-            ) : directLabel ? (
-              <Text style={styles.directHint}>{directLabel}</Text>
-            ) : null}
-            {deal.baggage_line ? (
-              <Text style={styles.baggage}>{deal.baggage_line}</Text>
-            ) : null}
-            {deal.route_hint ? (
-              <Text style={styles.routeHint}>{deal.route_hint}</Text>
-            ) : null}
-            {flightPp > 0 ? (
-              <Text style={styles.flightPriceLine}>{flightPp} € / pers. vol A/R</Text>
-            ) : null}
           </View>
 
           {hotelOptions.length > 1 ? (
@@ -524,55 +570,21 @@ export function DealDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
-          <View style={[styles.infoCard, shadow.soft]}>
-            <IconLabel
-              section
-              label="Hôtel"
-              icon={<BedIcon size={14} />}
-              style={{ marginBottom: 8 }}
-            />
-            <Pressable
-              onPress={() => {
-                setSheetHotelId(selected?.id || deal.hotel?.id || null)
-                setHotelSheetOpen(true)
-              }}
-            >
-              {selectedStars ? (
-                <Text style={styles.hotelStars}>{selectedStars}</Text>
-              ) : null}
-              <Text style={styles.hotelTitle}>
-                {selected?.name || deal.hotel_name || '—'}
-              </Text>
-              {boardLabelFr(selected?.board || deal.board) ? (
-                <Text style={styles.hotelMeta}>
-                  {boardLabelFr(selected?.board || deal.board)}
-                </Text>
-              ) : null}
-              {selected?.rating != null ? (
-                <Text style={styles.hotelMeta}>
-                  {Number(selected.rating).toFixed(1)}/10
-                  {selected.review_count != null
-                    ? ` · ${selected.review_count} avis`
-                    : ''}
-                </Text>
-              ) : null}
-              <Text style={styles.ficheLink}>Voir photos et détails →</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => void startComposeHotel()}
-              disabled={composingHotel || startingTrip}
-              style={({ pressed }) => [
-                styles.composeBtn,
-                pressed && { opacity: 0.9 },
-                (composingHotel || startingTrip) && { opacity: 0.55 },
-              ]}
-            >
-              <BedIcon size={15} />
-              <Text style={styles.composeBtnText}>
-                {composingHotel ? '…' : 'Changer d’hôtel'}
-              </Text>
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => void startComposeHotel()}
+            disabled={composingHotel || startingTrip}
+            style={({ pressed }) => [
+              styles.composeBtn,
+              styles.composeBtnStandalone,
+              pressed && { opacity: 0.9 },
+              (composingHotel || startingTrip) && { opacity: 0.55 },
+            ]}
+          >
+            <BedIcon size={15} />
+            <Text style={styles.composeBtnText}>
+              {composingHotel ? '…' : 'Changer d’hôtel'}
+            </Text>
+          </Pressable>
 
           {reviewsLoading || guestReviews.length > 0 ? (
             <View style={styles.reviewsBlock}>
@@ -843,8 +855,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
   )
 }
 
-const heroH = Math.min(240, Math.round(width * 0.52))
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   centered: {
@@ -893,32 +903,27 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingTop: 12,
   },
-  priceBlock: {
-    marginBottom: spacing.xl,
+  aboveFold: {
+    gap: 12,
+    marginBottom: 18,
   },
+  priceBlock: {},
   stack: {
-    gap: 20,
+    gap: 18,
   },
-  price: { ...type.price, fontSize: 32 },
-  priceHint: { ...type.caption, marginTop: 4, lineHeight: 18 },
+  price: { ...type.price, fontSize: 30, lineHeight: 34 },
+  priceHint: { ...type.caption, marginTop: 2, lineHeight: 16 },
   baggage: {
-    marginTop: 10,
+    marginTop: 8,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.inkSoft,
     lineHeight: 16,
   },
-  routeHint: {
-    marginTop: 4,
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 16,
-  },
   tax: {
-    marginTop: 8,
+    marginTop: 4,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: '#92400e',
@@ -926,26 +931,32 @@ const styles = StyleSheet.create({
   notice: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: 8,
   },
   noticeText: {
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     color: colors.primaryInk,
   },
   infoCard: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
+  },
+  flightCard: {
+    paddingVertical: 12,
+  },
+  hotelCard: {
+    paddingVertical: 12,
   },
   whyGoodCard: {
     backgroundColor: '#ECFDF5',
@@ -998,19 +1009,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.ink,
     lineHeight: 20,
+    marginBottom: 2,
   },
-  airportArrow: {
+  airportArrowInline: {
     fontFamily: fonts.medium,
-    fontSize: 12,
+    fontSize: 13,
     color: colors.faint,
-    marginVertical: 2,
   },
   legRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
-    marginTop: 8,
+    marginTop: 5,
   },
   legLabel: {
     fontFamily: fonts.semibold,
@@ -1024,13 +1035,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.ink,
     textAlign: 'right',
-    lineHeight: 18,
+    lineHeight: 17,
   },
   durationValue: {
     color: '#047857',
   },
   directHint: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: fonts.semibold,
     fontSize: 12,
     color: '#047857',
@@ -1091,7 +1102,7 @@ const styles = StyleSheet.create({
   },
   moreReviewsText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   flightPriceLine: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: fonts.bold,
     fontSize: 13,
     color: colors.ink,
@@ -1110,7 +1121,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   ficheLink: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.primaryDeep,
@@ -1128,7 +1139,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   composeBtn: {
-    marginTop: 12,
     borderWidth: 1.5,
     borderColor: colors.primary,
     backgroundColor: colors.primarySoft,
@@ -1139,6 +1149,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 12,
+  },
+  composeBtnStandalone: {
+    marginTop: 0,
   },
   composeBtnText: {
     fontFamily: fonts.bold,
