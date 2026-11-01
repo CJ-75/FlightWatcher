@@ -11,6 +11,7 @@ from routes import (
     persistence,
     planner,
     ref,
+    restaurants,
     scan,
     user,
 )
@@ -28,4 +29,5 @@ def include_all_routers(app: FastAPI) -> None:
     app.include_router(hotel_upsell.router)
     app.include_router(planner.router)
     app.include_router(activities.router)
+    app.include_router(restaurants.router)
     app.include_router(auth_password.router)

@@ -188,6 +188,12 @@ def get_config():
         payload.update(activities_config_public_dict())
     except Exception:
         payload.setdefault("activities_ui_enabled", False)
+    try:
+        from activities.restaurants_config import restaurants_config_public_dict
+
+        payload.update(restaurants_config_public_dict())
+    except Exception:
+        payload.setdefault("link_import_enabled", False)
     return payload
 
 

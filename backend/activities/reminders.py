@@ -61,11 +61,11 @@ def run_activity_j7_reminders(supabase: Any = None) -> Dict[str, Any]:
         try:
             items = (
                 sb.table("trip_items")
-                .select("id,status,item_type")
+                .select("id,status,item_type,meta,places(name)")
                 .eq("planned_trip_id", tid)
-                .eq("item_type", "activity")
+                .in_("item_type", ["activity", "restaurant"])
                 .in_("status", ["idea", "validated"])
-                .limit(20)
+                .limit(30)
                 .execute()
             )
             pending = list(items.data or [])
@@ -96,10 +96,31 @@ def run_activity_j7_reminders(supabase: Any = None) -> Dict[str, Any]:
             pass
         summary["candidates"] += 1
         name = trip.get("name") or "ton voyage"
-        subject = f"J-7 · activités pour {name}"
+        acts = [i for i in pending if i.get("item_type") == "activity"]
+        restos = [i for i in pending if i.get("item_type") == "restaurant"]
+        resto_names = []
+        for r in restos[:3]:
+            pl = r.get("places") if isinstance(r.get("places"), dict) else {}
+            n = (pl or {}).get("name")
+            if n:
+                resto_names.append(str(n))
+        subject = f"J-7 · ton séjour {name}"
+        bits = []
+        if acts:
+            bits.append(f"{len(acts)} activité(s) à finaliser")
+        if restos:
+            bits.append(f"{len(restos)} adresse(s) à réserver")
+        detail = ""
+        if resto_names:
+            detail = (
+                "<p>Pense à réserver : <strong>"
+                + ", ".join(resto_names)
+                + "</strong>.</p>"
+            )
         html = (
             f"<p>Dans 7 jours : <strong>{name}</strong>.</p>"
-            f"<p>Tu as {len(pending)} activité(s) à finaliser.</p>"
+            f"<p>{' · '.join(bits) or 'Quelques idées à finaliser'}.</p>"
+            f"{detail}"
             f"<p><a href=\"{WEB_APP_URL}/planner\">Ouvrir le Planner</a></p>"
         )
         uid = trip.get("owner_user_id")

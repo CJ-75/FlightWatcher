@@ -105,6 +105,44 @@ export function activityStepProgress(items: { status?: string | null }[]): {
   return { done: false, partial: true, hint: 'Idée' }
 }
 
+export const RESTAURANT_SKIP_LABEL_FR = 'Pas de restaurant prévu'
+export const RESTAURANT_ADD_LABEL_FR = 'Coller un lien'
+export const RESTAURANT_SEARCH_LABEL_FR = 'Chercher un restaurant'
+export const RESTAURANT_VALIDATE_LABEL_FR = 'Valider'
+export const RESTAURANT_MAPS_LABEL_FR = 'Avis et photos'
+export const RESTAURANT_BOOK_LABEL_FR = 'Réserver'
+export const RESTAURANT_EMPTY_TITLE_FR = (city: string) =>
+  `Où manger à ${city} ?`
+export const RESTAURANT_EMPTY_BODY_FR =
+  'Ajoute les adresses que tu as repérées : on vérifie qu’elles sont ouvertes pendant ton séjour.'
+export const RESTAURANT_BUDGET_HINT_FR = 'Restaurants non inclus'
+export const RESTAURANT_ADDRESSES_TAB_FR = 'Mes adresses'
+export const ACTIVITIES_EAT_CTA_FR = (city: string) =>
+  `Où manger à ${city} ? Ajoute tes adresses à ton voyage`
+
+export function restaurantStepProgress(items: { status?: string | null }[]): {
+  done: boolean
+  partial: boolean
+  hint: string
+  skipped: boolean
+} {
+  const skipped = items.some((i) => i.status === 'skipped')
+  const active = items.filter((i) => i.status !== 'skipped')
+  if (!active.length) {
+    return {
+      done: skipped,
+      partial: false,
+      hint: skipped ? 'Passé' : 'Choisir',
+      skipped,
+    }
+  }
+  const validated = active.some(
+    (i) => i.status === 'validated' || i.status === 'booked',
+  )
+  if (validated) return { done: true, partial: false, hint: 'Validé', skipped: false }
+  return { done: false, partial: true, hint: 'Idée', skipped: false }
+}
+
 export function nextStatusAfterBookConfirm(yes: boolean): TripItemStatus {
   return yes ? 'booked' : 'validated'
 }

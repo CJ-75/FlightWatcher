@@ -352,6 +352,26 @@ export function ActivitiesScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Activités</Text>
             <Text style={styles.subtitle}>Que faire sur place</Text>
+            <Pressable
+              onPress={() => {
+                if (activeTrip?.draftToken) {
+                  navigation.navigate('TripSummary', {
+                    draftToken: activeTrip.draftToken,
+                  })
+                  return
+                }
+                navigation.navigate('Main', { screen: 'Favorites' })
+              }}
+              style={({ pressed }) => [
+                styles.restoCta,
+                pressed && { opacity: 0.92 },
+              ]}
+            >
+              <Text style={styles.restoCtaText}>
+                Où manger à {activityDestinationLabelFr(citySlug)} ?
+              </Text>
+              <Text style={styles.restoCtaLink}>Ajoute tes adresses →</Text>
+            </Pressable>
 
             {activeTrip ? (
               <ActivityTripHero
@@ -618,6 +638,27 @@ export function ActivitiesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: { marginBottom: spacing.md },
+  restoCta: {
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFDCC8',
+    gap: 2,
+  },
+  restoCtaText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.inkSoft,
+  },
+  restoCtaLink: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.primaryDeep,
+  },
   title: {
     fontFamily: fonts.extrabold,
     fontSize: 32,

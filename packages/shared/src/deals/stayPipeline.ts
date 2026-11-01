@@ -51,6 +51,11 @@ export function buildStayPipeline(opts: {
   activitiesPartial?: boolean
   activitiesHint?: string
   restaurantsEnabled?: boolean
+  restaurantsDone?: boolean
+  restaurantsPartial?: boolean
+  restaurantsHint?: string
+  /** Organizer chose « Pas de restaurant prévu » */
+  restaurantsSkipped?: boolean
 }): StayPipelineStep[] {
   const flightDone = opts.flight === 'booked_fw' || opts.flight === 'external'
   const flightPartial = opts.flight === 'selected_fw'
@@ -60,6 +65,9 @@ export function buildStayPipeline(opts: {
   const restaurantsOn = Boolean(opts.restaurantsEnabled)
   const activitiesDone = Boolean(opts.activitiesDone)
   const activitiesPartial = Boolean(opts.activitiesPartial)
+  const restaurantsDone =
+    Boolean(opts.restaurantsDone) || Boolean(opts.restaurantsSkipped)
+  const restaurantsPartial = Boolean(opts.restaurantsPartial)
 
   const flightHint =
     opts.flight === 'booked_fw'
@@ -132,12 +140,16 @@ export function buildStayPipeline(opts: {
     ),
     step(
       'restaurants',
-      'Restos',
-      'Restos',
-      false,
-      false,
+      'Adresses',
+      'Adresses',
+      restaurantsDone,
+      restaurantsPartial,
       !restaurantsOn,
-      restaurantsOn ? 'Choisir' : 'Bientôt',
+      restaurantsOn
+        ? opts.restaurantsSkipped
+          ? 'Passé'
+          : opts.restaurantsHint || 'Choisir'
+        : 'Bientôt',
     ),
   ]
 }

@@ -920,6 +920,8 @@ function CreateTripModal({
   const [showFlexible, setShowFlexible] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [spotsPaste, setSpotsPaste] = useState('')
+  const [spotsOpen, setSpotsOpen] = useState(false)
 
   const departureGroups = useMemo(() => groupAirportsByCity(airports), [airports])
   const departureLabel = useMemo(
@@ -1100,6 +1102,17 @@ function CreateTripModal({
     }
     try {
       const trip = await getApiClient().createPlannedTrip(body)
+      const paste = spotsPaste.trim()
+      if (paste && typeof sessionStorage !== 'undefined') {
+        try {
+          sessionStorage.setItem(
+            'fw_pending_address_links',
+            JSON.stringify({ text: paste, tripId: trip.id, at: Date.now() }),
+          )
+        } catch {
+          /* ignore quota */
+        }
+      }
       onCreated(trip.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -1446,6 +1459,35 @@ function CreateTripModal({
               </label>
               <div className="[&>div]:mb-2">
                 <BudgetSlider value={budget} onChange={setBudget} />
+              </div>
+
+              <div className="rounded-2xl border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white p-4">
+                <button
+                  type="button"
+                  onClick={() => setSpotsOpen((o) => !o)}
+                  className="w-full flex items-center justify-between gap-2 text-left"
+                >
+                  <div>
+                    <p className="text-sm font-extrabold text-ink">
+                      Tu as déjà repéré des endroits ?
+                    </p>
+                    <p className="text-xs text-muted mt-0.5">
+                      Optionnel — colle des liens Maps / Instagram
+                    </p>
+                  </div>
+                  <span className="text-primary-700 font-bold text-sm shrink-0">
+                    {spotsOpen ? 'Masquer' : 'Ajouter'}
+                  </span>
+                </button>
+                {spotsOpen ? (
+                  <textarea
+                    value={spotsPaste}
+                    onChange={(e) => setSpotsPaste(e.target.value)}
+                    rows={3}
+                    placeholder="https://maps.app.goo.gl/…"
+                    className="mt-3 w-full rounded-2xl border border-line bg-white px-3.5 py-3 text-sm text-ink placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                  />
+                ) : null}
               </div>
             </motion.div>
           ) : null}

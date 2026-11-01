@@ -20,6 +20,7 @@ import {
   boardLabelFr,
   buildStayPipeline,
   distantAirportLine,
+  restaurantStepProgress,
   hotelCancelLabel,
   hotelStarsLabel,
   resolveCarrierBooking,
@@ -32,6 +33,7 @@ import {
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
+import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -86,8 +88,11 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [flightPriceHint, setFlightPriceHint] = useState<string | null>(null)
   const [chargedHotelTotal, setChargedHotelTotal] = useState<number | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
+  const [showRestaurants, setShowRestaurants] = useState(false)
   const leftForFlight = useRef(false)
   const seededRef = useRef(Boolean(seed))
   const flightLiveKey = useRef<string | null>(null)
@@ -99,17 +104,31 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         setPlannerActivitiesEnabled(
           cfg.planner_activities_enabled === true || cfg.activities_ui_enabled === true,
         )
+        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
       .catch(() => undefined)
   }, [])
 
   useEffect(() => {
-    if (!plannerActivitiesEnabled) return
+    if (!plannerActivitiesEnabled && !plannerRestaurantsEnabled) return
     void getApi()
       .listTripItems({ draft_token: draftToken })
-      .then((res) => setActivityItems(res.items || []))
-      .catch(() => setActivityItems([]))
-  }, [draftToken, plannerActivitiesEnabled, showActivities])
+      .then((res) => {
+        const items = res.items || []
+        setActivityItems(items.filter((i) => i.item_type === 'activity'))
+        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+      })
+      .catch(() => {
+        setActivityItems([])
+        setRestaurantItems([])
+      })
+  }, [
+    draftToken,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    showActivities,
+    showRestaurants,
+  ])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setError(null)
@@ -348,6 +367,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     () => activityStepProgress(activityItems),
     [activityItems],
   )
+  const restaurantProgress = useMemo(
+    () => restaurantStepProgress(restaurantItems),
+    [restaurantItems],
+  )
 
   const pipelineSteps = useMemo(
     () =>
@@ -362,11 +385,20 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           hasHotel: Boolean(hotelId),
           hotelBooked,
         }),
-        focus: showActivities ? 'activities' : undefined,
+        focus: showRestaurants
+          ? 'restaurants'
+          : showActivities
+            ? 'activities'
+            : undefined,
         activitiesEnabled: plannerActivitiesEnabled,
         activitiesDone: activityProgress.done,
         activitiesPartial: activityProgress.partial,
         activitiesHint: activityProgress.hint,
+        restaurantsEnabled: plannerRestaurantsEnabled,
+        restaurantsDone: restaurantProgress.done,
+        restaurantsPartial: restaurantProgress.partial,
+        restaurantsHint: restaurantProgress.hint,
+        restaurantsSkipped: restaurantProgress.skipped,
       }),
     [
       fl,
@@ -376,8 +408,11 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       hotelId,
       hotelBooked,
       showActivities,
+      showRestaurants,
       plannerActivitiesEnabled,
+      plannerRestaurantsEnabled,
       activityProgress,
+      restaurantProgress,
     ],
   )
 
@@ -481,6 +516,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     }
     if (id === 'activities' && plannerActivitiesEnabled) {
       setShowActivities(true)
+      return
+    }
+    if (id === 'restaurants' && plannerRestaurantsEnabled) {
+      setShowRestaurants(true)
       return
     }
     if (id === 'flight' && flightUrl && !flightBooked) {
@@ -785,6 +824,19 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
+        {plannerRestaurantsEnabled ? (
+          <View style={[styles.card, shadow.soft, styles.addressesCard]}>
+            <IconLabel section label="④ Adresses" icon={<TicketIcon size={14} />} />
+            <RestaurantStepPanel
+              draftToken={draftToken}
+              citySlug={String(pl.city_slug || city || 'paris').toLowerCase()}
+              cityLabel={city ? String(city) : undefined}
+              dateIso={out || null}
+              enabled={plannerRestaurantsEnabled}
+            />
+          </View>
+        ) : null}
+
         {party.total > 0 ? (
           <View style={[styles.card, shadow.soft]}>
             <IconLabel section label="Total séjour" icon={<CardIcon size={14} />} />
@@ -929,6 +981,10 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 14,
     gap: 8,
+  },
+  addressesCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFDCC8',
   },
   stars: {
     fontFamily: fonts.bold,

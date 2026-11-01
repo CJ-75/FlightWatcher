@@ -76,12 +76,40 @@ def add_activity_item(
     user_id: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
+    return add_place_item(
+        supabase,
+        place_id=place_id,
+        item_type="activity",
+        draft_id=draft_id,
+        planned_trip_id=planned_trip_id,
+        day_offset=day_offset,
+        moment=moment,
+        sort_key=sort_key,
+        user_id=user_id,
+        meta=meta,
+    )
+
+
+def add_place_item(
+    supabase,
+    *,
+    place_id: str,
+    item_type: str = "activity",
+    draft_id: Optional[str] = None,
+    planned_trip_id: Optional[str] = None,
+    day_offset: int = 0,
+    moment: Optional[str] = None,
+    sort_key: str = "a0",
+    user_id: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
     if (draft_id is None) == (planned_trip_id is None):
         return None
+    itype = item_type if item_type in ("activity", "hotel", "restaurant") else "activity"
     row = {
         "draft_id": draft_id,
         "planned_trip_id": planned_trip_id,
-        "item_type": "activity",
+        "item_type": itype,
         "place_id": place_id,
         "day_offset": int(day_offset or 0),
         "moment": moment,
@@ -96,7 +124,7 @@ def add_activity_item(
         res = supabase.table("trip_items").insert(row).execute()
         return (res.data or [None])[0]
     except Exception as e:
-        logger.warning("add_activity_item: %s", e)
+        logger.warning("add_place_item: %s", e)
         return None
 
 
@@ -146,7 +174,7 @@ def mark_items_needs_check_on_date_change(
     )
     n = 0
     for it in items:
-        if it.get("item_type") != "activity":
+        if it.get("item_type") not in ("activity", "restaurant"):
             continue
         if it.get("status") == "booked":
             continue

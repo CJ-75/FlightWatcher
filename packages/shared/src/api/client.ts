@@ -664,6 +664,50 @@ export function createApiClient(options: ApiClientOptions = {}) {
         `/api/activities/itineraries/${encodeURIComponent(itineraryId)}`,
       ),
 
+    importRestaurantLinks: (body: {
+      text: string
+      draft_token?: string
+      planned_trip_id?: string
+      city_slug?: string
+    }) =>
+      request<{
+        ok: boolean
+        results: Record<string, unknown>[]
+        counts: Record<string, number>
+        suggested_city?: string | null
+      }>('/api/restaurants/import-links', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    confirmRestaurantPlace: (body: Record<string, unknown>) =>
+      request<{ ok: boolean; item?: Record<string, unknown>; user_place?: unknown }>(
+        '/api/restaurants/confirm',
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    listUserAddresses: (opts?: { city_slug?: string; draft_token?: string }) => {
+      const q = new URLSearchParams()
+      if (opts?.city_slug) q.set('city_slug', opts.city_slug)
+      if (opts?.draft_token) q.set('draft_token', opts.draft_token)
+      const qs = q.toString()
+      return request<{ ok: boolean; items: Record<string, unknown>[] }>(
+        `/api/restaurants/addresses${qs ? `?${qs}` : ''}`,
+      )
+    },
+
+    patchUserAddress: (id: string, body: Record<string, unknown>) =>
+      request<{ ok: boolean; item?: Record<string, unknown> }>(
+        `/api/restaurants/addresses/${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      ),
+
+    reportPlace: (body: { place_id: string; reason?: string; note?: string }) =>
+      request<{ ok: boolean }>('/api/restaurants/report', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
     prebookHotel: (body: HotelBookingPrebookRequest) =>
       request<HotelBookingPrebookResponse>('/api/hotel-bookings/prebook', {
         method: 'POST',

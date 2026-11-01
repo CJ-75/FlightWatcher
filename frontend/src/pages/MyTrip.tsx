@@ -13,10 +13,12 @@ import {
   resolveDraftPartyPrice,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
+  restaurantStepProgress,
   type StayStepId,
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
+import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentSession } from '../lib/supabase'
@@ -96,9 +98,13 @@ export default function MyTrip() {
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
+  const [showRestaurants, setShowRestaurants] = useState(false)
   const activitiesSectionRef = useRef<HTMLElement | null>(null)
+  const restaurantsSectionRef = useRef<HTMLElement | null>(null)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
   const hotelSectionRef = useRef<HTMLElement | null>(null)
@@ -319,6 +325,10 @@ export default function MyTrip() {
     () => activityStepProgress(activityItems),
     [activityItems],
   )
+  const restaurantProgress = useMemo(
+    () => restaurantStepProgress(restaurantItems),
+    [restaurantItems],
+  )
 
   const pipelineSteps = useMemo(
     () =>
@@ -337,13 +347,20 @@ export default function MyTrip() {
         }),
         focus: wantsCompose
           ? 'hotel'
-          : showActivities
-            ? 'activities'
-            : undefined,
+          : showRestaurants
+            ? 'restaurants'
+            : showActivities
+              ? 'activities'
+              : undefined,
         activitiesEnabled: plannerActivitiesEnabled,
         activitiesDone: activityProgress.done,
         activitiesPartial: activityProgress.partial,
         activitiesHint: activityProgress.hint,
+        restaurantsEnabled: plannerRestaurantsEnabled,
+        restaurantsDone: restaurantProgress.done,
+        restaurantsPartial: restaurantProgress.partial,
+        restaurantsHint: restaurantProgress.hint,
+        restaurantsSkipped: restaurantProgress.skipped,
       }),
     [
       flight,
@@ -354,8 +371,11 @@ export default function MyTrip() {
       hotelBooked,
       wantsCompose,
       showActivities,
+      showRestaurants,
       plannerActivitiesEnabled,
+      plannerRestaurantsEnabled,
       activityProgress,
+      restaurantProgress,
     ],
   )
 
@@ -366,6 +386,7 @@ export default function MyTrip() {
         setPlannerActivitiesEnabled(
           cfg.planner_activities_enabled === true || cfg.activities_ui_enabled === true,
         )
+        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
       .catch(() => undefined)
   }, [])
@@ -383,12 +404,31 @@ export default function MyTrip() {
   }, [searchParams])
 
   useEffect(() => {
-    if (!token || !plannerActivitiesEnabled) return
+    if (searchParams.get('restaurants') !== '1') return
+    setShowRestaurants(true)
+    const t = window.setTimeout(() => {
+      restaurantsSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [searchParams])
+
+  useEffect(() => {
+    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) return
     void getApiClient()
       .listTripItems({ draft_token: token })
-      .then((res) => setActivityItems(res.items || []))
-      .catch(() => setActivityItems([]))
-  }, [token, plannerActivitiesEnabled, showActivities])
+      .then((res) => {
+        const items = res.items || []
+        setActivityItems(items.filter((i) => i.item_type === 'activity'))
+        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+      })
+      .catch(() => {
+        setActivityItems([])
+        setRestaurantItems([])
+      })
+  }, [token, plannerActivitiesEnabled, plannerRestaurantsEnabled, showActivities, showRestaurants])
 
   const from = searchParams.get('from')
   const backHref =
@@ -423,6 +463,13 @@ export default function MyTrip() {
       setShowActivities(true)
       setTimeout(() => {
         activitiesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 50)
+      return
+    }
+    if (id === 'restaurants' && plannerRestaurantsEnabled) {
+      setShowRestaurants(true)
+      setTimeout(() => {
+        restaurantsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 50)
       return
     }
@@ -1612,6 +1659,50 @@ export default function MyTrip() {
                   }
                   enabled={plannerActivitiesEnabled}
                   surface="my_trip"
+                />
+              </section>
+            ) : null}
+
+            {plannerRestaurantsEnabled ? (
+              <section
+                ref={restaurantsSectionRef}
+                className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 space-y-4 shadow-soft"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
+                      Étape ④
+                    </p>
+                    <h2 className="font-extrabold text-ink text-lg tracking-tight">
+                      Adresses
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs font-bold text-primary-700 hover:underline"
+                    onClick={() => setShowRestaurants(true)}
+                  >
+                    Gérer
+                  </button>
+                </div>
+                <RestaurantStepPanel
+                  draftToken={token}
+                  citySlug={
+                    typeof payload.city_slug === 'string'
+                      ? payload.city_slug
+                      : city
+                        ? String(city).toLowerCase()
+                        : 'paris'
+                  }
+                  cityLabel={city ? String(city) : undefined}
+                  dateIso={
+                    typeof payload.dates === 'object' &&
+                    payload.dates &&
+                    'outbound' in (payload.dates as object)
+                      ? String((payload.dates as { outbound?: string }).outbound || '')
+                      : null
+                  }
+                  enabled={plannerRestaurantsEnabled}
                 />
               </section>
             ) : null}

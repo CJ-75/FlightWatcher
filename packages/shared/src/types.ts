@@ -164,6 +164,9 @@ export interface ApiConfig {
   activities_ui_enabled?: boolean
   planner_activities_enabled?: boolean
   planner_restaurants_enabled?: boolean
+  link_import_enabled?: boolean
+  link_import_max_links?: number
+  restaurants_local_dishes_enabled?: boolean
   itineraries_enabled?: boolean
   /** Admin-only via /api/admin/activities/migrations — not on public /api/config */
   migrations_ok?: boolean | null

@@ -2191,9 +2191,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [showLightbox, setShowLightbox] = useState(false)
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [favoritesKind, setFavoritesKind] = useState<'flights' | 'deals' | 'activities'>(
-    'flights',
-  )
+  const [favoritesKind, setFavoritesKind] = useState<
+    'flights' | 'deals' | 'activities' | 'addresses'
+  >('flights')
+  const [userAddresses, setUserAddresses] = useState<Record<string, unknown>[]>([])
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
 
   const { active: activeFlightFavorites, archived: archivedFlightFavorites } = useMemo(
@@ -2217,7 +2218,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         return
       }
       // Favoris: vols + deals + activités
-      const [favs, deals, acts] = await Promise.all([
+      const [favs, deals, acts, addresses] = await Promise.all([
         getFavorites(force),
         getApiClient()
           .getLikedDeals()
@@ -2225,10 +2226,15 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         getApiClient()
           .getLikedActivities()
           .catch(() => [] as LikedActivity[]),
+        getApiClient()
+          .listUserAddresses()
+          .then((r) => r.items || [])
+          .catch(() => [] as Record<string, unknown>[]),
       ])
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
       setLikedActivities(Array.isArray(acts) ? acts : [])
+      setUserAddresses(Array.isArray(addresses) ? addresses : [])
       if (opts?.resetFilter) setArchiveOpen(false)
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
@@ -3026,6 +3032,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 ['flights', 'favorites.switch.flights'],
                 ['deals', 'favorites.switch.deals'],
                 ['activities', 'favorites.switch.activities'],
+                ['addresses', 'favorites.switch.addresses'],
               ] as const
             ).map(([id, key]) => (
               <button
@@ -3035,7 +3042,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   setFavoritesKind(id)
                   setArchiveOpen(false)
                 }}
-                className={`flex-1 py-2.5 rounded-xl text-[13px] sm:text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
+                className={`flex-1 py-2.5 rounded-xl text-[12px] sm:text-[14px] font-semibold tracking-tight transition-all min-h-[44px] ${
                   favoritesKind === id
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-700'
@@ -3048,7 +3055,69 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         </div>
         
         <div className="pt-2">
-          {favoritesKind === 'activities' ? (
+          {favoritesKind === 'addresses' ? (
+            userAddresses.length === 0 ? (
+              <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+                <div
+                  aria-hidden
+                  className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent"
+                />
+                <div className="relative">
+                  <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
+                    🍽
+                  </div>
+                  <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
+                    {t('favorites.addressesEmptyTitle')}
+                  </p>
+                  <p className="text-sm text-slate-500 max-w-md mx-auto">
+                    {t('favorites.addressesEmpty')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {userAddresses.map((row) => {
+                  const place = (row.places || {}) as {
+                    name?: string
+                    city_slug?: string
+                    restaurant_details?: { cuisine?: string }
+                  }
+                  const status = String(row.status || 'to_try')
+                  return (
+                    <article
+                      key={String(row.id)}
+                      className="group rounded-3xl border border-line bg-white p-4 shadow-soft transition-shadow hover:shadow-md"
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-11 h-11 rounded-xl bg-orange-50 text-primary-600 flex items-center justify-center shrink-0 text-lg">
+                          🍽
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-extrabold text-ink text-[15px] tracking-tight">
+                            {place.name || 'Adresse'}
+                          </h3>
+                          <p className="text-sm text-muted mt-0.5">
+                            {[place.restaurant_details?.cuisine, place.city_slug]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                          <p className="text-xs font-bold text-primary-700 mt-1.5">
+                            {t(
+                              status === 'loved'
+                                ? 'favorites.addressStatus.loved'
+                                : status === 'meh'
+                                  ? 'favorites.addressStatus.meh'
+                                  : 'favorites.addressStatus.to_try',
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )
+          ) : favoritesKind === 'activities' ? (
             likedActivities.length === 0 ? (
               <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />
