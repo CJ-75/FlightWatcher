@@ -24,6 +24,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
+import { ReviewStars } from './ReviewStars'
 import { colors, fonts, radius, spacing } from '../theme'
 
 type Props = {
@@ -587,11 +588,7 @@ export function HotelComposeDetailSheet({
                       return (
                         <View key={`${r.name || 'avis'}-${r.date || i}`} style={styles.reviewCard}>
                           <View style={styles.reviewTop}>
-                            {r.score != null ? (
-                              <Text style={styles.reviewScore}>
-                                {Number(r.score).toFixed(1)}/10
-                              </Text>
-                            ) : null}
+                            <ReviewStars score={r.score} />
                             {meta ? (
                               <Text style={styles.reviewMeta} numberOfLines={1}>
                                 {meta}
@@ -818,9 +815,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    flexWrap: 'nowrap',
   },
-  reviewScore: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
-  reviewMeta: { flex: 1, fontFamily: fonts.regular, fontSize: 10, color: colors.muted },
+  reviewMeta: {
+    flex: 1,
+    flexShrink: 1,
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: colors.muted,
+  },
   reviewText: {
     marginTop: 8,
     fontFamily: fonts.regular,

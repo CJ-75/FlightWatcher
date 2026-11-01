@@ -33,6 +33,7 @@ import { warmHotelUpsell } from '../lib/partnerBook'
 import { HeartIcon } from '../components/HeartIcon'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
+import { ReviewStars } from '../components/ReviewStars'
 import { toUpsellHotel } from '../lib/hotelUpsell'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -396,21 +397,24 @@ export function DealDetailScreen({ route, navigation }: Props) {
         />
 
         <View style={styles.content}>
-          <Text style={styles.price}>{Math.round(pricePp)} €</Text>
-          <Text style={styles.priceHint}>
-            {deal.price_pax_note
-              ? deal.price_pax_note
-              : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} voyageur${adults > 1 ? 's' : ''}`}
-            {flightPp > 0 || hotelPp > 0
-              ? ` · dont vol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
-              : ''}
-          </Text>
-          {fees > 0 ? (
-            <Text style={styles.tax}>
-              + {Math.round(fees)} € de taxes à régler à l’hôtel
+          <View style={styles.priceBlock}>
+            <Text style={styles.price}>{Math.round(pricePp)} €</Text>
+            <Text style={styles.priceHint}>
+              {deal.price_pax_note
+                ? deal.price_pax_note
+                : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} voyageur${adults > 1 ? 's' : ''}`}
+              {flightPp > 0 || hotelPp > 0
+                ? ` · dont vol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
+                : ''}
             </Text>
-          ) : null}
+            {fees > 0 ? (
+              <Text style={styles.tax}>
+                + {Math.round(fees)} € de taxes à régler à l’hôtel
+              </Text>
+            ) : null}
+          </View>
 
+          <View style={styles.stack}>
           <View style={styles.notice}>
             <TipIcon size={16} />
             <Text style={styles.noticeText}>
@@ -599,11 +603,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
                           style={styles.reviewCard}
                         >
                           <View style={styles.reviewTop}>
-                            {r.score != null ? (
-                              <Text style={styles.reviewScore}>
-                                {Number(r.score).toFixed(1)}/10
-                              </Text>
-                            ) : null}
+                            <ReviewStars score={r.score} />
                             {meta ? (
                               <Text style={styles.reviewMeta} numberOfLines={1}>
                                 {meta}
@@ -640,13 +640,19 @@ export function DealDetailScreen({ route, navigation }: Props) {
           ) : null}
 
           {(deal.why_good?.length || deal.hook) ? (
-            <View style={[styles.infoCard, shadow.soft, { backgroundColor: '#ECFDF5' }]}>
-              <Text style={styles.sectionLabel}>Pourquoi c’est un bon plan</Text>
+            <View style={[styles.whyGoodCard, shadow.soft]}>
+              <Text style={styles.whyGoodTitle}>Pourquoi c’est un bon plan</Text>
               {(deal.why_good?.length ? deal.why_good : deal.hook ? [deal.hook] : []).map(
-                (b) => (
-                  <View key={b} style={styles.highlightRow}>
-                    <Text style={[styles.bullet, { color: colors.success }]}>✓</Text>
-                    <Text style={styles.highlightText}>{b}</Text>
+                (b, i, arr) => (
+                  <View
+                    key={b}
+                    style={[
+                      styles.whyGoodRow,
+                      i < arr.length - 1 && styles.whyGoodRowSpaced,
+                    ]}
+                  >
+                    <Text style={styles.whyGoodCheck}>✓</Text>
+                    <Text style={styles.whyGoodText}>{b}</Text>
                   </View>
                 ),
               )}
@@ -711,6 +717,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
               ))}
             </View>
           ) : null}
+          </View>
 
           <View style={styles.secondaryLinks}>
             <Pressable
@@ -884,9 +891,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  content: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+  },
+  priceBlock: {
+    marginBottom: spacing.xl,
+  },
+  stack: {
+    gap: 20,
+  },
   price: { ...type.price, fontSize: 32 },
-  priceHint: { ...type.caption, marginTop: 2, lineHeight: 16 },
+  priceHint: { ...type.caption, marginTop: 4, lineHeight: 18 },
   baggage: {
     marginTop: 10,
     fontFamily: fonts.medium,
@@ -902,7 +918,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   tax: {
-    marginTop: 6,
+    marginTop: 8,
     fontFamily: fonts.medium,
     fontSize: 12,
     color: '#92400e',
@@ -910,28 +926,64 @@ const styles = StyleSheet.create({
   notice: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.md,
-    padding: 10,
-    marginTop: 12,
-    marginBottom: spacing.lg,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 10,
   },
   noticeText: {
     flex: 1,
     fontFamily: fonts.medium,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
     color: colors.primaryInk,
   },
   infoCard: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
+  },
+  whyGoodCard: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: radius.lg,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#BBF7D0',
+  },
+  whyGoodTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: '#047857',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 14,
+  },
+  whyGoodRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  whyGoodRowSpaced: {
+    marginBottom: 12,
+  },
+  whyGoodCheck: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.success,
+    lineHeight: 22,
+    width: 22,
+    marginRight: 10,
+  },
+  whyGoodText: {
+    flex: 1,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.ink,
+    lineHeight: 22,
   },
   cardSectionLabel: {
     fontFamily: fonts.bold,
@@ -984,17 +1036,14 @@ const styles = StyleSheet.create({
     color: '#047857',
   },
   reviewsBlock: {
-    marginTop: spacing.md,
-    paddingTop: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
+    paddingTop: 4,
   },
   reviewsHead: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   reviewCountHint: {
     fontFamily: fonts.semibold,
@@ -1004,8 +1053,8 @@ const styles = StyleSheet.create({
   reviewCard: {
     backgroundColor: colors.white,
     borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: 8,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
   },
@@ -1014,10 +1063,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    flexWrap: 'nowrap',
   },
-  reviewScore: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   reviewMeta: {
     flex: 1,
+    flexShrink: 1,
     fontFamily: fonts.regular,
     fontSize: 10,
     color: colors.muted,
@@ -1030,7 +1080,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   moreReviews: {
-    marginTop: 4,
+    marginTop: 2,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     borderRadius: radius.md,
@@ -1095,14 +1145,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primaryInk,
   },
-  switchBlock: { marginBottom: spacing.lg },
+  switchBlock: {},
   sectionLabel: {
     fontFamily: fonts.bold,
     fontSize: 12,
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   hotelOption: {
     flexDirection: 'row',
@@ -1113,7 +1163,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radius.md,
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   hotelOptionActive: {
     borderColor: colors.primary,
@@ -1122,8 +1172,8 @@ const styles = StyleSheet.create({
   hotelOptionName: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
   hotelOptionMeta: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
   hotelOptionPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
-  highlights: { marginBottom: spacing.lg },
-  highlightRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  highlights: {},
+  highlightRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   bullet: { fontFamily: fonts.bold, fontSize: 16, color: colors.primary, lineHeight: 22 },
   highlightText: {
     flex: 1,
@@ -1133,6 +1183,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   secondaryLinks: {
+    marginTop: spacing.xl,
     gap: 14,
     paddingBottom: spacing.md,
     alignItems: 'flex-start',

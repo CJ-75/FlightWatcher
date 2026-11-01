@@ -1,5 +1,12 @@
 import type { HotelGuestReview } from '../types'
 
+/** Note /10 → étoiles /5, arrondi au 0,5 le plus proche. */
+export function scoreToHalfStars5(scoreOutOf10?: number | null): number | null {
+  if (scoreOutOf10 == null || Number.isNaN(Number(scoreOutOf10))) return null
+  const n = Math.min(10, Math.max(0, Number(scoreOutOf10)))
+  return Math.round((n / 10) * 5 * 2) / 2
+}
+
 /** Prefer FR-flagged reviews (LiteAPI may mix locales even with language=fr). */
 export function preferFrenchReviews(list: HotelGuestReview[]): HotelGuestReview[] {
   return [...list].sort((a, b) => {

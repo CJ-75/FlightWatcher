@@ -605,11 +605,11 @@ export function DealDetailModal({
               ) : null}
 
               {(deal.why_good?.length || deal.hook) ? (
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3.5">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800/70 mb-2">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 px-5 py-5 sm:px-6 sm:py-6">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800/70 mb-4">
                     {t('deals.whyGood')}
                   </p>
-                  <ul className="space-y-1.5">
+                  <ul className="space-y-4">
                     {(deal.why_good?.length
                       ? deal.why_good
                       : deal.hook
@@ -618,10 +618,12 @@ export function DealDetailModal({
                     ).map((b) => (
                       <li
                         key={b}
-                        className="text-sm text-emerald-950 font-medium flex gap-2 items-start"
+                        className="text-sm text-emerald-950 font-medium flex gap-3 items-start"
                       >
-                        <span className="text-emerald-600 font-black shrink-0">✓</span>
-                        <span className="leading-snug">{b}</span>
+                        <span className="text-emerald-600 font-black shrink-0 w-5 leading-6 pt-0.5">
+                          ✓
+                        </span>
+                        <span className="leading-6">{b}</span>
                       </li>
                     ))}
                   </ul>
