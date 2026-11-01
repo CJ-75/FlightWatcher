@@ -91,6 +91,7 @@ def _loop() -> None:
         "cached-kill-switch": now0 - KILL_SWITCH_EVERY_S + 20 * 60,
         "purge-provider-cache": now0,
         "activity-j7-reminders": now0,
+        "activity-refresh-snapshots": now0,
     }
 
     logger.info(
@@ -190,6 +191,17 @@ def _loop() -> None:
                     return run_activity_j7_reminders(sb)
 
                 _safe_job("activity-j7-reminders", _j7)
+
+            # Activities — weekly city snapshots
+            if now - last.get("activity-refresh-snapshots", 0) >= 7 * 24 * 60 * 60:
+                last["activity-refresh-snapshots"] = now
+
+                def _snapshots():
+                    from activities.snapshots import refresh_city_snapshots
+
+                    return refresh_city_snapshots(sb)
+
+                _safe_job("activity-refresh-snapshots", _snapshots)
         except Exception as e:
             logger.exception("scheduler tick error: %s", e)
 

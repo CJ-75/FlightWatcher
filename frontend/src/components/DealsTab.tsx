@@ -17,6 +17,8 @@ import { DealCard } from './DealCard'
 import { DealDetailModal } from './DealDetailModal'
 import { OriginAlertSignup } from './OriginAlertSignup'
 import { OccasionRail } from './OccasionRail'
+import { ActivitySurfaceBanner } from './ActivitySurfaceBanner'
+import { ACTIVITY_OCCASIONS_CTA_FR } from '@flightwatcher/shared'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
@@ -455,6 +457,16 @@ export function DealsTab() {
         onToggle={toggleOccasion}
         onClear={() => setOccasion(null)}
       />
+
+      {occasion ? (
+        <div className="mb-4">
+          <ActivitySurfaceBanner
+            surface="occasions"
+            title={ACTIVITY_OCCASIONS_CTA_FR}
+            subtitle="Explore les activités Viator liées à ta sélection."
+          />
+        </div>
+      ) : null}
 
       <div
         className={`w-full app-card mb-5 sm:mb-6 ${

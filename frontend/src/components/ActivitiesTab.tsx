@@ -7,11 +7,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_SORT_LABEL_FR,
+  ACTIVITY_TRANSPARENCY_FR,
   activitiesCityPath,
+  savedIdeasTitleFr,
   toActivityCardModel,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
+import { listRememberedTrips } from '../utils/tripRecovery'
 
 function platform(): 'web' {
   return 'web'
@@ -37,6 +40,9 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const [detail, setDetail] = useState<ActivityCardModel | null>(null)
   const [pendingBook, setPendingBook] = useState<ActivityCardModel | null>(null)
   const [askBooked, setAskBooked] = useState(false)
+  const [savedIdeas, setSavedIdeas] = useState<
+    { city: string; title: string; productCode?: string }[]
+  >([])
 
   const cards = useMemo(() => {
     let list = items.map((r) => toActivityCardModel(r, adults))
@@ -75,6 +81,50 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   useEffect(() => {
     if (citySlug) void loadCity(citySlug)
   }, [citySlug, loadCity])
+
+  useEffect(() => {
+    // Idées sauvegardées quand pas de voyage actif / listing ville vide
+    const remembered = listRememberedTrips()
+    if (!remembered.length) {
+      setSavedIdeas([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const out: { city: string; title: string; productCode?: string }[] = []
+      for (const trip of remembered.slice(0, 3)) {
+        try {
+          const res = await getApiClient().listTripItems({
+            draft_token: trip.draft_token,
+          })
+          const city = trip.city || 'voyage'
+          for (const raw of res.items || []) {
+            const it = raw as {
+              item_type?: string
+              status?: string
+              places?: { name?: string }
+              meta?: { title?: string; product_code?: string }
+            }
+            if (it.item_type && it.item_type !== 'activity') continue
+            if (it.status === 'skipped' || it.status === 'booked') continue
+            out.push({
+              city,
+              title: String(it.places?.name || it.meta?.title || 'Activité'),
+              productCode: it.meta?.product_code
+                ? String(it.meta.product_code)
+                : undefined,
+            })
+          }
+        } catch {
+          /* draft may be expired */
+        }
+      }
+      if (!cancelled) setSavedIdeas(out.slice(0, 12))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const onVis = () => {
@@ -214,6 +264,25 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {loading ? <p className="text-sm text-slate-500">Chargement…</p> : null}
 
+      {!citySlug && savedIdeas.length ? (
+        <section className="space-y-2">
+          <h3 className="font-bold text-slate-900 text-sm">
+            {savedIdeasTitleFr(savedIdeas[0]?.city || 'tes voyages')}
+          </h3>
+          <ul className="space-y-1.5">
+            {savedIdeas.map((s, i) => (
+              <li
+                key={`${s.productCode || s.title}-${i}`}
+                className="text-sm text-slate-700 rounded-xl border border-slate-100 px-3 py-2"
+              >
+                {s.title}
+                <span className="text-xs text-slate-400"> · {s.city}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {cards.map((c) => (
           <article
@@ -263,11 +332,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         ))}
       </div>
 
-      <p className="text-xs text-slate-400 leading-relaxed">
-        Classement FlightWatcher (note bayésienne, annulation, durée) — indépendant du tri commercial
-        Viator. En cliquant sur « Réserver sur Viator », tu quittes FlightWatcher ; une commission peut
-        être versée si tu réserves.
-      </p>
+      <p className="text-xs text-slate-400 leading-relaxed">{ACTIVITY_TRANSPARENCY_FR}</p>
 
       {detail ? (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4">

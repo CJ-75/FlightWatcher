@@ -21,6 +21,7 @@ import {
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_NEARBY_LABEL_FR,
   ACTIVITY_SORT_LABEL_FR,
+  ACTIVITY_TRANSPARENCY_FR,
   toActivityCardModel,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
@@ -249,6 +250,11 @@ export function ActivitiesScreen() {
           !loading ? (
             <Text style={styles.meta}>Choisis une ville ou Autour de moi.</Text>
           ) : null
+        }
+        ListFooterComponent={
+          <Text style={[styles.meta, { marginTop: 8, lineHeight: 18 }]}>
+            {ACTIVITY_TRANSPARENCY_FR}
+          </Text>
         }
       />
 

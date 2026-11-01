@@ -15,9 +15,11 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  ACTIVITY_TRANSFER_CTA_FR,
   activityStepProgress,
   boardLabelFr,
   buildStayPipeline,
+  distantAirportLine,
   hotelCancelLabel,
   hotelStarsLabel,
   resolveCarrierBooking,
@@ -30,6 +32,7 @@ import {
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
+import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -760,6 +763,15 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         </View>
+
+        {plannerActivitiesEnabled && distantAirportLine(destIata, city) ? (
+          <ActivitySurfaceBanner
+            surface="transfer"
+            citySlug={String(pl.city_slug || city || '').toLowerCase() || null}
+            title={ACTIVITY_TRANSFER_CTA_FR}
+            subtitle={distantAirportLine(destIata, city) || undefined}
+          />
+        ) : null}
 
         {plannerActivitiesEnabled ? (
           <View style={[styles.card, shadow.soft]}>

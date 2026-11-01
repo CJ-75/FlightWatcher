@@ -621,10 +621,20 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'PATCH', body: JSON.stringify(body) },
       ),
 
-    reorderTripItems: (items: Record<string, unknown>[]) =>
+    reorderTripItems: (
+      items: Record<string, unknown>[],
+      owner?: { draft_token?: string; planned_trip_id?: string },
+    ) =>
       request<{ ok: boolean; updated: number }>(
         '/api/activities/trip-items/reorder',
-        { method: 'POST', body: JSON.stringify({ items }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            items,
+            draft_token: owner?.draft_token,
+            planned_trip_id: owner?.planned_trip_id,
+          }),
+        },
       ),
 
     transferTripItems: (body: {

@@ -165,6 +165,7 @@ export interface ApiConfig {
   planner_activities_enabled?: boolean
   planner_restaurants_enabled?: boolean
   itineraries_enabled?: boolean
+  /** Admin-only via /api/admin/activities/migrations — not on public /api/config */
   migrations_ok?: boolean | null
 }
 

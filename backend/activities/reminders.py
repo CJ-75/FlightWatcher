@@ -74,6 +74,26 @@ def run_activity_j7_reminders(supabase: Any = None) -> Dict[str, Any]:
         if not pending:
             summary["skipped"] += 1
             continue
+        # Dédup : déjà rappelé pour ce voyage dans les 6 derniers jours
+        try:
+            since = (datetime.now(timezone.utc) - timedelta(days=6)).isoformat()
+            prev = (
+                sb.table("events")
+                .select("id")
+                .eq("domain", "activity")
+                .eq("event", "j7_reminder")
+                .eq("planned_trip_id", tid)
+                .gte("created_at", since)
+                .limit(1)
+                .execute()
+            )
+            if prev.data:
+                summary["skipped"] += 1
+                summary.setdefault("deduped", 0)
+                summary["deduped"] = int(summary["deduped"]) + 1
+                continue
+        except Exception:
+            pass
         summary["candidates"] += 1
         name = trip.get("name") or "ton voyage"
         subject = f"J-7 · activités pour {name}"

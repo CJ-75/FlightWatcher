@@ -48,3 +48,17 @@ export const ACTIVITIES_PATH = '/activites'
 export function activitiesCityPath(citySlug: string): string {
   return `/activites/${encodeURIComponent(citySlug)}`
 }
+
+export function savedIdeasTitleFr(city: string): string {
+  return `Idées sauvegardées · ${city}`
+}
+
+/** Transparence classement + affiliation (onglet Activités). */
+export const ACTIVITY_TRANSPARENCY_FR =
+  'Classement FlightWatcher (note bayésienne, annulation gratuite, durée) — indépendant du tri commercial Viator. En cliquant sur « Réserver sur Viator », tu quittes FlightWatcher ; une commission peut être versée si tu réserves.'
+
+export const ACTIVITY_TRANSFER_CTA_FR =
+  'Aéroport loin du centre ? Compare les transferts et navettes Viator.'
+
+export const ACTIVITY_OCCASIONS_CTA_FR =
+  'Complète ton occasion avec des activités sur place.'

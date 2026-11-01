@@ -1,4 +1,4 @@
-"""Activities / Viator / trip_items / itineraries API — Lots A–G."""
+"""Activities / Viator / trip_items / itineraries API — Lots A–H (+ hardening)."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from admin_auth import require_admin
 from deals.cron_auth import require_cron
 
 router = APIRouter(tags=["activities"])
@@ -17,14 +18,13 @@ def _svc():
     return get_supabase_service_client() or get_supabase_client()
 
 
-def _user_id(request: Request) -> Optional[str]:
-    # Optional auth — many endpoints work as guest via draft_token
-    try:
-        from routes.planner import _require_user  # type: ignore
-
-        return None
-    except Exception:
-        return None
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for") or ""
+    if forwarded:
+        return forwarded.split(",")[0].strip() or "unknown"
+    if request.client:
+        return request.client.host or "unknown"
+    return "unknown"
 
 
 class EventBody(BaseModel):
@@ -64,10 +64,13 @@ class PatchItemBody(BaseModel):
     sort_key: Optional[str] = None
     day_offset: Optional[int] = None
     moment: Optional[str] = None
+    draft_token: Optional[str] = None
 
 
 class ReorderBody(BaseModel):
-    items: List[Dict[str, Any]]  # [{id, sort_key, day_offset?}]
+    items: List[Dict[str, Any]]
+    draft_token: Optional[str] = None
+    planned_trip_id: Optional[str] = None
 
 
 class TransferBody(BaseModel):
@@ -88,23 +91,12 @@ class ApplyItineraryBody(BaseModel):
     planned_trip_id: Optional[str] = None
 
 
-def _draft_id_from_token(supabase, token: Optional[str]) -> Optional[str]:
-    if not token:
-        return None
-    from deals.my_trips import get_draft
-
-    row = get_draft(supabase, token)
-    return str(row["id"]) if row and row.get("id") else None
-
-
 @router.get("/api/activities/config")
 async def activities_public_config():
     from activities.config import activities_config_public_dict
-    from activities.migrations_check import get_migrations_status
 
-    d = activities_config_public_dict()
-    d["migrations_ok"] = get_migrations_status().get("ok")
-    return d
+    # migrations_ok intentionally omitted — admin-only
+    return activities_config_public_dict()
 
 
 @router.get("/api/activities/cities/{city_slug}")
@@ -117,9 +109,6 @@ async def list_city_activities(
     from activities.service import search_city_activities
 
     cfg = load_activities_config()
-    if not cfg.ui_enabled and not cfg.viator_api_key:
-        # Allow API when key present even if UI off (admin/debug)
-        pass
     return search_city_activities(
         _svc(),
         city_slug=city_slug,
@@ -133,7 +122,6 @@ async def list_city_activities(
 async def activities_nearby(body: NearbyBody):
     from activities.service import nearby_activities
 
-    # Round on server too
     lat = round(float(body.lat), 2)
     lng = round(float(body.lng), 2)
     return nearby_activities(_svc(), lat=lat, lng=lng, adults=body.adults)
@@ -173,11 +161,28 @@ async def activity_product_detail(product_code: str):
 
 
 @router.post("/api/activities/events")
-async def post_activity_event(body: EventBody):
+async def post_activity_event(body: EventBody, request: Request):
+    from activities.access import draft_id_from_token
+    from activities.event_limits import check_ip_rate_limit, validate_event_fields
     from activities.events import record_event
 
+    err = validate_event_fields(
+        domain=body.domain,
+        event=body.event,
+        surface=body.surface,
+        platform=body.platform,
+    )
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    if not check_ip_rate_limit(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="rate_limited")
+
     sb = _svc()
-    draft_id = _draft_id_from_token(sb, body.draft_token)
+    draft_id = draft_id_from_token(sb, body.draft_token)
+    # Strip oversized meta
+    meta = body.meta if isinstance(body.meta, dict) else None
+    if meta and len(str(meta)) > 2000:
+        meta = {"truncated": True}
     return record_event(
         sb,
         domain=body.domain,
@@ -188,34 +193,43 @@ async def post_activity_event(body: EventBody):
         trip_item_id=body.trip_item_id,
         draft_id=draft_id,
         planned_trip_id=body.planned_trip_id,
-        meta=body.meta,
+        meta=meta,
     )
 
 
 @router.get("/api/activities/trip-items")
 async def get_trip_items(
+    request: Request,
     draft_token: Optional[str] = None,
     planned_trip_id: Optional[str] = None,
 ):
+    from activities.access import resolve_owner_for_write
     from activities.trip_items import list_trip_items
 
     sb = _svc()
-    draft_id = _draft_id_from_token(sb, draft_token)
-    if not draft_id and not planned_trip_id:
-        raise HTTPException(status_code=400, detail="draft_token or planned_trip_id required")
-    return {"ok": True, "items": list_trip_items(sb, draft_id=draft_id, planned_trip_id=planned_trip_id)}
+    draft_id, planned = resolve_owner_for_write(
+        sb, request, draft_token=draft_token, planned_trip_id=planned_trip_id
+    )
+    return {
+        "ok": True,
+        "items": list_trip_items(sb, draft_id=draft_id, planned_trip_id=planned),
+    }
 
 
 @router.post("/api/activities/trip-items")
-async def create_trip_item(body: AddItemBody):
+async def create_trip_item(body: AddItemBody, request: Request):
+    from activities.access import resolve_owner_for_write
     from activities.events import record_event
     from activities.places import upsert_place_with_ref
     from activities.trip_items import add_activity_item
 
     sb = _svc()
-    draft_id = _draft_id_from_token(sb, body.draft_token)
-    if (draft_id is None) == (body.planned_trip_id is None):
-        raise HTTPException(status_code=400, detail="exactly_one_owner")
+    draft_id, planned = resolve_owner_for_write(
+        sb,
+        request,
+        draft_token=body.draft_token,
+        planned_trip_id=body.planned_trip_id,
+    )
     place_id = body.place_id
     if not place_id and body.product_code:
         place = upsert_place_with_ref(
@@ -234,7 +248,7 @@ async def create_trip_item(body: AddItemBody):
         sb,
         place_id=place_id,
         draft_id=draft_id,
-        planned_trip_id=body.planned_trip_id,
+        planned_trip_id=planned,
         day_offset=body.day_offset,
         moment=body.moment,
         meta={"product_code": body.product_code, "product_url": body.product_url},
@@ -250,17 +264,23 @@ async def create_trip_item(body: AddItemBody):
         place_id=place_id,
         trip_item_id=item.get("id"),
         draft_id=draft_id,
-        planned_trip_id=body.planned_trip_id,
+        planned_trip_id=planned,
     )
     return {"ok": True, "item": item}
 
 
 @router.patch("/api/activities/trip-items/{item_id}")
-async def patch_trip_item(item_id: str, body: PatchItemBody):
+async def patch_trip_item(item_id: str, body: PatchItemBody, request: Request):
+    from activities.access import assert_can_mutate_item, get_trip_item
     from activities.trip_items import update_item_status
 
+    sb = _svc()
+    item = get_trip_item(sb, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="not_found")
+    assert_can_mutate_item(sb, request, item, draft_token=body.draft_token)
     row = update_item_status(
-        _svc(),
+        sb,
         item_id,
         status=body.status,
         availability_state=body.availability_state,
@@ -274,15 +294,32 @@ async def patch_trip_item(item_id: str, body: PatchItemBody):
 
 
 @router.post("/api/activities/trip-items/reorder")
-async def reorder_trip_items(body: ReorderBody):
+async def reorder_trip_items(body: ReorderBody, request: Request):
+    from activities.access import assert_can_mutate_item, get_trip_item, resolve_owner_for_write
     from activities.trip_items import update_item_status
 
     sb = _svc()
+    # Establish owner scope first
+    draft_id, planned = resolve_owner_for_write(
+        sb,
+        request,
+        draft_token=body.draft_token,
+        planned_trip_id=body.planned_trip_id,
+    )
     updated = 0
     for it in body.items or []:
         iid = it.get("id")
         if not iid:
             continue
+        row = get_trip_item(sb, str(iid))
+        if not row:
+            continue
+        # Must belong to the same owner
+        if draft_id and str(row.get("draft_id") or "") != draft_id:
+            raise HTTPException(status_code=403, detail="item_owner_mismatch")
+        if planned and str(row.get("planned_trip_id") or "") != planned:
+            raise HTTPException(status_code=403, detail="item_owner_mismatch")
+        assert_can_mutate_item(sb, request, row, draft_token=body.draft_token)
         if update_item_status(
             sb,
             str(iid),
@@ -295,51 +332,65 @@ async def reorder_trip_items(body: ReorderBody):
 
 
 @router.post("/api/activities/trip-items/transfer")
-async def transfer_items(body: TransferBody):
+async def transfer_items(body: TransferBody, request: Request):
+    from activities.access import require_draft_token, require_planned_trip_member
     from activities.trip_items import transfer_trip_items_draft_to_planned
 
     sb = _svc()
-    draft_id = _draft_id_from_token(sb, body.draft_token)
-    if not draft_id:
-        raise HTTPException(status_code=404, detail="draft_not_found")
+    draft_id = require_draft_token(sb, body.draft_token)
+    require_planned_trip_member(sb, request, body.planned_trip_id)
     return transfer_trip_items_draft_to_planned(
         sb, draft_id=draft_id, planned_trip_id=body.planned_trip_id
     )
 
 
 @router.post("/api/activities/itineraries")
-async def create_itinerary(body: CreateItineraryBody):
+async def create_itinerary(body: CreateItineraryBody, request: Request):
+    from activities.access import resolve_owner_for_write, user_id_from_request
     from activities.config import load_activities_config
     from activities.itineraries import create_itinerary_from_trip
 
     if not load_activities_config().itineraries_enabled:
         raise HTTPException(status_code=404, detail="itineraries_disabled")
     sb = _svc()
-    draft_id = _draft_id_from_token(sb, body.draft_token)
+    draft_id, planned = resolve_owner_for_write(
+        sb,
+        request,
+        draft_token=body.draft_token,
+        planned_trip_id=body.planned_trip_id,
+    )
     return create_itinerary_from_trip(
         sb,
         draft_id=draft_id,
-        planned_trip_id=body.planned_trip_id,
+        planned_trip_id=planned,
         title=body.title,
         city_slug=body.city_slug,
         visibility=body.visibility,
+        owner_user_id=user_id_from_request(request),
     )
 
 
 @router.post("/api/activities/itineraries/{itinerary_id}/apply")
-async def apply_itinerary(itinerary_id: str, body: ApplyItineraryBody):
+async def apply_itinerary(itinerary_id: str, body: ApplyItineraryBody, request: Request):
+    from activities.access import resolve_owner_for_write, user_id_from_request
     from activities.config import load_activities_config
     from activities.itineraries import apply_itinerary_to_trip
 
     if not load_activities_config().itineraries_enabled:
         raise HTTPException(status_code=404, detail="itineraries_disabled")
     sb = _svc()
-    draft_id = _draft_id_from_token(sb, body.draft_token)
+    draft_id, planned = resolve_owner_for_write(
+        sb,
+        request,
+        draft_token=body.draft_token,
+        planned_trip_id=body.planned_trip_id,
+    )
     return apply_itinerary_to_trip(
         sb,
         itinerary_id,
         draft_id=draft_id,
-        planned_trip_id=body.planned_trip_id,
+        planned_trip_id=planned,
+        user_id=user_id_from_request(request),
     )
 
 
@@ -363,7 +414,7 @@ async def get_itinerary(itinerary_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# —— Cron / admin jobs ——
+# —— Cron jobs (Bearer CRON_SECRET) ——
 
 @router.post("/api/activities/jobs/purge-cache")
 async def job_purge_cache(authorization: Optional[str] = Header(None)):
@@ -389,20 +440,41 @@ async def job_sandbox_check(authorization: Optional[str] = Header(None)):
     return run_sandbox_check()
 
 
+@router.post("/api/activities/jobs/refresh-snapshots")
+async def job_refresh_snapshots(authorization: Optional[str] = Header(None)):
+    """Weekly (or configured) city snapshot refresh — requires CRON_SECRET."""
+    require_cron(authorization)
+    from activities.snapshots import refresh_city_snapshots
+
+    return refresh_city_snapshots(_svc())
+
+
+@router.post("/api/activities/jobs/j7-reminders")
+async def job_j7_reminders(authorization: Optional[str] = Header(None)):
+    require_cron(authorization)
+    from activities.reminders import run_activity_j7_reminders
+
+    return run_activity_j7_reminders(_svc())
+
+
+# —— Admin (require_admin) ——
+
 @router.get("/api/admin/activities/migrations")
-async def admin_migrations_status():
+@require_admin
+async def admin_migrations_status(request: Request):
     from activities.migrations_check import get_migrations_status
 
     return get_migrations_status()
 
 
 @router.get("/api/admin/activities/events")
+@require_admin
 async def admin_activity_events(
+    request: Request,
     platform: Optional[str] = None,
     domain: str = "activity",
     limit: int = Query(200, ge=1, le=1000),
 ):
-    """Funnel aggregate by event / platform / surface (Lot H)."""
     sb = _svc()
     if not sb:
         raise HTTPException(status_code=503, detail="no_supabase")
@@ -433,11 +505,3 @@ async def admin_activity_events(
         counts[key]["n"] += 1
     funnel = sorted(counts.values(), key=lambda x: -int(x["n"]))
     return {"ok": True, "funnel": funnel, "raw_count": len(rows)}
-
-
-@router.post("/api/activities/jobs/j7-reminders")
-async def job_j7_reminders(authorization: Optional[str] = Header(None)):
-    require_cron(authorization)
-    from activities.reminders import run_activity_j7_reminders
-
-    return run_activity_j7_reminders(_svc())

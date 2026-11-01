@@ -18,21 +18,17 @@ export function ActivitiesAdminPage() {
     void (async () => {
       try {
         const api = getApiClient()
-        const m = await fetch(
-          `${(import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL || ''}/api/admin/activities/migrations`.replace(
-            /^\/\//,
-            '/',
-          ),
-        )
-        // Prefer shared client path if available
         const cfg = await api.getConfig()
+        const migRes = await fetch('/api/admin/activities/migrations', {
+          credentials: 'include',
+        })
+        const migBody = migRes.ok ? await migRes.json() : {}
         setMigrations({
-          migrations_ok: cfg.migrations_ok,
+          ...migBody,
           activities_ui_enabled: cfg.activities_ui_enabled,
           planner_activities_enabled: cfg.planner_activities_enabled,
           itineraries_enabled: cfg.itineraries_enabled,
         })
-        void m
         const q = platform ? `?platform=${encodeURIComponent(platform)}` : ''
         const res = await fetch(`/api/admin/activities/events${q}`, {
           credentials: 'include',
@@ -47,10 +43,20 @@ export function ActivitiesAdminPage() {
     })()
   }, [platform])
 
+  const migrationsOk = migrations?.ok ?? migrations?.migrations_ok
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-white">Activités / mesure</h1>
       {error ? <p className="text-red-400 text-sm">{error}</p> : null}
+
+      {migrationsOk === false ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Migrations activités manquantes — appliquer{' '}
+          <code className="text-amber-50">apply_activities_lot_a_migration.sql</code>{' '}
+          manuellement (pas de db push).
+        </div>
+      ) : null}
 
       <section className="rounded-xl bg-[#232736] p-4 space-y-2">
         <h2 className="font-semibold text-gray-200">Flags & migrations</h2>

@@ -102,7 +102,10 @@ export function ActivityStepPanel(props: {
   }
 
   const patch = async (id: string, body: Record<string, unknown>) => {
-    await getApi().patchTripItem(id, body)
+    await getApi().patchTripItem(id, {
+      ...body,
+      draft_token: draftToken || undefined,
+    })
     await load()
   }
 
@@ -112,7 +115,10 @@ export function ActivityStepPanel(props: {
       from,
       to,
     )
-    await getApi().reorderTripItems(keys)
+    await getApi().reorderTripItems(keys, {
+      draft_token: draftToken || undefined,
+      planned_trip_id: plannedTripId || undefined,
+    })
     await load()
   }
 

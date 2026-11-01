@@ -183,13 +183,11 @@ def get_config():
         payload["deals_provider"] = (os.getenv("DEALS_PROVIDER") or "mock").strip().lower()
     try:
         from activities.config import activities_config_public_dict
-        from activities.migrations_check import get_migrations_status
 
+        # migrations_ok is admin-only (/api/admin/activities/migrations)
         payload.update(activities_config_public_dict())
-        payload["migrations_ok"] = get_migrations_status().get("ok")
     except Exception:
         payload.setdefault("activities_ui_enabled", False)
-        payload.setdefault("migrations_ok", None)
     return payload
 
 

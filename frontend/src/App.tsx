@@ -150,7 +150,6 @@ function Dashboard() {
   const [dealsUiEnabled, setDealsUiEnabled] = useState(true)
   const [alertsUiEnabled, setAlertsUiEnabled] = useState(false)
   const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(false)
-  const [migrationsOk, setMigrationsOk] = useState<boolean | null>(null)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
@@ -469,7 +468,6 @@ function Dashboard() {
       const activitiesOn = cfg.activities_ui_enabled === true
       setActivitiesUiEnabled(activitiesOn)
       if (!activitiesOn && activeTab === 'activities') setActiveTab('search')
-      if (typeof cfg.migrations_ok === 'boolean') setMigrationsOk(cfg.migrations_ok)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
   }, [])
@@ -1106,13 +1104,6 @@ function Dashboard() {
               <UserMenu />
             </div>
           </header>
-
-          {migrationsOk === false ? (
-            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-              Migrations activités manquantes — appliquer{' '}
-              <code>apply_activities_lot_a_migration.sql</code> manuellement (pas de db push).
-            </div>
-          ) : null}
 
           {/* Onglets : barre bas mobile, pill centrée desktop */}
           <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">

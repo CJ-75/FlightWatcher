@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
+  ACTIVITY_TRANSFER_CTA_FR,
   activityStepProgress,
   airportDisplayNameFr,
   buildStayPipeline,
@@ -15,6 +16,7 @@ import {
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
+import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentSession } from '../lib/supabase'
 import { rememberTrip } from '../utils/tripRecovery'
@@ -1339,6 +1341,23 @@ export default function MyTrip() {
                       <p className="text-xs text-slate-500">{distanceLine}</p>
                     ) : null}
                   </div>
+
+                  {distanceLine && plannerActivitiesEnabled ? (
+                    <div className="mt-3">
+                      <ActivitySurfaceBanner
+                        surface="transfer"
+                        citySlug={
+                          typeof payload.city_slug === 'string'
+                            ? payload.city_slug
+                            : city
+                              ? String(city).toLowerCase()
+                              : null
+                        }
+                        title={ACTIVITY_TRANSFER_CTA_FR}
+                        subtitle={distanceLine}
+                      />
+                    </div>
+                  ) : null}
 
                   <a
                     href={flightUrl}

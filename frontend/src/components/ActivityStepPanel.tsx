@@ -118,7 +118,10 @@ export function ActivityStepPanel(props: {
   }
 
   const patch = async (id: string, body: Record<string, unknown>) => {
-    await getApiClient().patchTripItem(id, body)
+    await getApiClient().patchTripItem(id, {
+      ...body,
+      draft_token: draftToken || undefined,
+    })
     await load()
   }
 
@@ -177,7 +180,10 @@ export function ActivityStepPanel(props: {
     const keys = reorderKeysMoving(ids, from, to)
     setDragId(null)
     try {
-      await getApiClient().reorderTripItems(keys)
+      await getApiClient().reorderTripItems(keys, {
+        draft_token: draftToken || undefined,
+        planned_trip_id: plannedTripId || undefined,
+      })
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Réordonnancement impossible')

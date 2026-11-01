@@ -112,9 +112,18 @@
 
 ---
 
+## Hardening sécurité (post-review)
+- Jobs cron : `require_cron` (Bearer `CRON_SECRET`) — dont `refresh-snapshots` + `j7-reminders`
+- Admin `/api/admin/activities/*` : `@require_admin`
+- trip_items mutate : `draft_token` obligatoire si draft ; membre planned_trip sinon
+- Events : allowlist domain/event/surface/platform + rate-limit IP
+- `migrations_ok` : admin only (bandeau `/admin/activities`, plus dans `/api/config` public)
+- J-7 : dédup 6 jours via table `events`
+- Snapshot hebdo grandes villes : job + scheduler 7j
+
 ## Lot H — Mesure + tests
 ### Fait
-- Admin `/admin/activities` funnel + platform filter ; events.platform web/ios/android ; tests unitaires lot A/B.
+- Admin `/admin/activities` funnel + platform filter ; events.platform web/ios/android ; tests A/B + security/access
 
 ### Comment tester — Web
 - Admin Activités ; filtrer platform ; checklist lots ci-dessus.
