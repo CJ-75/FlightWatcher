@@ -561,6 +561,98 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify({}) },
       ),
 
+    listCityActivities: (citySlug: string, adults = 2) =>
+      request<{
+        ok: boolean
+        items: Record<string, unknown>[]
+        city_slug?: string
+        cached?: boolean
+        error?: string
+      }>(
+        `/api/activities/cities/${encodeURIComponent(citySlug)}?adults=${adults}`,
+      ),
+
+    nearbyActivities: (body: { lat: number; lng: number; adults?: number }) =>
+      request<{
+        ok: boolean
+        items: Record<string, unknown>[]
+        header?: string
+        radius_km?: number
+        count?: number
+        fallback_hint?: string
+        error?: string
+      }>('/api/activities/nearby', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    getActivityProduct: (productCode: string) =>
+      request<{ ok: boolean; product: Record<string, unknown>; cached?: boolean }>(
+        `/api/activities/products/${encodeURIComponent(productCode)}`,
+      ),
+
+    trackActivityEvent: (body: Record<string, unknown>) =>
+      request<{ ok: boolean }>('/api/activities/events', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    listTripItems: (opts: {
+      draft_token?: string
+      planned_trip_id?: string
+    }) => {
+      const q = new URLSearchParams()
+      if (opts.draft_token) q.set('draft_token', opts.draft_token)
+      if (opts.planned_trip_id) q.set('planned_trip_id', opts.planned_trip_id)
+      return request<{ ok: boolean; items: Record<string, unknown>[] }>(
+        `/api/activities/trip-items?${q.toString()}`,
+      )
+    },
+
+    addTripItem: (body: Record<string, unknown>) =>
+      request<{ ok: boolean; item: Record<string, unknown> }>(
+        '/api/activities/trip-items',
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    patchTripItem: (itemId: string, body: Record<string, unknown>) =>
+      request<{ ok: boolean; item: Record<string, unknown> }>(
+        `/api/activities/trip-items/${encodeURIComponent(itemId)}`,
+        { method: 'PATCH', body: JSON.stringify(body) },
+      ),
+
+    reorderTripItems: (items: Record<string, unknown>[]) =>
+      request<{ ok: boolean; updated: number }>(
+        '/api/activities/trip-items/reorder',
+        { method: 'POST', body: JSON.stringify({ items }) },
+      ),
+
+    transferTripItems: (body: {
+      draft_token: string
+      planned_trip_id: string
+    }) =>
+      request<{ ok: boolean; moved?: number }>(
+        '/api/activities/trip-items/transfer',
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    createItinerary: (body: Record<string, unknown>) =>
+      request<{ ok: boolean; itinerary?: Record<string, unknown>; error?: string }>(
+        '/api/activities/itineraries',
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    applyItinerary: (itineraryId: string, body: Record<string, unknown>) =>
+      request<{ ok: boolean; created?: number }>(
+        `/api/activities/itineraries/${encodeURIComponent(itineraryId)}/apply`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    getItinerary: (itineraryId: string) =>
+      request<{ ok: boolean; itinerary: Record<string, unknown> }>(
+        `/api/activities/itineraries/${encodeURIComponent(itineraryId)}`,
+      ),
+
     prebookHotel: (body: HotelBookingPrebookRequest) =>
       request<HotelBookingPrebookResponse>('/api/hotel-bookings/prebook', {
         method: 'POST',

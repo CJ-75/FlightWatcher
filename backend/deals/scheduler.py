@@ -89,6 +89,8 @@ def _loop() -> None:
         "seed-scan": now0,  # wait full SEED_SCAN_EVERY_S
         "build-seed-catalog": now0,
         "cached-kill-switch": now0 - KILL_SWITCH_EVERY_S + 20 * 60,
+        "purge-provider-cache": now0,
+        "activity-j7-reminders": now0,
     }
 
     logger.info(
@@ -166,6 +168,28 @@ def _loop() -> None:
                     "cached-kill-switch",
                     lambda: run_cached_kill_switch(sb, cfg=cfg),
                 )
+
+            # Activities Lot A — purge expired provider_cache (~6h)
+            if now - last.get("purge-provider-cache", 0) >= 6 * 60 * 60:
+                last["purge-provider-cache"] = now
+
+                def _purge_cache():
+                    from activities.cache import purge_expired
+
+                    return purge_expired(sb)
+
+                _safe_job("purge-provider-cache", _purge_cache)
+
+            # Activities Lot F — J-7 email + Expo push (~daily)
+            if now - last.get("activity-j7-reminders", 0) >= 24 * 60 * 60:
+                last["activity-j7-reminders"] = now
+
+                def _j7():
+                    from activities.reminders import run_activity_j7_reminders
+
+                    return run_activity_j7_reminders(sb)
+
+                _safe_job("activity-j7-reminders", _j7)
         except Exception as e:
             logger.exception("scheduler tick error: %s", e)
 

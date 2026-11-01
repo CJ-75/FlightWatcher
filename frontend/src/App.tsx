@@ -22,6 +22,7 @@ import { SiteFooter } from './components/SiteFooter'
 import { DealCard } from './components/DealCard'
 import { DealDetailModal } from './components/DealDetailModal'
 import { PlannerTab } from './components/PlannerTab'
+import { ActivitiesTab } from './components/ActivitiesTab'
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { AlertsGuestLanding } from './components/AlertsGuestLanding'
 import { PassengerStepper } from './components/PassengerStepper'
@@ -61,13 +62,14 @@ import {
 } from '@flightwatcher/shared'
 import { CityAirportSelect } from './components/CityAirportSelect'
 
-type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'saved'
+type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'activities' | 'saved'
 
 const TAB_PATH: Record<Tab, string> = {
   search: '/vols',
   deals: '/sejours',
   planner: '/planner',
   alerts: '/alertes',
+  activities: '/activites',
   saved: '/favoris',
 }
 
@@ -77,6 +79,7 @@ function tabFromPath(pathname: string): Tab | null {
   if (p === '/sejours' || p === '/deals') return 'deals'
   if (p === '/planner') return 'planner'
   if (p === '/alertes' || p === '/alerts') return 'alerts'
+  if (p === '/activites' || p.startsWith('/activites/')) return 'activities'
   if (p === '/favoris' || p === '/saved') return 'saved'
   return null
 }
@@ -146,6 +149,8 @@ function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [dealsUiEnabled, setDealsUiEnabled] = useState(true)
   const [alertsUiEnabled, setAlertsUiEnabled] = useState(false)
+  const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(false)
+  const [migrationsOk, setMigrationsOk] = useState<boolean | null>(null)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
@@ -461,6 +466,10 @@ function Dashboard() {
       const alertsOn = cfg.alerts_ui_enabled === true
       setAlertsUiEnabled(alertsOn)
       if (!alertsOn && activeTab === 'alerts') setActiveTab('search')
+      const activitiesOn = cfg.activities_ui_enabled === true
+      setActivitiesUiEnabled(activitiesOn)
+      if (!activitiesOn && activeTab === 'activities') setActiveTab('search')
+      if (typeof cfg.migrations_ok === 'boolean') setMigrationsOk(cfg.migrations_ok)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
   }, [])
@@ -474,6 +483,15 @@ function Dashboard() {
       if (activeTab === 'alerts') setActiveTabState('search')
     }
   }, [activeTab, alertsUiEnabled, location.pathname, navigate])
+
+  useEffect(() => {
+    if (activitiesUiEnabled) return
+    const p = location.pathname.replace(/\/+$/, '') || '/'
+    if (p === '/activites' || p.startsWith('/activites/')) {
+      navigate('/vols', { replace: true })
+      if (activeTab === 'activities') setActiveTabState('search')
+    }
+  }, [activeTab, activitiesUiEnabled, location.pathname, navigate])
 
   // Lot F — deep link hôtel depuis Mon voyage
   useEffect(() => {
@@ -1089,6 +1107,13 @@ function Dashboard() {
             </div>
           </header>
 
+          {migrationsOk === false ? (
+            <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              Migrations activités manquantes — appliquer{' '}
+              <code>apply_activities_lot_a_migration.sql</code> manuellement (pas de db push).
+            </div>
+          ) : null}
+
           {/* Onglets : barre bas mobile, pill centrée desktop */}
           <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
             <div className="app-tabbar w-full max-w-lg sm:max-w-2xl">
@@ -1097,6 +1122,9 @@ function Dashboard() {
                   { id: 'search' as const, label: t('nav.search') },
                   ...(dealsUiEnabled
                     ? [{ id: 'deals' as const, label: t('nav.deals') }]
+                    : []),
+                  ...(activitiesUiEnabled
+                    ? [{ id: 'activities' as const, label: 'Activités' }]
                     : []),
                   { id: 'planner' as const, label: t('nav.planner') },
                   ...(alertsUiEnabled
@@ -1141,6 +1169,10 @@ function Dashboard() {
         ) : null}
         {activeTab === 'deals' ? null : activeTab === 'planner' ? (
           <PlannerTab />
+        ) : activeTab === 'activities' && activitiesUiEnabled ? (
+          <div className="app-col pt-5 sm:pt-8 pb-24">
+            <ActivitiesTab />
+          </div>
         ) : activeTab === 'search' ? (
           <>
             <div className="app-col pt-5 sm:pt-8">

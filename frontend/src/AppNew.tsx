@@ -27,6 +27,8 @@ import { SettingsPage } from './admin/pages/SettingsPage'
 import { TestsPage } from './admin/pages/TestsPage'
 import { DealsMetricsPage } from './admin/pages/DealsMetricsPage'
 import { OccasionsPage } from './admin/pages/OccasionsPage'
+import { ActivitiesAdminPage } from './admin/pages/ActivitiesAdminPage'
+import ItinerariesPage from './pages/ItinerariesPage'
 
 /** Preserve query string on legacy path aliases (e.g. /deals?deal=…). */
 function LegacyRedirect({ to }: { to: string }) {
@@ -48,6 +50,8 @@ function App() {
         <Route path="/planner/invite/:token" element={<PlannerInvite />} />
         <Route path="/bookings" element={<MyBookings />} />
         <Route path="/trip/:token" element={<MyTrip />} />
+        <Route path="/parcours" element={<ItinerariesPage />} />
+        <Route path="/parcours/:itineraryId" element={<ItinerariesPage />} />
         <Route path="/pay/hotel" element={<HotelPay />} />
         
         {/* Routes admin */}
@@ -67,6 +71,7 @@ function App() {
           <Route path="plans" element={<PlansPage />} />
           <Route path="deals" element={<DealsMetricsPage />} />
           <Route path="occasions" element={<OccasionsPage />} />
+          <Route path="activities" element={<ActivitiesAdminPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="tests" element={<TestsPage />} />
         </Route>
@@ -76,6 +81,8 @@ function App() {
         <Route path="/vols" element={<Dashboard />} />
         <Route path="/sejours" element={<Dashboard />} />
         <Route path="/planner" element={<Dashboard />} />
+        <Route path="/activites" element={<Dashboard />} />
+        <Route path="/activites/:city" element={<Dashboard />} />
         {/* /alertes gated by ALERTS_UI_ENABLED inside Dashboard (redirect → /vols when off) */}
         <Route path="/alertes" element={<Dashboard />} />
         <Route path="/favoris" element={<Dashboard />} />

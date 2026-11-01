@@ -45,11 +45,21 @@ export function buildStayPipeline(opts: {
   hotel: HotelStepStatus
   /** Which step the user is viewing / acting on */
   focus?: StayStepId
+  /** PLANNER_ACTIVITIES_ENABLED / ACTIVITIES */
+  activitiesEnabled?: boolean
+  activitiesDone?: boolean
+  activitiesPartial?: boolean
+  activitiesHint?: string
+  restaurantsEnabled?: boolean
 }): StayPipelineStep[] {
   const flightDone = opts.flight === 'booked_fw' || opts.flight === 'external'
   const flightPartial = opts.flight === 'selected_fw'
   const hotelDone = opts.hotel === 'booked'
   const hotelPartial = opts.hotel === 'selected'
+  const activitiesOn = Boolean(opts.activitiesEnabled)
+  const restaurantsOn = Boolean(opts.restaurantsEnabled)
+  const activitiesDone = Boolean(opts.activitiesDone)
+  const activitiesPartial = Boolean(opts.activitiesPartial)
 
   const flightHint =
     opts.flight === 'booked_fw'
@@ -70,16 +80,22 @@ export function buildStayPipeline(opts: {
   // Current = first incomplete active step, unless focus overrides
   let current: StayStepId = 'flight'
   if (flightDone || flightPartial) {
-    current = hotelDone ? 'activities' : 'hotel'
+    current = hotelDone ? (activitiesOn ? 'activities' : 'hotel') : 'hotel'
   }
   if (hotelDone && (flightDone || flightPartial || opts.flight === 'none')) {
-    current = 'activities'
+    current = activitiesOn ? 'activities' : 'hotel'
+  }
+  if (activitiesOn && activitiesDone && hotelDone) {
+    current = restaurantsOn ? 'restaurants' : 'activities'
   }
   if (opts.focus === 'flight' || opts.focus === 'hotel') {
     current = opts.focus
   }
-  if (opts.focus === 'activities' || opts.focus === 'restaurants') {
-    /* OFF taps stay on current active */
+  if (opts.focus === 'activities' && activitiesOn) {
+    current = 'activities'
+  }
+  if (opts.focus === 'restaurants' && restaurantsOn) {
+    current = 'restaurants'
   }
 
   const step = (
@@ -105,7 +121,23 @@ export function buildStayPipeline(opts: {
   return [
     step('flight', 'Vol', 'Vol', flightDone, flightPartial, false, flightHint),
     step('hotel', 'Hôtel', 'Hôtel', hotelDone, hotelPartial, false, hotelHint),
-    step('activities', 'Activités', 'Actis', false, false, true, 'Bientôt'),
-    step('restaurants', 'Restos', 'Restos', false, false, true, 'Bientôt'),
+    step(
+      'activities',
+      'Activités',
+      'Actis',
+      activitiesDone,
+      activitiesPartial,
+      !activitiesOn,
+      activitiesOn ? opts.activitiesHint || 'Choisir' : 'Bientôt',
+    ),
+    step(
+      'restaurants',
+      'Restos',
+      'Restos',
+      false,
+      false,
+      !restaurantsOn,
+      restaurantsOn ? 'Choisir' : 'Bientôt',
+    ),
   ]
 }

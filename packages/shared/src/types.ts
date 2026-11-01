@@ -160,6 +160,12 @@ export interface ApiConfig {
   ui_enabled?: boolean
   /** Alerts tab (/alertes) — from ALERTS_UI_ENABLED (default off) */
   alerts_ui_enabled?: boolean
+  /** Activities tab — from ACTIVITIES_ENABLED */
+  activities_ui_enabled?: boolean
+  planner_activities_enabled?: boolean
+  planner_restaurants_enabled?: boolean
+  itineraries_enabled?: boolean
+  migrations_ok?: boolean | null
 }
 
 export type DealWindowKind = 'FRI_SUN' | 'SAT_MON'

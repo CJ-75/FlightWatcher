@@ -116,6 +116,14 @@ async def _lifespan(app: FastAPI):
             print("✅ Deals scheduler in-process démarré (DEALS_SCHEDULER_ENABLED)")
     except Exception as e:
         print(f"⚠️  Deals scheduler: {e}")
+    try:
+        from activities.migrations_check import warn_on_boot
+        from supabase_deps import get_supabase_client, get_supabase_service_client
+
+        sb = get_supabase_service_client() or get_supabase_client()
+        warn_on_boot(sb)
+    except Exception as e:
+        print(f"⚠️  Activities migrations boot check: {e}")
     yield
     try:
         from deals.scheduler import stop_deals_scheduler

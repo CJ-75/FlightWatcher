@@ -84,6 +84,9 @@ const DealsScreen = lazyScreen(() =>
 const PlannerScreen = lazyScreen(() =>
   import('./src/screens/PlannerScreen').then((m) => ({ default: m.PlannerScreen })),
 )
+const ActivitiesScreen = lazyScreen(() =>
+  import('./src/screens/ActivitiesScreen').then((m) => ({ default: m.ActivitiesScreen })),
+)
 const FavoritesScreen = lazyScreen(() =>
   import('./src/screens/FavoritesScreen').then((m) => ({ default: m.FavoritesScreen })),
 )
@@ -124,6 +127,11 @@ const HotelPayWebViewScreen = lazyScreen(() =>
 const InAppBrowserScreen = lazyScreen(() =>
   import('./src/screens/InAppBrowserScreen').then((m) => ({ default: m.InAppBrowserScreen })),
 )
+const ItineraryDetailScreen = lazyScreen(() =>
+  import('./src/screens/ItineraryDetailScreen').then((m) => ({
+    default: m.ItineraryDetailScreen,
+  })),
+)
 const SecurityScreen = lazyScreen(() =>
   import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
 )
@@ -131,6 +139,7 @@ const SecurityScreen = lazyScreen(() =>
 function MainTabs() {
   const insets = useSafeAreaInsets()
   const tabClearance = FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
+  const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(false)
 
   // Airports after first paint — never compete with boot JS/fonts/auth
   React.useEffect(() => {
@@ -146,6 +155,19 @@ function MainTabs() {
     return () => {
       cancelled = true
       clearTimeout(t)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+    void import('./src/lib/client')
+      .then(({ getApi }) => getApi().getConfig())
+      .then((cfg) => {
+        if (!cancelled) setActivitiesUiEnabled(cfg.activities_ui_enabled === true)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -186,6 +208,13 @@ function MainTabs() {
         component={DealsScreen}
         options={{ title: 'Séjours', headerShown: false }}
       />
+      {activitiesUiEnabled ? (
+        <Tab.Screen
+          name="Activities"
+          component={ActivitiesScreen}
+          options={{ title: 'Activités', headerShown: false }}
+        />
+      ) : null}
       <Tab.Screen
         name="Planner"
         component={PlannerScreen}
@@ -290,6 +319,11 @@ function RootNavigator() {
               animation: 'slide_from_bottom',
             }}
           />
+          <Stack.Screen
+            name="ItineraryDetail"
+            component={ItineraryDetailScreen}
+            options={stackHeaderOptions('Parcours')}
+          />
         </>
       ) : (
         <>
@@ -314,11 +348,16 @@ const linking = {
         screens: {
           Search: 'vols',
           Deals: 'sejours',
+          Activities: {
+            path: 'activites/:city?',
+            parse: { city: (c: string) => c },
+          },
           Planner: 'planner',
           Favorites: 'favoris',
           Profile: 'profil',
         },
       },
+      ItineraryDetail: 'parcours/:itineraryId',
     },
   },
 }

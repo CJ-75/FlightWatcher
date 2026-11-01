@@ -33,6 +33,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
+import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { rememberTrip } from '../lib/tripRecovery'
 import { warmHotelUpsell } from '../lib/partnerBook'
 import { HeartIcon } from '../components/HeartIcon'
@@ -483,6 +484,20 @@ export function DealDetailScreen({ route, navigation }: Props) {
         <View style={styles.content}>
           {/* Above the fold: prix + vol + 1er hôtel — puis scroll */}
           <View style={styles.aboveFold}>
+            <ActivitySurfaceBanner
+              surface="deal"
+              citySlug={
+                deal.city
+                  ? String(deal.city)
+                      .toLowerCase()
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '')
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, '')
+                  : null
+              }
+              title={`Que faire à ${deal.city || 'destination'} ?`}
+            />
             <View style={styles.priceBlock}>
               <Text style={styles.price}>{Math.round(pricePp)} €</Text>
               <Text style={styles.priceHint} numberOfLines={2}>

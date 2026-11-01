@@ -180,6 +180,19 @@ def update_draft_hotel(
     supabase.table("my_trip_drafts").update(
         {"payload": payload, "updated_at": now}
     ).eq("id", row["id"]).execute()
+    # Lot A — upsert place + trip_item hotel (no historical backfill)
+    if trusted_hotel and isinstance(trusted_hotel, dict):
+        try:
+            from activities.hotel_place import ensure_hotel_place_and_item
+
+            ensure_hotel_place_and_item(
+                supabase,
+                hotel=trusted_hotel,
+                draft_id=str(row["id"]),
+                status="idea",
+            )
+        except Exception as e:
+            logger.debug("hotel place hook: %s", e)
     # Always return full draft (update() may omit draft_token)
     out = {**row, "payload": payload, "updated_at": now, "hotel": trusted_hotel}
     if not out.get("draft_token"):
@@ -536,6 +549,17 @@ def mark_hotel_booked(
         extra["hotel"] = hotel
         extra["hotel_charged_total"] = charged
         extra["hotel_price_locked"] = True
+        try:
+            from activities.hotel_place import ensure_hotel_place_and_item
+
+            ensure_hotel_place_and_item(
+                supabase,
+                hotel=hotel,
+                draft_id=str(row["id"]),
+                status="booked",
+            )
+        except Exception as e:
+            logger.debug("hotel place booked hook: %s", e)
 
         flight = dict(payload0.get("flight") or {})
         try:

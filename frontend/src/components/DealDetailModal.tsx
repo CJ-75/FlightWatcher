@@ -25,6 +25,7 @@ import { DealCheckoutFlow } from './DealCheckoutFlow'
 import { DealComplianceNotice } from './DealComplianceNotice'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
 import { CountryFlag } from './CountryFlag'
+import { ActivitySurfaceBanner } from './ActivitySurfaceBanner'
 
 interface DealDetailModalProps {
   deal: TravelDeal | null
@@ -597,6 +598,21 @@ export function DealDetailModal({
                   <FactChip tone="warn">+{Math.round(fees)} € taxe sur place</FactChip>
                 ) : null}
               </div>
+
+              <ActivitySurfaceBanner
+                surface="deal"
+                citySlug={
+                  deal.city
+                    ? String(deal.city)
+                        .toLowerCase()
+                        .normalize('NFD')
+                        .replace(/[\u0300-\u036f]/g, '')
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-|-$/g, '')
+                    : null
+                }
+                title={`Que faire à ${deal.city || 'destination'} ?`}
+              />
 
               {deal.price_pax_note ? (
                 <p className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 font-medium">

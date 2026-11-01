@@ -29,6 +29,7 @@ export type MainTabParamList = {
       }
     | undefined
   Deals: undefined
+  Activities: { city?: string } | undefined
   Planner: undefined
   Favorites: undefined
   Profile: undefined
@@ -79,4 +80,5 @@ export type RootStackParamList = {
     returnHotelId?: string
   }
   InAppBrowser: { url: string; title?: string }
+  ItineraryDetail: { itineraryId: string }
 }

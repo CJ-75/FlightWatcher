@@ -174,6 +174,8 @@ export function TabBarIcon({
       return <SearchTabIcon size={size} color={color} focused={focused} />
     case 'Deals':
       return <DealsTabIcon size={size} color={color} focused={focused} />
+    case 'Activities':
+      return <PlannerTabIcon size={size} color={color} focused={focused} />
     case 'Planner':
       return <PlannerTabIcon size={size} color={color} focused={focused} />
     case 'Favorites':

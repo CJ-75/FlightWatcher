@@ -15,6 +15,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  activityStepProgress,
   boardLabelFr,
   buildStayPipeline,
   hotelCancelLabel,
@@ -28,6 +29,7 @@ import {
   type StayStepId,
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
+import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -80,9 +82,31 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [flightUnavailable, setFlightUnavailable] = useState(false)
   const [flightPriceHint, setFlightPriceHint] = useState<string | null>(null)
   const [chargedHotelTotal, setChargedHotelTotal] = useState<number | null>(null)
+  const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const [showActivities, setShowActivities] = useState(false)
   const leftForFlight = useRef(false)
   const seededRef = useRef(Boolean(seed))
   const flightLiveKey = useRef<string | null>(null)
+
+  useEffect(() => {
+    void getApi()
+      .getConfig()
+      .then((cfg) => {
+        setPlannerActivitiesEnabled(
+          cfg.planner_activities_enabled === true || cfg.activities_ui_enabled === true,
+        )
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!plannerActivitiesEnabled) return
+    void getApi()
+      .listTripItems({ draft_token: draftToken })
+      .then((res) => setActivityItems(res.items || []))
+      .catch(() => setActivityItems([]))
+  }, [draftToken, plannerActivitiesEnabled, showActivities])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setError(null)
@@ -317,6 +341,11 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     out,
   ])
 
+  const activityProgress = useMemo(
+    () => activityStepProgress(activityItems),
+    [activityItems],
+  )
+
   const pipelineSteps = useMemo(
     () =>
       buildStayPipeline({
@@ -330,8 +359,23 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           hasHotel: Boolean(hotelId),
           hotelBooked,
         }),
+        focus: showActivities ? 'activities' : undefined,
+        activitiesEnabled: plannerActivitiesEnabled,
+        activitiesDone: activityProgress.done,
+        activitiesPartial: activityProgress.partial,
+        activitiesHint: activityProgress.hint,
       }),
-    [fl, flightBooked, externalFlight, flightUrl, hotelId, hotelBooked],
+    [
+      fl,
+      flightBooked,
+      externalFlight,
+      flightUrl,
+      hotelId,
+      hotelBooked,
+      showActivities,
+      plannerActivitiesEnabled,
+      activityProgress,
+    ],
   )
 
   useEffect(() => {
@@ -430,6 +474,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       } else if (!hotelId) {
         navigation.navigate('HotelCompose', { draftToken })
       }
+      return
+    }
+    if (id === 'activities' && plannerActivitiesEnabled) {
+      setShowActivities(true)
       return
     }
     if (id === 'flight' && flightUrl && !flightBooked) {
@@ -712,6 +760,18 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             ) : null}
           </View>
         </View>
+
+        {plannerActivitiesEnabled ? (
+          <View style={[styles.card, shadow.soft]}>
+            <IconLabel section label="Activités" icon={<TicketIcon size={14} />} />
+            <ActivityStepPanel
+              draftToken={draftToken}
+              citySlug={String(pl.city_slug || city || 'paris').toLowerCase()}
+              enabled={plannerActivitiesEnabled}
+              surface="my_trip"
+            />
+          </View>
+        ) : null}
 
         {party.total > 0 ? (
           <View style={[styles.card, shadow.soft]}>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
+  activityStepProgress,
   airportDisplayNameFr,
   buildStayPipeline,
   distantAirportLine,
@@ -13,6 +14,7 @@ import {
   type StayStepId,
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
+import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentSession } from '../lib/supabase'
 import { rememberTrip } from '../utils/tripRecovery'
@@ -90,6 +92,10 @@ export default function MyTrip() {
   const [flightUnavailable, setFlightUnavailable] = useState(false)
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
+  const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const [showActivities, setShowActivities] = useState(false)
+  const activitiesSectionRef = useRef<HTMLElement | null>(null)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
   const hotelSectionRef = useRef<HTMLElement | null>(null)
@@ -306,6 +312,11 @@ export default function MyTrip() {
   const wantsCompose =
     composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
 
+  const activityProgress = useMemo(
+    () => activityStepProgress(activityItems),
+    [activityItems],
+  )
+
   const pipelineSteps = useMemo(
     () =>
       buildStayPipeline({
@@ -321,7 +332,15 @@ export default function MyTrip() {
           hasHotel: Boolean(hotelId),
           hotelBooked,
         }),
-        focus: wantsCompose ? 'hotel' : undefined,
+        focus: wantsCompose
+          ? 'hotel'
+          : showActivities
+            ? 'activities'
+            : undefined,
+        activitiesEnabled: plannerActivitiesEnabled,
+        activitiesDone: activityProgress.done,
+        activitiesPartial: activityProgress.partial,
+        activitiesHint: activityProgress.hint,
       }),
     [
       flight,
@@ -331,8 +350,30 @@ export default function MyTrip() {
       hotelId,
       hotelBooked,
       wantsCompose,
+      showActivities,
+      plannerActivitiesEnabled,
+      activityProgress,
     ],
   )
+
+  useEffect(() => {
+    void getApiClient()
+      .getConfig()
+      .then((cfg) => {
+        setPlannerActivitiesEnabled(
+          cfg.planner_activities_enabled === true || cfg.activities_ui_enabled === true,
+        )
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (!token || !plannerActivitiesEnabled) return
+    void getApiClient()
+      .listTripItems({ draft_token: token })
+      .then((res) => setActivityItems(res.items || []))
+      .catch(() => setActivityItems([]))
+  }, [token, plannerActivitiesEnabled, showActivities])
 
   const from = searchParams.get('from')
   const backHref =
@@ -361,6 +402,13 @@ export default function MyTrip() {
       } else if (!hotelId) {
         openCompose()
       }
+      return
+    }
+    if (id === 'activities' && plannerActivitiesEnabled) {
+      setShowActivities(true)
+      setTimeout(() => {
+        activitiesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 50)
       return
     }
     if (id === 'flight' && flightUrl && !flightBooked) {
@@ -1477,6 +1525,36 @@ export default function MyTrip() {
                 </button>
               ) : null}
             </section>
+
+            {plannerActivitiesEnabled ? (
+              <section
+                ref={activitiesSectionRef}
+                className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="font-bold text-slate-900">③ Activités</h2>
+                  <button
+                    type="button"
+                    className="text-xs font-bold text-primary-700"
+                    onClick={() => setShowActivities(true)}
+                  >
+                    Gérer
+                  </button>
+                </div>
+                <ActivityStepPanel
+                  draftToken={token}
+                  citySlug={
+                    typeof payload.city_slug === 'string'
+                      ? payload.city_slug
+                      : city
+                        ? String(city).toLowerCase()
+                        : 'paris'
+                  }
+                  enabled={plannerActivitiesEnabled}
+                  surface="my_trip"
+                />
+              </section>
+            ) : null}
 
             <aside className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600 leading-relaxed shadow-sm">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">

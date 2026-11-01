@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from routes import (
+    activities,
     analytics,
     auth_password,
     deals,
@@ -26,4 +27,5 @@ def include_all_routers(app: FastAPI) -> None:
     app.include_router(hotel_bookings.router)
     app.include_router(hotel_upsell.router)
     app.include_router(planner.router)
+    app.include_router(activities.router)
     app.include_router(auth_password.router)

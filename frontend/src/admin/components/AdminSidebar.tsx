@@ -10,6 +10,7 @@ const menuItems = [
   { path: '/admin/activated', label: 'Activated', icon: '📊' },
   { path: '/admin/deals', label: 'Deals', icon: '✈️' },
   { path: '/admin/occasions', label: 'Occasions', icon: '🎯' },
+  { path: '/admin/activities', label: 'Activités', icon: '🎟️' },
   { path: '/admin/plans', label: 'Plans', icon: '💳' },
   { path: '/admin/settings', label: 'Settings', icon: '⚙️' },
   { path: '/admin/tests', label: 'Tests', icon: '🧪' }
