@@ -13,6 +13,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   boardLabelFr,
   hotelCancelLabel,
+  preferFrenchReviews,
+  reviewExcerpt,
+  reviewMetaLine,
   type HotelGalleryPhoto,
   type HotelGuestReview,
   type HotelUpsellOption,
@@ -144,79 +147,6 @@ function stayOfferLabels(h: HotelUpsellOption, facilities: string[]): string[] {
   })
   if (flex) out.push(flex)
   return out
-}
-
-function formatReviewDate(raw?: string | null): string | null {
-  if (!raw) return null
-  const d = new Date(raw)
-  if (Number.isNaN(d.getTime())) {
-    const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/)
-    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(raw).slice(0, 10)
-  }
-  return d.toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
-function formatReviewCountry(raw?: string | null): string | null {
-  if (!raw) return null
-  const s = String(raw).trim()
-  if (!s) return null
-  if (/^[a-z]{2}$/i.test(s)) {
-    try {
-      const name = new Intl.DisplayNames(['fr'], { type: 'region' }).of(s.toUpperCase())
-      if (name) return name
-    } catch {
-      /* ignore */
-    }
-    return s.toUpperCase()
-  }
-  return s
-}
-
-function formatReviewType(raw?: string | null): string | null {
-  if (!raw) return null
-  const t = String(raw).trim().toLowerCase().replace(/[\s-]+/g, '_')
-  if (!t) return null
-  const map: Record<string, string> = {
-    couple: 'En couple',
-    family: 'En famille',
-    family_with_children: 'En famille',
-    family_with_kids: 'En famille',
-    solo: 'Solo',
-    solo_traveller: 'Solo',
-    solo_traveler: 'Solo',
-    business: 'Affaires',
-    group: 'Entre amis',
-    friends: 'Entre amis',
-    other: 'Voyageur',
-  }
-  if (map[t]) return map[t]
-  return t.charAt(0).toUpperCase() + t.slice(1).replace(/_/g, ' ')
-}
-
-function reviewMeta(r: HotelGuestReview) {
-  return [r.name?.trim() || null, formatReviewCountry(r.country), formatReviewType(r.type), formatReviewDate(r.date)]
-    .filter(Boolean)
-    .join(' · ')
-}
-
-function preferFrenchReviews(list: HotelGuestReview[]): HotelGuestReview[] {
-  return [...list].sort((a, b) => {
-    const rank = (r: HotelGuestReview) => {
-      const lang = String(r.language || '').toLowerCase()
-      if (lang.startsWith('fr')) return 0
-      if (!lang) return 1
-      return 2
-    }
-    return rank(a) - rank(b)
-  })
-}
-
-function reviewExcerpt(r: HotelGuestReview): string {
-  return [r.headline, r.pros, r.text, r.cons].filter(Boolean).join('\n\n')
 }
 
 export function HotelComposeDetailSheet({
@@ -612,7 +542,7 @@ export function HotelComposeDetailSheet({
                 ) : (
                   <>
                     {visibleReviews.map((r, i) => {
-                      const meta = reviewMeta(r)
+                      const meta = reviewMetaLine(r)
                       const excerpt = reviewExcerpt(r)
                       return (
                         <View key={`${r.name || 'avis'}-${r.date || i}`} style={styles.reviewCard}>

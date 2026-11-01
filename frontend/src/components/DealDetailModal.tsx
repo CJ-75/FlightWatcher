@@ -8,10 +8,15 @@ import {
   formatFetchedAt,
   formatFlightDuration,
   hotelCancelLabel,
+  isFetchableHotelId,
   localizeAviasalesBookingUrl,
+  preferFrenchReviews,
   pricePpWithHotel,
   resolveFlightDurationMinutes,
+  reviewExcerpt,
+  reviewMetaLine,
 } from '@flightwatcher/shared'
+import type { HotelGuestReview } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { getApiClient } from '../utils/apiClient'
@@ -138,11 +143,16 @@ export function DealDetailModal({
   const [hotelId, setHotelId] = useState<string | null>(null)
   const [checkout, setCheckout] = useState(false)
   const [bookingEnabled, setBookingEnabled] = useState(true)
+  const [guestReviews, setGuestReviews] = useState<HotelGuestReview[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewsExpanded, setReviewsExpanded] = useState(false)
 
   useEffect(() => {
     setDeal(dealProp)
     setHotelId(null)
     setCheckout(false)
+    setGuestReviews([])
+    setReviewsExpanded(false)
   }, [dealProp])
 
   useEffect(() => {
@@ -230,6 +240,43 @@ export function DealDetailModal({
     }
     return out
   }, [deal])
+
+  const selectedPreview =
+    hotelOptions.find((h) => h.id === (hotelId || hotelOptions[0]?.id)) || hotelOptions[0]
+  const reviewsHotelId = isFetchableHotelId(selectedPreview?.id)
+    ? String(selectedPreview!.id)
+    : isFetchableHotelId(deal?.hotel?.id)
+      ? String(deal!.hotel!.id)
+      : ''
+
+  useEffect(() => {
+    if (!reviewsHotelId) {
+      setGuestReviews([])
+      setReviewsLoading(false)
+      setReviewsExpanded(false)
+      return
+    }
+    let cancelled = false
+    setGuestReviews([])
+    setReviewsLoading(true)
+    setReviewsExpanded(false)
+    void getApiClient()
+      .getHotelReviews(reviewsHotelId, { language: 'fr', limit: 10 })
+      .then((r) => {
+        if (cancelled) return
+        const rows = Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : []
+        setGuestReviews(preferFrenchReviews(rows))
+      })
+      .catch(() => {
+        if (!cancelled) setGuestReviews([])
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reviewsHotelId])
 
   if (!deal) return null
 
@@ -673,6 +720,81 @@ export function DealDetailModal({
                 </p>
               </div>
             </section>
+
+            {reviewsLoading || guestReviews.length > 0 ? (
+              <section className="rounded-2xl border border-line bg-white p-4">
+                <div className="flex items-baseline justify-between gap-2 mb-2.5">
+                  <p className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
+                    Avis
+                  </p>
+                  <p className="text-[10px] font-semibold text-slate-400 tabular-nums">
+                    {[
+                      selected?.review_count != null && selected.review_count > 0
+                        ? `${Number(selected.review_count).toLocaleString('fr-FR')} avis`
+                        : null,
+                      'en français',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+                {reviewsLoading && guestReviews.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-2">Chargement des avis…</p>
+                ) : (
+                  <>
+                    <ul className="space-y-2">
+                      {(reviewsExpanded ? guestReviews : guestReviews.slice(0, 3)).map(
+                        (r, i) => {
+                          const meta = reviewMetaLine(r)
+                          const excerpt = reviewExcerpt(r)
+                          return (
+                            <li
+                              key={`${r.name || 'avis'}-${r.date || i}`}
+                              className="rounded-2xl bg-slate-50 px-3 py-2.5"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                {r.score != null ? (
+                                  <p className="text-sm font-bold text-ink tabular-nums">
+                                    {Number(r.score).toFixed(1)}/10
+                                  </p>
+                                ) : (
+                                  <span />
+                                )}
+                                {meta ? (
+                                  <p className="text-[10px] text-slate-400 truncate min-w-0">
+                                    {meta}
+                                  </p>
+                                ) : null}
+                              </div>
+                              {excerpt ? (
+                                <p
+                                  className={`text-[11px] text-slate-700 leading-relaxed mt-1.5 whitespace-pre-line ${
+                                    reviewsExpanded ? '' : 'line-clamp-3'
+                                  }`}
+                                >
+                                  {excerpt}
+                                </p>
+                              ) : null}
+                            </li>
+                          )
+                        },
+                      )}
+                    </ul>
+                    {guestReviews.length > 3 ? (
+                      <button
+                        type="button"
+                        onClick={() => setReviewsExpanded((v) => !v)}
+                        className="mt-2.5 w-full rounded-xl border border-slate-200 bg-white py-2.5 min-h-[44px] text-[12px] font-bold text-slate-800"
+                      >
+                        {reviewsExpanded
+                          ? 'Réduire'
+                          : `Voir tout · ${guestReviews.length} avis`}
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </section>
+            ) : null}
 
             {/* 3. Price transparency */}
             <section className="rounded-2xl bg-slate-50 border border-slate-100 px-4 py-3.5">

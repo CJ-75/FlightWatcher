@@ -12,15 +12,19 @@ import {
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
+import type { HotelGuestReview, TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
 import {
   boardLabelFr,
   dealAdults,
   directFlightLabel,
   formatFlightDuration,
   hotelStarsLabel,
+  isFetchableHotelId,
+  preferFrenchReviews,
   pricePpWithHotel,
   resolveFlightDurationMinutes,
+  reviewExcerpt,
+  reviewMetaLine,
 } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -72,6 +76,9 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [composingHotel, setComposingHotel] = useState(false)
   const [hotelSheetOpen, setHotelSheetOpen] = useState(false)
   const [sheetHotelId, setSheetHotelId] = useState<string | null>(null)
+  const [guestReviews, setGuestReviews] = useState<HotelGuestReview[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewsExpanded, setReviewsExpanded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -170,6 +177,41 @@ export function DealDetailScreen({ route, navigation }: Props) {
       ].filter((u, i, arr) => Boolean(u) && arr.indexOf(u) === i) as string[],
     [selected?.photos, deal?.hotel?.photos, hotelPhoto],
   )
+
+  const reviewsHotelId = isFetchableHotelId(selected?.id)
+    ? String(selected!.id)
+    : isFetchableHotelId(deal?.hotel?.id)
+      ? String(deal!.hotel!.id)
+      : ''
+
+  useEffect(() => {
+    if (!reviewsHotelId) {
+      setGuestReviews([])
+      setReviewsLoading(false)
+      setReviewsExpanded(false)
+      return
+    }
+    let cancelled = false
+    setGuestReviews([])
+    setReviewsLoading(true)
+    setReviewsExpanded(false)
+    void getApi()
+      .getHotelReviews(reviewsHotelId, { language: 'fr', limit: 10 })
+      .then((r) => {
+        if (cancelled) return
+        const rows = Array.isArray(r.reviews) ? r.reviews.slice(0, 10) : []
+        setGuestReviews(preferFrenchReviews(rows))
+      })
+      .catch(() => {
+        if (!cancelled) setGuestReviews([])
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [reviewsHotelId])
 
   if (loading) {
     return (
@@ -525,6 +567,75 @@ export function DealDetailScreen({ route, navigation }: Props) {
             </Pressable>
           </View>
 
+          {reviewsLoading || guestReviews.length > 0 ? (
+            <View style={styles.reviewsBlock}>
+              <View style={styles.reviewsHead}>
+                <Text style={styles.sectionLabel}>Avis</Text>
+                <Text style={styles.reviewCountHint}>
+                  {[
+                    selected?.review_count != null && selected.review_count > 0
+                      ? `${Number(selected.review_count).toLocaleString('fr-FR')} avis`
+                      : null,
+                    'en français',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </View>
+              {reviewsLoading && guestReviews.length === 0 ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <>
+                  {(reviewsExpanded ? guestReviews : guestReviews.slice(0, 3)).map(
+                    (r, i) => {
+                      const meta = reviewMetaLine(r)
+                      const excerpt = reviewExcerpt(r)
+                      return (
+                        <View
+                          key={`${r.name || 'avis'}-${r.date || i}`}
+                          style={styles.reviewCard}
+                        >
+                          <View style={styles.reviewTop}>
+                            {r.score != null ? (
+                              <Text style={styles.reviewScore}>
+                                {Number(r.score).toFixed(1)}/10
+                              </Text>
+                            ) : null}
+                            {meta ? (
+                              <Text style={styles.reviewMeta} numberOfLines={1}>
+                                {meta}
+                              </Text>
+                            ) : null}
+                          </View>
+                          {excerpt ? (
+                            <Text
+                              style={styles.reviewText}
+                              numberOfLines={reviewsExpanded ? undefined : 3}
+                            >
+                              {excerpt}
+                            </Text>
+                          ) : null}
+                        </View>
+                      )
+                    },
+                  )}
+                  {guestReviews.length > 3 ? (
+                    <Pressable
+                      style={styles.moreReviews}
+                      onPress={() => setReviewsExpanded((v) => !v)}
+                    >
+                      <Text style={styles.moreReviewsText}>
+                        {reviewsExpanded
+                          ? 'Réduire'
+                          : `Voir tout · ${guestReviews.length} avis`}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
+            </View>
+          ) : null}
+
           {(deal.why_good?.length || deal.hook) ? (
             <View style={[styles.infoCard, shadow.soft, { backgroundColor: '#ECFDF5' }]}>
               <Text style={styles.sectionLabel}>Pourquoi c’est un bon plan</Text>
@@ -869,6 +980,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#047857',
   },
+  reviewsBlock: {
+    marginTop: spacing.md,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  reviewsHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 10,
+  },
+  reviewCountHint: {
+    fontFamily: fonts.semibold,
+    fontSize: 10,
+    color: colors.muted,
+  },
+  reviewCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  reviewTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  reviewScore: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
+  reviewMeta: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 10,
+    color: colors.muted,
+  },
+  reviewText: {
+    marginTop: 8,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.inkSoft,
+    lineHeight: 18,
+  },
+  moreReviews: {
+    marginTop: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+  },
+  moreReviewsText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
   flightPriceLine: {
     marginTop: 8,
     fontFamily: fonts.bold,
