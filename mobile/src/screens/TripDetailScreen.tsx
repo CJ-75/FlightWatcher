@@ -17,6 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
 import {
+  activityCitySlugFromLabel,
   buildStayPipeline,
   cityDisplayNameFr,
   formatDateFr,
@@ -25,6 +26,8 @@ import {
   type EnrichedTripResponse,
   type StayStepId,
 } from '@flightwatcher/shared'
+import { ActivityStepPanel } from '../components/ActivityStepPanel'
+import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -86,6 +89,19 @@ export function TripDetailScreen() {
   } | null>(null)
   const [editBudget, setEditBudget] = useState(150)
   const [savingCriteria, setSavingCriteria] = useState(false)
+  const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
+  const extrasRef = useRef<View>(null)
+
+  useEffect(() => {
+    void getApi()
+      .getConfig()
+      .then((cfg) => {
+        setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
+        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
+      })
+      .catch(() => undefined)
+  }, [])
 
   const load = useCallback(async () => {
     setError(null)
@@ -410,20 +426,31 @@ export function TripDetailScreen() {
   )
   const pax = Math.max(trip?.passengers || 1, (trip?.members || []).length || 1)
 
+  const arrivalCode = parseAirportCodes(trip?.arrival_airport)[0] || ''
+  const cityLabel = arrivalCode
+    ? cityDisplayNameFr(arrivalCode)
+    : trip?.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
+  const citySlug = activityCitySlugFromLabel(cityLabel)
+  const dateIso = trip?.dates_depart?.[0]?.date || null
+
   const pipelineForUi = useMemo(() => {
     if (!accepted) {
       return buildStayPipeline({
         flight: 'none',
         hotel: 'none',
         focus: 'flight',
+        activitiesEnabled: plannerActivitiesEnabled,
+        restaurantsEnabled: plannerRestaurantsEnabled,
       })
     }
     return buildStayPipeline({
       flight: 'selected_fw',
       hotel: 'none',
       focus: 'hotel',
+      activitiesEnabled: plannerActivitiesEnabled,
+      restaurantsEnabled: plannerRestaurantsEnabled,
     })
-  }, [accepted])
+  }, [accepted, plannerActivitiesEnabled, plannerRestaurantsEnabled])
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
@@ -443,6 +470,16 @@ export function TripDetailScreen() {
       }).then((ps) => {
         openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
       })
+      return
+    }
+    if (
+      (id === 'activities' && plannerActivitiesEnabled) ||
+      (id === 'restaurants' && plannerRestaurantsEnabled)
+    ) {
+      Alert.alert(
+        id === 'activities' ? 'Activités' : 'Adresses',
+        'Plus bas sur cette fiche : ajoute tes idées (liens Maps / Instagram).',
+      )
     }
   }
 
@@ -506,7 +543,12 @@ export function TripDetailScreen() {
       <View style={[styles.pipelineCard, shadow.soft]}>
         <Text style={styles.pipelineTitle}>Ton parcours</Text>
         <Text style={styles.pipelineSub}>
-          Vol → Hôtel → Activités → Restos. Les deux dernières arrivent bientôt.
+          Vol → Hôtel
+          {plannerActivitiesEnabled ? ' → Activités' : ''}
+          {plannerRestaurantsEnabled ? ' → Adresses' : ''}
+          {!plannerActivitiesEnabled && !plannerRestaurantsEnabled
+            ? '. Activités & adresses bientôt.'
+            : '.'}
         </Text>
         <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
       </View>
@@ -613,6 +655,37 @@ export function TripDetailScreen() {
               Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
               l’organisateur décide pour le groupe.
             </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {!scanning && (plannerActivitiesEnabled || plannerRestaurantsEnabled) ? (
+        <View ref={extrasRef} style={styles.section}>
+          {plannerActivitiesEnabled ? (
+            <View style={[styles.extrasCard, shadow.soft]}>
+              <Text style={styles.sectionTitle}>Activités</Text>
+              <ActivityStepPanel
+                plannedTripId={tripId}
+                citySlug={citySlug}
+                enabled={plannerActivitiesEnabled}
+                surface="planner"
+              />
+            </View>
+          ) : null}
+          {plannerRestaurantsEnabled ? (
+            <View style={[styles.extrasCard, shadow.soft, { marginTop: 12 }]}>
+              <Text style={styles.sectionTitle}>④ Adresses</Text>
+              <Text style={styles.roleHint}>
+                Colle tes liens Maps / Instagram — même avant le vol.
+              </Text>
+              <RestaurantStepPanel
+                plannedTripId={tripId}
+                citySlug={citySlug}
+                cityLabel={cityLabel}
+                dateIso={dateIso}
+                enabled={plannerRestaurantsEnabled}
+              />
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -1022,6 +1095,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   section: { gap: 12 },
+  extrasCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FFDCC8',
+    gap: 10,
+  },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   sectionMuted: { fontFamily: fonts.medium, fontSize: 13, color: colors.faint },
   roleHint: {
