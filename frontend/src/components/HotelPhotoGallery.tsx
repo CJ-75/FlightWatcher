@@ -264,7 +264,7 @@ export function HotelPhotoGallery({
           className="absolute bottom-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/95 text-ink text-xs font-bold px-3 py-1.5 shadow-md active:scale-95 transition-transform"
         >
           <GridIcon />
-          {count} photo{count > 1 ? 's' : ''}
+          Photos
         </button>
 
         {loading ? (
@@ -341,9 +341,8 @@ export function HotelPhotoGallery({
               })}
             </div>
             <div className="flex items-center justify-between gap-2 px-0.5">
-              <p className="text-[11px] font-semibold text-slate-500 tabular-nums">
-                {count} photo{count > 1 ? 's' : ''}
-                {loading ? ' · …' : ''}
+              <p className="text-[11px] font-semibold text-slate-500">
+                Photos{loading ? ' · …' : ''}
               </p>
               <button
                 type="button"
@@ -433,7 +432,7 @@ export function HotelPhotoGallery({
               }`}
             >
               <GridIcon />
-              Voir les {count} photos
+              Voir les photos
             </button>
           </>
         )}

@@ -249,12 +249,13 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       ) => {
         if (!opts.length) return
         try {
-          const row = await getApi().saveMyTripComposeOptions(draftToken, {
+          // Persist only — do not setDraft(row): that re-ran this effect and
+          // flipped "On actualise les tarifs…" every ~2s in a loop.
+          await getApi().saveMyTripComposeOptions(draftToken, {
             options: opts,
             night_cap: meta?.night_cap ?? null,
             city: meta?.city ?? cityHint ?? null,
           })
-          if (!cancelled) setDraft(row)
         } catch {
           /* non-blocking */
         }
@@ -428,7 +429,17 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true
     }
-  }, [draft, draftToken])
+    // Stable trip keys only — full `draft` identity changes on persist and
+    // must not re-trigger live upsell (revalidating banner loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [
+    draftToken,
+    draft?.dest_iata,
+    draft?.out_date,
+    draft?.ret_date,
+    draft?.adults,
+    reloadKey,
+  ])
 
   const sorted = useMemo(() => {
     const list = [...options]

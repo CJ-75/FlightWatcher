@@ -268,9 +268,7 @@ export function HotelPhotoGallery({
           style={styles.seeAll}
           hitSlop={8}
         >
-          <Text style={styles.seeAllText}>
-            {count} photo{count > 1 ? 's' : ''}
-          </Text>
+          <Text style={styles.seeAllText}>Photos</Text>
         </Pressable>
 
         {count > 1 ? (
