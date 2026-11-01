@@ -9,6 +9,7 @@ import {
   Share,
   Alert,
   RefreshControl,
+  ImageBackground,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native'
@@ -20,6 +21,8 @@ import {
   activityCitySlugFromLabel,
   buildStayPipeline,
   cityDisplayNameFr,
+  cityImageUrl,
+  formatAirlineLabel,
   formatDateFr,
   parseAirportCodes,
   type AddTripMemberRequest,
@@ -49,7 +52,7 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { colors, fonts, shadow, spacing } from '../theme'
 
 function departureRouteLabel(value: string | null | undefined): string {
   const codes = parseAirportCodes(value)
@@ -432,6 +435,7 @@ export function TripDetailScreen() {
     : trip?.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
   const citySlug = activityCitySlugFromLabel(cityLabel)
   const dateIso = trip?.dates_depart?.[0]?.date || null
+  const destinationImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 
   const pipelineForUi = useMemo(() => {
     if (!accepted) {
@@ -520,25 +524,39 @@ export function TripDetailScreen() {
           <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={colors.primary} />
         }
       >
-      <View style={styles.hero}>
-        <Text style={styles.kicker}>MON SÉJOUR</Text>
-        <Text style={styles.name}>{trip.name}</Text>
-        <Text style={styles.meta}>
-          {departureRouteLabel(trip.departure_airport)}
-          {trip.arrival_airport
-            ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
-            : ' · inspire'}
-          {trip.direct ? ' · directs' : ''}
-          {' · '}
-          max {trip.budget_max}€/pers
-        </Text>
-        {trip.dates_depart[0] && trip.dates_retour[0] ? (
-          <Text style={styles.meta}>
-            {formatDateFr(trip.dates_depart[0].date)} →{' '}
-            {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
-          </Text>
-        ) : null}
-      </View>
+      <ImageBackground
+        source={{ uri: destinationImage }}
+        style={[styles.hero, shadow.lift]}
+        imageStyle={styles.heroImage}
+      >
+        <LinearGradient
+          colors={['rgba(17,10,7,0.2)', 'rgba(24,13,8,0.92)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.heroContent}>
+          <Text style={styles.kicker}>PROCHAIN DÉPART · {cityLabel.toUpperCase()}</Text>
+          <Text style={styles.name}>{trip.name}</Text>
+          <View style={styles.heroChips}>
+            <View style={styles.heroChip}>
+              <Text style={styles.heroChipText}>
+                {departureRouteLabel(trip.departure_airport)}
+                {trip.arrival_airport
+                  ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+                  : ' · inspire'}
+              </Text>
+            </View>
+            <View style={styles.heroChip}>
+              <Text style={styles.heroChipText}>max {trip.budget_max}€/pers</Text>
+            </View>
+          </View>
+          {trip.dates_depart[0] && trip.dates_retour[0] ? (
+            <Text style={styles.meta}>
+              {formatDateFr(trip.dates_depart[0].date)} →{' '}
+              {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
+            </Text>
+          ) : null}
+        </View>
+      </ImageBackground>
 
       <View style={[styles.pipelineCard, shadow.soft]}>
         <Text style={styles.pipelineTitle}>Ton parcours</Text>
@@ -553,31 +571,7 @@ export function TripDetailScreen() {
         <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
       </View>
 
-      {/* Next-step callout — makes hotel link obvious */}
-      {accepted && !scanning ? (
-        <Pressable
-          onPress={() => void addHotelFromTrip(accepted.trip_data)}
-          disabled={hotelBusy}
-          style={({ pressed }) => [
-            styles.nextStepCard,
-            shadow.soft,
-            pressed && { opacity: 0.94 },
-            hotelBusy && { opacity: 0.6 },
-          ]}
-        >
-          <View style={styles.nextStepBadge}>
-            <Text style={styles.nextStepBadgeText}>ÉTAPE 2</Text>
-          </View>
-          <Text style={styles.nextStepTitle}>Composer ton hôtel</Text>
-          <Text style={styles.nextStepBody}>
-            Vol choisi. Continue ton séjour : photos, avis, prix réels, paiement
-            sécurisé.
-          </Text>
-          <Text style={styles.nextStepCta}>
-            {hotelBusy ? 'Ouverture…' : 'Voir les hôtels →'}
-          </Text>
-        </Pressable>
-      ) : !scanning && pending.length === 0 && !scanEmpty ? (
+      {!accepted && !scanning && pending.length === 0 && !scanEmpty ? (
         <View style={[styles.nextStepCardMuted, shadow.soft]}>
           <View style={[styles.nextStepBadge, styles.nextStepBadgeMuted]}>
             <Text style={[styles.nextStepBadgeText, styles.nextStepBadgeTextMuted]}>
@@ -627,11 +621,9 @@ export function TripDetailScreen() {
 
       {accepted && !scanning ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1 · Vol choisi</Text>
-          <DestinationCard
+          <MobileBoardingPass
             trip={accepted.trip_data}
             passengers={pax}
-            addHotelBusy={hotelBusy}
             onBook={() => {
               void preparePartnerBook({
                 trip: accepted.trip_data,
@@ -640,8 +632,45 @@ export function TripDetailScreen() {
                 openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
               })
             }}
-            onAddHotel={() => void addHotelFromTrip(accepted.trip_data)}
           />
+          <Pressable
+            onPress={() => void addHotelFromTrip(accepted.trip_data)}
+            disabled={hotelBusy}
+            style={({ pressed }) => [
+              styles.nextStepCard,
+              shadow.soft,
+              pressed && { opacity: 0.94 },
+              hotelBusy && { opacity: 0.6 },
+            ]}
+          >
+            <ImageBackground
+              source={{ uri: destinationImage }}
+              style={styles.nextStepImage}
+              imageStyle={styles.nextStepImageRadius}
+            >
+              <LinearGradient
+                colors={['rgba(31,16,9,0.15)', 'rgba(31,16,9,0.94)']}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.nextStepContent}>
+                <View style={styles.nextStepIcon}>
+                  <Text style={styles.nextStepIconText}>🏨</Text>
+                </View>
+                <View style={styles.nextStepBadge}>
+                  <Text style={styles.nextStepBadgeText}>PROCHAINE ÉTAPE</Text>
+                </View>
+                <Text style={styles.nextStepTitle}>Composer ton hôtel</Text>
+                <Text style={styles.nextStepBody}>
+                  Photos, avis et prix réels pour séjourner à {cityLabel}.
+                </Text>
+                <View style={styles.nextStepButton}>
+                  <Text style={styles.nextStepButtonText}>
+                    {hotelBusy ? 'Ouverture…' : 'Explorer les hôtels →'}
+                  </Text>
+                </View>
+              </View>
+            </ImageBackground>
+          </Pressable>
           {!isOrganizer ? (
             <Text style={styles.roleHint}>
               Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
@@ -655,28 +684,56 @@ export function TripDetailScreen() {
         <View ref={extrasRef} style={styles.section}>
           {plannerActivitiesEnabled ? (
             <View style={[styles.extrasCard, shadow.soft]}>
-              <Text style={styles.sectionTitle}>Activités</Text>
-              <ActivityStepPanel
-                plannedTripId={tripId}
-                citySlug={citySlug}
-                enabled={plannerActivitiesEnabled}
-                surface="planner"
-              />
+              <ImageBackground
+                source={{ uri: destinationImage }}
+                style={styles.extrasHero}
+                imageStyle={styles.extrasHeroImage}
+              >
+                <LinearGradient
+                  colors={['rgba(14,24,40,0.2)', 'rgba(14,24,40,0.92)']}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Text style={styles.extrasIcon}>🎟️</Text>
+                <Text style={styles.extrasKicker}>À VIVRE SUR PLACE</Text>
+                <Text style={styles.extrasTitle}>Activités à {cityLabel}</Text>
+              </ImageBackground>
+              <View style={styles.extrasBody}>
+                <ActivityStepPanel
+                  plannedTripId={tripId}
+                  citySlug={citySlug}
+                  enabled={plannerActivitiesEnabled}
+                  surface="planner"
+                />
+              </View>
             </View>
           ) : null}
           {plannerRestaurantsEnabled ? (
-            <View style={[styles.extrasCard, shadow.soft, { marginTop: 12 }]}>
-              <Text style={styles.sectionTitle}>④ Adresses</Text>
-              <Text style={styles.roleHint}>
-                Colle tes liens Maps / Instagram — même avant le vol.
-              </Text>
-              <RestaurantStepPanel
-                plannedTripId={tripId}
-                citySlug={citySlug}
-                cityLabel={cityLabel}
-                dateIso={dateIso}
-                enabled={plannerRestaurantsEnabled}
-              />
+            <View style={[styles.extrasCard, styles.extrasCardMargin, shadow.soft]}>
+              <ImageBackground
+                source={{ uri: destinationImage }}
+                style={styles.extrasHero}
+                imageStyle={styles.extrasHeroImage}
+              >
+                <LinearGradient
+                  colors={['rgba(60,22,8,0.18)', 'rgba(60,22,8,0.94)']}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Text style={styles.extrasIcon}>🍽️</Text>
+                <Text style={styles.extrasKicker}>TES BONNES ADRESSES</Text>
+                <Text style={styles.extrasTitle}>Où manger à {cityLabel}</Text>
+              </ImageBackground>
+              <View style={styles.extrasBody}>
+                <Text style={styles.roleHint}>
+                  Colle tes liens Maps / Instagram — même avant le vol.
+                </Text>
+                <RestaurantStepPanel
+                  plannedTripId={tripId}
+                  citySlug={citySlug}
+                  cityLabel={cityLabel}
+                  dateIso={dateIso}
+                  enabled={plannerRestaurantsEnabled}
+                />
+              </View>
             </View>
           ) : null}
         </View>
@@ -697,11 +754,35 @@ export function TripDetailScreen() {
           onPress={() => void shareInvite()}
           style={[styles.shareEarly, shadow.soft]}
         >
-          <Text style={styles.shareEarlyTitle}>Inviter des amis</Text>
-          <Text style={styles.shareEarlyBody}>
-            Ils voient le parcours. Toi tu décides du vol — chacun peut ensuite
-            composer son hôtel.
-          </Text>
+          <LinearGradient
+            colors={['#1D1511', '#4A2012', '#D94D1B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.shareEarlyContent}
+          >
+            <View style={styles.shareAvatars}>
+              {['#FF7A45', '#FFB36B', '#F6D365'].map((color, index) => (
+                <View
+                  key={color}
+                  style={[
+                    styles.shareAvatar,
+                    { backgroundColor: color, marginLeft: index === 0 ? 0 : -8 },
+                  ]}
+                >
+                  <Text style={styles.shareAvatarText}>
+                    {index < (trip.members || []).length ? '✓' : '+'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.shareEarlyTitle}>Mieux à plusieurs</Text>
+            <Text style={styles.shareEarlyBody}>
+              Invite tes amis pour suivre le séjour et choisir ensemble.
+            </Text>
+            <View style={styles.shareButton}>
+              <Text style={styles.shareButtonText}>Inviter des amis ↗</Text>
+            </View>
+          </LinearGradient>
         </Pressable>
       ) : null}
 
@@ -949,6 +1030,116 @@ function PriceWatchBanner({
   )
 }
 
+function MobileBoardingPass({
+  trip,
+  passengers,
+  onBook,
+}: {
+  trip: EnrichedTripResponse
+  passengers: number
+  onBook: () => void
+}) {
+  const destination = cityDisplayNameFr(
+    trip.aller.destination,
+    trip.aller.destinationFull,
+  )
+  const image = trip.image_url || cityImageUrl(destination, trip.aller.destination)
+  const formatTicketDate = (value: string) =>
+    new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })
+      .format(new Date(value))
+      .replace('.', '')
+  const formatTicketTime = (value: string) =>
+    new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value))
+
+  return (
+    <View style={[styles.ticket, shadow.lift]}>
+      <ImageBackground
+        source={{ uri: image }}
+        style={styles.ticketHero}
+        imageStyle={styles.ticketHeroImage}
+      >
+        <LinearGradient
+          colors={['rgba(10,17,29,0.45)', 'rgba(10,17,29,0.96)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.ticketTop}>
+          <View>
+            <Text style={styles.ticketKicker}>CARTE D’EMBARQUEMENT</Text>
+            <Text style={styles.ticketAirline}>{formatAirlineLabel(trip)}</Text>
+          </View>
+          <View style={styles.ticketChosen}>
+            <Text style={styles.ticketChosenText}>VOL CHOISI</Text>
+          </View>
+        </View>
+
+        <View style={styles.ticketRoute}>
+          <View>
+            <Text style={styles.ticketCode}>{trip.aller.origin}</Text>
+            <Text style={styles.ticketCity} numberOfLines={1}>
+              {cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)}
+            </Text>
+          </View>
+          <View style={styles.ticketFlightLine}>
+            <View style={styles.ticketDash} />
+            <Text style={styles.ticketPlane}>✈</Text>
+            <View style={styles.ticketDash} />
+          </View>
+          <View style={styles.ticketDestination}>
+            <Text style={[styles.ticketCode, styles.ticketCodeAccent]}>
+              {trip.aller.destination}
+            </Text>
+            <Text style={styles.ticketCity} numberOfLines={1}>
+              {destination}
+            </Text>
+          </View>
+        </View>
+      </ImageBackground>
+
+      <View style={styles.ticketDetails}>
+        {[
+          { label: 'ALLER', flight: trip.aller },
+          { label: 'RETOUR', flight: trip.retour },
+        ].map(({ label, flight }) => (
+          <View key={label} style={styles.ticketLeg}>
+            <Text style={styles.ticketLegLabel}>{label}</Text>
+            <Text style={styles.ticketLegDate}>
+              {formatTicketDate(flight.departureTime)}
+            </Text>
+            <View style={styles.ticketLegBottom}>
+              <Text style={styles.ticketLegTime}>
+                {formatTicketTime(flight.departureTime)}
+              </Text>
+              <Text style={styles.ticketFlightNumber}>
+                {flight.flightNumber || '—'}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.ticketStub}>
+        <View>
+          <Text style={styles.ticketPriceLabel}>PRIX PAR PERSONNE</Text>
+          <Text style={styles.ticketPrice}>{Math.round(trip.prix_total)}€</Text>
+          <Text style={styles.ticketPassengers}>
+            {passengers} voyageur{passengers > 1 ? 's' : ''}
+          </Text>
+        </View>
+        <Pressable onPress={onBook} style={styles.ticketBook}>
+          <Text style={styles.ticketBookText}>Réserver</Text>
+        </Pressable>
+      </View>
+    </View>
+  )
+}
+
 function ProposalBlock({
   proposal,
   passengers,
@@ -987,20 +1178,38 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   scroll: { flex: 1, backgroundColor: 'transparent' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.canvas },
-  hero: { gap: 6, marginBottom: 4 },
+  hero: {
+    height: 230,
+    borderRadius: 26,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    marginBottom: 2,
+  },
+  heroImage: { borderRadius: 26 },
+  heroContent: { padding: 20, gap: 7 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,
     letterSpacing: 1.4,
-    color: colors.primary,
+    color: '#FDBA8C',
   },
   name: {
     fontFamily: fonts.extrabold,
-    fontSize: 28,
-    color: colors.ink,
+    fontSize: 30,
+    color: colors.white,
     letterSpacing: -0.8,
   },
-  meta: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted, lineHeight: 20 },
+  heroChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  heroChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  heroChipText: { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
+  meta: { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.74)', lineHeight: 18 },
   pipelineCard: {
     backgroundColor: colors.white,
     borderRadius: 20,
@@ -1027,11 +1236,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   nextStepCard: {
-    backgroundColor: colors.primary,
-    borderRadius: 20,
-    padding: 18,
-    gap: 6,
+    backgroundColor: '#21140D',
+    borderRadius: 24,
+    overflow: 'hidden',
+    minHeight: 210,
   },
+  nextStepImage: { minHeight: 210, justifyContent: 'flex-end' },
+  nextStepImageRadius: { borderRadius: 24 },
+  nextStepContent: { padding: 18, gap: 6 },
+  nextStepIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+    marginBottom: 8,
+  },
+  nextStepIconText: { fontSize: 20 },
   nextStepCardMuted: {
     backgroundColor: colors.white,
     borderRadius: 20,
@@ -1074,6 +1298,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.white,
   },
+  nextStepButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  nextStepButtonText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.primaryDeep,
+  },
   nextStepTitleDark: {
     fontFamily: fonts.extrabold,
     fontSize: 20,
@@ -1089,14 +1326,99 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   extrasCard: {
     backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    padding: 16,
+    borderRadius: 24,
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#FFDCC8',
-    gap: 10,
   },
+  extrasCardMargin: { marginTop: 12 },
+  extrasHero: { height: 138, justifyContent: 'flex-end', padding: 16 },
+  extrasHeroImage: { borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  extrasIcon: {
+    position: 'absolute',
+    top: 14,
+    left: 14,
+    width: 40,
+    height: 40,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    borderRadius: 13,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.17)',
+    fontSize: 19,
+  },
+  extrasKicker: { fontFamily: fonts.bold, fontSize: 9, letterSpacing: 1.2, color: '#FDBA8C' },
+  extrasTitle: { marginTop: 3, fontFamily: fonts.extrabold, fontSize: 20, color: colors.white },
+  extrasBody: { padding: 16, gap: 10 },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   sectionMuted: { fontFamily: fonts.medium, fontSize: 13, color: colors.faint },
+  ticket: {
+    overflow: 'hidden',
+    borderRadius: 24,
+    backgroundColor: colors.white,
+  },
+  ticketHero: { minHeight: 190, padding: 18, justifyContent: 'space-between' },
+  ticketHeroImage: { borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  ticketTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  ticketKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: '#FDBA8C',
+  },
+  ticketAirline: { marginTop: 4, fontFamily: fonts.bold, fontSize: 13, color: colors.white },
+  ticketChosen: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(16,185,129,0.22)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(167,243,208,0.35)',
+  },
+  ticketChosenText: { fontFamily: fonts.bold, fontSize: 8, letterSpacing: 0.8, color: '#D1FAE5' },
+  ticketRoute: { flexDirection: 'row', alignItems: 'center', marginTop: 34 },
+  ticketCode: { fontFamily: fonts.extrabold, fontSize: 38, letterSpacing: -1.5, color: colors.white },
+  ticketCodeAccent: { color: '#FDBA8C', textAlign: 'right' },
+  ticketCity: { maxWidth: 84, fontFamily: fonts.medium, fontSize: 10, color: 'rgba(255,255,255,0.62)' },
+  ticketDestination: { alignItems: 'flex-end' },
+  ticketFlightLine: { flex: 1, flexDirection: 'row', alignItems: 'center', marginHorizontal: 8 },
+  ticketDash: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.28)' },
+  ticketPlane: { marginHorizontal: 6, fontSize: 18, color: '#FDBA8C' },
+  ticketDetails: { flexDirection: 'row', gap: 10, padding: 14, backgroundColor: '#FFFCF8' },
+  ticketLeg: {
+    flex: 1,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  ticketLegLabel: { fontFamily: fonts.bold, fontSize: 9, letterSpacing: 0.8, color: colors.primaryDeep },
+  ticketLegDate: { marginTop: 4, fontFamily: fonts.bold, fontSize: 12, color: colors.ink },
+  ticketLegBottom: { marginTop: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  ticketLegTime: { fontFamily: fonts.extrabold, fontSize: 18, color: colors.ink },
+  ticketFlightNumber: { flexShrink: 1, fontFamily: fonts.medium, fontSize: 9, color: colors.muted },
+  ticketStub: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+  },
+  ticketPriceLabel: { fontFamily: fonts.bold, fontSize: 8, letterSpacing: 1, color: colors.faint },
+  ticketPrice: { marginTop: 1, fontFamily: fonts.extrabold, fontSize: 26, color: colors.ink },
+  ticketPassengers: { fontFamily: fonts.medium, fontSize: 10, color: colors.muted },
+  ticketBook: { borderRadius: 13, backgroundColor: '#121826', paddingHorizontal: 18, paddingVertical: 12 },
+  ticketBookText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
   roleHint: {
     fontFamily: fonts.medium,
     fontSize: 13,
@@ -1105,15 +1427,38 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   shareEarly: {
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 16,
-    gap: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+    borderRadius: 24,
+    overflow: 'hidden',
   },
-  shareEarlyTitle: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
-  shareEarlyBody: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, lineHeight: 18 },
+  shareEarlyContent: { padding: 18 },
+  shareAvatars: { flexDirection: 'row', marginBottom: 14 },
+  shareAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#3A1B0F',
+  },
+  shareAvatarText: { fontFamily: fonts.extrabold, fontSize: 13, color: colors.white },
+  shareEarlyTitle: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.white },
+  shareEarlyBody: {
+    marginTop: 5,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.68)',
+    lineHeight: 19,
+  },
+  shareButton: {
+    alignSelf: 'flex-start',
+    marginTop: 14,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.white,
+  },
+  shareButtonText: { fontFamily: fonts.bold, fontSize: 13, color: colors.primaryDeep },
   empty: {
     backgroundColor: colors.white,
     borderRadius: 18,

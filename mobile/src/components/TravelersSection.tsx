@@ -12,6 +12,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
 
@@ -71,6 +72,8 @@ export function TravelersSection({
   const sorted = useMemo(() => sortMembers(members || []), [members])
   const count = sorted.length
   const full = count >= 6
+  const seatTotal = Math.min(6, Math.max(seats, count, 1))
+  const progress = Math.min(100, Math.round((count / seatTotal) * 100))
 
   useEffect(() => {
     if (addOpen) {
@@ -123,26 +126,37 @@ export function TravelersSection({
 
   return (
     <View style={[styles.card, shadow.soft]}>
-      <View style={styles.header}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.title}>Voyageurs</Text>
-          <Text style={styles.seats}>
-            {count} / {Math.max(seats, count)} places
-          </Text>
+      <LinearGradient
+        colors={['#151D2A', '#27202A', '#6B2A16']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerHero}
+      >
+        <View style={styles.header}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.headerKicker}>LE GROUPE</Text>
+            <Text style={styles.title}>Ta bande de voyage</Text>
+            <Text style={styles.seats}>
+              {count} / {seatTotal} places
+            </Text>
+          </View>
+          {isOrganizer && !full ? (
+            <Pressable
+              onPress={() => setAddOpen(true)}
+              disabled={busy}
+              style={[styles.addBtn, busy && { opacity: 0.5 }]}
+            >
+              <Text style={styles.addBtnText}>+ Ajouter</Text>
+            </Pressable>
+          ) : null}
+          {isOrganizer && full ? (
+            <Text style={styles.fullHint}>Complet</Text>
+          ) : null}
         </View>
-        {isOrganizer && !full ? (
-          <Pressable
-            onPress={() => setAddOpen(true)}
-            disabled={busy}
-            style={[styles.addBtn, busy && { opacity: 0.5 }]}
-          >
-            <Text style={styles.addBtnText}>+ Ajouter</Text>
-          </Pressable>
-        ) : null}
-        {isOrganizer && full ? (
-          <Text style={styles.fullHint}>Complet</Text>
-        ) : null}
-      </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        </View>
+      </LinearGradient>
 
       {!isOrganizer ? (
         <Text style={styles.roleNote}>
@@ -300,14 +314,23 @@ export function TravelersSection({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 18,
+    backgroundColor: '#FFFCF9',
+    borderRadius: 24,
+    padding: 14,
     gap: 14,
   },
+  headerHero: { borderRadius: 19, padding: 16, gap: 14, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  title: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
-  seats: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
+  headerKicker: { fontFamily: fonts.bold, fontSize: 9, letterSpacing: 1.3, color: '#FDBA8C' },
+  title: { fontFamily: fonts.extrabold, fontSize: 19, color: colors.white },
+  seats: { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.62)' },
+  progressTrack: {
+    height: 7,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  progressFill: { height: 7, borderRadius: 999, backgroundColor: '#FF8A5B' },
   roleNote: {
     fontFamily: fonts.regular,
     fontSize: 12,
@@ -315,27 +338,33 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   addBtn: {
-    backgroundColor: colors.primarySoft || '#FFF3E8',
+    backgroundColor: colors.white,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 12,
   },
-  addBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.primaryInk },
-  fullHint: { fontFamily: fonts.semibold, fontSize: 12, color: colors.faint },
+  addBtnText: { fontFamily: fonts.bold, fontSize: 12, color: colors.primaryDeep },
+  fullHint: { fontFamily: fonts.semibold, fontSize: 12, color: colors.white },
   empty: { fontFamily: fonts.regular, fontSize: 14, color: colors.muted },
   list: { gap: 10 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 4,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.primarySoft,
   },
   avatarOrg: { backgroundColor: colors.primarySoft },
   avatarOn: { backgroundColor: colors.successSoft },
