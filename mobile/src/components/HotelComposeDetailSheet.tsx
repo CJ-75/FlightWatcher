@@ -175,6 +175,7 @@ export function HotelComposeDetailSheet({
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
+  const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
 
   useEffect(() => {
     if (!visible || !hotelId) {
@@ -354,6 +355,7 @@ export function HotelComposeDetailSheet({
         </View>
 
         <ScrollView
+          scrollEnabled={!gallerySwipeActive}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
         >
@@ -365,6 +367,7 @@ export function HotelComposeDetailSheet({
             hotelName={hotel.name}
             cityLabel={cityLabel || undefined}
             height={260}
+            onHorizontalGesture={setGallerySwipeActive}
           />
 
           <View style={styles.body}>

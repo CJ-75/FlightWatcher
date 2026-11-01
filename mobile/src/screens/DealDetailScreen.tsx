@@ -79,6 +79,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [guestReviews, setGuestReviews] = useState<HotelGuestReview[]>([])
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
+  const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -368,6 +369,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
     <View style={styles.root}>
       <ScreenBackground />
       <ScrollView
+        scrollEnabled={!gallerySwipeActive}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 168 }}
       >
@@ -379,6 +381,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
           hotelName={selected?.name || deal.hotel_name}
           cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
           height={heroH}
+          onHorizontalGesture={setGallerySwipeActive}
           bottomLeft={
             <View>
               {deal.badge ? (

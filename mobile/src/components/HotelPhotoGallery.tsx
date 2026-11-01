@@ -33,6 +33,8 @@ export type HotelPhotoGalleryProps = {
   topRight?: React.ReactElement | null
   bottomLeft?: React.ReactElement | null
   onImageError?: () => void
+  /** Lock parent vertical ScrollView while the user swipes photos. */
+  onHorizontalGesture?: (active: boolean) => void
 }
 
 function toPhotos(urls: (string | undefined | null)[]): HotelGalleryPhoto[] {
@@ -58,6 +60,7 @@ export function HotelPhotoGallery({
   topRight,
   bottomLeft,
   onImageError,
+  onHorizontalGesture,
 }: HotelPhotoGalleryProps) {
   const insets = useSafeAreaInsets()
   const listRef = useRef<FlatList>(null)
@@ -67,6 +70,8 @@ export function HotelPhotoGallery({
   const lightboxOpenRef = useRef(false)
   const ignoreOpenUntilRef = useRef(0)
   const blockHeroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heroMovedRef = useRef(false)
+  const gestureActiveRef = useRef(false)
   const [photos, setPhotos] = useState<HotelGalleryPhoto[]>(() =>
     toPhotos([...(seedPhotos || []), seedPhoto]),
   )
@@ -74,6 +79,15 @@ export function HotelPhotoGallery({
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [blockHero, setBlockHero] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  const setGestureActive = useCallback(
+    (active: boolean) => {
+      if (gestureActiveRef.current === active) return
+      gestureActiveRef.current = active
+      onHorizontalGesture?.(active)
+    },
+    [onHorizontalGesture],
+  )
 
   const seedKey = [...(seedPhotos || []), seedPhoto || ''].join('|')
 
@@ -126,37 +140,48 @@ export function HotelPhotoGallery({
     [],
   )
 
-  const onMomentum = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const x = e.nativeEvent.contentOffset.x
-    const i = Math.round(x / SCREEN_W)
-    setIndex(Math.max(0, Math.min(i, photos.length - 1)))
-  }, [photos.length])
+  const onMomentum = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const x = e.nativeEvent.contentOffset.x
+      const i = Math.round(x / SCREEN_W)
+      setIndex(Math.max(0, Math.min(i, photos.length - 1)))
+      setGestureActive(false)
+    },
+    [photos.length, setGestureActive],
+  )
 
   const closeLightbox = useCallback(() => {
     // Mark closed first so FlatList unmount scroll events cannot reopen.
     lightboxOpenRef.current = false
     ignoreOpenUntilRef.current = Date.now() + 1000
+    setGestureActive(false)
     setBlockHero(true)
     if (blockHeroTimerRef.current) clearTimeout(blockHeroTimerRef.current)
     blockHeroTimerRef.current = setTimeout(() => setBlockHero(false), 1000)
     setLightbox(null)
-  }, [])
+  }, [setGestureActive])
 
-  const openLightbox = useCallback((i: number) => {
-    if (lightboxOpenRef.current) return
-    if (blockHero || Date.now() < ignoreOpenUntilRef.current) return
-    lightboxOpenRef.current = true
-    setLightbox(i)
-    requestAnimationFrame(() => {
-      if (!lightboxOpenRef.current) return
-      lightboxRef.current?.scrollToIndex({ index: i, animated: false })
-    })
-  }, [blockHero])
+  const openLightbox = useCallback(
+    (i: number) => {
+      if (lightboxOpenRef.current) return
+      if (blockHero || Date.now() < ignoreOpenUntilRef.current) return
+      if (heroMovedRef.current) return
+      lightboxOpenRef.current = true
+      setGestureActive(false)
+      setLightbox(i)
+      requestAnimationFrame(() => {
+        if (!lightboxOpenRef.current) return
+        lightboxRef.current?.scrollToIndex({ index: i, animated: false })
+      })
+    },
+    [blockHero, setGestureActive],
+  )
 
   if (!photos.length) return null
 
   const count = photos.length
-  const dots = Math.min(count, 8)
+  const visible = Math.min(count, 24)
+  const dots = Math.min(visible, 8)
   const lightboxOpen = lightbox != null
 
   return (
@@ -169,12 +194,34 @@ export function HotelPhotoGallery({
           horizontal
           pagingEnabled
           nestedScrollEnabled
+          directionalLockEnabled
+          disableIntervalMomentum
           decelerationRate="fast"
+          bounces={false}
+          overScrollMode="never"
           showsHorizontalScrollIndicator={false}
+          getItemLayout={(_, i) => ({
+            length: SCREEN_W,
+            offset: SCREEN_W * i,
+            index: i,
+          })}
+          onScrollBeginDrag={() => {
+            heroMovedRef.current = true
+            setGestureActive(true)
+          }}
+          onScrollEndDrag={(e) => {
+            const { velocity } = e.nativeEvent
+            // Keep parent locked until momentum settles for a snappy page snap.
+            if (!velocity?.x || Math.abs(velocity.x) < 0.05) setGestureActive(false)
+          }}
           onMomentumScrollEnd={onMomentum}
           renderItem={({ item, index: i }) => (
             <Pressable
               disabled={blockHero}
+              delayPressIn={120}
+              onPressIn={() => {
+                heroMovedRef.current = false
+              }}
               onPress={() => openLightbox(i)}
               style={{ width: SCREEN_W, height }}
             >
@@ -211,7 +258,7 @@ export function HotelPhotoGallery({
 
         <View style={styles.counter}>
           <Text style={styles.counterText}>
-            {loading ? '…' : `${index + 1}/${Math.min(count, 24)}`}
+            {loading ? '…' : `${index + 1}/${visible}`}
           </Text>
         </View>
 
@@ -227,7 +274,7 @@ export function HotelPhotoGallery({
         </Pressable>
 
         {count > 1 ? (
-          <View style={styles.dots}>
+          <View style={styles.dots} pointerEvents="none">
             {Array.from({ length: dots }).map((_, i) => (
               <View
                 key={i}
@@ -282,6 +329,11 @@ export function HotelPhotoGallery({
             keyExtractor={(item, i) => `lb-${item.url}-${i}`}
             horizontal
             pagingEnabled
+            directionalLockEnabled
+            disableIntervalMomentum
+            decelerationRate="fast"
+            bounces={false}
+            overScrollMode="never"
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={lightbox ?? 0}
             getItemLayout={(_, i) => ({
