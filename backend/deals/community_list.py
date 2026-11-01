@@ -22,6 +22,36 @@ _FLAG_CACHE_TTL_S = 60.0
 WALL_MIN_DEALS = 30
 
 
+def _flight_duration_minutes(
+    flight: Optional[Dict[str, Any]],
+    *,
+    origin_iata: Any = None,
+    dest_iata: Any = None,
+) -> Optional[int]:
+    """Prefer snapshot duration; else estimate from airport pair (direct display)."""
+    snap = flight or {}
+    raw = snap.get("duration_minutes")
+    if raw is None:
+        raw = snap.get("duration_min")
+    try:
+        if raw is not None:
+            n = int(round(float(raw)))
+            if n > 0:
+                return n
+    except (TypeError, ValueError):
+        pass
+    oi = str(origin_iata or snap.get("origin_iata") or "").strip().upper()
+    di = str(dest_iata or snap.get("destination_iata") or snap.get("dest_iata") or "").strip().upper()
+    if not oi or not di:
+        return None
+    try:
+        from deals.flight_attach import estimate_duration_minutes
+
+        return int(estimate_duration_minutes(oi, di))
+    except Exception:
+        return None
+
+
 def _wall_max_deals() -> int:
     import os
 
@@ -290,6 +320,11 @@ def row_to_travel_deal(
             "airline": flight.get("carrier"),
             "booking_url": flight.get("booking_url"),
             "direct": flight.get("direct", True),
+            "duration_minutes": _flight_duration_minutes(
+                flight,
+                origin_iata=row.get("origin_iata"),
+                dest_iata=row.get("dest_iata"),
+            ),
             # Canonical UI fields + raw snapshot keys
             "outbound_local": flight.get("out_dep_local") or flight.get("outbound_local"),
             "inbound_local": flight.get("ret_dep_local") or flight.get("inbound_local"),

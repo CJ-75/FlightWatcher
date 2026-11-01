@@ -4,10 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   boardLabelFr,
   dealAdults,
+  directFlightLabel,
   formatFetchedAt,
+  formatFlightDuration,
   hotelCancelLabel,
   localizeAviasalesBookingUrl,
   pricePpWithHotel,
+  resolveFlightDurationMinutes,
 } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
 import { useI18n } from '../contexts/I18nContext'
@@ -288,6 +291,12 @@ export function DealDetailModal({
   const rating = selected?.rating
   const cancelLabel = hotelCancelLabel(selected || deal.hotel)
   const board = boardLabelFr(selected?.board || deal.board)
+  const flightDurationLabel = formatFlightDuration(resolveFlightDurationMinutes(deal))
+  const directLabel = directFlightLabel(deal.flight, {
+    originIata: deal.flight?.origin_iata || deal.departure_airport,
+    destIata: deal.flight?.destination_iata,
+    withDuration: true,
+  })
   const { out: outTime, ret: inTime } = flightLegTimes(deal.flight)
   const totalForParty = Math.round(pricePp * adults)
 
@@ -514,7 +523,7 @@ export function DealDetailModal({
 
               {/* Quick decision facts */}
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {deal.flight?.direct ? <FactChip tone="good">Vol direct</FactChip> : null}
+                {directLabel ? <FactChip tone="good">{directLabel}</FactChip> : null}
                 {deal.flight?.airline ? <FactChip>{deal.flight.airline}</FactChip> : null}
                 {board ? <FactChip>{board}</FactChip> : null}
                 {cancelLabel ? <FactChip tone="good">{cancelLabel}</FactChip> : null}
@@ -612,8 +621,17 @@ export function DealDetailModal({
                       {inTime ? ` · ${inTime}` : ''}
                     </span>
                   </p>
-                  {deal.flight?.direct ? (
-                    <p className="text-emerald-700 font-semibold pt-0.5">Vol direct</p>
+                  {flightDurationLabel ? (
+                    <p className="flex justify-between gap-3 pt-0.5">
+                      <span className="text-slate-400 font-semibold">Durée</span>
+                      <span className="font-semibold text-emerald-700 text-right">
+                        {deal.flight?.direct
+                          ? `Vol direct · ${flightDurationLabel}`
+                          : flightDurationLabel}
+                      </span>
+                    </p>
+                  ) : directLabel ? (
+                    <p className="text-emerald-700 font-semibold pt-0.5">{directLabel}</p>
                   ) : null}
                 </div>
                 {deal.baggage_line ? (

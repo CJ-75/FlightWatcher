@@ -114,20 +114,31 @@ def _hotel_card(h: Dict[str, Any]) -> Dict[str, Any]:
 def _flight_card(flight_row: Dict[str, Any], flight_json: Dict[str, Any]) -> Dict[str, Any]:
     aller = flight_json.get("aller") or {}
     retour = flight_json.get("retour") or {}
+    origin = (aller.get("origin") or flight_row.get("origin_iata") or "").upper()
+    dest = (
+        aller.get("destination")
+        or flight_row.get("iata_arrival")
+        or flight_json.get("destination_code")
+        or ""
+    ).upper()
+    duration_minutes = None
+    try:
+        from deals.flight_attach import estimate_duration_minutes
+
+        if origin and dest:
+            duration_minutes = int(estimate_duration_minutes(origin, dest))
+    except Exception:
+        duration_minutes = None
     return {
         "price_pp": float(flight_row.get("price_pp") or flight_json.get("prix_total") or 0),
         "outbound_local": aller.get("departureTime") or flight_json.get("arrival_local"),
         "inbound_local": retour.get("departureTime") or flight_json.get("return_departure_local"),
         "direct": bool(flight_row.get("direct") if flight_row.get("direct") is not None else True),
+        "duration_minutes": duration_minutes,
         "airline": flight_json.get("airline") or (flight_json.get("provider") or "").title(),
         "booking_url": flight_json.get("booking_url") or "",
-        "origin_iata": (aller.get("origin") or flight_row.get("origin_iata") or "").upper(),
-        "destination_iata": (
-            aller.get("destination")
-            or flight_row.get("iata_arrival")
-            or flight_json.get("destination_code")
-            or ""
-        ).upper(),
+        "origin_iata": origin,
+        "destination_iata": dest,
     }
 
 
@@ -139,6 +150,7 @@ def _highlights(
 ) -> List[str]:
     out: List[str] = []
     if flight.get("direct"):
+        # Duration belongs on deal detail, not list highlights/chips
         out.append("Vol direct")
     board = (hotel.get("board") or "").upper()
     if board in BOARD_LABEL and board != "RO":

@@ -63,13 +63,16 @@ export function HotelPhotoGallery({
   const listRef = useRef<FlatList>(null)
   const lightboxRef = useRef<FlatList>(null)
   const loadedKeyRef = useRef<string | null>(null)
-  const guardTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** True only while lightbox should stay open — blocks scroll-end reopen. */
+  const lightboxOpenRef = useRef(false)
+  const ignoreOpenUntilRef = useRef(0)
+  const blockHeroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [photos, setPhotos] = useState<HotelGalleryPhoto[]>(() =>
     toPhotos([...(seedPhotos || []), seedPhoto]),
   )
   const [index, setIndex] = useState(0)
   const [lightbox, setLightbox] = useState<number | null>(null)
-  const [closeGuard, setCloseGuard] = useState(false)
+  const [blockHero, setBlockHero] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const seedKey = [...(seedPhotos || []), seedPhoto || ''].join('|')
@@ -79,7 +82,6 @@ export function HotelPhotoGallery({
     const hid = (hotelId || '').trim()
     const key = `${hid}|${seedKey}`
 
-    // Skip reset/refetch when parent re-renders with same hotel (e.g. Modal close)
     if (loadedKeyRef.current === key) return
 
     setPhotos(seeds)
@@ -119,7 +121,7 @@ export function HotelPhotoGallery({
 
   useEffect(
     () => () => {
-      if (guardTimerRef.current) clearTimeout(guardTimerRef.current)
+      if (blockHeroTimerRef.current) clearTimeout(blockHeroTimerRef.current)
     },
     [],
   )
@@ -131,23 +133,31 @@ export function HotelPhotoGallery({
   }, [photos.length])
 
   const closeLightbox = useCallback(() => {
+    // Mark closed first so FlatList unmount scroll events cannot reopen.
+    lightboxOpenRef.current = false
+    ignoreOpenUntilRef.current = Date.now() + 1000
+    setBlockHero(true)
+    if (blockHeroTimerRef.current) clearTimeout(blockHeroTimerRef.current)
+    blockHeroTimerRef.current = setTimeout(() => setBlockHero(false), 1000)
     setLightbox(null)
-    setCloseGuard(true)
-    if (guardTimerRef.current) clearTimeout(guardTimerRef.current)
-    guardTimerRef.current = setTimeout(() => setCloseGuard(false), 420)
   }, [])
 
-  const openLightbox = (i: number) => {
+  const openLightbox = useCallback((i: number) => {
+    if (lightboxOpenRef.current) return
+    if (blockHero || Date.now() < ignoreOpenUntilRef.current) return
+    lightboxOpenRef.current = true
     setLightbox(i)
     requestAnimationFrame(() => {
+      if (!lightboxOpenRef.current) return
       lightboxRef.current?.scrollToIndex({ index: i, animated: false })
     })
-  }
+  }, [blockHero])
 
   if (!photos.length) return null
 
   const count = photos.length
   const dots = Math.min(count, 8)
+  const lightboxOpen = lightbox != null
 
   return (
     <>
@@ -163,7 +173,11 @@ export function HotelPhotoGallery({
           showsHorizontalScrollIndicator={false}
           onMomentumScrollEnd={onMomentum}
           renderItem={({ item, index: i }) => (
-            <Pressable onPress={() => openLightbox(i)} style={{ width: SCREEN_W, height }}>
+            <Pressable
+              disabled={blockHero}
+              onPress={() => openLightbox(i)}
+              style={{ width: SCREEN_W, height }}
+            >
               <Image
                 source={{ uri: item.url }}
                 style={styles.image}
@@ -202,6 +216,7 @@ export function HotelPhotoGallery({
         </View>
 
         <Pressable
+          disabled={blockHero}
           onPress={() => openLightbox(index)}
           style={styles.seeAll}
           hitSlop={8}
@@ -221,16 +236,14 @@ export function HotelPhotoGallery({
             ))}
           </View>
         ) : null}
+
+        {blockHero ? (
+          <View style={[StyleSheet.absoluteFill, styles.heroBlock]} pointerEvents="auto" />
+        ) : null}
       </View>
 
-      {closeGuard ? (
-        <Modal visible transparent animationType="none" onRequestClose={() => setCloseGuard(false)}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCloseGuard(false)} />
-        </Modal>
-      ) : null}
-
       <Modal
-        visible={lightbox != null}
+        visible={lightboxOpen}
         animationType="fade"
         presentationStyle="fullScreen"
         onRequestClose={closeLightbox}
@@ -253,9 +266,11 @@ export function HotelPhotoGallery({
               {(lightbox ?? 0) + 1} / {count}
             </Text>
             <Pressable
-              onPress={closeLightbox}
+              onPressIn={closeLightbox}
               style={styles.closeBtn}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer la galerie"
             >
               <Text style={styles.closeText}>×</Text>
             </Pressable>
@@ -275,11 +290,16 @@ export function HotelPhotoGallery({
               index: i,
             })}
             onMomentumScrollEnd={(e) => {
+              // Critical: ignore scroll events while / after closing — they were
+              // reopening the gallery on Séjours → fiche.
+              if (!lightboxOpenRef.current) return
               const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W)
               setLightbox(Math.max(0, Math.min(i, count - 1)))
             }}
             onScrollToIndexFailed={(info) => {
+              if (!lightboxOpenRef.current) return
               setTimeout(() => {
+                if (!lightboxOpenRef.current) return
                 lightboxRef.current?.scrollToIndex({
                   index: info.index,
                   animated: false,
@@ -306,6 +326,7 @@ export function HotelPhotoGallery({
             renderItem={({ item, index: i }) => (
               <Pressable
                 onPress={() => {
+                  if (!lightboxOpenRef.current) return
                   setLightbox(i)
                   lightboxRef.current?.scrollToIndex({ index: i, animated: true })
                 }}
@@ -330,6 +351,10 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: colors.line,
     overflow: 'hidden',
+  },
+  heroBlock: {
+    zIndex: 20,
+    backgroundColor: 'transparent',
   },
   image: { width: '100%', height: '100%' },
   topRight: {

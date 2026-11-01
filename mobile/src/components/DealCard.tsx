@@ -18,6 +18,7 @@ import {
   dealAdults,
   dealBadgeLabels,
   dealCornerBadgeParts,
+  directFlightLabel,
   hotelStarsLabel,
 } from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
@@ -200,7 +201,8 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
   const baggageLine = (deal.baggage_line || '').trim()
   const pills: string[] = []
-  if (deal.flight?.direct) pills.push('Vol direct')
+  const directLabel = directFlightLabel(deal.flight)
+  if (directLabel) pills.push(directLabel)
   if (board) pills.push(board)
   if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
     pills.push('Annul. OK')
@@ -427,10 +429,10 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
               {pills.slice(0, 3).map((c) => (
                 <View
                   key={c}
-                  style={[styles.chip, c === 'Vol direct' && styles.chipGood]}
+                  style={[styles.chip, c.startsWith('Vol direct') && styles.chipGood]}
                 >
                   <Text
-                    style={[styles.chipText, c === 'Vol direct' && styles.chipGoodText]}
+                    style={[styles.chipText, c.startsWith('Vol direct') && styles.chipGoodText]}
                   >
                     {c}
                   </Text>

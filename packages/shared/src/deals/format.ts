@@ -191,6 +191,186 @@ export function dealCornerBadge(deal: TravelDeal): string | null {
   return parts.text
 }
 
+/** Format block time: 2h, 2h15, 45 min. */
+export function formatFlightDuration(minutes?: number | null): string | null {
+  if (minutes == null || !Number.isFinite(Number(minutes))) return null
+  const m = Math.max(0, Math.round(Number(minutes)))
+  if (m <= 0) return null
+  const h = Math.floor(m / 60)
+  const min = m % 60
+  if (h <= 0) return `${min} min`
+  if (min === 0) return `${h}h`
+  return `${h}h${String(min).padStart(2, '0')}`
+}
+
+/** Approx airport coords for short-haul duration (same idea as backend). */
+const FLIGHT_DURATION_COORDS: Record<string, [number, number]> = {
+  BVA: [49.4544, 2.1128],
+  ORY: [48.7233, 2.3794],
+  CDG: [49.0097, 2.5479],
+  XCR: [48.7733, 4.2061],
+  MRS: [43.4393, 5.2214],
+  NCE: [43.6584, 7.2159],
+  LYS: [45.7256, 5.0811],
+  TLS: [43.6291, 1.3638],
+  BOD: [44.8283, -0.7156],
+  NTE: [47.1532, -1.6107],
+  LIS: [38.7742, -9.1342],
+  OPO: [41.2481, -8.6814],
+  BCN: [41.2971, 2.0785],
+  MAD: [40.4983, -3.5676],
+  AGP: [36.6749, -4.4991],
+  PMI: [39.5517, 2.7388],
+  FCO: [41.8003, 12.2389],
+  CIA: [41.7994, 12.5949],
+  MXP: [45.6306, 8.7281],
+  BGY: [45.6739, 9.7042],
+  VCE: [45.5053, 12.3519],
+  NAP: [40.886, 14.2908],
+  PMO: [38.1759, 13.091],
+  CAG: [39.2515, 9.0543],
+  ATH: [37.9364, 23.9445],
+  HER: [35.3397, 25.1803],
+  RHO: [36.4054, 28.0862],
+  CFU: [39.6019, 19.9117],
+  BUD: [47.4298, 19.2611],
+  PRG: [50.1008, 14.26],
+  KRK: [50.0777, 19.7848],
+  WAW: [52.1657, 20.9671],
+  WRO: [51.1027, 16.8858],
+  GDN: [54.3776, 18.4662],
+  VIE: [48.1103, 16.5697],
+  DUB: [53.4213, -6.2701],
+  STN: [51.885, 0.235],
+  LTN: [51.8747, -0.3683],
+  LGW: [51.1537, -0.1821],
+  MAN: [53.3537, -2.275],
+  EDI: [55.95, -3.3725],
+  AMS: [52.3086, 4.7639],
+  EIN: [51.4501, 5.3745],
+  BRU: [50.9014, 4.4844],
+  CRL: [50.4592, 4.4538],
+  FAO: [37.0144, -7.9659],
+  ALC: [38.2822, -0.5582],
+  VLC: [39.4893, -0.4816],
+  SVQ: [37.418, -5.8931],
+  BIO: [43.3011, -2.9106],
+  RAK: [31.6069, -8.0363],
+  TFS: [28.0445, -16.5725],
+  LPA: [27.9319, -15.3866],
+  ACE: [28.9455, -13.6052],
+  FUE: [28.4527, -13.8638],
+  AJA: [41.9236, 8.8029],
+  BIA: [42.5527, 9.4837],
+  CLY: [42.5308, 8.793],
+  FSC: [41.5006, 9.0978],
+  ZAG: [45.7429, 16.0688],
+  SPU: [43.5389, 16.298],
+  DBV: [42.5614, 18.2682],
+  TIA: [41.4147, 19.7206],
+  SOF: [42.6952, 23.4062],
+  OTP: [44.5711, 26.085],
+  BUH: [44.5032, 26.102],
+  IST: [41.2753, 28.7519],
+  SAW: [40.8986, 29.3092],
+  AYT: [36.8987, 30.8005],
+  CPH: [55.618, 12.656],
+  ARN: [59.6519, 17.9186],
+  OSL: [60.1939, 11.1004],
+  HEL: [60.3172, 24.9633],
+  RIX: [56.9236, 23.9711],
+  TLL: [59.4133, 24.8328],
+  VNO: [54.6341, 25.2858],
+  SKG: [40.5197, 22.9709],
+  JTR: [36.3992, 25.4793],
+  JMK: [36.6969, 25.1472],
+  KGS: [36.7933, 27.0917],
+  PSA: [43.6839, 10.3927],
+  BLQ: [44.5354, 11.2887],
+  TRN: [45.2008, 7.6498],
+  BRI: [41.1389, 16.7606],
+  CTA: [37.4668, 15.0664],
+  OLB: [40.8987, 9.5176],
+  SUF: [38.9072, 16.2423],
+}
+
+function _haversineKm(a: [number, number], b: [number, number]): number {
+  const r = 6371
+  const p1 = (a[0] * Math.PI) / 180
+  const p2 = (b[0] * Math.PI) / 180
+  const dp = ((b[0] - a[0]) * Math.PI) / 180
+  const dl = ((b[1] - a[1]) * Math.PI) / 180
+  const x =
+    Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(x)))
+}
+
+/** Estimate block time when API duration is missing (cruise 780 km/h + 45 min pad). */
+export function estimateFlightDurationMinutes(
+  originIata?: string | null,
+  destIata?: string | null,
+): number | null {
+  const o = String(originIata || '').trim().toUpperCase()
+  const d = String(destIata || '').trim().toUpperCase()
+  if (!o || !d) return null
+  const a = FLIGHT_DURATION_COORDS[o]
+  const b = FLIGHT_DURATION_COORDS[d]
+  if (!a || !b) return 150
+  const minutes = Math.round((_haversineKm(a, b) / 780) * 60 + 45)
+  return Math.max(75, Math.min(420, minutes))
+}
+
+/** Prefer API duration, else estimate from IATA pair. */
+export function resolveFlightDurationMinutes(deal: {
+  departure_airport?: string | null
+  arrival_airport?: string | null
+  flight?: {
+    duration_minutes?: number | null
+    origin_iata?: string | null
+    destination_iata?: string | null
+  } | null
+  /** occasional fields on related payloads */
+  origin_iata?: string | null
+  dest_iata?: string | null
+  destination?: string | null
+}): number | null {
+  const raw = deal.flight?.duration_minutes
+  if (raw != null && Number.isFinite(Number(raw)) && Number(raw) > 0) {
+    return Math.round(Number(raw))
+  }
+  const origin =
+    deal.flight?.origin_iata || deal.departure_airport || deal.origin_iata || null
+  const dest =
+    deal.flight?.destination_iata ||
+    deal.arrival_airport ||
+    deal.dest_iata ||
+    deal.destination ||
+    null
+  return estimateFlightDurationMinutes(origin, dest)
+}
+
+/**
+ * Card/list chip: « Vol direct » only.
+ * Pass `withDuration: true` for detail copy (« Vol direct · 2h15 »).
+ */
+export function directFlightLabel(
+  flight?: { direct?: boolean; duration_minutes?: number | null } | null,
+  opts?: {
+    originIata?: string | null
+    destIata?: string | null
+    withDuration?: boolean
+  },
+): string | null {
+  if (!flight?.direct) return null
+  if (!opts?.withDuration) return 'Vol direct'
+  const mins =
+    flight.duration_minutes != null && Number(flight.duration_minutes) > 0
+      ? Math.round(Number(flight.duration_minutes))
+      : estimateFlightDurationMinutes(opts?.originIata, opts?.destIata)
+  const dur = formatFlightDuration(mins)
+  return dur ? `Vol direct · ${dur}` : 'Vol direct'
+}
+
 export function dealBadgeLabels(deal: TravelDeal): string[] {
   const badges: string[] = []
   if (deal.flight?.direct || deal.highlights?.some((h) => /direct/i.test(h))) {

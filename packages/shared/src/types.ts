@@ -173,6 +173,8 @@ export interface TravelDealFlight {
   outbound_local?: string
   inbound_local?: string
   direct?: boolean
+  /** Estimated block time in minutes (direct / short-haul). */
+  duration_minutes?: number | null
   airline?: string
   carrier?: string
   booking_url?: string

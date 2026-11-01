@@ -5,6 +5,7 @@ import {
   dealAdults,
   dealBadgeLabels,
   dealCornerBadgeParts,
+  directFlightLabel,
   hotelCancelLabel,
 } from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
@@ -298,7 +299,8 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
 
   const baggageLine = (deal.baggage_line || '').trim()
   const pills: { label: string; tone: 'neutral' | 'good' }[] = []
-  if (deal.flight?.direct) pills.push({ label: 'Vol direct', tone: 'good' })
+  const directLabel = directFlightLabel(deal.flight)
+  if (directLabel) pills.push({ label: directLabel, tone: 'good' })
   if (board) pills.push({ label: board, tone: 'neutral' })
   {
     const cancelPill =

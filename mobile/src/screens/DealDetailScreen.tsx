@@ -16,8 +16,11 @@ import type { TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
 import {
   boardLabelFr,
   dealAdults,
+  directFlightLabel,
+  formatFlightDuration,
   hotelStarsLabel,
   pricePpWithHotel,
+  resolveFlightDurationMinutes,
 } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -194,6 +197,13 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
   const selectedStars = hotelStarsLabel(selected?.stars || deal.hotel_stars)
+  const flightDurationMin = resolveFlightDurationMinutes(deal)
+  const flightDurationLabel = formatFlightDuration(flightDurationMin)
+  const directLabel = directFlightLabel(deal.flight, {
+    originIata: deal.flight?.origin_iata || deal.departure_airport,
+    destIata: deal.flight?.destination_iata,
+    withDuration: true,
+  })
 
   const openFlight = async () => {
     let url = flightUrl
@@ -392,8 +402,17 @@ export function DealDetailScreen({ route, navigation }: Props) {
                 {inTime ? ` · ${inTime}` : ''}
               </Text>
             </View>
-            {deal.flight?.direct ? (
-              <Text style={styles.directHint}>Vol direct</Text>
+            {flightDurationLabel ? (
+              <View style={styles.legRow}>
+                <Text style={styles.legLabel}>Durée</Text>
+                <Text style={[styles.legValue, styles.durationValue]}>
+                  {deal.flight?.direct
+                    ? `Vol direct · ${flightDurationLabel}`
+                    : flightDurationLabel}
+                </Text>
+              </View>
+            ) : directLabel ? (
+              <Text style={styles.directHint}>{directLabel}</Text>
             ) : null}
             {deal.baggage_line ? (
               <Text style={styles.baggage}>{deal.baggage_line}</Text>
@@ -840,6 +859,9 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textAlign: 'right',
     lineHeight: 18,
+  },
+  durationValue: {
+    color: '#047857',
   },
   directHint: {
     marginTop: 8,
