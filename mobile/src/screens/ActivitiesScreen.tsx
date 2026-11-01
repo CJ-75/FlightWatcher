@@ -40,6 +40,7 @@ import { ActivityCard } from '../components/ActivityCard'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { ActivityTripHero } from '../components/ActivityTripHero'
 import { ScreenBackground } from '../components/ScreenBackground'
+import { useLikedActivities } from '../hooks/useLikedActivities'
 import type { MainTabParamList, RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -82,6 +83,11 @@ export function ActivitiesScreen() {
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
   const didAutoCity = useRef(false)
+  const { isLiked, toggleLike, refresh: refreshLikes } = useLikedActivities()
+
+  useEffect(() => {
+    void refreshLikes()
+  }, [refreshLikes])
 
   useEffect(() => {
     let cancelled = false
@@ -422,6 +428,8 @@ export function ActivitiesScreen() {
             onAdd={() => void onAddToPlanner(c)}
             addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
             addDisabled={addBusy}
+            liked={isLiked(c.productCode)}
+            onToggleLike={() => void toggleLike(c)}
           />
         )}
         ListEmptyComponent={

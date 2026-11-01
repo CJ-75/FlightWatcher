@@ -1,5 +1,5 @@
 import React from 'react'
-import { View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { colors } from '../theme'
 import { HeartIcon } from './HeartIcon'
 
@@ -70,6 +70,77 @@ export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
             backgroundColor: colors.white,
           }}
         />
+      </View>
+    </View>
+  )
+}
+
+/** Ticket / billet — Activités (distinct du calendrier Planner). */
+export function ActivitiesTabIcon({ size = 22, color = colors.faint }: IconProps) {
+  const w = size * 0.92
+  const h = size * 0.58
+  const hole = h * 0.28
+  const bodyW = w * 0.62
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <View
+        style={{
+          width: w,
+          height: h,
+          borderRadius: h * 0.22,
+          backgroundColor: color,
+          flexDirection: 'row',
+          alignItems: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        <View
+          style={{
+            width: w * 0.3,
+            height: h,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRightWidth: StyleSheet.hairlineWidth,
+            borderRightColor: 'rgba(255,255,255,0.35)',
+          }}
+        >
+          <View
+            style={{
+              width: hole,
+              height: hole,
+              borderRadius: hole,
+              backgroundColor: colors.white,
+            }}
+          />
+        </View>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: w * 0.08,
+            gap: h * 0.1,
+            justifyContent: 'center',
+          }}
+        >
+          {[0.78, 0.55, 0.68].map((frac, i) => (
+            <View
+              key={i}
+              style={{
+                width: bodyW * frac,
+                height: Math.max(2, h * 0.1),
+                borderRadius: 2,
+                backgroundColor: colors.white,
+                opacity: 0.92,
+              }}
+            />
+          ))}
+        </View>
       </View>
     </View>
   )
@@ -175,7 +246,7 @@ export function TabBarIcon({
     case 'Deals':
       return <DealsTabIcon size={size} color={color} focused={focused} />
     case 'Activities':
-      return <PlannerTabIcon size={size} color={color} focused={focused} />
+      return <ActivitiesTabIcon size={size} color={color} focused={focused} />
     case 'Planner':
       return <PlannerTabIcon size={size} color={color} focused={focused} />
     case 'Favorites':

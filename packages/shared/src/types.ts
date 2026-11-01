@@ -534,6 +534,27 @@ export interface LikedDeal {
   created_at: string
 }
 
+/** Persisted like of an activity (Viator product snapshot). */
+export interface LikedActivity {
+  id: string
+  product_code: string
+  activity: {
+    productCode: string
+    title: string
+    photoUrl?: string | null
+    rating?: number | null
+    reviewCount?: number | null
+    durationLabel?: string | null
+    priceLabel?: string | null
+    productUrl?: string | null
+    freeCancellation?: boolean
+    instantConfirmation?: boolean
+    destinationLabel?: string | null
+    distanceLabel?: string | null
+  }
+  created_at: string
+}
+
 export interface DealsListParams {
   origin?: string
   /** Arrival city IATA(s); backend expands via served_city */

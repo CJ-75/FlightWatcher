@@ -1,6 +1,8 @@
 import type {
+  ActivityCardModel,
   CreatePlannedTripRequest,
   EnrichedTripResponse,
+  LikedActivity,
   LikedDeal,
   PlannedTrip,
   PlannedTripDetail,
@@ -429,6 +431,38 @@ export function likeGuestDeal(deal: TravelDeal) {
 export function unlikeGuestDeal(dealId: string) {
   likedDealIds.delete(dealId)
   likedDeals = likedDeals.filter((d) => d.deal_id !== dealId)
+}
+
+let likedActivities: LikedActivity[] = []
+const likedActivityIds = new Set<string>()
+
+export function listGuestLikedActivities(): LikedActivity[] {
+  return likedActivities
+}
+
+export function listGuestLikedActivityIds(): string[] {
+  return [...likedActivityIds]
+}
+
+export function likeGuestActivity(card: ActivityCardModel) {
+  if (!card.productCode) return
+  likedActivityIds.add(card.productCode)
+  if (!likedActivities.some((a) => a.product_code === card.productCode)) {
+    likedActivities = [
+      {
+        id: `dev-liked-act-${Date.now()}`,
+        product_code: card.productCode,
+        activity: { ...card },
+        created_at: new Date().toISOString(),
+      },
+      ...likedActivities,
+    ]
+  }
+}
+
+export function unlikeGuestActivity(productCode: string) {
+  likedActivityIds.delete(productCode)
+  likedActivities = likedActivities.filter((a) => a.product_code !== productCode)
 }
 
 export function listGuestFlightFavorites(): SavedFavorite[] {

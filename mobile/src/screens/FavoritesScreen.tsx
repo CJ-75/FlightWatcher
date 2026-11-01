@@ -13,19 +13,29 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { EnrichedTripResponse, LikedDeal, SavedFavorite } from '@flightwatcher/shared'
+import type {
+  ActivityCardModel,
+  EnrichedTripResponse,
+  LikedActivity,
+  LikedDeal,
+  SavedFavorite,
+} from '@flightwatcher/shared'
 import { translate } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
   listGuestFlightFavorites,
+  listGuestLikedActivities,
   listGuestLikedDeals,
   removeGuestFlightFavorite,
+  unlikeGuestActivity,
   unlikeGuestDeal,
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
 import { DealCard } from '../components/DealCard'
+import { ActivityCard } from '../components/ActivityCard'
 import { HeartIcon } from '../components/HeartIcon'
+import { openInAppBrowser } from '../lib/openInApp'
 import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
@@ -37,15 +47,17 @@ export function FavoritesScreen() {
   const { viewUser, signInWithGoogle, isGuest } = useAuth()
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
+  const [likedActivities, setLikedActivities] = useState<LikedActivity[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
-  const [tab, setTab] = useState<'flights' | 'deals'>('flights')
+  const [tab, setTab] = useState<'flights' | 'deals' | 'activities'>('flights')
 
   const load = useCallback(async () => {
     if (!viewUser) {
       setFavorites([])
       setLikedDeals([])
+      setLikedActivities([])
       setRefreshing(false)
       return
     }
@@ -55,18 +67,22 @@ export function FavoritesScreen() {
       if (__DEV__ && isGuest) {
         setFavorites(listGuestFlightFavorites())
         setLikedDeals(listGuestLikedDeals())
+        setLikedActivities(listGuestLikedActivities())
       } else {
-        const [list, deals] = await Promise.all([
+        const [list, deals, acts] = await Promise.all([
           getApi().getFavorites(),
           getApi().getLikedDeals(),
+          getApi().getLikedActivities().catch(() => [] as LikedActivity[]),
         ])
         setFavorites(Array.isArray(list) ? list : [])
         setLikedDeals(Array.isArray(deals) ? deals : [])
+        setLikedActivities(Array.isArray(acts) ? acts : [])
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
       setFavorites([])
       setLikedDeals([])
+      setLikedActivities([])
     } finally {
       setRefreshing(false)
     }
@@ -105,6 +121,40 @@ export function FavoritesScreen() {
     }
   }
 
+  const unlikeActivity = async (productCode: string) => {
+    try {
+      if (__DEV__ && isGuest) unlikeGuestActivity(productCode)
+      else await getApi().unlikeActivity(productCode)
+      setLikedActivities((prev) =>
+        prev.filter((a) => a.product_code !== productCode),
+      )
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const toActivityCard = (item: LikedActivity): ActivityCardModel => ({
+    productCode: item.activity.productCode || item.product_code,
+    title: item.activity.title || 'Activité',
+    photoUrl: item.activity.photoUrl ?? null,
+    rating: item.activity.rating ?? null,
+    reviewCount: item.activity.reviewCount ?? null,
+    durationLabel: item.activity.durationLabel ?? null,
+    priceLabel: item.activity.priceLabel ?? null,
+    productUrl: item.activity.productUrl ?? null,
+    freeCancellation: !!item.activity.freeCancellation,
+    instantConfirmation: !!item.activity.instantConfirmation,
+    destinationLabel: item.activity.destinationLabel ?? null,
+    distanceLabel: item.activity.distanceLabel ?? null,
+  })
+
+  const listData =
+    tab === 'flights'
+      ? favorites
+      : tab === 'deals'
+        ? likedDeals
+        : likedActivities
+
   if (!viewUser) {
     return (
       <FavoritesGuestLanding
@@ -119,7 +169,7 @@ export function FavoritesScreen() {
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      <FlatList<SavedFavorite | LikedDeal>
+      <FlatList<SavedFavorite | LikedDeal | LikedActivity>
         style={styles.list}
         contentContainerStyle={{
           paddingHorizontal: spacing.xl,
@@ -127,7 +177,7 @@ export function FavoritesScreen() {
           paddingBottom: insets.bottom + 100,
           flexGrow: 1,
         }}
-        data={tab === 'flights' ? favorites : likedDeals}
+        data={listData}
         keyExtractor={(item) => item.id}
         extraData={tab}
         refreshControl={
@@ -136,24 +186,31 @@ export function FavoritesScreen() {
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
-            <View style={styles.switchTrack}>
-              <Pressable
-                onPress={() => setTab('flights')}
-                style={[styles.switchBtn, tab === 'flights' && styles.switchBtnOn]}
-              >
-                <Text style={[styles.switchLabel, tab === 'flights' && styles.switchLabelOn]}>
-                  {translate('fr', 'favorites.switch.flights')}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setTab('deals')}
-                style={[styles.switchBtn, tab === 'deals' && styles.switchBtnOn]}
-              >
-                <Text style={[styles.switchLabel, tab === 'deals' && styles.switchLabelOn]}>
-                  {translate('fr', 'favorites.switch.deals')}
-                </Text>
-              </Pressable>
-            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.switchTrack}
+            >
+              {(
+                [
+                  ['flights', 'favorites.switch.flights'],
+                  ['deals', 'favorites.switch.deals'],
+                  ['activities', 'favorites.switch.activities'],
+                ] as const
+              ).map(([id, key]) => (
+                <Pressable
+                  key={id}
+                  onPress={() => setTab(id)}
+                  style={[styles.switchBtn, tab === id && styles.switchBtnOn]}
+                >
+                  <Text
+                    style={[styles.switchLabel, tab === id && styles.switchLabelOn]}
+                  >
+                    {translate('fr', key)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={
@@ -166,14 +223,18 @@ export function FavoritesScreen() {
                 ? error
                 : tab === 'deals'
                   ? translate('fr', 'favorites.dealsEmptyTitle')
-                  : translate('fr', 'favorites.flightsEmpty')}
+                  : tab === 'activities'
+                    ? translate('fr', 'favorites.activitiesEmptyTitle')
+                    : translate('fr', 'favorites.flightsEmpty')}
             </Text>
             <Text style={styles.emptyBody}>
               {error
                 ? 'Tire pour réessayer.'
                 : tab === 'deals'
                   ? translate('fr', 'favorites.dealsEmpty')
-                  : translate('fr', 'favorites.flightsEmptyBody')}
+                  : tab === 'activities'
+                    ? translate('fr', 'favorites.activitiesEmpty')
+                    : translate('fr', 'favorites.flightsEmptyBody')}
             </Text>
           </View>
         }
@@ -187,6 +248,24 @@ export function FavoritesScreen() {
                 navigation.navigate('DealDetail', { dealId: (item as LikedDeal).deal_id })
               }
             />
+          ) : tab === 'activities' ? (
+            (() => {
+              const liked = item as LikedActivity
+              const card = toActivityCard(liked)
+              return (
+                <ActivityCard
+                  card={card}
+                  liked
+                  onToggleLike={() => void unlikeActivity(liked.product_code)}
+                  onPress={() => {
+                    if (card.productUrl) void openInAppBrowser(card.productUrl)
+                  }}
+                  onBook={() => {
+                    if (card.productUrl) void openInAppBrowser(card.productUrl)
+                  }}
+                />
+              )
+            })()
           ) : (
             <View>
               <DestinationCard
@@ -317,8 +396,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   switchBtn: {
-    flex: 1,
     paddingVertical: 11,
+    paddingHorizontal: 14,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',

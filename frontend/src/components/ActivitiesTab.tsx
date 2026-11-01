@@ -22,6 +22,7 @@ import {
   toggleActivityCategory,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
+import { getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { listRememberedTrips } from '../utils/tripRecovery'
 import { ActivityCitySelect } from './ActivityCitySelect'
@@ -46,11 +47,31 @@ function SoftChip({ children }: { children: string }) {
   )
 }
 
+function ActivityHeartSvg({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  )
+}
+
 function ActivityCard({
   card,
   onOpen,
   onBook,
   onAdd,
+  liked,
+  onToggleLike,
   addLabel = ACTIVITY_ADD_TO_PLANNER_FR,
   addDisabled = false,
 }: {
@@ -58,6 +79,8 @@ function ActivityCard({
   onOpen: () => void
   onBook: () => void
   onAdd: () => void
+  liked?: boolean
+  onToggleLike?: () => void
   addLabel?: string
   addDisabled?: boolean
 }) {
@@ -82,6 +105,32 @@ function ActivityCard({
         {card.freeCancellation ? (
           <span className="absolute top-3 left-3 z-[3] rounded-full px-2.5 py-1 bg-emerald-600 text-white text-[11px] font-bold shadow-soft">
             Annulation gratuite
+          </span>
+        ) : null}
+        {onToggleLike ? (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              onToggleLike()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation()
+                e.preventDefault()
+                onToggleLike()
+              }
+            }}
+            aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            className={`absolute top-3 right-3 z-[3] w-10 h-10 rounded-full flex items-center justify-center shadow-soft transition-colors ${
+              liked
+                ? 'bg-white text-primary-500'
+                : 'bg-white/95 text-ink-soft hover:text-primary-500'
+            }`}
+          >
+            <ActivityHeartSvg filled={!!liked} />
           </span>
         ) : null}
       </button>
@@ -156,7 +205,25 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const [plannerCount, setPlannerCount] = useState(0)
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const didAutoCity = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const user = await getCurrentUser()
+        if (!user || cancelled) return
+        const ids = await getApiClient().getLikedActivityIds()
+        if (!cancelled) setLikedIds(new Set(Array.isArray(ids) ? ids : []))
+      } catch {
+        if (!cancelled) setLikedIds(new Set())
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!citySlug && !header) {
@@ -332,6 +399,40 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const plannerHref = activeTrip
     ? `/trip/${encodeURIComponent(activeTrip.draftToken)}?activities=1`
     : null
+
+  const toggleLike = async (card: ActivityCardModel) => {
+    if (!card.productCode) return
+    const user = await getCurrentUser()
+    if (!user) {
+      setAddNotice('Connecte-toi pour liker une activité.')
+      return
+    }
+    const wasLiked = likedIds.has(card.productCode)
+    setLikedIds((prev) => {
+      const next = new Set(prev)
+      if (wasLiked) next.delete(card.productCode)
+      else next.add(card.productCode)
+      return next
+    })
+    try {
+      if (wasLiked) {
+        await getApiClient().unlikeActivity(card.productCode)
+        setAddNotice('Retiré des favoris')
+      } else {
+        await getApiClient().likeActivity(card)
+        setAddNotice('Ajouté aux favoris')
+      }
+      track(wasLiked ? 'unlike' : 'like', card)
+    } catch {
+      setLikedIds((prev) => {
+        const next = new Set(prev)
+        if (wasLiked) next.add(card.productCode)
+        else next.delete(card.productCode)
+        return next
+      })
+      setAddNotice('Impossible de mettre à jour le favori')
+    }
+  }
 
   const onAddToPlanner = async (card: ActivityCardModel) => {
     setAddNotice(null)
@@ -536,6 +637,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
               onAdd={() => {
                 void onAddToPlanner(c)
               }}
+              liked={likedIds.has(c.productCode)}
+              onToggleLike={() => void toggleLike(c)}
               addDisabled={addBusy}
             />
           ))}
@@ -563,7 +666,25 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
                 className="w-full h-48 object-cover rounded-2xl"
               />
             ) : null}
-            <h3 className="font-extrabold text-xl text-ink">{detail.title}</h3>
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-extrabold text-xl text-ink">{detail.title}</h3>
+              <button
+                type="button"
+                onClick={() => void toggleLike(detail)}
+                aria-label={
+                  likedIds.has(detail.productCode)
+                    ? 'Retirer des favoris'
+                    : 'Ajouter aux favoris'
+                }
+                className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center border ${
+                  likedIds.has(detail.productCode)
+                    ? 'bg-primary-50 text-primary-500 border-primary-200'
+                    : 'bg-white text-ink-soft border-line'
+                }`}
+              >
+                <ActivityHeartSvg filled={likedIds.has(detail.productCode)} />
+              </button>
+            </div>
             <p className="text-sm text-muted">
               {detail.priceLabel} · {detail.durationLabel || 'Durée variable'}
             </p>

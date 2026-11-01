@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from admin_auth import require_admin
 from deals.cron_auth import require_cron
+from supabase_deps import get_user_id_from_token, optional_auth
 
 router = APIRouter(tags=["activities"])
 
@@ -16,6 +17,49 @@ def _svc():
     from supabase_deps import get_supabase_client, get_supabase_service_client
 
     return get_supabase_service_client() or get_supabase_client()
+
+
+def _require_user(request: Request) -> str:
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentification requise")
+    return user_id
+
+
+class LikeActivityRequest(BaseModel):
+    """Snapshot ActivityCardModel (camelCase) at like time."""
+
+    productCode: Optional[str] = None
+    product_code: Optional[str] = None
+    title: str = "Activité"
+    photoUrl: Optional[str] = None
+    rating: Optional[float] = None
+    reviewCount: Optional[int] = None
+    durationLabel: Optional[str] = None
+    priceLabel: Optional[str] = None
+    productUrl: Optional[str] = None
+    freeCancellation: bool = False
+    instantConfirmation: bool = False
+    destinationLabel: Optional[str] = None
+    distanceLabel: Optional[str] = None
+
+    def resolved_code(self) -> str:
+        return (self.productCode or self.product_code or "").strip()
+
+
+def _row_to_liked_activity(row: dict) -> dict:
+    data = row.get("activity_data") or {}
+    if not isinstance(data, dict):
+        data = {}
+    code = str(row.get("product_code") or "")
+    if code and not data.get("productCode"):
+        data = {**data, "productCode": code}
+    return {
+        "id": row["id"],
+        "product_code": code,
+        "activity": data,
+        "created_at": row.get("created_at"),
+    }
 
 
 def _client_ip(request: Request) -> str:
@@ -158,6 +202,117 @@ async def activity_product_detail(product_code: str):
         ttl_h=cfg.cache_ttl_h,
     )
     return {"ok": True, "product": norm, "cached": False}
+
+
+@router.get("/api/liked-activities")
+@optional_auth
+async def list_liked_activities(request: Request):
+    """List activities liked by the current user."""
+    user_id = _require_user(request)
+    try:
+        sb = _svc()
+        if not sb:
+            raise HTTPException(status_code=503, detail="no_supabase")
+        result = (
+            sb.table("liked_activities")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [_row_to_liked_activity(row) for row in (result.data or [])]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
+
+
+@router.get("/api/liked-activities/ids")
+@optional_auth
+async def list_liked_activity_ids(request: Request):
+    user_id = _require_user(request)
+    try:
+        sb = _svc()
+        if not sb:
+            raise HTTPException(status_code=503, detail="no_supabase")
+        result = (
+            sb.table("liked_activities")
+            .select("product_code")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return [row["product_code"] for row in (result.data or [])]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
+
+
+@router.post("/api/liked-activities")
+@optional_auth
+async def like_activity(body: LikeActivityRequest, request: Request):
+    user_id = _require_user(request)
+    code = body.resolved_code()
+    if not code:
+        raise HTTPException(status_code=400, detail="product_code requis")
+    try:
+        sb = _svc()
+        if not sb:
+            raise HTTPException(status_code=503, detail="no_supabase")
+        existing = (
+            sb.table("liked_activities")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("product_code", code)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return _row_to_liked_activity(existing.data[0])
+
+        activity_data = body.model_dump(exclude_none=True)
+        activity_data["productCode"] = code
+        activity_data.pop("product_code", None)
+
+        result = (
+            sb.table("liked_activities")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "product_code": code,
+                    "activity_data": activity_data,
+                }
+            )
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Erreur lors du like")
+        return _row_to_liked_activity(result.data[0])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
+
+
+@router.delete("/api/liked-activities/{product_code}")
+@optional_auth
+async def unlike_activity(product_code: str, request: Request):
+    user_id = _require_user(request)
+    code = (product_code or "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="product_code requis")
+    try:
+        sb = _svc()
+        if not sb:
+            raise HTTPException(status_code=503, detail="no_supabase")
+        sb.table("liked_activities").delete().eq("user_id", user_id).eq(
+            "product_code", code
+        ).execute()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
 
 
 @router.post("/api/activities/events")

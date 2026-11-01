@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { ActivityCardModel } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { HeartIcon } from './HeartIcon'
 
 type Props = {
   card: ActivityCardModel
@@ -18,6 +19,8 @@ type Props = {
   onAdd?: () => void
   addLabel?: string
   addDisabled?: boolean
+  liked?: boolean
+  onToggleLike?: () => void
 }
 
 const screenW = Dimensions.get('window').width
@@ -31,6 +34,8 @@ export function ActivityCard({
   onAdd,
   addLabel = 'Au planner',
   addDisabled = false,
+  liked,
+  onToggleLike,
 }: Props) {
   const meta = [
     card.rating != null
@@ -71,6 +76,22 @@ export function ActivityCard({
           <View style={[styles.badge, styles.badgeInk]} pointerEvents="none">
             <Text style={styles.badgeText}>Confirmation instantanée</Text>
           </View>
+        ) : null}
+        {onToggleLike ? (
+          <Pressable
+            onPress={(e) => {
+              e?.stopPropagation?.()
+              onToggleLike()
+            }}
+            hitSlop={12}
+            style={styles.likeBtn}
+          >
+            <HeartIcon
+              size={18}
+              filled={!!liked}
+              color={liked ? colors.primary : colors.inkSoft}
+            />
+          </Pressable>
         ) : null}
         <View style={styles.heroBottom} pointerEvents="none">
           <Text style={styles.heroTitle} numberOfLines={2}>
@@ -166,6 +187,18 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 11,
+  },
+  likeBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
   },
   heroBottom: {
     position: 'absolute',

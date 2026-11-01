@@ -26,7 +26,8 @@ import { ActivitiesTab } from './components/ActivitiesTab'
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { AlertsGuestLanding } from './components/AlertsGuestLanding'
 import { PassengerStepper } from './components/PassengerStepper'
-import type { LikedDeal, TravelDeal } from './types'
+import type { LikedActivity, LikedDeal, TravelDeal } from './types'
+import type { ActivityCardModel } from '@flightwatcher/shared'
 import { DestinationCard } from './components/DestinationCard'
 import { RouletteMode } from './components/RouletteMode'
 import { PostBookLightbox } from './components/PostBookLightbox'
@@ -2178,6 +2179,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
+  const [likedActivities, setLikedActivities] = useState<LikedActivity[]>([])
   const [selectedLikedDeal, setSelectedLikedDeal] = useState<TravelDeal | null>(null)
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
   const [intervalSeconds, setIntervalSeconds] = useState<Record<string, number>>({})
@@ -2185,7 +2187,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [showLightbox, setShowLightbox] = useState(false)
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [favoritesFilter, setFavoritesFilter] = useState<'all' | 'active' | 'archived'>('all')
-  const [favoritesKind, setFavoritesKind] = useState<'flights' | 'deals'>('flights')
+  const [favoritesKind, setFavoritesKind] = useState<'flights' | 'deals' | 'activities'>(
+    'flights',
+  )
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
 
   const refreshData = async (force = false, opts?: { resetFilter?: boolean }) => {
@@ -2195,15 +2199,19 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         setSavedSearches(searches)
         return
       }
-      // Favoris: toujours tout charger d’un coup (vols + deals)
-      const [favs, deals] = await Promise.all([
+      // Favoris: vols + deals + activités
+      const [favs, deals, acts] = await Promise.all([
         getFavorites(force),
         getApiClient()
           .getLikedDeals()
           .catch(() => [] as LikedDeal[]),
+        getApiClient()
+          .getLikedActivities()
+          .catch(() => [] as LikedActivity[]),
       ])
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
+      setLikedActivities(Array.isArray(acts) ? acts : [])
       if (opts?.resetFilter) setFavoritesFilter('all')
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
@@ -2211,14 +2219,18 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         if (variant === 'alerts') {
           setSavedSearches(await getSavedSearches(true))
         } else {
-          const [favs, deals] = await Promise.all([
+          const [favs, deals, acts] = await Promise.all([
             getFavorites(true),
             getApiClient()
               .getLikedDeals()
               .catch(() => [] as LikedDeal[]),
+            getApiClient()
+              .getLikedActivities()
+              .catch(() => [] as LikedActivity[]),
           ])
           setFavorites(favs)
           setLikedDeals(Array.isArray(deals) ? deals : [])
+          setLikedActivities(Array.isArray(acts) ? acts : [])
           if (opts?.resetFilter) setFavoritesFilter('all')
         }
       } catch (fallbackError) {
@@ -2236,6 +2248,32 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       /* ignore */
     }
   }
+
+  const unlikeActivity = async (productCode: string) => {
+    try {
+      await getApiClient().unlikeActivity(productCode)
+      setLikedActivities((prev) =>
+        prev.filter((a) => a.product_code !== productCode),
+      )
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const likedActivityToCard = (item: LikedActivity): ActivityCardModel => ({
+    productCode: item.activity.productCode || item.product_code,
+    title: item.activity.title || 'Activité',
+    photoUrl: item.activity.photoUrl ?? null,
+    rating: item.activity.rating ?? null,
+    reviewCount: item.activity.reviewCount ?? null,
+    durationLabel: item.activity.durationLabel ?? null,
+    priceLabel: item.activity.priceLabel ?? null,
+    productUrl: item.activity.productUrl ?? null,
+    freeCancellation: !!item.activity.freeCancellation,
+    instantConfirmation: !!item.activity.instantConfirmation,
+    destinationLabel: item.activity.destinationLabel ?? null,
+    distanceLabel: item.activity.distanceLabel ?? null,
+  })
 
   // Fonction pour construire l'URL de réservation à partir d'un favori
   const buildRyanairUrl = (favorite: SavedFavorite): string => {
@@ -2966,28 +3004,26 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       <div className="relative">
         <div className="mb-4">
           <div className="flex p-1.5 rounded-2xl bg-white/80 border border-orange-100/80 shadow-sm gap-1">
-            <button
-              type="button"
-              onClick={() => setFavoritesKind('flights')}
-              className={`flex-1 py-2.5 rounded-xl text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
-                favoritesKind === 'flights'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {t('favorites.switch.flights')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setFavoritesKind('deals')}
-              className={`flex-1 py-2.5 rounded-xl text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
-                favoritesKind === 'deals'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {t('favorites.switch.deals')}
-            </button>
+            {(
+              [
+                ['flights', 'favorites.switch.flights'],
+                ['deals', 'favorites.switch.deals'],
+                ['activities', 'favorites.switch.activities'],
+              ] as const
+            ).map(([id, key]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFavoritesKind(id)}
+                className={`flex-1 py-2.5 rounded-xl text-[13px] sm:text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
+                  favoritesKind === id
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {t(key)}
+              </button>
+            ))}
           </div>
           {favoritesKind === 'flights' ? (
             <div className="flex gap-2 flex-wrap mt-4">
@@ -3029,7 +3065,76 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         </div>
         
         <div className="pt-2">
-          {favoritesKind === 'deals' ? (
+          {favoritesKind === 'activities' ? (
+            likedActivities.length === 0 ? (
+              <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+                <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />
+                <div className="relative">
+                  <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
+                    ♥
+                  </div>
+                  <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
+                    {t('favorites.activitiesEmptyTitle')}
+                  </p>
+                  <p className="text-sm text-slate-500 max-w-md mx-auto">
+                    {t('favorites.activitiesEmpty')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {likedActivities.map((item) => {
+                  const card = likedActivityToCard(item)
+                  return (
+                    <article
+                      key={item.id}
+                      className="group flex flex-col rounded-3xl overflow-hidden bg-white border border-line shadow-soft"
+                    >
+                      <div className="relative">
+                        {card.photoUrl ? (
+                          <img
+                            src={card.photoUrl}
+                            alt=""
+                            className="h-44 w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-44 w-full bg-canvas" />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void unlikeActivity(item.product_code)}
+                          className="absolute top-3 right-3 z-[3] w-10 h-10 rounded-full bg-white text-primary-500 flex items-center justify-center shadow-soft"
+                          aria-label={t('card.removeFavorite')}
+                        >
+                          ♥
+                        </button>
+                      </div>
+                      <div className="p-4 flex flex-col gap-2 flex-1">
+                        <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2">
+                          {card.title}
+                        </h3>
+                        <p className="text-sm text-muted">
+                          {[card.destinationLabel, card.priceLabel, card.durationLabel]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                        {card.productUrl ? (
+                          <a
+                            href={card.productUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-auto inline-flex items-center justify-center rounded-xl bg-primary-500 text-white text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-primary-600"
+                          >
+                            Voir l’activité
+                          </a>
+                        ) : null}
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )
+          ) : favoritesKind === 'deals' ? (
             likedDeals.length === 0 ? (
               <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />

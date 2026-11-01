@@ -8,6 +8,7 @@ import type {
   InspireResponse,
   InspireStreamEvent,
   InvitePreview,
+  LikedActivity,
   LikedDeal,
   PlannedTrip,
   PlannedTripDetail,
@@ -703,6 +704,34 @@ export function createApiClient(options: ApiClientOptions = {}) {
     unlikeDeal: (dealId: string) =>
       request<{ success: boolean }>(
         `/api/liked-deals/${encodeURIComponent(dealId)}`,
+        { method: 'DELETE' },
+      ),
+
+    getLikedActivities: () =>
+      request<LikedActivity[]>('/api/liked-activities'),
+    getLikedActivityIds: () =>
+      request<string[]>('/api/liked-activities/ids'),
+    likeActivity: (activity: {
+      productCode: string
+      title: string
+      photoUrl?: string | null
+      rating?: number | null
+      reviewCount?: number | null
+      durationLabel?: string | null
+      priceLabel?: string | null
+      productUrl?: string | null
+      freeCancellation?: boolean
+      instantConfirmation?: boolean
+      destinationLabel?: string | null
+      distanceLabel?: string | null
+    }) =>
+      request<LikedActivity>('/api/liked-activities', {
+        method: 'POST',
+        body: JSON.stringify(activity),
+      }),
+    unlikeActivity: (productCode: string) =>
+      request<{ success: boolean }>(
+        `/api/liked-activities/${encodeURIComponent(productCode)}`,
         { method: 'DELETE' },
       ),
 
