@@ -7,21 +7,20 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from supabase_deps import get_supabase_client_for_request
+from supabase_deps import get_user_id_from_token
 
 logger = logging.getLogger("routes.restaurants")
 router = APIRouter(tags=["restaurants"])
 
 
-def _svc(request: Request):
-    return get_supabase_client_for_request(request)
+def _svc(_request: Request = None):
+    from supabase_deps import get_supabase_client, get_supabase_service_client
+
+    return get_supabase_service_client() or get_supabase_client()
 
 
 def _uid(request: Request) -> Optional[str]:
-    user = getattr(request.state, "user", None)
-    if isinstance(user, dict):
-        return user.get("id") or user.get("sub")
-    return getattr(user, "id", None) if user else None
+    return get_user_id_from_token(request)
 
 
 class ImportLinksBody(BaseModel):

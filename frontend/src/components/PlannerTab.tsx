@@ -23,6 +23,7 @@ import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
   activityCitySlugFromLabel,
+  buildStayPipeline,
   airportSelectionLabel,
   arrivalDisplayLabel,
   cityDisplayNameFr,
@@ -35,8 +36,10 @@ import {
   groupAirportsByCity,
   parseAirportCodes,
   type CityAirportGroup,
+  type StayStepId,
 } from '@flightwatcher/shared'
-import { CityAirportSelect } from './CityAirportSelect'
+import { CreateTripModal } from './planner/CreateTripModal'
+import { StayPipelineStepper } from './StayPipelineStepper'
 import { RestaurantStepPanel } from './RestaurantStepPanel'
 import { ActivityStepPanel } from './ActivityStepPanel'
 
@@ -352,7 +355,7 @@ function TripsGallery({
     return (
       <motion.div
         layout
-        className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 min-h-[min(70vh,640px)] md:items-stretch"
+        className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 md:items-stretch"
       >
         {cards.map((trip, index) => (
           <TripListCard
@@ -371,7 +374,7 @@ function TripsGallery({
   return (
     <motion.div
       layout
-      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
+      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
     >
       {cards.map((trip, index) => (
         <TripListCard
@@ -654,7 +657,9 @@ function TripListCard({
         </h3>
         <div className="mt-3 flex-1">{meta}</div>
         <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
-          <span className="text-sm font-semibold text-[#FF6B35]">Voir le voyage</span>
+          <span className="text-sm font-semibold text-[#FF6B35]">
+            {trip.status === 'locked' ? 'Vol → Hôtel' : 'Ouvrir le parcours'}
+          </span>
           <span className="text-[#FF6B35] text-xl leading-none group-hover:translate-x-0.5 transition-transform">
             ›
           </span>
@@ -790,16 +795,16 @@ export function PlannerTab() {
 
       <div className="relative mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p className="app-kicker mb-1.5">Planner</p>
+          <p className="app-kicker mb-1.5">PLANNER</p>
           <h2 className="app-title">Tes voyages</h2>
           <p className="app-subtitle mt-1.5">
-            Crée, scanne les prix, invite tes proches.
+            Vol → Hôtel → la suite. Scanne, invite, compose ton séjour.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="app-btn-primary shrink-0"
+          className="app-btn-primary shrink-0 rounded-2xl"
         >
           <span className="text-lg leading-none">+</span>
           Nouveau
@@ -835,8 +840,9 @@ export function PlannerTab() {
             <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
               Ton premier voyage
             </p>
-            <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto leading-relaxed">
-              Choisis une ville, scanne les prix, partage le lien.
+            <p className="text-sm sm:text-base text-slate-500 mb-6 max-w-md mx-auto leading-relaxed">
+              Choisis une ville, trouve un vol, puis compose l’hôtel — même
+              parcours que Mon séjour.
             </p>
             <button
               type="button"
@@ -873,686 +879,6 @@ export function PlannerTab() {
           {toast}
         </div>
       ) : null}
-    </div>
-  )
-}
-
-const CREATE_STEPS = [
-  { id: 1 as const, label: 'Départ', title: 'D’où pars-tu ?', hint: 'Choisis ton aéroport de départ' },
-  { id: 2 as const, label: 'Destination', title: 'Où vas-tu ?', hint: 'Optionnel — laisse ouvert pour t’inspirer' },
-  { id: 3 as const, label: 'Détails', title: 'Cadre du voyage', hint: 'Dates, budget, voyageurs' },
-]
-
-function CreateTripModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void
-  onCreated: (id: string) => void
-}) {
-  const { t } = useI18n()
-  const initial = useMemo(() => {
-    const d = generateDatesFromPreset('next-weekend')
-    return {
-      dates_depart: d.dates_depart.map((x) => ({
-        ...x,
-        heure_min: '00:00',
-        heure_max: '23:59',
-      })),
-      dates_retour: d.dates_retour.map((x) => ({
-        ...x,
-        heure_min: '00:00',
-        heure_max: '23:59',
-      })),
-    }
-  }, [])
-  const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [name, setName] = useState('')
-  const [departure, setDeparture] = useState('')
-  const [arrivalCityKey, setArrivalCityKey] = useState('')
-  const [arrivalCodes, setArrivalCodes] = useState<string[]>([])
-  const [airports, setAirports] = useState<Airport[]>([])
-  const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
-  const [cityQuery, setCityQuery] = useState('')
-  const [passengers, setPassengers] = useState(2)
-  const [budget, setBudget] = useState(150)
-  const [directOnly, setDirectOnly] = useState(false)
-  const [preset, setPreset] = useState<DatePreset>('next-weekend')
-  const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>(initial.dates_depart)
-  const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>(initial.dates_retour)
-  const [showFlexible, setShowFlexible] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [spotsPaste, setSpotsPaste] = useState('')
-  const [spotsOpen, setSpotsOpen] = useState(false)
-
-  const departureGroups = useMemo(() => groupAirportsByCity(airports), [airports])
-  const departureLabel = useMemo(
-    () => airportSelectionLabel(departure, departureGroups) || departureRouteLabel(departure),
-    [departure, departureGroups],
-  )
-  const cityGroups = useMemo(() => groupAirportsByCity(arrivalAirports), [arrivalAirports])
-  const selectedCity = useMemo(
-    () => findCityGroupByKey(cityGroups, arrivalCityKey),
-    [cityGroups, arrivalCityKey],
-  )
-  const filteredCities = useMemo(() => {
-    const q = cityQuery.trim().toLowerCase()
-    if (!q) return []
-    return cityGroups
-      .filter(
-        (g) =>
-          g.city.toLowerCase().includes(q) ||
-          g.country.toLowerCase().includes(q) ||
-          g.airports.some((a) => a.code.toLowerCase().includes(q)),
-      )
-      .slice(0, 40)
-  }, [cityGroups, cityQuery])
-
-  useEffect(() => {
-    void loadAirportsOnce()
-      .then((list) => setAirports(list))
-      .catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    const origins = parseAirportCodes(departure)
-    if (!origins.length) {
-      setArrivalAirports([])
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        const lists = await Promise.all(
-          origins.map(async (code) => {
-            try {
-              return normalizeDestinations(
-                await getApiClient().getDestinations(code),
-              )
-            } catch {
-              return []
-            }
-          }),
-        )
-        if (cancelled) return
-        // Merge flat destination lists from all selected origins
-        const seen = new Set<string>()
-        const merged = []
-        for (const list of lists) {
-          for (const d of list) {
-            const code = (d?.code || '').toUpperCase()
-            if (!code || seen.has(code)) continue
-            seen.add(code)
-            merged.push(d)
-          }
-        }
-        const next = destinationsToAirports(merged)
-        setArrivalAirports(next)
-        setArrivalCodes((codes) => {
-          const allowed = new Set(next.map((a) => a.code))
-          const kept = codes.filter((c) => allowed.has(c))
-          if (kept.length !== codes.length) {
-            setArrivalCityKey('')
-            return []
-          }
-          return codes
-        })
-      } catch {
-        if (!cancelled) setArrivalAirports([])
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [departure])
-
-  const selectCity = (group: CityAirportGroup | null, advance = false) => {
-    if (!group) {
-      setArrivalCityKey('')
-      setArrivalCodes([])
-      if (!name.trim() || name.startsWith('Weekend ')) setName('')
-      if (advance) setStep(3)
-      return
-    }
-    setArrivalCityKey(group.key)
-    setArrivalCodes(group.airports.map((a) => a.code))
-    if (!name.trim() || name.startsWith('Weekend ')) setName(`Weekend ${group.city}`)
-    if (advance) setStep(3)
-  }
-
-  const toggleArrivalAirport = (code: string) => {
-    const upper = code.toUpperCase()
-    setArrivalCodes((prev) => {
-      const set = new Set(prev)
-      if (set.has(upper)) {
-        if (set.size <= 1) return prev
-        set.delete(upper)
-      } else {
-        set.add(upper)
-      }
-      return [...set]
-    })
-  }
-
-  const onPreset = (p: DatePreset) => {
-    setPreset(p)
-    if (p === 'flexible') {
-      setShowFlexible(true)
-      return
-    }
-    const d = generateDatesFromPreset(p)
-    setDatesDepart(
-      d.dates_depart.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
-    )
-    setDatesRetour(
-      d.dates_retour.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
-    )
-  }
-
-  const goNext = () => {
-    setError(null)
-    if (step === 1) {
-      if (!parseAirportCodes(departure).length) {
-        setError('Choisis une ville / aéroport de départ')
-        return
-      }
-      setStep(2)
-      return
-    }
-    if (step === 2) {
-      setStep(3)
-      return
-    }
-  }
-
-  const goBack = () => {
-    setError(null)
-    if (step === 1) {
-      onClose()
-      return
-    }
-    setStep((s) => (s === 3 ? 2 : 1))
-  }
-
-  const submit = async () => {
-    const depEncoded = encodeAirportCodes(parseAirportCodes(departure))
-    if (!depEncoded) {
-      setError('Choisis une ville / aéroport de départ')
-      setStep(1)
-      return
-    }
-    const tripName =
-      name.trim() ||
-      (selectedCity
-        ? `Weekend ${selectedCity.city}`
-        : `Weekend depuis ${departureLabel || depEncoded}`)
-    if (!datesDepart.length || !datesRetour.length) {
-      setError('Dates requises')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    const body: CreatePlannedTripRequest = {
-      name: tripName,
-      departure_airport: depEncoded,
-      arrival_airport: encodeArrivalCodes(arrivalCodes),
-      passengers,
-      dates_depart: datesDepart,
-      dates_retour: datesRetour,
-      budget_max: budget,
-      direct: directOnly,
-    }
-    try {
-      const trip = await getApiClient().createPlannedTrip(body)
-      const paste = spotsPaste.trim()
-      if (paste && typeof sessionStorage !== 'undefined') {
-        try {
-          sessionStorage.setItem(
-            'fw_pending_address_links',
-            JSON.stringify({ text: paste, tripId: trip.id, at: Date.now() }),
-          )
-        } catch {
-          /* ignore quota */
-        }
-      }
-      onCreated(trip.id)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const stepMeta = CREATE_STEPS[step - 1]
-
-  return (
-    <div className="app-dialog-root">
-      <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
-      <div className="app-dialog-panel app-dialog-xl">
-        <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-line px-5 sm:px-8 py-4 sm:py-5 z-10">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28] mb-1">
-                Étape {step} / 3
-              </p>
-              <h3 className="font-extrabold text-xl sm:text-2xl text-ink tracking-tight">
-                {stepMeta.title}
-              </h3>
-              <p className="text-sm text-muted mt-0.5">{stepMeta.hint}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-10 h-10 shrink-0 rounded-full bg-canvas text-ink-soft font-bold hover:bg-primary-50"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {CREATE_STEPS.map((s, i) => {
-              const done = step > s.id
-              const active = step === s.id
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  disabled={s.id > step && (s.id === 2 ? !departure : s.id === 3 ? !departure : false)}
-                  onClick={() => {
-                    if (s.id === 1 || (s.id === 2 && departure) || (s.id === 3 && departure)) {
-                      setError(null)
-                      setStep(s.id)
-                    }
-                  }}
-                  className="flex-1 min-w-0 group"
-                >
-                  <div
-                    className={`h-1.5 rounded-full transition-colors ${
-                      done || active ? 'bg-[#FF6B35]' : 'bg-slate-200'
-                    }`}
-                  />
-                  <p
-                    className={`mt-1.5 text-[11px] sm:text-xs font-bold truncate text-left ${
-                      active ? 'text-[#E85A28]' : done ? 'text-slate-700' : 'text-slate-400'
-                    }`}
-                  >
-                    {i + 1}. {s.label}
-                  </p>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="p-5 sm:p-8 min-h-[420px]">
-          {step === 1 ? (
-            <motion.div
-              key="step-1"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-5"
-            >
-              <div>
-                <p className="text-sm font-bold text-slate-700 mb-2">Ville de départ</p>
-                <CityAirportSelect
-                  value={departure}
-                  onChange={(encoded) => {
-                    setDeparture(encoded)
-                    setError(null)
-                  }}
-                />
-              </div>
-              {departure ? (
-                <div className="rounded-2xl border border-orange-200 bg-[#FFF3EC] px-4 py-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-[#E85A28] mb-1">
-                    Sélectionné
-                  </p>
-                  <p className="font-bold text-slate-900">{departureLabel}</p>
-                </div>
-              ) : null}
-            </motion.div>
-          ) : null}
-
-          {step === 2 ? (
-            <motion.div
-              key="step-2"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-4"
-            >
-              <div className="flex items-center gap-2 text-sm text-slate-500 font-medium flex-wrap">
-                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-800">
-                  {departureLabel || departure}
-                </span>
-                <span>→</span>
-                <span>{selectedCity ? selectedCity.city : 'Toutes destinations'}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => selectCity(null, true)}
-                className={`w-full text-left rounded-2xl border px-4 py-4 transition-colors ${
-                  !arrivalCityKey
-                    ? 'border-[#FF6B35] bg-[#FFF3EC]'
-                    : 'border-dashed border-slate-200 bg-slate-50 hover:border-orange-300 hover:bg-[#FFF8F3]'
-                }`}
-              >
-                <p className="font-bold text-slate-800">Toutes destinations</p>
-                <p className="text-xs text-slate-500 mt-0.5">Mode inspire — sans filtre ville</p>
-              </button>
-
-              {selectedCity ? (
-                <div className="space-y-3">
-                  <div className="relative rounded-2xl overflow-hidden h-36 sm:h-40 shadow-sm">
-                    <img
-                      src={cityImageUrl(selectedCity.city)}
-                      alt={selectedCity.city}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                    <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
-                      <div>
-                        <p className="text-white font-black text-xl tracking-tight">
-                          {selectedCity.city}
-                        </p>
-                        <p className="text-white/85 text-xs font-medium">
-                          {arrivalCodes.join(' · ') ||
-                            selectedCity.airports.map((a) => a.code).join(' · ')}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => selectCity(null)}
-                        className="text-xs font-bold bg-white/95 text-slate-800 px-3 py-1.5 rounded-full"
-                      >
-                        Effacer
-                      </button>
-                    </div>
-                  </div>
-                  {selectedCity.airports.length > 1 ? (
-                    <div className="mt-1">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-semibold text-slate-500">
-                          Aéroports de {selectedCity.city}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setArrivalCodes(selectedCity.airports.map((a) => a.code))
-                          }
-                          className="text-xs font-bold text-primary-600"
-                        >
-                          Tous
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedCity.airports.map((a) => {
-                          const on = arrivalCodes.includes(a.code)
-                          return (
-                            <motion.button
-                              key={a.code}
-                              type="button"
-                              onClick={() => toggleArrivalAirport(a.code)}
-                              aria-pressed={on}
-                              whileTap={{ scale: 0.96 }}
-                              transition={{ type: 'spring', stiffness: 480, damping: 28 }}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border min-h-[32px] transition-colors duration-200 ease-out ${
-                                on
-                                  ? 'bg-primary-50 text-primary-700 border-primary-300'
-                                  : 'bg-white text-slate-500 border-slate-200 hover:border-primary-200 hover:bg-primary-50/40'
-                              }`}
-                              title={a.name}
-                            >
-                              <span
-                                className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border transition-all duration-200 ease-out ${
-                                  on
-                                    ? 'bg-primary-500 border-primary-500 scale-100'
-                                    : 'bg-white border-slate-300 scale-95'
-                                }`}
-                                aria-hidden
-                              >
-                                <span
-                                  className={`text-[9px] leading-none text-white transition-opacity duration-200 ${
-                                    on ? 'opacity-100' : 'opacity-0'
-                                  }`}
-                                >
-                                  ✓
-                                </span>
-                              </span>
-                              {a.code}
-                            </motion.button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <p className="text-[11px] text-slate-400">
-                Destinations depuis {departureLabel || departure}
-              </p>
-              <div className="relative">
-                <input
-                  value={cityQuery}
-                  onChange={(e) => setCityQuery(e.target.value)}
-                  placeholder="Chercher une ville…"
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium focus:outline-none focus:ring-2 focus:ring-primary-300"
-                  autoComplete="off"
-                />
-                {cityQuery.trim() ? (
-                  <div className="absolute left-0 right-0 z-20 mt-1.5 max-h-[260px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-lift">
-                    {arrivalAirports.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-8 px-4">
-                        Chargement des destinations…
-                      </p>
-                    ) : filteredCities.length === 0 ? (
-                      <p className="text-sm text-slate-400 text-center py-8 px-4">
-                        Aucune ville pour « {cityQuery.trim()} »
-                      </p>
-                    ) : (
-                      filteredCities.map((g) => (
-                        <button
-                          key={g.key}
-                          type="button"
-                          onClick={() => {
-                            selectCity(g, true)
-                            setCityQuery('')
-                          }}
-                          className={`w-full flex items-center gap-3 text-left px-3 py-2.5 transition-colors ${
-                            g.key === arrivalCityKey
-                              ? 'bg-[#FFF3EC]'
-                              : 'hover:bg-slate-50'
-                          }`}
-                        >
-                          <img
-                            src={cityImageUrl(g.city)}
-                            alt=""
-                            className="w-10 h-10 rounded-xl object-cover shrink-0"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-slate-900 truncate text-sm">
-                              {g.city}
-                            </p>
-                            <p className="text-xs text-slate-500 truncate">
-                              {g.country} · {g.airports.map((a) => a.code).join(' · ')}
-                            </p>
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </motion.div>
-          ) : null}
-
-          {step === 3 ? (
-            <motion.div
-              key="step-3"
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.25 }}
-              className="space-y-5 max-w-xl mx-auto"
-            >
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <span className="font-bold text-slate-900">{departureLabel || departure}</span>
-                <span className="text-slate-400">→</span>
-                <span className="font-semibold text-slate-800">
-                  {selectedCity ? selectedCity.city : 'Toutes destinations'}
-                </span>
-                {directOnly ? (
-                  <>
-                    <span className="text-slate-300">·</span>
-                    <span className="text-slate-600 font-medium">directs</span>
-                  </>
-                ) : null}
-                {datesDepart[0] && datesRetour[0] ? (
-                  <>
-                    <span className="text-slate-300">·</span>
-                    <span className="text-slate-600 font-medium">
-                      {formatDateFr(datesDepart[0].date)} →{' '}
-                      {formatDateFr(datesRetour[datesRetour.length - 1].date)}
-                    </span>
-                  </>
-                ) : null}
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-slate-700 block mb-1.5">Nom du voyage</label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={
-                    selectedCity
-                      ? `Weekend ${selectedCity.city}`
-                      : `Weekend depuis ${departureLabel || '…'}`
-                  }
-                  className="w-full border border-slate-200 rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus:ring-2 focus:ring-primary-300"
-                />
-              </div>
-
-              <div className="[&>div]:mb-4">
-                <DatePresets
-                  selected={preset}
-                  onChange={onPreset}
-                  onFlexibleClick={() => {
-                    setPreset('flexible')
-                    setShowFlexible(true)
-                  }}
-                />
-              </div>
-
-              <div className="[&>div]:mb-4">
-                <PassengerStepper value={passengers} onChange={setPassengers} />
-              </div>
-              <label className="mb-4 flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={directOnly}
-                  onChange={(e) => setDirectOnly(e.target.checked)}
-                  className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
-                />
-                <span className="text-sm font-semibold text-slate-800">
-                  Vols directs uniquement
-                </span>
-              </label>
-              <div className="[&>div]:mb-2">
-                <BudgetSlider value={budget} onChange={setBudget} />
-              </div>
-
-              <div className="rounded-2xl border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white p-4">
-                <button
-                  type="button"
-                  onClick={() => setSpotsOpen((o) => !o)}
-                  className="w-full flex items-center justify-between gap-2 text-left"
-                >
-                  <div>
-                    <p className="text-sm font-extrabold text-ink">
-                      Tu as déjà repéré des endroits ?
-                    </p>
-                    <p className="text-xs text-muted mt-0.5">
-                      Optionnel — colle des liens Maps / Instagram
-                    </p>
-                  </div>
-                  <span className="text-primary-700 font-bold text-sm shrink-0">
-                    {spotsOpen ? 'Masquer' : 'Ajouter'}
-                  </span>
-                </button>
-                {spotsOpen ? (
-                  <textarea
-                    value={spotsPaste}
-                    onChange={(e) => setSpotsPaste(e.target.value)}
-                    rows={3}
-                    placeholder="https://maps.app.goo.gl/…"
-                    className="mt-3 w-full rounded-2xl border border-line bg-white px-3.5 py-3 text-sm text-ink placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                  />
-                ) : null}
-              </div>
-            </motion.div>
-          ) : null}
-
-          {error ? <p className="text-sm text-red-600 font-medium mt-5">{error}</p> : null}
-        </div>
-
-        <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-line px-5 sm:px-8 py-4 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
-          <button
-            type="button"
-            onClick={goBack}
-            className="sm:px-5 py-3 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-          >
-            {step === 1 ? 'Annuler' : 'Retour'}
-          </button>
-          {step < 3 ? (
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={step === 1 && !parseAirportCodes(departure).length}
-              className="app-btn-primary rounded-2xl disabled:opacity-50 sm:min-w-[200px] py-3.5"
-            >
-              Continuer
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={saving}
-              className="app-btn-primary rounded-2xl disabled:opacity-60 sm:min-w-[220px] py-3.5"
-            >
-              {saving ? '…' : t('planner.create')}
-            </button>
-          )}
-        </div>
-
-        {showFlexible ? (
-          <div className="app-dialog-root z-[60]">
-            <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={() => setShowFlexible(false)} />
-            <div className="app-dialog-panel app-dialog-xl p-5 sm:p-8">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="font-extrabold text-lg text-ink">Dates libres</h4>
-                <button
-                  type="button"
-                  onClick={() => setShowFlexible(false)}
-                  className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50"
-                >
-                  OK
-                </button>
-              </div>
-              <FlexibleDatesSelector
-                flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
-                onFlexibleDatesChange={(d) => {
-                  setDatesDepart(d.dates_depart)
-                  setDatesRetour(d.dates_retour)
-                }}
-                formatDateFr={formatDateFr}
-              />
-            </div>
-          </div>
-        ) : null}
-      </div>
     </div>
   )
 }
@@ -1646,6 +972,54 @@ function TripDetailView({
   const isOrganizer = trip?.organizer_id === userId
   const pending = (trip?.proposals || []).filter((p) => p.status === 'pending')
   const accepted = (trip?.proposals || []).find((p) => p.status === 'accepted')
+  const pax = Math.max(trip?.passengers || 1, (trip?.members || []).length || 1)
+
+  const pipelineForUi = useMemo(() => {
+    if (!accepted) {
+      return buildStayPipeline({
+        flight: 'none',
+        hotel: 'none',
+        focus: 'flight',
+        activitiesEnabled: plannerActivitiesEnabled,
+        restaurantsEnabled: plannerRestaurantsEnabled,
+      })
+    }
+    return buildStayPipeline({
+      flight: 'selected_fw',
+      hotel: 'none',
+      focus: 'hotel',
+      activitiesEnabled: plannerActivitiesEnabled,
+      restaurantsEnabled: plannerRestaurantsEnabled,
+    })
+  }, [accepted, plannerActivitiesEnabled, plannerRestaurantsEnabled])
+
+  const onPipelineStep = (id: StayStepId) => {
+    if (id === 'hotel') {
+      if (accepted) {
+        if (hotelBusy) return
+        setHotelBusy(true)
+        void createMyTripComposeFromTrip({
+          trip: accepted.trip_data,
+          passengers: pax,
+          language,
+          markFlightBooked: false,
+        })
+          .then((draft) => navigate(`/trip/${draft.draft_token}?compose=1`))
+          .catch(() => onToast('Impossible de créer le séjour hôtel — réessaie'))
+          .finally(() => setHotelBusy(false))
+      } else {
+        onToast('Choisis d’abord un vol (étape 1)')
+      }
+      return
+    }
+    if (id === 'flight' && accepted) {
+      openPartnerBookSync({
+        trip: accepted.trip_data,
+        passengers: pax,
+        language,
+      })
+    }
+  }
 
   const proposalOrigins = useMemo(() => {
     const set = new Set<string>()
@@ -1967,41 +1341,100 @@ function TripDetailView({
     )
   }
 
-  const url = inviteUrl(trip.invite_token)
-  const encoded = encodeURIComponent(`Rejoins mon voyage « ${trip.name} » : ${url}`)
+  const statusLabel = STATUS_LABEL[trip.status] || trip.status
+  const routeLine = `${departureRouteLabel(trip.departure_airport)}${
+    trip.arrival_airport
+      ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+      : ' · inspire'
+  }`
+  const dateLine =
+    trip.dates_depart[0] && trip.dates_retour[0]
+      ? `${formatDateFr(trip.dates_depart[0].date)} → ${formatDateFr(
+          trip.dates_retour[trip.dates_retour.length - 1].date,
+        )}`
+      : null
 
   return (
-    <div className="w-full space-y-6">
-      <button type="button" onClick={onBack} className="text-sm font-bold text-primary-600">
-        ← {t('nav.planner')}
-      </button>
-
-      <div className="bg-white rounded-2xl shadow-md p-6 space-y-2">
-        <div className="flex items-start gap-3">
-          <h2 className="flex-1 text-2xl font-black text-slate-900">{trip.name}</h2>
-          <span className="text-xs font-bold text-primary-700 bg-orange-50 px-2.5 py-1 rounded-full">
-            {STATUS_LABEL[trip.status] || trip.status}
-          </span>
-        </div>
-        <p className="text-slate-500">
-          {departureRouteLabel(trip.departure_airport)}
-          {trip.arrival_airport
-            ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
-            : ' · inspire'}
-          {trip.direct ? ' · directs' : ''}
-          {' · '}
-          {trip.budget_max}€/pers
-        </p>
-        {trip.dates_depart[0] && trip.dates_retour[0] ? (
-          <p className="text-sm text-slate-500">
-            {formatDateFr(trip.dates_depart[0].date)} →{' '}
-            {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
-          </p>
-        ) : null}
+    <div className="w-full space-y-8">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-sm font-bold text-primary-600 hover:text-primary-700"
+        >
+          ← {t('nav.planner')}
+        </button>
+        <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700 bg-orange-50 border border-orange-100 px-2.5 py-1 rounded-full">
+          {statusLabel}
+        </span>
       </div>
 
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-[28px] border border-orange-100/80 bg-white shadow-md">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#FF6B35]/12 blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-28 -left-20 w-64 h-64 rounded-full bg-[#FFB088]/20 blur-3xl"
+        />
+        <div className="relative p-6 sm:p-8 lg:p-10 space-y-7">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+            <div className="min-w-0 space-y-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28]">
+                Mon séjour
+              </p>
+              <h2 className="text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-ink tracking-tight leading-[1.1]">
+                {trip.name}
+              </h2>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <span className="inline-flex items-center rounded-full bg-[#FFF3EC] text-[#8B2E0E] text-xs font-bold px-3 py-1.5">
+                  {routeLine}
+                </span>
+                {dateLine ? (
+                  <span className="inline-flex items-center rounded-full bg-[#FFF3EC] text-[#8B2E0E] text-xs font-bold px-3 py-1.5">
+                    {dateLine}
+                  </span>
+                ) : null}
+                <span className="inline-flex items-center rounded-full bg-[#FFF3EC] text-[#8B2E0E] text-xs font-bold px-3 py-1.5">
+                  max {trip.budget_max}€/pers
+                </span>
+                {trip.direct ? (
+                  <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-1.5">
+                    Directs
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            {isOrganizer && trip.status !== 'locked' ? (
+              <button
+                type="button"
+                disabled={scanning}
+                onClick={() => void scan()}
+                className="app-btn-primary rounded-2xl px-7 py-3.5 disabled:opacity-60 shrink-0 self-start"
+              >
+                {scanning ? t('planner.scanning') : t('planner.scan')}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border border-orange-50 bg-[#FFF9F5]/80 px-4 sm:px-6 py-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
+              <p className="font-extrabold text-ink">Ton parcours</p>
+              <p className="text-xs font-semibold text-muted">
+                Vol → Hôtel
+                {plannerActivitiesEnabled ? ' → Activités' : ''}
+                {plannerRestaurantsEnabled ? ' → Adresses' : ''}
+              </p>
+            </div>
+            <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
+          </div>
+        </div>
+      </section>
+
       {trip.route_ok === false ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-2">
           <p className="font-bold text-amber-900">{t('planner.routeStale')}</p>
           <p className="text-sm text-amber-800">
             {t('planner.routeStaleBody', {
@@ -2021,146 +1454,89 @@ function TripDetailView({
         </div>
       ) : null}
 
-      <TravelersPanel
-        members={trip.members || []}
-        seats={trip.passengers}
-        currentUserId={userId}
-        isOrganizer={!!isOrganizer}
-        busy={membersBusy}
-        addOpen={addOpen}
-        newFirstName={newFirstName}
-        newLastName={newLastName}
-        newEmail={newEmail}
-        onOpenAdd={() => setAddOpen(true)}
-        onCloseAdd={() => {
-          setAddOpen(false)
-          setNewFirstName('')
-          setNewLastName('')
-          setNewEmail('')
-        }}
-        onFirstNameChange={setNewFirstName}
-        onLastNameChange={setNewLastName}
-        onEmailChange={setNewEmail}
-        onAdd={() => void addMember()}
-        onRemove={(m) => void removeMember(m)}
-        t={t}
-      />
-
       {error ? <p className="text-red-600 text-sm font-medium">{error}</p> : null}
 
-      {isOrganizer && trip.status !== 'locked' ? (
-        <div className="space-y-4">
-          <button
-            type="button"
-            disabled={scanning}
-            onClick={() => void scan()}
-            className="w-full sm:w-auto app-btn-primary rounded-2xl px-6 disabled:opacity-60"
-          >
-            {scanning ? t('planner.scanning') : t('planner.scan')}
-          </button>
-
-          <PriceWatchBanner
-            enabled={!!trip.auto_scan_enabled}
-            budget={trip.budget_max}
-            intervalSeconds={trip.auto_scan_interval_seconds || watchInterval}
-            watchInterval={watchInterval}
-            busy={watchBusy}
-            onIntervalChange={setWatchInterval}
-            onToggle={() => void setPriceWatch(!trip.auto_scan_enabled)}
-            t={t}
-          />
-        </div>
-      ) : null}
-
+      {/* Next action */}
       {scanning ? (
-        <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-5 py-8 text-center">
-          <div className="mx-auto mb-3 w-9 h-9 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
-          <p className="font-bold text-slate-900">{t('planner.scan.auto')}</p>
-          <p className="text-sm text-slate-500 mt-1">
-            {departureRouteLabel(trip.departure_airport)}
-            {trip.arrival_airport
-              ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
-              : ' → inspire'}
-            {trip.direct ? ' · directs' : ''}
-            {' · '}
-            {trip.budget_max}€/pers
-          </p>
+        <div className="rounded-[28px] border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white px-8 py-14 text-center shadow-soft">
+          <div className="mx-auto mb-4 w-11 h-11 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+          <p className="font-extrabold text-slate-900 text-xl">{t('planner.scan.auto')}</p>
+          <p className="text-sm text-slate-500 mt-2">{routeLine}</p>
         </div>
-      ) : null}
-
-      {accepted && !scanning ? (
-        <section className="space-y-4">
-          <h3 className="font-bold text-lg text-ink">Proposition acceptée</h3>
-          <div className="max-w-md">
+      ) : accepted ? (
+        <section className="space-y-5">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
+                Étape vol
+              </p>
+              <h3 className="font-extrabold text-2xl text-ink tracking-tight">Vol choisi</h3>
+            </div>
+            <button
+              type="button"
+              disabled={hotelBusy}
+              onClick={() => onPipelineStep('hotel')}
+              className="hidden sm:inline-flex app-btn-primary rounded-2xl px-5 py-2.5 disabled:opacity-60"
+            >
+              {hotelBusy ? 'Ouverture…' : 'Composer l’hôtel'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-start">
             <DestinationCard
               trip={accepted.trip_data}
-              passengers={Math.max(
-                trip.passengers || 1,
-                (trip.members || []).length || 1,
-              )}
+              passengers={pax}
               onSaveFavorite={() => undefined}
               onBook={() => {
-                const pax = Math.max(
-                  trip.passengers || 1,
-                  (trip.members || []).length || 1,
-                )
                 openPartnerBookSync({
                   trip: accepted.trip_data,
                   passengers: pax,
                   language,
                 })
               }}
-              onAddHotel={() => {
-                if (hotelBusy) return
-                const pax = Math.max(
-                  trip.passengers || 1,
-                  (trip.members || []).length || 1,
-                )
-                setHotelBusy(true)
-                void createMyTripComposeFromTrip({
-                  trip: accepted.trip_data,
-                  passengers: pax,
-                  language,
-                  markFlightBooked: false,
-                })
-                  .then((draft) => {
-                    navigate(`/trip/${draft.draft_token}?compose=1`)
-                  })
-                  .catch(() => {
-                    onToast('Impossible de créer le séjour hôtel — réessaie')
-                  })
-                  .finally(() => setHotelBusy(false))
-              }}
+              onAddHotel={() => onPipelineStep('hotel')}
             />
-            {!isOrganizer ? (
-              <p className="text-sm text-ink-muted mt-2 leading-snug">
-                Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
-                l’organisateur décide pour le groupe.
+            <button
+              type="button"
+              disabled={hotelBusy}
+              onClick={() => onPipelineStep('hotel')}
+              className="text-left rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-[#FFF1E8] via-white to-[#FFE8DC] p-6 sm:p-7 shadow-md shadow-orange-500/10 disabled:opacity-60 h-full min-h-[200px] flex flex-col justify-center"
+            >
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700">
+                Suite
               </p>
-            ) : null}
+              <p className="mt-2 font-extrabold text-ink text-2xl tracking-tight">
+                Composer ton hôtel
+              </p>
+              <p className="text-sm text-muted mt-2 leading-relaxed max-w-sm">
+                Photos, avis, prix réels et paiement sécurisé — pour ce vol.
+              </p>
+              <p className="mt-5 text-sm font-bold text-primary-700">
+                {hotelBusy ? 'Ouverture…' : 'Voir les hôtels →'}
+              </p>
+            </button>
           </div>
+          {!isOrganizer ? (
+            <p className="text-sm text-muted">
+              Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
+              l’organisateur décide pour le groupe.
+            </p>
+          ) : null}
         </section>
-      ) : null}
-
-      {!scanning && trip && (plannerActivitiesEnabled || plannerRestaurantsEnabled) ? (
-        <PlannerStayExtras
-          tripId={tripId}
-          trip={trip}
-          activitiesEnabled={plannerActivitiesEnabled}
-          restaurantsEnabled={plannerRestaurantsEnabled}
-        />
-      ) : null}
-
-      {!scanning && pending.length > 0 ? (
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <h3 className="font-bold text-lg text-ink">
-              {t('planner.proposals')} ({visiblePending.length}
-              {visiblePending.length !== pending.length
-                ? `/${pending.length}`
-                : ''}
-              )
-            </h3>
+      ) : pending.length > 0 ? (
+        <section className="space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
+                Étape 1
+              </p>
+              <h3 className="font-extrabold text-2xl text-ink tracking-tight">
+                {t('planner.proposals')} ({visiblePending.length}
+                {visiblePending.length !== pending.length
+                  ? `/${pending.length}`
+                  : ''}
+                )
+              </h3>
+            </div>
             {proposalOrigins.length > 1 ? (
               <div className="flex flex-wrap gap-2">
                 {proposalOrigins.map((code) => {
@@ -2171,8 +1547,7 @@ function TripDetailView({
                       type="button"
                       onClick={() => {
                         setOriginFilter((prev) => {
-                          const base =
-                            prev ?? new Set(proposalOrigins)
+                          const base = prev ?? new Set(proposalOrigins)
                           const next = new Set(base)
                           if (next.has(code)) {
                             if (next.size <= 1) return next
@@ -2184,7 +1559,7 @@ function TripDetailView({
                           return next
                         })
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-bold border min-h-[36px] ${
+                      className={`px-3 py-1.5 rounded-xl text-sm font-bold border min-h-[36px] ${
                         active
                           ? 'bg-primary-500 text-white border-primary-500'
                           : 'bg-white text-slate-600 border-slate-200'
@@ -2202,10 +1577,7 @@ function TripDetailView({
               <ProposalCard
                 key={p.id}
                 proposal={p}
-                passengers={Math.max(
-                  trip.passengers || 1,
-                  (trip.members || []).length || 1,
-                )}
+                passengers={pax}
                 isOrganizer={!!isOrganizer}
                 busy={acting === p.id}
                 onAccept={() => void accept(p.id)}
@@ -2215,113 +1587,173 @@ function TripDetailView({
             ))}
           </div>
         </section>
-      ) : null}
-
-      {!accepted && pending.length === 0 && !scanning ? (
-        scanEmpty ? (
-          <div
-            className={`rounded-2xl border px-5 py-6 sm:px-7 sm:py-7 ${
-              scanEmpty.reason === 'budget'
-                ? 'border-amber-200 bg-amber-50'
-                : 'border-slate-200 bg-white shadow-sm'
-            }`}
-          >
-            <div className="text-center">
-              <p
-                className={`font-extrabold text-lg ${
-                  scanEmpty.reason === 'budget' ? 'text-amber-950' : 'text-slate-900'
-                }`}
-              >
-                {scanEmpty.reason === 'budget'
-                  ? t('planner.scan.emptyBudget', { budget: scanEmpty.budget })
-                  : t('planner.scan.emptyNone')}
+      ) : scanEmpty ? (
+        <div
+          className={`rounded-[28px] border px-6 py-8 sm:px-10 sm:py-10 ${
+            scanEmpty.reason === 'budget'
+              ? 'border-amber-200 bg-amber-50'
+              : 'border-orange-100 bg-white shadow-soft'
+          }`}
+        >
+          <div className="text-center max-w-xl mx-auto">
+            <p
+              className={`font-extrabold text-xl ${
+                scanEmpty.reason === 'budget' ? 'text-amber-950' : 'text-slate-900'
+              }`}
+            >
+              {scanEmpty.reason === 'budget'
+                ? t('planner.scan.emptyBudget', { budget: scanEmpty.budget })
+                : t('planner.scan.emptyNone')}
+            </p>
+            {scanEmpty.reason === 'budget' ? (
+              <p className="text-sm text-amber-900/80 mt-2 leading-relaxed">
+                {scanEmpty.cheapest
+                  ? t('planner.scan.emptyBudgetHint', {
+                      price: Math.ceil(scanEmpty.cheapest),
+                    })
+                  : t('planner.scan.emptyBudgetNoPrice')}
               </p>
-              {scanEmpty.reason === 'budget' ? (
-                <p className="text-sm text-amber-900/80 mt-2 max-w-md mx-auto leading-relaxed">
-                  {scanEmpty.cheapest
-                    ? t('planner.scan.emptyBudgetHint', {
-                        price: Math.ceil(scanEmpty.cheapest),
-                      })
-                    : t('planner.scan.emptyBudgetNoPrice')}
+            ) : null}
+          </div>
+          {isOrganizer ? (
+            <div className="mt-8 max-w-2xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-5 text-left">
+              <div className="rounded-2xl bg-white border border-slate-100 px-4 pt-4 pb-2 shadow-sm">
+                <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
+                  {t('planner.scan.editDates')}
                 </p>
-              ) : null}
-            </div>
-
-            {isOrganizer ? (
-              <div className="mt-6 max-w-lg mx-auto text-left space-y-5">
-                <p className="text-sm font-bold text-slate-800 text-center sm:text-left">
-                  {t('planner.scan.editCriteria')}
+                <div className="[&>div]:mb-2">
+                  <DatePresets
+                    selected={editPreset}
+                    onChange={onEditPreset}
+                    onFlexibleClick={() => {
+                      setEditPreset('flexible')
+                      setShowEditFlexible(true)
+                    }}
+                  />
+                </div>
+                {editDatesDepart[0] && editDatesRetour[0] ? (
+                  <p className="text-sm text-slate-600 font-medium pb-2">
+                    {formatDateFr(editDatesDepart[0].date)} →{' '}
+                    {formatDateFr(editDatesRetour[editDatesRetour.length - 1].date)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="rounded-2xl bg-white border border-slate-100 px-4 pt-4 pb-2 shadow-sm space-y-3">
+                <p className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  {t('planner.scan.editBudget')}
                 </p>
-
-                <div className="rounded-2xl bg-white border border-slate-100 px-4 pt-4 pb-2 shadow-sm">
-                  <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
-                    {t('planner.scan.editDates')}
-                  </p>
-                  <div className="[&>div]:mb-2">
-                    <DatePresets
-                      selected={editPreset}
-                      onChange={onEditPreset}
-                      onFlexibleClick={() => {
-                        setEditPreset('flexible')
-                        setShowEditFlexible(true)
-                      }}
-                    />
-                  </div>
-                  {editDatesDepart[0] && editDatesRetour[0] ? (
-                    <p className="text-sm text-slate-600 font-medium pb-2">
-                      {formatDateFr(editDatesDepart[0].date)} →{' '}
-                      {formatDateFr(editDatesRetour[editDatesRetour.length - 1].date)}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="rounded-2xl bg-white border border-slate-100 px-4 pt-4 pb-2 shadow-sm [&>div]:mb-3">
-                  <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">
-                    {t('planner.scan.editBudget')}
-                  </p>
-                  {suggestedBudget && suggestedBudget > scanEmpty.budget ? (
-                    <button
-                      type="button"
-                      onClick={() => setEditBudget(suggestedBudget)}
-                      className="mb-3 text-xs font-bold px-3 py-1.5 rounded-full border border-orange-300 bg-white text-[#E85A28] hover:bg-[#FFF3EC]"
-                    >
-                      {t('planner.scan.useCheapest', { price: suggestedBudget })}
-                    </button>
-                  ) : null}
-                  <BudgetSlider value={editBudget} onChange={setEditBudget} />
-                </div>
-
+                {suggestedBudget && suggestedBudget > scanEmpty.budget ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditBudget(suggestedBudget)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-full border border-orange-300 bg-white text-[#E85A28] hover:bg-[#FFF3EC]"
+                  >
+                    {t('planner.scan.useCheapest', { price: suggestedBudget })}
+                  </button>
+                ) : null}
+                <BudgetSlider value={editBudget} onChange={setEditBudget} />
                 <button
                   type="button"
                   disabled={scanning || savingCriteria}
                   onClick={() => void updateCriteriaAndScan()}
-                  className="w-full app-btn-primary rounded-2xl py-3.5 disabled:opacity-60"
+                  className="w-full app-btn-primary rounded-2xl py-3 disabled:opacity-60"
                 >
                   {savingCriteria || scanning
                     ? t('planner.scanning')
                     : t('planner.scan.updateAndScan')}
                 </button>
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow p-8 text-center text-slate-500">
-            {isOrganizer ? t('planner.scan.emptyPrompt') : t('planner.proposals.empty')}
-          </div>
-        )
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <section className="rounded-[28px] border border-line bg-white p-7 sm:p-9 shadow-soft">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-muted mb-2">
+            Étape 1
+          </p>
+          <h3 className="font-extrabold text-2xl text-ink tracking-tight">Trouver un vol</h3>
+          <p className="text-base text-muted mt-2 max-w-xl leading-relaxed">
+            {isOrganizer
+              ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
+              : 'L’organisateur scanne et choisit le vol pour le groupe.'}
+          </p>
+          {isOrganizer ? (
+            <button
+              type="button"
+              disabled={scanning}
+              onClick={() => void scan()}
+              className="mt-6 app-btn-primary rounded-2xl px-6 py-3 disabled:opacity-60"
+            >
+              {scanning ? t('planner.scanning') : t('planner.scan')}
+            </button>
+          ) : null}
+        </section>
+      )}
+
+      {!scanning && trip && (plannerActivitiesEnabled || plannerRestaurantsEnabled) ? (
+        <PlannerStayExtras
+          tripId={tripId}
+          trip={trip}
+          activitiesEnabled={plannerActivitiesEnabled}
+          restaurantsEnabled={plannerRestaurantsEnabled}
+        />
       ) : null}
 
-      {isOrganizer ? (
-        <ShareBar onShare={() => void doShare()} encoded={encoded} url={url} t={t} />
-      ) : null}
+      <section className="space-y-5">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
+            Groupe
+          </p>
+          <h3 className="font-extrabold text-2xl text-ink tracking-tight">Qui part</h3>
+        </div>
+        <TravelersPanel
+          members={trip.members || []}
+          seats={trip.passengers}
+          currentUserId={userId}
+          isOrganizer={!!isOrganizer}
+          busy={membersBusy}
+          addOpen={addOpen}
+          newFirstName={newFirstName}
+          newLastName={newLastName}
+          newEmail={newEmail}
+          onOpenAdd={() => setAddOpen(true)}
+          onCloseAdd={() => {
+            setAddOpen(false)
+            setNewFirstName('')
+            setNewLastName('')
+            setNewEmail('')
+          }}
+          onFirstNameChange={setNewFirstName}
+          onLastNameChange={setNewLastName}
+          onEmailChange={setNewEmail}
+          onAdd={() => void addMember()}
+          onRemove={(m) => void removeMember(m)}
+          t={t}
+        />
+        {isOrganizer && !scanning ? (
+          <button
+            type="button"
+            onClick={() => void doShare()}
+            className="w-full sm:w-auto inline-flex items-center justify-between gap-6 rounded-2xl border border-orange-100 bg-[#FFF9F5] hover:bg-orange-50 px-5 py-4 text-left transition-colors"
+          >
+            <span>
+              <span className="block font-extrabold text-ink">Inviter des amis</span>
+              <span className="block text-sm text-muted mt-0.5">
+                Partage le lien — ils suivent le parcours.
+              </span>
+            </span>
+            <span className="text-primary-700 font-bold shrink-0">Partager →</span>
+          </button>
+        ) : null}
+      </section>
 
       {isOrganizer ? (
-        <div className="pt-14 pb-6 mt-6 border-t border-slate-100">
+        <div className="pt-2 border-t border-slate-100">
           <button
             type="button"
             disabled={deleting}
             onClick={() => void doDelete()}
-            className="w-full sm:w-auto text-red-600 font-bold px-5 py-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+            className="text-sm font-bold text-red-600 hover:text-red-700 px-1 py-2 disabled:opacity-50"
           >
             {deleting ? '…' : t('planner.delete')}
           </button>
@@ -2382,10 +1814,12 @@ function PlannerStayExtras({
   const citySlug = activityCitySlugFromLabel(cityLabel)
   const dateIso = trip.dates_depart?.[0]?.date || null
 
+  const both = activitiesEnabled && restaurantsEnabled
+
   return (
-    <div className="space-y-4">
+    <div className={both ? 'grid gap-4 lg:grid-cols-2 lg:gap-5' : 'space-y-4'}>
       {activitiesEnabled ? (
-        <section className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-3">
+        <section className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-3 min-w-0">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
               Sur place
@@ -2404,7 +1838,7 @@ function PlannerStayExtras({
       ) : null}
 
       {restaurantsEnabled ? (
-        <section className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 shadow-soft space-y-3">
+        <section className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 shadow-soft space-y-3 min-w-0">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
               Adresses
@@ -2603,58 +2037,6 @@ function ProposalCard({
           : undefined
       }
     />
-  )
-}
-
-function ShareBar({
-  onShare,
-  encoded,
-  url,
-  t,
-}: {
-  onShare: () => void
-  encoded: string
-  url: string
-  t: (k: string) => string
-}) {
-  return (
-    <div className="bg-white rounded-2xl shadow-md p-5 space-y-3">
-      <p className="font-bold text-slate-900">{t('planner.share')}</p>
-      <p className="text-xs text-slate-400 break-all">{url}</p>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onShare}
-          className="bg-primary-500 text-white font-bold px-4 py-2 rounded-xl text-sm"
-        >
-          {t('planner.share')}
-        </button>
-        <a
-          href={`https://wa.me/?text=${encoded}`}
-          target="_blank"
-          rel="noreferrer"
-          className="bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-sm"
-        >
-          WhatsApp
-        </a>
-        <a
-          href={`https://twitter.com/intent/tweet?text=${encoded}`}
-          target="_blank"
-          rel="noreferrer"
-          className="bg-slate-900 text-white font-bold px-4 py-2 rounded-xl text-sm"
-        >
-          X
-        </a>
-        <a
-          href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`}
-          target="_blank"
-          rel="noreferrer"
-          className="bg-blue-600 text-white font-bold px-4 py-2 rounded-xl text-sm"
-        >
-          Facebook
-        </a>
-      </div>
-    </div>
   )
 }
 

@@ -1,0 +1,409 @@
+/**
+ * Nouveau voyage — parité mobile (formulaire unique, pas de wizard 3 étapes).
+ */
+import { useEffect, useMemo, useState } from 'react'
+import type { Airport, DateAvecHoraire } from '../../types'
+import { getApiClient, destinationsToAirports, normalizeDestinations } from '../../utils/apiClient'
+import { loadAirportsOnce } from '../../hooks/useAirports'
+import { useI18n } from '../../contexts/I18nContext'
+import { BudgetSlider } from '../BudgetSlider'
+import { PassengerStepper } from '../PassengerStepper'
+import { FlexibleDatesSelector } from '../FlexibleDatesSelector'
+import { CityAirportSelect } from '../CityAirportSelect'
+import {
+  cityDisplayNameFr,
+  encodeAirportCodes,
+  encodeArrivalCodes,
+  findCityGroupByKey,
+  formatDateFr,
+  generateDatesFromPreset,
+  groupAirportsByCity,
+  parseAirportCodes,
+  type CityAirportGroup,
+} from '@flightwatcher/shared'
+import type { DatePreset } from '../DatePresets'
+
+const PRESETS: { id: DatePreset; label: string }[] = [
+  { id: 'next-weekend', label: 'Weekend prochain' },
+  { id: 'flexible', label: 'Dates libres' },
+]
+
+export function CreateTripModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void
+  onCreated: (id: string) => void
+}) {
+  const { t } = useI18n()
+  const initial = useMemo(() => {
+    const d = generateDatesFromPreset('next-weekend')
+    return {
+      dates_depart: d.dates_depart.map((x) => ({
+        ...x,
+        heure_min: '00:00',
+        heure_max: '23:59',
+      })),
+      dates_retour: d.dates_retour.map((x) => ({
+        ...x,
+        heure_min: '00:00',
+        heure_max: '23:59',
+      })),
+    }
+  }, [])
+
+  const [name, setName] = useState('')
+  const [departure, setDeparture] = useState('')
+  const [arrivalCityKey, setArrivalCityKey] = useState('')
+  const [arrivalCodes, setArrivalCodes] = useState<string[]>([])
+  const [arrivalAirports, setArrivalAirports] = useState<Airport[]>([])
+  const [cityQuery, setCityQuery] = useState('')
+  const [passengers, setPassengers] = useState(2)
+  const [budget, setBudget] = useState(150)
+  const [directOnly, setDirectOnly] = useState(false)
+  const [preset, setPreset] = useState<DatePreset>('next-weekend')
+  const [datesDepart, setDatesDepart] = useState<DateAvecHoraire[]>(initial.dates_depart)
+  const [datesRetour, setDatesRetour] = useState<DateAvecHoraire[]>(initial.dates_retour)
+  const [showFlexible, setShowFlexible] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const cityGroups = useMemo(
+    () => groupAirportsByCity(arrivalAirports),
+    [arrivalAirports],
+  )
+  const selectedCity = useMemo(
+    () => findCityGroupByKey(cityGroups, arrivalCityKey),
+    [cityGroups, arrivalCityKey],
+  )
+  const filteredCities = useMemo(() => {
+    const q = cityQuery.trim().toLowerCase()
+    if (!q) return cityGroups.slice(0, 12)
+    return cityGroups
+      .filter(
+        (g) =>
+          g.city.toLowerCase().includes(q) ||
+          g.country.toLowerCase().includes(q) ||
+          g.airports.some((a) => a.code.toLowerCase().includes(q)),
+      )
+      .slice(0, 40)
+  }, [cityGroups, cityQuery])
+
+  useEffect(() => {
+    void loadAirportsOnce().catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    const origins = parseAirportCodes(departure)
+    if (!origins.length) {
+      setArrivalAirports([])
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const lists = await Promise.all(
+          origins.map(async (code) => {
+            try {
+              return normalizeDestinations(await getApiClient().getDestinations(code))
+            } catch {
+              return []
+            }
+          }),
+        )
+        if (cancelled) return
+        const seen = new Set<string>()
+        const merged = []
+        for (const list of lists) {
+          for (const d of list) {
+            const code = (d?.code || '').toUpperCase()
+            if (!code || seen.has(code)) continue
+            seen.add(code)
+            merged.push(d)
+          }
+        }
+        const next = destinationsToAirports(merged)
+        setArrivalAirports(next)
+        setArrivalCodes((codes) => {
+          const allowed = new Set(next.map((a) => a.code))
+          const kept = codes.filter((c) => allowed.has(c))
+          if (kept.length !== codes.length) {
+            setArrivalCityKey('')
+            return []
+          }
+          return codes
+        })
+      } catch {
+        if (!cancelled) setArrivalAirports([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [departure])
+
+  const selectCity = (group: CityAirportGroup | null) => {
+    if (!group) {
+      setArrivalCityKey('')
+      setArrivalCodes([])
+      setCityQuery('')
+      return
+    }
+    setArrivalCityKey(group.key)
+    setArrivalCodes(group.airports.map((a) => a.code))
+    setCityQuery(group.city)
+    if (!name.trim() || name.startsWith('Weekend ')) {
+      setName(`Weekend ${group.city}`)
+    }
+  }
+
+  const onPreset = (p: DatePreset) => {
+    setPreset(p)
+    if (p === 'flexible') {
+      setShowFlexible(true)
+      return
+    }
+    const d = generateDatesFromPreset(p)
+    setDatesDepart(
+      d.dates_depart.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
+    )
+    setDatesRetour(
+      d.dates_retour.map((x) => ({ ...x, heure_min: '00:00', heure_max: '23:59' })),
+    )
+  }
+
+  const submit = async () => {
+    const depEncoded = encodeAirportCodes(parseAirportCodes(departure))
+    if (!depEncoded) {
+      setError('Choisis une ville / aéroport de départ')
+      return
+    }
+    if (!datesDepart.length || !datesRetour.length) {
+      setError('Choisis des dates aller et retour')
+      return
+    }
+    const tripName =
+      name.trim() ||
+      (selectedCity
+        ? `Weekend ${selectedCity.city}`
+        : `Weekend depuis ${cityDisplayNameFr(parseAirportCodes(departure)[0] || '') || depEncoded}`)
+    setSaving(true)
+    setError(null)
+    try {
+      const trip = await getApiClient().createPlannedTrip({
+        name: tripName,
+        departure_airport: depEncoded,
+        arrival_airport: encodeArrivalCodes(arrivalCodes),
+        passengers,
+        dates_depart: datesDepart,
+        dates_retour: datesRetour,
+        budget_max: budget,
+        direct: directOnly,
+      })
+      onCreated(trip.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="app-dialog-root">
+      <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
+      <div className="app-dialog-panel app-dialog-xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-white/95 backdrop-blur px-6 sm:px-8 py-4 sm:py-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm font-bold text-muted hover:text-ink min-w-[72px] text-left"
+          >
+            Annuler
+          </button>
+          <div className="text-center min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary-700">
+              Planner
+            </p>
+            <h3 className="font-extrabold text-ink text-xl tracking-tight">Nouveau voyage</h3>
+          </div>
+          <span className="min-w-[72px]" />
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            <div className="space-y-5">
+              <div>
+                <label className="text-sm font-bold text-ink block mb-1.5">Nom</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Weekend Lisbonne"
+                  className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-ink block mb-1.5">Départ</label>
+                <CityAirportSelect value={departure} onChange={setDeparture} />
+              </div>
+
+              <div>
+                <label className="text-sm font-bold text-ink block mb-1.5">
+                  Arrivée (optionnel)
+                </label>
+                <input
+                  value={cityQuery}
+                  onChange={(e) => {
+                    setCityQuery(e.target.value)
+                    if (arrivalCityKey) {
+                      setArrivalCityKey('')
+                      setArrivalCodes([])
+                    }
+                  }}
+                  placeholder={
+                    parseAirportCodes(departure).length
+                      ? 'Ville ou aéroport…'
+                      : 'Choisis d’abord un départ'
+                  }
+                  disabled={!parseAirportCodes(departure).length}
+                  className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                />
+                {selectedCity ? (
+                  <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-primary-50 border border-primary-100 px-3 py-2">
+                    <p className="text-sm font-bold text-ink">
+                      {selectedCity.city}
+                      <span className="text-muted font-medium">
+                        {' '}
+                        · {arrivalCodes.join(' · ')}
+                      </span>
+                    </p>
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-primary-700"
+                      onClick={() => selectCity(null)}
+                    >
+                      Effacer
+                    </button>
+                  </div>
+                ) : cityQuery.trim() && filteredCities.length > 0 ? (
+                  <ul className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-line bg-white shadow-soft divide-y divide-line">
+                    {filteredCities.map((g) => (
+                      <li key={g.key}>
+                        <button
+                          type="button"
+                          onClick={() => selectCity(g)}
+                          className="w-full text-left px-3.5 py-2.5 hover:bg-primary-50"
+                        >
+                          <span className="font-bold text-ink text-sm">{g.city}</span>
+                          <span className="text-muted text-xs ml-2">{g.country}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="text-xs text-muted mt-1.5">
+                  Laisse vide pour t’inspirer (scan inspire).
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <PassengerStepper value={passengers} onChange={setPassengers} />
+
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={directOnly}
+                  onChange={(e) => setDirectOnly(e.target.checked)}
+                  className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
+                />
+                <span className="text-sm font-semibold text-ink">
+                  Vols directs uniquement
+                </span>
+              </label>
+
+              <BudgetSlider value={budget} onChange={setBudget} />
+
+              <div>
+                <p className="text-sm font-bold text-ink mb-2">Dates</p>
+                <div className="flex flex-wrap gap-2">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onPreset(p.id)}
+                      className={`px-3.5 py-2 rounded-xl text-sm font-bold border transition-colors ${
+                        preset === p.id
+                          ? 'bg-ink text-white border-ink'
+                          : 'bg-white text-ink-soft border-line hover:bg-primary-50'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                {datesDepart[0] && datesRetour[0] ? (
+                  <p className="text-sm font-semibold text-muted mt-2">
+                    {formatDateFr(datesDepart[0].date)} →{' '}
+                    {formatDateFr(datesRetour[datesRetour.length - 1].date)}
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted mt-2">Choisis tes dates libres</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {error ? (
+            <p className="text-sm font-semibold text-red-600" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end pt-1 border-t border-line">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void submit()}
+              className="app-btn-primary rounded-2xl py-3.5 px-10 disabled:opacity-60 min-w-[200px] mt-4"
+            >
+              {saving ? '…' : 'Créer'}
+            </button>
+          </div>
+        </div>
+
+        {showFlexible ? (
+          <div className="app-dialog-root z-[60]">
+            <button
+              type="button"
+              aria-label="Fermer"
+              className="app-dialog-backdrop"
+              onClick={() => setShowFlexible(false)}
+            />
+            <div className="app-dialog-panel app-dialog-xl p-5 sm:p-8">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-extrabold text-lg text-ink">Dates libres</h4>
+                <button
+                  type="button"
+                  onClick={() => setShowFlexible(false)}
+                  className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50"
+                >
+                  OK
+                </button>
+              </div>
+              <FlexibleDatesSelector
+                flexibleDates={{ dates_depart: datesDepart, dates_retour: datesRetour }}
+                onFlexibleDatesChange={(d) => {
+                  setDatesDepart(d.dates_depart)
+                  setDatesRetour(d.dates_retour)
+                  setPreset('flexible')
+                }}
+                formatDateFr={formatDateFr}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}

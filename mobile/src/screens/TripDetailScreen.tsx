@@ -621,15 +621,7 @@ export function TripDetailScreen() {
             loading={scanning}
             disabled={scanning}
           />
-          <PriceWatchBanner
-            enabled={!!trip.auto_scan_enabled}
-            budget={trip.budget_max}
-            intervalSeconds={trip.auto_scan_interval_seconds || watchInterval}
-            watchInterval={watchInterval}
-            busy={watchBusy}
-            onIntervalChange={setWatchInterval}
-            onToggle={() => void setPriceWatch(!trip.auto_scan_enabled)}
-          />
+          {/* Price watch / surveillance — masqué pour le moment */}
         </>
       ) : null}
 
