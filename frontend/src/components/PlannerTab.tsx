@@ -16,7 +16,8 @@ import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange 
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
 import { BudgetSlider } from './BudgetSlider'
-import { openPartnerBookSync } from '../utils/partnerBook'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { createMyTripComposeFromTrip, openPartnerBookSync } from '../utils/partnerBook'
 import { PassengerStepper } from './PassengerStepper'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
@@ -662,6 +663,7 @@ function TripListCard({
 
 export function PlannerTab() {
   const { t } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [userId, setUserId] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [trips, setTrips] = useState<PlannedTrip[]>([])
@@ -672,6 +674,7 @@ export function PlannerTab() {
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [autoScanTripId, setAutoScanTripId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const deepTripOpened = useRef(false)
 
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
 
@@ -694,6 +697,18 @@ export function PlannerTab() {
       unsub?.()
     }
   }, [])
+
+  // Deep link /planner?trip={id}
+  useEffect(() => {
+    if (deepTripOpened.current || !userId) return
+    const tripQ = searchParams.get('trip')
+    if (!tripQ) return
+    deepTripOpened.current = true
+    setSelectedTripId(tripQ)
+    const next = new URLSearchParams(searchParams)
+    next.delete('trip')
+    setSearchParams(next, { replace: true })
+  }, [userId, searchParams, setSearchParams])
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -1540,7 +1555,9 @@ function TripDetailView({
   const [savingCriteria, setSavingCriteria] = useState(false)
   const [watchBusy, setWatchBusy] = useState(false)
   const [watchInterval, setWatchInterval] = useState(3600)
+  const [hotelBusy, setHotelBusy] = useState(false)
   const autoScanStarted = useRef(false)
+  const navigate = useNavigate()
 
   const syncEditFromTrip = useCallback((detail: PlannedTripDetail) => {
     setEditBudget(detail.budget_max || 150)
@@ -2036,7 +2053,34 @@ function TripDetailView({
                   language,
                 })
               }}
+              onAddHotel={() => {
+                if (hotelBusy) return
+                const pax = Math.max(
+                  trip.passengers || 1,
+                  (trip.members || []).length || 1,
+                )
+                setHotelBusy(true)
+                void createMyTripComposeFromTrip({
+                  trip: accepted.trip_data,
+                  passengers: pax,
+                  language,
+                  markFlightBooked: false,
+                })
+                  .then((draft) => {
+                    navigate(`/trip/${draft.draft_token}?compose=1`)
+                  })
+                  .catch(() => {
+                    onToast('Impossible de créer le séjour hôtel — réessaie')
+                  })
+                  .finally(() => setHotelBusy(false))
+              }}
             />
+            {!isOrganizer ? (
+              <p className="text-sm text-ink-muted mt-2 leading-snug">
+                Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
+                l’organisateur décide pour le groupe.
+              </p>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -2201,7 +2245,7 @@ function TripDetailView({
         )
       ) : null}
 
-      {isOrganizer && (trip.status === 'locked' || !!accepted) ? (
+      {isOrganizer ? (
         <ShareBar onShare={() => void doShare()} encoded={encoded} url={url} t={t} />
       ) : null}
 

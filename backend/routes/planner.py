@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -340,15 +340,23 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
             detail="Dates aller/retour manquantes sur le voyage — impossible de scanner",
         )
 
-    # Always search the whole calendar day of the trip dates
+    # Always search the whole calendar day of the trip dates; drop past outbounds
+    today = date.today().isoformat()
     dates_depart = [
         DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
         for d in dates_depart
+        if (d.date or "")[:10] >= today
     ]
     dates_retour = [
         DateAvecHoraire(date=d.date, heure_min="00:00", heure_max="23:59")
         for d in dates_retour
+        if (d.date or "")[:10] >= today
     ]
+    if not dates_depart or not dates_retour:
+        raise HTTPException(
+            status_code=400,
+            detail="Toutes les dates de ce voyage sont passées — mets à jour les dates",
+        )
 
     print(
         f"🔎 Planner scan {trip_id} dates aller="
@@ -645,6 +653,13 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
         raise HTTPException(status_code=400, detail="Nom du voyage requis")
     if not body.dates_depart or not body.dates_retour:
         raise HTTPException(status_code=400, detail="Dates aller et retour requises")
+
+    today = date.today().isoformat()
+    if not any((d.date or "")[:10] >= today for d in body.dates_depart):
+        raise HTTPException(
+            status_code=400,
+            detail="Choisis au moins une date de départ aujourd’hui ou plus tard",
+        )
 
     dep = _normalize_departure(body.departure_airport)
     arr = _normalize_arrival(body.arrival_airport)
@@ -1112,6 +1127,21 @@ async def invite_preview(token: str):
     accepted_trip = None
     if accepted.data:
         accepted_trip = accepted.data[0].get("trip_data")
+    org_name = None
+    org_id = row.get("organizer_id")
+    if org_id:
+        try:
+            prof = (
+                supabase.table("user_profiles")
+                .select("full_name")
+                .eq("id", org_id)
+                .limit(1)
+                .execute()
+            )
+            if prof.data:
+                org_name = (prof.data[0].get("full_name") or "").strip() or None
+        except Exception:
+            org_name = None
     return {
         "name": row["name"],
         "departure_airport": row["departure_airport"],
@@ -1120,7 +1150,7 @@ async def invite_preview(token: str):
         "dates_depart": row.get("dates_depart") or [],
         "dates_retour": row.get("dates_retour") or [],
         "budget_max": row.get("budget_max") or 200,
-        "organizer_name": None,
+        "organizer_name": org_name,
         "accepted_trip": accepted_trip,
         "members_count": members.count or 0,
         "invite_token": row["invite_token"],

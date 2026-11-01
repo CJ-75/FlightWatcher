@@ -10,6 +10,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { InvitePreview } from '@flightwatcher/shared'
+import { cityDisplayNameFr, parseAirportCodes } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -25,6 +26,16 @@ function formatDate(dateStr?: string | null) {
     day: 'numeric',
     month: 'short',
   })
+}
+
+function routeLabel(value?: string | null): string {
+  const codes = parseAirportCodes(value || '')
+  if (!codes.length) return value || '—'
+  const cities = [...new Set(codes.map((c) => cityDisplayNameFr(c)))]
+  if (cities.length === 1) {
+    return codes.length > 1 ? `${cities[0]} · ${codes.join(' · ')}` : `${cities[0]} · ${codes[0]}`
+  }
+  return codes.map((c) => `${cityDisplayNameFr(c)} (${c})`).join(' · ')
 }
 
 export function PlannerInviteScreen({ route, navigation }: Props) {
@@ -101,22 +112,32 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
           </View>
         ) : preview ? (
           <View style={[styles.card, shadow.soft]}>
+            <Text style={styles.kicker}>Invitation</Text>
             <Text style={styles.name}>{preview.name}</Text>
             <Text style={styles.meta}>
-              {preview.departure_airport}
-              {preview.arrival_airport ? ` → ${preview.arrival_airport}` : ''}
+              {routeLabel(preview.departure_airport)}
+              {preview.arrival_airport
+                ? ` → ${routeLabel(preview.arrival_airport)}`
+                : ' → destination ouverte'}
             </Text>
             <Text style={styles.meta}>
               {formatDate(outStr)} → {formatDate(innStr)} · {preview.passengers}{' '}
-              pers.
+              pers. · max {preview.budget_max} €/pers
             </Text>
             {preview.organizer_name ? (
               <Text style={styles.org}>Organisé par {preview.organizer_name}</Text>
-            ) : null}
+            ) : (
+              <Text style={styles.org}>Organisé avec FlightWatcher</Text>
+            )}
             {preview.members_count != null ? (
               <Text style={styles.meta}>{preview.members_count} participant(s)</Text>
             ) : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
+            {!user || isGuest ? (
+              <Text style={styles.loginHint}>
+                Connecte-toi (Profil) pour rejoindre ce voyage.
+              </Text>
+            ) : null}
             <Pressable
               style={[styles.btn, joining && styles.btnDisabled]}
               onPress={() => void join()}
@@ -150,9 +171,22 @@ const styles = StyleSheet.create({
     padding: 22,
     gap: 10,
   },
-  name: { fontFamily: fonts.bold, fontSize: 20, color: colors.ink },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  name: { fontFamily: fonts.extrabold, fontSize: 24, color: colors.ink, letterSpacing: -0.5 },
   meta: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
-  org: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  org: { fontFamily: fonts.semibold, fontSize: 14, color: colors.inkSoft },
+  loginHint: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.primaryInk,
+    lineHeight: 18,
+  },
   error: { fontFamily: fonts.medium, fontSize: 14, color: '#B91C1C' },
   btn: {
     marginTop: 8,

@@ -3,11 +3,16 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
   airportDisplayNameFr,
+  buildStayPipeline,
   computeTripPartyPrice,
   distantAirportLine,
   hotelCancelLabel,
   resolveCarrierBooking,
+  resolveFlightStepStatus,
+  resolveHotelStepStatus,
+  type StayStepId,
 } from '@flightwatcher/shared'
+import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentSession } from '../lib/supabase'
 import { rememberTrip } from '../utils/tripRecovery'
@@ -304,6 +309,7 @@ export default function MyTrip() {
   const hotelBooked = Boolean(
     draft?.hotel_booked_at || payload.hotel_booked || payload.hotel_booked_at,
   )
+  const externalFlight = Boolean(payload.flight_external || payload.external_flight)
   const hotelConfirmation =
     payload.hotel_confirmation_code != null
       ? String(payload.hotel_confirmation_code)
@@ -320,6 +326,34 @@ export default function MyTrip() {
   const hotelId = hotelObj?.id != null ? String(hotelObj.id) : null
   const wantsCompose =
     composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
+
+  const pipelineSteps = useMemo(
+    () =>
+      buildStayPipeline({
+        flight: resolveFlightStepStatus({
+          hasFlightPayload: Boolean(
+            flight && (flight.airline || flight.origin_iata || flight.price_pp),
+          ),
+          flightBooked,
+          externalFlight,
+          bookingUrl: String(flight.booking_url || payload.booking_url || ''),
+        }),
+        hotel: resolveHotelStepStatus({
+          hasHotel: Boolean(hotelId),
+          hotelBooked,
+        }),
+        focus: wantsCompose ? 'hotel' : undefined,
+      }),
+    [
+      flight,
+      flightBooked,
+      externalFlight,
+      payload.booking_url,
+      hotelId,
+      hotelBooked,
+      wantsCompose,
+    ],
+  )
 
   const from = searchParams.get('from')
   const backHref =
@@ -340,6 +374,22 @@ export default function MyTrip() {
     next.set('compose', '1')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
+
+  const onPipelineStep = (id: StayStepId) => {
+    if (id === 'hotel') {
+      if (hotelId && !hotelBooked) {
+        hotelSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else if (!hotelId) {
+        openCompose()
+      }
+      return
+    }
+    if (id === 'flight' && flightUrl && !flightBooked) {
+      leftForFlight.current = true
+      leftForFlightAt.current = Date.now()
+      window.open(flightUrl, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   const dismissHotelCheckout = useCallback(() => {
     setCheckoutDeal(null)
@@ -1124,6 +1174,25 @@ export default function MyTrip() {
             {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
             {` · ${travelersLabel}`}
           </p>
+          <StayPipelineStepper steps={pipelineSteps} onStepPress={onPipelineStep} />
+          {outDate && outDate < new Date().toISOString().slice(0, 10) ? (
+            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <p className="font-bold">Dates passées</p>
+              <p className="text-amber-900/80 mt-0.5 text-xs leading-relaxed">
+                Le départ était le {formatDate(outDate)}. Les tarifs hôtel peuvent
+                être indisponibles.
+              </p>
+            </div>
+          ) : null}
+          {externalFlight ? (
+            <div className="mt-3 rounded-2xl border border-primary-100 bg-primary-50/80 px-4 py-3 text-sm text-primary-900">
+              <p className="font-bold">Vol ailleurs</p>
+              <p className="text-primary-800/80 mt-0.5 text-xs leading-relaxed">
+                Tu peux composer et payer ton hôtel même si le vol n’est pas passé
+                par FlightWatcher.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {wantsCompose && token && draft ? (

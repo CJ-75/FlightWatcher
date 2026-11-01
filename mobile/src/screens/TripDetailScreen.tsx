@@ -16,7 +16,13 @@ import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
-import { cityDisplayNameFr, formatDateFr, parseAirportCodes } from '@flightwatcher/shared'
+import {
+  cityDisplayNameFr,
+  formatDateFr,
+  parseAirportCodes,
+  type AddTripMemberRequest,
+  type EnrichedTripResponse,
+} from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -32,8 +38,9 @@ import {
 import { DestinationCard } from '../components/DestinationCard'
 import { TravelersSection } from '../components/TravelersSection'
 import { Button } from '../components/ui/Button'
-import { preparePartnerBook } from '../lib/partnerBook'
+import { createMyTripComposeFromTrip, preparePartnerBook } from '../lib/partnerBook'
 import { openInAppBrowser } from '../lib/openInApp'
+import { rememberTrip } from '../lib/tripRecovery'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, shadow, spacing } from '../theme'
@@ -68,6 +75,14 @@ export function TripDetailScreen() {
   const [error, setError] = useState<string | null>(null)
   const [watchBusy, setWatchBusy] = useState(false)
   const [watchInterval, setWatchInterval] = useState(3600)
+  const [hotelBusy, setHotelBusy] = useState(false)
+  const [scanEmpty, setScanEmpty] = useState<{
+    reason: 'budget' | 'no_flights'
+    budget: number
+    cheapest?: number | null
+  } | null>(null)
+  const [editBudget, setEditBudget] = useState(150)
+  const [savingCriteria, setSavingCriteria] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -97,6 +112,7 @@ export function TripDetailScreen() {
 
   const scan = useCallback(async () => {
     setScanning(true)
+    setScanEmpty(null)
     setError(null)
     // Clear previous pending proposals immediately (Search parity)
     setTrip((prev) =>
@@ -114,20 +130,43 @@ export function TripDetailScreen() {
         if (!updated) throw new Error('Voyage introuvable')
         setTrip(updated)
         navigation.setOptions({ title: updated.name || 'Voyage' })
+        if (!(updated.proposals || []).some((p) => p.status === 'pending')) {
+          setScanEmpty({
+            reason: 'no_flights',
+            budget: updated.budget_max || 150,
+            cheapest: null,
+          })
+        }
       } else {
         const scanRes = await getApi().scanPlannedTrip(tripId)
-        // Affiche immédiatement les propositions persistées, puis resync bg
+        const proposals = scanRes.proposals || []
         setTrip((prev) =>
           prev
             ? {
                 ...prev,
                 status: 'planning',
-                proposals: scanRes.proposals || [],
-                proposals_count: (scanRes.proposals || []).length,
+                proposals,
+                proposals_count: proposals.length,
               }
             : prev,
         )
         void load()
+        if (proposals.length === 0) {
+          const budget = scanRes.budget_max ?? 150
+          const cheapest = scanRes.cheapest_found
+          setScanEmpty({
+            reason: scanRes.empty_reason === 'budget' ? 'budget' : 'no_flights',
+            budget,
+            cheapest,
+          })
+          if (cheapest != null) {
+            setEditBudget(
+              Math.min(1000, Math.max(budget, Math.ceil(cheapest / 10) * 10)),
+            )
+          } else {
+            setEditBudget(budget)
+          }
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan échoué')
@@ -136,6 +175,24 @@ export function TripDetailScreen() {
       setScanning(false)
     }
   }, [tripId, isGuest, load, navigation])
+
+  const bumpBudgetAndScan = async () => {
+    if (!trip) return
+    const next = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
+    setSavingCriteria(true)
+    try {
+      if (!(__DEV__ && isGuest)) {
+        await getApi().updatePlannedTrip(tripId, { budget_max: next })
+      }
+      setTrip((prev) => (prev ? { ...prev, budget_max: next } : prev))
+      setScanEmpty(null)
+      await scan()
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Mise à jour échouée')
+    } finally {
+      setSavingCriteria(false)
+    }
+  }
 
   // Création → scan immédiat (ne pas attendre le getTrip)
   useEffect(() => {
@@ -196,19 +253,51 @@ export function TripDetailScreen() {
     }
   }
 
-  const addMember = async (displayName: string) => {
+  const addMember = async (body: AddTripMemberRequest) => {
     setMembersBusy(true)
     try {
       if (__DEV__ && isGuest) {
-        const updated = addGuestTripMember(tripId, displayName)
+        const label =
+          [body.first_name, body.last_name].filter(Boolean).join(' ').trim() ||
+          body.display_name ||
+          ''
+        const updated = addGuestTripMember(tripId, label, body.email || undefined)
         if (!updated) throw new Error('Voyage introuvable')
         setTrip(updated)
       } else {
-        await getApi().addTripMember(tripId, { display_name: displayName })
+        await getApi().addTripMember(tripId, body)
         await load()
       }
     } finally {
       setMembersBusy(false)
+    }
+  }
+
+  const addHotelFromTrip = async (tripData: EnrichedTripResponse) => {
+    if (!trip) return
+    setHotelBusy(true)
+    try {
+      const pax = Math.max(trip.passengers || 1, (trip.members || []).length || 1)
+      const draft = await createMyTripComposeFromTrip({
+        trip: tripData,
+        passengers: pax,
+        markFlightBooked: false,
+      })
+      await rememberTrip({
+        draft_token: draft.draft_token,
+        city: cityDisplayNameFr(
+          tripData.destination_code,
+          tripData.aller?.destinationFull?.split(',')[0]?.trim(),
+        ),
+      })
+      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible de créer le séjour hôtel',
+      )
+    } finally {
+      setHotelBusy(false)
     }
   }
 
@@ -431,17 +520,37 @@ export function TripDetailScreen() {
           <Text style={styles.sectionTitle}>Proposition acceptée</Text>
           <DestinationCard
             trip={accepted.trip_data}
-            passengers={trip.passengers}
+            passengers={Math.max(trip.passengers || 1, (trip.members || []).length || 1)}
+            addHotelBusy={hotelBusy}
             onBook={() => {
               void preparePartnerBook({
                 trip: accepted.trip_data,
-                passengers: trip.passengers || 1,
+                passengers: Math.max(trip.passengers || 1, (trip.members || []).length || 1),
               }).then((ps) => {
                 openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
               })
             }}
+            onAddHotel={() => void addHotelFromTrip(accepted.trip_data)}
           />
+          {!isOrganizer ? (
+            <Text style={styles.roleHint}>
+              Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
+              l’organisateur décide pour le groupe.
+            </Text>
+          ) : null}
         </View>
+      ) : null}
+
+      {isOrganizer && !accepted && !scanning ? (
+        <Pressable
+          onPress={() => void shareInvite()}
+          style={[styles.shareEarly, shadow.soft]}
+        >
+          <Text style={styles.shareEarlyTitle}>Inviter des amis</Text>
+          <Text style={styles.shareEarlyBody}>
+            Partage le lien — ils voient les propositions, toi tu décides.
+          </Text>
+        </Pressable>
       ) : null}
 
       {scanning ? (
@@ -475,14 +584,84 @@ export function TripDetailScreen() {
       ) : null}
 
       {!accepted && pending.length === 0 && !scanning ? (
-        <View style={[styles.empty, shadow.soft]}>
-          <Text style={styles.emptyTitle}>Pas encore de propositions</Text>
-          <Text style={styles.emptyBody}>
-            {isOrganizer
-              ? 'Lance un scan pour trouver des vols dans ton budget.'
-              : 'L’organisateur n’a pas encore scanné de vols.'}
-          </Text>
-        </View>
+        scanEmpty ? (
+          <View
+            style={[
+              styles.empty,
+              shadow.soft,
+              scanEmpty.reason === 'budget' && styles.emptyBudget,
+            ]}
+          >
+            <Text style={styles.emptyTitle}>
+              {scanEmpty.reason === 'budget'
+                ? `Rien sous ${scanEmpty.budget} €/pers`
+                : 'Aucun vol trouvé'}
+            </Text>
+            <Text style={styles.emptyBody}>
+              {scanEmpty.reason === 'budget'
+                ? scanEmpty.cheapest
+                  ? `Le moins cher vu : ~${Math.ceil(scanEmpty.cheapest)} €/pers. Monte un peu le budget et relance.`
+                  : 'Élargis le budget ou les dates, puis relance le scan.'
+                : isOrganizer
+                  ? 'Essaie d’autres dates ou un budget plus large.'
+                  : 'L’organisateur n’a pas encore trouvé de vol.'}
+            </Text>
+            {isOrganizer && scanEmpty.reason === 'budget' ? (
+              <View style={styles.budgetEdit}>
+                <Text style={styles.budgetLabel}>
+                  Nouveau budget : {Math.round(editBudget)} €/pers
+                </Text>
+                <View style={styles.budgetRow}>
+                  {[
+                    Math.max(scanEmpty.budget + 20, 80),
+                    scanEmpty.cheapest
+                      ? Math.ceil(scanEmpty.cheapest / 10) * 10
+                      : scanEmpty.budget + 50,
+                    scanEmpty.budget + 100,
+                  ]
+                    .filter((v, i, a) => a.indexOf(v) === i && v > scanEmpty.budget)
+                    .slice(0, 3)
+                    .map((v) => (
+                      <Pressable
+                        key={v}
+                        onPress={() => setEditBudget(v)}
+                        style={[
+                          styles.budgetChip,
+                          editBudget === v && styles.budgetChipOn,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.budgetChipText,
+                            editBudget === v && styles.budgetChipTextOn,
+                          ]}
+                        >
+                          {v} €
+                        </Text>
+                      </Pressable>
+                    ))}
+                </View>
+                <Button
+                  label={savingCriteria ? '…' : 'Mettre à jour et rescanner'}
+                  onPress={() => void bumpBudgetAndScan()}
+                  loading={savingCriteria}
+                  disabled={savingCriteria}
+                />
+              </View>
+            ) : isOrganizer ? (
+              <Button label="Relancer le scan" onPress={() => void scan()} />
+            ) : null}
+          </View>
+        ) : (
+          <View style={[styles.empty, shadow.soft]}>
+            <Text style={styles.emptyTitle}>Pas encore de propositions</Text>
+            <Text style={styles.emptyBody}>
+              {isOrganizer
+                ? 'Lance un scan pour trouver des vols dans ton budget.'
+                : 'L’organisateur n’a pas encore scanné de vols.'}
+            </Text>
+          </View>
+        )
       ) : null}
 
       {others.length > 0 ? (
@@ -491,7 +670,7 @@ export function TripDetailScreen() {
         </View>
       ) : null}
 
-      {isOrganizer && (trip.status === 'locked' || !!accepted) ? (
+      {isOrganizer ? (
         <Button label="Partager l’invitation" onPress={() => void shareInvite()} />
       ) : null}
 
@@ -672,6 +851,23 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   sectionMuted: { fontFamily: fonts.medium, fontSize: 13, color: colors.faint },
+  roleHint: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  shareEarly: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 16,
+    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  shareEarlyTitle: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
+  shareEarlyBody: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, lineHeight: 18 },
   empty: {
     backgroundColor: colors.white,
     borderRadius: 18,
@@ -686,6 +882,33 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
+  emptyBudget: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  budgetEdit: { width: '100%', gap: 12, marginTop: 12 },
+  budgetLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
+    textAlign: 'center',
+  },
+  budgetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  budgetChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+  },
+  budgetChipOn: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  budgetChipText: { fontFamily: fonts.bold, fontSize: 13, color: colors.ink },
+  budgetChipTextOn: { color: colors.white },
   errorText: { fontFamily: fonts.medium, color: colors.danger, fontSize: 14 },
   routeWarn: {
     backgroundColor: '#FFFBEB',

@@ -16,12 +16,17 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   boardLabelFr,
+  buildStayPipeline,
   hotelCancelLabel,
   hotelStarsLabel,
   resolveCarrierBooking,
+  resolveFlightStepStatus,
+  resolveHotelStepStatus,
   type HotelGalleryPhoto,
   type MyTripDraft,
+  type StayStepId,
 } from '@flightwatcher/shared'
+import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -170,6 +175,23 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const hotelBooked = Boolean(
     draft?.hotel_booked_at || pl.hotel_booked || pl.hotel_booked_at,
   )
+  const externalFlight = Boolean(pl.flight_external || pl.external_flight)
+  const pipelineSteps = useMemo(
+    () =>
+      buildStayPipeline({
+        flight: resolveFlightStepStatus({
+          hasFlightPayload: Boolean(fl && (fl.airline || fl.origin_iata || fl.price_pp)),
+          flightBooked,
+          externalFlight,
+          bookingUrl: flightUrl,
+        }),
+        hotel: resolveHotelStepStatus({
+          hasHotel: Boolean(hotelId),
+          hotelBooked,
+        }),
+      }),
+    [fl, flightBooked, externalFlight, flightUrl, hotelId, hotelBooked],
+  )
 
   useEffect(() => {
     if (!hotelId) {
@@ -240,6 +262,23 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       flightUrl,
       carrier.ctaLabel || 'Réserver le vol',
     )
+  }
+
+  const onPipelineStep = (id: StayStepId) => {
+    if (id === 'hotel') {
+      if (hotelId && !hotelBooked) {
+        navigation.navigate('DealCheckout', {
+          draftToken,
+          hotelId: hotelId || undefined,
+        })
+      } else if (!hotelId) {
+        navigation.navigate('HotelCompose', { draftToken })
+      }
+      return
+    }
+    if (id === 'flight' && flightUrl && !flightBooked) {
+      openFlight()
+    }
   }
 
   const onSticky = () => {
@@ -332,6 +371,33 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             <Text style={styles.share}>Partager</Text>
           </Pressable>
         </View>
+
+        <StayPipelineStepper steps={pipelineSteps} onStepPress={onPipelineStep} />
+
+        {out && out < new Date().toISOString().slice(0, 10) ? (
+          <View style={styles.warnBanner}>
+            <Text style={styles.warnTitle}>Dates passées</Text>
+            <Text style={styles.warnBody}>
+              Le départ était le {formatDate(out)}. Les tarifs hôtel peuvent être
+              indisponibles — choisis d’autres dates si besoin.
+            </Text>
+          </View>
+        ) : null}
+
+        {externalFlight ? (
+          <View style={styles.infoBanner}>
+            <Text style={styles.infoTitle}>Vol ailleurs</Text>
+            <Text style={styles.infoBody}>
+              Tu as un vol hors FlightWatcher — tu peux quand même choisir et
+              payer ton hôtel ici.
+            </Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.legalSoft}>
+          Vol et hôtel sont deux réservations distinctes. Les prix et dispo sont
+          revalidés avant paiement — si un tarif a bougé, on te le dira.
+        </Text>
 
         <View style={[styles.card, shadow.soft]}>
           <IconLabel
@@ -539,6 +605,35 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sub: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
+  warnBanner: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 14,
+    gap: 4,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FDE68A',
+  },
+  warnTitle: { fontFamily: fonts.bold, fontSize: 14, color: '#92400E' },
+  warnBody: { fontFamily: fonts.regular, fontSize: 13, color: '#78350F', lineHeight: 18 },
+  infoBanner: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: 16,
+    padding: 14,
+    gap: 4,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+  },
+  infoTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryInk },
+  infoBody: { fontFamily: fonts.regular, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
+  legalSoft: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.faint,
+    lineHeight: 17,
+    marginBottom: 14,
+  },
   shareBtn: {
     marginTop: 2,
     paddingHorizontal: 12,

@@ -101,7 +101,7 @@ def notify_trip_under_budget(
     cheapest: float,
     recipients: List[str],
 ) -> bool:
-    link = f"{WEB_APP_URL}/?tab=planner&trip={trip_id}"
+    link = f"{WEB_APP_URL}/planner?trip={trip_id}"
     subject = f"Vol trouvé sous {int(budget_max)}€/pers — {trip_name}"
     html = f"""
     <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">

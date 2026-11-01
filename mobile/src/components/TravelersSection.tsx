@@ -10,8 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from 'react-native'
-import type { TripMember } from '@flightwatcher/shared'
+import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
 
 function memberLabel(m: TripMember, currentUserId?: string | null): string {
@@ -36,13 +37,18 @@ function sortMembers(list: TripMember[]): TripMember[] {
   })
 }
 
+function validEmail(v: string): boolean {
+  const e = v.trim().toLowerCase()
+  return e.length >= 5 && e.includes('@') && e.includes('.')
+}
+
 type Props = {
   members: TripMember[]
   seats: number
   currentUserId?: string | null
   isOrganizer: boolean
   busy?: boolean
-  onAdd: (displayName: string) => Promise<void>
+  onAdd: (body: AddTripMemberRequest) => Promise<void>
   onRemove: (member: TripMember) => Promise<void>
 }
 
@@ -56,7 +62,9 @@ export function TravelersSection({
   onRemove,
 }: Props) {
   const [addOpen, setAddOpen] = useState(false)
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -66,21 +74,29 @@ export function TravelersSection({
 
   useEffect(() => {
     if (addOpen) {
-      setName('')
+      setFirstName('')
+      setLastName('')
+      setEmail('')
       setFormError(null)
     }
   }, [addOpen])
 
   const submitAdd = async () => {
-    const trimmed = name.trim()
-    if (trimmed.length < 2) {
-      setFormError('Entre au moins 2 caractères')
+    const first = firstName.trim()
+    const last = lastName.trim()
+    const em = email.trim().toLowerCase()
+    if (first.length < 1) {
+      setFormError('Prénom requis')
+      return
+    }
+    if (!validEmail(em)) {
+      setFormError('Email invalide')
       return
     }
     setSaving(true)
     setFormError(null)
     try {
-      await onAdd(trimmed)
+      await onAdd({ first_name: first, last_name: last || undefined, email: em })
       setAddOpen(false)
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Ajout impossible')
@@ -128,6 +144,17 @@ export function TravelersSection({
         ) : null}
       </View>
 
+      {!isOrganizer ? (
+        <Text style={styles.roleNote}>
+          Lecture seule — seul l’organisateur gère la liste.
+        </Text>
+      ) : (
+        <Text style={styles.roleNote}>
+          Ajoute un ami (prénom + email). Il pourra rejoindre via le lien ; toi
+          tu décides du vol.
+        </Text>
+      )}
+
       {sorted.length === 0 ? (
         <Text style={styles.empty}>Aucun voyageur pour l’instant.</Text>
       ) : (
@@ -168,7 +195,12 @@ export function TravelersSection({
                     <View
                       style={[styles.dot, onApp ? styles.dotOn : styles.dotOff]}
                     />
-                    <Text style={[styles.pillText, onApp ? styles.pillTextOn : styles.pillTextOff]}>
+                    <Text
+                      style={[
+                        styles.pillText,
+                        onApp ? styles.pillTextOn : styles.pillTextOff,
+                      ]}
+                    >
                       {onApp ? 'Sur l’app' : 'Hors app'}
                     </Text>
                   </View>
@@ -189,46 +221,76 @@ export function TravelersSection({
         </View>
       )}
 
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
+      <Modal
+        visible={addOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddOpen(false)}
+      >
         <KeyboardAvoidingView
           style={styles.overlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAddOpen(false)} />
           <View style={[styles.modalCard, shadow.lift]}>
-            <Text style={styles.modalTitle}>Nouveau voyageur</Text>
-            <Text style={styles.modalHint}>
-              Ajoute quelqu’un même s’il n’a pas encore de compte. Quand il rejoindra via le lien, son
-              statut passera sur l’app.
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Prénom"
-              placeholderTextColor={colors.faint}
-              autoFocus
-              maxLength={60}
-              returnKeyType="done"
-              onSubmitEditing={() => void submitAdd()}
-            />
-            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
-            <View style={styles.modalActions}>
-              <Pressable onPress={() => setAddOpen(false)} style={styles.cancelBtn}>
-                <Text style={styles.cancelText}>Annuler</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => void submitAdd()}
-                style={styles.saveBtn}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Text style={styles.saveText}>Ajouter</Text>
-                )}
-              </Pressable>
-            </View>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Nouveau voyageur</Text>
+              <Text style={styles.modalHint}>
+                Prénom + email suffisent. Quand il rejoindra via le lien, son
+                statut passera sur l’app.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Prénom"
+                placeholderTextColor={colors.faint}
+                autoFocus
+                maxLength={40}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              <TextInput
+                style={styles.input}
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Nom (optionnel)"
+                placeholderTextColor={colors.faint}
+                maxLength={40}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email"
+                placeholderTextColor={colors.faint}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={120}
+                returnKeyType="done"
+                onSubmitEditing={() => void submitAdd()}
+              />
+              {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+              <View style={styles.modalActions}>
+                <Pressable onPress={() => setAddOpen(false)} style={styles.cancelBtn}>
+                  <Text style={styles.cancelText}>Annuler</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void submitAdd()}
+                  style={styles.saveBtn}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.saveText}>Ajouter</Text>
+                  )}
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -246,6 +308,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   seats: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
+  roleNote: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
   addBtn: {
     backgroundColor: colors.primarySoft || '#FFF3E8',
     paddingHorizontal: 12,
@@ -269,92 +337,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarOrg: { backgroundColor: colors.primary },
-  avatarOn: { backgroundColor: '#1F8A70' },
-  avatarOff: { backgroundColor: '#94A3B8' },
-  avatarText: { fontFamily: fonts.bold, fontSize: 16, color: colors.white },
+  avatarOrg: { backgroundColor: colors.primarySoft },
+  avatarOn: { backgroundColor: colors.successSoft },
+  avatarOff: { backgroundColor: colors.canvas },
+  avatarText: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
   meta: { flex: 1, gap: 4, minWidth: 0 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink, flexShrink: 1 },
   badgeOrg: {
-    backgroundColor: '#FFF3E8',
-    paddingHorizontal: 8,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   badgeOrgText: { fontFamily: fonts.bold, fontSize: 10, color: colors.primaryInk },
   pill: {
-    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
   },
-  pillOn: { backgroundColor: '#E8F7F2' },
-  pillOff: { backgroundColor: '#F1F5F9' },
-  pillText: { fontFamily: fonts.medium, fontSize: 11 },
-  pillTextOn: { color: '#0F766E' },
-  pillTextOff: { color: '#64748B' },
+  pillOn: { backgroundColor: colors.successSoft },
+  pillOff: { backgroundColor: colors.canvas },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  dotOn: { backgroundColor: '#14B8A6' },
-  dotOff: { backgroundColor: '#94A3B8' },
-  removeBtn: { paddingHorizontal: 6, paddingVertical: 8 },
-  removeText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.danger },
+  dotOn: { backgroundColor: colors.success },
+  dotOff: { backgroundColor: colors.faint },
+  pillText: { fontFamily: fonts.medium, fontSize: 11 },
+  pillTextOn: { color: colors.success },
+  pillTextOff: { color: colors.muted },
+  removeBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  removeText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.danger },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(12,18,34,0.5)',
-    justifyContent: 'center',
-    padding: 24,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
   },
   modalCard: {
     backgroundColor: colors.white,
-    borderRadius: 22,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     padding: 22,
+    gap: 12,
+    maxHeight: '85%',
   },
-  modalTitle: { fontFamily: fonts.bold, fontSize: 20, color: colors.ink },
+  modalTitle: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.ink },
   modalHint: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    lineHeight: 20,
     color: colors.muted,
-    marginTop: 6,
-    marginBottom: 16,
+    lineHeight: 18,
+    marginBottom: 4,
   },
   input: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
     fontFamily: fonts.medium,
     fontSize: 16,
     color: colors.ink,
     backgroundColor: colors.canvas,
+    marginBottom: 8,
   },
-  formError: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.danger,
-    marginTop: 8,
-  },
-  modalActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  formError: { fontFamily: fonts.medium, fontSize: 13, color: colors.danger },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   cancelBtn: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 14,
     backgroundColor: colors.canvas,
   },
-  cancelText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.inkSoft },
+  cancelText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.muted },
   saveBtn: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 14,
     backgroundColor: colors.primary,
   },
   saveText: { fontFamily: fonts.bold, fontSize: 15, color: colors.white },

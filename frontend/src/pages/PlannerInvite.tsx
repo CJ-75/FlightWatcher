@@ -1,15 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import type { InvitePreview } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from '../components/DestinationCard'
-import { formatDateFr } from '@flightwatcher/shared'
+import { cityDisplayNameFr, formatDateFr, parseAirportCodes } from '@flightwatcher/shared'
+
+function routeLabel(value?: string | null): string {
+  const codes = parseAirportCodes(value || '')
+  if (!codes.length) return value || '—'
+  const cities = [...new Set(codes.map((c) => cityDisplayNameFr(c)))]
+  if (cities.length === 1) {
+    return codes.length > 1 ? `${cities[0]}` : `${cities[0]}`
+  }
+  return cities.join(' · ')
+}
 
 export default function PlannerInvite() {
   const { token = '' } = useParams<{ token: string }>()
+  const navigate = useNavigate()
   const { t } = useI18n()
   const [preview, setPreview] = useState<InvitePreview | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,8 +59,9 @@ export default function PlannerInvite() {
     setJoining(true)
     setError(null)
     try {
-      await getApiClient().joinInvite(token)
+      const res = await getApiClient().joinInvite(token)
       setJoined(true)
+      navigate(`/planner?trip=${encodeURIComponent(res.trip_id)}`, { replace: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
@@ -116,20 +128,29 @@ export default function PlannerInvite() {
               />
               <div className="relative">
                 <h2 className="text-xl font-black tracking-tight">{preview.name}</h2>
+                {preview.organizer_name ? (
+                  <p className="text-sm text-orange-100/80 mt-1">
+                    Organisé par {preview.organizer_name}
+                  </p>
+                ) : null}
                 <div className="mt-4 flex items-end justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-orange-200/70">
                       Départ
                     </p>
-                    <p className="text-3xl font-black">{preview.departure_airport}</p>
+                    <p className="text-2xl sm:text-3xl font-black leading-tight">
+                      {routeLabel(preview.departure_airport)}
+                    </p>
                   </div>
                   <div className="flex-1 h-px mb-3 bg-gradient-to-r from-transparent via-orange-300/50 to-transparent" />
                   <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-orange-200/70">
                       Arrivée
                     </p>
-                    <p className="text-3xl font-black">
-                      {preview.arrival_airport || 'ANY'}
+                    <p className="text-2xl sm:text-3xl font-black leading-tight">
+                      {preview.arrival_airport
+                        ? routeLabel(preview.arrival_airport)
+                        : 'Ouverte'}
                     </p>
                   </div>
                 </div>

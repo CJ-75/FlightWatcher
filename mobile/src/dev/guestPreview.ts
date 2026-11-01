@@ -338,6 +338,7 @@ export function rejectGuestProposal(proposalId: string): PlannedTripDetail | nul
 export function addGuestTripMember(
   tripId: string,
   displayName: string,
+  email?: string,
 ): PlannedTripDetail | null {
   const idx = trips.findIndex((t) => t.id === tripId)
   if (idx < 0) return null
@@ -345,12 +346,15 @@ export function addGuestTripMember(
   const name = displayName.trim()
   if (name.length < 2) throw new Error('Nom trop court')
   if ((trip.members || []).length >= 6) throw new Error('Maximum 6 voyageurs')
+  const em = (email || '').trim().toLowerCase()
+  if (!em || !em.includes('@')) throw new Error('Email requis')
 
   const member: TripMember = {
     id: `dev-member-${Date.now()}`,
     trip_id: tripId,
     user_id: null,
     display_name: name,
+    email: em,
     role: 'traveler',
     status: 'guest',
     joined_at: new Date().toISOString(),
