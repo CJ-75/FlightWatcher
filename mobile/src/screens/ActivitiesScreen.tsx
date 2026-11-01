@@ -12,6 +12,7 @@ import {
   Platform,
   RefreshControl,
   Image,
+  ScrollView,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -323,36 +324,52 @@ export function ActivitiesScreen() {
               />
             </View>
 
-            <View style={[styles.chipWrap, { marginBottom: spacing.md }]}>
-              {ACTIVITY_CATEGORY_TAGS_FR.map((t) => {
-                const on = categories.includes(t.id)
-                return (
-                  <Pressable
-                    key={t.id}
-                    onPress={() =>
-                      setCategories((prev) => toggleActivityCategory(prev, t.id))
-                    }
-                    style={[styles.tagChip, on && styles.tagChipActive]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: on }}
-                  >
-                    <Text style={styles.tagEmoji}>{t.emoji}</Text>
-                    <Text
-                      style={[
-                        styles.tagChipText,
-                        on && styles.tagChipTextActive,
-                      ]}
-                    >
-                      {t.label}
-                    </Text>
+            <View style={styles.catBlock}>
+              <View style={styles.catHeader}>
+                <View>
+                  <Text style={styles.catKicker}>AFFINER</Text>
+                  <Text style={styles.catTitle}>Catégories</Text>
+                </View>
+                {categories.length ? (
+                  <Pressable onPress={() => setCategories([])} hitSlop={8}>
+                    <Text style={styles.catClear}>Toutes</Text>
                   </Pressable>
-                )
-              })}
-              {categories.length ? (
-                <Pressable onPress={() => setCategories([])} hitSlop={8}>
-                  <Text style={styles.clearLink}>Effacer</Text>
-                </Pressable>
-              ) : null}
+                ) : null}
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.catRail}
+              >
+                {ACTIVITY_CATEGORY_TAGS_FR.map((t) => {
+                  const on = categories.includes(t.id)
+                  return (
+                    <Pressable
+                      key={t.id}
+                      onPress={() =>
+                        setCategories((prev) =>
+                          toggleActivityCategory(prev, t.id),
+                        )
+                      }
+                      style={[styles.catCard, on && styles.catCardOn]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                    >
+                      <View
+                        style={[styles.catIcon, on && styles.catIconOn]}
+                      >
+                        <Text style={styles.catEmoji}>{t.emoji}</Text>
+                      </View>
+                      <Text
+                        style={[styles.catLabel, on && styles.catLabelOn]}
+                        numberOfLines={2}
+                      >
+                        {t.label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
             </View>
 
             {header ? <Text style={styles.count}>{header}</Text> : null}
@@ -543,40 +560,75 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textDecorationLine: 'underline',
   },
-  clearLink: {
-    fontFamily: fonts.semibold,
+  catBlock: {
+    marginBottom: spacing.md,
+  },
+  catHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  catKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  catTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    color: colors.ink,
+    letterSpacing: -0.3,
+  },
+  catClear: {
+    fontFamily: fonts.bold,
     fontSize: 12,
     color: colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
   },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  tagChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+  catRail: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  catCard: {
+    width: 124,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    backgroundColor: colors.canvas,
-    paddingHorizontal: 14,
+    backgroundColor: colors.white,
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    minHeight: 40,
+    gap: 6,
   },
-  tagChipActive: {
+  catCardOn: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  tagEmoji: {
-    fontSize: 16,
-    lineHeight: 20,
+  catIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tagChipText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.inkSoft,
+  catIconOn: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
-  tagChipTextActive: { color: colors.white },
+  catEmoji: {
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  catLabel: {
+    fontFamily: fonts.extrabold,
+    fontSize: 12,
+    color: colors.ink,
+    lineHeight: 15,
+  },
+  catLabelOn: {
+    color: colors.white,
+  },
   label: {
     fontFamily: fonts.bold,
     fontSize: 14,
