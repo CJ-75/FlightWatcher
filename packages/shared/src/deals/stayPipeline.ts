@@ -124,7 +124,7 @@ export function buildStayPipeline(opts: {
     step(
       'activities',
       'Activités',
-      'Actis',
+      'Activités',
       activitiesDone,
       activitiesPartial,
       !activitiesOn,
