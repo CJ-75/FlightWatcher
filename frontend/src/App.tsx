@@ -145,6 +145,7 @@ function Dashboard() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- mount only
   const [loading, setLoading] = useState(false)
   const [dealsUiEnabled, setDealsUiEnabled] = useState(true)
+  const [alertsUiEnabled, setAlertsUiEnabled] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
@@ -454,12 +455,25 @@ function Dashboard() {
   useEffect(() => {
     void getAppConfig().then((cfg) => {
       if (!cfg) return
-      const on = cfg.ui_enabled !== false
-      setDealsUiEnabled(on)
-      if (!on && activeTab === 'deals') setActiveTab('search')
+      const dealsOn = cfg.ui_enabled !== false
+      setDealsUiEnabled(dealsOn)
+      if (!dealsOn && activeTab === 'deals') setActiveTab('search')
+      const alertsOn = cfg.alerts_ui_enabled === true
+      setAlertsUiEnabled(alertsOn)
+      if (!alertsOn && activeTab === 'alerts') setActiveTab('search')
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
   }, [])
+
+  // Block deep links to /alertes when the feature switch is off
+  useEffect(() => {
+    if (alertsUiEnabled) return
+    const p = location.pathname.replace(/\/+$/, '') || '/'
+    if (p === '/alertes' || p === '/alerts') {
+      navigate('/vols', { replace: true })
+      if (activeTab === 'alerts') setActiveTabState('search')
+    }
+  }, [activeTab, alertsUiEnabled, location.pathname, navigate])
 
   // Lot F — deep link hôtel depuis Mon voyage
   useEffect(() => {
@@ -1085,7 +1099,9 @@ function Dashboard() {
                     ? [{ id: 'deals' as const, label: t('nav.deals') }]
                     : []),
                   { id: 'planner' as const, label: t('nav.planner') },
-                  { id: 'alerts' as const, label: t('nav.alerts') },
+                  ...(alertsUiEnabled
+                    ? [{ id: 'alerts' as const, label: t('nav.alerts') }]
+                    : []),
                   { id: 'saved' as const, label: t('nav.saved') },
                 ] as const
               ).map((tab) => (
@@ -1351,7 +1367,7 @@ function Dashboard() {
               </motion.div>
             )}
           </>
-        ) : activeTab === 'alerts' ? (
+        ) : activeTab === 'alerts' && alertsUiEnabled ? (
           <SavedTab
             variant="alerts"
             loading={loading}

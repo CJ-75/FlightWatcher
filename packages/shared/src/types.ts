@@ -156,6 +156,10 @@ export interface ApiConfig {
   excluded_fees_display?: string
   flight_cta_timing?: string
   payment_public_key?: string | null
+  /** Deals wall tab — from DEALS_UI_ENABLED */
+  ui_enabled?: boolean
+  /** Alerts tab (/alertes) — from ALERTS_UI_ENABLED (default off) */
+  alerts_ui_enabled?: boolean
 }
 
 export type DealWindowKind = 'FRI_SUN' | 'SAT_MON'

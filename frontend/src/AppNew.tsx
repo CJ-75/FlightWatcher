@@ -76,6 +76,7 @@ function App() {
         <Route path="/vols" element={<Dashboard />} />
         <Route path="/sejours" element={<Dashboard />} />
         <Route path="/planner" element={<Dashboard />} />
+        {/* /alertes gated by ALERTS_UI_ENABLED inside Dashboard (redirect → /vols when off) */}
         <Route path="/alertes" element={<Dashboard />} />
         <Route path="/favoris" element={<Dashboard />} />
         {/* Legacy aliases */}

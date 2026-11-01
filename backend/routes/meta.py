@@ -158,6 +158,13 @@ def health_check():
     return {"status": "ok", "service": "ryanair-scanner"}
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
 @router.get("/api/config")
 def get_config():
     supabase_url = os.getenv("SUPABASE_URL")
@@ -166,6 +173,8 @@ def get_config():
         "supabase_url": supabase_url if supabase_url else None,
         "supabase_anon_key": supabase_anon_key if supabase_anon_key else None,
         "available": bool(supabase_url and supabase_anon_key),
+        # Product switches (safe for clients)
+        "alerts_ui_enabled": _env_bool("ALERTS_UI_ENABLED", False),
     }
     try:
         from deals.liteapi_config import deals_config_public_dict
