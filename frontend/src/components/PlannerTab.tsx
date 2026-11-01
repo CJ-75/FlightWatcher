@@ -1810,51 +1810,97 @@ function PlannerStayExtras({
     : trip.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
   const citySlug = activityCitySlugFromLabel(cityLabel)
   const dateIso = trip.dates_depart?.[0]?.date || null
+  const cityImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 
   const both = activitiesEnabled && restaurantsEnabled
 
   return (
     <div className={both ? 'grid gap-4 lg:grid-cols-2 lg:gap-5' : 'space-y-4'}>
       {activitiesEnabled ? (
-        <section className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-3 min-w-0">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
-              Sur place
-            </p>
-            <h3 className="font-extrabold text-ink text-lg tracking-tight">
-              Activités
-            </h3>
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          whileHover={{ y: -4 }}
+          transition={{ type: 'spring', stiffness: 240, damping: 24 }}
+          className="group min-w-0 overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-xl shadow-slate-900/10"
+        >
+          <div className="relative h-44 overflow-hidden">
+            <img
+              src={cityImage}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#101827]/95 via-[#162033]/45 to-black/10" />
+            <div className="absolute left-5 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl backdrop-blur-md shadow-lg">
+              🎟️
+            </div>
+            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">
+                À vivre sur place
+              </p>
+              <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
+                Activités à {cityLabel}
+              </h3>
+              <p className="mt-1 text-sm font-medium text-white/70">
+                Transforme le séjour en souvenirs.
+              </p>
+            </div>
           </div>
-          <ActivityStepPanel
-            plannedTripId={tripId}
-            citySlug={citySlug}
-            enabled={activitiesEnabled}
-            surface="planner"
-          />
-        </section>
+          <div className="p-5 sm:p-6">
+            <ActivityStepPanel
+              plannedTripId={tripId}
+              citySlug={citySlug}
+              enabled={activitiesEnabled}
+              surface="planner"
+            />
+          </div>
+        </motion.section>
       ) : null}
 
       {restaurantsEnabled ? (
-        <section className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 shadow-soft space-y-3 min-w-0">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
-              Adresses
-            </p>
-            <h3 className="font-extrabold text-ink text-lg tracking-tight">
-              Où manger
-            </h3>
-            <p className="text-sm text-muted mt-1">
-              Colle tes liens Maps / Instagram — même avant d’avoir choisi le vol.
-            </p>
+        <motion.section
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          whileHover={{ y: -4 }}
+          transition={{ type: 'spring', stiffness: 240, damping: 24, delay: 0.06 }}
+          className="group min-w-0 overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-xl shadow-orange-950/10"
+        >
+          <div className="relative h-44 overflow-hidden">
+            <img
+              src={cityImage}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover object-bottom transition-transform duration-700 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#291108]/95 via-[#4A1D0D]/50 to-black/10" />
+            <div className="absolute left-5 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl backdrop-blur-md shadow-lg">
+              🍽️
+            </div>
+            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">
+                Tes bonnes adresses
+              </p>
+              <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
+                Où manger à {cityLabel}
+              </h3>
+              <p className="mt-1 text-sm font-medium text-white/70">
+                Tous tes coups de cœur au même endroit.
+              </p>
+            </div>
           </div>
-          <RestaurantStepPanel
-            plannedTripId={tripId}
-            citySlug={citySlug}
-            cityLabel={cityLabel}
-            dateIso={dateIso}
-            enabled={restaurantsEnabled}
-          />
-        </section>
+          <div className="p-5 sm:p-6">
+            <RestaurantStepPanel
+              plannedTripId={tripId}
+              citySlug={citySlug}
+              cityLabel={cityLabel}
+              dateIso={dateIso}
+              enabled={restaurantsEnabled}
+            />
+          </div>
+        </motion.section>
       ) : null}
     </div>
   )
@@ -1885,6 +1931,12 @@ function SelectedFlightBoardingPass({
     }).format(new Date(value))
 
   const airline = formatAirlineLabel(trip)
+  const destinationCity = cityDisplayNameFr(
+    trip.aller.destination,
+    trip.aller.destinationFull,
+  )
+  const ticketImage =
+    trip.image_url || cityImageUrl(destinationCity, trip.aller.destination)
 
   return (
     <motion.article
@@ -1892,55 +1944,64 @@ function SelectedFlightBoardingPass({
       animate={{ opacity: 1, x: 0 }}
       whileHover={{ y: -4 }}
       transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-      className="relative h-full min-h-[360px] overflow-hidden rounded-[28px] border border-slate-200 bg-[#FFFCF8] shadow-xl shadow-slate-900/10"
+      className="group relative h-full min-h-[360px] overflow-hidden rounded-[28px] border border-white/20 bg-slate-950 shadow-2xl shadow-slate-950/20"
     >
       <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#FF6B35] via-[#FF9B70] to-[#FF6B35]" />
       <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px]">
-        <div className="flex min-w-0 flex-col p-6 sm:p-7">
-          <div className="flex items-start justify-between gap-4">
+        <div className="relative flex min-w-0 flex-col overflow-hidden p-6 sm:p-7">
+          <img
+            src={ticketImage}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0B1220]/95 via-[#101827]/75 to-[#101827]/35" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-transparent to-black/20" />
+          <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full border border-white/10" />
+          <div className="relative flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary-600">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-orange-300">
                 Carte d’embarquement
               </p>
-              <p className="mt-1 text-sm font-extrabold text-slate-900">{airline}</p>
+              <p className="mt-1 text-sm font-extrabold text-white">{airline}</p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+            <span className="rounded-full border border-emerald-300/25 bg-emerald-400/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-100 backdrop-blur-md">
               Vol choisi
             </span>
           </div>
 
-          <div className="my-6 flex items-center gap-3 sm:gap-5">
+          <div className="relative my-6 flex items-center gap-3 sm:gap-5">
             <div>
-              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-slate-950">
+              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-white drop-shadow-lg">
                 {trip.aller.origin}
               </p>
-              <p className="mt-1 max-w-[120px] truncate text-xs font-semibold text-slate-500">
+              <p className="mt-1 max-w-[120px] truncate text-xs font-semibold text-white/65">
                 {cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)}
               </p>
             </div>
             <div className="flex min-w-[80px] flex-1 items-center" aria-hidden>
-              <span className="h-px flex-1 border-t border-dashed border-slate-300" />
-              <span className="mx-2 inline-flex h-9 w-9 rotate-12 items-center justify-center rounded-full bg-[#FFF0E8] text-lg text-primary-600">
+              <span className="h-px flex-1 border-t border-dashed border-white/35" />
+              <span className="mx-2 inline-flex h-10 w-10 rotate-12 items-center justify-center rounded-full border border-white/20 bg-white/15 text-xl text-orange-200 backdrop-blur-md shadow-lg">
                 ✈
               </span>
-              <span className="h-px flex-1 border-t border-dashed border-slate-300" />
+              <span className="h-px flex-1 border-t border-dashed border-white/35" />
             </div>
             <div className="text-right">
-              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-primary-600">
+              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-orange-300 drop-shadow-lg">
                 {trip.aller.destination}
               </p>
-              <p className="mt-1 ml-auto max-w-[120px] truncate text-xs font-semibold text-slate-500">
-                {cityDisplayNameFr(trip.aller.destination, trip.aller.destinationFull)}
+              <p className="mt-1 ml-auto max-w-[120px] truncate text-xs font-semibold text-white/65">
+                {destinationCity}
               </p>
             </div>
           </div>
 
-          <div className="mt-auto grid grid-cols-2 gap-3">
+          <div className="relative mt-auto grid grid-cols-2 gap-3">
             {[
               { label: 'Aller', flight: trip.aller },
               { label: 'Retour', flight: trip.retour },
             ].map(({ label, flight }) => (
-              <div key={label} className="rounded-2xl border border-orange-100 bg-white px-4 py-3 shadow-sm">
+              <div key={label} className="rounded-2xl border border-white/15 bg-white/95 px-4 py-3 shadow-xl backdrop-blur-md">
                 <p className="text-[10px] font-black uppercase tracking-wider text-primary-600">
                   {label}
                 </p>
@@ -1960,7 +2021,9 @@ function SelectedFlightBoardingPass({
           </div>
         </div>
 
-        <div className="relative flex flex-row items-center justify-between gap-4 border-t-2 border-dashed border-slate-200 bg-white/70 p-5 lg:flex-col lg:items-stretch lg:justify-center lg:border-l-2 lg:border-t-0">
+        <div className="relative flex flex-row items-center justify-between gap-4 border-t-2 border-dashed border-slate-300 bg-[#FFFCF8] p-5 lg:flex-col lg:items-stretch lg:justify-center lg:border-l-2 lg:border-t-0">
+          <span className="absolute -top-3 left-[-13px] hidden h-6 w-6 rounded-full bg-canvas lg:block" aria-hidden />
+          <span className="absolute -bottom-3 left-[-13px] hidden h-6 w-6 rounded-full bg-canvas lg:block" aria-hidden />
           <div>
             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
               Prix par personne
