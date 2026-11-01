@@ -1161,7 +1161,7 @@ function Dashboard() {
         {activeTab === 'deals' ? null : activeTab === 'planner' ? (
           <PlannerTab />
         ) : activeTab === 'activities' && activitiesUiEnabled ? (
-          <div className="app-col pt-5 sm:pt-8 pb-24">
+          <div className="w-full pt-1 sm:pt-2 pb-24">
             <ActivitiesTab />
           </div>
         ) : activeTab === 'search' ? (

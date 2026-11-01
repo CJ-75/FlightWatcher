@@ -2,13 +2,16 @@
  * Planner / MyTrip étape Activités — DnD ordre + Viator return prompt (Lot E).
  */
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   ACTIVITY_ADD_LABEL_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
+  ACTIVITY_BROWSE_CATALOG_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   AVAILABILITY_STATE_LABEL_FR,
+  activitiesCityPath,
   detectEventPlatform,
   reorderKeysMoving,
   tripItemStatusLabelFr,
@@ -199,20 +202,29 @@ export function ActivityStepPanel(props: {
   const titleOf = (it: ItemRow) =>
     String(it.places?.name || it.meta?.title || 'Activité')
 
+  const catalogHref = activitiesCityPath(props.citySlug || 'paris')
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
+        <Link
+          to={catalogHref}
+          onClick={() => track('browse_catalog')}
+          className="rounded-xl bg-primary-600 text-white text-sm font-bold px-4 py-2.5 min-h-[44px] inline-flex items-center"
+        >
+          {ACTIVITY_BROWSE_CATALOG_FR}
+        </Link>
         <button
           type="button"
           onClick={() => void openSuggestions()}
-          className="rounded-xl bg-primary-600 text-white text-sm font-bold px-4 py-2"
+          className="rounded-xl border border-slate-200 text-sm font-semibold px-4 py-2.5 min-h-[44px]"
         >
           {ACTIVITY_ADD_LABEL_FR}
         </button>
         <button
           type="button"
           onClick={() => void skipAll()}
-          className="rounded-xl border border-slate-200 text-sm font-semibold px-4 py-2"
+          className="rounded-xl border border-slate-200 text-sm font-semibold px-4 py-2.5 min-h-[44px] text-slate-600"
         >
           {ACTIVITY_SKIP_LABEL_FR}
         </button>
@@ -270,7 +282,20 @@ export function ActivityStepPanel(props: {
         ))}
       </ul>
       {!items.length && !loading ? (
-        <p className="text-sm text-slate-500">Aucune activité pour l’instant.</p>
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-4 space-y-2">
+          <p className="text-sm font-semibold text-slate-800">
+            Aucune activité pour l’instant
+          </p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Parcours le catalogue pour cette ville, ou ajoute une suggestion rapide.
+          </p>
+          <Link
+            to={catalogHref}
+            className="inline-flex text-sm font-bold text-primary-700 hover:underline"
+          >
+            {ACTIVITY_BROWSE_CATALOG_FR} →
+          </Link>
+        </div>
       ) : null}
 
       {pickerOpen ? (

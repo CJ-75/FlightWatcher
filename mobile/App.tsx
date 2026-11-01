@@ -139,7 +139,7 @@ const SecurityScreen = lazyScreen(() =>
 function MainTabs() {
   const insets = useSafeAreaInsets()
   const tabClearance = FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
-  const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(false)
+  const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(true)
 
   // Airports after first paint — never compete with boot JS/fonts/auth
   React.useEffect(() => {
@@ -163,7 +163,7 @@ function MainTabs() {
     void import('./src/lib/client')
       .then(({ getApi }) => getApi().getConfig())
       .then((cfg) => {
-        if (!cancelled) setActivitiesUiEnabled(cfg.activities_ui_enabled === true)
+        if (!cancelled) setActivitiesUiEnabled(cfg.activities_ui_enabled !== false)
       })
       .catch(() => undefined)
     return () => {
@@ -208,13 +208,16 @@ function MainTabs() {
         component={DealsScreen}
         options={{ title: 'Séjours', headerShown: false }}
       />
-      {activitiesUiEnabled ? (
-        <Tab.Screen
-          name="Activities"
-          component={ActivitiesScreen}
-          options={{ title: 'Activités', headerShown: false }}
-        />
-      ) : null}
+      <Tab.Screen
+        name="Activities"
+        component={ActivitiesScreen}
+        options={{
+          title: 'Activités',
+          headerShown: false,
+          // Keep route registered; hide tab when flag off
+          href: activitiesUiEnabled ? undefined : null,
+        }}
+      />
       <Tab.Screen
         name="Planner"
         component={PlannerScreen}

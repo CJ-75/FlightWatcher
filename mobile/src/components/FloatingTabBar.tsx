@@ -27,6 +27,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         {state.routes.map((route, index) => {
           const focused = state.index === index
           const { options } = descriptors[route.key]
+          // Hide screens opted out via href: null (e.g. Activities when flag off)
+          if ((options as { href?: string | null }).href === null) return null
           const label = LABELS[route.name] || options.title || route.name
 
           const onPress = () => {

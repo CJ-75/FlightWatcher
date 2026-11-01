@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
   ACTIVITY_TRANSFER_CTA_FR,
+  activitiesCityPath,
   activityStepProgress,
   airportDisplayNameFr,
   buildStayPipeline,
@@ -368,6 +369,18 @@ export default function MyTrip() {
       })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (searchParams.get('activities') !== '1') return
+    setShowActivities(true)
+    const t = window.setTimeout(() => {
+      activitiesSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [searchParams])
 
   useEffect(() => {
     if (!token || !plannerActivitiesEnabled) return
@@ -1552,13 +1565,27 @@ export default function MyTrip() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="font-bold text-slate-900">③ Activités</h2>
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-primary-700"
-                    onClick={() => setShowActivities(true)}
-                  >
-                    Gérer
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      to={activitiesCityPath(
+                        typeof payload.city_slug === 'string'
+                          ? payload.city_slug
+                          : city
+                            ? String(city).toLowerCase().replace(/\s+/g, '-')
+                            : 'paris',
+                      )}
+                      className="text-xs font-bold text-primary-700"
+                    >
+                      Catalogue
+                    </Link>
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-slate-600"
+                      onClick={() => setShowActivities(true)}
+                    >
+                      Gérer
+                    </button>
+                  </div>
                 </div>
                 <ActivityStepPanel
                   draftToken={token}

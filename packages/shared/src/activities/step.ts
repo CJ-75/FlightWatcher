@@ -9,6 +9,25 @@ export const ACTIVITY_SKIP_LABEL_FR = 'Pas d’activité'
 export const ACTIVITY_ADD_LABEL_FR = 'Ajouter une activité'
 export const ACTIVITY_VALIDATE_LABEL_FR = 'Valider'
 export const ACTIVITY_BOOK_VIATOR_FR = 'Réserver sur Viator'
+export const ACTIVITY_BROWSE_CATALOG_FR = 'Parcourir le catalogue'
+export const ACTIVITY_OPEN_PLANNER_FR = 'Ouvrir le planner'
+export const ACTIVITY_ADD_TO_PLANNER_FR = 'Au planner'
+export const ACTIVITY_TRIP_HERO_KICKER_FR = 'Voyage en cours'
+export const ACTIVITY_TRIP_IN_PROGRESS_FR = (city: string) =>
+  `Voyage en cours · ${city}`
+export const ACTIVITY_TRIP_IN_PROGRESS_HINT_FR =
+  'Ajoute des idées ici — elles atterrissent dans ton planner séjour.'
+export const ACTIVITY_TRIP_PLANNER_COUNT_FR = (n: number) =>
+  n <= 0 ? 'Planner prêt' : n === 1 ? '1 idée au planner' : `${n} idées au planner`
+export const ACTIVITY_SYNC_CITY_FR = (city: string) => `Activités à ${city}`
+export const ACTIVITY_NO_TRIP_CTA_TITLE_FR = 'Ton prochain séjour commence ici'
+export const ACTIVITY_NO_TRIP_CTA_BODY_FR =
+  'Ouvre un voyage en cours pour composer les activités au même endroit que ton vol et ton hôtel.'
+export const ACTIVITY_NO_TRIP_CTA_BUTTON_FR = 'Voir les séjours'
+export const ACTIVITY_ADDED_TO_PLANNER_FR = (city: string) =>
+  `Ajouté au planner · ${city}`
+export const ACTIVITY_SEE_PLANNER_FR = 'Voir le planner'
+/** Kept for later / parcours global — not shown in Affiner Activités for now. */
 export const ACTIVITY_NEARBY_LABEL_FR = 'Autour de moi'
 export const ACTIVITY_NEARBY_CLOSER_FR = 'Plus près'
 export const ACTIVITY_RADIUS_HINT_FR = (km: number) => `Dans un rayon de ${km} km`

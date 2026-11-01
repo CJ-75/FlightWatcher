@@ -17,6 +17,7 @@ import {
   ACTIVITY_ADD_LABEL_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
+  ACTIVITY_BROWSE_CATALOG_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   reorderKeysMoving,
@@ -133,6 +134,18 @@ export function ActivityStepPanel(props: {
       <View style={styles.row}>
         <Pressable
           style={styles.cta}
+          onPress={() => {
+            track('browse_catalog')
+            navigation.navigate('Main', {
+              screen: 'Activities',
+              params: { city: props.citySlug || 'paris' },
+            })
+          }}
+        >
+          <Text style={styles.ctaText}>{ACTIVITY_BROWSE_CATALOG_FR}</Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondary}
           onPress={async () => {
             setPickerOpen(true)
             try {
@@ -143,7 +156,7 @@ export function ActivityStepPanel(props: {
             }
           }}
         >
-          <Text style={styles.ctaText}>{ACTIVITY_ADD_LABEL_FR}</Text>
+          <Text style={styles.secondaryText}>{ACTIVITY_ADD_LABEL_FR}</Text>
         </Pressable>
         <Pressable
           style={styles.secondary}

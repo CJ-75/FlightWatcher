@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from activities.cache import cache_get, cache_set
@@ -12,6 +13,70 @@ from activities.ranking import haversine_km, rank_activities
 from activities.viator_client import ViatorClient, ViatorError
 
 logger = logging.getLogger("activities.service")
+
+# Viator taxonomy — Food & Drink + Dining Experiences (kept for Restaurants).
+_GASTRONOMY_TAG_IDS = frozenset({21911, 11890})
+
+_GASTRONOMY_TEXT_RE = re.compile(
+    r"("
+    r"food\s*&?\s*drink|food\s*tour|street\s*food|culinary|cooking\s*class|"
+    r"wine\s*tast|foodie|gastronom|dining\s*experience|dinner\s*cruise|"
+    r"brunch|tastings?|"
+    r"gastronomie|culinaire|d[eé]gustation|atelier\s*cuisine|"
+    r"cours\s*de\s*cuisine|visite\s*gourmande|food\s*tour|"
+    r"d[iî]ner\s*croisi[eè]re|oenolog|œnolog|wine\s*tour|"
+    r"cheese\s*tast|fromage|chocolat(e)?\s*(workshop|atelier|tast)|"
+    r"beer\s*tast|bi[eè]re\s*d[eé]gust"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _extract_tag_ids(raw: Any) -> List[int]:
+    out: List[int] = []
+    if not isinstance(raw, list):
+        return out
+    for t in raw:
+        if isinstance(t, int):
+            out.append(t)
+        elif isinstance(t, str) and t.isdigit():
+            out.append(int(t))
+        elif isinstance(t, dict):
+            tid = t.get("tagId") or t.get("id") or t.get("tag_id")
+            try:
+                if tid is not None:
+                    out.append(int(tid))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def is_gastronomy_activity(item: Dict[str, Any]) -> bool:
+    """True for food/drink experiences — reserved for Restaurants, not Activités."""
+    tags = item.get("tags")
+    if tags is None:
+        tags = []
+    tag_ids = (
+        tags
+        if tags and isinstance(tags[0], int)
+        else _extract_tag_ids(tags)
+    )
+    if any(tid in _GASTRONOMY_TAG_IDS for tid in tag_ids):
+        return True
+    blob = " ".join(
+        str(x or "")
+        for x in (
+            item.get("title"),
+            item.get("category"),
+            item.get("tag"),
+            item.get("description"),
+        )
+    )
+    return bool(_GASTRONOMY_TEXT_RE.search(blob))
+
+
+def exclude_gastronomy(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [it for it in items if not is_gastronomy_activity(it)]
 
 
 def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -> Dict[str, Any]:
@@ -41,6 +106,7 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
         fixed = duration.get("fixedDurationInMinutes")
         if fixed:
             dur = round(float(fixed) / 60.0, 2)
+    tags = _extract_tag_ids(p.get("tags"))
     return {
         "product_code": p.get("productCode") or p.get("code"),
         "title": p.get("title") or p.get("name"),
@@ -60,6 +126,7 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
         "category": (p.get("categories") or [None])[0]
         if isinstance(p.get("categories"), list)
         else p.get("category"),
+        "tags": tags,
         "destination_label": dest_label,
         "raw_flags": flags,
     }
@@ -75,6 +142,102 @@ def geo_cell_key(lat: float, lng: float, cell_km: float) -> str:
     return f"{ilat}:{ilng}:{cell_km}"
 
 
+# Fallback when viator_destination_map is empty (sandbox / before sync job).
+# IDs = Viator Partner destinationId for major EU cities.
+FALLBACK_CITY_DESTINATIONS: Dict[str, str] = {
+    "paris": "479",
+    "rome": "511",
+    "roma": "511",
+    "barcelone": "562",
+    "barcelona": "562",
+    "lisbonne": "645",
+    "lisbon": "645",
+    "lisboa": "645",
+    "porto": "667",
+    "milan": "223",
+    "milano": "223",
+    "amsterdam": "6",
+    "londres": "737",
+    "london": "737",
+    "madrid": "657",
+    "berlin": "357",
+    "venise": "425",
+    "venice": "425",
+    "florence": "239",
+    "nice": "467",
+    "lyon": "404",
+    "dublin": "549",
+    "budapest": "372",
+    "prague": "501",
+    "praha": "501",
+    "vienne": "534",
+    "vienna": "534",
+    "wien": "534",
+    "malte": "662",
+    "malta": "662",
+    "palerme": "486",
+    "palermo": "486",
+    "seville": "701",
+    "sevilla": "701",
+    "valence": "732",
+    "valencia": "732",
+    "naples": "464",
+    "napoli": "464",
+    "edimbourg": "577",
+    "edinburgh": "577",
+    "manchester": "444",
+    "birmingham": "360",
+}
+
+
+def _resolve_destination_id(supabase, slug: str) -> Optional[str]:
+    """Resolve Viator destinationId — map row, then FALLBACK, then name match (1 query)."""
+    key = (slug or "").strip().lower()
+    if not key:
+        return None
+    if supabase:
+        try:
+            m = (
+                supabase.table("viator_destination_map")
+                .select("viator_destination_id")
+                .eq("city_slug", key)
+                .limit(1)
+                .execute()
+            )
+            if m.data:
+                return str(m.data[0].get("viator_destination_id") or "") or None
+        except Exception:
+            pass
+    hit = FALLBACK_CITY_DESTINATIONS.get(key)
+    if hit:
+        return hit
+    # Soft name match — still one DB hit, never mass product search
+    if supabase:
+        try:
+            needle = key.replace("-", " ")
+            m = (
+                supabase.table("viator_destination_map")
+                .select("viator_destination_id,city_slug,name")
+                .ilike("name", f"%{needle}%")
+                .limit(1)
+                .execute()
+            )
+            if m.data:
+                return str(m.data[0].get("viator_destination_id") or "") or None
+            m2 = (
+                supabase.table("viator_destination_map")
+                .select("viator_destination_id")
+                .ilike("city_slug", f"%{key}%")
+                .limit(1)
+                .execute()
+            )
+            if m2.data:
+                return str(m2.data[0].get("viator_destination_id") or "") or None
+        except Exception:
+            pass
+    return None
+
+
 def search_city_activities(
     supabase,
     *,
@@ -85,33 +248,30 @@ def search_city_activities(
 ) -> Dict[str, Any]:
     cfg = cfg or load_activities_config()
     adults = max(1, min(6, int(adults or 2)))
-    cache_key = f"city:{city_slug}:{destination_id or ''}:{adults}"
+    slug = (city_slug or "").strip().lower()
+    cache_key = f"city:{slug}:{destination_id or ''}:{adults}"
     cached = cache_get(
         supabase, provider="viator", resource="city_search", cache_key=cache_key
     )
     if isinstance(cached, dict) and cached.get("items"):
-        return {**cached, "cached": True}
+        items = exclude_gastronomy(
+            [it for it in (cached.get("items") or []) if isinstance(it, dict)]
+        )
+        return {**cached, "items": items, "cached": True}
 
     client = ViatorClient(cfg)
     if not client.enabled:
         return {"ok": False, "error": "viator_disabled", "items": []}
 
-    dest = destination_id
-    if not dest and supabase:
-        try:
-            m = (
-                supabase.table("viator_destination_map")
-                .select("viator_destination_id")
-                .eq("city_slug", city_slug)
-                .limit(1)
-                .execute()
-            )
-            if m.data:
-                dest = m.data[0].get("viator_destination_id")
-        except Exception:
-            pass
+    dest = destination_id or _resolve_destination_id(supabase, slug)
     if not dest:
-        return {"ok": False, "error": "unknown_city", "items": [], "city_slug": city_slug}
+        return {
+            "ok": False,
+            "error": "unknown_city",
+            "items": [],
+            "city_slug": slug,
+            "hint": "Ville pas encore couverte — choisis une suggestion ou une grande ville EU",
+        }
 
     try:
         raw = client.search_products(
@@ -132,6 +292,7 @@ def search_city_activities(
         for p in products
         if isinstance(p, dict)
     ]
+    items = exclude_gastronomy(items)
     items = rank_activities(items)
     # Cap to multiple of 3 between min and max
     n = max(cfg.min_results, min(cfg.max_results, len(items)))
@@ -177,7 +338,10 @@ def nearby_activities(
         supabase, provider="viator", resource="geo_search", cache_key=cache_key
     )
     if isinstance(cached, dict) and cached.get("items"):
-        return {**cached, "cached": True}
+        items = exclude_gastronomy(
+            [it for it in (cached.get("items") or []) if isinstance(it, dict)]
+        )
+        return {**cached, "items": items, "cached": True}
 
     # Destinations from map sorted by distance
     dests: List[Tuple[float, Dict[str, Any]]] = []
@@ -249,6 +413,8 @@ def nearby_activities(
                 norm = _normalize_product(
                     p, dest_label=row.get("name") or row.get("city_slug")
                 )
+                if is_gastronomy_activity(norm):
+                    continue
                 code = str(norm.get("product_code") or "")
                 if not code or code in collected:
                     continue
@@ -275,6 +441,7 @@ def nearby_activities(
     else:
         items = [it for it in items if quality_ok(it, cfg.quality_steps[-1])] or items
 
+    items = exclude_gastronomy(items)
     dist_map = {
         str(it.get("product_code")): float(it.get("_dest_km") or 0) for it in items
     }
