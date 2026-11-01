@@ -217,6 +217,7 @@ export function FavoritesScreen() {
   if (!viewUser) {
     return (
       <FavoritesGuestLanding
+        insetsTop={insets.top}
         insetsBottom={insets.bottom}
         loginLoading={loginLoading}
         onLogin={() => void onLogin()}
@@ -231,8 +232,8 @@ export function FavoritesScreen() {
         style={styles.list}
         contentContainerStyle={{
           paddingHorizontal: spacing.xl,
-          paddingTop: spacing.md,
-          paddingBottom: insets.bottom + 40,
+          paddingTop: insets.top + 8,
+          paddingBottom: insets.bottom + 120,
           flexGrow: 1,
         }}
         data={listData}
@@ -243,6 +244,8 @@ export function FavoritesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
+            <Text style={styles.kicker}>FAVORIS</Text>
+            <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
             <Text style={styles.subtitle}>
               {translate('fr', 'favorites.subtitle')}
             </Text>
@@ -343,10 +346,12 @@ export function FavoritesScreen() {
 }
 
 function FavoritesGuestLanding({
+  insetsTop,
   insetsBottom,
   loginLoading,
   onLogin,
 }: {
+  insetsTop: number
   insetsBottom: number
   loginLoading: boolean
   onLogin: () => void
@@ -358,7 +363,7 @@ function FavoritesGuestLanding({
   ]
 
   return (
-    <View style={[styles.root, { paddingBottom: insetsBottom + 24 }]}>
+    <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
       <ScreenBackground />
       <View style={styles.guestOrbA} />
       <View style={styles.guestOrbB} />
@@ -439,17 +444,32 @@ function FavoritesGuestLanding({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   list: { flex: 1, backgroundColor: 'transparent' },
-  header: { marginBottom: 16, gap: 4 },
+  header: { marginBottom: 22, gap: 4 },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  title: {
+    fontFamily: fonts.extrabold,
+    fontSize: 34,
+    color: colors.ink,
+    letterSpacing: -1,
+    lineHeight: 40,
+  },
   subtitle: {
     fontFamily: fonts.medium,
     fontSize: 15,
     color: colors.muted,
     lineHeight: 22,
+    marginTop: 2,
   },
   switchTrack: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     backgroundColor: colors.primarySoft,
     borderRadius: 16,
     padding: 4,

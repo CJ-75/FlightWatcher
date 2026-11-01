@@ -37,6 +37,7 @@ export type MainTabParamList = {
       }
     | undefined
   Planner: undefined
+  Favorites: undefined
   Profile: undefined
 }
 
@@ -63,7 +64,6 @@ export type RootStackParamList = {
   }
   Security: undefined
   Bookings: undefined
-  Favorites: undefined
   HotelCompose: { draftToken: string; seed?: MyTripDraft }
   TripSummary: { draftToken: string; seed?: MyTripDraft }
   PlannerInvite: { token: string }

@@ -1126,6 +1126,7 @@ function Dashboard() {
                   ...(alertsUiEnabled
                     ? [{ id: 'alerts' as const, label: t('nav.alerts') }]
                     : []),
+                  { id: 'saved' as const, label: t('nav.saved') },
                 ] as const
               ).map((tab) => (
                 <motion.div

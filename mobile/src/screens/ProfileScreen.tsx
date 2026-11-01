@@ -42,8 +42,7 @@ export function ProfileScreen() {
   }
 
   const openFavorites = () => {
-    const root = navigation.getParent() ?? navigation
-    root.dispatch(CommonActions.navigate({ name: 'Favorites' }))
+    navigation.navigate('Favorites' as never)
   }
 
   // Logged-out landing (real guest landings) for preview / no user

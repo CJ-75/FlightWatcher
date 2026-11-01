@@ -224,6 +224,11 @@ function MainTabs() {
         options={{ title: 'Planner', headerShown: false }}
       />
       <Tab.Screen
+        name="Favorites"
+        component={FavoritesScreen}
+        options={{ title: 'Favoris', headerShown: false }}
+      />
+      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{ title: 'Profil', headerShown: false }}
@@ -278,11 +283,6 @@ function RootNavigator() {
             name="Bookings"
             component={BookingsScreen}
             options={stackHeaderOptions('')}
-          />
-          <Stack.Screen
-            name="Favorites"
-            component={FavoritesScreen}
-            options={stackHeaderOptions('Favoris')}
           />
           <Stack.Screen
             name="HotelCompose"
@@ -356,10 +356,10 @@ const linking = {
             parse: { city: (c: string) => c },
           },
           Planner: 'planner',
+          Favorites: 'favoris',
           Profile: 'profil',
         },
       },
-      Favorites: 'favoris',
       ItineraryDetail: 'parcours/:itineraryId',
     },
   },
