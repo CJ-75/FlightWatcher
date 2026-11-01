@@ -61,38 +61,42 @@ function formatDistance(m?: number | null) {
 }
 
 export function TripSummaryScreen({ route, navigation }: Props) {
-  const { draftToken } = route.params
+  const { draftToken, seed } = route.params
   const insets = useSafeAreaInsets()
-  const [draft, setDraft] = useState<MyTripDraft | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [draft, setDraft] = useState<MyTripDraft | null>(seed || null)
+  const [loading, setLoading] = useState(!seed)
   const [error, setError] = useState<string | null>(null)
   const [askFlight, setAskFlight] = useState(false)
   const [marking, setMarking] = useState(false)
   const [hotelSheet, setHotelSheet] = useState(false)
   const [gallery, setGallery] = useState<HotelGalleryPhoto[]>([])
   const leftForFlight = useRef(false)
+  const seededRef = useRef(Boolean(seed))
 
-  const load = useCallback(async () => {
-    setError(null)
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setError(null)
     try {
       const row = await getApi().getMyTrip(draftToken)
       setDraft(row)
-      await rememberTrip({
+      void rememberTrip({
         draft_token: draftToken,
         city: row.city_name || null,
       })
       void getApi().trackMyTripEvent(draftToken, 'view', { source: 'mobile' })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
-      setDraft(null)
+      if (!seededRef.current) {
+        setError(e instanceof Error ? e.message : 'Erreur')
+        setDraft(null)
+      }
     } finally {
       setLoading(false)
     }
   }, [draftToken])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    // Seed paints instantly; refresh in background.
+    void load({ silent: Boolean(seed) })
+  }, [load, seed])
 
   useFocusEffect(
     useCallback(() => {
@@ -100,7 +104,12 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         leftForFlight.current = false
         setAskFlight(true)
       }
-      void load()
+      // Skip heavy remount fetch if we just arrived with a seed.
+      if (seededRef.current) {
+        seededRef.current = false
+        return
+      }
+      void load({ silent: true })
     }, [load]),
   )
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -12,7 +12,12 @@ import {
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { HotelGuestReview, TravelDeal, TravelDealHotel } from '@flightwatcher/shared'
+import type {
+  HotelGuestReview,
+  MyTripDraft,
+  TravelDeal,
+  TravelDealHotel,
+} from '@flightwatcher/shared'
 import {
   boardLabelFr,
   dealAdults,
@@ -92,6 +97,12 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
   const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
+  /** Prefetched my-trip draft so « Organiser mon séjour » navigates instantly. */
+  const draftPrefetchRef = useRef<{
+    key: string
+    promise: Promise<MyTripDraft>
+    draft?: MyTripDraft
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -226,6 +237,70 @@ export function DealDetailScreen({ route, navigation }: Props) {
     }
   }, [reviewsHotelId])
 
+  const adults = deal ? dealAdults(deal) : 2
+  const hotelTotal = deal
+    ? selected?.public_hotel_price ?? deal.price_breakdown?.hotel_public_total ?? 0
+    : 0
+  const pricePp = deal
+    ? selected
+      ? pricePpWithHotel(deal, hotelTotal)
+      : deal.price_per_person
+    : 0
+  const flightUrl = deal?.flight?.booking_url || ''
+
+  const prefetchKey = useMemo(() => {
+    if (!deal) return ''
+    const hid = hotelId || deal.hotel?.id || ''
+    return `${deal.deal_key || deal.id}|${hid}|${adults}`
+  }, [deal, hotelId, adults])
+
+  // Warm createMyTrip while the user reads the fiche (before early returns — hooks).
+  useEffect(() => {
+    if (!deal || !prefetchKey) return
+    if (draftPrefetchRef.current?.key === prefetchKey) return
+    const hotel = selected || deal.hotel
+    const booking = flightUrl || deal.booking_url
+    const body = {
+      deal_key: deal.deal_key || deal.id,
+      origin_iata: deal.origin_iata || deal.departure_airport,
+      departure_airport: deal.origin_airport_label || deal.departure_airport,
+      destination: deal.destination || deal.flight?.destination_iata || undefined,
+      city: deal.city,
+      dates: deal.dates,
+      adults,
+      flight: {
+        ...deal.flight,
+        price_pp: deal.flight?.price_pp,
+        booking_url: booking,
+        destination_iata:
+          deal.flight?.destination_iata || deal.destination || undefined,
+      },
+      hotel,
+      price_per_person: pricePp,
+      booking_url: booking,
+      baggage_line: deal.baggage_line,
+      route_hint: deal.route_hint,
+      price_pax_note: deal.price_pax_note || null,
+      compose_hotel: !hotel?.id,
+    }
+    const key = prefetchKey
+    const promise = getApi()
+      .createMyTrip(body)
+      .then((d) => {
+        if (draftPrefetchRef.current?.key === key) {
+          draftPrefetchRef.current.draft = d
+        }
+        return d
+      })
+      .catch((e) => {
+        if (draftPrefetchRef.current?.key === key) {
+          draftPrefetchRef.current = null
+        }
+        throw e
+      })
+    draftPrefetchRef.current = { key, promise }
+  }, [deal, prefetchKey, adults, selected, pricePp, flightUrl])
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -244,12 +319,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
     )
   }
 
-  const adults = dealAdults(deal)
-  const hotelTotal =
-    selected?.public_hotel_price ?? deal.price_breakdown?.hotel_public_total ?? 0
-  const pricePp = selected ? pricePpWithHotel(deal, hotelTotal) : deal.price_per_person
   const fees = selected?.excluded_fees ?? deal.price_breakdown?.excluded_fees ?? 0
-  const flightUrl = deal.flight?.booking_url || ''
   const hasPartnerUrl = Boolean(deal.booking_url)
   const selectedStars = hotelStarsLabel(selected?.stars || deal.hotel_stars)
   const flightDurationMin = resolveFlightDurationMinutes(deal)
@@ -274,28 +344,13 @@ export function DealDetailScreen({ route, navigation }: Props) {
     if (url) openInAppBrowser(navigation, url, 'Réserver le vol')
   }
 
-  const buildDraftPayload = async (opts?: { composeHotel?: boolean }) => {
-    let booking = flightUrl || deal.booking_url
-    let flightPpLive = deal.flight?.price_pp
-    let priceNote: string | null = deal.price_pax_note || null
+  /** Sync payload — no blocking flight revalidate (keeps CTA snappy). */
+  const buildDraftPayload = (opts?: { composeHotel?: boolean }) => {
+    const booking = flightUrl || deal.booking_url
     const key = deal.deal_key || deal.id
-    if (adults > 2 && key) {
-      try {
-        const rv = await getApi().revalidateDealFlight(key, adults)
-        if (rv.booking_url) booking = rv.booking_url
-        if (rv.checked_pp != null) flightPpLive = rv.checked_pp
-        if (rv.price_note) priceNote = rv.price_note
-        else if (rv.available === false) {
-          priceNote = 'Vol à confirmer pour ce nombre de voyageurs'
-        } else if (rv.delta_pct != null && Math.abs(rv.delta_pct) >= 3) {
-          priceNote = `Prix vérifié pour ${adults} voyageurs`
-        }
-      } catch {
-        /* keep displayed */
-      }
-    }
     const dest =
       deal.destination || deal.flight?.destination_iata || undefined
+    const hotel = selected || deal.hotel
     return {
       deal_key: key,
       origin_iata: deal.origin_iata || deal.departure_airport,
@@ -306,29 +361,43 @@ export function DealDetailScreen({ route, navigation }: Props) {
       adults,
       flight: {
         ...deal.flight,
-        price_pp: flightPpLive ?? deal.flight?.price_pp,
+        price_pp: deal.flight?.price_pp,
         booking_url: booking,
         destination_iata:
           deal.flight?.destination_iata || deal.destination || undefined,
       },
-      hotel: selected || deal.hotel,
+      hotel,
       price_per_person: pricePp,
       booking_url: booking,
       baggage_line: deal.baggage_line,
       route_hint: deal.route_hint,
-      price_pax_note: priceNote,
+      price_pax_note: deal.price_pax_note || null,
       compose_hotel: Boolean(opts?.composeHotel),
     }
+  }
+
+  const resolveDraft = async (opts?: { composeHotel?: boolean }) => {
+    const hotel = selected || deal.hotel
+    const compose = Boolean(opts?.composeHotel ?? !hotel?.id)
+    if (!compose && draftPrefetchRef.current?.key === prefetchKey) {
+      try {
+        const d =
+          draftPrefetchRef.current.draft ||
+          (await draftPrefetchRef.current.promise)
+        draftPrefetchRef.current = null
+        return d
+      } catch {
+        /* fall through */
+      }
+    }
+    return getApi().createMyTrip(buildDraftPayload({ composeHotel: compose }))
   }
 
   const startMyTrip = async () => {
     setStartingTrip(true)
     try {
-      const hotel = selected || deal.hotel
-      const draft = await getApi().createMyTrip(
-        await buildDraftPayload({ composeHotel: !hotel?.id }),
-      )
-      await rememberTrip({
+      const draft = await resolveDraft()
+      void rememberTrip({
         draft_token: draft.draft_token,
         city: draft.city_name || deal.city,
       })
@@ -339,7 +408,10 @@ export function DealDetailScreen({ route, navigation }: Props) {
         participants: adults,
         flight_pp: deal.flight?.price_pp,
       })
-      navigation.navigate('TripSummary', { draftToken: draft.draft_token })
+      navigation.navigate('TripSummary', {
+        draftToken: draft.draft_token,
+        seed: draft,
+      })
     } catch {
       if (flightUrl) openInAppBrowser(navigation, flightUrl, 'Réserver le vol')
     } finally {
@@ -350,10 +422,8 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const startComposeHotel = async () => {
     setComposingHotel(true)
     try {
-      const draft = await getApi().createMyTrip(
-        await buildDraftPayload({ composeHotel: true }),
-      )
-      await rememberTrip({
+      const draft = await resolveDraft({ composeHotel: true })
+      void rememberTrip({
         draft_token: draft.draft_token,
         city: draft.city_name || deal.city,
       })
@@ -364,7 +434,10 @@ export function DealDetailScreen({ route, navigation }: Props) {
         participants: adults,
         flight_pp: deal.flight?.price_pp,
       })
-      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
+      navigation.navigate('HotelCompose', {
+        draftToken: draft.draft_token,
+        seed: draft,
+      })
     } catch {
       Alert.alert('Erreur', 'Impossible d’ouvrir la composition hôtel — réessaie')
     } finally {

@@ -1,4 +1,9 @@
-import type { DateAvecHoraire, DatePresetId, EnrichedTripResponse } from '@flightwatcher/shared'
+import type {
+  DateAvecHoraire,
+  DatePresetId,
+  EnrichedTripResponse,
+  MyTripDraft,
+} from '@flightwatcher/shared'
 
 export type SearchInfo = {
   airport: string
@@ -52,8 +57,8 @@ export type RootStackParamList = {
   }
   Security: undefined
   Bookings: undefined
-  HotelCompose: { draftToken: string }
-  TripSummary: { draftToken: string }
+  HotelCompose: { draftToken: string; seed?: MyTripDraft }
+  TripSummary: { draftToken: string; seed?: MyTripDraft }
   PlannerInvite: { token: string }
   DealCheckout: {
     dealId?: string

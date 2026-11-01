@@ -127,14 +127,14 @@ function emptyCopy(kind: EmptyKind, city?: string | null) {
 }
 
 export function HotelComposeScreen({ route, navigation }: Props) {
-  const { draftToken } = route.params
+  const { draftToken, seed } = route.params
   const insets = useSafeAreaInsets()
 
-  const [draft, setDraft] = useState<MyTripDraft | null>(null)
+  const [draft, setDraft] = useState<MyTripDraft | null>(seed || null)
   const [options, setOptions] = useState<HotelUpsellOption[]>([])
   const [selected, setSelected] = useState<HotelUpsellOption | null>(null)
   const [sort, setSort] = useState<SortKey>('price')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!seed)
   const [revalidating, setRevalidating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [emptyKind, setEmptyKind] = useState<EmptyKind | null>(null)
@@ -157,14 +157,15 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      setLoading(true)
+      // Seed already paints; only hard-load when missing or user reloads.
+      if (!draft || reloadKey > 0) setLoading(true)
       setEmptyKind(null)
       try {
         const row = await getApi().getMyTrip(draftToken)
         if (cancelled) return
         setDraft(row)
       } catch {
-        if (!cancelled) {
+        if (!cancelled && !draft) {
           setEmptyKind('fatal')
           setLoading(false)
         }
@@ -173,6 +174,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed draft on first paint
   }, [draftToken, reloadKey])
 
   useEffect(() => {
