@@ -8,11 +8,13 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  Linking,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   boardLabelFr,
   hotelCancelLabel,
+  hotelMapsSearchUrl,
   preferFrenchReviews,
   reviewExcerpt,
   reviewMetaLine,
@@ -169,6 +171,8 @@ export function HotelComposeDetailSheet({
   const [galleryPhotos, setGalleryPhotos] = useState<HotelGalleryPhoto[]>([])
   const [facilities, setFacilities] = useState<string[]>([])
   const [hotelAddress, setHotelAddress] = useState<string | null>(null)
+  const [hotelLat, setHotelLat] = useState<number | null>(null)
+  const [hotelLng, setHotelLng] = useState<number | null>(null)
   const [checkinTime, setCheckinTime] = useState<string | null>(null)
   const [checkoutTime, setCheckoutTime] = useState<string | null>(null)
   const [guestReviews, setGuestReviews] = useState<HotelGuestReview[]>([])
@@ -183,6 +187,8 @@ export function HotelComposeDetailSheet({
       setGalleryPhotos([])
       setFacilities([])
       setHotelAddress(null)
+      setHotelLat(null)
+      setHotelLng(null)
       setCheckinTime(null)
       setCheckoutTime(null)
       setGuestReviews([])
@@ -196,6 +202,8 @@ export function HotelComposeDetailSheet({
     setGalleryPhotos([])
     setFacilities([])
     setHotelAddress(null)
+    setHotelLat(null)
+    setHotelLng(null)
     setCheckinTime(null)
     setCheckoutTime(null)
     setGuestReviews([])
@@ -224,6 +232,10 @@ export function HotelComposeDetailSheet({
         setHotelAddress(
           typeof g.address === 'string' && g.address.trim() ? g.address.trim() : null,
         )
+        const latN = g.lat != null ? Number(g.lat) : NaN
+        const lngN = g.lng != null ? Number(g.lng) : NaN
+        setHotelLat(Number.isFinite(latN) ? latN : null)
+        setHotelLng(Number.isFinite(lngN) ? lngN : null)
         setCheckinTime(
           typeof g.checkin_time === 'string' && g.checkin_time.trim()
             ? g.checkin_time.trim()
@@ -497,6 +509,31 @@ export function HotelComposeDetailSheet({
             <View>
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionTitle}>Emplacement</Text>
+                {hotelMapsSearchUrl({
+                  name: hotel.name,
+                  city: cityLabel,
+                  address: hotelAddress,
+                  lat: hotelLat,
+                  lng: hotelLng,
+                }) ? (
+                  <Pressable
+                    onPress={() => {
+                      const url = hotelMapsSearchUrl({
+                        name: hotel.name,
+                        city: cityLabel,
+                        address: hotelAddress,
+                        lat: hotelLat,
+                        lng: hotelLng,
+                      })
+                      if (url) void Linking.openURL(url)
+                    }}
+                    hitSlop={8}
+                    accessibilityRole="link"
+                    accessibilityLabel="Voir sur Maps"
+                  >
+                    <Text style={styles.mapsLink}>Voir Maps</Text>
+                  </Pressable>
+                ) : null}
               </View>
               {hotelAddress ? (
                 <Text style={styles.address}>
@@ -716,6 +753,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  mapsLink: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.primary,
+    marginBottom: 8,
   },
   mosaicItem: {
     width: 112,

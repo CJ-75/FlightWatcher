@@ -5,6 +5,8 @@ import {
   airportDisplayNameFr,
   boardLabelFr,
   hotelCancelLabel,
+  hotelMapsEmbedUrl,
+  hotelMapsSearchUrl,
   resolveCarrierBooking,
   type HotelGalleryPhoto,
   type HotelGuestReview,
@@ -340,20 +342,22 @@ function StayOfferIcon({
   return <CheckFlexIcon className={className} />
 }
 
-function mapsQuery(name: string, city?: string | null) {
-  return [name, city].filter(Boolean).join(', ')
+function mapsSearchUrl(name: string, city?: string | null, address?: string | null) {
+  return (
+    hotelMapsSearchUrl({ name, city, address }) ||
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      [name, city].filter(Boolean).join(', '),
+    )}`
+  )
 }
 
-function mapsSearchUrl(name: string, city?: string | null) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    mapsQuery(name, city),
-  )}`
-}
-
-function mapsEmbedUrl(name: string, city?: string | null) {
-  return `https://maps.google.com/maps?q=${encodeURIComponent(
-    mapsQuery(name, city),
-  )}&z=15&output=embed`
+function mapsEmbedUrl(name: string, city?: string | null, address?: string | null) {
+  return (
+    hotelMapsEmbedUrl({ name, city, address }) ||
+    `https://maps.google.com/maps?q=${encodeURIComponent(
+      [name, city].filter(Boolean).join(', '),
+    )}&z=15&output=embed`
+  )
 }
 
 function StarRow({ stars }: { stars?: number | null }) {
@@ -1570,12 +1574,12 @@ export function MyTripHotelCompose({
                   Emplacement
                 </h4>
                 <a
-                  href={mapsSearchUrl(selected.name, cityLabel)}
+                  href={mapsSearchUrl(selected.name, cityLabel, hotelAddress)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[11px] font-bold text-[#FF385C] hover:underline underline-offset-2 min-h-[36px] inline-flex items-center"
                 >
-                  Ouvrir Maps
+                  Voir Maps
                 </a>
               </div>
               {hotelAddress ? (
@@ -1642,7 +1646,7 @@ export function MyTripHotelCompose({
               <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 h-[120px]">
                 <iframe
                   title={`Carte — ${selected.name}`}
-                  src={mapsEmbedUrl(selected.name, cityLabel)}
+                  src={mapsEmbedUrl(selected.name, cityLabel, hotelAddress)}
                   className="w-full h-full border-0"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"

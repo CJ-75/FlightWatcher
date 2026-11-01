@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { boardLabelFr, type HotelGuestReview } from '@flightwatcher/shared'
+import {
+  boardLabelFr,
+  hotelMapsSearchUrl,
+  type HotelGuestReview,
+} from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
 
@@ -222,6 +226,8 @@ export function MyTripHotelPanel({
   const [description, setDescription] = useState<string | null>(null)
   const [facilities, setFacilities] = useState<string[]>([])
   const [address, setAddress] = useState<string | null>(null)
+  const [hotelLat, setHotelLat] = useState<number | null>(null)
+  const [hotelLng, setHotelLng] = useState<number | null>(null)
   const [checkinTime, setCheckinTime] = useState<string | null>(null)
   const [checkoutTime, setCheckoutTime] = useState<string | null>(null)
   const [reviews, setReviews] = useState<HotelGuestReview[]>([])
@@ -250,6 +256,10 @@ export function MyTripHotelPanel({
         setAddress(
           typeof g.address === 'string' && g.address.trim() ? g.address.trim() : null,
         )
+        const latN = g.lat != null ? Number(g.lat) : NaN
+        const lngN = g.lng != null ? Number(g.lng) : NaN
+        setHotelLat(Number.isFinite(latN) ? latN : null)
+        setHotelLng(Number.isFinite(lngN) ? lngN : null)
         setCheckinTime(
           typeof g.checkin_time === 'string' && g.checkin_time.trim()
             ? g.checkin_time.trim()
@@ -475,11 +485,37 @@ export function MyTripHotelPanel({
       ) : null}
 
       {/* Location */}
-      {(address || stations.length > 0 || stationLabel) && (
+      {(address || stations.length > 0 || stationLabel || name) && (
         <div>
-          <p className="text-xs font-extrabold text-slate-900 tracking-wide uppercase mb-1.5">
-            Emplacement
-          </p>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <p className="text-xs font-extrabold text-slate-900 tracking-wide uppercase">
+              Emplacement
+            </p>
+            {hotelMapsSearchUrl({
+              name,
+              city: cityLabel,
+              address,
+              lat: hotelLat,
+              lng: hotelLng,
+            }) ? (
+              <a
+                href={
+                  hotelMapsSearchUrl({
+                    name,
+                    city: cityLabel,
+                    address,
+                    lat: hotelLat,
+                    lng: hotelLng,
+                  }) || '#'
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-bold text-primary-600 hover:underline underline-offset-2 min-h-[36px] inline-flex items-center"
+              >
+                Voir Maps
+              </a>
+            ) : null}
+          </div>
           {address ? (
             <p className="text-[11px] text-slate-600 mb-1.5">
               {address}
