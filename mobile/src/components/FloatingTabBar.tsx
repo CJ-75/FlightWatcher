@@ -10,7 +10,6 @@ const LABELS: Record<string, string> = {
   Deals: 'Séjours',
   Activities: 'Activités',
   Planner: 'Planner',
-  Favorites: 'Favoris',
   Profile: 'Compte',
 }
 
@@ -58,7 +57,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               <View style={styles.iconWrap}>
                 <TabBarIcon name={route.name} focused={focused} size={22} />
               </View>
-              <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
+              <Text
+                style={[styles.label, focused && styles.labelActive]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
                 {label}
               </Text>
             </Pressable>
@@ -80,15 +84,16 @@ const styles = StyleSheet.create({
   },
   bar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     minHeight: FLOATING_TAB_HEIGHT,
     borderRadius: 30,
     backgroundColor: 'rgba(255,255,255,0.96)',
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     paddingVertical: 6,
-    gap: 2,
+    gap: 0,
     ...Platform.select({
       ios: {
         shadowColor: colors.shadow,
@@ -106,11 +111,13 @@ const styles = StyleSheet.create({
   },
   item: {
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 24,
-    gap: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 2,
+    borderRadius: 22,
+    gap: 3,
   },
   itemActive: {
     backgroundColor: colors.primarySoft,
@@ -120,21 +127,22 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   iconWrap: {
-    height: 24,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: {
     fontFamily: fonts.medium,
-    fontSize: 11,
-    lineHeight: 13,
-    letterSpacing: 0.15,
+    fontSize: 10,
+    lineHeight: 12,
+    letterSpacing: -0.1,
     color: colors.muted,
+    textAlign: 'center',
     includeFontPadding: false,
   },
   labelActive: {
     color: colors.primaryInk,
     fontFamily: fonts.bold,
-    letterSpacing: 0.1,
+    letterSpacing: -0.1,
   },
 })

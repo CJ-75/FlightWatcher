@@ -41,6 +41,11 @@ export function ProfileScreen() {
     root.dispatch(CommonActions.navigate({ name: 'Bookings' }))
   }
 
+  const openFavorites = () => {
+    const root = navigation.getParent() ?? navigation
+    root.dispatch(CommonActions.navigate({ name: 'Favorites' }))
+  }
+
   // Logged-out landing (real guest landings) for preview / no user
   if (!viewUser) {
     return (
@@ -86,6 +91,14 @@ export function ProfileScreen() {
             style={({ pressed }) => [styles.guestBookings, pressed && { opacity: 0.9 }]}
           >
             <Text style={styles.guestBookingsLabel}>Mes réservations</Text>
+            <Text style={styles.guestBookingsChevron}>›</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={openFavorites}
+            style={({ pressed }) => [styles.guestBookings, pressed && { opacity: 0.9 }]}
+          >
+            <Text style={styles.guestBookingsLabel}>Favoris</Text>
             <Text style={styles.guestBookingsChevron}>›</Text>
           </Pressable>
 
@@ -152,6 +165,18 @@ export function ProfileScreen() {
           ]}
         >
           <Text style={styles.securityRowLabel}>Mes réservations</Text>
+          <Text style={styles.securityRowChevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={openFavorites}
+          style={({ pressed }) => [
+            styles.securityRow,
+            shadow.soft,
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={styles.securityRowLabel}>Favoris</Text>
           <Text style={styles.securityRowChevron}>›</Text>
         </Pressable>
 

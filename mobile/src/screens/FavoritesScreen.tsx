@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   Text,
   FlatList,
@@ -20,7 +20,13 @@ import type {
   LikedDeal,
   SavedFavorite,
 } from '@flightwatcher/shared'
-import { translate } from '@flightwatcher/shared'
+import {
+  isPastFavoriteActivity,
+  isPastFavoriteDeal,
+  isPastFavoriteFlight,
+  partitionFavoritesByPast,
+  translate,
+} from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -39,7 +45,7 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, shadow, spacing, type } from '../theme'
+import { colors, fonts, shadow, spacing } from '../theme'
 
 export function FavoritesScreen() {
   const insets = useSafeAreaInsets()
@@ -52,6 +58,7 @@ export function FavoritesScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
   const [tab, setTab] = useState<'flights' | 'deals' | 'activities'>('flights')
+  const [archiveOpen, setArchiveOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (!viewUser) {
@@ -148,17 +155,68 @@ export function FavoritesScreen() {
     distanceLabel: item.activity.distanceLabel ?? null,
   })
 
-  const listData =
-    tab === 'flights'
-      ? favorites
-      : tab === 'deals'
-        ? likedDeals
-        : likedActivities
+  const { active: activeItems, archived: archivedItems } = useMemo(() => {
+    if (tab === 'flights') {
+      return partitionFavoritesByPast(favorites, isPastFavoriteFlight)
+    }
+    if (tab === 'deals') {
+      return partitionFavoritesByPast(likedDeals, isPastFavoriteDeal)
+    }
+    return partitionFavoritesByPast(likedActivities, isPastFavoriteActivity)
+  }, [tab, favorites, likedDeals, likedActivities])
+
+  const listData = activeItems
+
+  const renderFavoriteItem = (
+    item: SavedFavorite | LikedDeal | LikedActivity,
+    faded: boolean,
+  ) => {
+    const wrap = (node: React.ReactNode) =>
+      faded ? <View style={styles.archivedItem}>{node}</View> : node
+
+    if (tab === 'deals') {
+      return wrap(
+        <DealCard
+          deal={(item as LikedDeal).deal}
+          liked
+          onToggleLike={() => void unlikeDeal((item as LikedDeal).deal_id)}
+          onPress={() =>
+            navigation.navigate('DealDetail', {
+              dealId: (item as LikedDeal).deal_id,
+            })
+          }
+        />,
+      )
+    }
+    if (tab === 'activities') {
+      const liked = item as LikedActivity
+      const card = toActivityCard(liked)
+      return wrap(
+        <ActivityCard
+          card={card}
+          liked
+          onToggleLike={() => void unlikeActivity(liked.product_code)}
+          onPress={() => {
+            if (card.productUrl) void openInAppBrowser(card.productUrl)
+          }}
+          onBook={() => {
+            if (card.productUrl) void openInAppBrowser(card.productUrl)
+          }}
+        />,
+      )
+    }
+    return wrap(
+      <DestinationCard
+        trip={(item as SavedFavorite).trip as EnrichedTripResponse}
+        isFavorite
+        onFavorite={() => void remove(item.id)}
+      />,
+    )
+  }
 
   if (!viewUser) {
     return (
       <FavoritesGuestLanding
-        insetsTop={insets.top}
         insetsBottom={insets.bottom}
         loginLoading={loginLoading}
         onLogin={() => void onLogin()}
@@ -173,24 +231,22 @@ export function FavoritesScreen() {
         style={styles.list}
         contentContainerStyle={{
           paddingHorizontal: spacing.xl,
-          paddingTop: insets.top + spacing.md,
-          paddingBottom: insets.bottom + 100,
+          paddingTop: spacing.md,
+          paddingBottom: insets.bottom + 40,
           flexGrow: 1,
         }}
         data={listData}
         keyExtractor={(item) => item.id}
-        extraData={tab}
+        extraData={{ tab, archiveOpen, archivedCount: archivedItems.length }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.switchTrack}
-            >
+            <Text style={styles.subtitle}>
+              {translate('fr', 'favorites.subtitle')}
+            </Text>
+            <View style={styles.switchTrack}>
               {(
                 [
                   ['flights', 'favorites.switch.flights'],
@@ -200,85 +256,86 @@ export function FavoritesScreen() {
               ).map(([id, key]) => (
                 <Pressable
                   key={id}
-                  onPress={() => setTab(id)}
+                  onPress={() => {
+                    setTab(id)
+                    setArchiveOpen(false)
+                  }}
                   style={[styles.switchBtn, tab === id && styles.switchBtnOn]}
                 >
                   <Text
                     style={[styles.switchLabel, tab === id && styles.switchLabelOn]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
                   >
                     {translate('fr', key)}
                   </Text>
                 </Pressable>
               ))}
-            </ScrollView>
+            </View>
           </View>
         }
         ListEmptyComponent={
-          <View style={[styles.emptyCard, shadow.soft]}>
-            <View style={styles.emptyIcon}>
-              <HeartIcon size={28} filled={false} color={colors.primary} />
+          listData.length === 0 && archivedItems.length === 0 ? (
+            <View style={[styles.emptyCard, shadow.soft]}>
+              <View style={styles.emptyIcon}>
+                <HeartIcon size={28} filled={false} color={colors.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {error
+                  ? error
+                  : tab === 'deals'
+                    ? translate('fr', 'favorites.dealsEmptyTitle')
+                    : tab === 'activities'
+                      ? translate('fr', 'favorites.activitiesEmptyTitle')
+                      : translate('fr', 'favorites.flightsEmpty')}
+              </Text>
+              <Text style={styles.emptyBody}>
+                {error
+                  ? 'Tire pour réessayer.'
+                  : tab === 'deals'
+                    ? translate('fr', 'favorites.dealsEmpty')
+                    : tab === 'activities'
+                      ? translate('fr', 'favorites.activitiesEmpty')
+                      : translate('fr', 'favorites.flightsEmptyBody')}
+              </Text>
             </View>
-            <Text style={styles.emptyTitle}>
-              {error
-                ? error
-                : tab === 'deals'
-                  ? translate('fr', 'favorites.dealsEmptyTitle')
-                  : tab === 'activities'
-                    ? translate('fr', 'favorites.activitiesEmptyTitle')
-                    : translate('fr', 'favorites.flightsEmpty')}
+          ) : listData.length === 0 ? (
+            <Text style={styles.onlyArchivedHint}>
+              {translate('fr', 'favorites.archivedHint')}
             </Text>
-            <Text style={styles.emptyBody}>
-              {error
-                ? 'Tire pour réessayer.'
-                : tab === 'deals'
-                  ? translate('fr', 'favorites.dealsEmpty')
-                  : tab === 'activities'
-                    ? translate('fr', 'favorites.activitiesEmpty')
-                    : translate('fr', 'favorites.flightsEmptyBody')}
-            </Text>
-          </View>
+          ) : null
         }
-        renderItem={({ item }) =>
-          tab === 'deals' ? (
-            <DealCard
-              deal={(item as LikedDeal).deal}
-              liked
-              onToggleLike={() => void unlikeDeal((item as LikedDeal).deal_id)}
-              onPress={() =>
-                navigation.navigate('DealDetail', { dealId: (item as LikedDeal).deal_id })
-              }
-            />
-          ) : tab === 'activities' ? (
-            (() => {
-              const liked = item as LikedActivity
-              const card = toActivityCard(liked)
-              return (
-                <ActivityCard
-                  card={card}
-                  liked
-                  onToggleLike={() => void unlikeActivity(liked.product_code)}
-                  onPress={() => {
-                    if (card.productUrl) void openInAppBrowser(card.productUrl)
-                  }}
-                  onBook={() => {
-                    if (card.productUrl) void openInAppBrowser(card.productUrl)
-                  }}
-                />
-              )
-            })()
-          ) : (
-            <View>
-              <DestinationCard
-                trip={(item as SavedFavorite).trip as EnrichedTripResponse}
-                isFavorite
-                onFavorite={() => void remove(item.id)}
-              />
-              <Pressable onPress={() => void remove(item.id)} style={styles.remove}>
-                <Text style={styles.removeText}>{translate('fr', 'card.removeFavorite')}</Text>
+        ListFooterComponent={
+          archivedItems.length > 0 ? (
+            <View style={styles.archiveBlock}>
+              <Pressable
+                onPress={() => setArchiveOpen((o) => !o)}
+                style={styles.archiveHeader}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: archiveOpen }}
+              >
+                <Text style={styles.archiveTitle}>
+                  {translate('fr', 'favorites.archivedSectionCount', {
+                    n: archivedItems.length,
+                  })}
+                </Text>
+                <Text style={styles.archiveChevron}>{archiveOpen ? '▾' : '▸'}</Text>
               </Pressable>
+              {archiveOpen ? (
+                <View style={styles.archiveList}>
+                  <Text style={styles.archiveHint}>
+                    {translate('fr', 'favorites.archivedHint')}
+                  </Text>
+                  {archivedItems.map((item) => (
+                    <View key={item.id}>{renderFavoriteItem(item, true)}</View>
+                  ))}
+                </View>
+              ) : null}
             </View>
-          )
+          ) : null
         }
+        renderItem={({ item }) => renderFavoriteItem(item, false)}
         showsVerticalScrollIndicator={false}
       />
     </View>
@@ -286,12 +343,10 @@ export function FavoritesScreen() {
 }
 
 function FavoritesGuestLanding({
-  insetsTop,
   insetsBottom,
   loginLoading,
   onLogin,
 }: {
-  insetsTop: number
   insetsBottom: number
   loginLoading: boolean
   onLogin: () => void
@@ -303,7 +358,7 @@ function FavoritesGuestLanding({
   ]
 
   return (
-    <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
+    <View style={[styles.root, { paddingBottom: insetsBottom + 24 }]}>
       <ScreenBackground />
       <View style={styles.guestOrbA} />
       <View style={styles.guestOrbB} />
@@ -384,20 +439,28 @@ function FavoritesGuestLanding({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   list: { flex: 1, backgroundColor: 'transparent' },
-  header: { marginBottom: spacing.xl },
-  title: { ...type.title },
-  sub: { ...type.caption, marginTop: 4, fontFamily: fonts.semibold },
+  header: { marginBottom: 16, gap: 4 },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: colors.muted,
+    lineHeight: 22,
+  },
   switchTrack: {
     flexDirection: 'row',
-    marginTop: spacing.lg,
+    alignItems: 'stretch',
+    marginTop: spacing.md,
     backgroundColor: colors.primarySoft,
     borderRadius: 16,
-    padding: 5,
+    padding: 4,
     gap: 4,
+    width: '100%',
   },
   switchBtn: {
-    paddingVertical: 11,
-    paddingHorizontal: 14,
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -408,13 +471,60 @@ const styles = StyleSheet.create({
   },
   switchLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 15,
+    fontSize: 13,
     letterSpacing: -0.2,
     color: colors.muted,
+    textAlign: 'center',
   },
   switchLabelOn: {
     fontFamily: fonts.bold,
     color: colors.ink,
+  },
+  archivedItem: {
+    opacity: 0.48,
+  },
+  archiveBlock: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    paddingTop: spacing.md,
+  },
+  archiveHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  archiveTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 15,
+    color: colors.inkSoft,
+    letterSpacing: -0.2,
+  },
+  archiveChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.muted,
+  },
+  archiveHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: spacing.md,
+    paddingHorizontal: 4,
+  },
+  archiveList: {
+    gap: 0,
+  },
+  onlyArchivedHint: {
+    marginTop: spacing.lg,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
   },
   section: { marginTop: spacing.xl },
   sectionTitle: {
@@ -457,9 +567,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  remove: { alignItems: 'center', marginTop: -4, marginBottom: spacing.lg },
-  removeText: { fontFamily: fonts.semibold, color: colors.danger, fontSize: 13 },
-
   guestOrbA: {
     position: 'absolute',
     top: -40,

@@ -58,7 +58,11 @@ import {
   buildBookingUrl,
   findCityGroupByCodes,
   groupAirportsByCity,
+  isPastFavoriteActivity,
+  isPastFavoriteDeal,
+  isPastFavoriteFlight,
   parseAirportCodes,
+  partitionFavoritesByPast,
   resolvePopularAirports,
 } from '@flightwatcher/shared'
 import { CityAirportSelect } from './components/CityAirportSelect'
@@ -1122,7 +1126,6 @@ function Dashboard() {
                   ...(alertsUiEnabled
                     ? [{ id: 'alerts' as const, label: t('nav.alerts') }]
                     : []),
-                  { id: 'saved' as const, label: t('nav.saved') },
                 ] as const
               ).map((tab) => (
                 <motion.div
@@ -2186,11 +2189,24 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [devMode, setDevModeState] = useState(() => getDevMode())
   const [showLightbox, setShowLightbox] = useState(false)
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
-  const [favoritesFilter, setFavoritesFilter] = useState<'all' | 'active' | 'archived'>('all')
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const [favoritesKind, setFavoritesKind] = useState<'flights' | 'deals' | 'activities'>(
     'flights',
   )
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
+
+  const { active: activeFlightFavorites, archived: archivedFlightFavorites } = useMemo(
+    () => partitionFavoritesByPast(favorites, isPastFavoriteFlight),
+    [favorites],
+  )
+  const { active: activeLikedDeals, archived: archivedLikedDeals } = useMemo(
+    () => partitionFavoritesByPast(likedDeals, isPastFavoriteDeal),
+    [likedDeals],
+  )
+  const { active: activeLikedActivities, archived: archivedLikedActivities } = useMemo(
+    () => partitionFavoritesByPast(likedActivities, isPastFavoriteActivity),
+    [likedActivities],
+  )
 
   const refreshData = async (force = false, opts?: { resetFilter?: boolean }) => {
     try {
@@ -2212,7 +2228,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
       setLikedActivities(Array.isArray(acts) ? acts : [])
-      if (opts?.resetFilter) setFavoritesFilter('all')
+      if (opts?.resetFilter) setArchiveOpen(false)
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
       try {
@@ -2231,7 +2247,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
           setFavorites(favs)
           setLikedDeals(Array.isArray(deals) ? deals : [])
           setLikedActivities(Array.isArray(acts) ? acts : [])
-          if (opts?.resetFilter) setFavoritesFilter('all')
+          if (opts?.resetFilter) setArchiveOpen(false)
         }
       } catch (fallbackError) {
         console.error('❌ Erreur fallback refreshData:', fallbackError)
@@ -2995,14 +3011,14 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
 
       {variant === 'favorites' && (
       <>
-      <div className="mb-2">
+      <div className="relative mb-7 sm:mb-9">
         <p className="app-kicker mb-1.5">{t('nav.favorites')}</p>
         <h2 className="app-title">{t('favorites.title')}</h2>
         <p className="app-subtitle mt-1.5">{t('favorites.subtitle')}</p>
       </div>
 
       <div className="relative">
-        <div className="mb-4">
+        <div className="mb-5 sm:mb-6">
           <div className="flex p-1.5 rounded-2xl bg-white/80 border border-orange-100/80 shadow-sm gap-1">
             {(
               [
@@ -3014,7 +3030,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
               <button
                 key={id}
                 type="button"
-                onClick={() => setFavoritesKind(id)}
+                onClick={() => {
+                  setFavoritesKind(id)
+                  setArchiveOpen(false)
+                }}
                 className={`flex-1 py-2.5 rounded-xl text-[13px] sm:text-[15px] font-semibold tracking-tight transition-all min-h-[44px] ${
                   favoritesKind === id
                     ? 'bg-white text-slate-900 shadow-sm'
@@ -3025,43 +3044,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
               </button>
             ))}
           </div>
-          {favoritesKind === 'flights' ? (
-            <div className="flex gap-2 flex-wrap mt-4">
-              <button
-                type="button"
-                onClick={() => setFavoritesFilter('all')}
-                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
-                  favoritesFilter === 'all'
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {t('favorites.all')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setFavoritesFilter('active')}
-                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
-                  favoritesFilter === 'active'
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {t('favorites.active')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setFavoritesFilter('archived')}
-                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold min-h-[40px] transition-colors ${
-                  favoritesFilter === 'archived'
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {t('favorites.archived')}
-              </button>
-            </div>
-          ) : null}
         </div>
         
         <div className="pt-2">
@@ -3082,56 +3064,127 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-                {likedActivities.map((item) => {
-                  const card = likedActivityToCard(item)
-                  return (
-                    <article
-                      key={item.id}
-                      className="group flex flex-col rounded-3xl overflow-hidden bg-white border border-line shadow-soft"
-                    >
-                      <div className="relative">
-                        {card.photoUrl ? (
-                          <img
-                            src={card.photoUrl}
-                            alt=""
-                            className="h-44 w-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-44 w-full bg-canvas" />
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => void unlikeActivity(item.product_code)}
-                          className="absolute top-3 right-3 z-[3] w-10 h-10 rounded-full bg-white text-primary-500 flex items-center justify-center shadow-soft"
-                          aria-label={t('card.removeFavorite')}
+              <div>
+                {activeLikedActivities.length === 0 && archivedLikedActivities.length > 0 ? (
+                  <p className="text-sm text-slate-500 text-center mb-4">
+                    {t('favorites.archivedHint')}
+                  </p>
+                ) : null}
+                {activeLikedActivities.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                    {activeLikedActivities.map((item) => {
+                      const card = likedActivityToCard(item)
+                      return (
+                        <article
+                          key={item.id}
+                          className="group flex flex-col rounded-3xl overflow-hidden bg-white border border-line shadow-soft"
                         >
-                          ♥
-                        </button>
+                          <div className="relative">
+                            {card.photoUrl ? (
+                              <img
+                                src={card.photoUrl}
+                                alt=""
+                                className="h-44 w-full object-cover"
+                              />
+                            ) : (
+                              <div className="h-44 w-full bg-canvas" />
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void unlikeActivity(item.product_code)}
+                              className="absolute top-3 right-3 z-[3] w-10 h-10 rounded-full bg-white text-primary-500 flex items-center justify-center shadow-soft"
+                              aria-label={t('card.removeFavorite')}
+                            >
+                              ♥
+                            </button>
+                          </div>
+                          <div className="p-4 flex flex-col gap-2 flex-1">
+                            <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2">
+                              {card.title}
+                            </h3>
+                            <p className="text-sm text-muted">
+                              {[card.destinationLabel, card.priceLabel, card.durationLabel]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                            {card.productUrl ? (
+                              <a
+                                href={card.productUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-auto inline-flex items-center justify-center rounded-xl bg-primary-500 text-white text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-primary-600"
+                              >
+                                Voir l’activité
+                              </a>
+                            ) : null}
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                ) : null}
+                {archivedLikedActivities.length > 0 ? (
+                  <div className="mt-8 border-t border-slate-200 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setArchiveOpen((o) => !o)}
+                      className="w-full flex items-center justify-between py-2.5 px-1 text-left"
+                      aria-expanded={archiveOpen}
+                    >
+                      <span className="text-[15px] font-extrabold text-slate-600 tracking-tight">
+                        {t('favorites.archivedSectionCount', {
+                          n: archivedLikedActivities.length,
+                        })}
+                      </span>
+                      <span className="text-slate-400 font-bold text-base">
+                        {archiveOpen ? '▾' : '▸'}
+                      </span>
+                    </button>
+                    {archiveOpen ? (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 opacity-50">
+                        {archivedLikedActivities.map((item) => {
+                          const card = likedActivityToCard(item)
+                          return (
+                            <article
+                              key={item.id}
+                              className="group flex flex-col rounded-3xl overflow-hidden bg-white border border-line shadow-soft"
+                            >
+                              <div className="relative">
+                                {card.photoUrl ? (
+                                  <img
+                                    src={card.photoUrl}
+                                    alt=""
+                                    className="h-44 w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-44 w-full bg-canvas" />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => void unlikeActivity(item.product_code)}
+                                  className="absolute top-3 right-3 z-[3] w-10 h-10 rounded-full bg-white text-primary-500 flex items-center justify-center shadow-soft"
+                                  aria-label={t('card.removeFavorite')}
+                                >
+                                  ♥
+                                </button>
+                              </div>
+                              <div className="p-4 flex flex-col gap-2 flex-1">
+                                <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2">
+                                  {card.title}
+                                </h3>
+                                <p className="text-sm text-muted">
+                                  {[card.destinationLabel, card.priceLabel, card.durationLabel]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </p>
+                              </div>
+                            </article>
+                          )
+                        })}
                       </div>
-                      <div className="p-4 flex flex-col gap-2 flex-1">
-                        <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2">
-                          {card.title}
-                        </h3>
-                        <p className="text-sm text-muted">
-                          {[card.destinationLabel, card.priceLabel, card.durationLabel]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </p>
-                        {card.productUrl ? (
-                          <a
-                            href={card.productUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-auto inline-flex items-center justify-center rounded-xl bg-primary-500 text-white text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-primary-600"
-                          >
-                            Voir l’activité
-                          </a>
-                        ) : null}
-                      </div>
-                    </article>
-                  )
-                })}
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )
           ) : favoritesKind === 'deals' ? (
@@ -3147,16 +3200,60 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-                {likedDeals.map((item) => (
-                  <DealCard
-                    key={item.id}
-                    deal={item.deal}
-                    liked
-                    onToggleLike={() => void unlikeDeal(item.deal_id)}
-                    onClick={() => setSelectedLikedDeal(item.deal)}
-                  />
-                ))}
+              <div>
+                {activeLikedDeals.length === 0 && archivedLikedDeals.length > 0 ? (
+                  <p className="text-sm text-slate-500 text-center mb-4">
+                    {t('favorites.archivedHint')}
+                  </p>
+                ) : null}
+                {activeLikedDeals.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                    {activeLikedDeals.map((item) => (
+                      <DealCard
+                        key={item.id}
+                        deal={item.deal}
+                        liked
+                        onToggleLike={() => void unlikeDeal(item.deal_id)}
+                        onClick={() => setSelectedLikedDeal(item.deal)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+                {archivedLikedDeals.length > 0 ? (
+                  <div className="mt-8 border-t border-slate-200 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setArchiveOpen((o) => !o)}
+                      className="w-full flex items-center justify-between py-2.5 px-1 text-left"
+                      aria-expanded={archiveOpen}
+                    >
+                      <span className="text-[15px] font-extrabold text-slate-600 tracking-tight">
+                        {t('favorites.archivedSectionCount', { n: archivedLikedDeals.length })}
+                      </span>
+                      <span className="text-slate-400 font-bold text-base">
+                        {archiveOpen ? '▾' : '▸'}
+                      </span>
+                    </button>
+                    {archiveOpen ? (
+                      <div className="mt-3">
+                        <p className="text-xs text-slate-500 mb-3 px-1">
+                          {t('favorites.archivedHint')}
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 opacity-50">
+                          {archivedLikedDeals.map((item) => (
+                            <DealCard
+                              key={item.id}
+                              deal={item.deal}
+                              liked
+                              onToggleLike={() => void unlikeDeal(item.deal_id)}
+                              onClick={() => setSelectedLikedDeal(item.deal)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )
           ) : favorites.length === 0 ? (
@@ -3173,46 +3270,22 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
               </div>
             </div>
           ) : (() => {
-            const filteredFavorites = favoritesFilter === 'all' 
-              ? favorites 
-              : favoritesFilter === 'active'
-              ? favorites.filter(f => !f.archived)
-              : favorites.filter(f => f.archived)
-            
-            if (filteredFavorites.length === 0) {
-              return (
-                <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-sm p-8 text-center">
-                  <p className="font-bold text-slate-700">
-                    {favoritesFilter === 'archived' 
-                      ? 'Aucun voyage archivé' 
-                      : 'Aucun voyage actif'}
-                  </p>
-                </div>
-              )
-            }
-            
-            return (
-              <div className="grid gap-4 sm:gap-5">
-                {filteredFavorites.map((favorite, index) => (
+            const renderFlightCard = (
+              favorite: SavedFavorite,
+              index: number,
+              faded: boolean,
+            ) => (
                   <motion.div
                     key={favorite.id}
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.04 }}
                     className={`group relative rounded-[28px] border overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 ${
-                      favorite.archived 
-                        ? 'border-slate-200 bg-slate-50/90 opacity-85' 
+                      faded
+                        ? 'border-slate-200 bg-slate-50/90 opacity-50'
                         : 'border-orange-100/70 bg-white hover:border-orange-200'
                     }`}
                   >
-                    {favorite.archived && (
-                      <div className="absolute top-3 right-3 z-10">
-                        <span className="px-2.5 py-1 bg-slate-700 text-white text-[11px] font-bold rounded-full">
-                          Archivé
-                        </span>
-                      </div>
-                    )}
-
                     <div className="p-4 sm:p-5 md:p-6">
                       {/* En-tête avec meilleure hiérarchie */}
                       <div className="flex flex-col sm:flex-row items-start justify-between mb-4 sm:mb-5 gap-4 sm:gap-5">
@@ -3421,7 +3494,53 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                       </div>
                     </div>
                   </motion.div>
-                ))}
+            )
+
+            return (
+              <div>
+                {activeFlightFavorites.length === 0 && archivedFlightFavorites.length > 0 ? (
+                  <p className="text-sm text-slate-500 text-center mb-4">
+                    {t('favorites.archivedHint')}
+                  </p>
+                ) : null}
+                {activeFlightFavorites.length > 0 ? (
+                  <div className="grid gap-4 sm:gap-5">
+                    {activeFlightFavorites.map((favorite, index) =>
+                      renderFlightCard(favorite, index, false),
+                    )}
+                  </div>
+                ) : null}
+                {archivedFlightFavorites.length > 0 ? (
+                  <div className="mt-8 border-t border-slate-200 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setArchiveOpen((o) => !o)}
+                      className="w-full flex items-center justify-between py-2.5 px-1 text-left"
+                      aria-expanded={archiveOpen}
+                    >
+                      <span className="text-[15px] font-extrabold text-slate-600 tracking-tight">
+                        {t('favorites.archivedSectionCount', {
+                          n: archivedFlightFavorites.length,
+                        })}
+                      </span>
+                      <span className="text-slate-400 font-bold text-base">
+                        {archiveOpen ? '▾' : '▸'}
+                      </span>
+                    </button>
+                    {archiveOpen ? (
+                      <div className="mt-3">
+                        <p className="text-xs text-slate-500 mb-3 px-1">
+                          {t('favorites.archivedHint')}
+                        </p>
+                        <div className="grid gap-4 sm:gap-5">
+                          {archivedFlightFavorites.map((favorite, index) =>
+                            renderFlightCard(favorite, index, true),
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )
           })()}

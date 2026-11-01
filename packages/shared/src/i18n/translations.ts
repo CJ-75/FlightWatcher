@@ -125,6 +125,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'favorites.switch.flights': 'Vols',
     'favorites.switch.deals': 'Deals',
     'favorites.switch.activities': 'Activités',
+    'favorites.archivedSection': 'Archivés',
+    'favorites.archivedSectionCount': 'Archivés ({n})',
+    'favorites.archivedHint': 'Dates passées — toujours accessibles ici.',
     'favorites.flightsEmpty': 'Aucun vol en favori',
     'favorites.flightsEmptyBody': 'Ajoute un voyage depuis les résultats de recherche.',
     'favorites.dealsEmptyTitle': 'Aucun deal liké',
@@ -346,8 +349,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.redirecting': 'Redirection en cours...',
     
     // Favorites
-    'favorites.title': 'Favoris',
-    'favorites.subtitle': 'Tes coups de cœur, vols et deals, au même endroit.',
+    'favorites.title': 'Tes coups de cœur',
+    'favorites.subtitle': 'Vols, séjours et activités likés, au même endroit.',
     'favorites.favoritesTitle': 'Voyages favoris',
     'favorites.empty': 'Aucun favori pour le moment',
     'favorites.emptyBody': 'Ajoute un voyage ou like un deal.',
@@ -533,6 +536,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'favorites.switch.flights': 'Flights',
     'favorites.switch.deals': 'Deals',
     'favorites.switch.activities': 'Activities',
+    'favorites.archivedSection': 'Archived',
+    'favorites.archivedSectionCount': 'Archived ({n})',
+    'favorites.archivedHint': 'Past dates — still available here.',
     'favorites.activitiesEmptyTitle': 'No liked activities',
     'favorites.activitiesEmpty': 'Like an activity from the Activities tab.',
     'favorites.flightsEmpty': 'No saved flights',
@@ -754,8 +760,8 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.redirecting': 'Redirecting...',
     
     // Favorites
-    'favorites.title': 'Favorites',
-    'favorites.subtitle': 'Your saved flights and deals, in one place.',
+    'favorites.title': 'Your saved picks',
+    'favorites.subtitle': 'Flights, stays and activities you liked, in one place.',
     'favorites.favoritesTitle': 'Favorite trips',
     'favorites.empty': 'No favorites yet',
     'favorites.emptyBody': 'Save a trip or like a deal.',
