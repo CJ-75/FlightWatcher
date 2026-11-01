@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 _list_cache_lock = threading.Lock()
@@ -20,6 +20,24 @@ _FLAG_CACHE_TTL_S = 60.0
 
 # Hard floor — a wall under 30 feels empty / broken (audit)
 WALL_MIN_DEALS = 30
+
+
+def _today_iso() -> str:
+    return date.today().isoformat()
+
+
+def _row_out_date_ok(row: Dict[str, Any], today: Optional[str] = None) -> bool:
+    """True if check-in / outbound is today or later (ISO YYYY-MM-DD)."""
+    t = today or _today_iso()
+    out = str(row.get("out_date") or "")[:10]
+    return len(out) >= 10 and out >= t
+
+
+def _deal_out_date_ok(deal: Dict[str, Any], today: Optional[str] = None) -> bool:
+    """TravelDeal-shaped: dates.outbound not before today."""
+    t = today or _today_iso()
+    out = str((deal.get("dates") or {}).get("outbound") or "")[:10]
+    return len(out) >= 10 and out >= t
 
 
 def _flight_duration_minutes(
@@ -488,10 +506,12 @@ def _fetch_active_rows(
     limit: int = 60,
     occasion: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    today = _today_iso()
     q = (
         supabase.table("deals_active")
         .select(_DEALS_ACTIVE_LIST_SELECT)
         .eq("status", "active")
+        .gte("out_date", today)
         .order("deal_score", desc=True)
         .limit(limit)
     )
@@ -508,7 +528,7 @@ def _fetch_active_rows(
             pass
     try:
         res = q.execute()
-        return list(res.data or [])
+        return [r for r in (res.data or []) if _row_out_date_ok(r, today)]
     except Exception as e:
         # Fallback if a listed column is missing on older DBs
         import logging
@@ -521,6 +541,7 @@ def _fetch_active_rows(
                 supabase.table("deals_active")
                 .select("*")
                 .eq("status", "active")
+                .gte("out_date", today)
                 .order("deal_score", desc=True)
                 .limit(limit)
             )
@@ -533,7 +554,7 @@ def _fetch_active_rows(
                     q2 = q2.contains("occasion_tags", [occasion_slug])
                 except Exception:
                     pass
-            return list((q2.execute().data) or [])
+            return [r for r in ((q2.execute().data) or []) if _row_out_date_ok(r, today)]
         except Exception:
             return []
 
@@ -1232,18 +1253,24 @@ def list_related_community_deals(
     if not dest or not supabase:
         return []
     try:
+        today = _today_iso()
         q = (
             supabase.table("deals_active")
             .select("*")
             .eq("dest_iata", dest)
             .eq("status", "active")
+            .gte("out_date", today)
             .order("deal_score", desc=True)
             .limit(40)
         )
         if len(cur_origin) == 3:
             q = q.eq("origin_iata", cur_origin)
         res = q.execute()
-        rows = [r for r in (res.data or []) if str(r.get("deal_key") or "") != current_key]
+        rows = [
+            r
+            for r in (res.data or [])
+            if str(r.get("deal_key") or "") != current_key and _row_out_date_ok(r, today)
+        ]
         if len(cur_origin) == 3:
             rows = [
                 r
@@ -1349,22 +1376,24 @@ def list_community_deals(
         with _list_cache_lock:
             epoch = _list_cache_epoch
     cache_key = (
-        f"hp4|{epoch}|{origin or ''}|{destination or ''}|"
+        f"hp5|{epoch}|{origin or ''}|{destination or ''}|"
         f"{adults_n}|{max_pp}|{occasion_slug or ''}|{duration_tab or ''}|"
         f"{target}|min{WALL_MIN_DEALS}"
     )
     now = time.monotonic()
+    today = _today_iso()
     with _list_cache_lock:
         hit = _list_cache.get(cache_key)
         if hit and now - hit[0] < _LIST_CACHE_TTL_S:
+            fresh_hit = [dict(d) for d in hit[1] if _deal_out_date_ok(d, today)]
             log.info(
                 "list_community_deals cache_hit origin=%s dest=%s n=%s ms=%.0f",
                 origin,
                 destination,
-                len(hit[1]),
+                len(fresh_hit),
                 (time.monotonic() - t0) * 1000,
             )
-            return [dict(d) for d in hit[1]]
+            return fresh_hit
 
     # L2 shared file cache (multi-worker) — Phase 3 latency
     try:
@@ -1372,16 +1401,17 @@ def list_community_deals(
 
         shared = get_shared(cache_key)
         if shared is not None:
+            fresh_shared = [dict(d) for d in shared if _deal_out_date_ok(d, today)]
             with _list_cache_lock:
                 _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in shared])
             log.info(
                 "list_community_deals l2_hit origin=%s dest=%s n=%s ms=%.0f",
                 origin,
                 destination,
-                len(shared),
+                len(fresh_shared),
                 (time.monotonic() - t0) * 1000,
             )
-            return [dict(d) for d in shared]
+            return fresh_shared
     except Exception:
         pass
 
@@ -1504,6 +1534,7 @@ def list_community_deals(
         ]
     if duration_tab:
         out = _apply_duration_with_floor(out, duration_tab, min_deals=WALL_MIN_DEALS)
+    out = [d for d in out if _deal_out_date_ok(d, today)]
     out = diversify_wall_min(out, target=target, min_deals=WALL_MIN_DEALS)
     snap = [dict(d) for d in out]
     with _list_cache_lock:
@@ -1547,10 +1578,13 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
         )
         if not res.data:
             return None
+        row0 = res.data[0]
+        if not _row_out_date_ok(row0):
+            return None
         fresh = _baselines_fresh_flag(supabase)
         # Detail: never drop for missing photo (wall filter is list-only)
         rows = _enrich_rows_to_deals(
-            [res.data[0]],
+            [row0],
             adults_n=2,
             fresh=fresh,
             max_pp=None,

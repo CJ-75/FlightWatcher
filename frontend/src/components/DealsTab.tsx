@@ -271,10 +271,14 @@ export function DealsTab() {
       void loadLikes()
       void loadOccasions()
       const list = await listPromise
-      // Deals = hôtel photo only (no city stock fallback)
-      const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
-        (d) => Boolean(d.hotel?.photo || (d.image_url && String(d.image_url).trim())),
-      )
+      // Deals = hôtel photo only (no city stock fallback); skip past outbound dates
+      const today = new Date()
+      const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      const withHotelPhoto = (Array.isArray(list) ? list : []).filter((d) => {
+        if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim())) return false
+        const out = String(d.dates?.outbound || '').slice(0, 10)
+        return out.length >= 10 && out >= todayIso
+      })
       setDeals(withHotelPhoto)
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))

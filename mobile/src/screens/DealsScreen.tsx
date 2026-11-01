@@ -181,9 +181,13 @@ export function DealsScreen() {
             setOccasionChips([])
           })
         const list = await listPromise
-        const withHotelPhoto = (Array.isArray(list) ? list : []).filter(
-          (d) => Boolean(d.hotel?.photo || (d.image_url && String(d.image_url).trim())),
-        )
+        const today = new Date()
+        const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        const withHotelPhoto = (Array.isArray(list) ? list : []).filter((d) => {
+          if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim())) return false
+          const out = String(d.dates?.outbound || '').slice(0, 10)
+          return out.length >= 10 && out >= todayIso
+        })
         setDeals(withHotelPhoto)
         lastFetchAtRef.current = Date.now()
       } catch (e) {
@@ -463,7 +467,7 @@ export function DealsScreen() {
                   <View style={styles.sortRowCompact}>
                     {(
                       [
-                        ['recommended', 'Reco'],
+                        ['recommended', 'Recommandé'],
                         ['price_asc', 'Prix ↑'],
                         ['price_desc', 'Prix ↓'],
                       ] as const

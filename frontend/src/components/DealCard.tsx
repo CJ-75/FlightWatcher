@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  boardLabelFr,
   dealAdults,
-  dealBadgeLabels,
   dealCornerBadgeParts,
-  directFlightLabel,
-  hotelCancelLabel,
 } from '@flightwatcher/shared'
 import type { TravelDeal } from '../types'
 import { useI18n } from '../contexts/I18nContext'
@@ -288,7 +284,6 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
 
   const outTime = formatClock(deal.flight?.outbound_local || deal.flight?.out_dep_local)
   const retTime = formatClock(deal.flight?.inbound_local || deal.flight?.ret_dep_local)
-  const board = boardLabelFr(deal.board || deal.hotel?.board)
   const dist = distanceLabel(deal)
   const rating =
     deal.hotel?.rating != null ? Number(deal.hotel.rating).toFixed(1) : null
@@ -299,16 +294,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
 
   const baggageLine = (deal.baggage_line || '').trim()
   const pills: { label: string; tone: 'neutral' | 'good' }[] = []
-  const directLabel = directFlightLabel(deal.flight)
-  if (directLabel) pills.push({ label: directLabel, tone: 'good' })
-  if (board) pills.push({ label: board, tone: 'neutral' })
-  {
-    const cancelPill =
-      hotelCancelLabel(deal.hotel, { short: true }) ||
-      dealBadgeLabels(deal).find((b) => /annul/i.test(b))
-    if (cancelPill) pills.push({ label: cancelPill, tone: 'good' })
-  }
-  const showPills = pills.slice(0, 3)
+  if (deal.flight?.direct) pills.push({ label: 'Vol direct', tone: 'good' })
+  else if (deal.flight) pills.push({ label: 'Avec escale', tone: 'neutral' })
+  const showPills = pills
 
   const priceMeta = [
     `${deal.nights} nuit${deal.nights > 1 ? 's' : ''}`,

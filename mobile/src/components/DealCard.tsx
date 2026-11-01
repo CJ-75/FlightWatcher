@@ -14,11 +14,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { TravelDeal } from '@flightwatcher/shared'
 import {
-  boardLabelFr,
   dealAdults,
-  dealBadgeLabels,
   dealCornerBadgeParts,
-  directFlightLabel,
   hotelStarsLabel,
 } from '@flightwatcher/shared'
 import { HeartIcon } from './HeartIcon'
@@ -151,7 +148,7 @@ function cardPlaceLabel(label?: string | null, fallback?: string | null): string
 }
 
 /**
- * Image-led card with booking-temptation signals (rating, times, board).
+ * Image-led card with booking-temptation signals (rating, times, flight).
  */
 export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
   const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
@@ -189,7 +186,6 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
   const outTime = formatClock(deal.flight?.outbound_local || deal.flight?.out_dep_local)
   const retTime = formatClock(deal.flight?.inbound_local || deal.flight?.ret_dep_local)
-  const board = boardLabelFr(deal.board || deal.hotel?.board)
   const dist = distanceLabel(deal)
   const rating =
     deal.hotel?.rating != null ? Number(deal.hotel.rating).toFixed(1) : null
@@ -201,12 +197,8 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
   const baggageLine = (deal.baggage_line || '').trim()
   const pills: string[] = []
-  const directLabel = directFlightLabel(deal.flight)
-  if (directLabel) pills.push(directLabel)
-  if (board) pills.push(board)
-  if (deal.hotel?.refundable || dealBadgeLabels(deal).includes('Annul. gratuite')) {
-    pills.push('Annul. OK')
-  }
+  if (deal.flight?.direct) pills.push('Vol direct')
+  else if (deal.flight) pills.push('Avec escale')
 
   const hotelMeta = [
     rating ? `${rating}/10` : null,
@@ -426,13 +418,13 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
           {pills.length > 0 || baggageLine ? (
             <View style={styles.chips}>
-              {pills.slice(0, 3).map((c) => (
+              {pills.map((c) => (
                 <View
                   key={c}
-                  style={[styles.chip, c.startsWith('Vol direct') && styles.chipGood]}
+                  style={[styles.chip, c === 'Vol direct' && styles.chipGood]}
                 >
                   <Text
-                    style={[styles.chipText, c.startsWith('Vol direct') && styles.chipGoodText]}
+                    style={[styles.chipText, c === 'Vol direct' && styles.chipGoodText]}
                   >
                     {c}
                   </Text>
