@@ -22,6 +22,7 @@ import { PassengerStepper } from './PassengerStepper'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
+  activityCitySlugFromLabel,
   airportSelectionLabel,
   arrivalDisplayLabel,
   cityDisplayNameFr,
@@ -36,6 +37,8 @@ import {
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { CityAirportSelect } from './CityAirportSelect'
+import { RestaurantStepPanel } from './RestaurantStepPanel'
+import { ActivityStepPanel } from './ActivityStepPanel'
 
 type TripGalleryDensity = 'solo' | 'duo' | 'multi'
 
@@ -1598,8 +1601,20 @@ function TripDetailView({
   const [watchBusy, setWatchBusy] = useState(false)
   const [watchInterval, setWatchInterval] = useState(3600)
   const [hotelBusy, setHotelBusy] = useState(false)
+  const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const autoScanStarted = useRef(false)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    void getApiClient()
+      .getConfig()
+      .then((cfg) => {
+        setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
+        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
+      })
+      .catch(() => undefined)
+  }, [])
 
   const syncEditFromTrip = useCallback((detail: PlannedTripDetail) => {
     setEditBudget(detail.budget_max || 150)
@@ -2127,6 +2142,15 @@ function TripDetailView({
         </section>
       ) : null}
 
+      {!scanning && trip && (plannerActivitiesEnabled || plannerRestaurantsEnabled) ? (
+        <PlannerStayExtras
+          tripId={tripId}
+          trip={trip}
+          activitiesEnabled={plannerActivitiesEnabled}
+          restaurantsEnabled={plannerRestaurantsEnabled}
+        />
+      ) : null}
+
       {!scanning && pending.length > 0 ? (
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -2336,6 +2360,71 @@ function TripDetailView({
         </div>
       ) : null}
 
+    </div>
+  )
+}
+
+function PlannerStayExtras({
+  tripId,
+  trip,
+  activitiesEnabled,
+  restaurantsEnabled,
+}: {
+  tripId: string
+  trip: PlannedTripDetail
+  activitiesEnabled: boolean
+  restaurantsEnabled: boolean
+}) {
+  const arrivalCode = parseAirportCodes(trip.arrival_airport)[0] || ''
+  const cityLabel = arrivalCode
+    ? cityDisplayNameFr(arrivalCode)
+    : trip.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
+  const citySlug = activityCitySlugFromLabel(cityLabel)
+  const dateIso = trip.dates_depart?.[0]?.date || null
+
+  return (
+    <div className="space-y-4">
+      {activitiesEnabled ? (
+        <section className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
+              Sur place
+            </p>
+            <h3 className="font-extrabold text-ink text-lg tracking-tight">
+              Activités
+            </h3>
+          </div>
+          <ActivityStepPanel
+            plannedTripId={tripId}
+            citySlug={citySlug}
+            enabled={activitiesEnabled}
+            surface="planner"
+          />
+        </section>
+      ) : null}
+
+      {restaurantsEnabled ? (
+        <section className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 shadow-soft space-y-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
+              Adresses
+            </p>
+            <h3 className="font-extrabold text-ink text-lg tracking-tight">
+              Où manger
+            </h3>
+            <p className="text-sm text-muted mt-1">
+              Colle tes liens Maps / Instagram — même avant d’avoir choisi le vol.
+            </p>
+          </div>
+          <RestaurantStepPanel
+            plannedTripId={tripId}
+            citySlug={citySlug}
+            cityLabel={cityLabel}
+            dateIso={dateIso}
+            enabled={restaurantsEnabled}
+          />
+        </section>
+      ) : null}
     </div>
   )
 }
