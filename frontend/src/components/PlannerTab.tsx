@@ -1728,19 +1728,51 @@ function TripDetailView({
           t={t}
         />
         {isOrganizer && !scanning ? (
-          <button
+          <motion.button
             type="button"
             onClick={() => void doShare()}
-            className="w-full sm:w-auto inline-flex items-center justify-between gap-6 rounded-2xl border border-orange-100 bg-[#FFF9F5] hover:bg-orange-50 px-5 py-4 text-left transition-colors"
+            whileHover={{ y: -4, scale: 1.005 }}
+            whileTap={{ scale: 0.99 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 22 }}
+            className="group relative w-full overflow-hidden rounded-[28px] border border-orange-400/20 bg-gradient-to-r from-[#21140D] via-[#3A1B0F] to-[#D94D1B] p-5 sm:p-6 text-left shadow-xl shadow-orange-950/20"
           >
-            <span>
-              <span className="block font-extrabold text-ink">Inviter des amis</span>
-              <span className="block text-sm text-muted mt-0.5">
-                Partage le lien — ils suivent le parcours.
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -right-12 -top-20 h-52 w-52 rounded-full border border-white/10 transition-transform duration-700 group-hover:scale-110"
+            />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute right-14 -bottom-24 h-44 w-44 rounded-full bg-orange-300/15 blur-2xl"
+            />
+            <span className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex min-w-0 items-center gap-4">
+                <span className="flex shrink-0 -space-x-2">
+                  {['bg-[#FF7A45]', 'bg-[#FFB36B]', 'bg-[#F6D365]'].map(
+                    (color, index) => (
+                      <span
+                        key={color}
+                        className={`flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#3A1B0F] text-sm font-black text-white shadow-md ${color}`}
+                      >
+                        {index < (trip.members || []).length ? '✓' : '+'}
+                      </span>
+                    ),
+                  )}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xl font-extrabold tracking-tight text-white">
+                    Le voyage est encore mieux à plusieurs
+                  </span>
+                  <span className="mt-1 block text-sm font-medium leading-relaxed text-white/65">
+                    Invite tes amis pour suivre le séjour et choisir ensemble.
+                  </span>
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3.5 text-sm font-extrabold text-[#D94D1B] shadow-lg shadow-black/15 transition group-hover:bg-orange-50">
+                Inviter des amis
+                <span aria-hidden className="text-lg leading-none">↗</span>
               </span>
             </span>
-            <span className="text-primary-700 font-bold shrink-0">Partager →</span>
-          </button>
+          </motion.button>
         ) : null}
       </section>
 
@@ -2241,7 +2273,7 @@ function TravelersPanel({
   }, [organizerUserId])
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-orange-100/80 bg-white shadow-md">
+    <section className="relative overflow-hidden rounded-[28px] border border-orange-100/80 bg-gradient-to-br from-white via-white to-[#FFF7F1] shadow-xl shadow-orange-950/5">
       <div
         aria-hidden
         className="pointer-events-none absolute -top-16 -right-10 w-44 h-44 rounded-full bg-[#FF6B35]/10 blur-2xl"
@@ -2251,56 +2283,69 @@ function TravelersPanel({
         className="pointer-events-none absolute -bottom-20 -left-12 w-40 h-40 rounded-full bg-[#FFB088]/15 blur-2xl"
       />
 
-      <div className="relative p-5 sm:p-6 space-y-5">
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28] mb-1">
-              {t('planner.members.kicker')}
-            </p>
-            <h3 className="font-extrabold text-xl text-slate-900 tracking-tight">
-              {t('planner.members')}
-            </h3>
-            <p className="text-sm text-slate-500 mt-0.5">
-              {t('planner.members.seats', { count, seats: seatTotal })}
-            </p>
+      <div className="relative p-4 sm:p-5 space-y-5">
+        <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#161D2A] via-[#24202A] to-[#6B2A16] p-5 sm:p-6 text-white shadow-xl">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full border border-white/10"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute right-10 -bottom-16 h-40 w-40 rounded-full bg-orange-400/15 blur-2xl"
+          />
+          <div className="relative flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300 mb-1">
+                {t('planner.members.kicker')}
+              </p>
+              <h3 className="font-extrabold text-2xl text-white tracking-tight">
+                Ta bande de voyage
+              </h3>
+              <p className="text-sm text-white/60 mt-1">
+                {t('planner.members.seats', { count, seats: seatTotal })}
+              </p>
+            </div>
+            {isOrganizer && !full ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onOpenAdd}
+                className="shrink-0 inline-flex items-center gap-1.5 text-sm font-extrabold text-[#D94D1B] bg-white hover:bg-orange-50 px-4 py-3 rounded-2xl shadow-lg shadow-black/20 disabled:opacity-50 transition-all hover:-translate-y-0.5"
+              >
+                <span className="text-lg leading-none">+</span>
+                {t('planner.members.addShort')}
+              </button>
+            ) : null}
+            {isOrganizer && full ? (
+              <span className="shrink-0 text-xs font-bold text-white bg-white/15 border border-white/15 px-3 py-2 rounded-2xl backdrop-blur-md">
+                {t('planner.members.full')}
+              </span>
+            ) : null}
           </div>
-          {isOrganizer && !full ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onOpenAdd}
-              className="shrink-0 inline-flex items-center gap-1.5 text-sm font-bold text-white bg-[#FF6B35] hover:bg-[#E85A28] px-3.5 py-2.5 rounded-2xl shadow-sm shadow-orange-500/25 disabled:opacity-50 transition-colors"
-            >
-              <span className="text-lg leading-none">+</span>
-              {t('planner.members.addShort')}
-            </button>
-          ) : null}
-          {isOrganizer && full ? (
-            <span className="shrink-0 text-xs font-bold text-slate-500 bg-slate-100 px-3 py-2 rounded-2xl">
-              {t('planner.members.full')}
-            </span>
-          ) : null}
-        </div>
 
-        <div>
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-1.5">
-            <span>{t('planner.members.places')}</span>
-            <span className="text-slate-600">
-              {count}/{seatTotal}
-            </span>
-          </div>
-          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-            <motion.div
-              initial={false}
-              animate={{ width: `${progress}%` }}
-              transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-              className="h-full rounded-full bg-gradient-to-r from-[#FF6B35] to-[#FF8A5B]"
-            />
+          <div className="relative mt-5">
+            <div className="flex items-center justify-between text-[11px] font-bold text-white/45 mb-2">
+              <span>{t('planner.members.places')}</span>
+              <span className="text-white">
+                {count}/{seatTotal}
+              </span>
+            </div>
+            <div className="h-2.5 rounded-full bg-white/10 overflow-hidden ring-1 ring-white/10">
+              <motion.div
+                initial={false}
+                animate={{ width: `${progress}%` }}
+                transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+                className="h-full rounded-full bg-gradient-to-r from-[#FF6B35] via-[#FF8A5B] to-[#FFC07D] shadow-[0_0_16px_rgba(255,107,53,0.5)]"
+              />
+            </div>
           </div>
         </div>
 
         {sorted.length === 0 && !addOpen ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center">
+          <div className="rounded-3xl border border-dashed border-orange-200 bg-white/80 px-4 py-10 text-center shadow-sm">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-orange-50 text-2xl">
+              👋
+            </div>
             <p className="text-sm font-medium text-slate-500">{t('planner.members.empty')}</p>
             {isOrganizer ? (
               <button
@@ -2314,7 +2359,7 @@ function TravelersPanel({
             ) : null}
           </div>
         ) : (
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {sorted.map((m, i) => {
               const isOrg = m.role === 'organizer'
               const label = memberLabel(
@@ -2342,10 +2387,11 @@ function TravelersPanel({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm hover:border-orange-200 hover:shadow-md transition-all"
+                  whileHover={{ y: -3 }}
+                  className="group flex items-center gap-3 rounded-3xl border border-slate-100 bg-white px-4 py-4 shadow-md shadow-slate-900/5 hover:border-orange-200 hover:shadow-lg transition-all"
                 >
                   <div
-                    className={`relative w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm ${
+                    className={`relative w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md ring-4 ring-orange-50 ${
                       showPhoto ? 'bg-slate-100' : `bg-gradient-to-br ${avatar}`
                     }`}
                   >
@@ -2413,9 +2459,9 @@ function TravelersPanel({
                       type="button"
                       disabled={busy}
                       onClick={onOpenAdd}
-                      className="w-full h-full min-h-[68px] flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 text-slate-400 hover:border-orange-300 hover:bg-[#FFF8F3] hover:text-[#E85A28] transition-colors disabled:opacity-50 px-3 py-3"
+                      className="w-full h-full min-h-[80px] flex items-center justify-center gap-2 rounded-3xl border border-dashed border-orange-200 bg-white/60 text-slate-400 hover:border-orange-400 hover:bg-white hover:text-[#E85A28] hover:shadow-md transition-all disabled:opacity-50 px-3 py-3"
                     >
-                      <span className="w-9 h-9 rounded-2xl border border-dashed border-current flex items-center justify-center text-xl font-light">
+                      <span className="w-10 h-10 rounded-full border border-dashed border-current flex items-center justify-center text-xl font-light">
                         +
                       </span>
                       <span className="text-sm font-bold">{t('planner.members.addShort')}</span>
