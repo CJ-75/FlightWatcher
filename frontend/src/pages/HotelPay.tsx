@@ -95,6 +95,12 @@ export default function HotelPay() {
               booking_id: booked.id || bookingId,
               confirmation_code: booked.confirmation_code || null,
               holder_email: email,
+              charged_price:
+                booked.charged_price != null
+                  ? Number(booked.charged_price)
+                  : booked.displayed_price != null
+                    ? Number(booked.displayed_price)
+                    : null,
             })
           } catch {
             /* best-effort */

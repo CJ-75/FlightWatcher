@@ -404,6 +404,12 @@ export function DealCheckoutFlow({
             booking_id: final.id,
             confirmation_code: final.confirmation_code,
             holder_email: email,
+            charged_price:
+              final.charged_price != null
+                ? Number(final.charged_price)
+                : final.displayed_price != null
+                  ? Number(final.displayed_price)
+                  : null,
           })
         } catch {
           /* draft mark best-effort — booking already succeeded */

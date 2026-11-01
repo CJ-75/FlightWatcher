@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -17,11 +17,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
 import {
+  buildStayPipeline,
   cityDisplayNameFr,
   formatDateFr,
   parseAirportCodes,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
+  type StayStepId,
 } from '@flightwatcher/shared'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
@@ -36,6 +38,7 @@ import {
   updateGuestTripArrival,
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
+import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { TravelersSection } from '../components/TravelersSection'
 import { Button } from '../components/ui/Button'
 import { createMyTripComposeFromTrip, preparePartnerBook } from '../lib/partnerBook'
@@ -43,7 +46,7 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, shadow, spacing } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 function departureRouteLabel(value: string | null | undefined): string {
   const codes = parseAirportCodes(value)
@@ -275,6 +278,7 @@ export function TripDetailScreen() {
 
   const addHotelFromTrip = async (tripData: EnrichedTripResponse) => {
     if (!trip) return
+    if (hotelBusy) return
     setHotelBusy(true)
     try {
       const pax = Math.max(trip.passengers || 1, (trip.members || []).length || 1)
@@ -283,15 +287,20 @@ export function TripDetailScreen() {
         passengers: pax,
         markFlightBooked: false,
       })
+      const token = String(draft?.draft_token || '').trim()
+      if (!token) {
+        throw new Error('Brouillon hôtel introuvable — réessaie')
+      }
       await rememberTrip({
-        draft_token: draft.draft_token,
+        draft_token: token,
         city: cityDisplayNameFr(
           tripData.destination_code,
           tripData.aller?.destinationFull?.split(',')[0]?.trim(),
         ),
       })
-      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
+      navigation.navigate('HotelCompose', { draftToken: token })
     } catch (e) {
+      console.warn('[planner] addHotelFromTrip', e)
       Alert.alert(
         'Erreur',
         e instanceof Error ? e.message : 'Impossible de créer le séjour hôtel',
@@ -394,6 +403,49 @@ export function TripDetailScreen() {
     }
   }
 
+  const accepted = (trip?.proposals || []).find((p) => p.status === 'accepted')
+  const pending = (trip?.proposals || []).filter((p) => p.status === 'pending')
+  const others = (trip?.proposals || []).filter(
+    (p) => p.status !== 'pending' && p.status !== 'accepted',
+  )
+  const pax = Math.max(trip?.passengers || 1, (trip?.members || []).length || 1)
+
+  const pipelineForUi = useMemo(() => {
+    if (!accepted) {
+      return buildStayPipeline({
+        flight: 'none',
+        hotel: 'none',
+        focus: 'flight',
+      })
+    }
+    return buildStayPipeline({
+      flight: 'selected_fw',
+      hotel: 'none',
+      focus: 'hotel',
+    })
+  }, [accepted])
+
+  const onPipelineStep = (id: StayStepId) => {
+    if (id === 'hotel') {
+      if (accepted) void addHotelFromTrip(accepted.trip_data)
+      else {
+        Alert.alert(
+          'Hôtel',
+          'Choisis d’abord un vol (étape 1), ou tu pourras composer l’hôtel dès qu’un vol est accepté.',
+        )
+      }
+      return
+    }
+    if (id === 'flight' && accepted) {
+      void preparePartnerBook({
+        trip: accepted.trip_data,
+        passengers: pax,
+      }).then((ps) => {
+        openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
+      })
+    }
+  }
+
   if (loading && !trip) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
@@ -417,12 +469,6 @@ export function TripDetailScreen() {
     )
   }
 
-  const pending = (trip.proposals || []).filter((p) => p.status === 'pending')
-  const accepted = (trip.proposals || []).find((p) => p.status === 'accepted')
-  const others = (trip.proposals || []).filter(
-    (p) => p.status !== 'pending' && p.status !== 'accepted',
-  )
-
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -437,7 +483,8 @@ export function TripDetailScreen() {
           <RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={colors.primary} />
         }
       >
-      <View style={[styles.summary, shadow.soft]}>
+      <View style={styles.hero}>
+        <Text style={styles.kicker}>MON SÉJOUR</Text>
         <Text style={styles.name}>{trip.name}</Text>
         <Text style={styles.meta}>
           {departureRouteLabel(trip.departure_airport)}
@@ -445,8 +492,7 @@ export function TripDetailScreen() {
             ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
             : ' · inspire'}
           {trip.direct ? ' · directs' : ''}
-        </Text>
-        <Text style={styles.meta}>
+          {' · '}
           max {trip.budget_max}€/pers
         </Text>
         {trip.dates_depart[0] && trip.dates_retour[0] ? (
@@ -455,15 +501,55 @@ export function TripDetailScreen() {
             {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
           </Text>
         ) : null}
-        <Text style={styles.status}>
-          Statut :{' '}
-          {trip.status === 'locked'
-            ? 'Confirmé'
-            : trip.status === 'scanning'
-              ? 'Scan…'
-              : 'Créé'}
-        </Text>
       </View>
+
+      <View style={[styles.pipelineCard, shadow.soft]}>
+        <Text style={styles.pipelineTitle}>Ton parcours</Text>
+        <Text style={styles.pipelineSub}>
+          Vol → Hôtel → Activités → Restos. Les deux dernières arrivent bientôt.
+        </Text>
+        <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
+      </View>
+
+      {/* Next-step callout — makes hotel link obvious */}
+      {accepted && !scanning ? (
+        <Pressable
+          onPress={() => void addHotelFromTrip(accepted.trip_data)}
+          disabled={hotelBusy}
+          style={({ pressed }) => [
+            styles.nextStepCard,
+            shadow.soft,
+            pressed && { opacity: 0.94 },
+            hotelBusy && { opacity: 0.6 },
+          ]}
+        >
+          <View style={styles.nextStepBadge}>
+            <Text style={styles.nextStepBadgeText}>ÉTAPE 2</Text>
+          </View>
+          <Text style={styles.nextStepTitle}>Composer ton hôtel</Text>
+          <Text style={styles.nextStepBody}>
+            Vol choisi. Continue ton séjour : photos, avis, prix réels, paiement
+            sécurisé.
+          </Text>
+          <Text style={styles.nextStepCta}>
+            {hotelBusy ? 'Ouverture…' : 'Voir les hôtels →'}
+          </Text>
+        </Pressable>
+      ) : !scanning && pending.length === 0 && !scanEmpty ? (
+        <View style={[styles.nextStepCardMuted, shadow.soft]}>
+          <View style={[styles.nextStepBadge, styles.nextStepBadgeMuted]}>
+            <Text style={[styles.nextStepBadgeText, styles.nextStepBadgeTextMuted]}>
+              ÉTAPE 1
+            </Text>
+          </View>
+          <Text style={styles.nextStepTitleDark}>Trouver un vol</Text>
+          <Text style={styles.nextStepBodyDark}>
+            {isOrganizer
+              ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
+              : 'L’organisateur scanne et choisit le vol pour le groupe.'}
+          </Text>
+        </View>
+      ) : null}
 
       {trip.route_ok === false ? (
         <View style={[styles.routeWarn, shadow.soft]}>
@@ -482,16 +568,6 @@ export function TripDetailScreen() {
           ) : null}
         </View>
       ) : null}
-
-      <TravelersSection
-        members={trip.members || []}
-        seats={trip.passengers}
-        currentUserId={viewUser?.id}
-        isOrganizer={!!isOrganizer}
-        busy={membersBusy}
-        onAdd={addMember}
-        onRemove={removeMember}
-      />
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -517,15 +593,15 @@ export function TripDetailScreen() {
 
       {accepted && !scanning ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Proposition acceptée</Text>
+          <Text style={styles.sectionTitle}>1 · Vol choisi</Text>
           <DestinationCard
             trip={accepted.trip_data}
-            passengers={Math.max(trip.passengers || 1, (trip.members || []).length || 1)}
+            passengers={pax}
             addHotelBusy={hotelBusy}
             onBook={() => {
               void preparePartnerBook({
                 trip: accepted.trip_data,
-                passengers: Math.max(trip.passengers || 1, (trip.members || []).length || 1),
+                passengers: pax,
               }).then((ps) => {
                 openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
               })
@@ -541,14 +617,25 @@ export function TripDetailScreen() {
         </View>
       ) : null}
 
-      {isOrganizer && !accepted && !scanning ? (
+      <TravelersSection
+        members={trip.members || []}
+        seats={trip.passengers}
+        currentUserId={viewUser?.id}
+        isOrganizer={!!isOrganizer}
+        busy={membersBusy}
+        onAdd={addMember}
+        onRemove={removeMember}
+      />
+
+      {isOrganizer && !scanning ? (
         <Pressable
           onPress={() => void shareInvite()}
           style={[styles.shareEarly, shadow.soft]}
         >
           <Text style={styles.shareEarlyTitle}>Inviter des amis</Text>
           <Text style={styles.shareEarlyBody}>
-            Partage le lien — ils voient les propositions, toi tu décides.
+            Ils voient le parcours. Toi tu décides du vol — chacun peut ensuite
+            composer son hôtel.
           </Text>
         </Pressable>
       ) : null}
@@ -568,7 +655,7 @@ export function TripDetailScreen() {
 
       {!scanning && pending.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Propositions ({pending.length})</Text>
+          <Text style={styles.sectionTitle}>1 · Choisir un vol ({pending.length})</Text>
           {pending.map((p) => (
             <ProposalBlock
               key={p.id}
@@ -668,10 +755,6 @@ export function TripDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionMuted}>Refusées ({others.length})</Text>
         </View>
-      ) : null}
-
-      {isOrganizer ? (
-        <Button label="Partager l’invitation" onPress={() => void shareInvite()} />
       ) : null}
 
       {isOrganizer ? (
@@ -839,15 +922,105 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   scroll: { flex: 1, backgroundColor: 'transparent' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.canvas },
-  summary: {
+  hero: { gap: 6, marginBottom: 4 },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+  },
+  name: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    color: colors.ink,
+    letterSpacing: -0.8,
+  },
+  meta: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted, lineHeight: 20 },
+  pipelineCard: {
     backgroundColor: colors.white,
-    borderRadius: 18,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  pipelineTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    color: colors.ink,
+    letterSpacing: -0.3,
+    paddingHorizontal: 4,
+  },
+  pipelineSub: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  nextStepCard: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
     padding: 18,
     gap: 6,
   },
-  name: { fontFamily: fonts.extrabold, fontSize: 22, color: colors.ink },
-  meta: { fontFamily: fonts.medium, fontSize: 14, color: colors.muted },
-  status: { fontFamily: fonts.bold, fontSize: 13, color: colors.primaryInk, marginTop: 4 },
+  nextStepCardMuted: {
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 18,
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  nextStepBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginBottom: 2,
+  },
+  nextStepBadgeMuted: { backgroundColor: colors.primarySoft },
+  nextStepBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.white,
+  },
+  nextStepBadgeTextMuted: { color: colors.primaryInk },
+  nextStepTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.white,
+    letterSpacing: -0.4,
+  },
+  nextStepBody: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.88)',
+    lineHeight: 20,
+  },
+  nextStepCta: {
+    marginTop: 8,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.white,
+  },
+  nextStepTitleDark: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.ink,
+    letterSpacing: -0.4,
+  },
+  nextStepBodyDark: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.muted,
+    lineHeight: 20,
+  },
   section: { gap: 12 },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   sectionMuted: { fontFamily: fonts.medium, fontSize: 13, color: colors.faint },

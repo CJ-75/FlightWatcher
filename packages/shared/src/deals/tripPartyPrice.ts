@@ -35,6 +35,71 @@ export function nightsBetween(out?: string | null, ret?: string | null): number 
 }
 
 /**
+ * Resolve party money from a Mon voyage draft payload.
+ * Prefer live flight.price_pp + locked/charged hotel total over stale breakdown.
+ */
+export function resolveDraftPartyPrice(input: {
+  adults?: number | null
+  outDate?: string | null
+  retDate?: string | null
+  payload?: Record<string, unknown> | null
+  hotelBooked?: boolean
+  /** Override from hotel_bookings.charged_price when draft lacks lock */
+  chargedHotelTotal?: number | null
+}): TripPartyPrice {
+  const payload = (input.payload || {}) as Record<string, unknown>
+  const flight = (payload.flight || {}) as Record<string, unknown>
+  const hotel = (payload.hotel || {}) as Record<string, unknown>
+  const bd = (payload.price_breakdown || {}) as Record<string, unknown>
+  const adults = Math.max(
+    1,
+    Math.min(6, Math.round(Number(input.adults || payload.adults) || 2)),
+  )
+
+  const flightPp =
+    flight.price_pp != null
+      ? Number(flight.price_pp)
+      : bd.flight_pp != null
+        ? Number(bd.flight_pp)
+        : bd.flight_pp_eur != null
+          ? Number(bd.flight_pp_eur)
+          : 0
+
+  const locked =
+    input.chargedHotelTotal != null && Number(input.chargedHotelTotal) > 0
+      ? Number(input.chargedHotelTotal)
+      : payload.hotel_charged_total != null &&
+          Number(payload.hotel_charged_total) > 0
+        ? Number(payload.hotel_charged_total)
+        : null
+
+  const hotelTotal =
+    locked ??
+    (hotel.public_hotel_price != null
+      ? Number(hotel.public_hotel_price)
+      : bd.hotel_public_total != null
+        ? Number(bd.hotel_public_total)
+        : bd.hotel_total_eur != null
+          ? Number(bd.hotel_total_eur)
+          : hotel.hotel_pp != null
+            ? Number(hotel.hotel_pp) * adults
+            : 0)
+
+  return computeTripPartyPrice({
+    adults,
+    flightPp,
+    hotelTotal,
+    cityTax:
+      (payload.excluded_fees as number | null | undefined) ??
+      (hotel.excluded_fees as number | null | undefined) ??
+      null,
+    outDate: input.outDate || String((payload.dates as { outbound?: string } | undefined)?.outbound || ''),
+    retDate: input.retDate || String((payload.dates as { inbound?: string } | undefined)?.inbound || ''),
+    nights: payload.nights != null ? Number(payload.nights) : null,
+  })
+}
+
+/**
  * @param flightPpRaw — trusted flight € / person (server)
  * @param hotelTotalRaw — trusted hotel public total for the stay
  * @param cityTaxRaw — optional city tax on site

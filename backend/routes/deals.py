@@ -885,6 +885,22 @@ async def revalidate_flight_endpoint(deal_key: str, body: RevalidateFlightReques
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/my-trip/{draft_token}/revalidate-flight")
+async def revalidate_my_trip_flight_endpoint(draft_token: str):
+    """Soft live flight price refresh for Mon voyage (Bookings / TripSummary)."""
+    try:
+        from deals.revalidate_flight import revalidate_my_trip_flight
+
+        out = revalidate_my_trip_flight(_svc(), draft_token)
+        if out.get("error") == "not_found":
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/deals/jobs/seed-baggage-policies")
 async def job_seed_baggage(authorization: Optional[str] = Header(None)):
     require_cron(authorization)
@@ -1127,6 +1143,7 @@ class MyTripHotelBookedBody(BaseModel):
     booking_id: Optional[str] = None
     confirmation_code: Optional[str] = None
     holder_email: Optional[str] = None
+    charged_price: Optional[float] = None
 
 
 @router.post("/api/deals/my-trip/{draft_token}/hotel-booked")
@@ -1144,6 +1161,7 @@ async def my_trip_hotel_booked(
             booking_id=b.booking_id,
             confirmation_code=b.confirmation_code,
             holder_email=b.holder_email,
+            charged_price=b.charged_price,
         )
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable")

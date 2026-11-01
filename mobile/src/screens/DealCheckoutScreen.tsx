@@ -14,6 +14,7 @@ import type {
   MyTripDraft,
   TravelDeal,
 } from '@flightwatcher/shared'
+import { resolveCarrierBooking } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -117,8 +118,12 @@ function buildDealFromMyTrip(d: MyTripDraft): TravelDeal | null {
       price_pp: flightPp,
       airline: fl.airline || fl.carrier,
       booking_url: fl.booking_url || pl.booking_url,
-      origin_iata: fl.origin_iata,
-      destination_iata: fl.destination_iata,
+      origin_iata:
+        fl.origin_iata || d.origin_iata || pl.origin_iata || pl.departure_airport,
+      destination_iata:
+        fl.destination_iata || d.dest_iata || pl.destination || pl.destination_iata,
+      outbound_local: fl.outbound_local || fl.out_dep_local || out,
+      inbound_local: fl.inbound_local || fl.ret_dep_local || inn,
       direct: fl.direct,
       provider: fl.provider,
     },
@@ -155,13 +160,35 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
     if (!payResult?.confirmation) return
     setConfirmation(payResult.confirmation)
     setStep('done')
-    if (draftToken) {
-      void rememberTrip({
-        draft_token: draftToken,
-        booking_id: payResult.bookingId,
-        city: deal?.city,
-      })
-    }
+    if (!draftToken) return
+    void rememberTrip({
+      draft_token: draftToken,
+      booking_id: payResult.bookingId,
+      city: deal?.city,
+    })
+    ;(async () => {
+      try {
+        let charged: number | null = null
+        if (payResult.bookingId) {
+          const b = await getApi().getHotelBooking(payResult.bookingId, {
+            draft_token: draftToken,
+          })
+          charged =
+            b.charged_price != null
+              ? Number(b.charged_price)
+              : b.displayed_price != null
+                ? Number(b.displayed_price)
+                : null
+        }
+        await getApi().markMyTripHotelBooked(draftToken, {
+          booking_id: payResult.bookingId || null,
+          confirmation_code: payResult.confirmation || null,
+          charged_price: charged,
+        })
+      } catch {
+        /* best-effort lock of paid hotel total */
+      }
+    })()
   }, [payResult, draftToken, deal?.city])
 
   useEffect(() => {
@@ -304,10 +331,17 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
     }
     if (draftToken) {
       try {
+        const charged =
+          booked.charged_price != null
+            ? Number(booked.charged_price)
+            : booked.displayed_price != null
+              ? Number(booked.displayed_price)
+              : null
         await getApi().markMyTripHotelBooked(draftToken, {
           booking_id: booked.id || id,
           confirmation_code: booked.confirmation_code || null,
           holder_email: email,
+          charged_price: charged,
         })
       } catch {
         /* non-blocking */
@@ -444,16 +478,39 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
                 ? `Code : ${confirmation}`
                 : 'Ta réservation hôtel est enregistrée.'}
             </Text>
-            {deal?.flight?.booking_url ? (
+            {deal ? (
               <Pressable
                 style={styles.btnSecondary}
-                onPress={() =>
-                  openInAppBrowser(
-                    navigation,
-                    deal.flight!.booking_url!,
-                    'Réserver le vol',
-                  )
-                }
+                onPress={() => {
+                  const fl = (deal.flight || {}) as Record<string, unknown>
+                  const resolved = resolveCarrierBooking({
+                    airline: String(fl.airline || '') || undefined,
+                    provider: String(fl.provider || '') || undefined,
+                    bookingUrl: String(fl.booking_url || deal.booking_url || ''),
+                    originIata: String(
+                      fl.origin_iata ||
+                        deal.origin_iata ||
+                        deal.departure_airport ||
+                        '',
+                    ).toUpperCase() || undefined,
+                    destIata: String(
+                      fl.destination_iata || deal.destination || '',
+                    ).toUpperCase() || undefined,
+                    outDate: deal.dates?.outbound,
+                    retDate: deal.dates?.inbound,
+                    outLocal: String(
+                      fl.outbound_local || deal.dates?.outbound || '',
+                    ) || undefined,
+                    inLocal: String(
+                      fl.inbound_local || deal.dates?.inbound || '',
+                    ) || undefined,
+                    adults: deal.adults || 2,
+                    language: 'fr',
+                  })
+                  const url = String(resolved.url || '').trim()
+                  if (!url) return
+                  openInAppBrowser(navigation, url, 'Réserver le vol')
+                }}
               >
                 <View style={styles.btnInner}>
                   <PlaneIcon size={15} />

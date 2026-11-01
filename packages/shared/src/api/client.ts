@@ -478,6 +478,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
         booking_id?: string | null
         confirmation_code?: string | null
         holder_email?: string | null
+        charged_price?: number | null
       },
     ) =>
       request<MyTripDraft>(
@@ -540,6 +541,25 @@ export function createApiClient(options: ApiClientOptions = {}) {
         method: 'POST',
         body: JSON.stringify({ adults }),
       }),
+
+    /** Soft live flight price refresh for Mon voyage drafts. */
+    revalidateMyTripFlight: (draftToken: string) =>
+      request<{
+        ok: boolean
+        revalidated?: boolean
+        available?: boolean
+        reason?: string
+        displayed_pp?: number
+        checked_pp?: number | null
+        adults?: number
+        booking_url?: string | null
+        delta_pct?: number | null
+        draft?: MyTripDraft
+        error?: string
+      }>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/revalidate-flight`,
+        { method: 'POST', body: JSON.stringify({}) },
+      ),
 
     prebookHotel: (body: HotelBookingPrebookRequest) =>
       request<HotelBookingPrebookResponse>('/api/hotel-bookings/prebook', {

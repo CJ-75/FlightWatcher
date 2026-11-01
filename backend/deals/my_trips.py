@@ -274,6 +274,98 @@ def save_compose_options(
     return (res.data or [{**row, "payload": payload, "updated_at": now}])[0]
 
 
+def apply_flight_price_refresh(
+    supabase,
+    draft_token: str,
+    *,
+    price_pp: float,
+    airline: Any = None,
+    provider: Any = None,
+    booking_url: Any = None,
+    outbound_local: Any = None,
+    inbound_local: Any = None,
+    origin_iata: Any = None,
+    destination_iata: Any = None,
+    price_per_person: Optional[float] = None,
+    hotel_total: Optional[float] = None,
+    adults: int = 2,
+) -> Optional[Dict[str, Any]]:
+    """Persist a live-refreshed flight price on the Mon voyage draft."""
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return None
+    now = _now().isoformat()
+    payload = dict(row.get("payload") or {})
+    flight = dict(payload.get("flight") or {})
+    adults_n = max(1, min(6, int(adults or row.get("adults") or payload.get("adults") or 2)))
+    pp = float(price_pp or 0)
+    flight.update(
+        {
+            "price_pp": round(pp, 2),
+            "origin_iata": origin_iata or flight.get("origin_iata"),
+            "destination_iata": destination_iata or flight.get("destination_iata"),
+        }
+    )
+    if airline:
+        flight["airline"] = airline
+    if provider:
+        flight["provider"] = provider
+    if booking_url:
+        flight["booking_url"] = booking_url
+        payload["booking_url"] = booking_url
+    if outbound_local:
+        flight["outbound_local"] = outbound_local
+        flight["out_dep_local"] = outbound_local
+    if inbound_local:
+        flight["inbound_local"] = inbound_local
+        flight["ret_dep_local"] = inbound_local
+
+    flight_pp_eur = int(round(pp))
+    hotel_eur = int(round(float(hotel_total or 0)))
+    flight_total_eur = flight_pp_eur * adults_n
+    total_eur = flight_total_eur + hotel_eur
+    pack_pp = (
+        float(price_per_person)
+        if price_per_person is not None
+        else round(total_eur / adults_n, 2)
+        if adults_n
+        else float(total_eur)
+    )
+    bd = dict(payload.get("price_breakdown") or {})
+    bd.update(
+        {
+            "flight_pp": round(pp, 2),
+            "hotel_public_total": float(hotel_total or bd.get("hotel_public_total") or 0),
+            "hotel_pp": round(float(hotel_total or 0) / adults_n, 2)
+            if hotel_total
+            else bd.get("hotel_pp"),
+            "total_pp": pack_pp,
+            "flight_pp_eur": flight_pp_eur,
+            "flight_total_eur": flight_total_eur,
+            "hotel_total_eur": hotel_eur,
+            "total_eur": total_eur,
+            "per_person_eur": int(round(total_eur / adults_n)) if adults_n else total_eur,
+            "adults": adults_n,
+        }
+    )
+    payload.update(
+        {
+            "flight": flight,
+            "price_per_person": pack_pp,
+            "price_breakdown": bd,
+            "flight_price_checked_at": now,
+            "price_trust": "flight_live",
+        }
+    )
+    supabase.table("my_trip_drafts").update(
+        {"payload": payload, "updated_at": now}
+    ).eq("id", row["id"]).execute()
+    out = {**row, "payload": payload, "updated_at": now}
+    if not out.get("draft_token"):
+        out["draft_token"] = draft_token
+    return out
+
+
 def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
     """Lot F — step ① done → unlock hotel at flight dates."""
     row = get_draft(supabase, draft_token)
@@ -358,6 +450,46 @@ def record_trip_event(
         return {"ok": False, "error": str(e)}
 
 
+def _lookup_hotel_charged(
+    supabase,
+    *,
+    draft_token: str,
+    booking_id: Optional[str] = None,
+) -> Optional[float]:
+    """Paid hotel total (charged_price preferred) for a Mon voyage draft."""
+    try:
+        if booking_id:
+            res = (
+                supabase.table("hotel_bookings")
+                .select("charged_price,displayed_price")
+                .eq("id", str(booking_id))
+                .limit(1)
+                .execute()
+            )
+        else:
+            res = (
+                supabase.table("hotel_bookings")
+                .select("charged_price,displayed_price,created_at")
+                .eq("draft_token", draft_token)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        if not res.data:
+            return None
+        b = res.data[0]
+        for key in ("charged_price", "displayed_price"):
+            try:
+                v = float(b.get(key))
+                if v > 0:
+                    return round(v, 2)
+            except (TypeError, ValueError):
+                continue
+    except Exception as e:
+        logger.debug("lookup hotel charged: %s", e)
+    return None
+
+
 def mark_hotel_booked(
     supabase,
     draft_token: str,
@@ -365,6 +497,7 @@ def mark_hotel_booked(
     booking_id: Optional[str] = None,
     confirmation_code: Optional[str] = None,
     holder_email: Optional[str] = None,
+    charged_price: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """Lot D — guest hotel payment succeeded → step ② Réservé ✓."""
     row = get_draft(supabase, draft_token)
@@ -372,6 +505,19 @@ def mark_hotel_booked(
         return None
     now = _now()
     now_iso = now.isoformat()
+    payload0 = dict(row.get("payload") or {})
+    adults = max(1, min(6, int(row.get("adults") or payload0.get("adults") or 2)))
+    charged = None
+    try:
+        if charged_price is not None and float(charged_price) > 0:
+            charged = round(float(charged_price), 2)
+    except (TypeError, ValueError):
+        charged = None
+    if charged is None:
+        charged = _lookup_hotel_charged(
+            supabase, draft_token=draft_token, booking_id=booking_id
+        )
+
     extra: Dict[str, Any] = {
         "hotel_booked": True,
         "hotel_booked_at": now_iso,
@@ -382,6 +528,41 @@ def mark_hotel_booked(
         extra["hotel_confirmation_code"] = str(confirmation_code)
     if holder_email:
         extra["hotel_holder_email"] = str(holder_email).strip().lower()
+
+    if charged is not None and charged > 0:
+        hotel = dict(payload0.get("hotel") or {})
+        hotel["public_hotel_price"] = charged
+        hotel["hotel_pp"] = round(charged / adults, 2)
+        extra["hotel"] = hotel
+        extra["hotel_charged_total"] = charged
+        extra["hotel_price_locked"] = True
+
+        flight = dict(payload0.get("flight") or {})
+        try:
+            flight_pp = float(flight.get("price_pp") or 0)
+        except (TypeError, ValueError):
+            flight_pp = 0.0
+        flight_pp_eur = int(round(flight_pp))
+        hotel_eur = int(round(charged))
+        flight_total_eur = flight_pp_eur * adults
+        total_eur = flight_total_eur + hotel_eur
+        pack_pp = round(total_eur / adults, 2) if adults else float(total_eur)
+        extra["price_per_person"] = pack_pp
+        extra["price_breakdown"] = {
+            **(payload0.get("price_breakdown") or {}),
+            "flight_pp": round(flight_pp, 2),
+            "hotel_public_total": charged,
+            "hotel_pp": round(charged / adults, 2),
+            "total_pp": pack_pp,
+            "flight_pp_eur": flight_pp_eur,
+            "flight_total_eur": flight_total_eur,
+            "hotel_total_eur": hotel_eur,
+            "total_eur": total_eur,
+            "per_person_eur": int(round(total_eur / adults)) if adults else total_eur,
+            "adults": adults,
+            "hotel_charged": True,
+        }
+
     payload = _merge_payload(row, extra)
     # Keep paid trips findable — don't archive after the default 7-day draft TTL
     expires = now + timedelta(days=90)

@@ -20,6 +20,7 @@ import {
   hotelCancelLabel,
   hotelStarsLabel,
   resolveCarrierBooking,
+  resolveDraftPartyPrice,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   type HotelGalleryPhoto,
@@ -75,8 +76,13 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [marking, setMarking] = useState(false)
   const [hotelSheet, setHotelSheet] = useState(false)
   const [gallery, setGallery] = useState<HotelGalleryPhoto[]>([])
+  const [flightRefreshing, setFlightRefreshing] = useState(false)
+  const [flightUnavailable, setFlightUnavailable] = useState(false)
+  const [flightPriceHint, setFlightPriceHint] = useState<string | null>(null)
+  const [chargedHotelTotal, setChargedHotelTotal] = useState<number | null>(null)
   const leftForFlight = useRef(false)
   const seededRef = useRef(Boolean(seed))
+  const flightLiveKey = useRef<string | null>(null)
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setError(null)
@@ -131,13 +137,32 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const inn = String(draft?.ret_date || pl.dates?.inbound || '').slice(0, 10)
   const adults = Math.max(1, Number(draft?.adults || pl.adults || 2))
 
+  const originIata = String(
+    fl.origin_iata ||
+      pl.origin_iata ||
+      pl.departure_airport ||
+      draft?.origin_iata ||
+      '',
+  )
+    .trim()
+    .toUpperCase()
+  const destIata = String(
+    fl.destination_iata ||
+      pl.destination_iata ||
+      pl.destination ||
+      draft?.dest_iata ||
+      '',
+  )
+    .trim()
+    .toUpperCase()
+
   const carrier = useMemo(() => {
     return resolveCarrierBooking({
-      airline: fl.airline,
-      provider: fl.provider,
+      airline: fl.airline || fl.carrier || pl.airline,
+      provider: fl.provider || pl.provider,
       bookingUrl: fl.booking_url || pl.booking_url,
-      originIata: fl.origin_iata || draft?.origin_iata || undefined,
-      destIata: fl.destination_iata || draft?.dest_iata || undefined,
+      originIata: originIata || undefined,
+      destIata: destIata || undefined,
       outDate: out || undefined,
       retDate: inn || undefined,
       outLocal: fl.outbound_local || fl.out_dep_local || out || undefined,
@@ -145,23 +170,26 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       adults,
       language: 'fr',
     })
-  }, [fl, pl.booking_url, draft?.origin_iata, draft?.dest_iata, out, inn, adults])
+  }, [
+    fl,
+    pl.airline,
+    pl.provider,
+    pl.booking_url,
+    originIata,
+    destIata,
+    out,
+    inn,
+    adults,
+  ])
 
-  const flightUrl = String(
-    fl.booking_url || pl.booking_url || carrier.url || '',
-  ).trim()
+  // Always prefer resolved deeplink (never trust stored homepage / incomplete select).
+  const flightUrl = String(carrier.url || '').trim()
 
   const hotelId = hotelOpt ? String(hotelOpt.id || hotelOpt.hotel_id || '') : ''
   const hotelPhoto = hotelOpt
     ? String(hotelOpt.photo || hotelOpt.thumbnail || '')
     : ''
   const hotelName = hotelOpt ? String(hotelOpt.name || 'Hôtel') : ''
-  const hotelPp =
-    hotelOpt?.hotel_pp != null
-      ? Math.round(Number(hotelOpt.hotel_pp))
-      : hotelOpt?.public_hotel_price != null
-        ? Math.round(Number(hotelOpt.public_hotel_price) / adults)
-        : null
   const boardFr = boardLabelFr(hotelOpt?.board)
   const cancelFr = hotelCancelLabel({
     refundable: hotelOpt?.refundable,
@@ -176,6 +204,119 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     draft?.hotel_booked_at || pl.hotel_booked || pl.hotel_booked_at,
   )
   const externalFlight = Boolean(pl.flight_external || pl.external_flight)
+
+  const party = useMemo(
+    () =>
+      resolveDraftPartyPrice({
+        adults,
+        outDate: out,
+        retDate: inn,
+        payload: pl,
+        hotelBooked,
+        chargedHotelTotal,
+      }),
+    [adults, chargedHotelTotal, hotelBooked, inn, out, pl],
+  )
+  const flightPp = party.flightPp > 0 ? party.flightPp : null
+  const hotelPp =
+    party.hotelTotal > 0 ? Math.round(party.hotelTotal / adults) : null
+
+  /** Hydrate paid hotel total for older drafts missing hotel_charged_total. */
+  useEffect(() => {
+    if (!hotelBooked || !draftToken) return
+    if (pl.hotel_charged_total != null && Number(pl.hotel_charged_total) > 0) {
+      setChargedHotelTotal(Number(pl.hotel_charged_total))
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await getApi().listHotelBookings({ draft_token: draftToken })
+        if (cancelled || !Array.isArray(list) || !list.length) return
+        const paid = list.find(
+          (b) =>
+            b.status === 'confirmed' ||
+            b.status === 'booking_pending' ||
+            b.status === 'payment_succeeded',
+        ) || list[0]
+        const n =
+          paid?.charged_price != null
+            ? Number(paid.charged_price)
+            : paid?.displayed_price != null
+              ? Number(paid.displayed_price)
+              : null
+        if (n != null && n > 0) setChargedHotelTotal(n)
+      } catch {
+        /* soft */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [draftToken, hotelBooked, pl.hotel_charged_total])
+
+  /** Soft live flight price refresh (Bookings → TripSummary). */
+  useEffect(() => {
+    if (!draft || loading || flightBooked || externalFlight) return
+    const key = [
+      draftToken,
+      draft.origin_iata || fl.origin_iata || '',
+      draft.dest_iata || fl.destination_iata || '',
+      out,
+      inn,
+      adults,
+    ].join(':')
+    if (flightLiveKey.current === key) return
+
+    let cancelled = false
+    setFlightRefreshing(true)
+    ;(async () => {
+      try {
+        const res = await getApi().revalidateMyTripFlight(draftToken)
+        if (cancelled) return
+        flightLiveKey.current = key
+        if (res.available === false) {
+          setFlightUnavailable(true)
+          setFlightPriceHint(null)
+          return
+        }
+        setFlightUnavailable(false)
+        if (res.draft) setDraft(res.draft)
+        if (res.revalidated && res.checked_pp != null) {
+          const delta = res.delta_pct
+          if (delta != null && Math.abs(delta) >= 1) {
+            setFlightPriceHint(
+              delta > 0
+                ? `Prix actualisé (+${Math.round(Math.abs(delta))} %)`
+                : `Prix actualisé (−${Math.round(Math.abs(delta))} %)`,
+            )
+          } else {
+            setFlightPriceHint('Prix actualisé')
+          }
+        }
+      } catch {
+        /* soft — keep snapshot */
+      } finally {
+        if (!cancelled) setFlightRefreshing(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    adults,
+    draft,
+    draftToken,
+    externalFlight,
+    fl.destination_iata,
+    fl.origin_iata,
+    flightBooked,
+    inn,
+    loading,
+    out,
+  ])
+
   const pipelineSteps = useMemo(
     () =>
       buildStayPipeline({
@@ -251,16 +392,31 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   }
 
   const openFlight = () => {
-    if (!flightUrl) return
+    const resolved = resolveCarrierBooking({
+      airline: fl.airline || fl.carrier || pl.airline,
+      provider: fl.provider || pl.provider,
+      bookingUrl: fl.booking_url || pl.booking_url,
+      originIata: originIata || undefined,
+      destIata: destIata || undefined,
+      outDate: out || undefined,
+      retDate: inn || undefined,
+      outLocal: fl.outbound_local || fl.out_dep_local || out || undefined,
+      inLocal: fl.inbound_local || fl.ret_dep_local || inn || undefined,
+      adults,
+      language: 'fr',
+    })
+    const url = String(resolved.url || flightUrl || '').trim()
+    if (!url) return
     leftForFlight.current = true
     void getApi().trackMyTripEvent(draftToken, 'company_click', {
-      site: carrier.siteLabel,
+      site: resolved.siteLabel || carrier.siteLabel,
       source: 'mobile',
+      booking_url: url,
     })
     openInAppBrowser(
       navigation,
-      flightUrl,
-      carrier.ctaLabel || 'Réserver le vol',
+      url,
+      resolved.ctaLabel || carrier.ctaLabel || 'Réserver le vol',
     )
   }
 
@@ -415,10 +571,26 @@ export function TripSummaryScreen({ route, navigation }: Props) {
               .filter(Boolean)
               .join(' ')}
           </Text>
-          {fl.price_pp != null ? (
+          {flightPp != null ? (
             <Text style={styles.cardMeta}>
-              {Math.round(Number(fl.price_pp))} € / pers.
+              {flightPp} €{adults > 1 ? ' / pers.' : ''}
+              {adults > 1 ? ` · ${party.flightTotal} €` : ''}
+              {flightRefreshing ? ' · actualisation…' : ''}
             </Text>
+          ) : flightRefreshing ? (
+            <Text style={styles.cardMeta}>Actualisation du prix…</Text>
+          ) : null}
+          {flightPriceHint && !flightUnavailable ? (
+            <Text style={styles.priceHint}>{flightPriceHint}</Text>
+          ) : null}
+          {flightUnavailable && !flightBooked ? (
+            <View style={styles.warnBanner}>
+              <Text style={styles.warnTitle}>Tarif vol à vérifier</Text>
+              <Text style={styles.warnBody}>
+                Ce vol n’apparaît plus au même prix — confirme sur le site de la
+                compagnie.
+              </Text>
+            </View>
           ) : null}
           {flightBooked ? (
             <View style={styles.badgeRow}>
@@ -495,7 +667,14 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                     .join(' · ')}
                 </Text>
                 {hotelPp != null ? (
-                  <Text style={styles.priceLine}>{hotelPp} € / pers.</Text>
+                  <Text style={styles.priceLine}>
+                    {hotelBooked
+                      ? `${party.hotelTotal} € payés`
+                      : `${hotelPp} €${adults > 1 ? ' / pers.' : ''}`}
+                    {!hotelBooked && adults > 1
+                      ? ` · ${party.hotelTotal} €`
+                      : ''}
+                  </Text>
                 ) : null}
                 <View style={styles.badgeRow}>
                   {hotelBooked ? (
@@ -518,17 +697,41 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             </Text>
           )}
           <View style={styles.hotelActions}>
-            <Pressable
-              style={styles.secondaryBtn}
-              onPress={() => navigation.navigate('HotelCompose', { draftToken })}
-            >
-              <BedIcon size={15} />
-              <Text style={styles.secondaryBtnText}>
-                {hotelId ? 'Changer d’hôtel' : 'Réserver mon hôtel'}
-              </Text>
-            </Pressable>
+            {!hotelBooked ? (
+              <Pressable
+                style={styles.secondaryBtn}
+                onPress={() =>
+                  navigation.navigate('HotelCompose', { draftToken })
+                }
+              >
+                <BedIcon size={15} />
+                <Text style={styles.secondaryBtnText}>
+                  {hotelId ? 'Changer d’hôtel' : 'Réserver mon hôtel'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
+
+        {party.total > 0 ? (
+          <View style={[styles.card, shadow.soft]}>
+            <IconLabel section label="Total séjour" icon={<CardIcon size={14} />} />
+            <Text style={styles.priceLine}>
+              {party.total} €
+              {adults > 1 ? ` · ${party.perPerson} € / pers.` : ''}
+            </Text>
+            <Text style={styles.cardMeta}>
+              {[
+                party.flightTotal > 0 ? `Vol ${party.flightTotal} €` : null,
+                party.hotelTotal > 0
+                  ? `Hôtel ${party.hotelTotal} €${hotelBooked ? ' (payé)' : ''}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' + ')}
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -663,6 +866,11 @@ const styles = StyleSheet.create({
   },
   cardBody: { fontFamily: fonts.semibold, fontSize: 16, color: colors.ink },
   cardMeta: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, lineHeight: 19 },
+  priceHint: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.primaryDeep,
+  },
   priceLine: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink, marginTop: 2 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badge: { fontFamily: fonts.medium, fontSize: 12, color: colors.primary, flexShrink: 1 },

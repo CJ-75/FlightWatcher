@@ -174,7 +174,7 @@ export function PlannerScreen() {
               <Text style={styles.kicker}>PLANNER</Text>
               <Text style={styles.title}>Tes voyages</Text>
               <Text style={styles.subtitle}>
-                Crée, scanne les prix, invite tes proches.
+                Vol → Hôtel → la suite. Scanne, invite, compose ton séjour.
               </Text>
             </View>
           }
@@ -203,7 +203,8 @@ export function PlannerScreen() {
                   </View>
                   <Text style={styles.emptyTitle}>Ton premier voyage</Text>
                   <Text style={styles.emptyBody}>
-                    Choisis une ville, scanne les prix, partage le lien.
+                    Choisis une ville, trouve un vol, puis compose l’hôtel —
+                    même parcours que Mon séjour.
                   </Text>
                   <Pressable
                     onPress={() => setShowCreate(true)}
@@ -319,7 +320,9 @@ export function PlannerScreen() {
                     <Text style={styles.tripDates}>{dateLabel}</Text>
                   ) : null}
                   <View style={styles.cardFooter}>
-                    <Text style={styles.openHint}>Voir le voyage</Text>
+                    <Text style={styles.openHint}>
+                      {item.status === 'locked' ? 'Vol → Hôtel' : 'Ouvrir le parcours'}
+                    </Text>
                     <Text style={styles.openArrow}>›</Text>
                   </View>
                 </View>
@@ -376,7 +379,7 @@ function PlannerGuestLanding({
 
   const steps = [
     { title: 'Crée le voyage', detail: 'Dates, budget et voyageurs' },
-    { title: 'Scanne les prix', detail: 'Accepte la meilleure offre' },
+    { title: 'Vol puis hôtel', detail: 'Accepte un vol, compose ton séjour' },
     { title: 'Invite tes proches', detail: 'Un lien pour amis et famille' },
   ]
 

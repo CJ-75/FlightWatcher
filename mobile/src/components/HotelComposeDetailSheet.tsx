@@ -630,7 +630,12 @@ export function HotelComposeDetailSheet({
             <Pressable
               style={[styles.cta, saving && styles.ctaDisabled]}
               disabled={saving}
-              onPress={onConfirm}
+              accessibilityRole="button"
+              accessibilityLabel={confirmLabel}
+              onPress={() => {
+                if (saving) return
+                onConfirm()
+              }}
             >
               <Text style={styles.ctaText}>{saving ? '…' : confirmLabel}</Text>
             </Pressable>

@@ -252,10 +252,14 @@ export function DestinationCard({
               <Pressable
                 onPress={onAddHotel}
                 disabled={addHotelBusy}
-                style={[styles.addHotelBtn, addHotelBusy && { opacity: 0.55 }]}
+                style={({ pressed }) => [
+                  styles.addHotelBtn,
+                  addHotelBusy && { opacity: 0.55 },
+                  pressed && !addHotelBusy && { opacity: 0.9 },
+                ]}
               >
                 <Text style={styles.addHotelText}>
-                  {addHotelBusy ? '…' : 'Ajouter un hôtel'}
+                  {addHotelBusy ? '…' : 'Composer mon hôtel →'}
                 </Text>
               </Pressable>
             ) : null}
@@ -426,16 +430,20 @@ const styles = StyleSheet.create({
   legPrice: { fontFamily: fonts.bold, fontSize: 14, color: colors.inkSoft, marginTop: 2 },
   actionsCol: { gap: 10 },
   addHotelBtn: {
-    marginTop: 8,
-    minHeight: 40,
+    marginTop: 4,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1.5,
+    borderColor: colors.primaryMuted,
+    paddingHorizontal: 14,
   },
   addHotelText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.primary,
-    textDecorationLine: 'underline',
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.primaryInk,
     includeFontPadding: false,
   },
   bookBtn: {

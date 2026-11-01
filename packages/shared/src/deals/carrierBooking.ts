@@ -216,6 +216,81 @@ type AirlineResolved = {
   copyHint: string | null
 }
 
+/** True if Ryanair URL already carries a usable O/D + dates select. */
+function isCompleteRyanairDeeplink(url: string): boolean {
+  const raw = String(url || '').trim()
+  if (!/ryanair\.com/i.test(raw)) return false
+  try {
+    const u = new URL(raw)
+    const origin =
+      u.searchParams.get('originIata') || u.searchParams.get('tpOriginIata') || ''
+    const dest =
+      u.searchParams.get('destinationIata') ||
+      u.searchParams.get('tpDestinationIata') ||
+      ''
+    const out = u.searchParams.get('dateOut') || u.searchParams.get('tpStartDate') || ''
+    const inn = u.searchParams.get('dateIn') || u.searchParams.get('tpEndDate') || ''
+    return Boolean(
+      /\/trip\/flights/i.test(u.pathname) &&
+        origin.length === 3 &&
+        dest.length === 3 &&
+        toRyanairDate(out) &&
+        toRyanairDate(inn),
+    )
+  } catch {
+    return false
+  }
+}
+
+/** True if URL is a carrier homepage / incomplete shell — rebuild deeplink instead. */
+function isCarrierHomepageUrl(url: string, row: CarrierBookingRow | null): boolean {
+  const raw = String(url || '').trim().toLowerCase()
+  if (!raw.startsWith('http')) return false
+  // Incomplete Ryanair select (no O/D/dates) must be rebuilt
+  if (/ryanair\.com/i.test(raw) && !isCompleteRyanairDeeplink(raw)) return true
+  if (/[?&](originIata|tpOriginIata|dateOut)=/i.test(raw) && !/ryanair\.com/i.test(raw)) {
+    return false
+  }
+  const home = String(row?.homepage_url || '').trim().toLowerCase().replace(/\/$/, '')
+  const bare = raw.replace(/\/$/, '').split('?')[0] || ''
+  if (home && (bare === home || bare.startsWith(home + '/'))) {
+    if (!/\/trip\//i.test(bare)) return true
+  }
+  if (/^https?:\/\/(www\.)?ryanair\.com(\/[a-z]{2}\/[a-z]{2})?\/?$/i.test(bare)) {
+    return true
+  }
+  return false
+}
+
+function tryRyanairDeeplink(
+  origin: string,
+  dest: string,
+  out: string,
+  ret: string,
+  adults: number,
+  siteLabel: string,
+  airlineName: string,
+): AirlineResolved | null {
+  if (!(origin && dest && out && ret)) return null
+  try {
+    return {
+      url: buildRyanairBookingUrl(
+        {
+          aller: { origin, destination: dest, departureTime: out },
+          retour: { departureTime: ret },
+        },
+        adults,
+      ),
+      kind: 'deeplink',
+      siteLabel,
+      airlineName,
+      copyHint: null,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Resolve airline site only (never Aviasales). */
 function resolveAirlineOnly(input: ResolveCarrierBookingInput): AirlineResolved {
   const adults = Math.min(6, Math.max(1, Math.round(Number(input.adults) || 1)))
@@ -228,39 +303,29 @@ function resolveAirlineOnly(input: ResolveCarrierBookingInput): AirlineResolved 
   const siteLabel = row?.site_label || 'la compagnie'
   const raw = String(input.bookingUrl || '').trim()
 
-  if (raw.startsWith('http') && !isAffiliateUrl(raw)) {
-    return {
-      url: raw,
-      kind: 'deeplink',
-      siteLabel,
-      airlineName,
-      copyHint: null,
-    }
-  }
-
   const origin = String(input.originIata || '').toUpperCase()
   const dest = String(input.destIata || '').toUpperCase()
   const out = String(input.outLocal || input.outDate || '')
   const ret = String(input.inLocal || input.retDate || '')
 
-  if (row?.supports_deeplink === 'ryanair' && origin && dest && out && ret) {
-    try {
-      return {
-        url: buildRyanairBookingUrl(
-          {
-            aller: { origin, destination: dest, departureTime: out },
-            retour: { departureTime: ret },
-          },
-          adults,
-        ),
-        kind: 'deeplink',
-        siteLabel,
-        airlineName,
-        copyHint: null,
-      }
-    } catch {
-      /* homepage */
-    }
+  const wantsRyanair =
+    row?.supports_deeplink === 'ryanair' ||
+    /ryanair/i.test(String(input.provider || airlineRaw || '')) ||
+    /ryanair\.com/i.test(raw)
+
+  // Prefer a freshly built deeplink whenever O/D + dates are known (Bookings drafts
+  // often store homepage or an incomplete /trip/flights/select shell).
+  if (wantsRyanair) {
+    const built = tryRyanairDeeplink(
+      origin,
+      dest,
+      out,
+      ret,
+      adults,
+      siteLabel === 'la compagnie' ? 'ryanair.com' : siteLabel,
+      airlineName || 'Ryanair',
+    )
+    if (built) return built
   }
 
   if (row?.supports_deeplink === 'transavia' && origin && dest && out && ret) {
@@ -277,30 +342,19 @@ function resolveAirlineOnly(input: ResolveCarrierBookingInput): AirlineResolved 
     }
   }
 
+  // Keep only complete non-affiliate deeplinks when we cannot rebuild
   if (
-    (!row || row.supports_deeplink === 'ryanair') &&
-    /ryanair/i.test(String(input.provider || airlineRaw || '')) &&
-    origin &&
-    dest &&
-    out &&
-    ret
+    raw.startsWith('http') &&
+    !isAffiliateUrl(raw) &&
+    !isCarrierHomepageUrl(raw, row) &&
+    (!/ryanair\.com/i.test(raw) || isCompleteRyanairDeeplink(raw))
   ) {
-    try {
-      return {
-        url: buildRyanairBookingUrl(
-          {
-            aller: { origin, destination: dest, departureTime: out },
-            retour: { departureTime: ret },
-          },
-          adults,
-        ),
-        kind: 'deeplink',
-        siteLabel: 'ryanair.com',
-        airlineName: airlineName || 'Ryanair',
-        copyHint: null,
-      }
-    } catch {
-      /* fall through */
+    return {
+      url: raw,
+      kind: 'deeplink',
+      siteLabel,
+      airlineName,
+      copyHint: null,
     }
   }
 

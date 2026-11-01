@@ -133,8 +133,9 @@ def resolve_trusted_hotel(
     checkout: str,
     adults: int,
     flight_pp: float,
+    compose_options: Optional[list] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Resolve hotel offer from deal candidates or rates cache (never client totals)."""
+    """Resolve hotel offer from deal candidates, compose snapshot, or rates cache."""
     hid = _hotel_id(hotel_ref)
     if deal:
         candidates = _hotels_from_deal(deal)
@@ -144,6 +145,14 @@ def resolve_trusted_hotel(
                 return matched
         elif deal.get("hotel") and _hotel_public_total(deal["hotel"], adults) is not None:
             return deal["hotel"]
+
+    # Planner / Search compose: options already saved on the draft (LiteAPI upsell)
+    if hid and compose_options:
+        matched = _match_hotel_in_list(
+            [h for h in compose_options if isinstance(h, dict)], hid
+        )
+        if matched and _hotel_public_total(matched, adults) is not None:
+            return matched
 
     if hid:
         from_rates = _resolve_hotel_from_rates(
@@ -157,6 +166,10 @@ def resolve_trusted_hotel(
         )
         if from_rates:
             return from_rates
+
+    # Soft trust: client hotel_ref with a priced total (compose live rates)
+    if hid and hotel_ref and _hotel_public_total(hotel_ref, adults) is not None:
+        return dict(hotel_ref)
 
     # Last resort: deal primary hotel already server-built
     if deal and deal.get("hotel"):
@@ -306,6 +319,10 @@ def trust_hotel_patch(
     else:
         flight_pp = float(_as_float(flight.get("price_pp")) or 0)
 
+    compose_opts = payload.get("compose_options")
+    if not isinstance(compose_opts, list):
+        compose_opts = None
+
     hotel = resolve_trusted_hotel(
         supabase,
         hotel_ref=hotel_ref,
@@ -315,9 +332,12 @@ def trust_hotel_patch(
         checkout=checkout,
         adults=adults,
         flight_pp=flight_pp,
+        compose_options=compose_opts,
     )
     if not hotel:
-        raise ValueError("hotel_unverified")
+        raise ValueError(
+            "hotel_unverified — tarif non confirmé, choisis un autre hôtel ou réessaie"
+        )
 
     hotel_total = _hotel_public_total(hotel, adults)
     if hotel_total is None:

@@ -4,10 +4,10 @@ import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
   airportDisplayNameFr,
   buildStayPipeline,
-  computeTripPartyPrice,
   distantAirportLine,
   hotelCancelLabel,
   resolveCarrierBooking,
+  resolveDraftPartyPrice,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   type StayStepId,
@@ -97,6 +97,8 @@ export default function MyTrip() {
   const trackedView = useRef(false)
   /** One live hotel revalidate per token+hotel (avoid loop after persist). */
   const hotelLiveKey = useRef<string | null>(null)
+  /** One live flight revalidate per token+route (avoid loop after persist). */
+  const flightLiveKey = useRef<string | null>(null)
 
   const track = useCallback(
     (event: string, meta?: Record<string, unknown>) => {
@@ -171,46 +173,23 @@ export default function MyTrip() {
   const adults = Math.max(1, Number(draft?.adults || payload.adults || 2))
   const outDate = draft?.out_date || payload.dates?.outbound
   const retDate = draft?.ret_date || payload.dates?.inbound
-  const bd = payload.price_breakdown || {}
+  const hotelBookedEarly = Boolean(
+    draft?.hotel_booked_at || payload.hotel_booked || payload.hotel_booked_at,
+  )
 
   const party = useMemo(() => {
-    if (bd.total_eur != null && bd.flight_total_eur != null) {
-      return {
-        adults: Number(bd.adults) || adults,
-        nights: Number(payload.nights) || 0,
-        flightPp: Number(bd.flight_pp_eur) || 0,
-        flightTotal: Number(bd.flight_total_eur) || 0,
-        hotelTotal: Number(bd.hotel_total_eur) || 0,
-        total: Number(bd.total_eur) || 0,
-        perPerson: Number(bd.per_person_eur) || 0,
-        cityTax:
-          bd.city_tax_eur != null && Number(bd.city_tax_eur) > 0
-            ? Number(bd.city_tax_eur)
-            : null,
-      }
-    }
-    const flightPp =
-      flight.price_pp != null
-        ? Number(flight.price_pp)
-        : bd.flight_pp != null
-          ? Number(bd.flight_pp)
-          : null
-    const hotelTotal =
-      hotelObj?.public_hotel_price != null
-        ? Number(hotelObj.public_hotel_price)
-        : bd.hotel_public_total != null
-          ? Number(bd.hotel_public_total)
-          : null
-    return computeTripPartyPrice({
+    return resolveDraftPartyPrice({
       adults,
-      flightPp,
-      hotelTotal,
-      cityTax: payload.excluded_fees ?? hotelObj?.excluded_fees ?? null,
       outDate,
       retDate,
-      nights: payload.nights,
+      payload,
+      hotelBooked: hotelBookedEarly,
+      chargedHotelTotal:
+        payload.hotel_charged_total != null
+          ? Number(payload.hotel_charged_total)
+          : null,
     })
-  }, [adults, bd, flight.price_pp, hotelObj, outDate, payload, retDate])
+  }, [adults, hotelBookedEarly, outDate, payload, retDate])
 
   const nights = party.nights || Number(payload.nights) || 0
 
@@ -721,29 +700,54 @@ export default function MyTrip() {
     ],
   )
 
-  /** Soft revalidate on load — price change / flight gone (§7). */
+  /** Soft live flight price refresh on load (Bookings / Mon voyage). */
   useEffect(() => {
-    if (!draft?.deal_key || loading) return
+    if (!token || !draft || loading || flightBooked) return
+    if (payload.flight_external || payload.external_flight) return
+    const key = `${token}:${outDate}:${retDate}:${adults}`
+    if (flightLiveKey.current === key) return
     let cancelled = false
     ;(async () => {
       try {
-        const res = await getApiClient().revalidateDealFlight(
-          String(draft.deal_key),
-          adults,
-        )
+        const res = await getApiClient().revalidateMyTripFlight(token)
         if (cancelled || !res?.ok) return
+        flightLiveKey.current = key
         if (res.available === false) {
           setFlightUnavailable(true)
           return
         }
+        setFlightUnavailable(false)
+        if (res.draft) setDraft(res.draft as typeof draft)
       } catch {
-        /* soft fail */
+        flightLiveKey.current = key
+        /* soft fail — fall back to deal_key check for multi-pax */
+        if (!draft.deal_key) return
+        try {
+          const res = await getApiClient().revalidateDealFlight(
+            String(draft.deal_key),
+            adults,
+          )
+          if (cancelled || !res?.ok) return
+          if (res.available === false) setFlightUnavailable(true)
+        } catch {
+          /* soft */
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [adults, draft?.deal_key, loading])
+  }, [
+    adults,
+    draft,
+    flightBooked,
+    loading,
+    outDate,
+    payload.external_flight,
+    payload.flight_external,
+    retDate,
+    token,
+  ])
 
   /**
    * Live hotel sync on trip load — price + refundable/cancel from LiteAPI

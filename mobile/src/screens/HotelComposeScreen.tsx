@@ -11,7 +11,11 @@ import {
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { type HotelUpsellOption, type MyTripDraft } from '@flightwatcher/shared'
+import {
+  resolveCarrierBooking,
+  type HotelUpsellOption,
+  type MyTripDraft,
+} from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
@@ -145,7 +149,6 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   const payload = (draft?.payload || {}) as Record<string, unknown>
   const flight = (payload.flight || {}) as Record<string, unknown>
   const flightPp = Number(flight.price_pp || 0)
-  const flightUrl = String(flight.booking_url || payload.booking_url || '').trim()
   const checkin = String(
     draft?.out_date || (payload.dates as { outbound?: string } | undefined)?.outbound || '',
   ).slice(0, 10)
@@ -153,6 +156,27 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     draft?.ret_date || (payload.dates as { inbound?: string } | undefined)?.inbound || '',
   ).slice(0, 10)
   const adults = Number(draft?.adults || payload.adults || 2)
+  const flightUrl = (() => {
+    const raw = String(flight.booking_url || payload.booking_url || '').trim()
+    try {
+      const resolved = resolveCarrierBooking({
+        airline: String(flight.airline || flight.carrier || '') || undefined,
+        provider: String(flight.provider || '') || undefined,
+        bookingUrl: raw,
+        originIata: String(flight.origin_iata || draft?.origin_iata || '') || undefined,
+        destIata: String(flight.destination_iata || draft?.dest_iata || '') || undefined,
+        outDate: checkin || undefined,
+        retDate: checkout || undefined,
+        outLocal: String(flight.outbound_local || flight.out_dep_local || checkin || '') || undefined,
+        inLocal: String(flight.inbound_local || flight.ret_dep_local || checkout || '') || undefined,
+        adults,
+        language: 'fr',
+      })
+      return String(resolved.url || raw).trim()
+    } catch {
+      return raw
+    }
+  })()
 
   useEffect(() => {
     let cancelled = false
@@ -458,35 +482,53 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   }, [options, sort, adults])
 
   const confirm = async () => {
-    if (!selected) return
+    const hotel = selected
+    if (!hotel) {
+      Alert.alert('Hôtel', 'Sélectionne un hôtel dans la liste.')
+      return
+    }
+    const hid = hotelIdOf(hotel)
+    if (!hid) {
+      Alert.alert('Hôtel', 'Cet hôtel n’a pas d’identifiant — choisis-en un autre.')
+      return
+    }
     setSaving(true)
     setEmptyKind(null)
+    // Close fullScreen Modal BEFORE navigate (otherwise iOS keeps modal on top → “rien ne se passe”)
+    setSheetOpen(false)
     try {
-      const hotelPp = Number(selected.hotel_pp || 0)
+      const hotelPp = Number(hotel.hotel_pp || 0)
       const totalPp = Math.round(flightPp + hotelPp)
       await getApi().updateMyTripHotel(draftToken, {
         hotel: {
-          id: selected.id || selected.hotel_id,
-          hotel_id: selected.hotel_id || selected.id,
-          name: selected.name,
-          stars: selected.stars,
-          rating: selected.rating,
-          photo: selected.photo || selected.thumbnail,
-          board: selected.board,
-          public_hotel_price: selected.public_hotel_price,
-          hotel_pp: selected.hotel_pp,
-          distance_m: selected.distance_m,
-          refundable: selected.refundable,
-          cancel_deadline: selected.cancel_deadline ?? null,
+          id: hotel.id || hotel.hotel_id,
+          hotel_id: hotel.hotel_id || hotel.id,
+          name: hotel.name,
+          stars: hotel.stars,
+          rating: hotel.rating,
+          photo: hotel.photo || hotel.thumbnail,
+          board: hotel.board,
+          public_hotel_price: hotel.public_hotel_price,
+          hotel_pp: hotel.hotel_pp,
+          distance_m: hotel.distance_m,
+          refundable: hotel.refundable,
+          cancel_deadline: hotel.cancel_deadline ?? null,
         },
         price_per_person: totalPp,
       })
-      navigation.navigate('DealCheckout', {
-        draftToken,
-        hotelId: hotelIdOf(selected) || undefined,
+      // Defer so Modal unmount finishes before stack push
+      requestAnimationFrame(() => {
+        navigation.navigate('DealCheckout', {
+          draftToken,
+          hotelId: hid,
+        })
       })
-    } catch {
-      Alert.alert('Erreur', 'Impossible d’enregistrer l’hôtel')
+    } catch (e) {
+      setSheetOpen(true)
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible d’enregistrer l’hôtel',
+      )
     } finally {
       setSaving(false)
     }
