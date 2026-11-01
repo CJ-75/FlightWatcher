@@ -19,6 +19,7 @@ import {
   type TripItemStatus,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
+import { rememberTrip } from '../utils/tripRecovery'
 
 type ItemRow = {
   id: string
@@ -202,14 +203,25 @@ export function ActivityStepPanel(props: {
   const titleOf = (it: ItemRow) =>
     String(it.places?.name || it.meta?.title || 'Activité')
 
-  const catalogHref = activitiesCityPath(props.citySlug || 'paris')
+  const catalogHref = activitiesCityPath(props.citySlug || 'paris', {
+    draftToken: draftToken || undefined,
+    plannedTripId: plannedTripId || undefined,
+  })
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         <Link
           to={catalogHref}
-          onClick={() => track('browse_catalog')}
+          onClick={() => {
+            track('browse_catalog')
+            if (draftToken) {
+              rememberTrip({
+                draft_token: draftToken,
+                city: props.citySlug || null,
+              })
+            }
+          }}
           className="rounded-xl bg-primary-600 text-white text-sm font-bold px-4 py-2.5 min-h-[44px] inline-flex items-center"
         >
           {ACTIVITY_BROWSE_CATALOG_FR}

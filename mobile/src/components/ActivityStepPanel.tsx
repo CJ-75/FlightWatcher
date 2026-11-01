@@ -25,6 +25,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
+import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, spacing } from '../theme'
 
@@ -136,9 +137,17 @@ export function ActivityStepPanel(props: {
           style={styles.cta}
           onPress={() => {
             track('browse_catalog')
+            const city = props.citySlug || 'paris'
+            if (draftToken) {
+              void rememberTrip({ draft_token: draftToken, city })
+            }
             navigation.navigate('Main', {
               screen: 'Activities',
-              params: { city: props.citySlug || 'paris' },
+              params: {
+                city,
+                draftToken: draftToken || undefined,
+                plannedTripId: plannedTripId || undefined,
+              },
             })
           }}
         >

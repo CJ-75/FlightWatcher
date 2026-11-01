@@ -243,8 +243,21 @@ export function activityCategoriesSummaryFr(selectedIds: readonly string[]): str
 
 /** Deep-link paths (web + Expo linking). */
 export const ACTIVITIES_PATH = '/activites'
-export function activitiesCityPath(citySlug: string): string {
-  return `/activites/${encodeURIComponent(citySlug)}`
+export function activitiesCityPath(
+  citySlug: string,
+  opts?: {
+    draftToken?: string | null
+    plannedTripId?: string | null
+  },
+): string {
+  const base = `/activites/${encodeURIComponent(citySlug)}`
+  const q = new URLSearchParams()
+  const draft = String(opts?.draftToken || '').trim()
+  const planned = String(opts?.plannedTripId || '').trim()
+  if (draft) q.set('draft', draft)
+  if (planned) q.set('planned', planned)
+  const qs = q.toString()
+  return qs ? `${base}?${qs}` : base
 }
 
 export function savedIdeasTitleFr(city: string): string {

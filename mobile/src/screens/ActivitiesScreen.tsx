@@ -24,7 +24,10 @@ import {
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_BACK_TO_PLANNER_FR,
+  ACTIVITY_KEEP_ADDING_FR,
   ACTIVITY_SEE_PLANNER_FR,
+  ACTIVITY_SESSION_ADDED_FR,
   ACTIVITY_SORT_LABEL_FR,
   activityCitySlugFromLabel,
   activityDestinationLabelFr,
@@ -35,7 +38,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
-import { listRememberedTrips } from '../lib/tripRecovery'
+import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { ActivityCard } from '../components/ActivityCard'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { ActivityTripHero } from '../components/ActivityTripHero'
@@ -74,12 +77,17 @@ export function ActivitiesScreen() {
   const [pendingBook, setPendingBook] = useState<ActivityCardModel | null>(null)
   const [askBooked, setAskBooked] = useState(false)
   const pendingRef = useRef<ActivityCardModel | null>(null)
+  const draftFromRoute = route.params?.draftToken?.trim() || ''
+  const plannedFromRoute = route.params?.plannedTripId?.trim() || ''
   const [activeTrip, setActiveTrip] = useState<{
-    draftToken: string
+    draftToken?: string
+    plannedTripId?: string
     slug: string
     label: string
   } | null>(null)
   const [plannerCount, setPlannerCount] = useState(0)
+  const [sessionAdded, setSessionAdded] = useState(0)
+  const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
   const didAutoCity = useRef(false)
@@ -93,52 +101,89 @@ export function ActivitiesScreen() {
     let cancelled = false
     void (async () => {
       const remembered = await listRememberedTrips()
-      const latest = remembered[0]
-      if (!latest?.draft_token) {
+      const fromRoute = draftFromRoute
+        ? remembered.find((t) => t.draft_token === draftFromRoute) || {
+            draft_token: draftFromRoute,
+            city: citySlug || null,
+            at: Date.now(),
+          }
+        : null
+      const latest = fromRoute || remembered[0]
+
+      if (plannedFromRoute && !draftFromRoute) {
+        const slug = citySlug || 'paris'
+        if (cancelled) return
+        setActiveTrip({
+          plannedTripId: plannedFromRoute,
+          slug,
+          label: activityDestinationLabelFr(slug),
+        })
+        didAutoCity.current = true
+      } else if (latest?.draft_token) {
+        const raw = String(latest.city || citySlug || '')
+          .trim()
+          .toLowerCase()
+        const known = raw
+          ? ACTIVITY_CITY_OPTIONS_FR.find(
+              (c) => c.slug === raw || c.label.toLowerCase() === raw,
+            )
+          : null
+        const slug =
+          known?.slug || (raw ? activityCitySlugFromLabel(raw) : '') || 'paris'
+        const label = String(known?.label || latest.city || slug)
+        if (cancelled) return
+        setActiveTrip({
+          draftToken: latest.draft_token,
+          slug,
+          label,
+        })
+        if (draftFromRoute) {
+          await rememberTrip({
+            draft_token: latest.draft_token,
+            city: latest.city || label,
+          })
+        }
+        if (
+          !didAutoCity.current &&
+          slug &&
+          slug !== 'paris' &&
+          citySlug === 'paris'
+        ) {
+          didAutoCity.current = true
+          setCitySlug(slug)
+        } else {
+          didAutoCity.current = true
+        }
+      } else {
         if (!cancelled) {
           setActiveTrip(null)
           setPlannerCount(0)
         }
         return
       }
-      const raw = String(latest.city || '')
-        .trim()
-        .toLowerCase()
-      const known = raw
-        ? ACTIVITY_CITY_OPTIONS_FR.find(
-            (c) => c.slug === raw || c.label.toLowerCase() === raw,
-          )
-        : null
-      const slug =
-        known?.slug || (raw ? activityCitySlugFromLabel(raw) : '') || 'paris'
-      const label = String(known?.label || latest.city || slug)
-      if (cancelled) return
-      setActiveTrip({
-        draftToken: latest.draft_token,
-        slug,
-        label,
-      })
-      if (
-        !didAutoCity.current &&
-        slug &&
-        slug !== 'paris' &&
-        citySlug === 'paris'
-      ) {
-        didAutoCity.current = true
-        setCitySlug(slug)
-      } else {
-        didAutoCity.current = true
-      }
+
       try {
         const res = await getApi().listTripItems({
-          draft_token: latest.draft_token,
+          draft_token: latest?.draft_token || draftFromRoute || undefined,
+          planned_trip_id: plannedFromRoute || undefined,
         })
+        const codes = new Set<string>()
         const n = (res.items || []).filter((raw) => {
-          const it = raw as { item_type?: string; status?: string }
+          const it = raw as {
+            item_type?: string
+            status?: string
+            meta?: { product_code?: string }
+          }
           if (it.item_type && it.item_type !== 'activity') return false
-          return it.status !== 'skipped'
+          if (it.status === 'skipped') return false
+          const code = it.meta?.product_code ? String(it.meta.product_code) : ''
+          if (code) codes.add(code)
+          return true
         }).length
-        if (!cancelled) setPlannerCount(n)
+        if (!cancelled) {
+          setPlannerCount(n)
+          setAddedCodes(codes)
+        }
       } catch {
         if (!cancelled) setPlannerCount(0)
       }
@@ -147,7 +192,7 @@ export function ActivitiesScreen() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [draftFromRoute, plannedFromRoute])
 
   const cards = useMemo(() => {
     const matched = items.filter((r) => activityMatchesCategories(r, categories))
@@ -232,8 +277,15 @@ export function ActivitiesScreen() {
 
   const onAddToPlanner = async (card: ActivityCardModel) => {
     setAddNotice(null)
-    if (!activeTrip?.draftToken) {
-      setAddNotice(ACTIVITY_NO_TRIP_CTA_BODY_FR)
+    if (!activeTrip?.draftToken && !activeTrip?.plannedTripId) {
+      setAddNotice(
+        'Ouvre ton séjour puis « Parcourir le catalogue » pour lier les ajouts.',
+      )
+      return
+    }
+    if (card.productCode && addedCodes.has(card.productCode)) {
+      setAddNotice('Déjà dans ce planner — continue avec une autre idée.')
+      setDetail(null)
       return
     }
     setAddBusy(true)
@@ -242,13 +294,20 @@ export function ActivitiesScreen() {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
-        draft_token: activeTrip.draftToken,
+        draft_token: activeTrip.draftToken || undefined,
+        planned_trip_id: activeTrip.plannedTripId || undefined,
         platform: eventPlatform(),
         surface: 'tab',
       })
       track('add', card)
       setPlannerCount((n) => n + 1)
-      setAddNotice(ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label))
+      setSessionAdded((n) => n + 1)
+      if (card.productCode) {
+        setAddedCodes((prev) => new Set(prev).add(card.productCode))
+      }
+      setAddNotice(
+        `${ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
+      )
       setDetail(null)
     } catch (e) {
       setAddNotice(e instanceof Error ? e.message : 'Ajout impossible')
@@ -258,11 +317,11 @@ export function ActivitiesScreen() {
   }
 
   const openPlanner = () => {
-    if (!activeTrip?.draftToken) {
-      navigation.navigate('Deals')
+    if (activeTrip?.draftToken) {
+      navigation.navigate('TripSummary', { draftToken: activeTrip.draftToken })
       return
     }
-    navigation.navigate('TripSummary', { draftToken: activeTrip.draftToken })
+    navigation.navigate('Main', { screen: 'Planner' })
   }
 
   const onRefresh = () => {
@@ -280,7 +339,7 @@ export function ActivitiesScreen() {
         contentContainerStyle={{
           paddingTop: insets.top + 8,
           paddingHorizontal: spacing.xl,
-          paddingBottom: 120,
+          paddingBottom: insets.bottom + (sessionAdded > 0 ? 160 : 120),
         }}
         refreshControl={
           <RefreshControl
@@ -420,18 +479,21 @@ export function ActivitiesScreen() {
             ) : null}
           </View>
         }
-        renderItem={({ item: c }) => (
-          <ActivityCard
-            card={c}
-            onPress={() => setDetail(c)}
-            onBook={() => onBook(c)}
-            onAdd={() => void onAddToPlanner(c)}
-            addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
-            addDisabled={addBusy}
-            liked={isLiked(c.productCode)}
-            onToggleLike={() => void toggleLike(c)}
-          />
-        )}
+        renderItem={({ item: c }) => {
+          const already = Boolean(c.productCode && addedCodes.has(c.productCode))
+          return (
+            <ActivityCard
+              card={c}
+              onPress={() => setDetail(c)}
+              onBook={() => onBook(c)}
+              onAdd={() => void onAddToPlanner(c)}
+              addLabel={already ? 'Dans le planner' : ACTIVITY_ADD_TO_PLANNER_FR}
+              addDisabled={addBusy || already}
+              liked={isLiked(c.productCode)}
+              onToggleLike={() => void toggleLike(c)}
+            />
+          )
+        }}
         ListEmptyComponent={
           loading ? null : (
             <View style={[styles.emptyCard, shadow.soft]}>
@@ -525,6 +587,30 @@ export function ActivitiesScreen() {
           </View>
         </View>
       </Modal>
+
+      {activeTrip && (sessionAdded > 0 || plannerCount > 0) ? (
+        <View
+          style={[
+            styles.stickyBar,
+            shadow.soft,
+            { paddingBottom: Math.max(insets.bottom, 12) },
+          ]}
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.stickyTitle} numberOfLines={1}>
+              {sessionAdded > 0
+                ? ACTIVITY_SESSION_ADDED_FR(sessionAdded)
+                : ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)}
+            </Text>
+            <Text style={styles.stickyHint} numberOfLines={2}>
+              {ACTIVITY_KEEP_ADDING_FR}
+            </Text>
+          </View>
+          <Pressable onPress={openPlanner} style={styles.stickyCta}>
+            <Text style={styles.stickyCtaText}>{ACTIVITY_BACK_TO_PLANNER_FR}</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -547,6 +633,46 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
     includeFontPadding: false,
+  },
+  stickyBar: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    bottom: 78,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  stickyTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  stickyHint: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: colors.muted,
+    lineHeight: 15,
+  },
+  stickyCta: {
+    backgroundColor: colors.ink,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  stickyCtaText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.white,
   },
   noticeBox: {
     backgroundColor: colors.primarySoft,

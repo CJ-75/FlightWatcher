@@ -29,7 +29,13 @@ export type MainTabParamList = {
       }
     | undefined
   Deals: undefined
-  Activities: { city?: string } | undefined
+  Activities:
+    | {
+        city?: string
+        draftToken?: string
+        plannedTripId?: string
+      }
+    | undefined
   Planner: undefined
   Favorites: undefined
   Profile: undefined

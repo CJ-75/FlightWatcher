@@ -2,15 +2,19 @@
  * Onglet Activités — UI alignée Séjours / Deals (grille desktop 3 col).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ACTIVITY_ADDED_TO_PLANNER_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
+  ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_KEEP_ADDING_FR,
+  ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
   ACTIVITY_SEE_PLANNER_FR,
+  ACTIVITY_SESSION_ADDED_FR,
   ACTIVITY_SORT_LABEL_FR,
   activitiesCityPath,
   activityCategoriesSummaryFr,
@@ -24,7 +28,7 @@ import {
 } from '@flightwatcher/shared'
 import { getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
-import { listRememberedTrips } from '../utils/tripRecovery'
+import { listRememberedTrips, rememberTrip } from '../utils/tripRecovery'
 import { ActivityCitySelect } from './ActivityCitySelect'
 import { ActivityTripHero } from './ActivityTripHero'
 
@@ -181,8 +185,11 @@ function ActivityCard({
 
 export function ActivitiesTab(props?: { citySlug?: string }) {
   const params = useParams<{ city?: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const citySlug = props?.citySlug || params.city || ''
+  const draftFromUrl = searchParams.get('draft')?.trim() || ''
+  const plannedFromUrl = searchParams.get('planned')?.trim() || ''
   const [adults] = useState(2)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -198,15 +205,26 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     { city: string; title: string; productCode?: string }[]
   >([])
   const [activeTrip, setActiveTrip] = useState<{
-    draftToken: string
+    draftToken?: string
+    plannedTripId?: string
     slug: string
     label: string
   } | null>(null)
   const [plannerCount, setPlannerCount] = useState(0)
+  const [sessionAdded, setSessionAdded] = useState(0)
+  const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const didAutoCity = useRef(false)
+
+  const catalogNavOpts = useMemo(
+    () => ({
+      draftToken: draftFromUrl || activeTrip?.draftToken || undefined,
+      plannedTripId: plannedFromUrl || activeTrip?.plannedTripId || undefined,
+    }),
+    [draftFromUrl, plannedFromUrl, activeTrip],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -284,11 +302,29 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
 
   useEffect(() => {
     const remembered = listRememberedTrips()
-    const latest = remembered[0]
+    const fromUrl = draftFromUrl
+      ? remembered.find((t) => t.draft_token === draftFromUrl) || {
+          draft_token: draftFromUrl,
+          city: citySlug || null,
+          at: Date.now(),
+        }
+      : null
+    const latest = fromUrl || remembered[0]
     let tripSlug = ''
     let tripLabel = ''
-    if (latest?.draft_token) {
-      const raw = String(latest.city || '')
+
+    if (plannedFromUrl && !draftFromUrl) {
+      const raw = (citySlug || 'paris').trim().toLowerCase()
+      tripSlug = activityCitySlugFromLabel(raw) || raw || 'paris'
+      tripLabel = activityDestinationLabelFr(tripSlug)
+      setActiveTrip({
+        plannedTripId: plannedFromUrl,
+        slug: tripSlug,
+        label: tripLabel,
+      })
+      didAutoCity.current = true
+    } else if (latest?.draft_token) {
+      const raw = String(latest.city || citySlug || '')
         .trim()
         .toLowerCase()
       const known = raw
@@ -303,7 +339,12 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         slug: tripSlug,
         label: tripLabel,
       })
-      // Prefer séjour city over default Paris on first entry
+      if (draftFromUrl || fromUrl) {
+        rememberTrip({
+          draft_token: latest.draft_token,
+          city: latest.city || tripLabel,
+        })
+      }
       if (
         !didAutoCity.current &&
         tripSlug &&
@@ -311,7 +352,13 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         tripSlug !== 'paris'
       ) {
         didAutoCity.current = true
-        navigate(activitiesCityPath(tripSlug), { replace: true })
+        navigate(
+          activitiesCityPath(tripSlug, {
+            draftToken: latest.draft_token,
+            plannedTripId: plannedFromUrl || undefined,
+          }),
+          { replace: true },
+        )
       } else {
         didAutoCity.current = true
       }
@@ -320,7 +367,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       didAutoCity.current = true
     }
 
-    if (!remembered.length) {
+    const bindToken = latest?.draft_token
+    if (!bindToken && !plannedFromUrl) {
       setSavedIdeas([])
       setPlannerCount(0)
       return
@@ -329,45 +377,50 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     void (async () => {
       const out: { city: string; title: string; productCode?: string }[] = []
       let count = 0
-      for (const trip of remembered.slice(0, 3)) {
-        try {
-          const res = await getApiClient().listTripItems({
-            draft_token: trip.draft_token,
-          })
-          const city = trip.city || 'voyage'
-          for (const raw of res.items || []) {
-            const it = raw as {
-              item_type?: string
-              status?: string
-              places?: { name?: string }
-              meta?: { title?: string; product_code?: string }
-            }
-            if (it.item_type && it.item_type !== 'activity') continue
-            if (it.status === 'skipped') continue
-            if (trip.draft_token === latest?.draft_token) count += 1
-            if (it.status === 'booked') continue
-            out.push({
-              city,
-              title: String(it.places?.name || it.meta?.title || 'Activité'),
-              productCode: it.meta?.product_code
-                ? String(it.meta.product_code)
-                : undefined,
-            })
+      try {
+        const res = await getApiClient().listTripItems({
+          draft_token: bindToken || undefined,
+          planned_trip_id: plannedFromUrl || undefined,
+        })
+        for (const raw of res.items || []) {
+          const it = raw as {
+            item_type?: string
+            status?: string
+            places?: { name?: string }
+            meta?: { title?: string; product_code?: string }
           }
-        } catch {
-          /* ignore */
+          if (it.item_type && it.item_type !== 'activity') continue
+          if (it.status === 'skipped') continue
+          count += 1
+          if (it.status === 'booked') continue
+          out.push({
+            city: latest?.city || tripLabel || 'voyage',
+            title: String(it.places?.name || it.meta?.title || 'Activité'),
+            productCode: it.meta?.product_code
+              ? String(it.meta.product_code)
+              : undefined,
+          })
         }
+      } catch {
+        /* ignore */
       }
       if (!cancelled) {
         setSavedIdeas(out.slice(0, 12))
         setPlannerCount(count)
+        setAddedCodes(
+          new Set(
+            out
+              .map((x) => x.productCode)
+              .filter((c): c is string => Boolean(c)),
+          ),
+        )
       }
     })()
     return () => {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [draftFromUrl, plannedFromUrl])
 
   useEffect(() => {
     const onVis = () => {
@@ -396,9 +449,11 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     openViatorSync(card.productUrl)
   }
 
-  const plannerHref = activeTrip
+  const plannerHref = activeTrip?.draftToken
     ? `/trip/${encodeURIComponent(activeTrip.draftToken)}?activities=1`
-    : null
+    : activeTrip?.plannedTripId
+      ? '/planner'
+      : null
 
   const toggleLike = async (card: ActivityCardModel) => {
     if (!card.productCode) return
@@ -436,9 +491,16 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
 
   const onAddToPlanner = async (card: ActivityCardModel) => {
     setAddNotice(null)
-    if (!activeTrip?.draftToken) {
-      setAddNotice(ACTIVITY_NO_TRIP_CTA_BODY_FR)
+    if (!activeTrip?.draftToken && !activeTrip?.plannedTripId) {
+      setAddNotice(
+        'Ouvre ton séjour (planner) puis « Parcourir le catalogue » pour lier les ajouts.',
+      )
       setDetail(card)
+      return
+    }
+    if (card.productCode && addedCodes.has(card.productCode)) {
+      setAddNotice('Déjà dans ce planner — continue avec une autre idée.')
+      setDetail(null)
       return
     }
     setAddBusy(true)
@@ -447,13 +509,20 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
-        draft_token: activeTrip.draftToken,
+        draft_token: activeTrip.draftToken || undefined,
+        planned_trip_id: activeTrip.plannedTripId || undefined,
         platform: 'web',
         surface: 'tab',
       })
       track('add', card)
       setPlannerCount((n) => n + 1)
-      setAddNotice(ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label))
+      setSessionAdded((n) => n + 1)
+      if (card.productCode) {
+        setAddedCodes((prev) => new Set(prev).add(card.productCode))
+      }
+      setAddNotice(
+        `${ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
+      )
       setDetail(null)
     } catch (e) {
       setAddNotice(e instanceof Error ? e.message : 'Ajout impossible')
@@ -478,7 +547,9 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           plannerCount={plannerCount}
           plannerHref={plannerHref}
           showSyncCity={activeTrip.slug !== citySlug}
-          onSyncCity={() => navigate(activitiesCityPath(activeTrip.slug))}
+          onSyncCity={() =>
+            navigate(activitiesCityPath(activeTrip.slug, catalogNavOpts))
+          }
         />
       ) : (
         <ActivityTripHero mode="empty" emptyHref="/sejours" />
@@ -490,7 +561,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           valueSlug={citySlug}
           valueLabel={activityDestinationLabelFr(citySlug)}
           onChange={(city) => {
-            if (city.slug) navigate(activitiesCityPath(city.slug))
+            if (city.slug) navigate(activitiesCityPath(city.slug, catalogNavOpts))
           }}
         />
       </div>
@@ -628,20 +699,24 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         </div>
       ) : cards.length ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
-          {cards.map((c) => (
-            <ActivityCard
-              key={c.productCode || c.title}
-              card={c}
-              onOpen={() => setDetail(c)}
-              onBook={() => onBook(c)}
-              onAdd={() => {
-                void onAddToPlanner(c)
-              }}
-              liked={likedIds.has(c.productCode)}
-              onToggleLike={() => void toggleLike(c)}
-              addDisabled={addBusy}
-            />
-          ))}
+          {cards.map((c) => {
+            const already = Boolean(c.productCode && addedCodes.has(c.productCode))
+            return (
+              <ActivityCard
+                key={c.productCode || c.title}
+                card={c}
+                onOpen={() => setDetail(c)}
+                onBook={() => onBook(c)}
+                onAdd={() => {
+                  void onAddToPlanner(c)
+                }}
+                liked={likedIds.has(c.productCode)}
+                onToggleLike={() => void toggleLike(c)}
+                addLabel={already ? 'Dans le planner' : ACTIVITY_ADD_TO_PLANNER_FR}
+                addDisabled={addBusy || already}
+              />
+            )
+          })}
         </div>
       ) : !error && !loading ? (
         <div className="app-card p-8 text-center max-w-md mx-auto">
@@ -746,6 +821,25 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {activeTrip && plannerHref && (sessionAdded > 0 || plannerCount > 0) ? (
+        <div className="sticky bottom-20 sm:bottom-4 z-30 mt-6 rounded-2xl border border-primary-200 bg-white/95 backdrop-blur shadow-lift px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-extrabold text-ink">
+              {sessionAdded > 0
+                ? ACTIVITY_SESSION_ADDED_FR(sessionAdded)
+                : ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)}
+            </p>
+            <p className="text-xs text-muted mt-0.5">{ACTIVITY_KEEP_ADDING_FR}</p>
+          </div>
+          <Link
+            to={plannerHref}
+            className="shrink-0 inline-flex items-center justify-center rounded-xl bg-ink text-white px-4 py-2.5 text-sm font-bold min-h-[44px]"
+          >
+            {ACTIVITY_BACK_TO_PLANNER_FR}
+          </Link>
         </div>
       ) : null}
     </div>

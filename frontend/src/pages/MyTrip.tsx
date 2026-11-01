@@ -1573,7 +1573,21 @@ export default function MyTrip() {
                           : city
                             ? String(city).toLowerCase().replace(/\s+/g, '-')
                             : 'paris',
+                        { draftToken: token },
                       )}
+                      onClick={() => {
+                        if (token) {
+                          rememberTrip({
+                            draft_token: token,
+                            city:
+                              typeof payload.city_slug === 'string'
+                                ? payload.city_slug
+                                : city
+                                  ? String(city)
+                                  : null,
+                          })
+                        }
+                      }}
                       className="text-xs font-bold text-primary-700"
                     >
                       Catalogue

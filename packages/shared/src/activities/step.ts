@@ -26,7 +26,12 @@ export const ACTIVITY_NO_TRIP_CTA_BODY_FR =
 export const ACTIVITY_NO_TRIP_CTA_BUTTON_FR = 'Voir les séjours'
 export const ACTIVITY_ADDED_TO_PLANNER_FR = (city: string) =>
   `Ajouté au planner · ${city}`
+export const ACTIVITY_KEEP_ADDING_FR =
+  'Continue — ajoute d’autres idées, puis reviens au planner.'
+export const ACTIVITY_SESSION_ADDED_FR = (n: number) =>
+  n <= 1 ? '1 activité ajoutée' : `${n} activités ajoutées`
 export const ACTIVITY_SEE_PLANNER_FR = 'Voir le planner'
+export const ACTIVITY_BACK_TO_PLANNER_FR = 'Retour au planner'
 /** Kept for later / parcours global — not shown in Affiner Activités for now. */
 export const ACTIVITY_NEARBY_LABEL_FR = 'Autour de moi'
 export const ACTIVITY_NEARBY_CLOSER_FR = 'Plus près'
