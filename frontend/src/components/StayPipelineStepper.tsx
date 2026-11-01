@@ -3,6 +3,7 @@ import type { StayPipelineStep, StayStepId } from '@flightwatcher/shared'
 type Props = {
   steps: StayPipelineStep[]
   onStepPress?: (id: StayStepId) => void
+  variant?: 'light' | 'dark'
 }
 
 function StepGlyph({
@@ -48,7 +49,8 @@ function StepGlyph({
   }
 }
 
-export function StayPipelineStepper({ steps, onStepPress }: Props) {
+export function StayPipelineStepper({ steps, onStepPress, variant = 'light' }: Props) {
+  const dark = variant === 'dark'
   const n = Math.max(steps.length, 1)
   let lastDone = -1
   for (let i = 0; i < steps.length; i++) {
@@ -68,7 +70,7 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
           marginRight: `calc(100% / ${n} / 2)`,
         }}
       >
-        <div className="h-full w-full rounded-full bg-line" />
+        <div className={`h-full w-full rounded-full ${dark ? 'bg-white/15' : 'bg-line'}`} />
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-primary-300"
           style={{ width: `${progressPct}%` }}
@@ -95,13 +97,19 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
               >
                 <span
                   className={[
-                    'relative z-[1] w-11 h-11 rounded-full flex items-center justify-center shadow-soft ring-4 ring-[#FFF9F5]',
+                    `relative z-[1] w-11 h-11 rounded-full flex items-center justify-center shadow-soft ring-4 ${
+                      dark ? 'ring-white/10' : 'ring-[#FFF9F5]'
+                    }`,
                     isDone
                       ? 'bg-emerald-500 text-white'
                       : isCurrent
                         ? 'bg-primary-500 text-white'
                         : isOff
-                          ? 'bg-canvas text-ink-faint border border-dashed border-line-strong'
+                        ? dark
+                          ? 'bg-white/10 text-white/40 border border-dashed border-white/20'
+                          : 'bg-canvas text-ink-faint border border-dashed border-line-strong'
+                        : dark
+                          ? 'bg-white/15 text-white border border-white/20'
                           : 'bg-white text-ink-soft border border-line-strong',
                   ].join(' ')}
                 >
@@ -110,13 +118,19 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
                 <span
                   className={[
                     'text-[12px] sm:text-[13px] leading-tight px-0.5',
-                    isCurrent
-                      ? 'font-extrabold text-ink'
-                      : isDone
-                        ? 'font-bold text-ink-soft'
-                        : isOff
-                          ? 'font-semibold text-ink-faint'
-                          : 'font-bold text-ink-muted',
+                    dark
+                      ? isOff
+                        ? 'font-semibold text-white/40'
+                        : isCurrent
+                          ? 'font-extrabold text-white'
+                          : 'font-bold text-white/75'
+                      : isCurrent
+                        ? 'font-extrabold text-ink'
+                        : isDone
+                          ? 'font-bold text-ink-soft'
+                          : isOff
+                            ? 'font-semibold text-ink-faint'
+                            : 'font-bold text-ink-muted',
                   ].join(' ')}
                 >
                   {s.label}
@@ -125,11 +139,17 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
                   <span
                     className={[
                       'text-[10px] sm:text-[11px] font-semibold leading-none',
-                      isCurrent
-                        ? 'text-primary-700'
-                        : isDone
-                          ? 'text-emerald-700'
-                          : 'text-ink-faint',
+                      dark
+                        ? isCurrent
+                          ? 'text-orange-200'
+                          : isDone
+                            ? 'text-emerald-300'
+                            : 'text-white/35'
+                        : isCurrent
+                          ? 'text-primary-700'
+                          : isDone
+                            ? 'text-emerald-700'
+                            : 'text-ink-faint',
                     ].join(' ')}
                   >
                     {s.hint}

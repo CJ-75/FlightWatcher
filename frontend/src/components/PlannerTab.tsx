@@ -10,7 +10,7 @@ import type {
   TripMember,
   TripProposal,
 } from '../types'
-import { getApiClient, destinationsToAirports, normalizeDestinations } from '../utils/apiClient'
+import { getApiClient } from '../utils/apiClient'
 import { loadAirportsOnce } from '../hooks/useAirports'
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
@@ -18,19 +18,15 @@ import { DestinationCard } from './DestinationCard'
 import { BudgetSlider } from './BudgetSlider'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { createMyTripComposeFromTrip, openPartnerBookSync } from '../utils/partnerBook'
-import { PassengerStepper } from './PassengerStepper'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
   activityCitySlugFromLabel,
   buildStayPipeline,
-  airportSelectionLabel,
   arrivalDisplayLabel,
   cityDisplayNameFr,
   cityImageUrl,
-  encodeAirportCodes,
-  encodeArrivalCodes,
-  findCityGroupByKey,
+  formatAirlineLabel,
   formatDateFr,
   generateDatesFromPreset,
   groupAirportsByCity,
@@ -924,8 +920,6 @@ function TripDetailView({
   const [editPreset, setEditPreset] = useState<DatePreset>('next-weekend')
   const [showEditFlexible, setShowEditFlexible] = useState(false)
   const [savingCriteria, setSavingCriteria] = useState(false)
-  const [watchBusy, setWatchBusy] = useState(false)
-  const [watchInterval, setWatchInterval] = useState(3600)
   const [hotelBusy, setHotelBusy] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
@@ -947,9 +941,6 @@ function TripDetailView({
     setEditDatesDepart(detail.dates_depart || [])
     setEditDatesRetour(detail.dates_retour || [])
     setEditPreset('flexible')
-    setWatchInterval(
-      Math.max(900, detail.auto_scan_interval_seconds || 3600),
-    )
   }, [])
 
   const load = useCallback(async () => {
@@ -1170,37 +1161,6 @@ function TripDetailView({
     void scan().finally(() => onAutoScanDone?.())
   }, [autoScan, scan, onAutoScanDone])
 
-  const setPriceWatch = async (enabled: boolean) => {
-    if (!trip) return
-    const interval = Math.max(900, watchInterval || 3600)
-    setWatchBusy(true)
-    setError(null)
-    try {
-      const updated = await getApiClient().updatePlannedTrip(tripId, {
-        auto_scan_enabled: enabled,
-        auto_scan_interval_seconds: interval,
-      })
-      setTrip((prev) =>
-        prev
-          ? {
-              ...prev,
-              auto_scan_enabled: updated.auto_scan_enabled ?? enabled,
-              auto_scan_interval_seconds:
-                updated.auto_scan_interval_seconds ?? interval,
-            }
-          : prev,
-      )
-      setWatchInterval(updated.auto_scan_interval_seconds ?? interval)
-      onToast(
-        enabled ? t('planner.watch.on') : t('planner.watch.off'),
-      )
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
-    } finally {
-      setWatchBusy(false)
-    }
-  }
-
   const accept = async (id: string) => {
     setActing(id)
     try {
@@ -1353,9 +1313,14 @@ function TripDetailView({
           trip.dates_retour[trip.dates_retour.length - 1].date,
         )}`
       : null
+  const destinationCode = parseAirportCodes(trip.arrival_airport)[0] || ''
+  const destinationName = destinationCode
+    ? cityDisplayNameFr(destinationCode)
+    : trip.name.replace(/^Weekend\s+/i, '')
+  const destinationImage = cityImageUrl(destinationName || null, destinationCode || undefined)
 
   return (
-    <div className="w-full space-y-8">
+    <div className="w-full space-y-8 pb-8">
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
@@ -1370,38 +1335,44 @@ function TripDetailView({
       </div>
 
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-[28px] border border-orange-100/80 bg-white shadow-md">
-        <div
+      <motion.section
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-[32px] border border-white/20 bg-[#211610] shadow-2xl shadow-orange-950/20 min-h-[390px]"
+      >
+        <img
+          src={destinationImage}
+          alt=""
           aria-hidden
-          className="pointer-events-none absolute -top-24 -right-16 w-72 h-72 rounded-full bg-[#FF6B35]/12 blur-3xl"
+          className="absolute inset-0 h-full w-full object-cover"
         />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-28 -left-20 w-64 h-64 rounded-full bg-[#FFB088]/20 blur-3xl"
-        />
-        <div className="relative p-6 sm:p-8 lg:p-10 space-y-7">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#170F0B]/95 via-[#21140D]/80 to-[#21140D]/25" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/15" />
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full border border-white/15" />
+        <div className="pointer-events-none absolute -right-4 -top-4 h-32 w-32 rounded-full border border-white/10" />
+        <div className="relative p-6 sm:p-8 lg:p-10 space-y-8">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="min-w-0 space-y-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28]">
-                Mon séjour
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
+                Prochain départ · {destinationName}
               </p>
-              <h2 className="text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-ink tracking-tight leading-[1.1]">
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-[1.05] drop-shadow-sm">
                 {trip.name}
               </h2>
               <div className="flex flex-wrap gap-2 pt-1">
-                <span className="inline-flex items-center rounded-full bg-[#FFF3EC] text-[#8B2E0E] text-xs font-bold px-3 py-1.5">
+                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5">
                   {routeLine}
                 </span>
                 {dateLine ? (
-                  <span className="inline-flex items-center rounded-full bg-[#FFF3EC] text-[#8B2E0E] text-xs font-bold px-3 py-1.5">
+                  <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5">
                     {dateLine}
                   </span>
                 ) : null}
-                <span className="inline-flex items-center rounded-full bg-[#FFF3EC] text-[#8B2E0E] text-xs font-bold px-3 py-1.5">
+                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5">
                   max {trip.budget_max}€/pers
                 </span>
                 {trip.direct ? (
-                  <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-1.5">
+                  <span className="inline-flex items-center rounded-full border border-emerald-300/30 bg-emerald-400/20 backdrop-blur-md text-emerald-100 text-xs font-bold px-3 py-1.5">
                     Directs
                   </span>
                 ) : null}
@@ -1412,26 +1383,30 @@ function TripDetailView({
                 type="button"
                 disabled={scanning}
                 onClick={() => void scan()}
-                className="app-btn-primary rounded-2xl px-7 py-3.5 disabled:opacity-60 shrink-0 self-start"
+                className="rounded-2xl bg-white px-7 py-3.5 font-extrabold text-[#D94D1B] shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-orange-50 disabled:opacity-60 shrink-0 self-start"
               >
                 {scanning ? t('planner.scanning') : t('planner.scan')}
               </button>
             ) : null}
           </div>
 
-          <div className="rounded-2xl border border-orange-50 bg-[#FFF9F5]/80 px-4 sm:px-6 py-4">
+          <div className="rounded-3xl border border-white/15 bg-black/25 backdrop-blur-xl px-4 sm:px-6 py-5 shadow-inner">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
-              <p className="font-extrabold text-ink">Ton parcours</p>
-              <p className="text-xs font-semibold text-muted">
+              <p className="font-extrabold text-white">Ton parcours</p>
+              <p className="text-xs font-semibold text-white/65">
                 Vol → Hôtel
                 {plannerActivitiesEnabled ? ' → Activités' : ''}
                 {plannerRestaurantsEnabled ? ' → Adresses' : ''}
               </p>
             </div>
-            <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
+            <StayPipelineStepper
+              steps={pipelineForUi}
+              onStepPress={onPipelineStep}
+              variant="dark"
+            />
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {trip.route_ok === false ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-2">
@@ -1482,10 +1457,9 @@ function TripDetailView({
             </button>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-start">
-            <DestinationCard
+            <SelectedFlightBoardingPass
               trip={accepted.trip_data}
               passengers={pax}
-              onSaveFavorite={() => undefined}
               onBook={() => {
                 openPartnerBookSync({
                   trip: accepted.trip_data,
@@ -1493,27 +1467,50 @@ function TripDetailView({
                   language,
                 })
               }}
-              onAddHotel={() => onPipelineStep('hotel')}
             />
-            <button
+            <motion.button
               type="button"
               disabled={hotelBusy}
               onClick={() => onPipelineStep('hotel')}
-              className="text-left rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-[#FFF1E8] via-white to-[#FFE8DC] p-6 sm:p-7 shadow-md shadow-orange-500/10 disabled:opacity-60 h-full min-h-[200px] flex flex-col justify-center"
+              whileHover={{ y: -5 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+              className="group relative text-left rounded-[28px] overflow-hidden border border-white/20 bg-[#24140D] shadow-xl shadow-orange-950/20 disabled:opacity-60 h-full min-h-[360px] flex flex-col justify-end"
             >
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700">
-                Suite
-              </p>
-              <p className="mt-2 font-extrabold text-ink text-2xl tracking-tight">
-                Composer ton hôtel
-              </p>
-              <p className="text-sm text-muted mt-2 leading-relaxed max-w-sm">
-                Photos, avis, prix réels et paiement sécurisé — pour ce vol.
-              </p>
-              <p className="mt-5 text-sm font-bold text-primary-700">
-                {hotelBusy ? 'Ouverture…' : 'Voir les hôtels →'}
-              </p>
-            </button>
+              <img
+                src={destinationImage}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#160C08] via-[#24140D]/65 to-black/5" />
+              <div className="absolute left-5 top-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl backdrop-blur-md shadow-lg">
+                🏨
+              </div>
+              <div className="relative p-6 sm:p-7">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+                  Prochaine étape
+                </p>
+                <p className="mt-2 font-extrabold text-white text-2xl sm:text-3xl tracking-tight">
+                  Composer ton hôtel
+                </p>
+                <p className="text-sm text-white/75 mt-2 leading-relaxed max-w-sm">
+                  Trouve le bon quartier et compare les meilleurs séjours à {destinationName}.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {['Photos', 'Avis', 'Prix réels'].map((benefit) => (
+                    <span
+                      key={benefit}
+                      className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/90 backdrop-blur-md"
+                    >
+                      {benefit}
+                    </span>
+                  ))}
+                </div>
+                <span className="mt-6 inline-flex items-center rounded-xl bg-white px-4 py-2.5 text-sm font-extrabold text-[#D94D1B] shadow-lg">
+                  {hotelBusy ? 'Ouverture…' : 'Explorer les hôtels →'}
+                </span>
+              </div>
+            </motion.button>
           </div>
           {!isOrganizer ? (
             <p className="text-sm text-muted">
@@ -1863,144 +1860,136 @@ function PlannerStayExtras({
   )
 }
 
-function PriceWatchBanner({
-  enabled,
-  budget,
-  intervalSeconds,
-  watchInterval,
-  busy,
-  onIntervalChange,
-  onToggle,
-  t,
+function SelectedFlightBoardingPass({
+  trip,
+  passengers,
+  onBook,
 }: {
-  enabled: boolean
-  budget: number
-  intervalSeconds: number
-  watchInterval: number
-  busy: boolean
-  onIntervalChange: (n: number) => void
-  onToggle: () => void
-  t: (k: string, vars?: Record<string, string | number>) => string
+  trip: EnrichedTripResponse
+  passengers: number
+  onBook: () => void
 }) {
-  if (enabled) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-[#FFF8F3] p-5 sm:p-6 shadow-sm"
-      >
-        <div
-          className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-emerald-400/15 blur-2xl"
-          aria-hidden
-        />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1.5 min-w-0">
-            <div className="inline-flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              </span>
-              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700">
-                {t('planner.watch.banner.activeTitle')}
-              </p>
-            </div>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl">
-              {t('planner.watch.banner.activeBody', { budget })}
-            </p>
-            <p className="text-xs font-semibold text-emerald-800/80">
-              {t('planner.watch.every', {
-                minutes: Math.floor((intervalSeconds || 3600) / 60),
-              })}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onToggle}
-            className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-          >
-            {t('planner.watch.off')}
-          </button>
-        </div>
-      </motion.div>
-    )
-  }
+  const formatBoardingDate = (value: string) =>
+    new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    })
+      .format(new Date(value))
+      .replace('.', '')
+
+  const formatBoardingTime = (value: string) =>
+    new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(value))
+
+  const airline = formatAirlineLabel(trip)
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-3xl border border-orange-200/70 bg-gradient-to-br from-[#FFF1E8] via-white to-[#FFE8DC] p-5 sm:p-7 shadow-md shadow-orange-500/10"
+    <motion.article
+      initial={{ opacity: 0, x: -16 }}
+      animate={{ opacity: 1, x: 0 }}
+      whileHover={{ y: -4 }}
+      transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+      className="relative h-full min-h-[360px] overflow-hidden rounded-[28px] border border-slate-200 bg-[#FFFCF8] shadow-xl shadow-slate-900/10"
     >
-      <div
-        className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-[#FF6B35]/20 blur-3xl"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-[#E85A28]/10 blur-2xl"
-        aria-hidden
-      />
+      <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#FF6B35] via-[#FF9B70] to-[#FF6B35]" />
+      <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px]">
+        <div className="flex min-w-0 flex-col p-6 sm:p-7">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary-600">
+                Carte d’embarquement
+              </p>
+              <p className="mt-1 text-sm font-extrabold text-slate-900">{airline}</p>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
+              Vol choisi
+            </span>
+          </div>
 
-      <div className="relative space-y-5">
-        <div className="space-y-2 max-w-2xl">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-primary-600">
-            {t('planner.watch.banner.kicker')}
-          </p>
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-snug">
-            {t('planner.watch.banner.title')}
-          </h3>
-          <p className="text-sm sm:text-[15px] text-slate-600 leading-relaxed">
-            {t('planner.watch.banner.body', { budget })}
-          </p>
+          <div className="my-6 flex items-center gap-3 sm:gap-5">
+            <div>
+              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-slate-950">
+                {trip.aller.origin}
+              </p>
+              <p className="mt-1 max-w-[120px] truncate text-xs font-semibold text-slate-500">
+                {cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)}
+              </p>
+            </div>
+            <div className="flex min-w-[80px] flex-1 items-center" aria-hidden>
+              <span className="h-px flex-1 border-t border-dashed border-slate-300" />
+              <span className="mx-2 inline-flex h-9 w-9 rotate-12 items-center justify-center rounded-full bg-[#FFF0E8] text-lg text-primary-600">
+                ✈
+              </span>
+              <span className="h-px flex-1 border-t border-dashed border-slate-300" />
+            </div>
+            <div className="text-right">
+              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-primary-600">
+                {trip.aller.destination}
+              </p>
+              <p className="mt-1 ml-auto max-w-[120px] truncate text-xs font-semibold text-slate-500">
+                {cityDisplayNameFr(trip.aller.destination, trip.aller.destinationFull)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-auto grid grid-cols-2 gap-3">
+            {[
+              { label: 'Aller', flight: trip.aller },
+              { label: 'Retour', flight: trip.retour },
+            ].map(({ label, flight }) => (
+              <div key={label} className="rounded-2xl border border-orange-100 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-wider text-primary-600">
+                  {label}
+                </p>
+                <p className="mt-1 text-sm font-extrabold text-slate-900">
+                  {formatBoardingDate(flight.departureTime)}
+                </p>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="text-xl font-black text-slate-950">
+                    {formatBoardingTime(flight.departureTime)}
+                  </span>
+                  <span className="truncate font-mono text-[11px] font-bold text-slate-500">
+                    {flight.flightNumber || '—'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <ul className="space-y-2.5 text-sm text-slate-700">
-          {(
-            [
-              'planner.watch.banner.b1',
-              'planner.watch.banner.b2',
-              'planner.watch.banner.b3',
-            ] as const
-          ).map((key) => (
-            <li key={key} className="flex items-start gap-2.5">
-              <span
-                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-500 text-[11px] font-black text-white"
-                aria-hidden
-              >
-                ✓
-              </span>
-              <span className="font-medium leading-snug">{t(key)}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4 pt-1">
-          <label className="flex flex-col gap-1.5 text-sm text-slate-600">
-            <span className="font-bold text-slate-800">{t('planner.watch.interval')}</span>
-            <select
-              value={watchInterval}
-              onChange={(e) => onIntervalChange(Number(e.target.value))}
-              className="rounded-xl border border-orange-200/80 bg-white/90 px-3 py-2.5 font-semibold text-slate-800 shadow-sm"
-            >
-              <option value={900}>15 min</option>
-              <option value={1800}>30 min</option>
-              <option value={3600}>1 h</option>
-              <option value={7200}>2 h</option>
-              <option value={21600}>6 h</option>
-              <option value={86400}>24 h</option>
-            </select>
-          </label>
+        <div className="relative flex flex-row items-center justify-between gap-4 border-t-2 border-dashed border-slate-200 bg-white/70 p-5 lg:flex-col lg:items-stretch lg:justify-center lg:border-l-2 lg:border-t-0">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
+              Prix par personne
+            </p>
+            <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">
+              {Math.round(trip.prix_total)}€
+            </p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">
+              {passengers} voyageur{passengers > 1 ? 's' : ''}
+            </p>
+          </div>
+          <div
+            aria-hidden
+            className="hidden h-11 w-full opacity-60 lg:block"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(90deg,#111827 0,#111827 2px,transparent 2px,transparent 5px)',
+            }}
+          />
           <button
             type="button"
-            disabled={busy}
-            onClick={onToggle}
-            className="app-btn-primary rounded-2xl px-6 py-3.5 text-sm sm:text-base font-extrabold shadow-lg shadow-orange-500/25 disabled:opacity-60 sm:flex-1 sm:max-w-xs"
+            onClick={onBook}
+            className="shrink-0 rounded-xl bg-slate-950 px-4 py-3 text-xs font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-primary-600 lg:w-full"
           >
-            {t('planner.watch.banner.cta')}
+            Réserver
           </button>
         </div>
       </div>
-    </motion.div>
+    </motion.article>
   )
 }
 
