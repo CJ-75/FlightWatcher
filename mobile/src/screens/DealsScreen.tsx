@@ -45,11 +45,9 @@ export function DealsScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** Arrival city first; origin optional for flight priority. */
-  const [destination, setDestination] = useState('')
+  /** Affiner = départ (+ voyageurs). Arrivée = job Recherche. */
   const [origin, setOrigin] = useState('')
   const [adults, setAdults] = useState(2)
-  const [queryDestination, setQueryDestination] = useState('')
   const [queryOrigin, setQueryOrigin] = useState('')
   const [queryAdults, setQueryAdults] = useState(2)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -127,14 +125,13 @@ export function DealsScreen() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      setQueryDestination(destination)
       setQueryOrigin(origin)
       setQueryAdults(adults)
     }, 280)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [destination, origin, adults])
+  }, [origin, adults])
 
   const load = useCallback(
     async (opts?: { refresh?: boolean; force?: boolean }) => {
@@ -154,7 +151,6 @@ export function DealsScreen() {
         }
         const listPromise = getApi().getDeals({
           origin: queryOrigin || undefined,
-          destination: queryDestination || undefined,
           adults: queryAdults,
           occasion: occasion || undefined,
           duration: durationTab,
@@ -164,7 +160,6 @@ export function DealsScreen() {
         void getApi()
           .getDealOccasions({
             origin: queryOrigin || undefined,
-            destination: queryDestination || undefined,
             adults: queryAdults,
             duration: durationTab,
           })
@@ -199,14 +194,14 @@ export function DealsScreen() {
         setRefreshing(false)
       }
     },
-    [refreshLikes, queryOrigin, queryDestination, queryAdults, occasion, durationTab, uiEnabled],
+    [refreshLikes, queryOrigin, queryAdults, occasion, durationTab, uiEnabled],
   )
 
   // Filter changes → always refetch
   useEffect(() => {
     void load({ force: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
-  }, [queryOrigin, queryDestination, queryAdults, occasion, durationTab])
+  }, [queryOrigin, queryAdults, occasion, durationTab])
 
   // Tab focus → refetch only if stale (skip first mount: filter effect owns it)
   useFocusEffect(
@@ -224,29 +219,24 @@ export function DealsScreen() {
   }, [origin, airports])
 
   const filterSummary = (() => {
-    const from = originCityLabel || null
-    const to = destination ? destination.split(',')[0] : null
     const parts: string[] = []
-    if (from && to) parts.push(`${from} → ${to}`)
-    else if (from) parts.push(`de ${from}`)
-    else if (to) parts.push(`→ ${to}`)
+    if (originCityLabel) parts.push(`de ${originCityLabel}`)
     if (adults !== 2) parts.push(`${adults} ad.`)
     return parts.join(' · ')
   })()
 
-  const hasWallFilter = Boolean(queryOrigin || queryDestination)
+  const hasWallFilter = Boolean(queryOrigin)
   // Duration applied server-side (≥30 floor) — do not re-strip here
   const matchedDeals = useMemo(() => {
     let list = deals
     if (hasWallFilter) {
       list = list.filter((d) => {
         if (queryOrigin && d.flags?.match_origin === false) return false
-        if (queryDestination && d.flags?.match_destination === false) return false
         return true
       })
     }
     return list
-  }, [deals, queryOrigin, queryDestination, hasWallFilter])
+  }, [deals, queryOrigin, hasWallFilter])
   const gridDeals = useMemo(() => {
     const sorted =
       sort === 'recommended'
@@ -261,13 +251,12 @@ export function DealsScreen() {
     if (!hasWallFilter) return []
     const raw = deals.filter((d) => {
       if (queryOrigin && d.flags?.match_origin === false) return true
-      if (queryDestination && d.flags?.match_destination === false) return true
       return false
     })
     const occupied = new Set<string>()
     dedupeDealsByHotelTitle(gridDeals, occupied)
     return dedupeDealsByHotelTitle(raw, occupied)
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, gridDeals])
+  }, [deals, queryOrigin, hasWallFilter, gridDeals])
 
   const listData =
     fillerDeals.length > 0
@@ -425,7 +414,7 @@ export function DealsScreen() {
                   <View style={styles.filterToggleText}>
                     <Text style={styles.filterToggleTitle}>Affiner</Text>
                     <Text style={styles.filterToggleHint} numberOfLines={1}>
-                      {filterSummary || 'Tous trajets · 2 voyageurs'}
+                      {filterSummary || 'Tous départs · 2 voyageurs'}
                     </Text>
                   </View>
                   <Text
@@ -440,43 +429,22 @@ export function DealsScreen() {
 
                 {filtersOpen ? (
                   <View style={styles.filterBody}>
-                    <View style={styles.routePair}>
-                      <View style={styles.routeField}>
-                        <View style={styles.originRow}>
-                          <Text style={styles.label}>Départ</Text>
-                          {origin ? (
-                            <Pressable onPress={() => setOriginPersist('')} hitSlop={8}>
-                              <Text style={styles.clearOrigin}>Effacer</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                        <CityAirportPicker
-                          airports={airports}
-                          value={origin}
-                          onChange={setOriginPersist}
-                        />
-                      </View>
-
-                      <Text style={styles.routeArrow}>↓</Text>
-
-                      <View style={styles.routeField}>
-                        <View style={styles.originRow}>
-                          <Text style={styles.label}>Arrivée</Text>
-                          {destination ? (
-                            <Pressable onPress={() => setDestination('')} hitSlop={8}>
-                              <Text style={styles.clearOrigin}>Effacer</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                        <CityAirportPicker
-                          airports={airports}
-                          value={destination}
-                          onChange={setDestination}
-                        />
-                      </View>
+                    <View style={styles.originRow}>
+                      <Text style={styles.label}>Départ</Text>
+                      {origin ? (
+                        <Pressable onPress={() => setOriginPersist('')} hitSlop={8}>
+                          <Text style={styles.clearOrigin}>Effacer</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
+                    <CityAirportPicker
+                      airports={airports}
+                      value={origin}
+                      onChange={setOriginPersist}
+                    />
                     <Text style={styles.originHint}>
-                      Optionnels — filtrent le mur (arrivée = ville / hôtels).
+                      Filtre le mur selon ton aéroport de départ. Pour une ville précise,
+                      utilise Recherche.
                     </Text>
 
                     <View style={styles.divider} />
@@ -817,17 +785,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 12,
     color: colors.primary,
-  },
-  routePair: {
-    gap: 4,
-  },
-  routeField: {},
-  routeArrow: {
-    alignSelf: 'center',
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.muted,
-    paddingVertical: 2,
   },
   originHint: {
     marginTop: 10,
