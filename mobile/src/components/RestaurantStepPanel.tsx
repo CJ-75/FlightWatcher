@@ -25,6 +25,7 @@ import { colors, fonts, radius, shadow, spacing } from '../theme'
 type ItemRow = {
   id: string
   status?: string
+  inherited?: boolean
   item_type?: string
   moment?: string | null
   availability_state?: string
@@ -295,6 +296,9 @@ export function RestaurantStepPanel(props: {
                 <Text style={styles.cardTitle} numberOfLines={2}>
                   {name}
                 </Text>
+                {item.inherited ? (
+                  <Text style={styles.groupBadge}>IDÉE DU GROUPE</Text>
+                ) : null}
                 {cuisine ? <Text style={styles.muted}>{cuisine}</Text> : null}
                 {chip ? (
                   <Text
@@ -319,7 +323,7 @@ export function RestaurantStepPanel(props: {
               </View>
             </View>
             <View style={styles.row}>
-              {item.status === 'idea' ? (
+              {!item.inherited && item.status === 'idea' ? (
                 <Pressable
                   onPress={() =>
                     void getApi()
@@ -508,6 +512,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.ink },
+  groupBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    fontFamily: fonts.bold,
+    fontSize: 8,
+    color: colors.primaryInk,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
   statusLine: {
     marginTop: 4,
     fontFamily: fonts.medium,

@@ -618,6 +618,26 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
 
+        {draft.source_planned_trip_id ? (
+          <Pressable
+            onPress={() =>
+              navigation.navigate('TripDetail', {
+                tripId: draft.source_planned_trip_id!,
+              })
+            }
+            style={({ pressed }) => [
+              styles.plannerLink,
+              pressed && { opacity: 0.82 },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.plannerLinkKicker}>VOYAGE DE GROUPE</Text>
+              <Text style={styles.plannerLinkTitle}>Voir le planning et les voyageurs</Text>
+            </View>
+            <Text style={styles.plannerLinkArrow}>›</Text>
+          </Pressable>
+        ) : null}
+
         <StayPipelineStepper steps={pipelineSteps} onStepPress={onPipelineStep} />
 
         {out && out < new Date().toISOString().slice(0, 10) ? (
@@ -975,6 +995,28 @@ const styles = StyleSheet.create({
   },
   sharePressed: { backgroundColor: colors.primaryMuted },
   share: { fontFamily: fonts.semibold, fontSize: 13, color: colors.primaryDeep },
+  plannerLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 18,
+    backgroundColor: '#1D1820',
+    padding: 15,
+    marginBottom: 14,
+  },
+  plannerLinkKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 9,
+    letterSpacing: 1.1,
+    color: '#FDBA8C',
+  },
+  plannerLinkTitle: {
+    marginTop: 3,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.white,
+  },
+  plannerLinkArrow: { fontFamily: fonts.regular, fontSize: 28, color: colors.white },
   card: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,

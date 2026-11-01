@@ -329,6 +329,10 @@ export interface MyTripDraft {
   /** Lot D */
   hotel_booked_at?: string | null
   share_email?: string | null
+  source_planned_trip_id?: string | null
+  source_proposal_id?: string | null
+  source_kind?: 'planner' | 'deal' | 'legacy_unlinked' | null
+  reused?: boolean
 }
 
 export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'
@@ -405,6 +409,46 @@ export interface AddTripMemberRequest {
 export interface PlannedTripDetail extends PlannedTrip {
   proposals: TripProposal[]
   members: TripMember[]
+}
+
+export type TravelWorkspaceScope = 'collaborative' | 'personal'
+export type TravelWorkspacePhase =
+  | 'planning'
+  | 'flight_selected'
+  | 'composing'
+  | 'booked'
+  | 'past'
+
+export interface TravelWorkspace {
+  workspace_id: string
+  planned_trip_id?: string | null
+  proposal_id?: string | null
+  draft_id?: string | null
+  draft_token?: string | null
+  hotel_booking_id?: string | null
+  hotel_booking_status?: HotelBookingStatus | string | null
+  scope: TravelWorkspaceScope
+  phase: TravelWorkspacePhase
+  title: string
+  city?: string | null
+  origin_iata?: string | null
+  dest_iata?: string | null
+  out_date?: string | null
+  ret_date?: string | null
+  image_url?: string | null
+  is_organizer: boolean
+  capabilities: {
+    can_scan: boolean
+    can_choose_flight: boolean
+    can_compose_hotel: boolean
+    can_view_confirmation: boolean
+  }
+  pipeline: {
+    flight: 'none' | 'selected' | 'booked'
+    hotel: 'none' | 'selected' | 'booked'
+  }
+  planned_trip?: PlannedTrip | null
+  updated_at?: string | null
 }
 
 export interface CreatePlannedTripRequest {
@@ -840,6 +884,7 @@ export interface HotelBooking {
   prebook_id?: string | null
   /** Linked Mon voyage draft when booked from /trip/:token */
   draft_token?: string | null
+  draft_id?: string | null
   city?: string
   hotel_name?: string
   hotel_photo?: string | null

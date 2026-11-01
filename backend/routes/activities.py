@@ -365,9 +365,36 @@ async def get_trip_items(
     draft_id, planned = resolve_owner_for_write(
         sb, request, draft_token=draft_token, planned_trip_id=planned_trip_id
     )
+    items = list_trip_items(sb, draft_id=draft_id, planned_trip_id=planned)
+    # A personal execution draft inherits collaborative Planner ideas in read-only
+    # form. The rows stay owned by the Planner and are never moved or copied.
+    if draft_id and not planned:
+        try:
+            draft_res = (
+                sb.table("my_trip_drafts")
+                .select("source_planned_trip_id")
+                .eq("id", draft_id)
+                .limit(1)
+                .execute()
+            )
+            source_trip_id = (
+                draft_res.data[0].get("source_planned_trip_id")
+                if draft_res.data
+                else None
+            )
+            if source_trip_id:
+                inherited = list_trip_items(sb, planned_trip_id=source_trip_id)
+                own_ids = {str(item.get("id")) for item in items}
+                items.extend(
+                    {**item, "inherited": True}
+                    for item in inherited
+                    if str(item.get("id")) not in own_ids
+                )
+        except Exception:
+            pass
     return {
         "ok": True,
-        "items": list_trip_items(sb, draft_id=draft_id, planned_trip_id=planned),
+        "items": items,
     }
 
 

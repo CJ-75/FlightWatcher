@@ -23,6 +23,7 @@ type ItemRow = {
   moment?: string | null
   day_offset?: number
   availability_state?: string
+  inherited?: boolean
   meta?: Record<string, unknown>
   places?: {
     id?: string
@@ -248,6 +249,11 @@ export function RestaurantStepPanel(props: {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="font-extrabold text-ink text-[15px]">{name}</h4>
+                      {item.inherited ? (
+                        <span className="text-[9px] font-bold uppercase text-primary-700 bg-orange-50 px-2 py-1 rounded-full">
+                          Idée du groupe
+                        </span>
+                      ) : null}
                       {item.moment ? (
                         <span className="text-[10px] font-bold uppercase tracking-wide text-muted bg-slate-100 px-2 py-0.5 rounded-full">
                           {item.moment}
@@ -277,7 +283,7 @@ export function RestaurantStepPanel(props: {
                         : ''}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {item.status === 'idea' ? (
+                      {!item.inherited && item.status === 'idea' ? (
                         <button
                           type="button"
                           className="text-sm font-bold bg-ink text-white rounded-xl px-3 py-2"

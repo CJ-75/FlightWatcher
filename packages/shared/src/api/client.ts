@@ -37,6 +37,7 @@ import type {
   TripProposal,
   TripMember,
   TripResponse,
+  TravelWorkspace,
   UpdatePlannedTripRequest,
 } from '../types'
 
@@ -780,6 +781,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
       ),
 
     listPlannedTrips: () => request<PlannedTrip[]>('/api/planner/trips'),
+    listTravelWorkspaces: () =>
+      request<TravelWorkspace[]>('/api/travel-workspaces'),
     createPlannedTrip: (body: CreatePlannedTripRequest) =>
       request<PlannedTrip>('/api/planner/trips', {
         method: 'POST',
@@ -822,6 +825,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<TripProposal>(`/api/planner/proposals/${encodeURIComponent(id)}/accept`, {
         method: 'POST',
       }),
+    getOrCreateExecutionDraft: (proposalId: string) =>
+      request<MyTripDraft>(
+        `/api/planner/proposals/${encodeURIComponent(proposalId)}/execution-draft`,
+        { method: 'POST' },
+      ),
     rejectProposal: (id: string) =>
       request<TripProposal>(`/api/planner/proposals/${encodeURIComponent(id)}/reject`, {
         method: 'POST',

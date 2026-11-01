@@ -26,9 +26,8 @@ import {
   latestTripDraft,
   listRememberedTrips,
   rememberTrip,
-  type TripRecovery,
 } from '../lib/tripRecovery'
-import { BedIcon, PlaneIcon, ShareIcon } from '../components/UiIcons'
+import { BedIcon, ShareIcon } from '../components/UiIcons'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, spacing } from '../theme'
 
@@ -103,15 +102,42 @@ function isPast(b: HotelBooking, today: string) {
 }
 
 function dedupeBookings(list: HotelBooking[]): HotelBooking[] {
-  const seen = new Set<string>()
-  const out: HotelBooking[] = []
-  for (const b of list) {
-    const id = String(b.id || '')
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    out.push(b)
+  const rank: Record<string, number> = {
+    confirmed: 70,
+    booking_pending: 60,
+    payment_succeeded: 50,
+    payment_pending: 40,
+    prebooked: 30,
+    draft: 20,
+    cancelled: 10,
+    failed: 0,
   }
-  return out
+  const best = new Map<string, HotelBooking>()
+  for (const b of list) {
+    const key = b.draft_id
+      ? `draft:${b.draft_id}`
+      : b.draft_token
+        ? `token:${b.draft_token}`
+        : b.liteapi_booking_id
+          ? `lite:${b.liteapi_booking_id}`
+          : `id:${b.id}`
+    const previous = best.get(key)
+    if (
+      !previous ||
+      (rank[String(b.status)] || 0) > (rank[String(previous.status)] || 0) ||
+      ((rank[String(b.status)] || 0) === (rank[String(previous.status)] || 0) &&
+        String(b.updated_at || b.created_at || '') >
+          String(previous.updated_at || previous.created_at || ''))
+    ) {
+      best.set(key, b)
+    }
+  }
+  return [...best.values()].sort(
+    (a, b) =>
+      String(b.updated_at || b.created_at || '').localeCompare(
+        String(a.updated_at || a.created_at || ''),
+      ),
+  )
 }
 
 function bookingPhoto(b: HotelBooking): string | null {
@@ -160,7 +186,6 @@ export function BookingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { user, isGuest } = useAuth()
   const [bookings, setBookings] = useState<HotelBooking[]>([])
-  const [openTrips, setOpenTrips] = useState<TripRecovery[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -187,7 +212,6 @@ export function BookingsScreen() {
 
         const draft = await latestTripDraft()
         const remembered = await listRememberedTrips()
-        setOpenTrips(remembered)
         if (!isRefresh) setLoading(false)
 
         const api = getApi()
@@ -258,26 +282,6 @@ export function BookingsScreen() {
     [bookings, today],
   )
   const activeList = tab === 'upcoming' ? upcoming : past
-
-  const bookedTokens = useMemo(() => {
-    const s = new Set<string>()
-    for (const b of bookings) {
-      if (
-        b.draft_token &&
-        (b.status === 'confirmed' ||
-          b.status === 'booking_pending' ||
-          b.status === 'payment_succeeded')
-      ) {
-        s.add(b.draft_token)
-      }
-    }
-    return s
-  }, [bookings])
-
-  const openOnly = useMemo(
-    () => openTrips.filter((t) => t.draft_token && !bookedTokens.has(t.draft_token)),
-    [openTrips, bookedTokens],
-  )
 
   const shareBooking = async (b: HotelBooking) => {
     const meta = statusMeta(String(b.status))
@@ -432,48 +436,6 @@ export function BookingsScreen() {
               {error ? (
                 <View style={styles.errorBanner}>
                   <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-
-              {openOnly.length > 0 ? (
-                <View style={styles.resumeBlock}>
-                  <View style={styles.resumeHead}>
-                    <View style={styles.resumeIcon}>
-                      <PlaneIcon size={18} color={colors.white} />
-                    </View>
-                    <View style={styles.resumeHeadCopy}>
-                      <Text style={styles.resumeKicker}>EN ATTENTE</Text>
-                      <Text style={styles.resumeTitle}>
-                        {openOnly.length} voyage
-                        {openOnly.length > 1 ? 's' : ''} à reprendre
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.resumeList}>
-                    {openOnly.slice(0, 4).map((t) => (
-                      <Pressable
-                        key={t.draft_token}
-                        style={({ pressed }) => [
-                          styles.resumeCard,
-                          pressed && styles.resumeCardPressed,
-                        ]}
-                        onPress={() => openTrip(t.draft_token)}
-                      >
-                        <View style={styles.resumeCardCopy}>
-                          <Text style={styles.resumeCity} numberOfLines={1}>
-                            {t.city || 'Voyage en cours'}
-                          </Text>
-                          <Text style={styles.resumeHint}>
-                            Continuer l’itinéraire · hôtel & vols
-                          </Text>
-                        </View>
-                        <View style={styles.resumeCta}>
-                          <Text style={styles.resumeCtaText}>Reprendre</Text>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
                 </View>
               ) : null}
 

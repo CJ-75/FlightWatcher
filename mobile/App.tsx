@@ -221,7 +221,7 @@ function MainTabs() {
       <Tab.Screen
         name="Planner"
         component={PlannerScreen}
-        options={{ title: 'Planner', headerShown: false }}
+        options={{ title: 'Voyages', headerShown: false }}
       />
       <Tab.Screen
         name="Favorites"

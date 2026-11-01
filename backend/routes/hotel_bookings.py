@@ -300,12 +300,25 @@ async def prebook(body: PrebookRequest, request: Request):
         "raw_prebook": raw,
         "updated_at": _now(),
     }
+    if actor["draft_token"]:
+        try:
+            from deals.my_trips import get_draft
+
+            linked_draft = get_draft(supabase, actor["draft_token"])
+            if linked_draft and linked_draft.get("id"):
+                row["draft_id"] = linked_draft["id"]
+        except Exception:
+            pass
     try:
         result = supabase.table("hotel_bookings").insert(row).execute()
     except Exception as e:
-        # Column draft_token missing before Lot D SQL — retry without it if logged in
-        if actor["user_id"] and "draft_token" in str(e).lower():
+        # Backward-compatible during manual migration rollout.
+        missing_link_column = any(
+            key in str(e).lower() for key in ("draft_token", "draft_id")
+        )
+        if actor["user_id"] and missing_link_column:
             row.pop("draft_token", None)
+            row.pop("draft_id", None)
             result = supabase.table("hotel_bookings").insert(row).execute()
         else:
             raise HTTPException(
@@ -600,6 +613,7 @@ def _public_booking(row: dict) -> dict:
         "liteapi_booking_id": row.get("liteapi_booking_id"),
         "prebook_id": row.get("prebook_id"),
         "draft_token": row.get("draft_token"),
+        "draft_id": row.get("draft_id"),
         "city": snap.get("city"),
         "hotel_name": hotel.get("name") or snap.get("hotel_name"),
         "hotel_photo": hotel.get("photo"),

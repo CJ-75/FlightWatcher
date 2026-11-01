@@ -27,6 +27,7 @@ type ItemRow = {
   availability_state?: string
   sort_key?: string
   day_offset?: number
+  inherited?: boolean
   meta?: Record<string, unknown>
   places?: { name?: string } | null
 }
@@ -164,7 +165,7 @@ export function ActivityStepPanel(props: {
   const onBook = (it: ItemRow) => {
     const url = String(it.meta?.product_url || '')
     if (!url) return
-    setPendingBook(it)
+    if (!it.inherited) setPendingBook(it)
     track('book_click', { trip_item_id: it.id })
     window.open(url, '_blank', 'noopener,noreferrer')
   }
@@ -249,14 +250,27 @@ export function ActivityStepPanel(props: {
         {items.map((it) => (
           <li
             key={it.id}
-            draggable
-            onDragStart={() => setDragId(it.id)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => void onDrop(it.id)}
-            className="rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2 cursor-grab active:cursor-grabbing"
+            draggable={!it.inherited}
+            onDragStart={() => {
+              if (!it.inherited) setDragId(it.id)
+            }}
+            onDragOver={(e) => {
+              if (!it.inherited) e.preventDefault()
+            }}
+            onDrop={() => {
+              if (!it.inherited) void onDrop(it.id)
+            }}
+            className="rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2"
           >
             <div className="flex justify-between gap-2">
-              <p className="font-bold text-sm text-slate-900">{titleOf(it)}</p>
+              <p className="font-bold text-sm text-slate-900">
+                {titleOf(it)}
+                {it.inherited ? (
+                  <span className="ml-2 text-[9px] font-bold text-primary-700 bg-orange-50 px-2 py-1 rounded-full">
+                    Idée du groupe
+                  </span>
+                ) : null}
+              </p>
               <span className="text-xs text-slate-500">
                 {tripItemStatusLabelFr(it.status)}
                 {it.availability_state
@@ -269,7 +283,7 @@ export function ActivityStepPanel(props: {
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
+              {!it.inherited && it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
                 <button
                   type="button"
                   className="text-xs font-semibold rounded-lg bg-slate-100 px-2 py-1"

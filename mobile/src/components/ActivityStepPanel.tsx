@@ -33,6 +33,7 @@ type ItemRow = {
   id: string
   status?: string
   sort_key?: string
+  inherited?: boolean
   meta?: Record<string, unknown>
   places?: { name?: string } | null
 }
@@ -200,20 +201,23 @@ export function ActivityStepPanel(props: {
 
       {items.map((it, idx) => (
         <View key={it.id} style={styles.card}>
-          <Text style={styles.title}>{titleOf(it)}</Text>
+          <View style={styles.itemTitleRow}>
+            <Text style={[styles.title, { flex: 1 }]}>{titleOf(it)}</Text>
+            {it.inherited ? <Text style={styles.groupBadge}>IDÉE DU GROUPE</Text> : null}
+          </View>
           <Text style={styles.muted}>{tripItemStatusLabelFr(it.status)}</Text>
           <View style={styles.row}>
-            {idx > 0 ? (
+            {!it.inherited && idx > 0 ? (
               <Pressable onPress={() => void move(idx, idx - 1)}>
                 <Text style={styles.link}>Monter</Text>
               </Pressable>
             ) : null}
-            {idx < items.length - 1 ? (
+            {!it.inherited && idx < items.length - 1 ? (
               <Pressable onPress={() => void move(idx, idx + 1)}>
                 <Text style={styles.link}>Descendre</Text>
               </Pressable>
             ) : null}
-            {it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
+            {!it.inherited && it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
               <Pressable onPress={() => void patch(it.id, { status: 'validated' })}>
                 <Text style={styles.link}>{ACTIVITY_VALIDATE_LABEL_FR}</Text>
               </Pressable>
@@ -221,7 +225,7 @@ export function ActivityStepPanel(props: {
             {it.meta?.product_url ? (
               <Pressable
                 onPress={() => {
-                  setPendingBook(it)
+                  if (!it.inherited) setPendingBook(it)
                   track('book_click', { trip_item_id: it.id })
                   openInAppBrowser(navigation, String(it.meta?.product_url), titleOf(it))
                 }}
@@ -331,6 +335,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: { fontFamily: fonts.bold, color: colors.ink, fontSize: 14 },
+  itemTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  groupBadge: {
+    fontFamily: fonts.bold,
+    fontSize: 8,
+    color: colors.primaryInk,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
   muted: { fontFamily: fonts.regular, color: colors.muted, fontSize: 12 },
   err: { color: colors.danger, fontFamily: fonts.medium, fontSize: 12 },
   link: { fontFamily: fonts.semibold, color: colors.inkSoft, fontSize: 12 },

@@ -295,17 +295,23 @@ export function TripDetailScreen() {
     }
   }
 
-  const addHotelFromTrip = async (tripData: EnrichedTripResponse) => {
+  const addHotelFromTrip = async (
+    tripData: EnrichedTripResponse,
+    proposalId?: string,
+  ) => {
     if (!trip) return
     if (hotelBusy) return
     setHotelBusy(true)
     try {
       const pax = Math.max(trip.passengers || 1, (trip.members || []).length || 1)
-      const draft = await createMyTripComposeFromTrip({
-        trip: tripData,
-        passengers: pax,
-        markFlightBooked: false,
-      })
+      const draft =
+        proposalId && !(__DEV__ && isGuest)
+          ? await getApi().getOrCreateExecutionDraft(proposalId)
+          : await createMyTripComposeFromTrip({
+              trip: tripData,
+              passengers: pax,
+              markFlightBooked: false,
+            })
       const token = String(draft?.draft_token || '').trim()
       if (!token) {
         throw new Error('Brouillon hôtel introuvable — réessaie')
@@ -458,7 +464,7 @@ export function TripDetailScreen() {
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
-      if (accepted) void addHotelFromTrip(accepted.trip_data)
+      if (accepted) void addHotelFromTrip(accepted.trip_data, accepted.id)
       else {
         Alert.alert(
           'Hôtel',
@@ -634,7 +640,7 @@ export function TripDetailScreen() {
             }}
           />
           <Pressable
-            onPress={() => void addHotelFromTrip(accepted.trip_data)}
+            onPress={() => void addHotelFromTrip(accepted.trip_data, accepted.id)}
             disabled={hotelBusy}
             style={({ pressed }) => [
               styles.nextStepCard,

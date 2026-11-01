@@ -21,6 +21,9 @@ def create_draft(
     payload: Dict[str, Any],
     user_id: Optional[str] = None,
     deal_key: Optional[str] = None,
+    source_planned_trip_id: Optional[str] = None,
+    source_proposal_id: Optional[str] = None,
+    source_kind: Optional[str] = None,
 ) -> Dict[str, Any]:
     token = secrets.token_urlsafe(24)
     raw = dict(payload or {})
@@ -49,6 +52,12 @@ def create_draft(
         "created_at": _now().isoformat(),
         "updated_at": _now().isoformat(),
     }
+    if source_planned_trip_id:
+        row["source_planned_trip_id"] = source_planned_trip_id
+    if source_proposal_id:
+        row["source_proposal_id"] = source_proposal_id
+    if source_kind:
+        row["source_kind"] = source_kind
     # Drop hotel from requiring auth — keep in payload
     res = supabase.table("my_trip_drafts").insert(row).execute()
     if not res.data:

@@ -986,6 +986,7 @@ async def create_my_trip(body: MyTripDraftRequest, request: Request):
             payload=payload,
             user_id=user_id,
             deal_key=body.deal_key,
+            source_kind="deal",
         )
         return draft
     except HTTPException:

@@ -12,23 +12,19 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport, PlannedTrip } from '@flightwatcher/shared'
+import type { Airport, PlannedTrip, TravelWorkspace } from '@flightwatcher/shared'
 import {
-  arrivalDisplayLabel,
   cityDisplayNameFr,
-  cityImageUrl,
   destinationsToAirports,
   encodeAirportCodes,
   encodeArrivalCodes,
   formatDateFr,
   generateDatesFromPreset,
-  groupAirportsByCity,
   normalizeDestinations,
   parseAirportCodes,
   type DatePresetId,
@@ -46,6 +42,7 @@ import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { Button } from '../components/ui/Button'
 import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
+import { JourneyCard } from '../components/JourneyCard'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -54,51 +51,59 @@ const PRESETS: { id: DatePresetId; label: string }[] = [
   { id: 'flexible', label: 'Dates libres' },
 ]
 
-function departureRouteLabel(value: string | null | undefined): string {
-  const codes = parseAirportCodes(value)
-  if (!codes.length) return value || '—'
-  const cities = [...new Set(codes.map((c) => cityDisplayNameFr(c)))]
-  if (cities.length === 1) {
-    return codes.length > 1
-      ? `${cities[0]} · ${codes.join(' · ')}`
-      : `${cities[0]} · ${codes[0]}`
-  }
-  return codes.join(' · ')
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Créé',
-  scanning: 'Scan…',
-  planning: 'Créé',
-  locked: 'Confirmé',
-}
-
 const TRIPS_STALE_MS = 60_000
+type HubFilter = 'organize' | 'upcoming' | 'past'
+
+function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
+  const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  return {
+    workspace_id: `planner:${trip.id}`,
+    planned_trip_id: trip.id,
+    proposal_id: trip.accepted_proposal?.id || null,
+    scope: 'collaborative',
+    phase: trip.status === 'locked' ? 'flight_selected' : 'planning',
+    title: trip.name,
+    city: dest ? cityDisplayNameFr(dest) : 'Destination libre',
+    origin_iata: trip.departure_airport,
+    dest_iata: trip.arrival_airport,
+    out_date: trip.dates_depart?.[0]?.date || null,
+    ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
+    is_organizer: true,
+    capabilities: {
+      can_scan: trip.status !== 'locked',
+      can_choose_flight: trip.status !== 'locked',
+      can_compose_hotel: trip.status === 'locked',
+      can_view_confirmation: false,
+    },
+    pipeline: {
+      flight: trip.status === 'locked' ? 'selected' : 'none',
+      hotel: 'none',
+    },
+    planned_trip: trip,
+    updated_at: trip.updated_at || trip.created_at,
+  }
+}
 
 export function PlannerScreen() {
   const insets = useSafeAreaInsets()
   const { viewUser, isGuest } = useAuth()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const [trips, setTrips] = useState<PlannedTrip[]>([])
-  const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
+  const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
+  const [filter, setFilter] = useState<HubFilter>('organize')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const lastFetchAtRef = useRef(0)
-  const tripsLenRef = useRef(0)
-  tripsLenRef.current = trips.length
-
-  const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
-
-  React.useEffect(() => subscribeAirports(setAirports), [])
+  const workspacesLenRef = useRef(0)
+  workspacesLenRef.current = workspaces.length
 
   const load = useCallback(
     async (opts?: { refresh?: boolean; force?: boolean }) => {
       const isRefresh = Boolean(opts?.refresh)
       const force = Boolean(opts?.force)
       if (!viewUser) {
-        setTrips([])
+        setWorkspaces([])
         setLoading(false)
         setRefreshing(false)
         return
@@ -112,19 +117,24 @@ export function PlannerScreen() {
         return
       }
       if (isRefresh) setRefreshing(true)
-      else if (tripsLenRef.current === 0) setLoading(true)
+      else if (workspacesLenRef.current === 0) setLoading(true)
       setError(null)
       try {
         if (__DEV__ && isGuest) {
-          setTrips(listGuestTrips())
+          setWorkspaces(listGuestTrips().map(tripAsWorkspace))
         } else {
-          const list = await getApi().listPlannedTrips()
-          setTrips(Array.isArray(list) ? list : [])
+          try {
+            const list = await getApi().listTravelWorkspaces()
+            setWorkspaces(Array.isArray(list) ? list : [])
+          } catch {
+            const legacy = await getApi().listPlannedTrips()
+            setWorkspaces((Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace))
+          }
         }
         lastFetchAtRef.current = Date.now()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les voyages')
-        if (tripsLenRef.current === 0) setTrips([])
+        if (workspacesLenRef.current === 0) setWorkspaces([])
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -139,6 +149,45 @@ export function PlannerScreen() {
     }, [load]),
   )
 
+  const counts = useMemo(
+    () => ({
+      organize: workspaces.filter((w) => w.phase === 'planning').length,
+      upcoming: workspaces.filter((w) => w.phase !== 'planning' && w.phase !== 'past').length,
+      past: workspaces.filter((w) => w.phase === 'past').length,
+    }),
+    [workspaces],
+  )
+  const filteredWorkspaces = useMemo(
+    () =>
+      workspaces.filter((workspace) =>
+        filter === 'organize'
+          ? workspace.phase === 'planning'
+          : filter === 'upcoming'
+            ? workspace.phase !== 'planning' && workspace.phase !== 'past'
+            : workspace.phase === 'past',
+      ),
+    [filter, workspaces],
+  )
+
+  React.useEffect(() => {
+    if (!workspaces.length || counts[filter] > 0) return
+    if (counts.organize > 0) setFilter('organize')
+    else if (counts.upcoming > 0) setFilter('upcoming')
+    else if (counts.past > 0) setFilter('past')
+  }, [counts, filter, workspaces.length])
+
+  const openWorkspace = (workspace: TravelWorkspace) => {
+    if (workspace.draft_token && workspace.phase !== 'planning') {
+      navigation.navigate('TripSummary', { draftToken: workspace.draft_token })
+      return
+    }
+    if (workspace.planned_trip_id) {
+      navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
+      return
+    }
+    navigation.navigate('Bookings')
+  }
+
   if (!viewUser) {
     return <PlannerGuestLanding insetsTop={insets.top} insetsBottom={insets.bottom} />
   }
@@ -147,15 +196,15 @@ export function PlannerScreen() {
     <View style={styles.root}>
       <ScreenBackground />
 
-      {loading && trips.length === 0 ? (
+      {loading && workspaces.length === 0 ? (
         <View style={[styles.centered, { paddingTop: insets.top }]}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Chargement des voyages…</Text>
         </View>
       ) : (
         <FlatList
-          data={trips}
-          keyExtractor={(item) => item.id}
+          data={filteredWorkspaces}
+          keyExtractor={(item) => item.workspace_id}
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
             paddingTop: insets.top + 8,
@@ -171,11 +220,30 @@ export function PlannerScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text style={styles.kicker}>PLANNER</Text>
-              <Text style={styles.title}>Tes voyages</Text>
+              <Text style={styles.kicker}>VOYAGES</Text>
+              <Text style={styles.title}>Tout ton parcours</Text>
               <Text style={styles.subtitle}>
-                Vol → Hôtel → la suite. Scanne, invite, compose ton séjour.
+                Organise en groupe, puis retrouve ton séjour et ses réservations.
               </Text>
+              <View style={styles.hubTabs}>
+                {(
+                  [
+                    ['organize', 'À organiser'],
+                    ['upcoming', 'À venir'],
+                    ['past', 'Passés'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Pressable
+                    key={key}
+                    onPress={() => setFilter(key)}
+                    style={[styles.hubTab, filter === key && styles.hubTabActive]}
+                  >
+                    <Text style={[styles.hubTabText, filter === key && styles.hubTabTextActive]}>
+                      {label} · {counts[key]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
           }
           ListEmptyComponent={
@@ -201,139 +269,37 @@ export function PlannerScreen() {
                       <Text style={styles.emptyIconText}>✈</Text>
                     </LinearGradient>
                   </View>
-                  <Text style={styles.emptyTitle}>Ton premier voyage</Text>
-                  <Text style={styles.emptyBody}>
-                    Choisis une ville, trouve un vol, puis compose l’hôtel —
-                    même parcours que Mon séjour.
+                  <Text style={styles.emptyTitle}>
+                    {workspaces.length ? 'Rien dans cette catégorie' : 'Ton premier voyage'}
                   </Text>
-                  <Pressable
-                    onPress={() => setShowCreate(true)}
-                    style={({ pressed }) => [
-                      styles.emptyCta,
-                      pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-                    ]}
-                  >
-                    <Text style={styles.emptyCtaText}>Créer un voyage</Text>
-                  </Pressable>
+                  <Text style={styles.emptyBody}>
+                    {workspaces.length
+                      ? 'Tes voyages apparaîtront ici au fil de leur progression.'
+                      : 'Choisis une ville, trouve un vol, puis compose tout le séjour.'}
+                  </Text>
+                  {!workspaces.length || filter === 'organize' ? (
+                    <Pressable
+                      onPress={() => setShowCreate(true)}
+                      style={({ pressed }) => [
+                        styles.emptyCta,
+                        pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+                      ]}
+                    >
+                      <Text style={styles.emptyCtaText}>Créer un voyage</Text>
+                    </Pressable>
+                  ) : null}
                 </>
               )}
             </View>
           }
-          renderItem={({ item }) => {
-            const arrival = arrivalDisplayLabel(item.arrival_airport, cityGroups)
-            const imageUri = arrival.isAny
-              ? cityImageUrl(null)
-              : cityImageUrl(arrival.city)
-            const dateLabel =
-              item.dates_depart?.[0] && item.dates_retour?.[0]
-                ? `${formatDateFr(item.dates_depart[0].date)} → ${formatDateFr(
-                    item.dates_retour[item.dates_retour.length - 1].date,
-                  )}`
-                : null
-            return (
-              <Pressable
-                onPress={() => navigation.navigate('TripDetail', { tripId: item.id })}
-                style={({ pressed }) => [
-                  styles.tripCard,
-                  shadow.soft,
-                  pressed && { opacity: 0.96, transform: [{ scale: 0.992 }] },
-                ]}
-              >
-                <View style={styles.tripHero}>
-                  <Image source={{ uri: imageUri }} style={styles.tripHeroImage} />
-                  <LinearGradient
-                    colors={[
-                      'rgba(26,18,14,0.15)',
-                      'transparent',
-                      'rgba(26,18,14,0.82)',
-                    ]}
-                    locations={[0, 0.35, 1]}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View
-                    style={[
-                      styles.statusPill,
-                      item.status === 'locked' && styles.statusLocked,
-                      (item.status === 'planning' || item.status === 'draft') &&
-                        styles.statusPlanning,
-                      item.status === 'scanning' && styles.statusScanning,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        item.status === 'locked' && styles.statusTextLocked,
-                      ]}
-                    >
-                      {STATUS_LABEL[item.status] || item.status}
-                    </Text>
-                  </View>
-                  <View style={styles.tripHeroCaption}>
-                    <Text style={styles.tripHeroCity} numberOfLines={1}>
-                      {arrival.isAny ? 'Destination libre' : arrival.city}
-                    </Text>
-                    <View style={styles.routeRow}>
-                      <Text style={styles.routeCode}>
-                        {departureRouteLabel(item.departure_airport)}
-                      </Text>
-                      <View style={styles.routeDash} />
-                      <Text style={styles.routeCode}>
-                        {arrival.isAny ? 'ANY' : arrival.codes.split(' · ')[0]}
-                      </Text>
-                      {!arrival.isAny && arrival.codes.includes('·') ? (
-                        <Text style={styles.routeMore}>
-                          {' '}+{arrival.codes.split(' · ').length - 1}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.tripBody}>
-                  <Text style={styles.tripName} numberOfLines={2}>
-                    {item.name}
-                  </Text>
-                  <View style={styles.chipRow}>
-                    <View style={styles.chip}>
-                      <Text style={styles.chipText}>
-                        {item.passengers} voy.
-                      </Text>
-                    </View>
-                    <View style={styles.chip}>
-                      <Text style={styles.chipText}>max {item.budget_max}€</Text>
-                    </View>
-                    {(item.proposals_count ?? 0) > 0 ? (
-                      <View style={[styles.chip, styles.chipAccent]}>
-                        <Text style={[styles.chipText, styles.chipTextAccent]}>
-                          {item.proposals_count} prop.
-                        </Text>
-                      </View>
-                    ) : null}
-                    {item.route_ok === false ? (
-                      <View style={[styles.chip, { backgroundColor: '#FFFBEB' }]}>
-                        <Text style={[styles.chipText, { color: '#92400E' }]}>
-                          Route à maj
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  {dateLabel ? (
-                    <Text style={styles.tripDates}>{dateLabel}</Text>
-                  ) : null}
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.openHint}>
-                      {item.status === 'locked' ? 'Vol → Hôtel' : 'Ouvrir le parcours'}
-                    </Text>
-                    <Text style={styles.openArrow}>›</Text>
-                  </View>
-                </View>
-              </Pressable>
-            )
-          }}
+          renderItem={({ item }) => (
+            <JourneyCard workspace={item} onPress={() => openWorkspace(item)} />
+          )}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {trips.length > 0 ? (
+      {workspaces.length > 0 ? (
         <Pressable
           onPress={() => setShowCreate(true)}
           style={({ pressed }) => [
@@ -765,6 +731,33 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: 2,
   },
+  hubTabs: {
+    flexDirection: 'row',
+    gap: 7,
+    marginTop: 14,
+  },
+  hubTab: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  hubTabActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  hubTabText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: colors.muted,
+    textAlign: 'center',
+  },
+  hubTabTextActive: { color: colors.white },
   loadingText: { fontFamily: fonts.medium, color: colors.muted, marginTop: 8 },
   emptyCard: {
     backgroundColor: colors.white,
