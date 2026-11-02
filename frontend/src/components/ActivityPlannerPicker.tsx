@@ -2,14 +2,16 @@
  * Modal: choisir le séjour / planner cible pour une activité.
  * Charge les workspaces API + fallbacks locaux (remembered / guest-like drafts).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
   ACTIVITY_PICK_PLANNER_HINT_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
+  ACTIVITY_SWITCHER_SOFT_LIMIT,
   cityDisplayNameFr,
+  filterActivitySwitcherWorkspaces,
   parseAirportCodes,
   type PlannedTrip,
   type TravelWorkspace,
@@ -31,6 +33,7 @@ type Props = {
   busy?: boolean
   preferredPlannedTripId?: string | null
   preferredDraftToken?: string | null
+  catalogCity?: string | null
   title?: string
   hint?: string
   onClose: () => void
@@ -109,28 +112,12 @@ function rememberedAsWorkspace(row: {
   }
 }
 
-function mergeWorkspaces(rows: TravelWorkspace[]): TravelWorkspace[] {
-  const byKey = new Map<string, TravelWorkspace>()
-  for (const w of rows) {
-    const planned = String(w.planned_trip_id || '').trim()
-    const draft = String(w.draft_token || '').trim()
-    if (!planned && !draft) continue
-    const key = planned ? `p:${planned}` : `d:${draft}`
-    if (!byKey.has(key)) byKey.set(key, w)
-  }
-  return [...byKey.values()].sort((a, b) => {
-    const ap = a.planned_trip_id ? 0 : 1
-    const bp = b.planned_trip_id ? 0 : 1
-    if (ap !== bp) return ap - bp
-    return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
-  })
-}
-
 export function ActivityPlannerPicker({
   open,
   busy = false,
   preferredPlannedTripId,
   preferredDraftToken,
+  catalogCity = null,
   title = ACTIVITY_PICK_PLANNER_TITLE_FR,
   hint = ACTIVITY_PICK_PLANNER_HINT_FR,
   onClose,
@@ -140,13 +127,21 @@ export function ActivityPlannerPicker({
   const [error, setError] = useState<string | null>(null)
   const [authNeeded, setAuthNeeded] = useState(false)
   const [items, setItems] = useState<TravelWorkspace[]>([])
+  const [expanded, setExpanded] = useState(false)
+
+  const applyFilter = (rows: TravelWorkspace[]) =>
+    filterActivitySwitcherWorkspaces(rows, { catalogCity })
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setExpanded(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
     setAuthNeeded(false)
+    setExpanded(false)
     void (async () => {
       const local = listRememberedTrips().map(rememberedAsWorkspace)
 
@@ -173,7 +168,7 @@ export function ActivityPlannerPicker({
                   )
                 } catch {
                   if (cancelled) return
-                  const merged = mergeWorkspaces(local)
+                  const merged = applyFilter(local)
                   setItems(merged)
                   if (!merged.length) {
                     setAuthNeeded(true)
@@ -190,7 +185,7 @@ export function ActivityPlannerPicker({
                 remote = (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace)
               } catch {
                 if (cancelled) return
-                const merged = mergeWorkspaces(local)
+                const merged = applyFilter(local)
                 setItems(merged)
                 if (!merged.length) {
                   setAuthNeeded(true)
@@ -204,10 +199,10 @@ export function ActivityPlannerPicker({
           }
         }
         if (cancelled) return
-        setItems(mergeWorkspaces([...remote, ...local]))
+        setItems(applyFilter([...remote, ...local]))
       } catch (e) {
         if (cancelled) return
-        const merged = mergeWorkspaces(local)
+        const merged = applyFilter(local)
         setItems(merged)
         if (!merged.length) {
           setError(e instanceof Error ? e.message : 'Erreur')
@@ -219,7 +214,15 @@ export function ActivityPlannerPicker({
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, catalogCity])
+
+  const visibleItems = useMemo(() => {
+    if (expanded || items.length <= ACTIVITY_SWITCHER_SOFT_LIMIT) return items
+    return items.slice(0, ACTIVITY_SWITCHER_SOFT_LIMIT)
+  }, [expanded, items])
+
+  const canExpand =
+    !expanded && items.length > ACTIVITY_SWITCHER_SOFT_LIMIT
 
   if (!open) return null
 
@@ -266,7 +269,7 @@ export function ActivityPlannerPicker({
               </Link>
             </div>
           ) : null}
-          {items.map((ws) => {
+          {visibleItems.map((ws) => {
             const planned = String(ws.planned_trip_id || '').trim()
             const draft = String(ws.draft_token || '').trim()
             const preferred =
@@ -299,7 +302,7 @@ export function ActivityPlannerPicker({
                     <p className="font-bold text-ink text-sm truncate">{label}</p>
                     <p className="mt-0.5 text-xs text-muted">
                       {[
-                        planned ? 'Planner' : 'Réservation',
+                        planned ? 'Planner' : 'Séjour',
                         dates,
                         ws.dest_iata ? String(ws.dest_iata) : null,
                       ]
@@ -314,6 +317,15 @@ export function ActivityPlannerPicker({
               </button>
             )
           })}
+          {canExpand ? (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="w-full rounded-xl border border-dashed border-line px-3 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-50/50"
+            >
+              Voir plus ({items.length - ACTIVITY_SWITCHER_SOFT_LIMIT})
+            </button>
+          ) : null}
         </div>
 
         <button

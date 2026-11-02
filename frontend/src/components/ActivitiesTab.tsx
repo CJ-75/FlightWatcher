@@ -1013,6 +1013,9 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         busy={addBusy}
         preferredPlannedTripId={activeTrip?.plannedTripId}
         preferredDraftToken={activeTrip?.draftToken}
+        catalogCity={
+          pendingAdd?.destinationLabel || citySlug || null
+        }
         title={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_FR}
         hint={
           pendingAdd

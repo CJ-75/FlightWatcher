@@ -415,6 +415,7 @@ export function FavoritesScreen() {
       <ActivityPlannerPicker
         visible={Boolean(pendingAdd)}
         busy={addBusy}
+        catalogCity={pendingAdd?.destinationLabel || null}
         onClose={() => {
           if (!addBusy) setPendingAdd(null)
         }}

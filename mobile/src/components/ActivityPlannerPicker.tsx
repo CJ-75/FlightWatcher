@@ -1,7 +1,7 @@
 /**
  * Modal: choisir le séjour / planner cible pour une activité.
  */
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import {
   ACTIVITY_PICK_PLANNER_HINT_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
+  ACTIVITY_SWITCHER_SOFT_LIMIT,
   cityDisplayNameFr,
+  filterActivitySwitcherWorkspaces,
   parseAirportCodes,
   type PlannedTrip,
   type TravelWorkspace,
@@ -83,23 +85,6 @@ function rememberedAsWorkspace(row: {
   }
 }
 
-function mergeWorkspaces(rows: TravelWorkspace[]): TravelWorkspace[] {
-  const byKey = new Map<string, TravelWorkspace>()
-  for (const w of rows) {
-    const planned = String(w.planned_trip_id || '').trim()
-    const draft = String(w.draft_token || '').trim()
-    if (!planned && !draft) continue
-    const key = planned ? `p:${planned}` : `d:${draft}`
-    if (!byKey.has(key)) byKey.set(key, w)
-  }
-  return [...byKey.values()].sort((a, b) => {
-    const ap = a.planned_trip_id ? 0 : 1
-    const bp = b.planned_trip_id ? 0 : 1
-    if (ap !== bp) return ap - bp
-    return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
-  })
-}
-
 export type ActivityPlannerTarget = {
   plannedTripId?: string
   draftToken?: string
@@ -113,6 +98,7 @@ type Props = {
   busy?: boolean
   preferredPlannedTripId?: string | null
   preferredDraftToken?: string | null
+  catalogCity?: string | null
   title?: string
   hint?: string
   onClose: () => void
@@ -143,6 +129,7 @@ export function ActivityPlannerPicker({
   busy = false,
   preferredPlannedTripId,
   preferredDraftToken,
+  catalogCity = null,
   title = ACTIVITY_PICK_PLANNER_TITLE_FR,
   hint = ACTIVITY_PICK_PLANNER_HINT_FR,
   onClose,
@@ -156,14 +143,22 @@ export function ActivityPlannerPicker({
   const [error, setError] = useState<string | null>(null)
   const [authNeeded, setAuthNeeded] = useState(false)
   const [items, setItems] = useState<TravelWorkspace[]>([])
+  const [expanded, setExpanded] = useState(false)
   const loggedIn = Boolean(user || session?.user)
 
+  const applyFilter = (rows: TravelWorkspace[]) =>
+    filterActivitySwitcherWorkspaces(rows, { catalogCity })
+
   useEffect(() => {
-    if (!visible) return
+    if (!visible) {
+      setExpanded(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
     setAuthNeeded(false)
+    setExpanded(false)
     void (async () => {
       const local: TravelWorkspace[] = []
       try {
@@ -179,7 +174,7 @@ export function ActivityPlannerPicker({
       try {
         if (__DEV__ && isGuest) {
           if (cancelled) return
-          setItems(mergeWorkspaces(local))
+          setItems(applyFilter(local))
           return
         }
         let remote: TravelWorkspace[] = []
@@ -202,7 +197,7 @@ export function ActivityPlannerPicker({
                   )
                 } catch {
                   if (cancelled) return
-                  const merged = mergeWorkspaces(local)
+                  const merged = applyFilter(local)
                   setItems(merged)
                   if (!merged.length) {
                     setAuthNeeded(true)
@@ -219,7 +214,7 @@ export function ActivityPlannerPicker({
                 remote = (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace)
               } catch {
                 if (cancelled) return
-                const merged = mergeWorkspaces(local)
+                const merged = applyFilter(local)
                 setItems(merged)
                 if (!merged.length) {
                   setAuthNeeded(true)
@@ -233,10 +228,10 @@ export function ActivityPlannerPicker({
           }
         }
         if (cancelled) return
-        setItems(mergeWorkspaces([...remote, ...local]))
+        setItems(applyFilter([...remote, ...local]))
       } catch (e) {
         if (cancelled) return
-        const merged = mergeWorkspaces(local)
+        const merged = applyFilter(local)
         setItems(merged)
         if (!merged.length) {
           setError(e instanceof Error ? e.message : 'Erreur')
@@ -248,7 +243,15 @@ export function ActivityPlannerPicker({
     return () => {
       cancelled = true
     }
-  }, [visible, isGuest, loggedIn])
+  }, [visible, isGuest, loggedIn, catalogCity])
+
+  const visibleItems = useMemo(() => {
+    if (expanded || items.length <= ACTIVITY_SWITCHER_SOFT_LIMIT) return items
+    return items.slice(0, ACTIVITY_SWITCHER_SOFT_LIMIT)
+  }, [expanded, items])
+
+  const canExpand =
+    !expanded && items.length > ACTIVITY_SWITCHER_SOFT_LIMIT
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -291,7 +294,7 @@ export function ActivityPlannerPicker({
           ) : null}
 
           <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ gap: 8 }}>
-            {items.map((ws) => {
+            {visibleItems.map((ws) => {
               const planned = String(ws.planned_trip_id || '').trim()
               const draft = String(ws.draft_token || '').trim()
               const preferred =
@@ -325,7 +328,7 @@ export function ActivityPlannerPicker({
                     </Text>
                     <Text style={styles.rowMeta} numberOfLines={1}>
                       {[
-                        planned ? 'Planner' : 'Réservation',
+                        planned ? 'Planner' : 'Séjour',
                         dates,
                         ws.dest_iata ? String(ws.dest_iata) : null,
                       ]
@@ -337,6 +340,19 @@ export function ActivityPlannerPicker({
                 </Pressable>
               )
             })}
+            {canExpand ? (
+              <Pressable
+                onPress={() => setExpanded(true)}
+                style={({ pressed }) => [
+                  styles.moreBtn,
+                  pressed && { opacity: 0.9 },
+                ]}
+              >
+                <Text style={styles.moreText}>
+                  Voir plus ({items.length - ACTIVITY_SWITCHER_SOFT_LIMIT})
+                </Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
 
           <Pressable onPress={onClose} style={styles.cancel}>
@@ -439,6 +455,19 @@ const styles = StyleSheet.create({
   plus: {
     fontFamily: fonts.extrabold,
     fontSize: 20,
+    color: colors.primary,
+  },
+  moreBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+    borderColor: colors.line,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  moreText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
     color: colors.primary,
   },
   cancel: {

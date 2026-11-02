@@ -3528,6 +3528,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         <ActivityPlannerPicker
           open={Boolean(pendingAddActivity)}
           busy={activityAddBusy}
+          catalogCity={pendingAddActivity?.destinationLabel || null}
           onClose={() => {
             if (!activityAddBusy) setPendingAddActivity(null)
           }}
