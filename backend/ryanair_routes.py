@@ -152,8 +152,10 @@ def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
     ``departure`` may be a single IATA or comma-separated city airports
     (e.g. ``CDG,ORY,BVA``). Empty arrival = ok.
 
-    Ryanair-only check: if no origin has Ryanair routes (all CDG/ORY…),
-    do not block — Travelpayouts may still serve the route.
+    Ryanair-only check: if any origin has no Ryanair route data (CDG/ORY,
+    another provider, or a temporary widget failure), do not block.
+    The absence of a route in Ryanair's network is not evidence that a
+    multi-provider route is unavailable.
     """
     if not arrival:
         return []
@@ -172,21 +174,15 @@ def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
     if not deps:
         return []
 
-    # Prefer origins that likely have Ryanair data first (BVA before CDG)
-    deps_sorted = sorted(
-        deps,
-        key=lambda c: 0 if _cache_get(c) else 1,
-    )
-
     served: Set[str] = set()
-    remaining = set(codes)
-    for dep in deps_sorted:
-        if not remaining:
-            break
-        served |= fetch_served_codes(dep)
-        remaining -= served
+    for dep in deps:
+        routes = fetch_served_codes(dep)
+        if not routes:
+            # This origin is outside the Ryanair dataset (or temporarily
+            # unavailable), so other providers may still serve the route.
+            return []
+        served |= routes
+        if all(code in served for code in codes):
+            return []
 
-    if not served:
-        # No Ryanair coverage from any origin — don't block multi-provider trips
-        return []
     return [c for c in codes if c not in served]
