@@ -1,6 +1,9 @@
 """Deals listing + user liked deals + batch jobs."""
 from __future__ import annotations
 
+import hmac
+import os
+from urllib.parse import parse_qs
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -1138,6 +1141,157 @@ async def my_trip_flight_booked(draft_token: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class FlightBookingStatusBody(BaseModel):
+    status: str
+    provider: Optional[str] = None
+    reference: Optional[str] = None
+
+
+@router.post("/api/deals/my-trip/{draft_token}/flight-booking-status")
+async def my_trip_flight_booking_status(
+    draft_token: str, body: FlightBookingStatusBody
+):
+    """Record browser redirect/pending state or a user's airline confirmation."""
+    if body.status not in {
+        "redirected",
+        "pending_partner",
+        "user_confirmed",
+        "cancelled",
+    }:
+        raise HTTPException(status_code=400, detail="Statut client non autorisé")
+    try:
+        from deals.my_trips import record_trip_event, update_flight_booking_status
+
+        row = update_flight_booking_status(
+            _svc(),
+            draft_token,
+            status=body.status,
+            provider=body.provider,
+            reference=body.reference,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Voyage introuvable")
+        event = {
+            "redirected": "flight_redirected",
+            "pending_partner": "flight_partner_pending",
+            "user_confirmed": "flight_booked_yes",
+            "cancelled": "flight_partner_cancelled",
+        }[body.status]
+        record_trip_event(
+            _svc(),
+            draft_token,
+            event,
+            meta={"provider": body.provider, "reference": body.reference},
+        )
+        return row
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _travelpayouts_postback_payload(request: Request) -> Dict[str, str]:
+    values = {key: value for key, value in request.query_params.items()}
+    if request.method == "POST":
+        raw = await request.body()
+        if raw:
+            try:
+                parsed = await request.json()
+                if isinstance(parsed, dict):
+                    values.update(
+                        {str(key): str(value) for key, value in parsed.items()}
+                    )
+            except Exception:
+                form = parse_qs(raw.decode("utf-8", errors="ignore"))
+                values.update(
+                    {key: str(items[-1]) for key, items in form.items() if items}
+                )
+    return values
+
+
+@router.get("/api/webhooks/travelpayouts/flight-booking")
+@router.post("/api/webhooks/travelpayouts/flight-booking")
+async def travelpayouts_flight_booking_postback(request: Request):
+    """Travelpayouts postback; configure the shared secret in the dashboard URL."""
+    values = await _travelpayouts_postback_payload(request)
+    expected = (os.getenv("TRAVELPAYOUTS_POSTBACK_SECRET") or "").strip()
+    supplied = str(values.get("secret") or "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Postback non configuré")
+    if not hmac.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="Postback invalide")
+
+    sub_id = str(
+        values.get("sub_id")
+        or values.get("subid")
+        or values.get("additional_marker")
+        or ""
+    ).strip()
+    draft_id = sub_id.removeprefix("fw_").replace("_", "-")
+    if not draft_id:
+        raise HTTPException(status_code=400, detail="SubID manquant")
+
+    status_raw = str(
+        values.get("status") or values.get("state") or values.get("event_type") or ""
+    ).strip().lower()
+    status = {
+        "processing": "pending_partner",
+        "pending": "pending_partner",
+        "paid": "partner_confirmed",
+        "approved": "partner_confirmed",
+        "confirmed": "partner_confirmed",
+        "cancelled": "cancelled",
+        "canceled": "cancelled",
+        "rejected": "cancelled",
+    }.get(status_raw)
+    if not status:
+        raise HTTPException(status_code=400, detail="Statut partenaire inconnu")
+
+    supabase = _svc()
+    found = (
+        supabase.table("my_trip_drafts")
+        .select("draft_token")
+        .eq("id", draft_id)
+        .limit(1)
+        .execute()
+    )
+    if not found.data:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+    draft_token = found.data[0]["draft_token"]
+    reference = str(
+        values.get("booking_id")
+        or values.get("bookingId")
+        or values.get("action_id")
+        or ""
+    ).strip() or None
+
+    from deals.my_trips import record_trip_event, update_flight_booking_status
+
+    row = update_flight_booking_status(
+        supabase,
+        draft_token,
+        status=status,
+        provider="travelpayouts",
+        reference=reference,
+    )
+    event = (
+        "flight_partner_confirmed"
+        if status == "partner_confirmed"
+        else "flight_partner_cancelled"
+        if status == "cancelled"
+        else "flight_partner_pending"
+    )
+    record_trip_event(
+        supabase,
+        draft_token,
+        event,
+        meta={"provider": "travelpayouts", "reference": reference},
+    )
+    return {"ok": True, "status": status, "draft_id": draft_id}
 
 
 class MyTripHotelBookedBody(BaseModel):

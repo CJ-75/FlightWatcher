@@ -82,7 +82,12 @@ function tabFromPath(pathname: string): Tab | null {
   const p = pathname.replace(/\/+$/, '') || '/'
   if (p === '/vols' || p === '/recherche' || p === '/search') return 'search'
   if (p === '/sejours' || p === '/deals') return 'deals'
-  if (p === '/planner') return 'planner'
+  if (
+    p === '/planner' ||
+    (p.startsWith('/planner/') && !p.startsWith('/planner/invite'))
+  ) {
+    return 'planner'
+  }
   if (p === '/alertes' || p === '/alerts') return 'alerts'
   if (p === '/activites' || p.startsWith('/activites/')) return 'activities'
   if (p === '/favoris' || p === '/saved') return 'saved'
@@ -162,7 +167,12 @@ function Dashboard() {
   const [rouletteBudget, setRouletteBudget] = useState(100)
   const [error, setError] = useState<string | null>(null)
   const [postBookTrip, setPostBookTrip] = useState<EnrichedTripResponse | null>(null)
+  const [postBookDraftToken, setPostBookDraftToken] = useState<string | null>(null)
   const [hotelUpsellBusy, setHotelUpsellBusy] = useState(false)
+  const leftForFlightBook = useRef(false)
+  const leftForFlightBookAt = useRef(0)
+  const pendingPostBookTrip = useRef<EnrichedTripResponse | null>(null)
+  const pendingPostBookToken = useRef<string | null>(null)
   const [currentSearchEventId, setCurrentSearchEventId] = useState<string | null>(null) // ID de l'événement de recherche actuel
   const [lastSearchInfo, setLastSearchInfo] = useState<{
     datePreset: string | null
@@ -1003,19 +1013,78 @@ function Dashboard() {
     lastSearchInfo?.passengers || currentRequest?.passengers || 1
 
   const handlePartnerBook = (trip: EnrichedTripResponse) => {
-    // 1) Partner tab sync (popup blockers), 2) lightbox to launch Mon voyage
-    openPartnerBookSync({
+    const popup = window.open('about:blank', '_blank')
+    if (!popup) {
+      setToastMessage('Autorise les fenêtres pour ouvrir la réservation')
+      setToastType('error')
+      return
+    }
+    popup.opener = null
+    setHotelUpsellBusy(true)
+    void createMyTripComposeFromTrip({
       trip,
       passengers: searchPassengersForBook,
       language,
-      searchEventId: currentSearchEventId,
+      markFlightBooked: false,
     })
-    setPostBookTrip(trip)
+      .then(async (draft) => {
+        const source = openPartnerBookSync({
+          trip,
+          passengers: searchPassengersForBook,
+          language,
+          searchEventId: currentSearchEventId,
+          draftId: draft.id,
+          targetWindow: popup,
+        })
+        const isTravelpayouts = source.partnerId === 'aviasales'
+        await getApiClient().updateMyTripFlightBookingStatus(draft.draft_token, {
+          status: isTravelpayouts ? 'pending_partner' : 'redirected',
+          provider: source.partnerId,
+        })
+        setPostBookDraftToken(draft.draft_token)
+        // Travelpayouts: suivi auto. Ryanair/compagnie: demander au retour de l’onglet.
+        if (isTravelpayouts) {
+          setPostBookTrip(trip)
+        } else {
+          pendingPostBookTrip.current = trip
+          pendingPostBookToken.current = draft.draft_token
+          leftForFlightBook.current = true
+          leftForFlightBookAt.current = Date.now()
+        }
+      })
+      .catch(() => {
+        popup.close()
+        setToastMessage('Impossible d’ouvrir la réservation — réessaie')
+        setToastType('error')
+      })
+      .finally(() => setHotelUpsellBusy(false))
   }
+
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!leftForFlightBook.current) return
+      if (Date.now() - leftForFlightBookAt.current < 1200) return
+      leftForFlightBook.current = false
+      const trip = pendingPostBookTrip.current
+      if (!trip) return
+      setPostBookDraftToken(pendingPostBookToken.current)
+      setPostBookTrip(trip)
+      pendingPostBookTrip.current = null
+      pendingPostBookToken.current = null
+    }
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+    return () => {
+      document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
+    }
+  }, [])
 
   const handleAddHotel = async (trip: EnrichedTripResponse) => {
     clearPendingHotelUpsell()
     setPostBookTrip(null)
+    setPostBookDraftToken(null)
     setHotelUpsellBusy(true)
     try {
       const draft = await createMyTripComposeFromTrip({
@@ -1048,16 +1117,27 @@ function Dashboard() {
       search_event_id: pending?.searchEventId || currentSearchEventId || null,
     })
     try {
-      const draft = await createMyTripComposeFromTrip({
-        trip,
-        passengers: pending?.passengers || searchPassengersForBook,
-        language,
-        markFlightBooked: true,
-      })
+      const draftToken =
+        postBookDraftToken ||
+        (
+          await createMyTripComposeFromTrip({
+            trip,
+            passengers: pending?.passengers || searchPassengersForBook,
+            language,
+            markFlightBooked: false,
+          })
+        ).draft_token
+      if (pending?.partnerId !== 'aviasales') {
+        await getApiClient().updateMyTripFlightBookingStatus(draftToken, {
+          status: 'user_confirmed',
+          provider: pending?.partnerId || 'airline',
+        })
+      }
       clearPendingHotelUpsell()
       setPostBookTrip(null)
+      setPostBookDraftToken(null)
       // New tab → keep Search results in the current tab
-      const path = `/trip/${draft.draft_token}?compose=1`
+      const path = `/trip/${draftToken}?compose=1`
       const opened = window.open(path, '_blank', 'noopener,noreferrer')
       if (!opened) {
         navigate(path)
@@ -1086,6 +1166,7 @@ function Dashboard() {
     }
     clearPendingHotelUpsell()
     setPostBookTrip(null)
+    setPostBookDraftToken(null)
   }
 
   return (
@@ -1441,6 +1522,9 @@ function Dashboard() {
         <PostBookLightbox
           trip={postBookTrip}
           busy={hotelUpsellBusy}
+          automaticConfirmation={/travelpayouts|aviasales/i.test(
+            `${postBookTrip.provider || ''} ${postBookTrip.booking_url || ''}`,
+          )}
           onOpenTrip={() => void handlePostBookOpenTrip()}
           onClose={handlePostBookDismiss}
         />
@@ -2192,9 +2276,8 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [favoritesKind, setFavoritesKind] = useState<
-    'flights' | 'deals' | 'activities' | 'addresses'
+    'flights' | 'deals' | 'activities'
   >('flights')
-  const [userAddresses, setUserAddresses] = useState<Record<string, unknown>[]>([])
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
 
   const { active: activeFlightFavorites, archived: archivedFlightFavorites } = useMemo(
@@ -2218,7 +2301,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         return
       }
       // Favoris: vols + deals + activités
-      const [favs, deals, acts, addresses] = await Promise.all([
+      const [favs, deals, acts] = await Promise.all([
         getFavorites(force),
         getApiClient()
           .getLikedDeals()
@@ -2226,15 +2309,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         getApiClient()
           .getLikedActivities()
           .catch(() => [] as LikedActivity[]),
-        getApiClient()
-          .listUserAddresses()
-          .then((r) => r.items || [])
-          .catch(() => [] as Record<string, unknown>[]),
       ])
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
       setLikedActivities(Array.isArray(acts) ? acts : [])
-      setUserAddresses(Array.isArray(addresses) ? addresses : [])
       if (opts?.resetFilter) setArchiveOpen(false)
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
@@ -3032,7 +3110,6 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 ['flights', 'favorites.switch.flights'],
                 ['deals', 'favorites.switch.deals'],
                 ['activities', 'favorites.switch.activities'],
-                ['addresses', 'favorites.switch.addresses'],
               ] as const
             ).map(([id, key]) => (
               <button
@@ -3055,69 +3132,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         </div>
         
         <div className="pt-2">
-          {favoritesKind === 'addresses' ? (
-            userAddresses.length === 0 ? (
-              <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
-                <div
-                  aria-hidden
-                  className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent"
-                />
-                <div className="relative">
-                  <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
-                    🍽
-                  </div>
-                  <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
-                    {t('favorites.addressesEmptyTitle')}
-                  </p>
-                  <p className="text-sm text-slate-500 max-w-md mx-auto">
-                    {t('favorites.addressesEmpty')}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {userAddresses.map((row) => {
-                  const place = (row.places || {}) as {
-                    name?: string
-                    city_slug?: string
-                    restaurant_details?: { cuisine?: string }
-                  }
-                  const status = String(row.status || 'to_try')
-                  return (
-                    <article
-                      key={String(row.id)}
-                      className="group rounded-3xl border border-line bg-white p-4 shadow-soft transition-shadow hover:shadow-md"
-                    >
-                      <div className="flex gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-orange-50 text-primary-600 flex items-center justify-center shrink-0 text-lg">
-                          🍽
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="font-extrabold text-ink text-[15px] tracking-tight">
-                            {place.name || 'Adresse'}
-                          </h3>
-                          <p className="text-sm text-muted mt-0.5">
-                            {[place.restaurant_details?.cuisine, place.city_slug]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                          <p className="text-xs font-bold text-primary-700 mt-1.5">
-                            {t(
-                              status === 'loved'
-                                ? 'favorites.addressStatus.loved'
-                                : status === 'meh'
-                                  ? 'favorites.addressStatus.meh'
-                                  : 'favorites.addressStatus.to_try',
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </article>
-                  )
-                })}
-              </div>
-            )
-          ) : favoritesKind === 'activities' ? (
+          {favoritesKind === 'activities' ? (
             likedActivities.length === 0 ? (
               <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />

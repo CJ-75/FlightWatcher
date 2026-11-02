@@ -16,15 +16,25 @@ import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/nativ
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { PlannedTripDetail, TripMember, TripProposal } from '@flightwatcher/shared'
+import type {
+  MyTripDraft,
+  PlannedTripDetail,
+  TravelWorkspace,
+  TripMember,
+  TripProposal,
+} from '@flightwatcher/shared'
 import {
   activityCitySlugFromLabel,
+  activityStepProgress,
   buildStayPipeline,
   cityDisplayNameFr,
   cityImageUrl,
   formatAirlineLabel,
   formatDateFr,
   parseAirportCodes,
+  resolveFlightStepStatus,
+  resolveHotelStepStatus,
+  restaurantStepProgress,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type StayStepId,
@@ -92,9 +102,20 @@ export function TripDetailScreen() {
   } | null>(null)
   const [editBudget, setEditBudget] = useState(150)
   const [savingCriteria, setSavingCriteria] = useState(false)
+  const [reopeningFlight, setReopeningFlight] = useState(false)
+  const [skippingFlight, setSkippingFlight] = useState(false)
+  const [skippingHotel, setSkippingHotel] = useState(false)
+  const [showModalities, setShowModalities] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
+  const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
+  const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
+  const [flightBookingBusy, setFlightBookingBusy] = useState(false)
+  const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const extrasRef = useRef<View>(null)
+  const leftForFlight = useRef(false)
+  const leftForFlightNeedsAsk = useRef(false)
 
   useEffect(() => {
     void getApi()
@@ -106,28 +127,92 @@ export function TripDetailScreen() {
       .catch(() => undefined)
   }, [])
 
-  const load = useCallback(async () => {
-    setError(null)
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
+    if (!silent) setError(null)
     try {
       const detail =
         __DEV__ && isGuest ? getGuestTrip(tripId) : await getApi().getPlannedTrip(tripId)
       if (!detail) throw new Error('Voyage introuvable')
       setTrip(detail)
+      setEditBudget(detail.budget_max || 150)
       setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
       navigation.setOptions({ title: detail.name || 'Voyage' })
+      if (!(__DEV__ && isGuest)) {
+        try {
+          const workspaces = await getApi().listTravelWorkspaces()
+          const matched =
+            workspaces.find((item) => item.planned_trip_id === tripId) || null
+          setWorkspace(matched)
+          if (matched?.draft_token) {
+            setFlightDraft(await getApi().getMyTrip(matched.draft_token))
+          } else {
+            setFlightDraft(null)
+          }
+        } catch {
+          setWorkspace(null)
+          setFlightDraft(null)
+        }
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Chargement impossible')
-      setTrip(null)
+      if (!silent) {
+        setError(e instanceof Error ? e.message : 'Chargement impossible')
+        setTrip(null)
+      }
     } finally {
       setLoading(false)
     }
   }, [tripId, navigation, isGuest])
 
+  const hasTripRef = useRef(false)
+  hasTripRef.current = Boolean(trip)
+
   useFocusEffect(
     useCallback(() => {
+      // Keep current UI while refreshing statuses after hotel/flight booking.
+      if (hasTripRef.current) {
+        void load({ silent: true })
+        return
+      }
       setLoading(true)
       void load()
     }, [load]),
+  )
+
+  useEffect(() => {
+    const token = flightDraft?.draft_token || workspace?.draft_token
+    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) {
+      setActivityItems([])
+      setRestaurantItems([])
+      return
+    }
+    void getApi()
+      .listTripItems({ draft_token: token })
+      .then((res) => {
+        const items = res.items || []
+        setActivityItems(items.filter((i) => i.item_type === 'activity'))
+        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+      })
+      .catch(() => {
+        setActivityItems([])
+        setRestaurantItems([])
+      })
+  }, [
+    flightDraft?.draft_token,
+    workspace?.draft_token,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    flightDraft?.hotel_booked_at,
+    flightDraft?.flight_booked_at,
+  ])
+
+  const activityProgress = useMemo(
+    () => activityStepProgress(activityItems),
+    [activityItems],
+  )
+  const restaurantProgress = useMemo(
+    () => restaurantStepProgress(restaurantItems),
+    [restaurantItems],
   )
 
   const isOrganizer = !!viewUser && trip?.organizer_id === viewUser.id
@@ -400,7 +485,7 @@ export function TripDetailScreen() {
     if (!trip) return
     Alert.alert(
       'Supprimer le voyage',
-      `Supprimer « ${trip.name} » ? Cette action est définitive.`,
+      `Supprimer « ${trip.name} » ?\n\nLe Planner disparaît, mais tes réservations (vol / hôtel) sont conservées.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -443,27 +528,306 @@ export function TripDetailScreen() {
   const dateIso = trip?.dates_depart?.[0]?.date || null
   const destinationImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 
-  const pipelineForUi = useMemo(() => {
-    if (!accepted) {
-      return buildStayPipeline({
-        flight: 'none',
-        hotel: 'none',
-        focus: 'flight',
-        activitiesEnabled: plannerActivitiesEnabled,
-        restaurantsEnabled: plannerRestaurantsEnabled,
-      })
+  const reservationFlags = useMemo(() => {
+    const payload = (flightDraft?.payload || {}) as Record<string, unknown>
+    const flight = (payload.flight || {}) as Record<string, unknown>
+    const status = String(
+      flightDraft?.flight_booking_status ||
+        payload.flight_booking_status ||
+        workspace?.flight_booking_status ||
+        '',
+    )
+    const externalFlight = Boolean(
+      payload.flight_external || payload.external_flight,
+    )
+    const externalHotel = Boolean(
+      payload.hotel_external || payload.external_hotel,
+    )
+    const flightBooked = Boolean(
+      flightDraft?.flight_booked_at ||
+        payload.flight_booked ||
+        payload.flight_booked_at ||
+        status === 'user_confirmed' ||
+        status === 'partner_confirmed' ||
+        workspace?.pipeline.flight === 'booked' ||
+        externalFlight,
+    )
+    const hotelBooked = Boolean(
+      flightDraft?.hotel_booked_at ||
+        payload.hotel_booked ||
+        payload.hotel_booked_at ||
+        (workspace?.pipeline.hotel === 'booked' && !externalHotel) ||
+        (workspace?.phase === 'booked' && !externalHotel),
+    )
+    const hasHotel = Boolean(
+      flightDraft?.hotel || payload.hotel || workspace?.hotel_booking_id,
+    )
+    const canSkipFlight =
+      !externalFlight &&
+      !hotelBooked &&
+      !externalHotel &&
+      !flightDraft?.flight_booked_at &&
+      status !== 'user_confirmed' &&
+      status !== 'partner_confirmed'
+    const canSkipHotel =
+      !externalHotel && !hotelBooked && !flightDraft?.hotel_booked_at
+    return {
+      payload,
+      flight,
+      externalFlight,
+      externalHotel,
+      flightBooked,
+      hotelBooked,
+      hasHotel,
+      canSkipFlight,
+      canSkipHotel,
     }
-    return buildStayPipeline({
-      flight: 'selected_fw',
-      hotel: 'none',
-      focus: 'hotel',
-      activitiesEnabled: plannerActivitiesEnabled,
-      restaurantsEnabled: plannerRestaurantsEnabled,
+  }, [flightDraft, workspace])
+
+  const pipelineForUi = useMemo(() => {
+    const {
+      flight,
+      flightBooked,
+      hotelBooked,
+      hasHotel,
+      payload,
+      externalFlight,
+      externalHotel,
+    } = reservationFlags
+    const flightStep = resolveFlightStepStatus({
+      hasFlightPayload: Boolean(accepted || flight.origin_iata || externalFlight),
+      flightBooked: flightBooked && !externalFlight,
+      externalFlight,
+      bookingUrl:
+        (flight.booking_url as string | undefined) ||
+        (payload.booking_url as string | undefined) ||
+        null,
     })
-  }, [accepted, plannerActivitiesEnabled, plannerRestaurantsEnabled])
+    const hotelStep = resolveHotelStepStatus({
+      hasHotel,
+      hotelBooked: hotelBooked && !externalHotel,
+      externalHotel,
+    })
+    return buildStayPipeline({
+      flight: flightStep,
+      hotel: hotelStep,
+      focus:
+        hotelBooked || externalHotel
+          ? undefined
+          : accepted || flightStep !== 'none' || externalFlight
+            ? 'hotel'
+            : 'flight',
+      activitiesEnabled: plannerActivitiesEnabled,
+      activitiesDone: activityProgress.done,
+      activitiesPartial: activityProgress.partial,
+      activitiesHint: activityProgress.hint,
+      restaurantsEnabled: plannerRestaurantsEnabled,
+      restaurantsDone: restaurantProgress.done,
+      restaurantsPartial: restaurantProgress.partial,
+      restaurantsHint: restaurantProgress.hint,
+      restaurantsSkipped: restaurantProgress.skipped,
+    })
+  }, [
+    accepted,
+    activityProgress,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    reservationFlags,
+    restaurantProgress,
+  ])
+
+  const changeFlightChoice = async () => {
+    if (!trip || reopeningFlight || (__DEV__ && isGuest)) return
+    Alert.alert(
+      'Changer de vol',
+      'Les propositions actuelles seront remplacées par un nouveau scan. Continuer ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Rescanner',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setReopeningFlight(true)
+              try {
+                await getApi().reopenPlannedTripFlight(tripId)
+                setShowModalities(false)
+                setFlightDraft(null)
+                setWorkspace(null)
+                await scan()
+              } catch (e) {
+                Alert.alert(
+                  'Erreur',
+                  e instanceof Error ? e.message : 'Impossible de rouvrir le vol',
+                )
+              } finally {
+                setReopeningFlight(false)
+              }
+            })()
+          },
+        },
+      ],
+    )
+  }
+
+  const updateBudgetAndRescan = async () => {
+    if (!trip) return
+    const next = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
+    setSavingCriteria(true)
+    try {
+      if (!(__DEV__ && isGuest)) {
+        await getApi().updatePlannedTrip(tripId, { budget_max: next })
+      }
+      setTrip((prev) =>
+        prev
+          ? { ...prev, budget_max: next, status: 'planning' }
+          : prev,
+      )
+      setShowModalities(false)
+      setFlightDraft(null)
+      setWorkspace(null)
+      await scan()
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Mise à jour échouée')
+    } finally {
+      setSavingCriteria(false)
+    }
+  }
+
+  const skipFlight = async () => {
+    if (!trip || skippingFlight || (__DEV__ && isGuest)) return
+    if (!trip.arrival_airport) {
+      Alert.alert('Destination', 'Choisis d’abord une destination.')
+      return
+    }
+    if (!trip.dates_depart?.[0] || !trip.dates_retour?.[0]) {
+      Alert.alert('Dates', 'Dates aller/retour requises.')
+      return
+    }
+    setSkippingFlight(true)
+    try {
+      const draft = await getApi().skipPlannedTripFlight(tripId)
+      const token = String(draft?.draft_token || '').trim()
+      if (!token) throw new Error('Brouillon introuvable')
+      setFlightDraft(draft)
+      navigation.navigate('HotelCompose', { draftToken: token })
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible de passer à l’hôtel',
+      )
+    } finally {
+      setSkippingFlight(false)
+    }
+  }
+
+  const skipHotel = async () => {
+    if (!trip || skippingHotel || (__DEV__ && isGuest)) return
+    setSkippingHotel(true)
+    try {
+      const draft = await getApi().skipPlannedTripHotel(tripId)
+      setFlightDraft(draft)
+      Alert.alert('Hôtel ailleurs', 'Étape hôtel passée — séjour à jour.')
+      await load()
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible de skipper l’hôtel',
+      )
+    } finally {
+      setSkippingHotel(false)
+    }
+  }
+
+  const confirmAirlineFlight = async () => {
+    const token = flightDraft?.draft_token || workspace?.draft_token
+    if (!token || flightBookingBusy) return
+    setFlightBookingBusy(true)
+    leftForFlight.current = false
+    leftForFlightNeedsAsk.current = false
+    try {
+      const updated = await getApi().updateMyTripFlightBookingStatus(token, {
+        status: 'user_confirmed',
+        provider: 'ryanair',
+      })
+      setFlightDraft(updated)
+      Alert.alert('Vol confirmé', 'Ton voyage est à jour.')
+      await load()
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible de confirmer le vol',
+      )
+    } finally {
+      setFlightBookingBusy(false)
+    }
+  }
+
+  const bookSelectedFlight = async () => {
+    if (!accepted || flightBookingBusy || (__DEV__ && isGuest)) return
+    setFlightBookingBusy(true)
+    try {
+      const draft = await getApi().getOrCreateExecutionDraft(accepted.id)
+      setFlightDraft(draft)
+      const ps = await preparePartnerBook({
+        trip: accepted.trip_data,
+        passengers: pax,
+      })
+      const isTravelpayouts = ps.partnerId === 'aviasales'
+      const updated = await getApi().updateMyTripFlightBookingStatus(
+        draft.draft_token,
+        {
+          status: isTravelpayouts ? 'pending_partner' : 'redirected',
+          provider: ps.partnerId,
+        },
+      )
+      setFlightDraft(updated)
+      leftForFlight.current = true
+      leftForFlightNeedsAsk.current = !isTravelpayouts
+      openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible d’ouvrir la réservation',
+      )
+    } finally {
+      setFlightBookingBusy(false)
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!leftForFlight.current) return
+      leftForFlight.current = false
+      if (!leftForFlightNeedsAsk.current) return
+      leftForFlightNeedsAsk.current = false
+      if (reservationFlags.flightBooked) return
+      Alert.alert('Ton vol est réservé ?', 'Tu reviens de Ryanair / la compagnie.', [
+        {
+          text: 'Pas encore',
+          style: 'cancel',
+        },
+        {
+          text: 'Oui, c’est réservé',
+          onPress: () => void confirmAirlineFlight(),
+        },
+      ])
+    }, [reservationFlags.flightBooked]),
+  )
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
+      const draftToken = flightDraft?.draft_token || workspace?.draft_token
+      if (
+        draftToken &&
+        (workspace?.phase === 'booked' ||
+          workspace?.phase === 'composing' ||
+          workspace?.phase === 'past' ||
+          workspace?.pipeline.hotel !== 'none')
+      ) {
+        navigation.navigate('TripSummary', { draftToken })
+        return
+      }
       if (accepted) void addHotelFromTrip(accepted.trip_data, accepted.id)
       else {
         Alert.alert(
@@ -474,12 +838,7 @@ export function TripDetailScreen() {
       return
     }
     if (id === 'flight' && accepted) {
-      void preparePartnerBook({
-        trip: accepted.trip_data,
-        passengers: pax,
-      }).then((ps) => {
-        openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
-      })
+      void bookSelectedFlight()
       return
     }
     if (
@@ -488,7 +847,9 @@ export function TripDetailScreen() {
     ) {
       Alert.alert(
         id === 'activities' ? 'Activités' : 'Adresses',
-        'Plus bas sur cette fiche : ajoute tes idées (liens Maps / Instagram).',
+        id === 'activities'
+          ? 'Plus bas sur cette fiche : idées d’activités.'
+          : 'Plus bas sur cette fiche : restaurants autour de ton hôtel.',
       )
     }
   }
@@ -625,20 +986,164 @@ export function TripDetailScreen() {
         </>
       ) : null}
 
-      {accepted && !scanning ? (
+      {!accepted &&
+      !scanning &&
+      pending.length === 0 &&
+      reservationFlags.canSkipFlight &&
+      !(__DEV__ && isGuest) ? (
+        <View style={[styles.skipFlightCard, shadow.soft]}>
+          <Text style={styles.skipFlightTitle}>J’ai déjà un vol</Text>
+          <Text style={styles.skipFlightBody}>
+            Tu as réservé l’avion ailleurs ? Passe directement à l’hôtel.
+          </Text>
+          <Button
+            label={skippingFlight ? 'Ouverture…' : 'Passer à l’hôtel'}
+            onPress={() => void skipFlight()}
+            loading={skippingFlight}
+            disabled={skippingFlight}
+          />
+        </View>
+      ) : null}
+
+      {reservationFlags.externalFlight && !scanning ? (
+        <View style={[styles.skipFlightCard, shadow.soft]}>
+          <Text style={styles.skipFlightTitle}>Vol ailleurs</Text>
+          <Text style={styles.skipFlightBody}>
+            Tu continues sur l’hôtel sans passer par FlightWatcher pour le vol.
+          </Text>
+          {reservationFlags.externalHotel ? (
+            <Text style={styles.skipFlightBody}>Hôtel aussi réservé ailleurs.</Text>
+          ) : (
+            <>
+              <Button
+                label={hotelBusy ? 'Ouverture…' : 'Composer l’hôtel'}
+                onPress={() => {
+                  const token = flightDraft?.draft_token || workspace?.draft_token
+                  if (token) navigation.navigate('HotelCompose', { draftToken: token })
+                  else void skipFlight()
+                }}
+                loading={hotelBusy}
+                disabled={hotelBusy || skippingHotel}
+              />
+              {reservationFlags.canSkipHotel ? (
+                <Pressable
+                  onPress={() => void skipHotel()}
+                  disabled={skippingHotel}
+                  style={styles.changeFlightBtn}
+                >
+                  <Text style={styles.changeFlightText}>
+                    {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
+        </View>
+      ) : null}
+
+      {accepted && !scanning && !reservationFlags.externalFlight ? (
         <View style={styles.section}>
           <MobileBoardingPass
             trip={accepted.trip_data}
             passengers={pax}
-            onBook={() => {
-              void preparePartnerBook({
-                trip: accepted.trip_data,
-                passengers: pax,
-              }).then((ps) => {
-                openInAppBrowser(navigation, ps.primaryUrl, 'Réserver le vol')
-              })
-            }}
+            bookingBusy={flightBookingBusy}
+            onBook={() => void bookSelectedFlight()}
           />
+          {isOrganizer &&
+          !reservationFlags.flightBooked &&
+          !reservationFlags.hotelBooked ? (
+            <View style={[styles.modalitiesCard, shadow.soft]}>
+              <Text style={styles.modalitiesTitle}>Modalités du vol</Text>
+              <Text style={styles.modalitiesBody}>
+                Tant que le vol n’est pas réservé, tu peux changer budget ou
+                relancer un scan.
+              </Text>
+              <Pressable
+                onPress={() => setShowModalities((v) => !v)}
+                style={styles.modalitiesToggle}
+              >
+                <Text style={styles.modalitiesToggleText}>
+                  {showModalities ? 'Fermer' : 'Modifier les modalités'}
+                </Text>
+              </Pressable>
+              {showModalities ? (
+                <View style={styles.modalitiesEditor}>
+                  <Text style={styles.modalitiesLabel}>
+                    Budget max · {editBudget} €/pers
+                  </Text>
+                  <View style={styles.budgetRow}>
+                    <Pressable
+                      onPress={() =>
+                        setEditBudget((v) => Math.max(20, v - 10))
+                      }
+                      style={styles.budgetBtn}
+                    >
+                      <Text style={styles.budgetBtnText}>−</Text>
+                    </Pressable>
+                    <Text style={styles.budgetValue}>{editBudget} €</Text>
+                    <Pressable
+                      onPress={() =>
+                        setEditBudget((v) => Math.min(1000, v + 10))
+                      }
+                      style={styles.budgetBtn}
+                    >
+                      <Text style={styles.budgetBtnText}>+</Text>
+                    </Pressable>
+                  </View>
+                  <Button
+                    label={
+                      savingCriteria || scanning
+                        ? 'Scan…'
+                        : 'Enregistrer et rescanner'
+                    }
+                    onPress={() => void updateBudgetAndRescan()}
+                    loading={savingCriteria || scanning}
+                    disabled={savingCriteria || scanning || reopeningFlight}
+                  />
+                  <Pressable
+                    onPress={() => void changeFlightChoice()}
+                    disabled={reopeningFlight || scanning || savingCriteria}
+                    style={styles.changeFlightBtn}
+                  >
+                    <Text style={styles.changeFlightText}>
+                      {reopeningFlight ? 'Ouverture…' : 'Choisir un autre vol'}
+                    </Text>
+                  </Pressable>
+                  {reservationFlags.canSkipFlight ? (
+                    <Pressable
+                      onPress={() => void skipFlight()}
+                      disabled={skippingFlight || scanning || savingCriteria}
+                      style={styles.changeFlightBtn}
+                    >
+                      <Text style={styles.changeFlightText}>
+                        {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {reservationFlags.externalHotel ? (
+            <View style={[styles.skipFlightCard, shadow.soft]}>
+              <Text style={styles.skipFlightTitle}>Hôtel ailleurs</Text>
+              <Text style={styles.skipFlightBody}>
+                Tu as sauté l’étape hôtel FlightWatcher.
+              </Text>
+            </View>
+          ) : null}
+          {reservationFlags.canSkipHotel && !reservationFlags.externalHotel ? (
+            <Pressable
+              onPress={() => void skipHotel()}
+              disabled={skippingHotel}
+              style={[styles.changeFlightBtn, { marginBottom: 4 }]}
+            >
+              <Text style={styles.changeFlightText}>
+                {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+              </Text>
+            </Pressable>
+          ) : null}
+          {!reservationFlags.externalHotel ? (
           <Pressable
             onPress={() => void addHotelFromTrip(accepted.trip_data, accepted.id)}
             disabled={hotelBusy}
@@ -677,6 +1182,7 @@ export function TripDetailScreen() {
               </View>
             </ImageBackground>
           </Pressable>
+          ) : null}
           {!isOrganizer ? (
             <Text style={styles.roleHint}>
               Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
@@ -729,9 +1235,6 @@ export function TripDetailScreen() {
                 <Text style={styles.extrasTitle}>Où manger à {cityLabel}</Text>
               </ImageBackground>
               <View style={styles.extrasBody}>
-                <Text style={styles.roleHint}>
-                  Colle tes liens Maps / Instagram — même avant le vol.
-                </Text>
                 <RestaurantStepPanel
                   plannedTripId={tripId}
                   citySlug={citySlug}
@@ -819,6 +1322,17 @@ export function TripDetailScreen() {
               onReject={() => void reject(p.id)}
             />
           ))}
+          {reservationFlags.canSkipFlight && !(__DEV__ && isGuest) ? (
+            <Pressable
+              onPress={() => void skipFlight()}
+              disabled={skippingFlight}
+              style={styles.changeFlightBtn}
+            >
+              <Text style={styles.changeFlightText}>
+                {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol — passer à l’hôtel'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
@@ -1039,10 +1553,12 @@ function PriceWatchBanner({
 function MobileBoardingPass({
   trip,
   passengers,
+  bookingBusy,
   onBook,
 }: {
   trip: EnrichedTripResponse
   passengers: number
+  bookingBusy?: boolean
   onBook: () => void
 }) {
   const destination = cityDisplayNameFr(
@@ -1138,8 +1654,14 @@ function MobileBoardingPass({
             {passengers} voyageur{passengers > 1 ? 's' : ''}
           </Text>
         </View>
-        <Pressable onPress={onBook} style={styles.ticketBook}>
-          <Text style={styles.ticketBookText}>Réserver</Text>
+        <Pressable
+          onPress={onBook}
+          disabled={bookingBusy}
+          style={[styles.ticketBook, bookingBusy && { opacity: 0.6 }]}
+        >
+          <Text style={styles.ticketBookText}>
+            {bookingBusy ? 'Ouverture…' : 'Réserver'}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -1240,6 +1762,103 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 4,
     paddingHorizontal: 4,
+  },
+  skipFlightCard: {
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    padding: 16,
+    gap: 10,
+  },
+  skipFlightTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  skipFlightBody: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  modalitiesCard: {
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    padding: 16,
+    gap: 10,
+  },
+  modalitiesTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    color: colors.ink,
+  },
+  modalitiesBody: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  modalitiesToggle: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.canvas,
+  },
+  modalitiesToggleText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  modalitiesEditor: { gap: 12, paddingTop: 4 },
+  modalitiesLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  budgetBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  budgetBtnText: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.primaryDeep,
+  },
+  budgetValue: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.ink,
+  },
+  changeFlightBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  changeFlightText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
   },
   nextStepCard: {
     backgroundColor: '#21140D',

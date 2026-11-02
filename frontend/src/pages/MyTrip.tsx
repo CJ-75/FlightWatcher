@@ -6,6 +6,7 @@ import {
   activitiesCityPath,
   activityStepProgress,
   airportDisplayNameFr,
+  ACTIVITY_BACK_TO_PLANNER_FR,
   buildStayPipeline,
   distantAirportLine,
   hotelCancelLabel,
@@ -13,6 +14,7 @@ import {
   resolveDraftPartyPrice,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
+  resolveNextStayAction,
   restaurantStepProgress,
   type StayStepId,
 } from '@flightwatcher/shared'
@@ -92,8 +94,9 @@ export default function MyTrip() {
   const [copyDone, setCopyDone] = useState(false)
   const [checkoutDeal, setCheckoutDeal] = useState<TravelDeal | null>(null)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
-  /** After compose → checkout, Précédent / fermer returns to compose. */
+  /** After compose → checkout, Précédent / fermer returns to compose (unless booked). */
   const [returnToCompose, setReturnToCompose] = useState(false)
+  const hotelJustBookedRef = useRef(false)
   const [flightUnavailable, setFlightUnavailable] = useState(false)
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
@@ -125,10 +128,13 @@ export default function MyTrip() {
     [token],
   )
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!token) return
-    setLoading(true)
-    setError(null)
+    const silent = Boolean(opts?.silent)
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const row = await getApiClient().getMyTrip(token)
       setDraft(row)
@@ -146,12 +152,27 @@ export default function MyTrip() {
           .catch(() => undefined)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Voyage introuvable')
-      setDraft(null)
+      // Silent refresh must keep optimistic / last-known reserved statuses.
+      if (!silent) {
+        setError(e instanceof Error ? e.message : 'Voyage introuvable')
+        setDraft(null)
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [token])
+
+  const refreshTripItems = useCallback(async () => {
+    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) return
+    try {
+      const res = await getApiClient().listTripItems({ draft_token: token })
+      const items = res.items || []
+      setActivityItems(items.filter((i) => i.item_type === 'activity'))
+      setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+    } catch {
+      /* keep previous step progress */
+    }
+  }, [token, plannerActivitiesEnabled, plannerRestaurantsEnabled])
 
   useEffect(() => {
     void load()
@@ -297,13 +318,24 @@ export default function MyTrip() {
             (flight.transfers != null && Number(flight.transfers) > 0)
           ? `${Number(flight.transfers || flight.stops || 1)} escale${Number(flight.transfers || flight.stops || 1) > 1 ? 's' : ''}`
           : null
+  const flightBookingStatus = String(
+    draft?.flight_booking_status || payload.flight_booking_status || 'not_started',
+  )
+  const externalFlight = Boolean(payload.flight_external || payload.external_flight)
   const flightBooked = Boolean(
-    draft?.flight_booked_at || payload.flight_booked || payload.flight_booked_at,
+    draft?.flight_booked_at ||
+      payload.flight_booked ||
+      payload.flight_booked_at ||
+      flightBookingStatus === 'user_confirmed' ||
+      flightBookingStatus === 'partner_confirmed' ||
+      externalFlight,
+  )
+  const isTravelpayouts = /travelpayouts|aviasales/i.test(
+    `${flight.provider || payload.provider || ''} ${carrier.siteLabel || ''}`,
   )
   const hotelBooked = Boolean(
     draft?.hotel_booked_at || payload.hotel_booked || payload.hotel_booked_at,
   )
-  const externalFlight = Boolean(payload.flight_external || payload.external_flight)
   const hotelConfirmation =
     payload.hotel_confirmation_code != null
       ? String(payload.hotel_confirmation_code)
@@ -416,25 +448,31 @@ export default function MyTrip() {
   }, [searchParams])
 
   useEffect(() => {
-    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) return
-    void getApiClient()
-      .listTripItems({ draft_token: token })
-      .then((res) => {
-        const items = res.items || []
-        setActivityItems(items.filter((i) => i.item_type === 'activity'))
-        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
-      })
-      .catch(() => {
-        setActivityItems([])
-        setRestaurantItems([])
-      })
-  }, [token, plannerActivitiesEnabled, plannerRestaurantsEnabled, showActivities, showRestaurants])
+    void refreshTripItems()
+  }, [
+    refreshTripItems,
+    showActivities,
+    showRestaurants,
+    hotelBooked,
+    flightBooked,
+  ])
 
   const from = searchParams.get('from')
-  const backHref =
-    from === 'recherche' || from === 'vols' ? '/vols' : '/sejours'
-  const backLabel =
-    from === 'recherche' || from === 'vols' ? '← Vols' : '← Séjours'
+  const plannerTripId = draft?.source_planned_trip_id || null
+  const backHref = plannerTripId
+    ? `/planner/${encodeURIComponent(plannerTripId)}`
+    : from === 'recherche' || from === 'vols'
+      ? '/vols'
+      : from === 'planner'
+        ? '/planner'
+        : '/sejours'
+  const backLabel = plannerTripId
+    ? '← Planner'
+    : from === 'recherche' || from === 'vols'
+      ? '← Vols'
+      : from === 'planner'
+        ? '← Planner'
+        : '← Séjours'
 
   const closeCompose = () => {
     setComposeOpen(false)
@@ -482,15 +520,37 @@ export default function MyTrip() {
 
   const dismissHotelCheckout = useCallback(() => {
     setCheckoutDeal(null)
+    // After a successful hotel booking, never dump the user back into compose.
+    if (hotelJustBookedRef.current || hotelBooked) {
+      hotelJustBookedRef.current = false
+      setReturnToCompose(false)
+      closeCompose()
+      void load({ silent: true })
+      void refreshTripItems()
+      window.setTimeout(() => {
+        hotelSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
+      return
+    }
     if (!returnToCompose) return
     setReturnToCompose(false)
     openCompose()
-  }, [openCompose, returnToCompose])
+  }, [closeCompose, hotelBooked, load, openCompose, refreshTripItems, returnToCompose])
 
   const onFlightClick = async () => {
     leftForFlight.current = true
     leftForFlightAt.current = Date.now()
     track('company_click', { airline: airlineName, site: carrier.siteLabel })
+    if (!token) return
+    try {
+      const row = await getApiClient().updateMyTripFlightBookingStatus(token, {
+        status: isTravelpayouts ? 'pending_partner' : 'redirected',
+        provider: isTravelpayouts ? 'travelpayouts' : carrier.partnerId,
+      })
+      setDraft(row)
+    } catch {
+      /* The partner tab remains usable if status persistence is unavailable. */
+    }
     if (!draft?.deal_key && !payload.deal_key) return
     try {
       const res = await getApiClient().recordFlightClick({
@@ -520,7 +580,10 @@ export default function MyTrip() {
     setAskFlightBooked(false)
     leftForFlight.current = false
     try {
-      const row = await getApiClient().markMyTripFlightBooked(token)
+      const row = await getApiClient().updateMyTripFlightBookingStatus(token, {
+        status: 'user_confirmed',
+        provider: carrier.partnerId,
+      })
       setDraft(row)
       scrollToHotel()
       if (isCached) setShowPriceAsk(true)
@@ -538,24 +601,25 @@ export default function MyTrip() {
   }
 
   useEffect(() => {
-    if (flightBooked) {
-      setAskFlightBooked(false)
-      return
-    }
     const onReturn = () => {
       if (document.visibilityState !== 'visible') return
+      // Re-sync vol / hôtel / pipeline after partner tab or checkout.
+      void load({ silent: true })
+      void refreshTripItems()
+      if (flightBooked) {
+        setAskFlightBooked(false)
+        return
+      }
       if (!leftForFlight.current) return
       // Ignore instant focus blips right after click
       if (Date.now() - leftForFlightAt.current < 1200) return
-      setAskFlightBooked(true)
+      if (!isTravelpayouts) setAskFlightBooked(true)
     }
     document.addEventListener('visibilitychange', onReturn)
-    window.addEventListener('focus', onReturn)
     return () => {
       document.removeEventListener('visibilitychange', onReturn)
-      window.removeEventListener('focus', onReturn)
     }
-  }, [flightBooked])
+  }, [flightBooked, isTravelpayouts, load, refreshTripItems])
 
   const copyRouteHint = async () => {
     if (!carrier.copyHint) return
@@ -972,35 +1036,37 @@ export default function MyTrip() {
     void openHotelCheckout()
   }, [draft, hotelBooked, loading, openHotelCheckout])
 
-  /** Sticky récap CTA — hôtel prêt → paiement, sinon vol, sinon choisir hôtel. */
+  /** Sticky récap CTA — dynamique selon vol / hôtel / activités / restos. */
   const nextAction = useMemo(() => {
-    if (flightBooked && hotelBooked) {
-      return { kind: 'done' as const, label: 'Voir ma réservation' }
-    }
-    const hotelReady = Boolean(
-      !hotelBooked && (hotelObj?.id || hotelObj?.hotel_id),
-    )
-    if (hotelReady) {
+    const base = resolveNextStayAction({
+      flightBooked,
+      hotelBooked,
+      hasHotelSelected: Boolean(hotelObj?.id || hotelObj?.hotel_id),
+      activitiesEnabled: plannerActivitiesEnabled,
+      activitiesDone: activityProgress.done,
+      restaurantsEnabled: plannerRestaurantsEnabled,
+      restaurantsDone: restaurantProgress.done || restaurantProgress.skipped,
+      hasPlanner: Boolean(plannerTripId),
+    })
+    if (base.id === 'hotel_pay' && party.hotelTotal > 0) {
       return {
-        kind: 'hotel' as const,
-        label:
-          party.hotelTotal > 0
-            ? `Réserver mon hôtel · ${Math.round(party.hotelTotal)} €`
-            : 'Réserver mon hôtel',
+        ...base,
+        label: `Réserver mon hôtel · ${Math.round(party.hotelTotal)} €`,
       }
     }
-    if (!flightBooked) {
-      return {
-        kind: 'flight' as const,
-        label: 'Réserver mon vol',
-        href: flightUrl,
-      }
-    }
-    return {
-      kind: 'pick_hotel' as const,
-      label: 'Choisir un hôtel',
-    }
-  }, [flightBooked, flightUrl, hotelBooked, hotelObj, party.hotelTotal])
+    return base
+  }, [
+    activityProgress.done,
+    flightBooked,
+    hotelBooked,
+    hotelObj,
+    party.hotelTotal,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    plannerTripId,
+    restaurantProgress.done,
+    restaurantProgress.skipped,
+  ])
 
   if (loading) {
     return (
@@ -1038,8 +1104,8 @@ export default function MyTrip() {
 
   /** Hotel payment focus: never cite the flight in the sticky récap. */
   const hotelPaymentFocus =
-    nextAction.kind === 'hotel' ||
-    nextAction.kind === 'pick_hotel' ||
+    nextAction.id === 'hotel_pay' ||
+    nextAction.id === 'hotel_pick' ||
     Boolean(checkoutDeal)
   const hotelRecapTotal = Math.round(Number(party.hotelTotal) || 0)
   const hotelRecapPp =
@@ -1149,49 +1215,107 @@ export default function MyTrip() {
   const nextActionButton = () => {
     const cls =
       'block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]'
-    if (nextAction.kind === 'flight') {
-      return (
-        <a
-          href={nextAction.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => void onFlightClick()}
-          className={cls}
-        >
-          {nextAction.label}
-        </a>
-      )
-    }
-    if (nextAction.kind === 'hotel') {
-      return (
-        <div className="w-full space-y-2">
-          <button
-            type="button"
-            disabled={checkoutLoading}
-            onClick={() => void openHotelCheckout()}
+    const secondaryCls =
+      'block w-full text-center border border-slate-200 font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px] text-slate-800'
+    const primary = (() => {
+      if (nextAction.id === 'flight' && flightUrl) {
+        return (
+          <a
+            href={flightUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => void onFlightClick()}
             className={cls}
           >
-            {checkoutLoading ? '…' : nextAction.label}
+            {nextAction.label}
+          </a>
+        )
+      }
+      if (nextAction.id === 'hotel_pay') {
+        return (
+          <div className="w-full space-y-2">
+            <button
+              type="button"
+              disabled={checkoutLoading}
+              onClick={() => void openHotelCheckout()}
+              className={cls}
+            >
+              {checkoutLoading ? '…' : nextAction.label}
+            </button>
+            <PaymentCardMarks />
+          </div>
+        )
+      }
+      if (nextAction.id === 'hotel_pick') {
+        return (
+          <button type="button" onClick={() => openCompose()} className={cls}>
+            {nextAction.label}
           </button>
-          <PaymentCardMarks />
-        </div>
-      )
-    }
-    if (nextAction.kind === 'pick_hotel') {
+        )
+      }
+      if (nextAction.id === 'activities') {
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              setShowActivities(true)
+              setTimeout(() => {
+                activitiesSectionRef.current?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              }, 50)
+            }}
+            className={cls}
+          >
+            {nextAction.label}
+          </button>
+        )
+      }
+      if (nextAction.id === 'restaurants') {
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              setShowRestaurants(true)
+              setTimeout(() => {
+                restaurantsSectionRef.current?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              }, 50)
+            }}
+            className={cls}
+          >
+            {nextAction.label}
+          </button>
+        )
+      }
+      if (nextAction.id === 'planner' && plannerTripId) {
+        return (
+          <Link to={`/planner/${encodeURIComponent(plannerTripId)}`} className={cls}>
+            {ACTIVITY_BACK_TO_PLANNER_FR}
+          </Link>
+        )
+      }
       return (
-        <button type="button" onClick={() => openCompose()} className={cls}>
+        <Link to="/bookings" className={cls}>
           {nextAction.label}
-        </button>
+        </Link>
       )
-    }
+    })()
     return (
-      <button
-        type="button"
-        onClick={() => hotelSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
-        className={cls}
-      >
-        {nextAction.label}
-      </button>
+      <div className="w-full space-y-2">
+        {primary}
+        {plannerTripId && nextAction.id !== 'planner' ? (
+          <Link
+            to={`/planner/${encodeURIComponent(plannerTripId)}`}
+            className={secondaryCls}
+          >
+            {ACTIVITY_BACK_TO_PLANNER_FR}
+          </Link>
+        ) : null}
+      </div>
     )
   }
 
@@ -1444,6 +1568,18 @@ export default function MyTrip() {
                     </div>
                   ) : null}
 
+                  {isTravelpayouts && flightBookingStatus === 'pending_partner' ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3">
+                      <p className="text-sm font-bold text-amber-900">
+                        Confirmation du paiement en attente
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-amber-800">
+                        Travelpayouts mettra automatiquement ce voyage à jour après
+                        validation de la réservation.
+                      </p>
+                    </div>
+                  ) : null}
+
                   {askFlightBooked ? (
                     <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 p-3 space-y-2">
                       <p className="text-sm font-semibold text-slate-800">
@@ -1508,9 +1644,13 @@ export default function MyTrip() {
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
                     Réservé ✓
                   </span>
+                ) : hotelId ? (
+                  <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
+                    À payer
+                  </span>
                 ) : (
                   <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
-                    À réserver
+                    À choisir
                   </span>
                 )}
               </div>
@@ -1772,15 +1912,41 @@ export default function MyTrip() {
           onUnavailable={() => {
             setCheckoutDeal(null)
             setHotelUnavailable(true)
+            if (hotelJustBookedRef.current || hotelBooked) {
+              hotelJustBookedRef.current = false
+              setReturnToCompose(false)
+              closeCompose()
+              return
+            }
             if (returnToCompose) {
               setReturnToCompose(false)
               openCompose()
             }
           }}
           onAccountCta={() => track('account_cta')}
-          onBooked={() => {
+          onBooked={(booking) => {
+            hotelJustBookedRef.current = true
             setReturnToCompose(false)
-            void load()
+            const nowIso = new Date().toISOString()
+            setDraft((prev) => {
+              if (!prev) return prev
+              const prevPayload = (prev.payload || {}) as Record<string, unknown>
+              return {
+                ...prev,
+                hotel_booked_at: nowIso,
+                payload: {
+                  ...prevPayload,
+                  hotel_booked: true,
+                  hotel_booked_at: nowIso,
+                  hotel_booking_id: booking.id || prevPayload.hotel_booking_id,
+                  hotel_confirmation_code:
+                    booking.confirmation_code ||
+                    prevPayload.hotel_confirmation_code,
+                },
+              }
+            })
+            void load({ silent: true })
+            void refreshTripItems()
           }}
         />
       ) : null}

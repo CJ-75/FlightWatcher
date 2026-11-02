@@ -81,6 +81,7 @@ function App() {
         <Route path="/vols" element={<Dashboard />} />
         <Route path="/sejours" element={<Dashboard />} />
         <Route path="/planner" element={<Dashboard />} />
+        <Route path="/planner/:tripId" element={<Dashboard />} />
         <Route path="/activites" element={<Dashboard />} />
         <Route path="/activites/:city" element={<Dashboard />} />
         {/* /alertes gated by ALERTS_UI_ENABLED inside Dashboard (redirect → /vols when off) */}

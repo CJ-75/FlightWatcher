@@ -15,12 +15,19 @@ import { colors, fonts, radius, spacing } from '../theme'
 type Props = {
   trip: EnrichedTripResponse
   busy?: boolean
+  automaticConfirmation?: boolean
   onOpenTrip: () => void
   onClose: () => void
 }
 
-/** Shown right after partner book opens — same UX as web PostBookLightbox. */
-export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
+/** Shown after partner book — ask for Ryanair; Travelpayouts = auto. */
+export function PostBookLightbox({
+  trip,
+  busy,
+  automaticConfirmation,
+  onOpenTrip,
+  onClose,
+}: Props) {
   const insets = useSafeAreaInsets()
   const city = cityDisplayNameFr(
     trip.destination_code,
@@ -45,9 +52,15 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             <PlaneIcon size={16} />
             <Text style={styles.brand}>FlightWatcher</Text>
           </View>
-          <Text style={styles.title}>Vol pour {city} réservé ?</Text>
+          <Text style={styles.title}>
+            {automaticConfirmation
+              ? 'Suivi de réservation activé'
+              : `Vol pour ${city} réservé ?`}
+          </Text>
           <Text style={styles.hint}>
-            Super — trouve maintenant un hôtel pour compléter ton séjour.
+            {automaticConfirmation
+              ? `Travelpayouts confirmera automatiquement le paiement pour ${city}.`
+              : 'Super — trouve maintenant un hôtel pour compléter ton séjour.'}
           </Text>
 
           <Pressable
@@ -60,7 +73,11 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             ) : (
               <View style={styles.ctaInner}>
                 <BedIcon size={16} color={colors.white} />
-                <Text style={styles.ctaText}>Oui, choisir mon hôtel</Text>
+                <Text style={styles.ctaText}>
+                  {automaticConfirmation
+                    ? 'Continuer vers mon voyage'
+                    : 'Oui, choisir mon hôtel'}
+                </Text>
               </View>
             )}
           </Pressable>
@@ -71,7 +88,9 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             onPress={onClose}
             hitSlop={8}
           >
-            <Text style={styles.dismissText}>Plus tard</Text>
+            <Text style={styles.dismissText}>
+              {automaticConfirmation ? 'Fermer' : 'Pas encore'}
+            </Text>
           </Pressable>
         </Pressable>
       </Pressable>

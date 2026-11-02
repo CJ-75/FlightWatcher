@@ -558,6 +558,9 @@ export function ResultsScreen({ route, navigation }: Props) {
         <PostBookLightbox
           trip={postBookTrip}
           busy={hotelUpsellBusy}
+          automaticConfirmation={/travelpayouts|aviasales/i.test(
+            `${postBookTrip.provider || ''} ${postBookTrip.booking_url || ''}`,
+          )}
           onOpenTrip={() => void handlePostBookOpenTrip()}
           onClose={() => void handlePostBookDismiss()}
         />

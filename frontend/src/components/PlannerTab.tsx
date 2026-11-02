@@ -7,8 +7,10 @@ import type {
   EnrichedTripResponse,
   PlannedTrip,
   PlannedTripDetail,
+  TravelWorkspace,
   TripMember,
   TripProposal,
+  UpdatePlannedTripRequest,
 } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { loadAirportsOnce } from '../hooks/useAirports'
@@ -16,12 +18,14 @@ import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange 
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
 import { BudgetSlider } from './BudgetSlider'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { createMyTripComposeFromTrip, openPartnerBookSync } from '../utils/partnerBook'
+import { PassengerStepper } from './PassengerStepper'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { openPartnerBookSync } from '../utils/partnerBook'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
   activityCitySlugFromLabel,
+  activityStepProgress,
   buildStayPipeline,
   arrivalDisplayLabel,
   cityDisplayNameFr,
@@ -31,15 +35,22 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   parseAirportCodes,
+  partyModeFromCount,
+  partyModeKickerFr,
+  partyModeSubtitleFr,
+  partyModeTitleFr,
+  resolveFlightStepStatus,
+  resolveHotelStepStatus,
+  restaurantStepProgress,
   type CityAirportGroup,
+  type FlightBookingStatus,
+  type MyTripDraft,
   type StayStepId,
 } from '@flightwatcher/shared'
 import { CreateTripModal } from './planner/CreateTripModal'
 import { StayPipelineStepper } from './StayPipelineStepper'
 import { RestaurantStepPanel } from './RestaurantStepPanel'
 import { ActivityStepPanel } from './ActivityStepPanel'
-
-type TripGalleryDensity = 'solo' | 'duo' | 'multi'
 
 /** Compact label for multi-IATA departure without needing city groups. */
 function departureRouteLabel(value: string | null | undefined): string {
@@ -275,19 +286,103 @@ const STATUS_LABEL: Record<string, string> = {
   locked: 'Confirmé',
 }
 
+const PHASE_LABEL: Record<TravelWorkspace['phase'], string> = {
+  planning: 'À organiser',
+  flight_selected: 'Vol choisi',
+  composing: 'À finaliser',
+  booked: 'Réservé',
+  past: 'Terminé',
+}
+
+const PHASE_CHIP_CLASS: Record<TravelWorkspace['phase'], string> = {
+  planning: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
+  flight_selected: 'bg-amber-50 text-amber-900 ring-1 ring-amber-200',
+  composing: 'bg-amber-50 text-amber-900 ring-1 ring-amber-200',
+  booked: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200',
+  past: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
+}
+
+const PHASE_HINT: Record<TravelWorkspace['phase'], string> = {
+  planning: 'Choisis un vol et invite tes voyageurs.',
+  flight_selected: 'Vol choisi — compose ton hôtel.',
+  composing: 'Séjour en cours — finalise la réservation.',
+  booked: 'Réservation rattachée à ce voyage.',
+  past: 'Voyage terminé — dossier conservé.',
+}
+
+const PHASE_ACTION: Record<TravelWorkspace['phase'], string> = {
+  planning: 'Ouvrir le voyage',
+  flight_selected: 'Finaliser le séjour',
+  composing: 'Reprendre le séjour',
+  booked: 'Voir le dossier',
+  past: 'Revoir le voyage',
+}
+
+const FLIGHT_BOOKED_STATUSES = new Set<FlightBookingStatus>([
+  'user_confirmed',
+  'partner_confirmed',
+])
+
+function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
+  const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  return {
+    workspace_id: `planner:${trip.id}`,
+    planned_trip_id: trip.id,
+    proposal_id: trip.accepted_proposal?.id || null,
+    scope: 'collaborative',
+    phase: trip.status === 'locked' ? 'flight_selected' : 'planning',
+    title: trip.name,
+    city: dest ? cityDisplayNameFr(dest) : 'Destination libre',
+    origin_iata: trip.departure_airport,
+    dest_iata: trip.arrival_airport,
+    out_date: trip.dates_depart?.[0]?.date || null,
+    ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
+    is_organizer: true,
+    capabilities: {
+      can_scan: trip.status !== 'locked',
+      can_choose_flight: trip.status !== 'locked',
+      can_compose_hotel: trip.status === 'locked',
+      can_view_confirmation: false,
+    },
+    pipeline: {
+      flight: trip.status === 'locked' ? 'selected' : 'none',
+      hotel: 'none',
+    },
+    planned_trip: trip,
+    updated_at: trip.updated_at || trip.created_at,
+  }
+}
+
+type TripGalleryDensity = 'solo' | 'duo' | 'multi'
+
+const MEMBER_CHIP_COLORS = [
+  'bg-[#FF6B35]',
+  'bg-[#E85A28]',
+  'bg-[#1A120E]',
+  'bg-teal-700',
+  'bg-amber-700',
+  'bg-slate-600',
+]
+
+function firstNameOf(full: string): string {
+  const t = full.trim()
+  if (!t) return ''
+  return t.split(/\s+/)[0]
+}
+
 function TripsGallery({
-  trips,
+  workspaces,
   cityGroups,
   currentUserId,
   onOpen,
 }: {
-  trips: PlannedTrip[]
+  workspaces: TravelWorkspace[]
   cityGroups: CityAirportGroup[]
   currentUserId: string | null
-  onOpen: (id: string) => void
+  onOpen: (workspace: TravelWorkspace) => void
 }) {
   const density: TripGalleryDensity =
-    trips.length === 1 ? 'solo' : trips.length === 2 ? 'duo' : 'multi'
+    workspaces.length === 1 ? 'solo' : workspaces.length === 2 ? 'duo' : 'multi'
   const [selfProfile, setSelfProfile] = useState<{
     name: string
     avatarUrl?: string
@@ -307,8 +402,16 @@ function TripsGallery({
     }
   }, [currentUserId])
 
-  const enrichTrip = (trip: PlannedTrip): PlannedTrip => {
-    if (!currentUserId || trip.organizer_id !== currentUserId || !selfProfile) return trip
+  const enrichWorkspace = (workspace: TravelWorkspace): TravelWorkspace => {
+    const trip = workspace.planned_trip
+    if (
+      !trip ||
+      !currentUserId ||
+      trip.organizer_id !== currentUserId ||
+      !selfProfile
+    ) {
+      return workspace
+    }
     const apiName = trip.organizer?.full_name?.trim()
     const apiAvatar = trip.organizer?.avatar_url?.trim()
     const fullName = apiName || selfProfile.name
@@ -321,23 +424,26 @@ function TripsGallery({
       }
     }
     return {
-      ...trip,
-      member_names: names.length ? names : [fullName],
-      organizer: {
-        id: currentUserId,
-        full_name: fullName,
-        avatar_url: avatarUrl,
+      ...workspace,
+      planned_trip: {
+        ...trip,
+        member_names: names.length ? names : [fullName],
+        organizer: {
+          id: currentUserId,
+          full_name: fullName,
+          avatar_url: avatarUrl,
+        },
       },
     }
   }
 
-  const cards = trips.map(enrichTrip)
+  const cards = workspaces.map(enrichWorkspace)
 
   if (density === 'solo') {
     return (
       <motion.div layout className="w-full">
         <TripListCard
-          trip={cards[0]}
+          workspace={cards[0]}
           cityGroups={cityGroups}
           density="solo"
           index={0}
@@ -351,12 +457,12 @@ function TripsGallery({
     return (
       <motion.div
         layout
-        className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 md:items-stretch"
+        className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 min-h-[min(70vh,640px)] md:items-stretch"
       >
-        {cards.map((trip, index) => (
+        {cards.map((workspace, index) => (
           <TripListCard
-            key={trip.id}
-            trip={trip}
+            key={workspace.workspace_id}
+            workspace={workspace}
             cityGroups={cityGroups}
             density="duo"
             index={index}
@@ -370,12 +476,12 @@ function TripsGallery({
   return (
     <motion.div
       layout
-      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
+      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
     >
-      {cards.map((trip, index) => (
+      {cards.map((workspace, index) => (
         <TripListCard
-          key={trip.id}
-          trip={trip}
+          key={workspace.workspace_id}
+          workspace={workspace}
           cityGroups={cityGroups}
           density="multi"
           index={index}
@@ -386,59 +492,49 @@ function TripsGallery({
   )
 }
 
-const MEMBER_CHIP_COLORS = [
-  'bg-[#FF6B35]',
-  'bg-[#E85A28]',
-  'bg-[#1A120E]',
-  'bg-teal-700',
-  'bg-amber-700',
-  'bg-slate-600',
-]
-
-function firstNameOf(full: string): string {
-  const t = full.trim()
-  if (!t) return ''
-  return t.split(/\s+/)[0]
-}
-
 function TripListCard({
-  trip,
+  workspace,
   cityGroups,
   density,
   index,
   onOpen,
 }: {
-  trip: PlannedTrip
+  workspace: TravelWorkspace
   cityGroups: CityAirportGroup[]
   density: TripGalleryDensity
   index: number
-  onOpen: (id: string) => void
+  onOpen: (workspace: TravelWorkspace) => void
 }) {
   const { t } = useI18n()
-  const arrival = arrivalDisplayLabel(trip.arrival_airport, cityGroups)
-  const imageUri = arrival.isAny ? cityImageUrl(null) : cityImageUrl(arrival.city)
+  const trip = workspace.planned_trip || null
+  const destIata = workspace.dest_iata || trip?.arrival_airport || null
+  const originIata = workspace.origin_iata || trip?.departure_airport || null
+  const arrival = arrivalDisplayLabel(destIata, cityGroups)
+  const photo =
+    workspace.image_url ||
+    (arrival.isAny
+      ? cityImageUrl(null)
+      : cityImageUrl(workspace.city || arrival.city))
   const codes = arrival.isAny ? [] : arrival.codes.split(' · ').filter(Boolean)
-  const cityLabel = arrival.isAny ? 'Destination libre' : arrival.city
-
-  const statusClass =
-    trip.status === 'locked'
-      ? 'bg-emerald-50/95 text-emerald-700'
-      : trip.status === 'planning'
-        ? 'bg-orange-50/95 text-[#E85A28]'
-        : 'bg-white/95 text-slate-600'
+  const cityLabel =
+    workspace.city || (arrival.isAny ? 'Destination libre' : arrival.city)
+  const outDate = workspace.out_date || trip?.dates_depart?.[0]?.date
+  const retDate =
+    workspace.ret_date ||
+    trip?.dates_retour?.[trip.dates_retour.length - 1]?.date
 
   const [orgAvatarBroken, setOrgAvatarBroken] = useState(false)
   const organizerName =
-    trip.organizer?.full_name?.trim() ||
-    (trip.member_names?.[0] &&
+    trip?.organizer?.full_name?.trim() ||
+    (trip?.member_names?.[0] &&
     trip.member_names[0] !== 'Organisateur' &&
     trip.member_names[0] !== 'Organizer'
       ? trip.member_names[0]
       : null)
-  const organizerAvatar = trip.organizer?.avatar_url?.trim() || null
+  const organizerAvatar = trip?.organizer?.avatar_url?.trim() || null
 
   const memberNames = useMemo(() => {
-    const names = [...(trip.member_names || [])]
+    const names = [...(trip?.member_names || [])]
     if (organizerName && names.length > 0) {
       const first = names[0]
       if (!first || first === 'Organisateur' || first === 'Organizer') {
@@ -448,7 +544,7 @@ function TripListCard({
       names.push(organizerName)
     }
     return names
-  }, [trip.member_names, organizerName])
+  }, [trip?.member_names, organizerName])
 
   const maxShown = density === 'multi' ? 3 : density === 'duo' ? 4 : 5
   const shownMembers = memberNames.slice(0, maxShown)
@@ -461,15 +557,22 @@ function TripListCard({
 
   const travelersBlock =
     shownMembers.length > 0 ? (
-      <div className={`flex items-center gap-2.5 min-w-0 ${density === 'solo' ? 'mt-5' : 'mt-3'}`}>
+      <div
+        className={`flex items-center gap-2.5 min-w-0 ${
+          density === 'solo' ? 'mt-5' : 'mt-3'
+        }`}
+      >
         <div className="flex -space-x-2 shrink-0">
           {shownMembers.map((name, i) => {
-            const isOrganizerChip = i === 0 && !!organizerAvatar && !orgAvatarBroken
+            const isOrganizerChip =
+              i === 0 && !!organizerAvatar && !orgAvatarBroken
             return (
               <span
                 key={`${name}-${i}`}
                 className={`relative w-7 h-7 rounded-full border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-sm overflow-hidden ${
-                  isOrganizerChip ? 'bg-slate-100' : MEMBER_CHIP_COLORS[i % MEMBER_CHIP_COLORS.length]
+                  isOrganizerChip
+                    ? 'bg-slate-100'
+                    : MEMBER_CHIP_COLORS[i % MEMBER_CHIP_COLORS.length]
                 }`}
                 title={name}
               >
@@ -508,29 +611,66 @@ function TripListCard({
   const meta = (
     <>
       <div className="flex flex-wrap gap-2">
-        <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
-          {trip.passengers} voy.
-        </span>
-        {trip.route_ok === false ? (
+        {trip?.passengers ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
+            {trip.passengers} voy.
+          </span>
+        ) : null}
+        {trip?.route_ok === false ? (
           <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-amber-50 text-amber-800">
             Route à mettre à jour
           </span>
         ) : null}
-        <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
-          max {trip.budget_max}€
-        </span>
-        {(trip.proposals_count ?? 0) > 0 ? (
-          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFE8DC] text-[#E85A28]">
-            {trip.proposals_count} prop.
+        {trip?.budget_max != null ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
+            max {trip.budget_max}€
           </span>
         ) : null}
+        {(trip?.proposals_count ?? 0) > 0 ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFE8DC] text-[#E85A28]">
+            {trip?.proposals_count} prop.
+          </span>
+        ) : null}
+        <span
+          className={`text-xs font-semibold px-3 py-1.5 rounded-full ${PHASE_CHIP_CLASS[workspace.phase]}`}
+        >
+          {PHASE_LABEL[workspace.phase]}
+        </span>
       </div>
-      {trip.dates_depart?.[0] && trip.dates_retour?.[0] ? (
+      {outDate && retDate ? (
         <p className="text-sm font-semibold text-slate-600 mt-3">
-          {formatDateFr(trip.dates_depart[0].date)} →{' '}
-          {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
+          {formatDateFr(outDate)} → {formatDateFr(retDate)}
         </p>
       ) : null}
+      <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
+        <span
+          className={`inline-block w-2 h-2 rounded-full ${
+            workspace.pipeline.flight === 'booked'
+              ? 'bg-emerald-500'
+              : workspace.pipeline.flight === 'none'
+                ? 'bg-slate-300'
+                : 'bg-primary-500'
+          }`}
+        />
+        Vol
+        {workspace.pipeline.flight === 'booked' ? (
+          <span className="text-emerald-700">réservé</span>
+        ) : null}
+        <span className="w-4 h-px bg-slate-200" />
+        <span
+          className={`inline-block w-2 h-2 rounded-full ${
+            workspace.pipeline.hotel === 'booked'
+              ? 'bg-emerald-500'
+              : workspace.pipeline.hotel === 'none'
+                ? 'bg-slate-300'
+                : 'bg-primary-500'
+          }`}
+        />
+        Hôtel
+        {workspace.pipeline.hotel === 'booked' ? (
+          <span className="text-emerald-700">réservé</span>
+        ) : null}
+      </div>
       {travelersBlock}
     </>
   )
@@ -541,26 +681,32 @@ function TripListCard({
         type="button"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        onClick={() => onOpen(trip.id)}
+        onClick={() => onOpen(workspace)}
         className="group w-full text-left bg-white rounded-[32px] border border-orange-100/70 shadow-lg hover:shadow-2xl transition-all overflow-hidden"
       >
         <div className="grid lg:grid-cols-5 min-h-[min(72vh,560px)]">
           <div className="relative lg:col-span-3 h-64 sm:h-80 lg:h-auto min-h-[280px] overflow-hidden">
-            <img
-              src={imageUri}
-              alt={cityLabel}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-            />
+            {photo ? (
+              <img
+                src={photo}
+                alt={cityLabel}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-slate-200" />
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-black/10 lg:to-black/40" />
             <span
-              className={`absolute top-5 right-5 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${statusClass}`}
+              className={`absolute top-5 right-5 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
             >
-              {STATUS_LABEL[trip.status] || trip.status}
+              {PHASE_LABEL[workspace.phase]}
             </span>
             <div className="absolute bottom-6 left-6 right-6 lg:hidden">
-              <p className="text-white text-4xl font-black tracking-tight">{cityLabel}</p>
+              <p className="text-white text-4xl font-black tracking-tight">
+                {cityLabel}
+              </p>
               <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
-                <span>{departureRouteLabel(trip.departure_airport)}</span>
+                <span>{departureRouteLabel(originIata)}</span>
                 <span className="w-8 h-0.5 rounded bg-white/55" />
                 <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
               </div>
@@ -572,23 +718,27 @@ function TripListCard({
                 Ton voyage
               </p>
               <h3 className="font-black text-3xl sm:text-4xl text-slate-900 tracking-tight leading-tight group-hover:text-[#E85A28] transition-colors">
-                {trip.name}
+                {workspace.title}
               </h3>
               <p className="hidden lg:block text-2xl font-bold text-slate-700 mt-3 tracking-tight">
                 {cityLabel}
               </p>
               <div className="hidden lg:flex items-center gap-2 mt-2 text-slate-500 font-bold text-sm tracking-wide">
-                <span>{departureRouteLabel(trip.departure_airport)}</span>
+                <span>{departureRouteLabel(originIata)}</span>
                 <span className="w-7 h-0.5 rounded bg-slate-300" />
                 <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
                 {codes.length > 1 ? (
-                  <span className="text-slate-400 font-semibold text-xs">+{codes.length - 1}</span>
+                  <span className="text-slate-400 font-semibold text-xs">
+                    +{codes.length - 1}
+                  </span>
                 ) : null}
               </div>
               <div className="mt-6">{meta}</div>
             </div>
             <div className="mt-8 pt-5 border-t border-orange-50 flex items-center justify-between">
-              <span className="text-base font-bold text-[#FF6B35]">Ouvrir le voyage</span>
+              <span className="text-base font-bold text-[#FF6B35]">
+                {PHASE_ACTION[workspace.phase]}
+              </span>
               <span className="w-11 h-11 rounded-2xl bg-[#FFF3EC] text-[#FF6B35] font-black text-xl flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
                 ›
               </span>
@@ -608,22 +758,26 @@ function TripListCard({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      onClick={() => onOpen(trip.id)}
+      onClick={() => onOpen(workspace)}
       className={`group w-full text-left bg-white rounded-[28px] border border-orange-100/70 shadow-md hover:shadow-2xl hover:-translate-y-0.5 transition-all overflow-hidden h-full flex flex-col ${
         density === 'duo' ? 'min-h-[420px]' : ''
       }`}
     >
       <div className={`relative ${imageH} shrink-0 overflow-hidden`}>
-        <img
-          src={imageUri}
-          alt={cityLabel}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-        />
+        {photo ? (
+          <img
+            src={photo}
+            alt={cityLabel}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-slate-200" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" />
         <span
-          className={`absolute top-4 right-4 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${statusClass}`}
+          className={`absolute top-4 right-4 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
         >
-          {STATUS_LABEL[trip.status] || trip.status}
+          {PHASE_LABEL[workspace.phase]}
         </span>
         <div className="absolute bottom-4 left-5 right-5">
           <p
@@ -634,27 +788,33 @@ function TripListCard({
             {cityLabel}
           </p>
           <div className="flex items-center gap-2 mt-2 text-white font-bold text-sm tracking-wide">
-            <span>{departureRouteLabel(trip.departure_airport)}</span>
+            <span>{departureRouteLabel(originIata)}</span>
             <span className="w-7 h-0.5 rounded bg-white/55" />
             <span>{arrival.isAny ? 'ANY' : codes[0]}</span>
             {codes.length > 1 ? (
-              <span className="text-white/75 font-semibold text-xs">+{codes.length - 1}</span>
+              <span className="text-white/75 font-semibold text-xs">
+                +{codes.length - 1}
+              </span>
             ) : null}
           </div>
         </div>
       </div>
-      <div className={`flex-1 flex flex-col ${density === 'duo' ? 'p-6 sm:p-7' : 'p-5'}`}>
+      <div
+        className={`flex-1 flex flex-col ${
+          density === 'duo' ? 'p-6 sm:p-7' : 'p-5'
+        }`}
+      >
         <h3
           className={`font-bold text-slate-900 tracking-tight group-hover:text-[#E85A28] transition-colors ${
             density === 'duo' ? 'text-2xl' : 'text-xl'
           }`}
         >
-          {trip.name}
+          {workspace.title}
         </h3>
         <div className="mt-3 flex-1">{meta}</div>
         <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
           <span className="text-sm font-semibold text-[#FF6B35]">
-            {trip.status === 'locked' ? 'Vol → Hôtel' : 'Ouvrir le parcours'}
+            {PHASE_ACTION[workspace.phase]}
           </span>
           <span className="text-[#FF6B35] text-xl leading-none group-hover:translate-x-0.5 transition-transform">
             ›
@@ -667,18 +827,20 @@ function TripListCard({
 
 export function PlannerTab() {
   const { t } = useI18n()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const { tripId: tripIdParam } = useParams<{ tripId?: string }>()
+  const [searchParams] = useSearchParams()
   const [userId, setUserId] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [trips, setTrips] = useState<PlannedTrip[]>([])
+  const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
   const [airports, setAirports] = useState<Airport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [autoScanTripId, setAutoScanTripId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const deepTripOpened = useRef(false)
+  const selectedTripId =
+    tripIdParam && tripIdParam !== 'invite' ? tripIdParam : null
 
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
 
@@ -702,39 +864,71 @@ export function PlannerTab() {
     }
   }, [])
 
-  // Deep link /planner?trip={id}
+  // Legacy deep link /planner?trip={id} → /planner/{id}
   useEffect(() => {
-    if (deepTripOpened.current || !userId) return
     const tripQ = searchParams.get('trip')
     if (!tripQ) return
-    deepTripOpened.current = true
-    setSelectedTripId(tripQ)
-    const next = new URLSearchParams(searchParams)
-    next.delete('trip')
-    setSearchParams(next, { replace: true })
-  }, [userId, searchParams, setSearchParams])
+    navigate(`/planner/${encodeURIComponent(tripQ)}`, { replace: true })
+  }, [searchParams, navigate])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!userId) {
-      setTrips([])
+      setWorkspaces([])
       setLoading(false)
       return
     }
-    setLoading(true)
-    setError(null)
+    const silent = Boolean(opts?.silent)
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
-      const list = await getApiClient().listPlannedTrips()
-      setTrips(Array.isArray(list) ? list : [])
+      try {
+        const list = await getApiClient().listTravelWorkspaces()
+        setWorkspaces(Array.isArray(list) ? list : [])
+      } catch {
+        const legacy = await getApiClient().listPlannedTrips()
+        setWorkspaces(
+          (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace),
+        )
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
-      setTrips([])
+      if (!silent) {
+        setError(e instanceof Error ? e.message : t('app.error'))
+        setWorkspaces([])
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [userId, t])
 
+  const openWorkspace = useCallback(
+    (workspace: TravelWorkspace) => {
+      if (workspace.planned_trip_id) {
+        navigate(`/planner/${encodeURIComponent(workspace.planned_trip_id)}`)
+        return
+      }
+      if (workspace.draft_token) {
+        navigate(`/trip/${encodeURIComponent(workspace.draft_token)}`)
+      }
+    },
+    [navigate],
+  )
+
   useEffect(() => {
     void load()
+  }, [load])
+
+  // Returning from /trip/... must refresh phase / pipeline chips.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      void load({ silent: true })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [load])
 
   useEffect(() => {
@@ -764,13 +958,13 @@ export function PlannerTab() {
         autoScan={autoScanTripId === selectedTripId}
         onAutoScanDone={() => setAutoScanTripId(null)}
         onBack={() => {
-          setSelectedTripId(null)
           setAutoScanTripId(null)
+          navigate('/planner')
           void load()
         }}
         onDeleted={() => {
-          setSelectedTripId(null)
           setAutoScanTripId(null)
+          navigate('/planner')
           void load()
         }}
         onToast={setToast}
@@ -791,16 +985,16 @@ export function PlannerTab() {
 
       <div className="relative mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p className="app-kicker mb-1.5">PLANNER</p>
+          <p className="app-kicker mb-1.5">Planner</p>
           <h2 className="app-title">Tes voyages</h2>
           <p className="app-subtitle mt-1.5">
-            Vol → Hôtel → la suite. Scanne, invite, compose ton séjour.
+            Crée, scanne les prix, invite tes proches.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="app-btn-primary shrink-0 rounded-2xl"
+          className="app-btn-primary shrink-0"
         >
           <span className="text-lg leading-none">+</span>
           Nouveau
@@ -823,7 +1017,7 @@ export function PlannerTab() {
             {t('deals.retry')}
           </button>
         </div>
-      ) : trips.length === 0 ? (
+      ) : workspaces.length === 0 ? (
         <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
           <div
             aria-hidden
@@ -836,9 +1030,8 @@ export function PlannerTab() {
             <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
               Ton premier voyage
             </p>
-            <p className="text-sm sm:text-base text-slate-500 mb-6 max-w-md mx-auto leading-relaxed">
-              Choisis une ville, trouve un vol, puis compose l’hôtel — même
-              parcours que Mon séjour.
+            <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto leading-relaxed">
+              Choisis une ville, scanne les prix, partage le lien.
             </p>
             <button
               type="button"
@@ -851,10 +1044,10 @@ export function PlannerTab() {
         </div>
       ) : (
         <TripsGallery
-          trips={trips}
+          workspaces={workspaces}
           cityGroups={cityGroups}
           currentUserId={userId}
-          onOpen={(id) => setSelectedTripId(id)}
+          onOpen={openWorkspace}
         />
       )}
 
@@ -865,7 +1058,7 @@ export function PlannerTab() {
             setShowCreate(false)
             void load()
             setAutoScanTripId(id)
-            setSelectedTripId(id)
+            navigate(`/planner/${encodeURIComponent(id)}`)
           }}
         />
       ) : null}
@@ -915,15 +1108,29 @@ function TripDetailView({
     cheapest?: number | null
   } | null>(null)
   const [editBudget, setEditBudget] = useState(150)
+  const [editPassengers, setEditPassengers] = useState(1)
+  const [editDirect, setEditDirect] = useState(false)
   const [editDatesDepart, setEditDatesDepart] = useState<DateAvecHoraire[]>([])
   const [editDatesRetour, setEditDatesRetour] = useState<DateAvecHoraire[]>([])
   const [editPreset, setEditPreset] = useState<DatePreset>('next-weekend')
   const [showEditFlexible, setShowEditFlexible] = useState(false)
+  const [showModalities, setShowModalities] = useState(false)
   const [savingCriteria, setSavingCriteria] = useState(false)
+  const [reopeningFlight, setReopeningFlight] = useState(false)
+  const [skippingFlight, setSkippingFlight] = useState(false)
+  const [skippingHotel, setSkippingHotel] = useState(false)
   const [hotelBusy, setHotelBusy] = useState(false)
+  const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
+  const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
+  const [flightBookingBusy, setFlightBookingBusy] = useState(false)
+  const [askFlightBooked, setAskFlightBooked] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
+  const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const autoScanStarted = useRef(false)
+  const leftForFlight = useRef(false)
+  const leftForFlightAt = useRef(0)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -938,21 +1145,39 @@ function TripDetailView({
 
   const syncEditFromTrip = useCallback((detail: PlannedTripDetail) => {
     setEditBudget(detail.budget_max || 150)
+    setEditPassengers(Math.max(1, detail.passengers || 1))
+    setEditDirect(Boolean(detail.direct))
     setEditDatesDepart(detail.dates_depart || [])
     setEditDatesRetour(detail.dates_retour || [])
     setEditPreset('flexible')
   }, [])
 
-  const load = useCallback(async () => {
-    setError(null)
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
+    if (!silent) setError(null)
     try {
       const detail = await getApiClient().getPlannedTrip(tripId)
       setTrip(detail)
       syncEditFromTrip(detail)
+      try {
+        const workspaces = await getApiClient().listTravelWorkspaces()
+        const matched =
+          workspaces.find((item) => item.planned_trip_id === tripId) || null
+        setWorkspace(matched)
+        if (matched?.draft_token) {
+          setFlightDraft(await getApiClient().getMyTrip(matched.draft_token))
+        } else {
+          setFlightDraft(null)
+        }
+      } catch {
+        // The Planner remains usable before the manual workspace migration.
+        setWorkspace(null)
+        setFlightDraft(null)
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
+      if (!silent) setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [tripId, t, syncEditFromTrip])
 
@@ -960,55 +1185,298 @@ function TripDetailView({
     void load()
   }, [load])
 
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      void load({ silent: true })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [load])
+
+  useEffect(() => {
+    const token = flightDraft?.draft_token || workspace?.draft_token
+    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) {
+      setActivityItems([])
+      setRestaurantItems([])
+      return
+    }
+    void getApiClient()
+      .listTripItems({ draft_token: token })
+      .then((res) => {
+        const items = res.items || []
+        setActivityItems(items.filter((i) => i.item_type === 'activity'))
+        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+      })
+      .catch(() => {
+        setActivityItems([])
+        setRestaurantItems([])
+      })
+  }, [
+    flightDraft?.draft_token,
+    workspace?.draft_token,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    flightDraft?.hotel_booked_at,
+    flightDraft?.flight_booked_at,
+  ])
+
   const isOrganizer = trip?.organizer_id === userId
   const pending = (trip?.proposals || []).filter((p) => p.status === 'pending')
   const accepted = (trip?.proposals || []).find((p) => p.status === 'accepted')
   const pax = Math.max(trip?.passengers || 1, (trip?.members || []).length || 1)
 
-  const pipelineForUi = useMemo(() => {
-    if (!accepted) {
-      return buildStayPipeline({
-        flight: 'none',
-        hotel: 'none',
-        focus: 'flight',
-        activitiesEnabled: plannerActivitiesEnabled,
-        restaurantsEnabled: plannerRestaurantsEnabled,
-      })
-    }
-    return buildStayPipeline({
-      flight: 'selected_fw',
-      hotel: 'none',
-      focus: 'hotel',
-      activitiesEnabled: plannerActivitiesEnabled,
-      restaurantsEnabled: plannerRestaurantsEnabled,
-    })
-  }, [accepted, plannerActivitiesEnabled, plannerRestaurantsEnabled])
+  const activityProgress = useMemo(
+    () => activityStepProgress(activityItems),
+    [activityItems],
+  )
+  const restaurantProgress = useMemo(
+    () => restaurantStepProgress(restaurantItems),
+    [restaurantItems],
+  )
 
-  const onPipelineStep = (id: StayStepId) => {
-    if (id === 'hotel') {
-      if (accepted) {
-        if (hotelBusy) return
-        setHotelBusy(true)
-        void createMyTripComposeFromTrip({
-          trip: accepted.trip_data,
-          passengers: pax,
-          language,
-          markFlightBooked: false,
-        })
-          .then((draft) => navigate(`/trip/${draft.draft_token}?compose=1`))
-          .catch(() => onToast('Impossible de créer le séjour hôtel — réessaie'))
-          .finally(() => setHotelBusy(false))
-      } else {
-        onToast('Choisis d’abord un vol (étape 1)')
-      }
+  const draftPayload = (flightDraft?.payload || {}) as Record<string, unknown>
+  const draftFlight = (draftPayload.flight || {}) as Record<string, unknown>
+  const draftHotel =
+    (flightDraft?.hotel as Record<string, unknown> | null | undefined) ||
+    (draftPayload.hotel as Record<string, unknown> | null | undefined) ||
+    null
+  const flightBookingStatus =
+    flightDraft?.flight_booking_status ||
+    (draftPayload.flight_booking_status as FlightBookingStatus | undefined) ||
+    workspace?.flight_booking_status ||
+    null
+  const externalFlight = Boolean(
+    draftPayload.flight_external || draftPayload.external_flight,
+  )
+  const externalHotel = Boolean(
+    draftPayload.hotel_external || draftPayload.external_hotel,
+  )
+  const flightBooked = Boolean(
+    flightDraft?.flight_booked_at ||
+      draftPayload.flight_booked ||
+      draftPayload.flight_booked_at ||
+      (flightBookingStatus && FLIGHT_BOOKED_STATUSES.has(flightBookingStatus)) ||
+      workspace?.pipeline.flight === 'booked' ||
+      externalFlight,
+  )
+  const hotelBooked = Boolean(
+    flightDraft?.hotel_booked_at ||
+      draftPayload.hotel_booked ||
+      draftPayload.hotel_booked_at ||
+      (workspace?.pipeline.hotel === 'booked' && !externalHotel) ||
+      (workspace?.phase === 'booked' && !externalHotel),
+  )
+  const hasHotel = Boolean(draftHotel || workspace?.hotel_booking_id)
+  const canSkipFlight =
+    !externalFlight &&
+    !hotelBooked &&
+    !externalHotel &&
+    !flightDraft?.flight_booked_at &&
+    !(
+      flightBookingStatus && FLIGHT_BOOKED_STATUSES.has(flightBookingStatus)
+    )
+  const canSkipHotel =
+    Boolean(trip) &&
+    !externalHotel &&
+    !hotelBooked &&
+    !flightDraft?.hotel_booked_at
+
+  const pipelineForUi = useMemo(() => {
+    const flight = resolveFlightStepStatus({
+      hasFlightPayload: Boolean(
+        accepted || draftFlight.origin_iata || externalFlight,
+      ),
+      flightBooked: flightBooked && !externalFlight,
+      externalFlight,
+      bookingUrl:
+        (draftFlight.booking_url as string | undefined) ||
+        (draftPayload.booking_url as string | undefined) ||
+        null,
+    })
+    const hotel = resolveHotelStepStatus({
+      hasHotel,
+      hotelBooked: hotelBooked && !externalHotel,
+      externalHotel,
+    })
+    return buildStayPipeline({
+      flight,
+      hotel,
+      focus:
+        hotelBooked || externalHotel
+          ? undefined
+          : accepted || flight !== 'none' || externalFlight
+            ? 'hotel'
+            : 'flight',
+      activitiesEnabled: plannerActivitiesEnabled,
+      activitiesDone: activityProgress.done,
+      activitiesPartial: activityProgress.partial,
+      activitiesHint: activityProgress.hint,
+      restaurantsEnabled: plannerRestaurantsEnabled,
+      restaurantsDone: restaurantProgress.done,
+      restaurantsPartial: restaurantProgress.partial,
+      restaurantsHint: restaurantProgress.hint,
+      restaurantsSkipped: restaurantProgress.skipped,
+    })
+  }, [
+    accepted,
+    activityProgress,
+    draftFlight.booking_url,
+    draftFlight.origin_iata,
+    draftPayload.booking_url,
+    externalFlight,
+    externalHotel,
+    flightBooked,
+    hasHotel,
+    hotelBooked,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    restaurantProgress,
+  ])
+
+  const bookSelectedFlight = async () => {
+    if (!accepted || flightBookingBusy) return
+    const popup = window.open('about:blank', '_blank')
+    if (!popup) {
+      onToast('Autorise les fenêtres pour ouvrir le site de réservation')
       return
     }
-    if (id === 'flight' && accepted) {
-      openPartnerBookSync({
+    popup.opener = null
+    setFlightBookingBusy(true)
+    setAskFlightBooked(false)
+    try {
+      const draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
+      const source = openPartnerBookSync({
         trip: accepted.trip_data,
         passengers: pax,
         language,
+        draftId: draft.id,
+        targetWindow: popup,
       })
+      const isTravelpayouts = source.partnerId === 'aviasales'
+      const status: FlightBookingStatus = isTravelpayouts
+        ? 'pending_partner'
+        : 'redirected'
+      const updated = await getApiClient().updateMyTripFlightBookingStatus(
+        draft.draft_token,
+        { status, provider: source.partnerId },
+      )
+      setFlightDraft(updated)
+      // Ryanair / compagnie : demander au retour. Travelpayouts = postback auto.
+      if (!isTravelpayouts) {
+        leftForFlight.current = true
+        leftForFlightAt.current = Date.now()
+      }
+    } catch {
+      popup.close()
+      onToast('Impossible d’ouvrir la réservation — réessaie')
+    } finally {
+      setFlightBookingBusy(false)
+    }
+  }
+
+  const confirmAirlineFlight = async () => {
+    if (!flightDraft?.draft_token || flightBookingBusy) return
+    setFlightBookingBusy(true)
+    setAskFlightBooked(false)
+    leftForFlight.current = false
+    try {
+      const updated = await getApiClient().updateMyTripFlightBookingStatus(
+        flightDraft.draft_token,
+        { status: 'user_confirmed', provider: 'ryanair' },
+      )
+      setFlightDraft(updated)
+      onToast('Vol confirmé — ton voyage est à jour')
+      void load()
+    } catch {
+      onToast('Impossible de confirmer le vol — réessaie')
+    } finally {
+      setFlightBookingBusy(false)
+    }
+  }
+
+  const dismissFlightBookAsk = () => {
+    setAskFlightBooked(false)
+    leftForFlight.current = false
+  }
+
+  useEffect(() => {
+    if (flightBooked) {
+      setAskFlightBooked(false)
+      return
+    }
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!leftForFlight.current) return
+      if (Date.now() - leftForFlightAt.current < 1200) return
+      setAskFlightBooked(true)
+    }
+    document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
+    return () => {
+      document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
+    }
+  }, [flightBooked])
+
+  const openReservation = (compose = false) => {
+    if (hotelBusy) return
+    if (flightDraft?.draft_token) {
+      navigate(
+        `/trip/${flightDraft.draft_token}${compose && !hotelBooked ? '?compose=1' : ''}`,
+      )
+      return
+    }
+    if (externalFlight || !accepted) {
+      if (canSkipFlight) {
+        void skipFlight()
+        return
+      }
+      onToast(
+        externalFlight
+          ? 'Impossible d’ouvrir le séjour — réessaie'
+          : 'Choisis d’abord un vol, ou indique que tu as déjà un avion',
+      )
+      return
+    }
+    setHotelBusy(true)
+    void getApiClient()
+      .getOrCreateExecutionDraft(accepted.id)
+      .then((draft) => {
+        setFlightDraft(draft)
+        navigate(
+          `/trip/${draft.draft_token}${compose && !hotelBooked ? '?compose=1' : ''}`,
+        )
+      })
+      .catch(() => onToast('Impossible d’ouvrir la réservation — réessaie'))
+      .finally(() => setHotelBusy(false))
+  }
+
+  const onPipelineStep = (id: StayStepId) => {
+    if (id === 'hotel') {
+      if (externalHotel) {
+        if (flightDraft?.draft_token) {
+          navigate(`/trip/${flightDraft.draft_token}`)
+        }
+        return
+      }
+      openReservation(!hotelBooked && !hasHotel)
+      return
+    }
+    if (id === 'flight') {
+      if (externalFlight && flightDraft?.draft_token) {
+        navigate(`/trip/${flightDraft.draft_token}`)
+        return
+      }
+      if (accepted) {
+        if (flightBooked && flightDraft?.draft_token) {
+          navigate(`/trip/${flightDraft.draft_token}`)
+          return
+        }
+        void bookSelectedFlight()
+      }
     }
   }
 
@@ -1120,8 +1588,11 @@ function TripDetailView({
       return
     }
     const nextBudget = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
-    const patch: Partial<CreatePlannedTripRequest> = {}
+    const nextPassengers = Math.min(6, Math.max(1, editPassengers))
+    const patch: UpdatePlannedTripRequest = {}
     if (nextBudget !== trip.budget_max) patch.budget_max = nextBudget
+    if (nextPassengers !== trip.passengers) patch.passengers = nextPassengers
+    if (Boolean(editDirect) !== Boolean(trip.direct)) patch.direct = editDirect
     if (datesChanged(editDatesDepart, trip.dates_depart || [])) {
       patch.dates_depart = editDatesDepart
     }
@@ -1132,24 +1603,100 @@ function TripDetailView({
     setError(null)
     try {
       if (Object.keys(patch).length > 0) {
-        await getApiClient().updatePlannedTrip(tripId, patch)
+        const updated = await getApiClient().updatePlannedTrip(tripId, patch)
         setTrip((prev) =>
           prev
             ? {
                 ...prev,
+                ...updated,
                 budget_max: nextBudget,
+                passengers: nextPassengers,
+                direct: editDirect,
                 dates_depart: editDatesDepart,
                 dates_retour: editDatesRetour,
+                proposals: prev.proposals,
+                members: prev.members,
               }
             : prev,
         )
         setEditBudget(nextBudget)
+        setEditPassengers(nextPassengers)
+      } else if (trip.status === 'locked') {
+        await getApiClient().reopenPlannedTripFlight(tripId)
       }
+      setShowModalities(false)
+      setFlightDraft(null)
+      setWorkspace(null)
       await scan()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
       setSavingCriteria(false)
+    }
+  }
+
+  const changeFlightChoice = async () => {
+    if (!trip || reopeningFlight) return
+    if (
+      !window.confirm(
+        'Changer de vol ? Les propositions actuelles seront remplacées par un nouveau scan.',
+      )
+    ) {
+      return
+    }
+    setReopeningFlight(true)
+    setError(null)
+    try {
+      await getApiClient().reopenPlannedTripFlight(tripId)
+      setShowModalities(false)
+      setFlightDraft(null)
+      setWorkspace(null)
+      await scan()
+      onToast('Vol réouvert — nouveau scan lancé')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setReopeningFlight(false)
+    }
+  }
+
+  const skipFlight = async () => {
+    if (!trip || skippingFlight || !canSkipFlight) return
+    if (!trip.arrival_airport) {
+      onToast('Choisis d’abord une destination')
+      return
+    }
+    if (!trip.dates_depart?.[0] || !trip.dates_retour?.[0]) {
+      onToast('Dates aller/retour requises')
+      return
+    }
+    setSkippingFlight(true)
+    setError(null)
+    try {
+      const draft = await getApiClient().skipPlannedTripFlight(tripId)
+      setFlightDraft(draft)
+      onToast('Vol ailleurs — compose ton hôtel')
+      navigate(`/trip/${draft.draft_token}?compose=1`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setSkippingFlight(false)
+    }
+  }
+
+  const skipHotel = async () => {
+    if (!trip || skippingHotel || !canSkipHotel) return
+    setSkippingHotel(true)
+    setError(null)
+    try {
+      const draft = await getApiClient().skipPlannedTripHotel(tripId)
+      setFlightDraft(draft)
+      onToast('Hôtel ailleurs — séjour à jour')
+      void load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setSkippingHotel(false)
     }
   }
 
@@ -1244,11 +1791,18 @@ function TripDetailView({
 
   const doDelete = async () => {
     if (!trip) return
-    if (!window.confirm(t('planner.deleteConfirm', { name: trip.name }))) return
+    if (
+      !window.confirm(
+        `Supprimer « ${trip.name} » ?\n\nLe voyage Planner disparaît, mais tes réservations (vol / hôtel) sont conservées.`,
+      )
+    ) {
+      return
+    }
     setDeleting(true)
     setError(null)
     try {
       await getApiClient().deletePlannedTrip(tripId)
+      onToast('Voyage supprimé — réservations conservées')
       onDeleted()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -1301,112 +1855,125 @@ function TripDetailView({
     )
   }
 
-  const statusLabel = STATUS_LABEL[trip.status] || trip.status
-  const routeLine = `${departureRouteLabel(trip.departure_airport)}${
+  const statusLabel =
+    (workspace?.phase && PHASE_LABEL[workspace.phase]) ||
+    STATUS_LABEL[trip.status] ||
+    trip.status
+  const reservationOrigin =
+    (draftFlight.origin_iata as string | undefined) ||
+    workspace?.origin_iata ||
+    trip.departure_airport
+  const reservationDest =
+    (draftFlight.destination_iata as string | undefined) ||
+    workspace?.dest_iata ||
     trip.arrival_airport
-      ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+  const routeLine = `${departureRouteLabel(reservationOrigin)}${
+    reservationDest
+      ? ` → ${String(reservationDest).replace(/,/g, ' · ')}`
       : ' · inspire'
   }`
+  const outDate =
+    workspace?.out_date ||
+    flightDraft?.out_date ||
+    (draftPayload.dates as { outbound?: string } | undefined)?.outbound ||
+    trip.dates_depart[0]?.date
+  const retDate =
+    workspace?.ret_date ||
+    flightDraft?.ret_date ||
+    (draftPayload.dates as { inbound?: string } | undefined)?.inbound ||
+    trip.dates_retour[trip.dates_retour.length - 1]?.date
   const dateLine =
-    trip.dates_depart[0] && trip.dates_retour[0]
-      ? `${formatDateFr(trip.dates_depart[0].date)} → ${formatDateFr(
-          trip.dates_retour[trip.dates_retour.length - 1].date,
-        )}`
+    outDate && retDate
+      ? `${formatDateFr(outDate)} → ${formatDateFr(retDate)}`
       : null
-  const destinationCode = parseAirportCodes(trip.arrival_airport)[0] || ''
-  const destinationName = destinationCode
-    ? cityDisplayNameFr(destinationCode)
-    : trip.name.replace(/^Weekend\s+/i, '')
-  const destinationImage = cityImageUrl(destinationName || null, destinationCode || undefined)
+  const destinationCode =
+    parseAirportCodes(reservationDest)[0] ||
+    parseAirportCodes(trip.arrival_airport)[0] ||
+    ''
+  const destinationName =
+    workspace?.city ||
+    (draftPayload.city as string | undefined) ||
+    flightDraft?.city_name ||
+    (destinationCode
+      ? cityDisplayNameFr(destinationCode)
+      : trip.name.replace(/^Weekend\s+/i, ''))
+  const destinationImage =
+    workspace?.image_url ||
+    (draftPayload.image_url as string | undefined) ||
+    cityImageUrl(destinationName || null, destinationCode || undefined)
 
   return (
-    <div className="w-full space-y-8 pb-8">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-sm font-bold text-primary-600 hover:text-primary-700"
-        >
-          ← {t('nav.planner')}
-        </button>
-        <span className="text-[11px] font-bold uppercase tracking-wide text-primary-700 bg-orange-50 border border-orange-100 px-2.5 py-1 rounded-full">
-          {statusLabel}
-        </span>
-      </div>
-
-      {/* Hero */}
-      <motion.section
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-[32px] border border-white/20 bg-[#211610] shadow-2xl shadow-orange-950/20 min-h-[390px]"
-      >
+    <div className="w-full space-y-6 pb-8">
+      <section className="relative overflow-hidden rounded-[32px] min-h-[min(52vh,420px)] shadow-xl shadow-orange-950/10 border border-orange-100/60">
         <img
           src={destinationImage}
           alt=""
           aria-hidden
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover scale-[1.02]"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#170F0B]/95 via-[#21140D]/80 to-[#21140D]/25" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/15" />
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full border border-white/15" />
-        <div className="pointer-events-none absolute -right-4 -top-4 h-32 w-32 rounded-full border border-white/10" />
-        <div className="relative p-6 sm:p-8 lg:p-10 space-y-8">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-            <div className="min-w-0 space-y-3">
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
-                Prochain départ · {destinationName}
-              </p>
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-[1.05] drop-shadow-sm">
-                {trip.name}
-              </h2>
-              <div className="flex flex-wrap gap-2 pt-1">
-                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5">
-                  {routeLine}
-                </span>
-                {dateLine ? (
-                  <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5">
-                    {dateLine}
-                  </span>
-                ) : null}
-                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5">
-                  max {trip.budget_max}€/pers
-                </span>
-                {trip.direct ? (
-                  <span className="inline-flex items-center rounded-full border border-emerald-300/30 bg-emerald-400/20 backdrop-blur-md text-emerald-100 text-xs font-bold px-3 py-1.5">
-                    Directs
-                  </span>
-                ) : null}
-              </div>
-            </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/92 via-[#1a100c]/45 to-black/25" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#140c08]/55 via-transparent to-transparent" />
+        <div className="relative flex min-h-[min(52vh,420px)] flex-col justify-between p-5 sm:p-7 lg:p-9">
+          <div className="flex items-start justify-between gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center rounded-full bg-white/15 px-3.5 py-2 text-sm font-bold text-white backdrop-blur-md ring-1 ring-white/20 hover:bg-white/25 min-h-[40px]"
+            >
+              ← {t('nav.planner')}
+            </button>
+            <span
+              className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
+                workspace?.phase === 'booked'
+                  ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
+                  : 'bg-white/90 text-slate-800'
+              }`}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
+              {destinationName}
+            </p>
+            <h2 className="mt-2 text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-[1.05]">
+              {trip.name}
+            </h2>
+            <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
+              {routeLine}
+              {trip.direct ? ' · directs' : ''}
+              {` · ${trip.budget_max}€/pers`}
+            </p>
+            {dateLine ? (
+              <p className="mt-1 text-sm text-white/65">{dateLine}</p>
+            ) : null}
+            {workspace?.phase ? (
+              <p className="mt-2 text-sm text-white/55">{PHASE_HINT[workspace.phase]}</p>
+            ) : null}
             {isOrganizer && trip.status !== 'locked' ? (
               <button
                 type="button"
                 disabled={scanning}
                 onClick={() => void scan()}
-                className="rounded-2xl bg-white px-7 py-3.5 font-extrabold text-[#D94D1B] shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-orange-50 disabled:opacity-60 shrink-0 self-start"
+                className="mt-5 inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
               >
                 {scanning ? t('planner.scanning') : t('planner.scan')}
               </button>
             ) : null}
           </div>
-
-          <div className="rounded-3xl border border-white/15 bg-black/25 backdrop-blur-xl px-4 sm:px-6 py-5 shadow-inner">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
-              <p className="font-extrabold text-white">Ton parcours</p>
-              <p className="text-xs font-semibold text-white/65">
-                Vol → Hôtel
-                {plannerActivitiesEnabled ? ' → Activités' : ''}
-                {plannerRestaurantsEnabled ? ' → Adresses' : ''}
-              </p>
-            </div>
-            <StayPipelineStepper
-              steps={pipelineForUi}
-              onStepPress={onPipelineStep}
-              variant="dark"
-            />
-          </div>
         </div>
-      </motion.section>
+      </section>
+
+      <div className="bg-white rounded-2xl shadow-md px-4 sm:px-6 py-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
+          Ton parcours
+        </p>
+        <StayPipelineStepper
+          steps={pipelineForUi}
+          onStepPress={onPipelineStep}
+          variant="light"
+        />
+      </div>
 
       {trip.route_ok === false ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-2">
@@ -1433,84 +2000,258 @@ function TripDetailView({
 
       {/* Next action */}
       {scanning ? (
-        <div className="rounded-[28px] border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white px-8 py-14 text-center shadow-soft">
+        <div className="rounded-3xl border border-line bg-white px-8 py-14 text-center shadow-soft">
           <div className="mx-auto mb-4 w-11 h-11 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
-          <p className="font-extrabold text-slate-900 text-xl">{t('planner.scan.auto')}</p>
-          <p className="text-sm text-slate-500 mt-2">{routeLine}</p>
+          <p className="font-extrabold text-ink text-xl">{t('planner.scan.auto')}</p>
+          <p className="text-sm text-muted mt-2">{routeLine}</p>
         </div>
-      ) : accepted ? (
+      ) : accepted || externalFlight ? (
         <section className="space-y-5">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
-                Étape vol
-              </p>
-              <h3 className="font-extrabold text-2xl text-ink tracking-tight">Vol choisi</h3>
-            </div>
-            <button
-              type="button"
-              disabled={hotelBusy}
-              onClick={() => onPipelineStep('hotel')}
-              className="hidden sm:inline-flex app-btn-primary rounded-2xl px-5 py-2.5 disabled:opacity-60"
-            >
-              {hotelBusy ? 'Ouverture…' : 'Composer l’hôtel'}
-            </button>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
+              Étape séjour
+            </p>
+            <h3 className="font-extrabold text-2xl text-ink tracking-tight">
+              {externalFlight
+                ? 'Vol ailleurs — place à l’hôtel'
+                : flightBooked
+                  ? 'Vol réservé — complète ton séjour'
+                  : 'Vol choisi — compose ton hôtel'}
+            </h3>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 items-start">
-            <SelectedFlightBoardingPass
-              trip={accepted.trip_data}
-              passengers={pax}
-              onBook={() => {
-                openPartnerBookSync({
-                  trip: accepted.trip_data,
-                  passengers: pax,
-                  language,
-                })
-              }}
-            />
-            <motion.button
-              type="button"
-              disabled={hotelBusy}
-              onClick={() => onPipelineStep('hotel')}
-              whileHover={{ y: -5 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-              className="group relative text-left rounded-[28px] overflow-hidden border border-white/20 bg-[#24140D] shadow-xl shadow-orange-950/20 disabled:opacity-60 h-full min-h-[360px] flex flex-col justify-end"
-            >
-              <img
-                src={destinationImage}
-                alt=""
-                aria-hidden
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#160C08] via-[#24140D]/65 to-black/5" />
-              <div className="absolute left-5 top-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl backdrop-blur-md shadow-lg">
-                🏨
+          {externalFlight ? (
+            <div className="rounded-3xl border border-line bg-white p-5 shadow-soft">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                Vol
+              </p>
+              <p className="mt-1 font-extrabold text-lg text-ink tracking-tight">
+                Déjà réservé ailleurs
+              </p>
+              <p className="text-sm text-ink-soft mt-1 leading-relaxed">
+                Tu continues directement sur l’hôtel pour {destinationName}.
+              </p>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+            {accepted && !externalFlight ? (
+              <div className="space-y-3">
+                <SelectedFlightBoardingPass
+                  trip={accepted.trip_data}
+                  passengers={pax}
+                  bookingStatus={flightBookingStatus || undefined}
+                  bookingBusy={flightBookingBusy}
+                  askBooked={askFlightBooked}
+                  onBook={() => void bookSelectedFlight()}
+                  onConfirm={() => void confirmAirlineFlight()}
+                  onDismissAsk={dismissFlightBookAsk}
+                />
+                {isOrganizer && !flightBooked && !hotelBooked ? (
+                  <button
+                    type="button"
+                    disabled={reopeningFlight || savingCriteria || scanning}
+                    onClick={() => setShowModalities((v) => !v)}
+                    className="w-full inline-flex items-center justify-center rounded-2xl border border-line bg-white px-4 py-3 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[44px] shadow-sm"
+                  >
+                    {showModalities ? 'Fermer les modalités' : 'Modifier les modalités'}
+                  </button>
+                ) : null}
+                {isOrganizer && !flightBooked && !hotelBooked && showModalities ? (
+                  <div className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-5">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                        Modalités du vol
+                      </p>
+                      <p className="text-sm text-ink-soft mt-1">
+                        Tant que le vol n’est pas réservé, tu peux changer dates,
+                        budget, voyageurs ou relancer un scan.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="rounded-2xl border border-line bg-slate-50/70 px-4 pt-4 pb-2">
+                        <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                          Dates
+                        </p>
+                        <DatePresets
+                          selected={editPreset}
+                          onChange={onEditPreset}
+                          onFlexibleClick={() => {
+                            setEditPreset('flexible')
+                            setShowEditFlexible(true)
+                          }}
+                        />
+                        {editDatesDepart[0] && editDatesRetour[0] ? (
+                          <p className="text-sm text-ink-soft font-medium pb-2 mt-2">
+                            {formatDateFr(editDatesDepart[0].date)} →{' '}
+                            {formatDateFr(
+                              editDatesRetour[editDatesRetour.length - 1].date,
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 space-y-4">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                            Budget max / pers.
+                          </p>
+                          <BudgetSlider value={editBudget} onChange={setEditBudget} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                            Voyageurs
+                          </p>
+                          <PassengerStepper
+                            value={editPassengers}
+                            onChange={setEditPassengers}
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                          <input
+                            type="checkbox"
+                            checked={editDirect}
+                            onChange={(e) => setEditDirect(e.target.checked)}
+                            className="rounded border-line"
+                          />
+                          Vols directs uniquement
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={scanning || savingCriteria || reopeningFlight}
+                        onClick={() => void updateCriteriaAndScan()}
+                        className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 disabled:opacity-60 min-h-[40px]"
+                      >
+                        {savingCriteria || scanning
+                          ? 'Scan…'
+                          : 'Enregistrer et rescanner'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={scanning || savingCriteria || reopeningFlight}
+                        onClick={() => void changeFlightChoice()}
+                        className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
+                      >
+                        {reopeningFlight ? 'Ouverture…' : 'Choisir un autre vol'}
+                      </button>
+                      {canSkipFlight ? (
+                        <button
+                          type="button"
+                          disabled={skippingFlight || scanning || savingCriteria}
+                          onClick={() => void skipFlight()}
+                          className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
+                        >
+                          {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div className="relative p-6 sm:p-7">
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
-                  Prochaine étape
+            ) : null}
+            {externalHotel ? (
+              <div
+                className={`bg-white rounded-3xl border border-line shadow-soft p-5 ${
+                  externalFlight && !accepted ? 'lg:col-span-2' : ''
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Hôtel
                 </p>
-                <p className="mt-2 font-extrabold text-white text-2xl sm:text-3xl tracking-tight">
-                  Composer ton hôtel
+                <p className="mt-0.5 font-extrabold text-ink text-lg tracking-tight">
+                  Déjà réservé ailleurs
                 </p>
-                <p className="text-sm text-white/75 mt-2 leading-relaxed max-w-sm">
-                  Trouve le bon quartier et compare les meilleurs séjours à {destinationName}.
+                <p className="text-sm text-ink-soft mt-1 leading-relaxed">
+                  Tu as sauté l’étape hôtel FlightWatcher pour {destinationName}.
                 </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {['Photos', 'Avis', 'Prix réels'].map((benefit) => (
-                    <span
-                      key={benefit}
-                      className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/90 backdrop-blur-md"
-                    >
-                      {benefit}
+              </div>
+            ) : (
+              <div
+                className={`group relative overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 min-h-[360px] ${
+                  externalFlight && !accepted ? 'lg:col-span-2' : ''
+                }`}
+              >
+                <button
+                  type="button"
+                  disabled={hotelBusy}
+                  onClick={() => onPipelineStep('hotel')}
+                  className="relative w-full text-left disabled:opacity-60 h-full min-h-[360px]"
+                >
+                  <img
+                    src={destinationImage}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+                  <div
+                    className={`relative flex h-full min-h-[360px] flex-col justify-end p-6 sm:p-7 ${
+                      canSkipHotel ? 'pb-20' : ''
+                    }`}
+                  >
+                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+                      {hotelBooked
+                        ? 'Réservation'
+                        : hasHotel
+                          ? 'Hôtel sélectionné'
+                          : 'Prochaine étape'}
+                    </p>
+                    <p className="mt-2 text-3xl sm:text-4xl font-black tracking-tight text-white leading-tight">
+                      {hotelBooked
+                        ? String(
+                            (draftHotel as { name?: string } | null)?.name ||
+                              'Hôtel réservé',
+                          )
+                        : hasHotel
+                          ? String(
+                              (draftHotel as { name?: string } | null)?.name ||
+                                'Finaliser l’hôtel',
+                            )
+                          : 'Composer ton hôtel'}
+                    </p>
+                    <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                      {hotelBooked
+                        ? `Ta réservation à ${destinationName} est rattachée à ce voyage.`
+                        : hasHotel
+                          ? `Reprends ton séjour à ${destinationName} pour finaliser.`
+                          : `Compare les chambres à ${destinationName} et réserve en quelques clics.`}
+                    </p>
+                    {hotelBooked ? (
+                      <div className="mt-4 inline-flex self-start rounded-2xl border border-emerald-200/30 bg-emerald-400/15 px-3 py-2 backdrop-blur-md">
+                        <p className="text-sm font-bold text-emerald-100">
+                          Réservé ✓ · dossier conservé
+                        </p>
+                      </div>
+                    ) : null}
+                    <span className="mt-6 inline-flex items-center gap-2 self-start rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px]">
+                      {hotelBusy
+                        ? 'Ouverture…'
+                        : hotelBooked
+                          ? 'Ouvrir mon séjour'
+                          : hasHotel
+                            ? 'Reprendre l’hôtel'
+                            : 'Explorer les hôtels'}
+                      <span aria-hidden>›</span>
                     </span>
-                  ))}
-                </div>
-                <span className="mt-6 inline-flex items-center rounded-xl bg-white px-4 py-2.5 text-sm font-extrabold text-[#D94D1B] shadow-lg">
-                  {hotelBusy ? 'Ouverture…' : 'Explorer les hôtels →'}
-                </span>
+                  </div>
+                </button>
+                {canSkipHotel ? (
+                  <div className="absolute bottom-0 inset-x-0 border-t border-white/15 bg-black/35 px-5 py-3 flex flex-wrap items-center justify-between gap-2 backdrop-blur-md">
+                    <p className="text-sm text-white/80">
+                      Tu as déjà un hôtel ailleurs ?
+                    </p>
+                    <button
+                      type="button"
+                      disabled={skippingHotel || hotelBusy}
+                      onClick={() => void skipHotel()}
+                      className="inline-flex items-center rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[40px]"
+                    >
+                      {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
-            </motion.button>
+            )}
           </div>
           {!isOrganizer ? (
             <p className="text-sm text-muted">
@@ -1583,6 +2324,24 @@ function TripDetailView({
               />
             ))}
           </div>
+          {canSkipFlight ? (
+            <div className="rounded-3xl border border-line bg-white p-5 shadow-soft flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="font-extrabold text-ink">J’ai déjà un vol</p>
+                <p className="text-sm text-ink-soft mt-0.5">
+                  Passe directement à l’hôtel si tu as réservé l’avion ailleurs.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={skippingFlight}
+                onClick={() => void skipFlight()}
+                className="inline-flex items-center justify-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px] shrink-0"
+              >
+                {skippingFlight ? 'Ouverture…' : 'Passer à l’hôtel'}
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : scanEmpty ? (
         <div
@@ -1674,16 +2433,28 @@ function TripDetailView({
               ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
               : 'L’organisateur scanne et choisit le vol pour le groupe.'}
           </p>
-          {isOrganizer ? (
-            <button
-              type="button"
-              disabled={scanning}
-              onClick={() => void scan()}
-              className="mt-6 app-btn-primary rounded-2xl px-6 py-3 disabled:opacity-60"
-            >
-              {scanning ? t('planner.scanning') : t('planner.scan')}
-            </button>
-          ) : null}
+          <div className="mt-6 flex flex-wrap gap-2">
+            {isOrganizer ? (
+              <button
+                type="button"
+                disabled={scanning}
+                onClick={() => void scan()}
+                className="app-btn-primary rounded-2xl px-6 py-3 disabled:opacity-60"
+              >
+                {scanning ? t('planner.scanning') : t('planner.scan')}
+              </button>
+            ) : null}
+            {canSkipFlight ? (
+              <button
+                type="button"
+                disabled={skippingFlight || scanning}
+                onClick={() => void skipFlight()}
+                className="inline-flex items-center rounded-2xl border border-line px-5 py-3 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60"
+              >
+                {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
+              </button>
+            ) : null}
+          </div>
         </section>
       )}
 
@@ -1728,51 +2499,28 @@ function TripDetailView({
           t={t}
         />
         {isOrganizer && !scanning ? (
-          <motion.button
+          <button
             type="button"
             onClick={() => void doShare()}
-            whileHover={{ y: -4, scale: 1.005 }}
-            whileTap={{ scale: 0.99 }}
-            transition={{ type: 'spring', stiffness: 280, damping: 22 }}
-            className="group relative w-full overflow-hidden rounded-[28px] border border-orange-400/20 bg-gradient-to-r from-[#21140D] via-[#3A1B0F] to-[#D94D1B] p-5 sm:p-6 text-left shadow-xl shadow-orange-950/20"
+            className="w-full text-left bg-white rounded-3xl border border-line shadow-soft p-5 sm:p-6 hover:bg-slate-50/80 transition-colors"
           >
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -right-12 -top-20 h-52 w-52 rounded-full border border-white/10 transition-transform duration-700 group-hover:scale-110"
-            />
-            <span
-              aria-hidden
-              className="pointer-events-none absolute right-14 -bottom-24 h-44 w-44 rounded-full bg-orange-300/15 blur-2xl"
-            />
-            <span className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <span className="flex min-w-0 items-center gap-4">
-                <span className="flex shrink-0 -space-x-2">
-                  {['bg-[#FF7A45]', 'bg-[#FFB36B]', 'bg-[#F6D365]'].map(
-                    (color, index) => (
-                      <span
-                        key={color}
-                        className={`flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#3A1B0F] text-sm font-black text-white shadow-md ${color}`}
-                      >
-                        {index < (trip.members || []).length ? '✓' : '+'}
-                      </span>
-                    ),
-                  )}
+            <span className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold uppercase tracking-wide text-muted">
+                  Groupe
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-xl font-extrabold tracking-tight text-white">
-                    Le voyage est encore mieux à plusieurs
-                  </span>
-                  <span className="mt-1 block text-sm font-medium leading-relaxed text-white/65">
-                    Invite tes amis pour suivre le séjour et choisir ensemble.
-                  </span>
+                <span className="mt-0.5 block text-lg font-extrabold tracking-tight text-ink">
+                  Inviter des amis
+                </span>
+                <span className="mt-1 block text-sm text-ink-soft">
+                  Partage le voyage pour suivre le séjour ensemble.
                 </span>
               </span>
-              <span className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3.5 text-sm font-extrabold text-[#D94D1B] shadow-lg shadow-black/15 transition group-hover:bg-orange-50">
-                Inviter des amis
-                <span aria-hidden className="text-lg leading-none">↗</span>
+              <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold min-h-[40px]">
+                Partager le lien
               </span>
             </span>
-          </motion.button>
+          </button>
         ) : null}
       </section>
 
@@ -1847,35 +2595,25 @@ function PlannerStayExtras({
   const both = activitiesEnabled && restaurantsEnabled
 
   return (
-    <div className={both ? 'grid gap-4 lg:grid-cols-2 lg:gap-5' : 'space-y-4'}>
+    <div className={both ? 'grid gap-5 lg:grid-cols-2' : 'space-y-5'}>
       {activitiesEnabled ? (
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          whileHover={{ y: -4 }}
-          transition={{ type: 'spring', stiffness: 240, damping: 24 }}
-          className="group min-w-0 overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-xl shadow-slate-900/10"
-        >
-          <div className="relative h-44 overflow-hidden">
+        <section className="group min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 bg-white shadow-xl shadow-orange-950/5">
+          <div className="relative h-44 sm:h-52 overflow-hidden">
             <img
               src={cityImage}
               alt=""
               aria-hidden
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#101827]/95 via-[#162033]/45 to-black/10" />
-            <div className="absolute left-5 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl backdrop-blur-md shadow-lg">
-              🎟️
-            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/35 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
                 À vivre sur place
               </p>
-              <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
+              <h3 className="mt-1.5 text-2xl font-black tracking-tight text-white">
                 Activités à {cityLabel}
               </h3>
-              <p className="mt-1 text-sm font-medium text-white/70">
+              <p className="mt-1 text-sm text-white/70">
                 Transforme le séjour en souvenirs.
               </p>
             </div>
@@ -1888,37 +2626,27 @@ function PlannerStayExtras({
               surface="planner"
             />
           </div>
-        </motion.section>
+        </section>
       ) : null}
 
       {restaurantsEnabled ? (
-        <motion.section
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          whileHover={{ y: -4 }}
-          transition={{ type: 'spring', stiffness: 240, damping: 24, delay: 0.06 }}
-          className="group min-w-0 overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-xl shadow-orange-950/10"
-        >
-          <div className="relative h-44 overflow-hidden">
+        <section className="group min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 bg-white shadow-xl shadow-orange-950/5">
+          <div className="relative h-44 sm:h-52 overflow-hidden">
             <img
               src={cityImage}
               alt=""
               aria-hidden
-              className="absolute inset-0 h-full w-full object-cover object-bottom transition-transform duration-700 group-hover:scale-105"
+              className="absolute inset-0 h-full w-full object-cover object-[center_65%] transition-transform duration-700 group-hover:scale-[1.03]"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#291108]/95 via-[#4A1D0D]/50 to-black/10" />
-            <div className="absolute left-5 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/20 bg-white/15 text-2xl backdrop-blur-md shadow-lg">
-              🍽️
-            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/40 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
                 Tes bonnes adresses
               </p>
-              <h3 className="mt-1 text-2xl font-extrabold tracking-tight text-white">
+              <h3 className="mt-1.5 text-2xl font-black tracking-tight text-white">
                 Où manger à {cityLabel}
               </h3>
-              <p className="mt-1 text-sm font-medium text-white/70">
+              <p className="mt-1 text-sm text-white/70">
                 Tous tes coups de cœur au même endroit.
               </p>
             </div>
@@ -1932,7 +2660,7 @@ function PlannerStayExtras({
               enabled={restaurantsEnabled}
             />
           </div>
-        </motion.section>
+        </section>
       ) : null}
     </div>
   )
@@ -1941,11 +2669,21 @@ function PlannerStayExtras({
 function SelectedFlightBoardingPass({
   trip,
   passengers,
+  bookingStatus,
+  bookingBusy,
+  askBooked,
   onBook,
+  onConfirm,
+  onDismissAsk,
 }: {
   trip: EnrichedTripResponse
   passengers: number
+  bookingStatus?: FlightBookingStatus
+  bookingBusy: boolean
+  askBooked?: boolean
   onBook: () => void
+  onConfirm: () => void
+  onDismissAsk?: () => void
 }) {
   const formatBoardingDate = (value: string) =>
     new Intl.DateTimeFormat('fr-FR', {
@@ -1969,6 +2707,11 @@ function SelectedFlightBoardingPass({
   )
   const ticketImage =
     trip.image_url || cityImageUrl(destinationCity, trip.aller.destination)
+  const isTravelpayouts = /travelpayouts|aviasales/i.test(
+    `${trip.provider || ''} ${trip.booking_url || ''}`,
+  )
+  const isConfirmed =
+    bookingStatus === 'user_confirmed' || bookingStatus === 'partner_confirmed'
 
   return (
     <motion.article
@@ -2075,13 +2818,73 @@ function SelectedFlightBoardingPass({
                 'repeating-linear-gradient(90deg,#111827 0,#111827 2px,transparent 2px,transparent 5px)',
             }}
           />
-          <button
-            type="button"
-            onClick={onBook}
-            className="shrink-0 rounded-xl bg-slate-950 px-4 py-3 text-xs font-extrabold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-primary-600 lg:w-full"
-          >
-            Réserver
-          </button>
+          <div className="flex shrink-0 flex-col gap-2 lg:w-full">
+            {bookingStatus === 'pending_partner' && isTravelpayouts ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="text-[10px] font-black uppercase tracking-wide text-amber-800">
+                  Paiement à confirmer
+                </p>
+                <p className="mt-0.5 text-[10px] font-semibold leading-snug text-amber-700">
+                  Mise à jour automatique dès validation par Travelpayouts.
+                </p>
+              </div>
+            ) : null}
+            {askBooked && !isConfirmed && !isTravelpayouts ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 space-y-2">
+                <p className="text-[11px] font-black text-emerald-900">
+                  Ton vol est réservé ?
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={onConfirm}
+                    disabled={bookingBusy}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-black text-white disabled:opacity-60"
+                  >
+                    {bookingBusy ? '…' : 'Oui, c’est réservé'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDismissAsk}
+                    disabled={bookingBusy}
+                    className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[11px] font-bold text-emerald-900 disabled:opacity-60"
+                  >
+                    Pas encore
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={onBook}
+              disabled={bookingBusy || isConfirmed}
+              className={`rounded-xl px-4 py-3 text-xs font-extrabold text-white shadow-lg transition lg:w-full ${
+                isConfirmed
+                  ? 'cursor-default bg-emerald-600'
+                  : 'bg-slate-950 hover:-translate-y-0.5 hover:bg-primary-600 disabled:opacity-60'
+              }`}
+            >
+              {isConfirmed
+                ? 'Vol confirmé ✓'
+                : bookingBusy
+                  ? 'Ouverture…'
+                  : bookingStatus === 'pending_partner'
+                    ? 'Revoir la réservation'
+                    : bookingStatus === 'redirected'
+                      ? 'Retourner sur le site'
+                      : 'Réserver'}
+            </button>
+            {!askBooked && bookingStatus === 'redirected' && !isTravelpayouts ? (
+              <button
+                type="button"
+                onClick={onConfirm}
+                disabled={bookingBusy}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+              >
+                J’ai réservé mon vol
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </motion.article>
@@ -2249,6 +3052,10 @@ function TravelersPanel({
   const full = count >= 6
   const freeSlots = Math.max(0, seatTotal - count)
   const progress = Math.min(100, Math.round((count / Math.max(seatTotal, 1)) * 100))
+  const partyMode = partyModeFromCount(Math.max(seatTotal, count, 1))
+  const partyTitle = partyModeTitleFr(partyMode)
+  const partyKicker = partyModeKickerFr(partyMode)
+  const partySubtitle = partyModeSubtitleFr(partyMode)
   const organizer = sorted.find((m) => m.role === 'organizer')
   const organizerUserId = organizer?.user_id || (isOrganizer ? currentUserId : null)
   const [accountHolder, setAccountHolder] = useState<{
@@ -2296,13 +3103,15 @@ function TravelersPanel({
           <div className="relative flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300 mb-1">
-                {t('planner.members.kicker')}
+                {partyKicker}
               </p>
               <h3 className="font-extrabold text-2xl text-white tracking-tight">
-                Ta bande de voyage
+                {partyTitle}
               </h3>
               <p className="text-sm text-white/60 mt-1">
-                {t('planner.members.seats', { count, seats: seatTotal })}
+                {partyMode === 'solo'
+                  ? partySubtitle
+                  : t('planner.members.seats', { count, seats: seatTotal })}
               </p>
             </div>
             {isOrganizer && !full ? (

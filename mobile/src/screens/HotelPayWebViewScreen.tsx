@@ -57,6 +57,8 @@ export function HotelPayWebViewScreen({ route, navigation }: Props) {
         message?: string
       }
       if (data.type === 'booked') {
+        // Pop back onto the existing DealCheckout and merge payResult
+        // (Chambre confirmée / reserved). Avoid goBack+navigate race.
         navigation.navigate({
           name: 'DealCheckout',
           params: {
@@ -72,7 +74,6 @@ export function HotelPayWebViewScreen({ route, navigation }: Props) {
           },
           merge: true,
         })
-        navigation.goBack()
       } else if (data.type === 'error' && data.message) {
         setError(data.message)
       }

@@ -15,6 +15,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_TRANSFER_CTA_FR,
   activityStepProgress,
   boardLabelFr,
@@ -27,6 +28,7 @@ import {
   resolveDraftPartyPrice,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
+  resolveNextStayAction,
   type HotelGalleryPhoto,
   type MyTripDraft,
   type StayStepId,
@@ -94,6 +96,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [showActivities, setShowActivities] = useState(false)
   const [showRestaurants, setShowRestaurants] = useState(false)
   const leftForFlight = useRef(false)
+  const askFlightOnReturn = useRef(false)
   const seededRef = useRef(Boolean(seed))
   const flightLiveKey = useRef<string | null>(null)
 
@@ -109,25 +112,26 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       .catch(() => undefined)
   }, [])
 
-  useEffect(() => {
+  const refreshTripItems = useCallback(async () => {
     if (!plannerActivitiesEnabled && !plannerRestaurantsEnabled) return
-    void getApi()
-      .listTripItems({ draft_token: draftToken })
-      .then((res) => {
-        const items = res.items || []
-        setActivityItems(items.filter((i) => i.item_type === 'activity'))
-        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
-      })
-      .catch(() => {
-        setActivityItems([])
-        setRestaurantItems([])
-      })
+    try {
+      const res = await getApi().listTripItems({ draft_token: draftToken })
+      const items = res.items || []
+      setActivityItems(items.filter((i) => i.item_type === 'activity'))
+      setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+    } catch {
+      /* keep previous progress */
+    }
+  }, [draftToken, plannerActivitiesEnabled, plannerRestaurantsEnabled])
+
+  useEffect(() => {
+    void refreshTripItems()
   }, [
-    draftToken,
-    plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
+    refreshTripItems,
     showActivities,
     showRestaurants,
+    draft?.hotel_booked_at,
+    draft?.flight_booked_at,
   ])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
@@ -141,7 +145,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       })
       void getApi().trackMyTripEvent(draftToken, 'view', { source: 'mobile' })
     } catch (e) {
-      if (!seededRef.current) {
+      if (!opts?.silent && !seededRef.current) {
         setError(e instanceof Error ? e.message : 'Erreur')
         setDraft(null)
       }
@@ -159,15 +163,22 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     useCallback(() => {
       if (leftForFlight.current) {
         leftForFlight.current = false
-        setAskFlight(true)
+        if (askFlightOnReturn.current) {
+          askFlightOnReturn.current = false
+          setAskFlight(true)
+        }
       }
-      // Skip heavy remount fetch if we just arrived with a seed.
+      // Always re-sync statuses (vol / hôtel / pipeline) when returning
+      // from checkout or partner browser — seed only skips the first paint.
       if (seededRef.current) {
         seededRef.current = false
+        void load({ silent: true })
+        void refreshTripItems()
         return
       }
       void load({ silent: true })
-    }, [load]),
+      void refreshTripItems()
+    }, [load, refreshTripItems]),
   )
 
   const pl = (draft?.payload || {}) as Record<string, any>
@@ -243,13 +254,21 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   })
   const distFr = formatDistance(hotelOpt?.distance_m ?? null)
 
+  const flightBookingStatus = String(
+    draft?.flight_booking_status || pl.flight_booking_status || '',
+  )
+  const externalFlight = Boolean(pl.flight_external || pl.external_flight)
   const flightBooked = Boolean(
-    draft?.flight_booked_at || pl.flight_booked || pl.flight_booked_at,
+    draft?.flight_booked_at ||
+      pl.flight_booked ||
+      pl.flight_booked_at ||
+      flightBookingStatus === 'user_confirmed' ||
+      flightBookingStatus === 'partner_confirmed' ||
+      externalFlight,
   )
   const hotelBooked = Boolean(
     draft?.hotel_booked_at || pl.hotel_booked || pl.hotel_booked_at,
   )
-  const externalFlight = Boolean(pl.flight_external || pl.external_flight)
 
   const party = useMemo(
     () =>
@@ -440,20 +459,28 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   }, [hotelId, hotelPhoto])
 
   const sticky = useMemo(() => {
-    if (hotelBooked && flightBooked) {
-      return { label: 'Voir mes réservations', action: 'bookings' as const }
-    }
-    if (hotelId && !hotelBooked) {
-      return { label: 'Payer ma chambre', action: 'pay' as const }
-    }
-    if (!hotelId) {
-      return { label: 'Réserver mon hôtel', action: 'compose' as const }
-    }
-    if (!flightBooked && flightUrl) {
-      return { label: 'Réserver mon vol', action: 'flight' as const }
-    }
-    return { label: 'Voir mes réservations', action: 'bookings' as const }
-  }, [hotelBooked, flightBooked, hotelId, flightUrl])
+    const next = resolveNextStayAction({
+      flightBooked,
+      hotelBooked,
+      hasHotelSelected: Boolean(hotelId),
+      activitiesEnabled: plannerActivitiesEnabled,
+      activitiesDone: activityProgress.done,
+      restaurantsEnabled: plannerRestaurantsEnabled,
+      restaurantsDone: restaurantProgress.done || restaurantProgress.skipped,
+      hasPlanner: Boolean(draft?.source_planned_trip_id),
+    })
+    return { label: next.label, action: next.id }
+  }, [
+    activityProgress.done,
+    draft?.source_planned_trip_id,
+    flightBooked,
+    hotelBooked,
+    hotelId,
+    plannerActivitiesEnabled,
+    plannerRestaurantsEnabled,
+    restaurantProgress.done,
+    restaurantProgress.skipped,
+  ])
 
   const markFlight = async (yes: boolean) => {
     setAskFlight(false)
@@ -466,6 +493,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       const row = await getApi().markMyTripFlightBooked(draftToken)
       setDraft(row)
       void getApi().trackMyTripEvent(draftToken, 'flight_booked_yes')
+      void refreshTripItems()
     } catch {
       /* non-blocking */
     } finally {
@@ -489,7 +517,11 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     })
     const url = String(resolved.url || flightUrl || '').trim()
     if (!url) return
+    const isTravelpayouts = /travelpayouts|aviasales/i.test(
+      `${resolved.partnerId || ''} ${fl.provider || pl.provider || ''} ${url}`,
+    )
     leftForFlight.current = true
+    askFlightOnReturn.current = !isTravelpayouts
     void getApi().trackMyTripEvent(draftToken, 'company_click', {
       site: resolved.siteLabel || carrier.siteLabel,
       source: 'mobile',
@@ -528,18 +560,33 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   }
 
   const onSticky = () => {
-    if (sticky.action === 'compose') {
+    if (sticky.action === 'hotel_pick') {
       navigation.navigate('HotelCompose', { draftToken })
-    } else if (sticky.action === 'pay') {
+    } else if (sticky.action === 'hotel_pay') {
       navigation.navigate('DealCheckout', {
         draftToken,
         hotelId: hotelId || undefined,
       })
     } else if (sticky.action === 'flight') {
       openFlight()
+    } else if (sticky.action === 'activities') {
+      setShowActivities(true)
+    } else if (sticky.action === 'restaurants') {
+      setShowRestaurants(true)
+    } else if (sticky.action === 'planner' && draft?.source_planned_trip_id) {
+      navigation.navigate('TripDetail', {
+        tripId: draft.source_planned_trip_id,
+      })
     } else {
       navigation.navigate('Bookings')
     }
+  }
+
+  const goPlanner = () => {
+    if (!draft?.source_planned_trip_id) return
+    navigation.navigate('TripDetail', {
+      tripId: draft.source_planned_trip_id,
+    })
   }
 
   const share = async () => {
@@ -794,10 +841,19 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                   )}
                   <Text style={hotelBooked ? styles.badgeOk : styles.badge}>
                     {hotelBooked
-                      ? 'Chambre confirmée'
+                      ? 'Réservé ✓'
                       : 'Il reste à payer la chambre'}
                   </Text>
                 </View>
+                {hotelBooked &&
+                (pl.hotel_confirmation_code || pl.hotel_booking_id) ? (
+                  <Text style={styles.cardMeta}>
+                    N°{' '}
+                    {String(
+                      pl.hotel_confirmation_code || pl.hotel_booking_id || '',
+                    )}
+                  </Text>
+                ) : null}
                 <Text style={styles.ficheLink}>Voir photos et détails →</Text>
               </Pressable>
             </>
@@ -882,15 +938,26 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         <Pressable style={styles.btn} onPress={onSticky} disabled={marking}>
           {sticky.action === 'flight' ? (
             <PlaneIcon size={16} color={colors.white} />
-          ) : sticky.action === 'pay' ? (
+          ) : sticky.action === 'hotel_pay' ? (
             <CardIcon size={16} color={colors.white} />
-          ) : sticky.action === 'compose' ? (
+          ) : sticky.action === 'hotel_pick' ? (
             <BedIcon size={16} color={colors.white} />
           ) : (
             <TicketIcon size={16} color={colors.white} />
           )}
-          <Text style={styles.btnText}>{sticky.label}</Text>
+          <Text style={styles.btnText}>
+            {sticky.action === 'planner'
+              ? ACTIVITY_BACK_TO_PLANNER_FR
+              : sticky.label}
+          </Text>
         </Pressable>
+        {draft?.source_planned_trip_id && sticky.action !== 'planner' ? (
+          <Pressable style={styles.stickySecondary} onPress={goPlanner}>
+            <Text style={styles.stickySecondaryText}>
+              {ACTIVITY_BACK_TO_PLANNER_FR}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <HotelComposeDetailSheet
@@ -1087,6 +1154,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   secondaryBtnText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  stickySecondary: {
+    marginTop: 8,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  stickySecondaryText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
   sticky: {
     position: 'absolute',
     left: 0,

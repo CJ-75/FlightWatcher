@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { hotelCancelLabel } from '@flightwatcher/shared'
+import {
+  ACTIVITY_BACK_TO_PLANNER_FR,
+  activityStepProgress,
+  hotelCancelLabel,
+  resolveNextStayAction,
+  restaurantStepProgress,
+  type StayNextAction,
+} from '@flightwatcher/shared'
 import type {
   DealRevalidateResponse,
   HotelBooking,
@@ -217,6 +224,8 @@ export function DealCheckoutFlow({
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [showAccountCta, setShowAccountCta] = useState(false)
+  const [doneNext, setDoneNext] = useState<StayNextAction | null>(null)
+  const [plannerTripId, setPlannerTripId] = useState<string | null>(null)
   const payRef = useRef<HTMLDivElement>(null)
   const dealKey =
     draftToken && !String(deal.deal_key || '').startsWith('mytrip-')
@@ -419,6 +428,66 @@ export function DealCheckoutFlow({
       onBooked?.(final)
       setShowAccountCta(guestMode)
       setStep('done')
+      if (draftToken) {
+        void (async () => {
+          try {
+            const [trip, cfg, itemsRes] = await Promise.all([
+              getApiClient().getMyTrip(draftToken),
+              getApiClient().getConfig().catch(() => null),
+              getApiClient()
+                .listTripItems({ draft_token: draftToken })
+                .catch(() => ({ items: [] as { item_type?: string; status?: string }[] })),
+            ])
+            const payload = (trip.payload || {}) as Record<string, unknown>
+            const status = String(
+              trip.flight_booking_status || payload.flight_booking_status || '',
+            )
+            const flightBooked = Boolean(
+              trip.flight_booked_at ||
+                payload.flight_booked ||
+                payload.flight_booked_at ||
+                status === 'user_confirmed' ||
+                status === 'partner_confirmed' ||
+                payload.flight_external ||
+                payload.external_flight,
+            )
+            const items = (itemsRes.items || []) as {
+              item_type?: string
+              status?: string
+            }[]
+            const act = activityStepProgress(
+              items.filter((i) => i.item_type === 'activity'),
+            )
+            const resto = restaurantStepProgress(
+              items.filter((i) => i.item_type === 'restaurant'),
+            )
+            const plannerId = trip.source_planned_trip_id
+              ? String(trip.source_planned_trip_id)
+              : null
+            setPlannerTripId(plannerId)
+            setDoneNext(
+              resolveNextStayAction({
+                flightBooked,
+                hotelBooked: true,
+                hasHotelSelected: true,
+                activitiesEnabled: cfg?.planner_activities_enabled === true,
+                activitiesDone: act.done,
+                restaurantsEnabled: cfg?.planner_restaurants_enabled === true,
+                restaurantsDone: resto.done || resto.skipped,
+                hasPlanner: Boolean(plannerId),
+              }),
+            )
+          } catch {
+            setDoneNext(
+              resolveNextStayAction({
+                flightBooked: false,
+                hotelBooked: true,
+                hasHotelSelected: true,
+              }),
+            )
+          }
+        })()
+      }
     } catch (e) {
       let msg = e instanceof Error ? e.message : t('app.error')
       // Surface nested LiteAPI body when API returns { detail: { message, liteapi } }
@@ -874,13 +943,45 @@ export function DealCheckoutFlow({
                   ) : null}
 
                   <div className="flex flex-col gap-2">
-                    {draftToken ? (
+                    {doneNext?.id === 'flight' && draftToken ? (
                       <Link
                         to={`/trip/${draftToken}`}
                         onClick={onClose}
                         className="block text-center bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
                       >
-                        Retour à mon voyage
+                        {doneNext.label}
+                      </Link>
+                    ) : doneNext?.id === 'activities' && draftToken ? (
+                      <Link
+                        to={`/trip/${draftToken}?activities=1`}
+                        onClick={onClose}
+                        className="block text-center bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                      >
+                        {doneNext.label}
+                      </Link>
+                    ) : doneNext?.id === 'restaurants' && draftToken ? (
+                      <Link
+                        to={`/trip/${draftToken}?restaurants=1`}
+                        onClick={onClose}
+                        className="block text-center bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                      >
+                        {doneNext.label}
+                      </Link>
+                    ) : doneNext?.id === 'planner' && plannerTripId ? (
+                      <Link
+                        to={`/planner/${encodeURIComponent(plannerTripId)}`}
+                        onClick={onClose}
+                        className="block text-center bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                      >
+                        {ACTIVITY_BACK_TO_PLANNER_FR}
+                      </Link>
+                    ) : draftToken ? (
+                      <Link
+                        to={`/trip/${draftToken}`}
+                        onClick={onClose}
+                        className="block text-center bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
+                      >
+                        {doneNext?.label || 'Retour à mon voyage'}
                       </Link>
                     ) : (
                       <button
@@ -891,6 +992,15 @@ export function DealCheckoutFlow({
                         Fermer
                       </button>
                     )}
+                    {plannerTripId && doneNext?.id !== 'planner' ? (
+                      <Link
+                        to={`/planner/${encodeURIComponent(plannerTripId)}`}
+                        onClick={onClose}
+                        className="block text-center border border-slate-200 font-bold py-3 rounded-xl hover:bg-slate-50 min-h-[44px] text-slate-800"
+                      >
+                        {ACTIVITY_BACK_TO_PLANNER_FR}
+                      </Link>
+                    ) : null}
                     <Link
                       to={
                         draftToken

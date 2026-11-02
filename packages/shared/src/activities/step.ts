@@ -106,7 +106,9 @@ export function activityStepProgress(items: { status?: string | null }[]): {
 }
 
 export const RESTAURANT_SKIP_LABEL_FR = 'Pas de restaurant prévu'
+/** @deprecated Paste-link CTA removed — prefer RESTAURANT_NEAR_HOTEL_LABEL_FR */
 export const RESTAURANT_ADD_LABEL_FR = 'Coller un lien'
+export const RESTAURANT_NEAR_HOTEL_LABEL_FR = 'Restaurants autour de ton hôtel'
 export const RESTAURANT_SEARCH_LABEL_FR = 'Chercher un restaurant'
 export const RESTAURANT_VALIDATE_LABEL_FR = 'Valider'
 export const RESTAURANT_MAPS_LABEL_FR = 'Avis et photos'
@@ -114,11 +116,11 @@ export const RESTAURANT_BOOK_LABEL_FR = 'Réserver'
 export const RESTAURANT_EMPTY_TITLE_FR = (city: string) =>
   `Où manger à ${city} ?`
 export const RESTAURANT_EMPTY_BODY_FR =
-  'Ajoute les adresses que tu as repérées : on vérifie qu’elles sont ouvertes pendant ton séjour.'
+  'Repère les bonnes adresses près de ton hôtel pour ton séjour.'
 export const RESTAURANT_BUDGET_HINT_FR = 'Restaurants non inclus'
 export const RESTAURANT_ADDRESSES_TAB_FR = 'Mes adresses'
 export const ACTIVITIES_EAT_CTA_FR = (city: string) =>
-  `Où manger à ${city} ? Ajoute tes adresses à ton voyage`
+  `Où manger à ${city} ? Restaurants autour de ton hôtel`
 
 export function restaurantStepProgress(items: { status?: string | null }[]): {
   done: boolean

@@ -6,6 +6,7 @@ import { useI18n } from '../contexts/I18nContext'
 type Props = {
   trip: EnrichedTripResponse
   busy?: boolean
+  automaticConfirmation?: boolean
   onOpenTrip: () => void
   onClose: () => void
 }
@@ -15,7 +16,13 @@ const spring = { type: 'spring' as const, stiffness: 320, damping: 28, mass: 0.5
 /**
  * Shown right after partner tab opens — CTA launches Mon voyage compose.
  */
-export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
+export function PostBookLightbox({
+  trip,
+  busy,
+  automaticConfirmation,
+  onOpenTrip,
+  onClose,
+}: Props) {
   const { t } = useI18n()
   const city = cityDisplayNameFr(
     trip.destination_code,
@@ -51,10 +58,14 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
               id="post-book-title"
               className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight"
             >
-              {t('upsell.flightBooked', { city })}
+              {automaticConfirmation
+                ? 'Suivi de réservation activé'
+                : t('upsell.flightBooked', { city })}
             </h2>
             <p className="text-sm text-muted leading-relaxed">
-              {t('upsell.lightboxHint')}
+              {automaticConfirmation
+                ? `Travelpayouts confirmera automatiquement le paiement pour ${city}.`
+                : t('upsell.lightboxHint')}
             </p>
           </div>
 
@@ -64,7 +75,11 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             onClick={onOpenTrip}
             className="w-full app-btn-primary min-h-[48px] sm:min-h-[52px] text-sm sm:text-base rounded-2xl disabled:opacity-60"
           >
-            {busy ? '…' : t('upsell.yesHotel')}
+            {busy
+              ? '…'
+              : automaticConfirmation
+                ? 'Continuer vers mon voyage'
+                : t('upsell.yesHotel')}
           </button>
           <button
             type="button"
@@ -72,7 +87,7 @@ export function PostBookLightbox({ trip, busy, onOpenTrip, onClose }: Props) {
             onClick={onClose}
             className="w-full text-center text-sm font-semibold text-ink-soft hover:text-ink min-h-[40px]"
           >
-            {t('upsell.notYet')}
+            {automaticConfirmation ? 'Fermer' : t('upsell.notYet')}
           </button>
         </div>
       </motion.div>

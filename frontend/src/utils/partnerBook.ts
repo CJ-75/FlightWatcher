@@ -5,6 +5,7 @@ import {
   cityDisplayNameFr,
   dateFromFlightIso,
   resolvePriceSourceBooking,
+  type MyTripDraft,
   type PriceSourceBooking,
 } from '@flightwatcher/shared'
 import type { EnrichedTripResponse } from '../types'
@@ -127,12 +128,39 @@ export function openPartnerBookSync(opts: {
   passengers: number
   language: string
   searchEventId?: string | null
+  /** Stable draft id used as Travelpayouts SubID for postback attribution. */
+  draftId?: string | null
+  /** Pre-opened tab, useful when draft creation must finish before redirect. */
+  targetWindow?: Window | null
   /** If true, do not show return banner (e.g. after « Ajouter un hôtel ») */
   skipReturnBanner?: boolean
 }): PriceSourceBooking {
-  const { trip, passengers, language, searchEventId, skipReturnBanner } = opts
-  const ps = resolveTripPriceSource(trip, passengers, language)
-  window.open(ps.primaryUrl, '_blank', 'noopener,noreferrer')
+  const {
+    trip,
+    passengers,
+    language,
+    searchEventId,
+    draftId,
+    targetWindow,
+    skipReturnBanner,
+  } = opts
+  const resolved = resolveTripPriceSource(trip, passengers, language)
+  let primaryUrl = resolved.primaryUrl
+  if (resolved.partnerId === 'aviasales' && draftId) {
+    try {
+      const url = new URL(primaryUrl)
+      url.searchParams.set('subid', `fw_${draftId.replace(/-/g, '_')}`)
+      primaryUrl = url.toString()
+    } catch {
+      /* Keep partner URL unchanged if it cannot be parsed. */
+    }
+  }
+  const ps = { ...resolved, primaryUrl }
+  if (targetWindow && !targetWindow.closed) {
+    targetWindow.location.href = primaryUrl
+  } else {
+    window.open(primaryUrl, '_blank', 'noopener,noreferrer')
+  }
 
   trackPartnerAnalytics({
     trip,
@@ -180,7 +208,7 @@ export async function createMyTripComposeFromTrip(opts: {
   passengers: number
   language: string
   markFlightBooked?: boolean
-}): Promise<{ draft_token: string }> {
+}): Promise<MyTripDraft> {
   const { trip, passengers, language, markFlightBooked } = opts
   const ps = resolveTripPriceSource(trip, passengers, language)
   const pax = Math.min(6, Math.max(1, passengers || 1))

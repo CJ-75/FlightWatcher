@@ -180,6 +180,33 @@ def update_draft_hotel(
     row = get_draft(supabase, draft_token)
     if not row:
         return None
+    current_payload = row.get("payload") or {}
+    current_status = str(
+        row.get("flight_booking_status")
+        or current_payload.get("flight_booking_status")
+        or "not_started"
+    )
+    rank = {
+        "not_started": 0,
+        "redirected": 1,
+        "pending_partner": 2,
+        "user_confirmed": 3,
+        "partner_confirmed": 4,
+    }
+    if normalized != "cancelled" and rank.get(current_status, 0) > rank.get(
+        normalized, 0
+    ):
+        normalized = current_status
+    provider = (
+        provider
+        or row.get("flight_booking_provider")
+        or current_payload.get("flight_booking_provider")
+    )
+    reference = (
+        reference
+        or row.get("flight_booking_reference")
+        or current_payload.get("flight_booking_reference")
+    )
     now = _now().isoformat()
     from deals.draft_pricing import trust_hotel_patch
 
@@ -388,24 +415,59 @@ def apply_flight_price_refresh(
     return out
 
 
-def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
-    """Lot F — step ① done → unlock hotel at flight dates."""
+FLIGHT_BOOKING_STATUSES = frozenset(
+    {
+        "not_started",
+        "redirected",
+        "pending_partner",
+        "user_confirmed",
+        "partner_confirmed",
+        "cancelled",
+    }
+)
+
+
+def update_flight_booking_status(
+    supabase,
+    draft_token: str,
+    *,
+    status: str,
+    provider: Optional[str] = None,
+    reference: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Persist the flight lifecycle while remaining compatible before SQL apply."""
+    normalized = str(status or "").strip().lower()
+    if normalized not in FLIGHT_BOOKING_STATUSES:
+        raise ValueError("Statut de réservation vol invalide")
     row = get_draft(supabase, draft_token)
     if not row:
         return None
     now = _now().isoformat()
+    confirmed = normalized in {"user_confirmed", "partner_confirmed"}
     payload = _merge_payload(
         row,
         {
-            "flight_booked": True,
-            "flight_booked_at": now,
+            "flight_booking_status": normalized,
+            "flight_booking_provider": provider,
+            "flight_booking_reference": reference,
+            "flight_booking_updated_at": now,
+            **(
+                {"flight_booked": True, "flight_booked_at": now}
+                if confirmed
+                else {}
+            ),
         },
     )
     update: Dict[str, Any] = {
         "payload": payload,
         "updated_at": now,
-        "flight_booked_at": now,
+        "flight_booking_status": normalized,
+        "flight_booking_provider": provider,
+        "flight_booking_reference": reference,
+        "flight_booking_updated_at": now,
     }
+    if confirmed:
+        update["flight_booked_at"] = now
     try:
         res = (
             supabase.table("my_trip_drafts")
@@ -415,8 +477,8 @@ def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
         )
         return (res.data or [{**row, **update}])[0]
     except Exception as e:
-        # Column may be missing before Lot F SQL — payload only
-        logger.warning("mark_flight_booked columns: %s", e)
+        # New lifecycle columns may be missing before the manual SQL migration.
+        logger.warning("flight booking status columns: %s", e)
         res = (
             supabase.table("my_trip_drafts")
             .update({"payload": payload, "updated_at": now})
@@ -426,10 +488,23 @@ def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
         return (res.data or [{**row, "payload": payload}])[0]
 
 
+def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:
+    """Backward-compatible user declaration."""
+    return update_flight_booking_status(
+        supabase,
+        draft_token,
+        status="user_confirmed",
+    )
+
+
 ALLOWED_TRIP_EVENTS = frozenset(
     {
         "view",
         "company_click",
+        "flight_redirected",
+        "flight_partner_pending",
+        "flight_partner_confirmed",
+        "flight_partner_cancelled",
         "flight_booked_yes",
         "flight_booked_no",
         "hotel_checkout_open",

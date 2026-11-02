@@ -61,7 +61,7 @@ export default function PlannerInvite() {
     try {
       const res = await getApiClient().joinInvite(token)
       setJoined(true)
-      navigate(`/planner?trip=${encodeURIComponent(res.trip_id)}`, { replace: true })
+      navigate(`/planner/${encodeURIComponent(res.trip_id)}`, { replace: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {

@@ -4,17 +4,16 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  TextInput,
   ActivityIndicator,
   Linking,
 } from 'react-native'
 import {
   evaluateOpening,
-  RESTAURANT_ADD_LABEL_FR,
   RESTAURANT_BUDGET_HINT_FR,
   RESTAURANT_EMPTY_BODY_FR,
   RESTAURANT_EMPTY_TITLE_FR,
   RESTAURANT_MAPS_LABEL_FR,
+  RESTAURANT_NEAR_HOTEL_LABEL_FR,
   RESTAURANT_SKIP_LABEL_FR,
   RESTAURANT_VALIDATE_LABEL_FR,
   tripItemStatusLabelFr,
@@ -61,13 +60,8 @@ export function RestaurantStepPanel(props: {
   } = props
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<Record<string, unknown>[]>([])
   const [skipped, setSkipped] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!draftToken && !plannedTripId) return
@@ -104,47 +98,6 @@ export function RestaurantStepPanel(props: {
     return `https://www.google.com/maps/search/?api=1&query=${q}`
   }, [city, props.hotelLat, props.hotelLng])
 
-  const runImport = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await getApi().importRestaurantLinks({
-        text,
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-        city_slug: citySlug || undefined,
-      })
-      setResults(res.results || [])
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Import impossible')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const confirm = async (row: Record<string, unknown>) => {
-    const placeId = row.place_id as string | undefined
-    if (!placeId) return
-    try {
-      await getApi().confirmRestaurantPlace({
-        place_id: placeId,
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-        item_type: 'restaurant',
-        save_address: true,
-        city_slug: citySlug,
-      })
-      setToast('Ajouté au voyage')
-      setTimeout(() => setToast(null), 2200)
-      setImportOpen(false)
-      setText('')
-      setResults([])
-      await load()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ajout impossible')
-    }
-  }
-
   const skipRestaurants = async () => {
     setSkipped(true)
     try {
@@ -171,7 +124,6 @@ export function RestaurantStepPanel(props: {
       <Text style={styles.budget}>{RESTAURANT_BUDGET_HINT_FR}</Text>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
       {error ? <Text style={styles.err}>{error}</Text> : null}
-      {toast ? <Text style={styles.toast}>{toast}</Text> : null}
 
       {!loading && visible.length === 0 ? (
         <View style={[styles.empty, shadow.soft]}>
@@ -181,99 +133,24 @@ export function RestaurantStepPanel(props: {
           <Text style={styles.emptyTitle}>{RESTAURANT_EMPTY_TITLE_FR(String(city))}</Text>
           <Text style={styles.emptyBody}>{RESTAURANT_EMPTY_BODY_FR}</Text>
           <Pressable
-            onPress={() => setImportOpen(true)}
+            onPress={() => void Linking.openURL(mapsSearchUrl)}
             style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.92 }]}
           >
-            <Text style={styles.primaryBtnText}>{RESTAURANT_ADD_LABEL_FR}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => void Linking.openURL(mapsSearchUrl)}
-            style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.ghostBtnText}>Restaurants autour de ton hôtel</Text>
+            <Text style={styles.primaryBtnText}>{RESTAURANT_NEAR_HOTEL_LABEL_FR}</Text>
           </Pressable>
           <Pressable onPress={() => void skipRestaurants()}>
             <Text style={styles.skip}>{RESTAURANT_SKIP_LABEL_FR}</Text>
           </Pressable>
-          <Text style={styles.hint}>
-            Astuce : Instagram ou Maps → Partager → FlightWatcher
-          </Text>
         </View>
       ) : null}
 
-      {importOpen || visible.length > 0 ? (
-        <View style={styles.importBox}>
-          <View style={styles.importHead}>
-            <Text style={styles.importTitle}>Ajouter</Text>
-            <Pressable onPress={() => setImportOpen((o) => !o)}>
-              <Text style={styles.link}>
-                {importOpen ? 'Masquer' : RESTAURANT_ADD_LABEL_FR}
-              </Text>
-            </Pressable>
-          </View>
-          {importOpen ? (
-            <>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Colle tes liens Maps, Instagram…"
-                placeholderTextColor={colors.muted}
-                multiline
-                style={styles.input}
-              />
-              <Pressable
-                onPress={() => void runImport()}
-                disabled={busy || !text.trim()}
-                style={[
-                  styles.primaryBtn,
-                  (!text.trim() || busy) && { opacity: 0.5 },
-                ]}
-              >
-                <Text style={styles.primaryBtnText}>
-                  {busy ? 'Analyse…' : 'Analyser'}
-                </Text>
-              </Pressable>
-              {results.map((row, i) => {
-                const place = row.place as { name?: string } | undefined
-                const parse = row.parse as { name?: string; url_clean?: string } | undefined
-                const name = place?.name || parse?.name || 'Lieu'
-                const bucket = String(row.bucket || 'restaurant')
-                return (
-                  <View key={String(row.place_id || i)} style={styles.resultCard}>
-                    <View style={styles.resultRow}>
-                      <View
-                        style={[
-                          styles.resultIcon,
-                          bucket === 'attraction' && styles.resultIconAttraction,
-                        ]}
-                      >
-                        <Text style={styles.emptyGlyph}>
-                          {bucket === 'attraction' ? '◎' : '🍽'}
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.resultName}>{name}</Text>
-                        {parse?.url_clean ? (
-                          <Pressable
-                            onPress={() => void Linking.openURL(String(parse.url_clean))}
-                          >
-                            <Text style={styles.linkSmall}>Ouvrir la source</Text>
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </View>
-                    <Pressable
-                      onPress={() => void confirm(row)}
-                      style={styles.secondaryBtn}
-                    >
-                      <Text style={styles.secondaryBtnText}>Oui, ajouter</Text>
-                    </Pressable>
-                  </View>
-                )
-              })}
-            </>
-          ) : null}
-        </View>
+      {visible.length > 0 ? (
+        <Pressable
+          onPress={() => void Linking.openURL(mapsSearchUrl)}
+          style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.9 }]}
+        >
+          <Text style={styles.ghostBtnText}>{RESTAURANT_NEAR_HOTEL_LABEL_FR}</Text>
+        </Pressable>
       ) : null}
 
       {visible.map((item) => {
@@ -377,7 +254,6 @@ const styles = StyleSheet.create({
   budget: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted },
   muted: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
   err: { fontFamily: fonts.semibold, fontSize: 13, color: colors.danger },
-  toast: { fontFamily: fonts.semibold, fontSize: 13, color: colors.success },
   empty: {
     backgroundColor: colors.white,
     borderRadius: radius.xl,
@@ -441,59 +317,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { fontFamily: fonts.bold, color: colors.white, fontSize: 13 },
   link: { fontFamily: fonts.bold, fontSize: 13, color: colors.primaryDeep },
-  linkSmall: {
-    marginTop: 2,
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.primaryDeep,
-  },
   report: { fontFamily: fonts.bold, fontSize: 12, color: colors.muted },
-  hint: { fontFamily: fonts.medium, fontSize: 11, color: colors.muted },
-  importBox: {
-    gap: 10,
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  importHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  importTitle: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.ink },
-  input: {
-    minHeight: 88,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    borderRadius: 16,
-    padding: 12,
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.ink,
-    backgroundColor: colors.canvas,
-    textAlignVertical: 'top',
-  },
-  resultCard: {
-    backgroundColor: colors.canvas,
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    gap: 10,
-  },
-  resultRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  resultIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resultIconAttraction: { backgroundColor: '#E8F4FF' },
-  resultName: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.ink },
   card: {
     backgroundColor: colors.white,
     borderRadius: 16,

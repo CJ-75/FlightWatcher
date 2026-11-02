@@ -619,6 +619,114 @@ def _best_booking(rows: List[dict]) -> Optional[dict]:
     )
 
 
+_FLIGHT_BOOKED_STATUSES = {"user_confirmed", "partner_confirmed"}
+
+
+def _flight_pipeline_state(
+    *,
+    accepted: Optional[dict],
+    draft: Optional[dict],
+) -> str:
+    if not draft and not accepted:
+        return "none"
+    payload = (draft or {}).get("payload") or {}
+    if payload.get("flight_external") or payload.get("external_flight"):
+        return "booked"
+    status = str(
+        (draft or {}).get("flight_booking_status")
+        or payload.get("flight_booking_status")
+        or ""
+    )
+    if (
+        (draft or {}).get("flight_booked_at")
+        or payload.get("flight_booked")
+        or payload.get("flight_booked_at")
+        or status in _FLIGHT_BOOKED_STATUSES
+    ):
+        return "booked"
+    if accepted or draft:
+        return "selected"
+    return "none"
+
+
+def _external_flight_payload(trip: dict) -> dict:
+    """Build a hotel-compose draft when the user already has flights elsewhere."""
+    dep_codes = [
+        c.strip().upper()
+        for c in str(trip.get("departure_airport") or "").split(",")
+        if c.strip()
+    ]
+    arr_codes = [
+        c.strip().upper()
+        for c in str(trip.get("arrival_airport") or "").split(",")
+        if c.strip()
+    ]
+    if not dep_codes:
+        raise HTTPException(status_code=400, detail="Aéroport de départ requis")
+    if not arr_codes:
+        raise HTTPException(
+            status_code=400,
+            detail="Choisis une destination avant de passer à l’hôtel",
+        )
+    out_date = _date10((trip.get("dates_depart") or [{}])[0].get("date"))
+    ret_date = _date10((trip.get("dates_retour") or [{}])[-1].get("date"))
+    if not out_date or not ret_date:
+        raise HTTPException(status_code=400, detail="Dates aller/retour requises")
+    origin = dep_codes[0]
+    destination = arr_codes[0]
+    pax = _clamp_passengers(trip.get("passengers") or 1)
+    city = str(trip.get("name") or "").replace("Weekend ", "").strip() or destination
+    return {
+        "origin_iata": origin,
+        "departure_airport": origin,
+        "destination": destination,
+        "city": city,
+        "dates": {"outbound": out_date, "inbound": ret_date},
+        "adults": pax,
+        "compose_hotel": True,
+        "flight_external": True,
+        "external_flight": True,
+        "flight": {
+            "price_pp": 0,
+            "external": True,
+            "origin_iata": origin,
+            "destination_iata": destination,
+            "outbound_local": out_date,
+            "inbound_local": ret_date,
+            "out_dep_local": out_date,
+            "ret_dep_local": ret_date,
+        },
+        "price_per_person": 0,
+    }
+
+
+def _hotel_pipeline_state(
+    *,
+    draft: Optional[dict],
+    booking: Optional[dict],
+    phase: str,
+) -> str:
+    if phase == "booked":
+        return "booked"
+    payload = (draft or {}).get("payload") or {}
+    if payload.get("hotel_external") or payload.get("external_hotel"):
+        return "booked"
+    if (
+        (draft or {}).get("hotel_booked_at")
+        or payload.get("hotel_booked")
+        or payload.get("hotel_booked_at")
+        or (
+            booking
+            and str(booking.get("status"))
+            in {"confirmed", "booking_pending", "payment_succeeded"}
+        )
+    ):
+        return "booked"
+    if draft and (payload.get("hotel") or (draft or {}).get("hotel")):
+        return "selected"
+    return "none"
+
+
 def _workspace_phase(
     *,
     ret_date: Optional[str],
@@ -634,7 +742,15 @@ def _workspace_phase(
         "payment_succeeded",
     }:
         return "booked"
-    if draft and (draft.get("hotel_booked_at") or (draft.get("payload") or {}).get("hotel_booked")):
+    payload = (draft or {}).get("payload") or {} if draft else {}
+    hotel_external = bool(
+        payload.get("hotel_external") or payload.get("external_hotel")
+    )
+    if draft and (
+        draft.get("hotel_booked_at")
+        or payload.get("hotel_booked")
+        or hotel_external
+    ):
         return "booked"
     if draft:
         return "composing"
@@ -803,12 +919,61 @@ async def list_travel_workspaces(request: Request):
         .neq("status", "archived")
         .execute()
     ).data or []
+    # Drafts linked to my trips may be guest-owned until claim — still drive pipeline.
+    if trip_ids:
+        linked = (
+            supabase.table("my_trip_drafts")
+            .select("*")
+            .in_("source_planned_trip_id", trip_ids)
+            .neq("status", "archived")
+            .execute()
+        ).data or []
+        by_id = {str(d["id"]): d for d in drafts if d.get("id")}
+        for row in linked:
+            rid = str(row.get("id") or "")
+            if rid and rid not in by_id:
+                by_id[rid] = row
+                drafts.append(row)
     bookings = (
         supabase.table("hotel_bookings")
         .select("*")
         .eq("user_id", user_id)
         .execute()
     ).data or []
+    draft_tokens = [
+        str(d.get("draft_token"))
+        for d in drafts
+        if d.get("draft_token")
+    ]
+    draft_row_ids = [str(d["id"]) for d in drafts if d.get("id")]
+    if draft_tokens or draft_row_ids:
+        extra_bookings: list = []
+        if draft_row_ids:
+            extra_bookings.extend(
+                (
+                    supabase.table("hotel_bookings")
+                    .select("*")
+                    .in_("draft_id", draft_row_ids)
+                    .execute()
+                ).data
+                or []
+            )
+        if draft_tokens:
+            extra_bookings.extend(
+                (
+                    supabase.table("hotel_bookings")
+                    .select("*")
+                    .in_("draft_token", draft_tokens)
+                    .execute()
+                ).data
+                or []
+            )
+        seen_b = {str(b["id"]) for b in bookings if b.get("id")}
+        for b in extra_bookings:
+            bid = str(b.get("id") or "")
+            if bid and bid not in seen_b:
+                seen_b.add(bid)
+                bookings.append(b)
 
     drafts_by_trip: Dict[str, dict] = {}
     for draft in drafts:
@@ -871,6 +1036,10 @@ async def list_travel_workspaces(request: Request):
                 "proposal_id": (accepted or {}).get("id"),
                 "draft_id": (draft or {}).get("id"),
                 "draft_token": (draft or {}).get("draft_token"),
+                "flight_booking_status": (draft or {}).get("flight_booking_status")
+                or payload.get("flight_booking_status"),
+                "flight_booking_provider": (draft or {}).get("flight_booking_provider")
+                or payload.get("flight_booking_provider"),
                 "hotel_booking_id": (booking or {}).get("id"),
                 "hotel_booking_status": (booking or {}).get("status"),
                 "scope": "collaborative",
@@ -892,20 +1061,14 @@ async def list_travel_workspaces(request: Request):
                 "capabilities": {
                     "can_scan": is_organizer and phase == "planning",
                     "can_choose_flight": is_organizer and phase == "planning",
-                    "can_compose_hotel": accepted is not None,
+                    "can_compose_hotel": accepted is not None or draft is not None,
                     "can_view_confirmation": booking is not None,
                 },
                 "pipeline": {
-                    "flight": "booked"
-                    if draft and draft.get("flight_booked_at")
-                    else "selected"
-                    if accepted
-                    else "none",
-                    "hotel": "booked"
-                    if phase == "booked"
-                    else "selected"
-                    if draft and payload.get("hotel")
-                    else "none",
+                    "flight": _flight_pipeline_state(accepted=accepted, draft=draft),
+                    "hotel": _hotel_pipeline_state(
+                        draft=draft, booking=booking, phase=phase
+                    ),
                 },
                 "planned_trip": _row_to_trip(trip),
                 "updated_at": (draft or {}).get("updated_at")
@@ -940,6 +1103,10 @@ async def list_travel_workspaces(request: Request):
                 "proposal_id": None,
                 "draft_id": draft_id,
                 "draft_token": token,
+                "flight_booking_status": draft.get("flight_booking_status")
+                or payload.get("flight_booking_status"),
+                "flight_booking_provider": draft.get("flight_booking_provider")
+                or payload.get("flight_booking_provider"),
                 "hotel_booking_id": (booking or {}).get("id"),
                 "hotel_booking_status": (booking or {}).get("status"),
                 "scope": "personal",
@@ -959,12 +1126,10 @@ async def list_travel_workspaces(request: Request):
                     "can_view_confirmation": booking is not None,
                 },
                 "pipeline": {
-                    "flight": "booked" if draft.get("flight_booked_at") else "selected",
-                    "hotel": "booked"
-                    if phase == "booked"
-                    else "selected"
-                    if payload.get("hotel")
-                    else "none",
+                    "flight": _flight_pipeline_state(accepted=None, draft=draft),
+                    "hotel": _hotel_pipeline_state(
+                        draft=draft, booking=booking, phase=phase
+                    ),
                 },
                 "planned_trip": None,
                 "updated_at": draft.get("updated_at"),
@@ -983,6 +1148,8 @@ async def list_travel_workspaces(request: Request):
                 "proposal_id": None,
                 "draft_id": booking.get("draft_id"),
                 "draft_token": booking.get("draft_token"),
+                "flight_booking_status": None,
+                "flight_booking_provider": None,
                 "hotel_booking_id": booking["id"],
                 "hotel_booking_status": booking.get("status"),
                 "scope": "personal",
@@ -1165,6 +1332,24 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
             body.auto_scan_interval_seconds
         )
 
+    modality_keys = {
+        "departure_airport",
+        "arrival_airport",
+        "passengers",
+        "direct",
+        "dates_depart",
+        "dates_retour",
+        "budget_max",
+    }
+    modalities_changed = bool(modality_keys.intersection(patch.keys()))
+    if modalities_changed and current.get("status") == "locked":
+        blocked = _trip_has_active_reservation(supabase, trip_id)
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
+        _reopen_flight_selection(supabase, trip_id)
+        patch["status"] = "planning"
+        patch["auto_scan_enabled"] = False
+
     dep = patch.get("departure_airport") or current.get("departure_airport")
     arr = (
         patch["arrival_airport"]
@@ -1192,11 +1377,52 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
 @router.delete("/api/planner/trips/{trip_id}")
 @optional_auth
 async def delete_trip(trip_id: str, request: Request):
+    """Delete the collaborative Planner only.
+
+    Personal execution drafts and hotel bookings stay. Provenance FKs are
+    nulled first so a missing/wrong ON DELETE rule cannot cascade into
+    reservations.
+    """
     user_id = _require_user(request)
     supabase = _svc()
     _require_organizer(supabase, trip_id, user_id)
+
+    # Detach reservations before removing the planner graph (proposals CASCADE).
+    # Never delete my_trip_drafts / hotel_bookings here.
+    try:
+        now = datetime.utcnow().isoformat()
+        detach = {
+            "source_planned_trip_id": None,
+            "source_proposal_id": None,
+            "updated_at": now,
+        }
+        supabase.table("my_trip_drafts").update(detach).eq(
+            "source_planned_trip_id", trip_id
+        ).execute()
+        proposal_rows = (
+            supabase.table("trip_proposals")
+            .select("id")
+            .eq("trip_id", trip_id)
+            .execute()
+        )
+        proposal_ids = [
+            str(row["id"])
+            for row in (proposal_rows.data or [])
+            if row.get("id")
+        ]
+        if proposal_ids:
+            supabase.table("my_trip_drafts").update(detach).in_(
+                "source_proposal_id", proposal_ids
+            ).execute()
+    except Exception as e:
+        print(f"⚠️ detach drafts before planner delete: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Impossible de détacher les réservations — suppression annulée",
+        )
+
     supabase.table("planned_trips").delete().eq("id", trip_id).execute()
-    return {"ok": True}
+    return {"ok": True, "reservations_preserved": True}
 
 
 @router.post("/api/planner/trips/{trip_id}/members")
@@ -1296,6 +1522,370 @@ async def remove_trip_member(trip_id: str, member_id: str, request: Request):
     return {"ok": True}
 
 
+_FLIGHT_RESERVED_STATUSES = {"user_confirmed", "partner_confirmed"}
+_HOTEL_RESERVED_STATUSES = {
+    "confirmed",
+    "booking_pending",
+    "payment_succeeded",
+}
+
+
+def _trip_has_active_reservation(supabase, trip_id: str) -> Optional[str]:
+    """Return a human reason if flight/hotel is already reserved for this planner."""
+    drafts = (
+        supabase.table("my_trip_drafts")
+        .select(
+            "id,draft_token,flight_booked_at,flight_booking_status,"
+            "hotel_booked_at,payload"
+        )
+        .eq("source_planned_trip_id", trip_id)
+        .neq("status", "archived")
+        .execute()
+    ).data or []
+    draft_ids = [str(row["id"]) for row in drafts if row.get("id")]
+    tokens = [
+        str(row["draft_token"])
+        for row in drafts
+        if row.get("draft_token")
+    ]
+    for draft in drafts:
+        payload = draft.get("payload") or {}
+        status = str(
+            draft.get("flight_booking_status")
+            or payload.get("flight_booking_status")
+            or ""
+        )
+        if (
+            draft.get("flight_booked_at")
+            or payload.get("flight_booked")
+            or payload.get("flight_booked_at")
+            or status in _FLIGHT_RESERVED_STATUSES
+        ):
+            return "Vol déjà réservé — modalités figées"
+        if (
+            draft.get("hotel_booked_at")
+            or payload.get("hotel_booked")
+            or payload.get("hotel_booked_at")
+        ):
+            return "Hôtel déjà réservé — modalités figées"
+
+    bookings: list = []
+    if draft_ids:
+        bookings.extend(
+            (
+                supabase.table("hotel_bookings")
+                .select("id,status")
+                .in_("draft_id", draft_ids)
+                .execute()
+            ).data
+            or []
+        )
+    if tokens:
+        bookings.extend(
+            (
+                supabase.table("hotel_bookings")
+                .select("id,status")
+                .in_("draft_token", tokens)
+                .execute()
+            ).data
+            or []
+        )
+    for booking in bookings:
+        if str(booking.get("status") or "") in _HOTEL_RESERVED_STATUSES:
+            return "Hôtel déjà réservé — modalités figées"
+    return None
+
+
+def _reopen_flight_selection(supabase, trip_id: str) -> None:
+    """Drop accepted flight choice and unlock planner for a new scan."""
+    now = datetime.utcnow().isoformat()
+    supabase.table("trip_proposals").update({"status": "rejected"}).eq(
+        "trip_id", trip_id
+    ).eq("status", "accepted").execute()
+    supabase.table("trip_proposals").delete().eq("trip_id", trip_id).eq(
+        "status", "pending"
+    ).execute()
+    supabase.table("planned_trips").update(
+        {
+            "status": "planning",
+            "auto_scan_enabled": False,
+            "updated_at": now,
+        }
+    ).eq("id", trip_id).execute()
+
+
+@router.post("/api/planner/trips/{trip_id}/reopen-flight")
+@optional_auth
+async def reopen_flight(trip_id: str, request: Request):
+    """Unlock flight modalities when nothing is reserved yet."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    trip = _require_organizer(supabase, trip_id, user_id)
+    blocked = _trip_has_active_reservation(supabase, trip_id)
+    if blocked:
+        raise HTTPException(status_code=409, detail=blocked)
+    has_accepted = bool(
+        (
+            supabase.table("trip_proposals")
+            .select("id")
+            .eq("trip_id", trip_id)
+            .eq("status", "accepted")
+            .limit(1)
+            .execute()
+        ).data
+    )
+    if trip.get("status") == "locked" or has_accepted:
+        _reopen_flight_selection(supabase, trip_id)
+    refreshed = (
+        supabase.table("planned_trips")
+        .select(_TRIPS_LIST_SELECT)
+        .eq("id", trip_id)
+        .limit(1)
+        .execute()
+    )
+    if not refreshed.data:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+    return {
+        "ok": True,
+        "trip": _row_to_trip(refreshed.data[0]),
+    }
+
+
+def _user_trip_draft(supabase, trip_id: str, user_id: str) -> Optional[dict]:
+    existing = (
+        supabase.table("my_trip_drafts")
+        .select("*")
+        .eq("source_planned_trip_id", trip_id)
+        .eq("user_id", user_id)
+        .neq("status", "archived")
+        .order("updated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return (existing.data or [None])[0]
+
+
+def _draft_response(data: dict, *, reused: bool, **extra: Any) -> dict:
+    return {
+        "id": data["id"],
+        "draft_token": data["draft_token"],
+        "status": data.get("status") or "draft",
+        "payload": data.get("payload") or {},
+        "expires_at": data.get("expires_at"),
+        "reused": reused,
+        "source_planned_trip_id": data.get("source_planned_trip_id"),
+        "source_proposal_id": data.get("source_proposal_id"),
+        **extra,
+    }
+
+
+@router.post("/api/planner/trips/{trip_id}/skip-flight")
+@optional_auth
+async def skip_flight(trip_id: str, request: Request):
+    """Skip FlightWatcher booking — user already has flights elsewhere."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    trip = _user_can_access(supabase, trip_id, user_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+    blocked = _trip_has_active_reservation(supabase, trip_id)
+    if blocked:
+        raise HTTPException(status_code=409, detail=blocked)
+
+    payload = _external_flight_payload(trip)
+    existing = _user_trip_draft(supabase, trip_id, user_id)
+    if existing:
+        row = existing
+        merged = dict(row.get("payload") or {})
+        merged.update(payload)
+        now = datetime.utcnow().isoformat()
+        updated = (
+            supabase.table("my_trip_drafts")
+            .update(
+                {
+                    "payload": merged,
+                    "origin_iata": payload.get("origin_iata"),
+                    "dest_iata": payload.get("destination"),
+                    "city_name": payload.get("city"),
+                    "out_date": payload["dates"]["outbound"],
+                    "ret_date": payload["dates"]["inbound"],
+                    "adults": payload.get("adults") or 1,
+                    "source_kind": "planner",
+                    "updated_at": now,
+                }
+            )
+            .eq("id", row["id"])
+            .execute()
+        )
+        data = (updated.data or [row])[0]
+        return _draft_response(
+            data,
+            reused=True,
+            source_planned_trip_id=trip_id,
+            flight_external=True,
+        )
+
+    try:
+        from deals.my_trips import create_draft
+
+        draft = create_draft(
+            supabase,
+            payload=payload,
+            user_id=user_id,
+            source_planned_trip_id=trip_id,
+            source_kind="planner",
+        )
+        return {
+            **draft,
+            "reused": False,
+            "source_planned_trip_id": trip_id,
+            "source_proposal_id": None,
+            "flight_external": True,
+        }
+    except Exception as exc:
+        print(f"❌ skip-flight {trip_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Impossible de passer à l’hôtel")
+
+
+@router.post("/api/planner/trips/{trip_id}/skip-hotel")
+@optional_auth
+async def skip_hotel(trip_id: str, request: Request):
+    """Skip FlightWatcher hotel — user already has lodging elsewhere."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    trip = _user_can_access(supabase, trip_id, user_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+
+    draft_row = _user_trip_draft(supabase, trip_id, user_id)
+    accepted = (
+        supabase.table("trip_proposals")
+        .select("*")
+        .eq("trip_id", trip_id)
+        .eq("status", "accepted")
+        .order("updated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    accepted_row = (accepted.data or [None])[0]
+
+    # Ensure a personal draft exists (from accepted flight, skip-flight, or both).
+    if not draft_row and accepted_row:
+        payload = _planner_draft_payload(
+            accepted_row.get("trip_data") or {},
+            int(trip.get("passengers") or 1),
+        )
+        try:
+            from deals.my_trips import create_draft
+
+            created = create_draft(
+                supabase,
+                payload=payload,
+                user_id=user_id,
+                source_planned_trip_id=trip_id,
+                source_proposal_id=accepted_row.get("id"),
+                source_kind="planner",
+            )
+            draft_row = (
+                supabase.table("my_trip_drafts")
+                .select("*")
+                .eq("id", created["id"])
+                .limit(1)
+                .execute()
+            ).data[0]
+        except Exception as exc:
+            print(f"❌ skip-hotel create from proposal {trip_id}: {exc}")
+            raise HTTPException(
+                status_code=500, detail="Impossible de préparer le séjour"
+            )
+    elif not draft_row:
+        # No flight chosen yet — seed an external-flight draft then mark hotel external.
+        try:
+            from deals.my_trips import create_draft
+
+            created = create_draft(
+                supabase,
+                payload=_external_flight_payload(trip),
+                user_id=user_id,
+                source_planned_trip_id=trip_id,
+                source_kind="planner",
+            )
+            draft_row = (
+                supabase.table("my_trip_drafts")
+                .select("*")
+                .eq("id", created["id"])
+                .limit(1)
+                .execute()
+            ).data[0]
+        except HTTPException:
+            raise
+        except Exception as exc:
+            print(f"❌ skip-hotel seed draft {trip_id}: {exc}")
+            raise HTTPException(
+                status_code=500, detail="Impossible de préparer le séjour"
+            )
+
+    payload = dict(draft_row.get("payload") or {})
+    if (
+        draft_row.get("hotel_booked_at")
+        or payload.get("hotel_booked")
+        or payload.get("hotel_booked_at")
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Hôtel déjà réservé sur FlightWatcher",
+        )
+
+    # Block if a paid/confirmed hotel booking already exists for this draft.
+    booking_rows: list = (
+        supabase.table("hotel_bookings")
+        .select("id,status")
+        .eq("draft_id", draft_row["id"])
+        .execute()
+    ).data or []
+    token = str(draft_row.get("draft_token") or "").strip()
+    if token:
+        booking_rows.extend(
+            (
+                supabase.table("hotel_bookings")
+                .select("id,status")
+                .eq("draft_token", token)
+                .execute()
+            ).data
+            or []
+        )
+    for booking in booking_rows:
+        if str(booking.get("status") or "") in _HOTEL_RESERVED_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail="Hôtel déjà réservé sur FlightWatcher",
+            )
+
+    payload["hotel_external"] = True
+    payload["external_hotel"] = True
+    payload.pop("hotel", None)
+    now = datetime.utcnow().isoformat()
+    updated = (
+        supabase.table("my_trip_drafts")
+        .update(
+            {
+                "payload": payload,
+                "source_kind": "planner",
+                "updated_at": now,
+            }
+        )
+        .eq("id", draft_row["id"])
+        .execute()
+    )
+    data = (updated.data or [{**draft_row, "payload": payload}])[0]
+    return _draft_response(
+        data,
+        reused=True,
+        source_planned_trip_id=trip_id,
+        hotel_external=True,
+    )
+
+
 @router.post("/api/planner/trips/{trip_id}/scan")
 @optional_auth
 async def scan_trip(trip_id: str, request: Request):
@@ -1304,9 +1894,17 @@ async def scan_trip(trip_id: str, request: Request):
     trip = _require_organizer(supabase, trip_id, user_id)
 
     if trip.get("status") == "locked":
-        raise HTTPException(
-            status_code=400, detail="Voyage confirmé — scan indisponible"
-        )
+        blocked = _trip_has_active_reservation(supabase, trip_id)
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
+        _reopen_flight_selection(supabase, trip_id)
+        trip = (
+            supabase.table("planned_trips")
+            .select("*")
+            .eq("id", trip_id)
+            .limit(1)
+            .execute()
+        ).data[0]
 
     supabase.table("planned_trips").update(
         {"status": "scanning", "updated_at": datetime.utcnow().isoformat()}

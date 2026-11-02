@@ -57,12 +57,7 @@ export function FavoritesScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
-  const [tab, setTab] = useState<'flights' | 'deals' | 'activities' | 'addresses'>(
-    'flights',
-  )
-  const [userAddresses, setUserAddresses] = useState<
-    { id: string; status?: string; places?: { name?: string; city_slug?: string } }[]
-  >([])
+  const [tab, setTab] = useState<'flights' | 'deals' | 'activities'>('flights')
   const [archiveOpen, setArchiveOpen] = useState(false)
 
   const load = useCallback(async () => {
@@ -70,7 +65,6 @@ export function FavoritesScreen() {
       setFavorites([])
       setLikedDeals([])
       setLikedActivities([])
-      setUserAddresses([])
       setRefreshing(false)
       return
     }
@@ -81,36 +75,21 @@ export function FavoritesScreen() {
         setFavorites(listGuestFlightFavorites())
         setLikedDeals(listGuestLikedDeals())
         setLikedActivities(listGuestLikedActivities())
-        setUserAddresses([])
       } else {
-        const [list, deals, acts, addresses] = await Promise.all([
+        const [list, deals, acts] = await Promise.all([
           getApi().getFavorites(),
           getApi().getLikedDeals(),
           getApi().getLikedActivities().catch(() => [] as LikedActivity[]),
-          getApi()
-            .listUserAddresses()
-            .then((r) => r.items || [])
-            .catch(() => []),
         ])
         setFavorites(Array.isArray(list) ? list : [])
         setLikedDeals(Array.isArray(deals) ? deals : [])
         setLikedActivities(Array.isArray(acts) ? acts : [])
-        setUserAddresses(
-          Array.isArray(addresses)
-            ? (addresses as {
-                id: string
-                status?: string
-                places?: { name?: string; city_slug?: string }
-              }[])
-            : [],
-        )
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
       setFavorites([])
       setLikedDeals([])
       setLikedActivities([])
-      setUserAddresses([])
     } finally {
       setRefreshing(false)
     }
@@ -177,7 +156,6 @@ export function FavoritesScreen() {
   })
 
   const { active: activeItems, archived: archivedItems } = useMemo(() => {
-    if (tab === 'addresses') return { active: [] as never[], archived: [] as never[] }
     if (tab === 'flights') {
       return partitionFavoritesByPast(favorites, isPastFavoriteFlight)
     }
@@ -264,7 +242,6 @@ export function FavoritesScreen() {
           tab,
           archiveOpen,
           archivedCount: archivedItems.length,
-          addressCount: userAddresses.length,
         }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />
@@ -282,7 +259,6 @@ export function FavoritesScreen() {
                   ['flights', 'favorites.switch.flights'],
                   ['deals', 'favorites.switch.deals'],
                   ['activities', 'favorites.switch.activities'],
-                  ['addresses', 'favorites.switch.addresses'],
                 ] as const
               ).map(([id, key]) => (
                 <Pressable
@@ -307,58 +283,7 @@ export function FavoritesScreen() {
           </View>
         }
         ListEmptyComponent={
-          tab === 'addresses' ? (
-            userAddresses.length === 0 ? (
-              <View style={[styles.emptyCard, shadow.soft]}>
-                <View style={[styles.emptyIcon, styles.addressEmptyIcon]}>
-                  <Text style={styles.addressGlyph}>🍽</Text>
-                </View>
-                <Text style={styles.emptyTitle}>
-                  {error
-                    ? error
-                    : translate('fr', 'favorites.addressesEmptyTitle')}
-                </Text>
-                <Text style={styles.emptyBody}>
-                  {error
-                    ? 'Tire pour réessayer.'
-                    : translate('fr', 'favorites.addressesEmpty')}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.addressList}>
-                {userAddresses.map((row) => {
-                  const place = row.places || {}
-                  const status = String(row.status || 'to_try')
-                  const statusKey =
-                    status === 'loved' || status === 'meh' ? status : 'to_try'
-                  return (
-                    <View key={row.id} style={[styles.addressCard, shadow.soft]}>
-                      <View style={styles.addressIcon}>
-                        <Text style={styles.addressGlyph}>🍽</Text>
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.addressName} numberOfLines={2}>
-                          {place.name || 'Adresse'}
-                        </Text>
-                        {place.city_slug ? (
-                          <Text style={styles.addressMeta}>{place.city_slug}</Text>
-                        ) : null}
-                        <Text style={styles.addressStatus}>
-                          {translate(
-                            'fr',
-                            `favorites.addressStatus.${statusKey}` as
-                              | 'favorites.addressStatus.to_try'
-                              | 'favorites.addressStatus.loved'
-                              | 'favorites.addressStatus.meh',
-                          )}
-                        </Text>
-                      </View>
-                    </View>
-                  )
-                })}
-              </View>
-            )
-          ) : listData.length === 0 && archivedItems.length === 0 ? (
+          listData.length === 0 && archivedItems.length === 0 ? (
             <View style={[styles.emptyCard, shadow.soft]}>
               <View style={styles.emptyIcon}>
                 <HeartIcon size={28} filled={false} color={colors.primary} />
@@ -665,45 +590,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
     lineHeight: 20,
-  },
-  addressEmptyIcon: { backgroundColor: '#FFF3EC' },
-  addressGlyph: { fontSize: 22 },
-  addressList: { marginTop: 8, gap: 10 },
-  addressCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  addressIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addressName: {
-    fontFamily: fonts.extrabold,
-    fontSize: 15,
-    color: colors.ink,
-    letterSpacing: -0.2,
-  },
-  addressMeta: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.muted,
-  },
-  addressStatus: {
-    marginTop: 4,
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.primaryDeep,
   },
   guestOrbA: {
     position: 'absolute',

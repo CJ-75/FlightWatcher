@@ -538,19 +538,6 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
           Que faire sur place
         </h2>
-        <p className="mt-2 text-sm text-muted">
-          Où manger à {citySlug || 'cette ville'} ?{' '}
-          <Link
-            to={
-              plannerHref
-                ? `${plannerHref}${plannerHref.includes('?') ? '&' : '?'}restaurants=1`
-                : '/favoris'
-            }
-            className="font-bold text-primary-700 hover:underline"
-          >
-            Ajoute tes adresses à ton voyage
-          </Link>
-        </p>
       </div>
 
       {activeTrip && plannerHref ? (

@@ -2,37 +2,43 @@ import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { colors, fonts } from '../theme'
 
-const MIN = 1
-const MAX = 6
-
 type Props = {
   value: number
   onChange: (n: number) => void
+  min?: number
+  max?: number
+  label?: string
 }
 
-export function PassengerStepper({ value, onChange }: Props) {
-  const n = Math.min(MAX, Math.max(MIN, value || 1))
+export function PassengerStepper({
+  value,
+  onChange,
+  min = 1,
+  max = 6,
+  label = 'Voyageurs',
+}: Props) {
+  const n = Math.min(max, Math.max(min, value || min))
 
   return (
     <View style={styles.row}>
-      <Text style={styles.label}>Voyageurs</Text>
+      <Text style={styles.label}>{label}</Text>
       <View style={styles.stepper}>
         <Pressable
-          onPress={() => onChange(Math.max(MIN, n - 1))}
-          disabled={n <= MIN}
-          style={[styles.btn, n <= MIN && styles.btnDisabled]}
+          onPress={() => onChange(Math.max(min, n - 1))}
+          disabled={n <= min}
+          style={[styles.btn, n <= min && styles.btnDisabled]}
           hitSlop={8}
         >
-          <Text style={[styles.btnText, n <= MIN && styles.btnTextDisabled]}>−</Text>
+          <Text style={[styles.btnText, n <= min && styles.btnTextDisabled]}>−</Text>
         </Pressable>
         <Text style={styles.value}>{n}</Text>
         <Pressable
-          onPress={() => onChange(Math.min(MAX, n + 1))}
-          disabled={n >= MAX}
-          style={[styles.btn, n >= MAX && styles.btnDisabled]}
+          onPress={() => onChange(Math.min(max, n + 1))}
+          disabled={n >= max}
+          style={[styles.btn, n >= max && styles.btnDisabled]}
           hitSlop={8}
         >
-          <Text style={[styles.btnText, n >= MAX && styles.btnTextDisabled]}>+</Text>
+          <Text style={[styles.btnText, n >= max && styles.btnTextDisabled]}>+</Text>
         </Pressable>
       </View>
     </View>
@@ -47,14 +53,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   label: {
-    flex: 1,
     fontFamily: fonts.bold,
-    fontSize: 12,
-    lineHeight: 16,
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    includeFontPadding: false,
+    fontSize: 16,
+    color: colors.ink,
   },
   stepper: {
     flexDirection: 'row',
@@ -62,37 +63,30 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: colors.primarySoft,
     borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   btn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnDisabled: {
-    opacity: 0.45,
-  },
+  btnDisabled: { opacity: 0.4 },
   btnText: {
     fontFamily: fonts.bold,
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 22,
     color: colors.primary,
-    includeFontPadding: false,
-    marginTop: -1,
+    lineHeight: 24,
   },
-  btnTextDisabled: {
-    color: colors.faint,
-  },
+  btnTextDisabled: { color: colors.muted },
   value: {
-    minWidth: 22,
+    minWidth: 24,
     textAlign: 'center',
-    fontFamily: fonts.bold,
+    fontFamily: fonts.extrabold,
     fontSize: 18,
     color: colors.ink,
-    includeFontPadding: false,
   },
 })

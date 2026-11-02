@@ -27,8 +27,15 @@ import {
   generateDatesFromPreset,
   normalizeDestinations,
   parseAirportCodes,
+  PARTY_MODE_OPTIONS,
+  partyModeCreateHintFr,
+  partyModeDefaultPassengers,
+  partyModeKickerFr,
+  partyModeMaxPassengers,
+  partyModeMinPassengers,
   type DatePresetId,
   type FlexibleDates,
+  type PartyMode,
 } from '@flightwatcher/shared'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
@@ -42,7 +49,7 @@ import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { Button } from '../components/ui/Button'
 import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { JourneyCard } from '../components/JourneyCard'
+import { JourneyCard, type JourneyDensity } from '../components/JourneyCard'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -145,7 +152,9 @@ export function PlannerScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load()
+      // Always re-sync phase / pipeline (vol·hôtel réservés) when coming back
+      // from TripDetail / séjour — ignore the 60s stale window.
+      void load({ force: true })
     }, [load]),
   )
 
@@ -188,6 +197,13 @@ export function PlannerScreen() {
     navigation.navigate('Bookings')
   }
 
+  const density: JourneyDensity =
+    filteredWorkspaces.length <= 1
+      ? 'solo'
+      : filteredWorkspaces.length === 2
+        ? 'duo'
+        : 'groupe'
+
   if (!viewUser) {
     return <PlannerGuestLanding insetsTop={insets.top} insetsBottom={insets.bottom} />
   }
@@ -203,12 +219,16 @@ export function PlannerScreen() {
         </View>
       ) : (
         <FlatList
+          key={`planner-${density}`}
           data={filteredWorkspaces}
           keyExtractor={(item) => item.workspace_id}
+          numColumns={density === 'duo' ? 2 : 1}
+          columnWrapperStyle={density === 'duo' ? styles.duoRow : undefined}
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
             paddingTop: insets.top + 8,
-            paddingBottom: insets.bottom + 120,
+            // Leave room for the FAB; tab bar clearance is already on the scene.
+            paddingBottom: 88,
             flexGrow: 1,
           }}
           refreshControl={
@@ -223,7 +243,11 @@ export function PlannerScreen() {
               <Text style={styles.kicker}>VOYAGES</Text>
               <Text style={styles.title}>Tout ton parcours</Text>
               <Text style={styles.subtitle}>
-                Organise en groupe, puis retrouve ton séjour et ses réservations.
+                {density === 'solo'
+                  ? 'Ton voyage — mode solo.'
+                  : density === 'duo'
+                    ? 'Deux voyages — vue duo.'
+                    : 'Plusieurs voyages — vue groupe.'}
               </Text>
               <View style={styles.hubTabs}>
                 {(
@@ -293,25 +317,29 @@ export function PlannerScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <JourneyCard workspace={item} onPress={() => openWorkspace(item)} />
+            <JourneyCard
+              workspace={item}
+              density={density}
+              onPress={() => openWorkspace(item)}
+            />
           )}
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {workspaces.length > 0 ? (
-        <Pressable
-          onPress={() => setShowCreate(true)}
-          style={({ pressed }) => [
-            styles.fab,
-            { bottom: insets.bottom + 88 },
-            pressed && { opacity: 0.92, transform: [{ scale: 0.97 }] },
-          ]}
-        >
-          <Text style={styles.fabPlus}>+</Text>
-          <Text style={styles.fabLabel}>Nouveau</Text>
-        </Pressable>
-      ) : null}
+      <Pressable
+        onPress={() => setShowCreate(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Nouveau voyage"
+        style={({ pressed }) => [
+          styles.fab,
+          // Scene already has tabClearance paddingBottom — don't add insets again.
+          pressed && { opacity: 0.92, transform: [{ scale: 0.97 }] },
+        ]}
+      >
+        <Text style={styles.fabPlus}>+</Text>
+        <Text style={styles.fabLabel}>Nouveau</Text>
+      </Pressable>
 
       <CreateTripModal
         visible={showCreate}
@@ -442,6 +470,8 @@ function CreateTripModal({
 }) {
   const { isGuest } = useAuth()
   const insets = useSafeAreaInsets()
+  const [step, setStep] = useState<1 | 2>(1)
+  const [partyMode, setPartyMode] = useState<PartyMode | null>(null)
   const [name, setName] = useState('')
   const [departure, setDeparture] = useState('BVA')
   const [arrivalCityKey, setArrivalCityKey] = useState('')
@@ -477,6 +507,9 @@ function CreateTripModal({
 
   React.useEffect(() => {
     if (!visible) return
+    setStep(1)
+    setPartyMode(null)
+    setError(null)
     return subscribeAirports(setAirports)
   }, [visible])
 
@@ -552,7 +585,19 @@ function CreateTripModal({
       ? flexibleDates
       : presetDates
 
+  const selectParty = (mode: PartyMode) => {
+    setPartyMode(mode)
+    setPassengers(partyModeDefaultPassengers(mode))
+    setError(null)
+    setStep(2)
+  }
+
   const submit = async () => {
+    if (!partyMode) {
+      setStep(1)
+      setError('Choisis Solo, Duo ou Groupe')
+      return
+    }
     if (!name.trim()) {
       setError('Donne un nom au voyage')
       return
@@ -587,6 +632,8 @@ function CreateTripModal({
       setName('')
       setArrivalCityKey('')
       setArrivalCodes([])
+      setStep(1)
+      setPartyMode(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Création échouée')
     } finally {
@@ -601,98 +648,164 @@ function CreateTripModal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[styles.modalHeader, { paddingTop: insets.top + 8 }]}>
-          <Pressable onPress={onClose}>
-            <Text style={styles.modalCancel}>Annuler</Text>
+          <Pressable
+            onPress={() => {
+              if (step === 2) {
+                setStep(1)
+                setError(null)
+                return
+              }
+              onClose()
+            }}
+          >
+            <Text style={styles.modalCancel}>{step === 2 ? 'Retour' : 'Annuler'}</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>Nouveau voyage</Text>
+          <View style={{ alignItems: 'center', flex: 1 }}>
+            <Text style={styles.modalStep}>Étape {step}/2</Text>
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              {step === 1
+                ? 'Avec qui tu voyages ?'
+                : partyMode
+                  ? `Voyage · ${partyModeKickerFr(partyMode)}`
+                  : 'Nouveau voyage'}
+            </Text>
+          </View>
           <View style={{ width: 60 }} />
         </View>
         <ScrollView
           contentContainerStyle={{ padding: spacing.xl, paddingBottom: 40, gap: 16 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View>
-            <Text style={styles.fieldLabel}>Nom</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Weekend Lisbonne"
-              placeholderTextColor={colors.faint}
-              style={styles.input}
-            />
-          </View>
-
-          <View>
-            <Text style={styles.fieldLabel}>Départ</Text>
-            <CityAirportPicker airports={airports} value={departure} onChange={setDeparture} />
-          </View>
-
-          <View>
-            <Text style={styles.fieldLabel}>Arrivée (optionnel)</Text>
-            <CityPicker
-              airports={arrivalAirports}
-              valueKey={arrivalCityKey}
-              onChange={(group) => {
-                if (!group) {
-                  setArrivalCityKey('')
-                  setArrivalCodes([])
-                  return
-                }
-                setArrivalCityKey(group.key)
-                setArrivalCodes(group.airports.map((a) => a.code))
-                if (!name.trim()) {
-                  setName(`Weekend ${group.city}`)
-                }
-              }}
-            />
-          </View>
-
-          <PassengerStepper value={passengers} onChange={setPassengers} />
-
-          <Pressable
-            style={styles.directRow}
-            onPress={() => setDirectOnly((v) => !v)}
-            hitSlop={8}
-          >
-            <View style={[styles.directBox, directOnly && styles.directBoxOn]}>
-              {directOnly ? <Text style={styles.directCheck}>✓</Text> : null}
-            </View>
-            <Text style={styles.directLabel}>Vols directs uniquement</Text>
-          </Pressable>
-
-          <BudgetSlider value={budget} onChange={setBudget} />
-
-          <View>
-            <Text style={styles.fieldLabel}>Dates</Text>
-            <View style={styles.presetRow}>
-              {PRESETS.map((p) => (
+          {step === 1 ? (
+            <>
+              <Text style={styles.partyIntro}>
+                Solo, duo ou groupe — ça fixe les places dès le départ.
+              </Text>
+              {PARTY_MODE_OPTIONS.map((opt) => (
                 <Pressable
-                  key={p.id}
-                  onPress={() => {
-                    setPreset(p.id)
-                    if (p.id === 'flexible') setShowFlexible(true)
-                  }}
-                  style={[styles.presetChip, preset === p.id && styles.presetChipOn]}
+                  key={opt.mode}
+                  onPress={() => selectParty(opt.mode)}
+                  style={({ pressed }) => [
+                    styles.partyCard,
+                    pressed && { opacity: 0.92 },
+                  ]}
                 >
-                  <Text style={[styles.presetChipText, preset === p.id && styles.presetChipTextOn]}>
-                    {p.label}
+                  <Text style={styles.partyHint}>{opt.label}</Text>
+                  <Text style={styles.partyLead}>{opt.hint}</Text>
+                  <Text style={styles.partyMeta}>
+                    {partyModeCreateHintFr(opt.mode)}
                   </Text>
                 </Pressable>
               ))}
-            </View>
-            {dates.dates_depart[0] && dates.dates_retour[0] ? (
-              <Text style={styles.datesHint}>
-                {formatDateFr(dates.dates_depart[0].date)} →{' '}
-                {formatDateFr(dates.dates_retour[dates.dates_retour.length - 1].date)}
-              </Text>
-            ) : (
-              <Text style={styles.datesHint}>Choisis tes dates libres</Text>
-            )}
-          </View>
+            </>
+          ) : (
+            <>
+              <View>
+                <Text style={styles.fieldLabel}>Nom</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Weekend Lisbonne"
+                  placeholderTextColor={colors.faint}
+                  style={styles.input}
+                />
+              </View>
+
+              <View>
+                <Text style={styles.fieldLabel}>Départ</Text>
+                <CityAirportPicker airports={airports} value={departure} onChange={setDeparture} />
+              </View>
+
+              <View>
+                <Text style={styles.fieldLabel}>Arrivée (optionnel)</Text>
+                <CityPicker
+                  airports={arrivalAirports}
+                  valueKey={arrivalCityKey}
+                  onChange={(group) => {
+                    if (!group) {
+                      setArrivalCityKey('')
+                      setArrivalCodes([])
+                      return
+                    }
+                    setArrivalCityKey(group.key)
+                    setArrivalCodes(group.airports.map((a) => a.code))
+                    if (!name.trim()) {
+                      setName(`Weekend ${group.city}`)
+                    }
+                  }}
+                />
+              </View>
+
+              {partyMode === 'groupe' ? (
+                <PassengerStepper
+                  value={passengers}
+                  onChange={setPassengers}
+                  min={partyModeMinPassengers('groupe')}
+                  max={partyModeMaxPassengers('groupe')}
+                  label="Taille du groupe"
+                />
+              ) : (
+                <View style={styles.partySummary}>
+                  <Text style={styles.partySummaryTitle}>
+                    {partyMode ? partyModeKickerFr(partyMode) : 'Voyageurs'}
+                  </Text>
+                  <Text style={styles.partySummaryBody}>
+                    {partyMode ? partyModeCreateHintFr(partyMode) : `${passengers} place(s)`}
+                  </Text>
+                </View>
+              )}
+
+              <Pressable
+                style={styles.directRow}
+                onPress={() => setDirectOnly((v) => !v)}
+                hitSlop={8}
+              >
+                <View style={[styles.directBox, directOnly && styles.directBoxOn]}>
+                  {directOnly ? <Text style={styles.directCheck}>✓</Text> : null}
+                </View>
+                <Text style={styles.directLabel}>Vols directs uniquement</Text>
+              </Pressable>
+
+              <BudgetSlider value={budget} onChange={setBudget} />
+
+              <View>
+                <Text style={styles.fieldLabel}>Dates</Text>
+                <View style={styles.presetRow}>
+                  {PRESETS.map((p) => (
+                    <Pressable
+                      key={p.id}
+                      onPress={() => {
+                        setPreset(p.id)
+                        if (p.id === 'flexible') setShowFlexible(true)
+                      }}
+                      style={[styles.presetChip, preset === p.id && styles.presetChipOn]}
+                    >
+                      <Text
+                        style={[
+                          styles.presetChipText,
+                          preset === p.id && styles.presetChipTextOn,
+                        ]}
+                      >
+                        {p.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {dates.dates_depart[0] && dates.dates_retour[0] ? (
+                  <Text style={styles.datesHint}>
+                    {formatDateFr(dates.dates_depart[0].date)} →{' '}
+                    {formatDateFr(dates.dates_retour[dates.dates_retour.length - 1].date)}
+                  </Text>
+                ) : (
+                  <Text style={styles.datesHint}>Choisis tes dates libres</Text>
+                )}
+              </View>
+
+              <Button label="Créer" onPress={() => void submit()} loading={saving} />
+            </>
+          )}
 
           {error ? <Text style={styles.formError}>{error}</Text> : null}
-
-          <Button label="Créer" onPress={() => void submit()} loading={saving} />
         </ScrollView>
 
         <FlexibleDatesModal
@@ -709,6 +822,10 @@ function CreateTripModal({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  duoRow: {
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   header: { marginBottom: 22, gap: 4 },
   kicker: {
     fontFamily: fonts.bold,
@@ -940,9 +1057,13 @@ const styles = StyleSheet.create({
   statusTextLocked: { color: colors.success },
   fab: {
     position: 'absolute',
-    right: 20,
+    right: 16,
+    bottom: 16,
+    zIndex: 30,
+    elevation: 10,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingLeft: 14,
     paddingRight: 18,
@@ -1234,7 +1355,66 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
   },
   modalCancel: { fontFamily: fonts.medium, color: colors.muted, width: 60 },
+  modalStep: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
   modalTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
+  partyIntro: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  partyCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    gap: 4,
+  },
+  partyHint: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
+  partyLead: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
+  partyMeta: {
+    marginTop: 4,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  partySummary: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    gap: 2,
+  },
+  partySummaryTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  partySummaryBody: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+  },
   fieldLabel: {
     fontFamily: fonts.bold,
     fontSize: 12,

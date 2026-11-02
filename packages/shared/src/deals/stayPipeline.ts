@@ -6,7 +6,7 @@ export type StayStepId = 'flight' | 'hotel' | 'activities' | 'restaurants'
 
 export type FlightStepStatus = 'none' | 'selected_fw' | 'booked_fw' | 'external'
 
-export type HotelStepStatus = 'none' | 'selected' | 'booked'
+export type HotelStepStatus = 'none' | 'selected' | 'booked' | 'external'
 
 export type PipelineStepState = 'done' | 'current' | 'upcoming' | 'off'
 
@@ -34,8 +34,10 @@ export function resolveFlightStepStatus(opts: {
 export function resolveHotelStepStatus(opts: {
   hasHotel?: boolean
   hotelBooked?: boolean
+  externalHotel?: boolean
 }): HotelStepStatus {
   if (opts.hotelBooked) return 'booked'
+  if (opts.externalHotel) return 'external'
   if (opts.hasHotel) return 'selected'
   return 'none'
 }
@@ -59,7 +61,7 @@ export function buildStayPipeline(opts: {
 }): StayPipelineStep[] {
   const flightDone = opts.flight === 'booked_fw' || opts.flight === 'external'
   const flightPartial = opts.flight === 'selected_fw'
-  const hotelDone = opts.hotel === 'booked'
+  const hotelDone = opts.hotel === 'booked' || opts.hotel === 'external'
   const hotelPartial = opts.hotel === 'selected'
   const activitiesOn = Boolean(opts.activitiesEnabled)
   const restaurantsOn = Boolean(opts.restaurantsEnabled)
@@ -81,9 +83,11 @@ export function buildStayPipeline(opts: {
   const hotelHint =
     opts.hotel === 'booked'
       ? 'Réservé'
-      : opts.hotel === 'selected'
-        ? 'À payer'
-        : 'Choisir'
+      : opts.hotel === 'external'
+        ? 'Hôtel ailleurs'
+        : opts.hotel === 'selected'
+          ? 'À payer'
+          : 'Choisir'
 
   // Current = first incomplete active step, unless focus overrides
   let current: StayStepId = 'flight'
@@ -152,4 +156,54 @@ export function buildStayPipeline(opts: {
         : 'Bientôt',
     ),
   ]
+}
+
+/** Next primary CTA after progress (vol → hôtel → activités → restos → planner). */
+export type StayNextActionId =
+  | 'flight'
+  | 'hotel_pay'
+  | 'hotel_pick'
+  | 'activities'
+  | 'restaurants'
+  | 'planner'
+  | 'bookings'
+
+export type StayNextAction = {
+  id: StayNextActionId
+  label: string
+}
+
+export function resolveNextStayAction(opts: {
+  flightBooked?: boolean
+  hotelBooked?: boolean
+  hasHotelSelected?: boolean
+  activitiesEnabled?: boolean
+  activitiesDone?: boolean
+  restaurantsEnabled?: boolean
+  restaurantsDone?: boolean
+  hasPlanner?: boolean
+}): StayNextAction {
+  const flightBooked = Boolean(opts.flightBooked)
+  const hotelBooked = Boolean(opts.hotelBooked)
+  const hasHotel = Boolean(opts.hasHotelSelected)
+
+  if (!flightBooked) {
+    return { id: 'flight', label: 'Réserver mon vol maintenant' }
+  }
+  if (!hotelBooked) {
+    if (hasHotel) {
+      return { id: 'hotel_pay', label: 'Payer ma chambre' }
+    }
+    return { id: 'hotel_pick', label: 'Réserver mon hôtel' }
+  }
+  if (opts.activitiesEnabled && !opts.activitiesDone) {
+    return { id: 'activities', label: 'Planifier des activités' }
+  }
+  if (opts.restaurantsEnabled && !opts.restaurantsDone) {
+    return { id: 'restaurants', label: 'Restaurants autour de ton hôtel' }
+  }
+  if (opts.hasPlanner) {
+    return { id: 'planner', label: 'Retour au planner' }
+  }
+  return { id: 'bookings', label: 'Voir mes réservations' }
 }

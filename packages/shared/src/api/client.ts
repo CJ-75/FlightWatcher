@@ -473,6 +473,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         `/api/deals/my-trip/${encodeURIComponent(draftToken)}/flight-booked`,
         { method: 'POST', body: JSON.stringify({}) },
       ),
+    updateMyTripFlightBookingStatus: (
+      draftToken: string,
+      body: {
+        status: 'redirected' | 'pending_partner' | 'user_confirmed' | 'cancelled'
+        provider?: string | null
+        reference?: string | null
+      },
+    ) =>
+      request<MyTripDraft>(
+        `/api/deals/my-trip/${encodeURIComponent(draftToken)}/flight-booking-status`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
 
     markMyTripHotelBooked: (
       draftToken: string,
@@ -821,6 +833,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
         method: 'POST',
         timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       }),
+    reopenPlannedTripFlight: (id: string) =>
+      request<{ ok: boolean; trip: PlannedTrip }>(
+        `/api/planner/trips/${encodeURIComponent(id)}/reopen-flight`,
+        { method: 'POST' },
+      ),
+    skipPlannedTripFlight: (id: string) =>
+      request<MyTripDraft & { flight_external?: boolean; reused?: boolean }>(
+        `/api/planner/trips/${encodeURIComponent(id)}/skip-flight`,
+        { method: 'POST' },
+      ),
+    skipPlannedTripHotel: (id: string) =>
+      request<MyTripDraft & { hotel_external?: boolean; reused?: boolean }>(
+        `/api/planner/trips/${encodeURIComponent(id)}/skip-hotel`,
+        { method: 'POST' },
+      ),
     acceptProposal: (id: string) =>
       request<TripProposal>(`/api/planner/proposals/${encodeURIComponent(id)}/accept`, {
         method: 'POST',

@@ -1,5 +1,5 @@
 /**
- * Nouveau voyage — parité mobile (formulaire unique, pas de wizard 3 étapes).
+ * Nouveau voyage — étape 1 Solo/Duo/Groupe, puis critères.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { Airport, DateAvecHoraire } from '../../types'
@@ -19,7 +19,14 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   parseAirportCodes,
+  PARTY_MODE_OPTIONS,
+  partyModeCreateHintFr,
+  partyModeDefaultPassengers,
+  partyModeKickerFr,
+  partyModeMaxPassengers,
+  partyModeMinPassengers,
   type CityAirportGroup,
+  type PartyMode,
 } from '@flightwatcher/shared'
 import type { DatePreset } from '../DatePresets'
 
@@ -52,6 +59,8 @@ export function CreateTripModal({
     }
   }, [])
 
+  const [step, setStep] = useState<1 | 2>(1)
+  const [partyMode, setPartyMode] = useState<PartyMode | null>(null)
   const [name, setName] = useState('')
   const [departure, setDeparture] = useState('')
   const [arrivalCityKey, setArrivalCityKey] = useState('')
@@ -142,6 +151,13 @@ export function CreateTripModal({
     }
   }, [departure])
 
+  const selectParty = (mode: PartyMode) => {
+    setPartyMode(mode)
+    setPassengers(partyModeDefaultPassengers(mode))
+    setError(null)
+    setStep(2)
+  }
+
   const selectCity = (group: CityAirportGroup | null) => {
     if (!group) {
       setArrivalCityKey('')
@@ -173,6 +189,11 @@ export function CreateTripModal({
   }
 
   const submit = async () => {
+    if (!partyMode) {
+      setStep(1)
+      setError('Choisis Solo, Duo ou Groupe')
+      return
+    }
     const depEncoded = encodeAirportCodes(parseAirportCodes(departure))
     if (!depEncoded) {
       setError('Choisis une ville / aéroport de départ')
@@ -215,161 +236,221 @@ export function CreateTripModal({
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-white/95 backdrop-blur px-6 sm:px-8 py-4 sm:py-5">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (step === 2) {
+                setStep(1)
+                setError(null)
+                return
+              }
+              onClose()
+            }}
             className="text-sm font-bold text-muted hover:text-ink min-w-[72px] text-left"
           >
-            Annuler
+            {step === 2 ? 'Retour' : 'Annuler'}
           </button>
           <div className="text-center min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary-700">
-              Planner
+              Étape {step}/2
             </p>
-            <h3 className="font-extrabold text-ink text-xl tracking-tight">Nouveau voyage</h3>
+            <h3 className="font-extrabold text-ink text-xl tracking-tight">
+              {step === 1
+                ? 'Avec qui tu voyages ?'
+                : partyMode
+                  ? `Nouveau voyage · ${partyModeKickerFr(partyMode)}`
+                  : 'Nouveau voyage'}
+            </h3>
           </div>
           <span className="min-w-[72px]" />
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-            <div className="space-y-5">
-              <div>
-                <label className="text-sm font-bold text-ink block mb-1.5">Nom</label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Weekend Lisbonne"
-                  className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-ink block mb-1.5">Départ</label>
-                <CityAirportSelect value={departure} onChange={setDeparture} />
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-ink block mb-1.5">
-                  Arrivée (optionnel)
-                </label>
-                <input
-                  value={cityQuery}
-                  onChange={(e) => {
-                    setCityQuery(e.target.value)
-                    if (arrivalCityKey) {
-                      setArrivalCityKey('')
-                      setArrivalCodes([])
-                    }
-                  }}
-                  placeholder={
-                    parseAirportCodes(departure).length
-                      ? 'Ville ou aéroport…'
-                      : 'Choisis d’abord un départ'
-                  }
-                  disabled={!parseAirportCodes(departure).length}
-                  className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                />
-                {selectedCity ? (
-                  <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-primary-50 border border-primary-100 px-3 py-2">
-                    <p className="text-sm font-bold text-ink">
-                      {selectedCity.city}
-                      <span className="text-muted font-medium">
-                        {' '}
-                        · {arrivalCodes.join(' · ')}
-                      </span>
+          {step === 1 ? (
+            <div className="max-w-2xl mx-auto space-y-3">
+              <p className="text-sm text-ink-soft text-center mb-2">
+                Solo, duo ou groupe — ça fixe les places dès le départ.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {PARTY_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.mode}
+                    type="button"
+                    onClick={() => selectParty(opt.mode)}
+                    className="rounded-2xl border border-line bg-white px-4 py-5 text-left hover:border-primary-400 hover:bg-primary-50/40 transition-colors min-h-[108px]"
+                  >
+                    <p className="font-extrabold text-ink text-lg tracking-tight">
+                      {opt.label}
                     </p>
-                    <button
-                      type="button"
-                      className="text-xs font-bold text-primary-700"
-                      onClick={() => selectCity(null)}
-                    >
-                      Effacer
-                    </button>
+                    <p className="mt-1 text-sm text-ink-soft">{opt.hint}</p>
+                    <p className="mt-2 text-xs font-semibold text-muted">
+                      {partyModeCreateHintFr(opt.mode)}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+                <div className="space-y-5">
+                  <div>
+                    <label className="text-sm font-bold text-ink block mb-1.5">Nom</label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Weekend Lisbonne"
+                      className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                    />
                   </div>
-                ) : cityQuery.trim() && filteredCities.length > 0 ? (
-                  <ul className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-line bg-white shadow-soft divide-y divide-line">
-                    {filteredCities.map((g) => (
-                      <li key={g.key}>
+
+                  <div>
+                    <label className="text-sm font-bold text-ink block mb-1.5">Départ</label>
+                    <CityAirportSelect value={departure} onChange={setDeparture} />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-bold text-ink block mb-1.5">
+                      Arrivée (optionnel)
+                    </label>
+                    <input
+                      value={cityQuery}
+                      onChange={(e) => {
+                        setCityQuery(e.target.value)
+                        if (arrivalCityKey) {
+                          setArrivalCityKey('')
+                          setArrivalCodes([])
+                        }
+                      }}
+                      placeholder={
+                        parseAirportCodes(departure).length
+                          ? 'Ville ou aéroport…'
+                          : 'Choisis d’abord un départ'
+                      }
+                      disabled={!parseAirportCodes(departure).length}
+                      className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                    />
+                    {selectedCity ? (
+                      <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-primary-50 border border-primary-100 px-3 py-2">
+                        <p className="text-sm font-bold text-ink">
+                          {selectedCity.city}
+                          <span className="text-muted font-medium">
+                            {' '}
+                            · {arrivalCodes.join(' · ')}
+                          </span>
+                        </p>
                         <button
                           type="button"
-                          onClick={() => selectCity(g)}
-                          className="w-full text-left px-3.5 py-2.5 hover:bg-primary-50"
+                          className="text-xs font-bold text-primary-700"
+                          onClick={() => selectCity(null)}
                         >
-                          <span className="font-bold text-ink text-sm">{g.city}</span>
-                          <span className="text-muted text-xs ml-2">{g.country}</span>
+                          Effacer
                         </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <p className="text-xs text-muted mt-1.5">
-                  Laisse vide pour t’inspirer (scan inspire).
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <PassengerStepper value={passengers} onChange={setPassengers} />
-
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={directOnly}
-                  onChange={(e) => setDirectOnly(e.target.checked)}
-                  className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
-                />
-                <span className="text-sm font-semibold text-ink">
-                  Vols directs uniquement
-                </span>
-              </label>
-
-              <BudgetSlider value={budget} onChange={setBudget} />
-
-              <div>
-                <p className="text-sm font-bold text-ink mb-2">Dates</p>
-                <div className="flex flex-wrap gap-2">
-                  {PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => onPreset(p.id)}
-                      className={`px-3.5 py-2 rounded-xl text-sm font-bold border transition-colors ${
-                        preset === p.id
-                          ? 'bg-ink text-white border-ink'
-                          : 'bg-white text-ink-soft border-line hover:bg-primary-50'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                      </div>
+                    ) : cityQuery.trim() && filteredCities.length > 0 ? (
+                      <ul className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-line bg-white shadow-soft divide-y divide-line">
+                        {filteredCities.map((g) => (
+                          <li key={g.key}>
+                            <button
+                              type="button"
+                              onClick={() => selectCity(g)}
+                              className="w-full text-left px-3.5 py-2.5 hover:bg-primary-50"
+                            >
+                              <span className="font-bold text-ink text-sm">{g.city}</span>
+                              <span className="text-muted text-xs ml-2">{g.country}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <p className="text-xs text-muted mt-1.5">
+                      Laisse vide pour t’inspirer (scan inspire).
+                    </p>
+                  </div>
                 </div>
-                {datesDepart[0] && datesRetour[0] ? (
-                  <p className="text-sm font-semibold text-muted mt-2">
-                    {formatDateFr(datesDepart[0].date)} →{' '}
-                    {formatDateFr(datesRetour[datesRetour.length - 1].date)}
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted mt-2">Choisis tes dates libres</p>
-                )}
+
+                <div className="space-y-5">
+                  {partyMode === 'groupe' ? (
+                    <PassengerStepper
+                      value={passengers}
+                      onChange={setPassengers}
+                      min={partyModeMinPassengers('groupe')}
+                      max={partyModeMaxPassengers('groupe')}
+                      label="Taille du groupe"
+                    />
+                  ) : (
+                    <div className="rounded-2xl border border-line bg-slate-50/80 px-4 py-3">
+                      <p className="text-sm font-bold text-ink">
+                        {partyMode ? partyModeKickerFr(partyMode) : 'Voyageurs'}
+                      </p>
+                      <p className="text-sm text-muted mt-0.5">
+                        {partyMode
+                          ? partyModeCreateHintFr(partyMode)
+                          : `${passengers} place(s)`}
+                      </p>
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={directOnly}
+                      onChange={(e) => setDirectOnly(e.target.checked)}
+                      className="w-5 h-5 rounded border-orange-300 text-[#FF6B35] focus:ring-orange-200"
+                    />
+                    <span className="text-sm font-semibold text-ink">
+                      Vols directs uniquement
+                    </span>
+                  </label>
+
+                  <BudgetSlider value={budget} onChange={setBudget} />
+
+                  <div>
+                    <p className="text-sm font-bold text-ink mb-2">Dates</p>
+                    <div className="flex flex-wrap gap-2">
+                      {PRESETS.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => onPreset(p.id)}
+                          className={`px-3.5 py-2 rounded-xl text-sm font-bold border transition-colors ${
+                            preset === p.id
+                              ? 'bg-ink text-white border-ink'
+                              : 'bg-white text-ink-soft border-line hover:bg-primary-50'
+                          }`}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    {datesDepart[0] && datesRetour[0] ? (
+                      <p className="text-sm font-semibold text-muted mt-2">
+                        {formatDateFr(datesDepart[0].date)} →{' '}
+                        {formatDateFr(datesRetour[datesRetour.length - 1].date)}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted mt-2">Choisis tes dates libres</p>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+
+              <div className="flex justify-end pt-1 border-t border-line">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void submit()}
+                  className="app-btn-primary rounded-2xl py-3.5 px-10 disabled:opacity-60 min-w-[200px] mt-4"
+                >
+                  {saving ? '…' : 'Créer'}
+                </button>
+              </div>
+            </>
+          )}
 
           {error ? (
             <p className="text-sm font-semibold text-red-600" role="alert">
               {error}
             </p>
           ) : null}
-
-          <div className="flex justify-end pt-1 border-t border-line">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void submit()}
-              className="app-btn-primary rounded-2xl py-3.5 px-10 disabled:opacity-60 min-w-[200px] mt-4"
-            >
-              {saving ? '…' : 'Créer'}
-            </button>
-          </div>
         </div>
 
         {showFlexible ? (

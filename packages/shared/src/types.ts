@@ -309,6 +309,14 @@ export interface TravelDealBadgeMeta {
   tooltip?: string
 }
 
+export type FlightBookingStatus =
+  | 'not_started'
+  | 'redirected'
+  | 'pending_partner'
+  | 'user_confirmed'
+  | 'partner_confirmed'
+  | 'cancelled'
+
 export interface MyTripDraft {
   id: string
   draft_token: string
@@ -326,6 +334,10 @@ export interface MyTripDraft {
   invite_available?: boolean
   /** Lot F */
   flight_booked_at?: string | null
+  flight_booking_status?: FlightBookingStatus
+  flight_booking_provider?: string | null
+  flight_booking_reference?: string | null
+  flight_booking_updated_at?: string | null
   /** Lot D */
   hotel_booked_at?: string | null
   share_email?: string | null
@@ -425,6 +437,8 @@ export interface TravelWorkspace {
   proposal_id?: string | null
   draft_id?: string | null
   draft_token?: string | null
+  flight_booking_status?: FlightBookingStatus | null
+  flight_booking_provider?: string | null
   hotel_booking_id?: string | null
   hotel_booking_status?: HotelBookingStatus | string | null
   scope: TravelWorkspaceScope

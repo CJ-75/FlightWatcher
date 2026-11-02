@@ -14,6 +14,12 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
+import {
+  partyModeFromCount,
+  partyModeKickerFr,
+  partyModeSubtitleFr,
+  partyModeTitleFr,
+} from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
 
 function memberLabel(m: TripMember, currentUserId?: string | null): string {
@@ -74,6 +80,10 @@ export function TravelersSection({
   const full = count >= 6
   const seatTotal = Math.min(6, Math.max(seats, count, 1))
   const progress = Math.min(100, Math.round((count / seatTotal) * 100))
+  const partyMode = partyModeFromCount(Math.max(seatTotal, count, 1))
+  const partyTitle = partyModeTitleFr(partyMode)
+  const partyKicker = partyModeKickerFr(partyMode)
+  const partySubtitle = partyModeSubtitleFr(partyMode)
 
   useEffect(() => {
     if (addOpen) {
@@ -134,8 +144,8 @@ export function TravelersSection({
       >
         <View style={styles.header}>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.headerKicker}>LE GROUPE</Text>
-            <Text style={styles.title}>Ta bande de voyage</Text>
+            <Text style={styles.headerKicker}>{partyKicker.toUpperCase()}</Text>
+            <Text style={styles.title}>{partyTitle}</Text>
             <Text style={styles.seats}>
               {count} / {seatTotal} places
             </Text>
@@ -164,8 +174,9 @@ export function TravelersSection({
         </Text>
       ) : (
         <Text style={styles.roleNote}>
-          Ajoute un ami (prénom + email). Il pourra rejoindre via le lien ; toi
-          tu décides du vol.
+          {partyMode === 'solo'
+            ? partySubtitle
+            : 'Ajoute un ami (prénom + email). Il pourra rejoindre via le lien ; toi tu décides du vol.'}
         </Text>
       )}
 

@@ -12,9 +12,16 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import type {
   DealRevalidateResponse,
   MyTripDraft,
+  StayNextAction,
   TravelDeal,
 } from '@flightwatcher/shared'
-import { resolveCarrierBooking } from '@flightwatcher/shared'
+import {
+  ACTIVITY_BACK_TO_PLANNER_FR,
+  activityStepProgress,
+  resolveCarrierBooking,
+  resolveNextStayAction,
+  restaurantStepProgress,
+} from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -155,12 +162,136 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
     liteapi_env?: string
   } | null>(null)
   const [paying, setPaying] = useState(false)
+  const [doneNext, setDoneNext] = useState<StayNextAction | null>(null)
+  const [plannerTripId, setPlannerTripId] = useState<string | null>(null)
+  const [flightBookUrl, setFlightBookUrl] = useState<string | null>(null)
+
+  const refreshDoneNext = async () => {
+    if (!draftToken) {
+      setDoneNext(
+        resolveNextStayAction({
+          flightBooked: false,
+          hotelBooked: true,
+          hasHotelSelected: true,
+        }),
+      )
+      return
+    }
+    try {
+      const [trip, cfg, itemsRes] = await Promise.all([
+        getApi().getMyTrip(draftToken),
+        getApi().getConfig().catch(() => null),
+        getApi()
+          .listTripItems({ draft_token: draftToken })
+          .catch(() => ({ items: [] as { item_type?: string; status?: string }[] })),
+      ])
+      const payload = (trip.payload || {}) as Record<string, unknown>
+      const fl = (payload.flight || {}) as Record<string, unknown>
+      const status = String(
+        trip.flight_booking_status || payload.flight_booking_status || '',
+      )
+      const flightBooked = Boolean(
+        trip.flight_booked_at ||
+          payload.flight_booked ||
+          payload.flight_booked_at ||
+          status === 'user_confirmed' ||
+          status === 'partner_confirmed' ||
+          payload.flight_external ||
+          payload.external_flight,
+      )
+      const items = (itemsRes.items || []) as {
+        item_type?: string
+        status?: string
+      }[]
+      const act = activityStepProgress(
+        items.filter((i) => i.item_type === 'activity'),
+      )
+      const resto = restaurantStepProgress(
+        items.filter((i) => i.item_type === 'restaurant'),
+      )
+      const plannerId = trip.source_planned_trip_id
+        ? String(trip.source_planned_trip_id)
+        : null
+      setPlannerTripId(plannerId)
+      setDoneNext(
+        resolveNextStayAction({
+          flightBooked,
+          hotelBooked: true,
+          hasHotelSelected: true,
+          activitiesEnabled: cfg?.planner_activities_enabled === true,
+          activitiesDone: act.done,
+          restaurantsEnabled: cfg?.planner_restaurants_enabled === true,
+          restaurantsDone: resto.done || resto.skipped,
+          hasPlanner: Boolean(plannerId),
+        }),
+      )
+      const resolved = resolveCarrierBooking({
+        airline: String(fl.airline || '') || undefined,
+        provider: String(fl.provider || '') || undefined,
+        bookingUrl: String(fl.booking_url || payload.booking_url || ''),
+        originIata:
+          String(
+            fl.origin_iata || trip.origin_iata || payload.origin_iata || '',
+          ).toUpperCase() || undefined,
+        destIata:
+          String(
+            fl.destination_iata || trip.dest_iata || payload.destination || '',
+          ).toUpperCase() || undefined,
+        outDate: String(trip.out_date || '').slice(0, 10) || undefined,
+        retDate: String(trip.ret_date || '').slice(0, 10) || undefined,
+        adults: Math.max(1, Number(trip.adults || 2)),
+        language: 'fr',
+      })
+      setFlightBookUrl(String(resolved.url || '').trim() || null)
+    } catch {
+      setDoneNext(
+        resolveNextStayAction({
+          flightBooked: false,
+          hotelBooked: true,
+          hasHotelSelected: true,
+        }),
+      )
+    }
+  }
+
+  const goBackToTrip = () => {
+    if (draftToken) {
+      // Pop HotelCompose / checkout and land on summary with reserved hotel.
+      // Clear any stale seed so TripSummary always re-fetches booked status.
+      navigation.navigate({
+        name: 'TripSummary',
+        params: { draftToken, seed: undefined },
+        merge: true,
+      })
+      return
+    }
+    navigation.navigate('Bookings')
+  }
+
+  useEffect(() => {
+    if (step !== 'done' || !draftToken) return
+    const unsub = navigation.addListener('beforeRemove', (e) => {
+      const type = e.data?.action?.type
+      if (type !== 'GO_BACK' && type !== 'POP') return
+      // Back after booking → trip summary (reserved), not hotel picker.
+      e.preventDefault()
+      navigation.navigate({
+        name: 'TripSummary',
+        params: { draftToken },
+        merge: true,
+      })
+    })
+    return unsub
+  }, [step, draftToken, navigation])
 
   useEffect(() => {
     if (!payResult?.confirmation) return
     setConfirmation(payResult.confirmation)
     setStep('done')
-    if (!draftToken) return
+    if (!draftToken) {
+      void refreshDoneNext()
+      return
+    }
     void rememberTrip({
       draft_token: draftToken,
       booking_id: payResult.bookingId,
@@ -188,10 +319,14 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
       } catch {
         /* best-effort lock of paid hotel total */
       }
+      await refreshDoneNext()
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when payResult arrives
   }, [payResult, draftToken, deal?.city])
 
   useEffect(() => {
+    // Returning from HotelPay with payResult: skip revalidate, stay on « done ».
+    if (payResult?.confirmation) return
     let cancelled = false
     ;(async () => {
       try {
@@ -243,7 +378,7 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true
     }
-  }, [dealId, draftToken, hotelId])
+  }, [dealId, draftToken, hotelId, payResult?.confirmation])
 
   const startPrebook = async () => {
     if (!deal || !reval?.offer_id || !reval.hotel_id) return
@@ -353,7 +488,9 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
       })
     }
     setConfirmation(booked.confirmation_code || booked.status)
+    setBookingId(booked.id || id)
     setStep('done')
+    void refreshDoneNext()
   }
 
   return (
@@ -472,56 +609,71 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
 
         {step === 'done' ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Chambre confirmée</Text>
+            <Text style={styles.title}>Hôtel réservé ✓</Text>
             <Text style={styles.body}>
               {confirmation
-                ? `Code : ${confirmation}`
-                : 'Ta réservation hôtel est enregistrée.'}
+                ? `N° de réservation : ${confirmation}`
+                : 'Ta chambre est confirmée et enregistrée sur ton voyage.'}
             </Text>
-            {deal ? (
+            {doneNext?.id === 'flight' && flightBookUrl ? (
               <Pressable
-                style={styles.btnSecondary}
-                onPress={() => {
-                  const fl = (deal.flight || {}) as Record<string, unknown>
-                  const resolved = resolveCarrierBooking({
-                    airline: String(fl.airline || '') || undefined,
-                    provider: String(fl.provider || '') || undefined,
-                    bookingUrl: String(fl.booking_url || deal.booking_url || ''),
-                    originIata: String(
-                      fl.origin_iata ||
-                        deal.origin_iata ||
-                        deal.departure_airport ||
-                        '',
-                    ).toUpperCase() || undefined,
-                    destIata: String(
-                      fl.destination_iata || deal.destination || '',
-                    ).toUpperCase() || undefined,
-                    outDate: deal.dates?.outbound,
-                    retDate: deal.dates?.inbound,
-                    outLocal: String(
-                      fl.outbound_local || deal.dates?.outbound || '',
-                    ) || undefined,
-                    inLocal: String(
-                      fl.inbound_local || deal.dates?.inbound || '',
-                    ) || undefined,
-                    adults: deal.adults || 2,
-                    language: 'fr',
-                  })
-                  const url = String(resolved.url || '').trim()
-                  if (!url) return
-                  openInAppBrowser(navigation, url, 'Réserver le vol')
-                }}
+                style={styles.btn}
+                onPress={() =>
+                  openInAppBrowser(navigation, flightBookUrl, 'Réserver le vol')
+                }
               >
                 <View style={styles.btnInner}>
-                  <PlaneIcon size={15} />
-                  <Text style={styles.btnSecondaryText}>
-                    Réserver mon vol maintenant
-                  </Text>
+                  <PlaneIcon size={15} color={colors.white} />
+                  <Text style={styles.btnText}>{doneNext.label}</Text>
                 </View>
               </Pressable>
+            ) : doneNext?.id === 'planner' && plannerTripId ? (
+              <Pressable
+                style={styles.btn}
+                onPress={() =>
+                  navigation.navigate('TripDetail', { tripId: plannerTripId })
+                }
+              >
+                <Text style={styles.btnText}>{ACTIVITY_BACK_TO_PLANNER_FR}</Text>
+              </Pressable>
+            ) : doneNext?.id === 'bookings' ? (
+              <Pressable
+                style={styles.btn}
+                onPress={() => navigation.navigate('Bookings')}
+              >
+                <Text style={styles.btnText}>{doneNext.label}</Text>
+              </Pressable>
+            ) : draftToken ? (
+              <Pressable style={styles.btn} onPress={goBackToTrip}>
+                <Text style={styles.btnText}>
+                  {doneNext?.label || 'Voir mon voyage'}
+                </Text>
+              </Pressable>
             ) : null}
-            <Pressable style={styles.btn} onPress={() => navigation.navigate('Bookings')}>
-              <Text style={styles.btnText}>Mes réservations</Text>
+            {draftToken ? (
+              <Pressable style={styles.btnSecondary} onPress={goBackToTrip}>
+                <Text style={styles.btnSecondaryText}>
+                  Retour au voyage (hôtel réservé)
+                </Text>
+              </Pressable>
+            ) : null}
+            {plannerTripId && doneNext?.id !== 'planner' ? (
+              <Pressable
+                style={styles.btnSecondary}
+                onPress={() =>
+                  navigation.navigate('TripDetail', { tripId: plannerTripId })
+                }
+              >
+                <Text style={styles.btnSecondaryText}>
+                  {ACTIVITY_BACK_TO_PLANNER_FR}
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              style={styles.btnSecondary}
+              onPress={() => navigation.navigate('Bookings')}
+            >
+              <Text style={styles.btnSecondaryText}>Mes réservations</Text>
             </Pressable>
           </View>
         ) : null}
