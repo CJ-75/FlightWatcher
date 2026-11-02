@@ -110,6 +110,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
                   : String(d),
               )
               .join(', ')
+          } else if (
+            parsed?.detail &&
+            typeof parsed.detail === 'object' &&
+            'message' in (parsed.detail as object)
+          ) {
+            message = String((parsed.detail as { message: unknown }).message)
           }
         } catch {
           /* keep raw */

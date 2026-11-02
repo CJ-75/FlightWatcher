@@ -474,12 +474,12 @@ export default function MyTrip() {
         ? '← Planner'
         : '← Séjours'
 
-  const closeCompose = () => {
+  const closeCompose = useCallback(() => {
     setComposeOpen(false)
     const next = new URLSearchParams(searchParams)
     next.delete('compose')
     setSearchParams(next, { replace: true })
-  }
+  }, [searchParams, setSearchParams])
 
   const openCompose = useCallback(() => {
     setComposeOpen(true)
@@ -536,6 +536,21 @@ export default function MyTrip() {
     setReturnToCompose(false)
     openCompose()
   }, [closeCompose, hotelBooked, load, openCompose, refreshTripItems, returnToCompose])
+
+  const handleHotelUnavailable = useCallback(() => {
+    setCheckoutDeal(null)
+    setHotelUnavailable(true)
+    if (hotelJustBookedRef.current || hotelBooked) {
+      hotelJustBookedRef.current = false
+      setReturnToCompose(false)
+      closeCompose()
+      return
+    }
+    if (returnToCompose) {
+      setReturnToCompose(false)
+      openCompose()
+    }
+  }, [closeCompose, hotelBooked, openCompose, returnToCompose])
 
   const onFlightClick = async () => {
     leftForFlight.current = true
@@ -803,16 +818,8 @@ export default function MyTrip() {
       setError(null)
       setHotelUnavailable(false)
       try {
-        let deal: TravelDeal | null = null
-        const key = String(d.deal_key || pl.deal_key || '').trim()
-        if (key && !key.startsWith('mytrip-')) {
-          try {
-            deal = await getApiClient().getDeal(key)
-          } catch {
-            deal = null
-          }
-        }
-        if (!deal) deal = buildDealFromMyTrip(d)
+        // Always from the live draft — skip community getDeal (slow + stale).
+        let deal: TravelDeal | null = buildDealFromMyTrip(d)
         if (!deal) {
           setError('Impossible d’ouvrir la réservation hôtel')
           return
@@ -1930,20 +1937,7 @@ export default function MyTrip() {
           draftToken={token}
           hotelTotalHint={party.hotelTotal}
           onClose={dismissHotelCheckout}
-          onUnavailable={() => {
-            setCheckoutDeal(null)
-            setHotelUnavailable(true)
-            if (hotelJustBookedRef.current || hotelBooked) {
-              hotelJustBookedRef.current = false
-              setReturnToCompose(false)
-              closeCompose()
-              return
-            }
-            if (returnToCompose) {
-              setReturnToCompose(false)
-              openCompose()
-            }
-          }}
+          onUnavailable={handleHotelUnavailable}
           onAccountCta={() => track('account_cta')}
           onBooked={(booking) => {
             hotelJustBookedRef.current = true

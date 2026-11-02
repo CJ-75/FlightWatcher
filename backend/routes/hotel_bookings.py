@@ -360,7 +360,11 @@ async def book(booking_id: str, body: BookRequest, request: Request):
         user_id=actor["user_id"],
         draft_token=actor["draft_token"],
     )
-    if booking.get("status") in ("confirmed", "booking_pending"):
+    status_now = str(booking.get("status") or "")
+    if status_now == "confirmed":
+        return _public_booking(booking)
+    if status_now == "booking_pending":
+        # Another request already claimed LiteAPI — return current row (idempotent).
         return _public_booking(booking)
 
     prebook_id = booking.get("prebook_id")
@@ -403,12 +407,25 @@ async def book(booking_id: str, body: BookRequest, request: Request):
             "transactionId": transaction_id,
         }
 
+    # Atomic claim: only one concurrent book may call LiteAPI.
+    claim = (
+        supabase.table("hotel_bookings")
+        .update({"status": "booking_pending", "updated_at": _now()})
+        .eq("id", booking_id)
+        .in_("status", ["prebooked", "payment_succeeded", "failed"])
+        .execute()
+    )
+    if not (claim.data or []):
+        fresh = _fetch_booking_for_actor(
+            supabase,
+            booking_id,
+            user_id=actor["user_id"],
+            draft_token=actor["draft_token"],
+        )
+        return _public_booking(fresh)
+
     client = LiteApiClient(cfg=cfg)
     try:
-        supabase.table("hotel_bookings").update(
-            {"status": "booking_pending", "updated_at": _now()}
-        ).eq("id", booking_id).execute()
-
         raw = client.book(
             {
                 "prebookId": prebook_id,

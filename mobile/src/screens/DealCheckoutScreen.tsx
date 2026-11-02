@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -18,9 +18,11 @@ import type {
 import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   activityStepProgress,
+  hotelBookingIsConfirmed,
   resolveCarrierBooking,
   resolveNextStayAction,
   restaurantStepProgress,
+  settleHotelBooking,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -165,6 +167,8 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
   const [doneNext, setDoneNext] = useState<StayNextAction | null>(null)
   const [plannerTripId, setPlannerTripId] = useState<string | null>(null)
   const [flightBookUrl, setFlightBookUrl] = useState<string | null>(null)
+  const prebookInFlightRef = useRef(false)
+  const bookInFlightRef = useRef(false)
 
   const refreshDoneNext = async () => {
     if (!draftToken) {
@@ -334,19 +338,12 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
         if (draftToken) {
           const trip = await getApi().getMyTrip(draftToken)
           if (cancelled) return
-          const key = String(trip.deal_key || '').trim()
-          if (key && !key.startsWith('mytrip-')) {
-            try {
-              d = await getApi().getDeal(key)
-            } catch {
-              d = null
-            }
-          }
-          if (!d) d = buildDealFromMyTrip(trip)
-          if (d && draftToken && !String(d.deal_key || '').startsWith('mytrip-')) {
+          // Live draft only — skip community getDeal (slow + stale).
+          d = buildDealFromMyTrip(trip)
+          if (d && !String(d.deal_key || '').startsWith('mytrip-')) {
             const mk = `mytrip-${draftToken}`
             d = { ...d, id: mk, deal_key: mk }
-          } else if (d && draftToken && !d.deal_key) {
+          } else if (d && !d.deal_key) {
             const mk = `mytrip-${draftToken}`
             d = { ...d, id: mk, deal_key: mk }
           }
@@ -382,6 +379,8 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
 
   const startPrebook = async () => {
     if (!deal || !reval?.offer_id || !reval.hotel_id) return
+    if (prebookInFlightRef.current) return
+    prebookInFlightRef.current = true
     setError(null)
     setPaying(true)
     try {
@@ -446,51 +445,62 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
       setError(e instanceof Error ? e.message : 'Erreur')
       setStep('error')
     } finally {
+      prebookInFlightRef.current = false
       setPaying(false)
     }
   }
 
   const sandboxBook = async (id: string) => {
-    let booked = await getApi().bookHotel(id, {
-      holder: { firstName, lastName, email },
-      guests: [{ firstName, lastName, email, occupancyNumber: 1 }],
-      payment_status: 'succeeded',
-      draft_token: draftToken || undefined,
-      sandbox_simulate: true,
-    })
-    if (booked.status === 'booking_pending') {
-      await new Promise((r) => setTimeout(r, 1500))
-      booked = await getApi().getHotelBooking(id, {
+    if (bookInFlightRef.current) return
+    bookInFlightRef.current = true
+    try {
+      const bookedRaw = await getApi().bookHotel(id, {
+        holder: { firstName, lastName, email },
+        guests: [{ firstName, lastName, email, occupancyNumber: 1 }],
+        payment_status: 'succeeded',
         draft_token: draftToken || undefined,
+        sandbox_simulate: true,
       })
-    }
-    if (draftToken) {
-      try {
-        const charged =
-          booked.charged_price != null
-            ? Number(booked.charged_price)
-            : booked.displayed_price != null
-              ? Number(booked.displayed_price)
-              : null
-        await getApi().markMyTripHotelBooked(draftToken, {
-          booking_id: booked.id || id,
-          confirmation_code: booked.confirmation_code || null,
-          holder_email: email,
-          charged_price: charged,
-        })
-      } catch {
-        /* non-blocking */
+      const booked = await settleHotelBooking(bookedRaw, () =>
+        getApi().getHotelBooking(id, { draft_token: draftToken || undefined }),
+      )
+      if (!hotelBookingIsConfirmed(booked)) {
+        throw new Error(
+          booked.status === 'failed'
+            ? 'La réservation hôtel a échoué'
+            : 'Confirmation en cours — réessaie dans quelques secondes',
+        )
       }
-      await rememberTrip({
-        draft_token: draftToken,
-        booking_id: booked.id || id,
-        city: deal?.city,
-      })
+      if (draftToken) {
+        try {
+          const charged =
+            booked.charged_price != null
+              ? Number(booked.charged_price)
+              : booked.displayed_price != null
+                ? Number(booked.displayed_price)
+                : null
+          await getApi().markMyTripHotelBooked(draftToken, {
+            booking_id: booked.id || id,
+            confirmation_code: booked.confirmation_code || null,
+            holder_email: email,
+            charged_price: charged,
+          })
+        } catch {
+          /* non-blocking */
+        }
+        await rememberTrip({
+          draft_token: draftToken,
+          booking_id: booked.id || id,
+          city: deal?.city,
+        })
+      }
+      setConfirmation(booked.confirmation_code || booked.status)
+      setBookingId(booked.id || id)
+      setStep('done')
+      void refreshDoneNext()
+    } finally {
+      bookInFlightRef.current = false
     }
-    setConfirmation(booked.confirmation_code || booked.status)
-    setBookingId(booked.id || id)
-    setStep('done')
-    void refreshDoneNext()
   }
 
   return (

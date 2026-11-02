@@ -492,24 +492,39 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       Alert.alert('Hôtel', 'Cet hôtel n’a pas d’identifiant — choisis-en un autre.')
       return
     }
+    const pax = Math.max(1, Number(adults) || 2)
+    const hotelPpNum = Number(hotel.hotel_pp)
+    const publicTotal =
+      hotel.public_hotel_price != null && Number(hotel.public_hotel_price) > 0
+        ? Number(hotel.public_hotel_price)
+        : hotelPpNum > 0
+          ? Math.round(hotelPpNum * pax * 100) / 100
+          : null
+    if (publicTotal == null || publicTotal <= 0) {
+      Alert.alert(
+        'Hôtel',
+        'Tarif manquant — relance la recherche puis réessaie.',
+      )
+      return
+    }
     setSaving(true)
     setEmptyKind(null)
     // Close fullScreen Modal BEFORE navigate (otherwise iOS keeps modal on top → “rien ne se passe”)
     setSheetOpen(false)
     try {
-      const hotelPp = Number(hotel.hotel_pp || 0)
-      const totalPp = Math.round(flightPp + hotelPp)
+      const ppForUi = hotelPpNum > 0 ? hotelPpNum : publicTotal / pax
+      const totalPp = Math.round(flightPp + ppForUi)
       await getApi().updateMyTripHotel(draftToken, {
         hotel: {
-          id: hotel.id || hotel.hotel_id,
-          hotel_id: hotel.hotel_id || hotel.id,
+          id: hid,
+          hotel_id: hid,
           name: hotel.name,
           stars: hotel.stars,
           rating: hotel.rating,
           photo: hotel.photo || hotel.thumbnail,
           board: hotel.board,
-          public_hotel_price: hotel.public_hotel_price,
-          hotel_pp: hotel.hotel_pp,
+          public_hotel_price: publicTotal,
+          hotel_pp: Math.round(ppForUi * 100) / 100,
           distance_m: hotel.distance_m,
           refundable: hotel.refundable,
           cancel_deadline: hotel.cancel_deadline ?? null,
@@ -525,9 +540,12 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       })
     } catch (e) {
       setSheetOpen(true)
+      const msg = e instanceof Error ? e.message : ''
       Alert.alert(
         'Erreur',
-        e instanceof Error ? e.message : 'Impossible d’enregistrer l’hôtel',
+        msg && msg.length < 180
+          ? msg
+          : 'Impossible d’enregistrer l’hôtel — réessaie',
       )
     } finally {
       setSaving(false)

@@ -154,6 +154,11 @@ def resolve_trusted_hotel(
         if matched and _hotel_public_total(matched, adults) is not None:
             return matched
 
+    # Soft trust FIRST when the client already sends a priced hotel (live compose).
+    # Rates re-lookup is slow and was timing out « Impossible d’enregistrer l’hôtel ».
+    if hid and hotel_ref and _hotel_public_total(hotel_ref, adults) is not None:
+        return dict(hotel_ref)
+
     if hid:
         from_rates = _resolve_hotel_from_rates(
             supabase,
@@ -166,10 +171,6 @@ def resolve_trusted_hotel(
         )
         if from_rates:
             return from_rates
-
-    # Soft trust: client hotel_ref with a priced total (compose live rates)
-    if hid and hotel_ref and _hotel_public_total(hotel_ref, adults) is not None:
-        return dict(hotel_ref)
 
     # Last resort: deal primary hotel already server-built
     if deal and deal.get("hotel"):
@@ -296,7 +297,15 @@ def trust_hotel_patch(
     hotel_ref: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Rebuild payload after hotel switch — ignores client price_per_person."""
-    payload = dict(row.get("payload") or {})
+    raw_payload = row.get("payload") or {}
+    if isinstance(raw_payload, str):
+        import json
+
+        try:
+            raw_payload = json.loads(raw_payload)
+        except Exception:
+            raw_payload = {}
+    payload = dict(raw_payload) if isinstance(raw_payload, dict) else {}
     adults = max(1, min(6, int(row.get("adults") or payload.get("adults") or 2)))
     dates = payload.get("dates") or {}
     checkin = str(row.get("out_date") or dates.get("outbound") or "")[:10]

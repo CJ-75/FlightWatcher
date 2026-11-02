@@ -4,6 +4,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import {
+  hotelBookingIsConfirmed,
+  settleHotelBooking,
+} from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
 
 declare global {
@@ -21,18 +25,28 @@ function loadPaymentScript(): Promise<void> {
       resolve()
       return
     }
-    const existing = document.querySelector('script[data-liteapi-payment]')
-    if (existing) {
-      existing.addEventListener('load', () => resolve())
-      existing.addEventListener('error', () => reject(new Error('payment script')))
-      return
-    }
+    const existing = document.querySelector(
+      'script[data-liteapi-payment]',
+    ) as HTMLScriptElement | null
+    if (existing) existing.remove()
     const s = document.createElement('script')
     s.src = 'https://payment-wrapper.liteapi.travel/v1.0/payment-wrapper.js'
     s.async = true
     s.dataset.liteapiPayment = '1'
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+    const timer = window.setTimeout(() => {
+      s.remove()
+      reject(new Error('Module de paiement trop lent — réessaie'))
+    }, 12000)
+    s.onload = () => {
+      window.clearTimeout(timer)
+      if (window.LiteAPIPayment) resolve()
+      else reject(new Error('Module de paiement indisponible'))
+    }
+    s.onerror = () => {
+      window.clearTimeout(timer)
+      s.remove()
+      reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+    }
     document.body.appendChild(s)
   })
 }
@@ -67,27 +81,36 @@ export default function HotelPay() {
   const liteapiEnv = (params.get('env') || '').toLowerCase()
   const isSandbox = liteapiEnv === 'sandbox'
 
+  const bookInFlightRef = useRef(false)
   const finalizeBook = useCallback(
     async (opts?: { sandboxSimulate?: boolean }) => {
       if (!bookingId || !firstName || !lastName || !email) {
         setError('Coordonnées manquantes')
         return
       }
+      if (bookInFlightRef.current) return
+      bookInFlightRef.current = true
       setPending(true)
       setError(null)
       try {
-        let booked = await getApiClient().bookHotel(bookingId, {
+        const bookedRaw = await getApiClient().bookHotel(bookingId, {
           holder: { firstName, lastName, email },
           guests: [{ firstName, lastName, email, occupancyNumber: 1 }],
           payment_status: 'succeeded',
           draft_token: draftToken || undefined,
           sandbox_simulate: opts?.sandboxSimulate || undefined,
         })
-        if (booked.status === 'booking_pending') {
-          await new Promise((r) => setTimeout(r, 1500))
-          booked = await getApiClient().getHotelBooking(bookingId, {
+        const booked = await settleHotelBooking(bookedRaw, () =>
+          getApiClient().getHotelBooking(bookingId, {
             draft_token: draftToken || undefined,
-          })
+          }),
+        )
+        if (!hotelBookingIsConfirmed(booked)) {
+          throw new Error(
+            booked.status === 'failed'
+              ? 'La réservation hôtel a échoué'
+              : 'Confirmation en cours chez l’hôtel — réessaie sans payer une seconde fois',
+          )
         }
         if (draftToken) {
           try {
@@ -118,6 +141,7 @@ export default function HotelPay() {
         setError(msg)
         postToApp({ type: 'error', message: msg })
       } finally {
+        bookInFlightRef.current = false
         setPending(false)
       }
     },

@@ -100,7 +100,30 @@ class TrustHotelPatchTests(unittest.TestCase):
         self.assertEqual(payload["price_per_person"], 80.0)  # 50 + 30
         self.assertEqual(payload["hotel"]["public_hotel_price"], 60.0)
 
-    def test_rejects_unknown_hotel(self):
+    def test_soft_trusts_priced_compose_hotel(self):
+        """Live compose already priced the hotel — accept without rates re-lookup."""
+        row = {
+            "deal_key": None,
+            "adults": 2,
+            "dest_iata": "BCN",
+            "out_date": "2026-11-06",
+            "ret_date": "2026-11-08",
+            "payload": {"flight": {"price_pp": 40.0}},
+        }
+        with patch("deals.draft_pricing._load_deal", return_value=None):
+            with patch(
+                "deals.draft_pricing._resolve_hotel_from_rates", return_value=None
+            ) as rates:
+                payload = trust_hotel_patch(
+                    None,
+                    row,
+                    {"id": "live-1", "name": "Hostal", "public_hotel_price": 120},
+                )
+                rates.assert_not_called()
+        self.assertEqual(payload["hotel"]["id"], "live-1")
+        self.assertEqual(payload["hotel"]["public_hotel_price"], 120.0)
+
+    def test_rejects_unknown_hotel_without_price(self):
         row = {
             "deal_key": None,
             "adults": 2,
@@ -114,7 +137,7 @@ class TrustHotelPatchTests(unittest.TestCase):
                 "deals.draft_pricing._resolve_hotel_from_rates", return_value=None
             ):
                 with self.assertRaises(ValueError):
-                    trust_hotel_patch(None, row, {"id": "ghost", "public_hotel_price": 1})
+                    trust_hotel_patch(None, row, {"id": "ghost"})
 
 
 if __name__ == "__main__":

@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   activityStepProgress,
+  hotelBookingIsConfirmed,
   hotelCancelLabel,
   resolveNextStayAction,
   restaurantStepProgress,
+  settleHotelBooking,
   type StayNextAction,
 } from '@flightwatcher/shared'
 import type {
@@ -52,18 +54,28 @@ function loadPaymentScript(): Promise<void> {
       resolve()
       return
     }
-    const existing = document.querySelector('script[data-liteapi-payment]')
-    if (existing) {
-      existing.addEventListener('load', () => resolve())
-      existing.addEventListener('error', () => reject(new Error('payment script')))
-      return
-    }
+    const existing = document.querySelector(
+      'script[data-liteapi-payment]',
+    ) as HTMLScriptElement | null
+    if (existing) existing.remove()
     const s = document.createElement('script')
     s.src = 'https://payment-wrapper.liteapi.travel/v1.0/payment-wrapper.js'
     s.async = true
     s.dataset.liteapiPayment = '1'
-    s.onload = () => resolve()
-    s.onerror = () => reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+    const timer = window.setTimeout(() => {
+      s.remove()
+      reject(new Error('Module de paiement trop lent — réessaie'))
+    }, 12000)
+    s.onload = () => {
+      window.clearTimeout(timer)
+      if (window.LiteAPIPayment) resolve()
+      else reject(new Error('Module de paiement indisponible'))
+    }
+    s.onerror = () => {
+      window.clearTimeout(timer)
+      s.remove()
+      reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+    }
     document.body.appendChild(s)
   })
 }
@@ -226,11 +238,22 @@ export function DealCheckoutFlow({
   const [showAccountCta, setShowAccountCta] = useState(false)
   const [doneNext, setDoneNext] = useState<StayNextAction | null>(null)
   const [plannerTripId, setPlannerTripId] = useState<string | null>(null)
+  const [prebooking, setPrebooking] = useState(false)
   const payRef = useRef<HTMLDivElement>(null)
+  const prebookInFlightRef = useRef(false)
+  const bookInFlightRef = useRef(false)
+  const checkoutStartedRef = useRef(false)
+  const onCloseRef = useRef(onClose)
+  const onNeedLoginRef = useRef(onNeedLogin)
+  const onUnavailableRef = useRef(onUnavailable)
+  onCloseRef.current = onClose
+  onNeedLoginRef.current = onNeedLogin
+  onUnavailableRef.current = onUnavailable
   const dealKey =
     draftToken && !String(deal.deal_key || '').startsWith('mytrip-')
       ? `mytrip-${draftToken}`
       : deal.deal_key || deal.id || (draftToken ? `mytrip-${draftToken}` : '')
+  const hotelIdStable = hotelId || deal.hotel?.id || ''
 
   const runRevalidate = useCallback(async () => {
     setStep('revalidate')
@@ -239,13 +262,13 @@ export function DealCheckoutFlow({
       if (!guestMode) {
         const user = await getCurrentUser()
         if (!user) {
-          onNeedLogin?.()
-          onClose()
+          onNeedLoginRef.current?.()
+          onCloseRef.current()
           return
         }
       }
       const body = {
-        hotel_id: hotelId || deal.hotel?.id,
+        hotel_id: hotelIdStable || undefined,
         displayed_price_pp: deal.price_per_person,
         draft_token: draftToken || undefined,
       }
@@ -260,31 +283,28 @@ export function DealCheckoutFlow({
     } catch (e) {
       const msg = e instanceof Error ? e.message : t('app.error')
       setError(msg)
-      if (/indisponible|unavailable|409/i.test(msg)) onUnavailable?.()
+      if (/indisponible|unavailable|409/i.test(msg)) onUnavailableRef.current?.()
       setStep('error')
     }
-  }, [
-    deal,
-    dealKey,
-    draftToken,
-    guestMode,
-    hotelId,
-    onClose,
-    onNeedLogin,
-    onUnavailable,
-    t,
-  ])
+  }, [deal.price_per_person, dealKey, draftToken, guestMode, hotelIdStable, t])
 
   useEffect(() => {
+    if (checkoutStartedRef.current) return
+    checkoutStartedRef.current = true
     void runRevalidate()
-  }, [runRevalidate])
+    // Initial open only — never restart once prebook/pay started.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealKey, draftToken, hotelIdStable])
 
   const doPrebook = async () => {
+    if (prebookInFlightRef.current) return
     if (!reval?.offer_id || !reval.hotel_id) {
       setError('Offre invalide')
       setStep('error')
       return
     }
+    prebookInFlightRef.current = true
+    setPrebooking(true)
     setError(null)
     try {
       const price = reval.revalidated_price_pp ?? deal.price_per_person
@@ -336,9 +356,12 @@ export function DealCheckoutFlow({
       const msg = e instanceof Error ? e.message : t('app.error')
       setError(msg)
       if (/indisponible|unavailable|409/i.test(msg)) {
-        onUnavailable?.()
+        onUnavailableRef.current?.()
       }
       setStep('error')
+    } finally {
+      prebookInFlightRef.current = false
+      setPrebooking(false)
     }
   }
 
@@ -359,8 +382,17 @@ export function DealCheckoutFlow({
           },
         })
         widget.mount?.(payRef.current)
-      } catch {
-        // SDK optional — sandbox fallback button remains
+      } catch (e) {
+        if (cancelled) return
+        // Sandbox still has a fallback button; production needs a clear error.
+        if (prebookMeta.liteapi_env !== 'sandbox') {
+          setError(
+            e instanceof Error
+              ? e.message
+              : 'Module de paiement indisponible — réessaie',
+          )
+          setStep('error')
+        }
       }
     })()
     return () => {
@@ -373,7 +405,8 @@ export function DealCheckoutFlow({
     payment_status: 'succeeded' | 'requires_capture',
     opts?: { sandboxSimulate?: boolean },
   ) => {
-    if (!bookingId) return
+    if (!bookingId || bookInFlightRef.current) return
+    bookInFlightRef.current = true
     setStep('pending')
     setError(null)
     try {
@@ -393,14 +426,23 @@ export function DealCheckoutFlow({
         draft_token: draftToken || undefined,
         sandbox_simulate: opts?.sandboxSimulate || undefined,
       })
-      let final = b
-      if (b.status === 'booking_pending') {
-        await new Promise((r) => setTimeout(r, 1500))
-        final = await getApiClient().getHotelBooking(bookingId, {
+      const final = await settleHotelBooking(b, () =>
+        getApiClient().getHotelBooking(bookingId, {
           draft_token: draftToken || undefined,
-        })
-      }
+        }),
+      )
       setBooking(final)
+
+      if (final.status === 'failed' || final.status === 'cancelled') {
+        throw new Error('La réservation hôtel a échoué — réessaie ou contacte le support')
+      }
+      if (!hotelBookingIsConfirmed(final)) {
+        setError(
+          'Confirmation en cours chez l’hôtel. Réessaie dans quelques secondes — ne paie pas une seconde fois.',
+        )
+        setStep('error')
+        return
+      }
 
       if (draftToken) {
         rememberTrip({
@@ -502,6 +544,61 @@ export function DealCheckoutFlow({
       setError(msg)
       // Keep holder fields — retry payment without re-typing
       setStep('error')
+    } finally {
+      bookInFlightRef.current = false
+    }
+  }
+
+  const reconcilePendingBooking = async () => {
+    if (!bookingId || bookInFlightRef.current) return
+    bookInFlightRef.current = true
+    setStep('pending')
+    setError(null)
+    try {
+      const current = await getApiClient().getHotelBooking(bookingId, {
+        draft_token: draftToken || undefined,
+      })
+      const final = await settleHotelBooking(current, () =>
+        getApiClient().getHotelBooking(bookingId, {
+          draft_token: draftToken || undefined,
+        }),
+      )
+      setBooking(final)
+      if (hotelBookingIsConfirmed(final)) {
+        if (draftToken) {
+          try {
+            await getApiClient().markMyTripHotelBooked(draftToken, {
+              booking_id: final.id,
+              confirmation_code: final.confirmation_code,
+              holder_email: email,
+              charged_price:
+                final.charged_price != null
+                  ? Number(final.charged_price)
+                  : final.displayed_price != null
+                    ? Number(final.displayed_price)
+                    : null,
+            })
+          } catch {
+            /* best-effort */
+          }
+        }
+        onBooked?.(final)
+        setShowAccountCta(guestMode)
+        setStep('done')
+        return
+      }
+      if (final.status === 'failed' || final.status === 'cancelled') {
+        throw new Error('La réservation hôtel a échoué')
+      }
+      setError(
+        'Toujours en confirmation. Attends un instant puis réessaie — ne paie pas une seconde fois.',
+      )
+      setStep('error')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+      setStep('error')
+    } finally {
+      bookInFlightRef.current = false
     }
   }
 
@@ -1037,6 +1134,13 @@ export function DealCheckoutFlow({
                   <button
                     type="button"
                     onClick={() => {
+                      if (
+                        bookingId &&
+                        /confirmation|en cours|ne paie pas/i.test(error || '')
+                      ) {
+                        void reconcilePendingBooking()
+                        return
+                      }
                       if (firstName && lastName && email && bookingId) {
                         setStep('pay')
                         return
@@ -1045,6 +1149,7 @@ export function DealCheckoutFlow({
                         setStep('guests')
                         return
                       }
+                      checkoutStartedRef.current = false
                       void runRevalidate()
                     }}
                     className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
@@ -1083,14 +1188,17 @@ export function DealCheckoutFlow({
                     </button>
                     <button
                       type="button"
-                      disabled={!canSubmitGuests}
+                      disabled={!canSubmitGuests || prebooking}
                       onClick={() => void doPrebook()}
                       className="flex-1 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl min-h-[48px] transition"
                     >
-                      Continuer vers le paiement
-                      {hotelTotal != null
-                        ? ` · ${Math.round(Number(hotelTotal))} €`
-                        : ''}
+                      {prebooking
+                        ? 'Préparation…'
+                        : `Continuer vers le paiement${
+                            hotelTotal != null
+                              ? ` · ${Math.round(Number(hotelTotal))} €`
+                              : ''
+                          }`}
                     </button>
                   </div>
                   <PaymentCardMarks compact />

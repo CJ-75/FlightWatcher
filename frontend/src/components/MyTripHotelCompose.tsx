@@ -1157,22 +1157,39 @@ export function MyTripHotelCompose({
   const confirm = async (hotel?: HotelUpsellOption | null) => {
     const pick = hotel || selected
     if (!pick) return
+    const hid = String(pick.id || pick.hotel_id || '').trim()
+    if (!hid) {
+      setError('Cet hôtel n’a pas d’identifiant — choisis-en un autre.')
+      return
+    }
+    const pax = Math.max(1, Number(adults) || 2)
+    const hotelPp = Number(pick.hotel_pp)
+    const publicTotal =
+      pick.public_hotel_price != null && Number(pick.public_hotel_price) > 0
+        ? Number(pick.public_hotel_price)
+        : hotelPp > 0
+          ? Math.round(hotelPp * pax * 100) / 100
+          : null
+    if (publicTotal == null || publicTotal <= 0) {
+      setError('Tarif hôtel manquant — relance la recherche puis réessaie.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      const hotelPp = Number(pick.hotel_pp || 0)
-      const totalPp = Math.round(flightPp + hotelPp)
+      const ppForUi = hotelPp > 0 ? hotelPp : publicTotal / pax
+      const totalPp = Math.round(flightPp + ppForUi)
       const row = await getApiClient().updateMyTripHotel(token, {
         hotel: {
-          id: pick.id || pick.hotel_id,
-          hotel_id: pick.hotel_id || pick.id,
+          id: hid,
+          hotel_id: hid,
           name: pick.name,
           stars: pick.stars,
           rating: pick.rating,
           photo: pick.photo || pick.thumbnail,
           board: pick.board,
-          public_hotel_price: pick.public_hotel_price,
-          hotel_pp: pick.hotel_pp,
+          public_hotel_price: publicTotal,
+          hotel_pp: Math.round(ppForUi * 100) / 100,
           distance_m: pick.distance_m,
           refundable: pick.refundable,
           cancel_deadline: pick.cancel_deadline ?? null,
@@ -1183,8 +1200,13 @@ export function MyTripHotelCompose({
       onUpdated(row)
       if (onHotelChosen) onHotelChosen(row)
       else onDone()
-    } catch {
-      setError('Impossible d’enregistrer l’hôtel')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      setError(
+        msg && msg.length < 180
+          ? msg
+          : 'Impossible d’enregistrer l’hôtel — réessaie',
+      )
     } finally {
       setSaving(false)
     }
