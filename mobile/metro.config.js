@@ -26,7 +26,10 @@ function resolveDep(name) {
 
 const config = getDefaultConfig(projectRoot)
 
-config.watchFolders = [workspaceRoot]
+// The mobile app only imports source outside its root from the shared package.
+// Watching the whole monorepo makes Metro traverse unrelated frontend/backend
+// trees and can exhaust Windows file handles (EMFILE) during HMR.
+config.watchFolders = [path.resolve(workspaceRoot, 'packages/shared')]
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
