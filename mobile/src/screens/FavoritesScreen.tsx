@@ -8,6 +8,8 @@ import {
   View,
   ActivityIndicator,
   ScrollView,
+  Alert,
+  Platform,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
@@ -21,10 +23,15 @@ import type {
   SavedFavorite,
 } from '@flightwatcher/shared'
 import {
+  ACTIVITY_ADDED_TO_PLANNER_FR,
+  ACTIVITY_ADD_TO_PLANNER_FR,
+  ACTIVITY_NO_PLANNER_TO_ADD_FR,
+  hasTripItemOwner,
   isPastFavoriteActivity,
   isPastFavoriteDeal,
   isPastFavoriteFlight,
   partitionFavoritesByPast,
+  pickTripItemOwner,
   translate,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
@@ -37,12 +44,17 @@ import {
   unlikeGuestActivity,
   unlikeGuestDeal,
 } from '../dev/guestPreview'
-import { DestinationCard } from '../components/DestinationCard'
+import { FavoriteFlightCard } from '../components/FavoriteFlightCard'
 import { DealCard } from '../components/DealCard'
 import { ActivityCard } from '../components/ActivityCard'
+import {
+  ActivityPlannerPicker,
+  type ActivityPlannerTarget,
+} from '../components/ActivityPlannerPicker'
 import { HeartIcon } from '../components/HeartIcon'
+import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { openInAppBrowser } from '../lib/openInApp'
-import { GoogleGIcon } from '../components/GoogleGIcon'
+import { bookCtaLabel, preparePartnerBook } from '../lib/partnerBook'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, shadow, spacing } from '../theme'
@@ -59,6 +71,8 @@ export function FavoritesScreen() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [tab, setTab] = useState<'flights' | 'deals' | 'activities'>('flights')
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
+  const [addBusy, setAddBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!viewUser) {
@@ -118,6 +132,17 @@ export function FavoritesScreen() {
     }
   }
 
+  const bookFavoriteFlight = (favorite: SavedFavorite) => {
+    const trip = favorite.trip as EnrichedTripResponse
+    void preparePartnerBook({
+      trip,
+      passengers: 1,
+      skipReturnBanner: true,
+    }).then((ps) => {
+      openInAppBrowser(navigation, ps.primaryUrl, bookCtaLabel(ps))
+    })
+  }
+
   const unlikeDeal = async (dealId: string) => {
     try {
       if (__DEV__ && isGuest) unlikeGuestDeal(dealId)
@@ -154,6 +179,44 @@ export function FavoritesScreen() {
     destinationLabel: item.activity.destinationLabel ?? null,
     distanceLabel: item.activity.distanceLabel ?? null,
   })
+
+  const confirmAddToPlanner = async (target: ActivityPlannerTarget) => {
+    const card = pendingAdd
+    if (!card) return
+    if (__DEV__ && isGuest) {
+      Alert.alert('Connexion', 'Connecte-toi pour ajouter au planner.')
+      setPendingAdd(null)
+      return
+    }
+    const owner = pickTripItemOwner({
+      draftToken: target.draftToken,
+      plannedTripId: target.plannedTripId,
+    })
+    if (!hasTripItemOwner(owner)) {
+      Alert.alert('Planner', ACTIVITY_NO_PLANNER_TO_ADD_FR)
+      return
+    }
+    setAddBusy(true)
+    try {
+      await getApi().addTripItem({
+        product_code: card.productCode,
+        title: card.title,
+        product_url: card.productUrl,
+        ...owner,
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        surface: 'favorites',
+      })
+      setPendingAdd(null)
+      Alert.alert('Activité', ACTIVITY_ADDED_TO_PLANNER_FR(target.label))
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Ajout au planner impossible',
+      )
+    } finally {
+      setAddBusy(false)
+    }
+  }
 
   const { active: activeItems, archived: archivedItems } = useMemo(() => {
     if (tab === 'flights') {
@@ -196,21 +259,25 @@ export function FavoritesScreen() {
           card={card}
           liked
           onToggleLike={() => void unlikeActivity(liked.product_code)}
+          onAdd={() => setPendingAdd(card)}
+          addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
           onPress={() => {
-            if (card.productUrl) void openInAppBrowser(card.productUrl)
+            if (card.productUrl) void openInAppBrowser(navigation, card.productUrl, card.title)
           }}
           onBook={() => {
-            if (card.productUrl) void openInAppBrowser(card.productUrl)
+            if (card.productUrl) void openInAppBrowser(navigation, card.productUrl, card.title)
           }}
         />,
       )
     }
-    return wrap(
-      <DestinationCard
-        trip={(item as SavedFavorite).trip as EnrichedTripResponse}
-        isFavorite
-        onFavorite={() => void remove(item.id)}
-      />,
+    return (
+      <FavoriteFlightCard
+        favorite={item as SavedFavorite}
+        faded={faded}
+        bookLabel={bookCtaLabel()}
+        onBook={() => bookFavoriteFlight(item as SavedFavorite)}
+        onRemove={() => void remove(item.id)}
+      />
     )
   }
 
@@ -345,6 +412,22 @@ export function FavoritesScreen() {
         renderItem={({ item }) => renderFavoriteItem(item, false)}
         showsVerticalScrollIndicator={false}
       />
+      <ActivityPlannerPicker
+        visible={Boolean(pendingAdd)}
+        busy={addBusy}
+        onClose={() => {
+          if (!addBusy) setPendingAdd(null)
+        }}
+        onPick={(target) => void confirmAddToPlanner(target)}
+        onOpenPlanner={() => {
+          setPendingAdd(null)
+          navigation.navigate('Main', { screen: 'Planner' })
+        }}
+        onSignIn={() => {
+          setPendingAdd(null)
+          void onLogin()
+        }}
+      />
     </View>
   )
 }
@@ -360,27 +443,27 @@ function FavoritesGuestLanding({
   loginLoading: boolean
   onLogin: () => void
 }) {
-  const steps = [
-    { title: 'Trouve un weekend', detail: 'Lance une recherche selon ton budget' },
-    { title: 'Ajoute aux favoris', detail: 'Un tap sur le cœur suffit' },
-    { title: 'Retrouve-les plus tard', detail: 'Sync sur web et mobile' },
-  ]
+  const t = (key: string) => translate('fr', key as never)
 
   return (
-    <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
-      <ScreenBackground />
-      <View style={styles.guestOrbA} />
-      <View style={styles.guestOrbB} />
-      <ScrollView
-        contentContainerStyle={styles.guestContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.guestKicker}>FAVORIS</Text>
-        <Text style={styles.guestTitle}>Tes coups de cœur, partout</Text>
-        <Text style={styles.guestBody}>
-          Sauve les weekends qui te font vibrer et retrouve-les sur tous tes appareils.
-        </Text>
-
+    <GuestAuthLanding
+      insetsTop={insetsTop}
+      insetsBottom={insetsBottom}
+      kicker="FAVORIS"
+      title={t('favorites.guest.title')}
+      lead={t('favorites.guest.lead')}
+      steps={[
+        { title: t('favorites.guest.step1'), detail: t('favorites.guest.step1.detail') },
+        { title: t('favorites.guest.step2'), detail: t('favorites.guest.step2.detail') },
+        { title: t('favorites.guest.step3'), detail: t('favorites.guest.step3.detail') },
+      ]}
+      ctaLabel={t('favorites.guest.cta')}
+      hint={t('favorites.guest.hint')}
+      loginLoading={loginLoading}
+      onLogin={onLogin}
+      accent="accent"
+      orbStyle="rose"
+      preview={
         <View style={[styles.mockCard, shadow.soft]}>
           <LinearGradient
             colors={['#1A120E', '#2A1418', '#3D1820']}
@@ -390,9 +473,9 @@ function FavoritesGuestLanding({
           >
             <View style={styles.mockTop}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.mockTag}>Coup de cœur</Text>
-                <Text style={styles.mockCity}>Lisbonne</Text>
-                <Text style={styles.mockRoute}>BVA → LIS</Text>
+                <Text style={styles.mockTag}>{t('favorites.guest.mock.tag')}</Text>
+                <Text style={styles.mockCity}>{t('favorites.guest.mock.city')}</Text>
+                <Text style={styles.mockRoute}>{t('favorites.guest.mock.route')}</Text>
               </View>
               <View style={styles.mockHeart}>
                 <HeartIcon size={22} filled color={colors.white} />
@@ -400,48 +483,15 @@ function FavoritesGuestLanding({
             </View>
             <View style={styles.mockBottom}>
               <View style={styles.mockChips}>
-                <Text style={styles.mockChip}>Weekend</Text>
-                <Text style={styles.mockChip}>Aller-retour</Text>
+                <Text style={styles.mockChip}>{t('favorites.guest.mock.chip1')}</Text>
+                <Text style={styles.mockChip}>{t('favorites.guest.mock.chip2')}</Text>
               </View>
-              <Text style={styles.mockPrice}>48€</Text>
+              <Text style={styles.mockPrice}>{t('favorites.guest.mock.price')}</Text>
             </View>
           </LinearGradient>
         </View>
-
-        <View style={styles.steps}>
-          {steps.map((step, i) => (
-            <View key={step.title} style={[styles.stepCard, shadow.soft]}>
-              <View style={styles.stepNum}>
-                <Text style={styles.stepNumText}>{i + 1}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                <Text style={styles.stepDetail}>{step.detail}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        <Pressable
-          onPress={onLogin}
-          disabled={loginLoading}
-          style={({ pressed }) => [
-            styles.googleBtn,
-            pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
-          ]}
-        >
-          {loginLoading ? (
-            <ActivityIndicator color={colors.ink} />
-          ) : (
-            <>
-              <GoogleGIcon size={22} />
-              <Text style={styles.googleLabel}>Continuer avec Google</Text>
-            </>
-          )}
-        </Pressable>
-        <Text style={styles.guestHint}>Gratuit · tes favoris restent privés</Text>
-      </ScrollView>
-    </View>
+      }
+    />
   )
 }
 
@@ -591,59 +641,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  guestOrbA: {
-    position: 'absolute',
-    top: -40,
-    right: -30,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,61,107,0.12)',
-  },
-  guestOrbB: {
-    position: 'absolute',
-    bottom: 80,
-    left: -50,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,107,53,0.14)',
-  },
-  guestContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 28,
-  },
-  guestKicker: {
-    fontFamily: fonts.extrabold,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: colors.accent,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  guestTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  guestBody: {
-    marginTop: 10,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.muted,
-    textAlign: 'center',
-    includeFontPadding: false,
-    paddingHorizontal: 4,
-  },
   mockCard: {
-    marginTop: 22,
     borderRadius: 22,
     overflow: 'hidden',
     alignSelf: 'stretch',
@@ -707,86 +705,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.extrabold,
     fontSize: 24,
     color: colors.white,
-    includeFontPadding: false,
-  },
-  steps: { alignSelf: 'stretch', marginTop: 18, gap: 8 },
-  stepCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  stepNum: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumText: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.white },
-  stepTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  stepDetail: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    includeFontPadding: false,
-  },
-  googleBtn: {
-    marginTop: 20,
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
-    paddingHorizontal: 18,
-  },
-  gMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gLetter: {
-    fontFamily: fonts.extrabold,
-    color: '#4285F4',
-    fontSize: 14,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  googleLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  guestHint: {
-    marginTop: 14,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.faint,
-    textAlign: 'center',
     includeFontPadding: false,
   },
 })

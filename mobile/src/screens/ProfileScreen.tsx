@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
+  Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { CommonActions, useNavigation } from '@react-navigation/native'
@@ -13,10 +13,51 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { apiBase } from '../lib/client'
-import { Button } from '../components/ui/Button'
-import { GoogleGIcon } from '../components/GoogleGIcon'
+import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { colors, fonts, shadow, spacing, type } from '../theme'
+import { colors, fonts, radius, shadow, spacing, type } from '../theme'
+
+type MenuRowProps = {
+  title: string
+  subtitle?: string
+  tone?: 'default' | 'warm' | 'rose'
+  onPress: () => void
+  glyph: string
+}
+
+function MenuRow({ title, subtitle, tone = 'default', onPress, glyph }: MenuRowProps) {
+  const iconBg =
+    tone === 'warm'
+      ? colors.primarySoft
+      : tone === 'rose'
+        ? '#FFE8EE'
+        : colors.canvas
+  const iconColor =
+    tone === 'warm'
+      ? colors.primary
+      : tone === 'rose'
+        ? colors.accent
+        : colors.inkSoft
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuRow,
+        pressed && { opacity: 0.92, transform: [{ scale: 0.995 }] },
+      ]}
+    >
+      <View style={[styles.menuIcon, { backgroundColor: iconBg }]}>
+        <Text style={[styles.menuGlyph, { color: iconColor }]}>{glyph}</Text>
+      </View>
+      <View style={styles.menuCopy}>
+        <Text style={styles.menuTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.menuSubtitle}>{subtitle}</Text> : null}
+      </View>
+      <Text style={styles.menuChevron}>›</Text>
+    </Pressable>
+  )
+}
 
 export function ProfileScreen() {
   const {
@@ -30,9 +71,9 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
   const [loginLoading, setLoginLoading] = useState(false)
+  const [avatarFailed, setAvatarFailed] = useState(false)
 
   const openSecurity = () => {
-    // Profile is inside tabs; Security lives on the root stack
     navigation.dispatch(CommonActions.navigate({ name: 'Security' }))
   }
 
@@ -45,89 +86,78 @@ export function ProfileScreen() {
     navigation.navigate('Favorites' as never)
   }
 
-  // Logged-out landing (real guest landings) for preview / no user
   if (!viewUser) {
+    const t = (key: string) => translate('fr', key as never)
     return (
-      <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
-        <ScreenBackground />
-        <View style={styles.guestWrap}>
-          <View style={styles.guestIcon}>
-            <View style={styles.guestHead} />
-            <View style={styles.guestShoulders} />
+      <GuestAuthLanding
+        insetsTop={insets.top}
+        insetsBottom={insets.bottom}
+        kicker="COMPTE"
+        title={t('profile.guest.title')}
+        lead={t('profile.guest.lead')}
+        steps={[
+          { title: t('profile.guest.step1'), detail: t('profile.guest.step1.detail') },
+          { title: t('profile.guest.step2'), detail: t('profile.guest.step2.detail') },
+          { title: t('profile.guest.step3'), detail: t('profile.guest.step3.detail') },
+        ]}
+        ctaLabel={t('profile.guest.cta')}
+        hint={t('profile.guest.hint')}
+        loginLoading={loginLoading}
+        onLogin={() => {
+          void (async () => {
+            setLoginLoading(true)
+            setAppearLoggedOut(false)
+            const { error } = await signInWithGoogle()
+            if (error && __DEV__) console.warn('[auth] signIn', error.message)
+            setLoginLoading(false)
+          })()
+        }}
+        footer={
+          <View style={styles.guestFooter}>
+            <Pressable
+              onPress={openBookings}
+              style={({ pressed }) => [styles.guestLink, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.guestLinkLabel}>{t('profile.guest.bookings')}</Text>
+              <Text style={styles.guestLinkChevron}>›</Text>
+            </Pressable>
+            <Pressable
+              onPress={openFavorites}
+              style={({ pressed }) => [styles.guestLink, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.guestLinkLabel}>{t('profile.guest.favorites')}</Text>
+              <Text style={styles.guestLinkChevron}>›</Text>
+            </Pressable>
+            {__DEV__ && appearLoggedOut ? (
+              <Pressable
+                onPress={() => setAppearLoggedOut(false)}
+                style={({ pressed }) => [styles.devBtn, pressed && { opacity: 0.75 }]}
+                hitSlop={8}
+              >
+                <Text style={styles.devBtnLabel}>Quitter l’aperçu non connecté</Text>
+              </Pressable>
+            ) : __DEV__ && isGuest ? (
+              <Pressable
+                onPress={() => void signOut()}
+                style={({ pressed }) => [styles.devBtn, pressed && { opacity: 0.75 }]}
+                hitSlop={8}
+              >
+                <Text style={styles.devBtnLabel}>Quitter le mode invité</Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Text style={styles.guestKicker}>COMPTE</Text>
-          <Text style={styles.guestTitle}>Connecte-toi</Text>
-          <Text style={styles.guestBody}>
-            Pour synchroniser favoris, voyages et recherches sur tous tes appareils.
-          </Text>
-
-          <Pressable
-            onPress={async () => {
-              setLoginLoading(true)
-              setAppearLoggedOut(false)
-              const { error } = await signInWithGoogle()
-              if (error && __DEV__) console.warn('[auth] signIn', error.message)
-              setLoginLoading(false)
-            }}
-            disabled={loginLoading}
-            style={({ pressed }) => [
-              styles.googleBtn,
-              pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
-            ]}
-          >
-            {loginLoading ? (
-              <ActivityIndicator color={colors.ink} />
-            ) : (
-              <>
-                <GoogleGIcon size={22} />
-                <Text style={styles.googleLabel}>Continuer avec Google</Text>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={openBookings}
-            style={({ pressed }) => [styles.guestBookings, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.guestBookingsLabel}>Mes réservations</Text>
-            <Text style={styles.guestBookingsChevron}>›</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={openFavorites}
-            style={({ pressed }) => [styles.guestBookings, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.guestBookingsLabel}>Favoris</Text>
-            <Text style={styles.guestBookingsChevron}>›</Text>
-          </Pressable>
-
-          {__DEV__ && appearLoggedOut ? (
-            <Pressable
-              onPress={() => setAppearLoggedOut(false)}
-              style={({ pressed }) => [styles.devBtn, pressed && { opacity: 0.75 }]}
-              hitSlop={8}
-            >
-              <Text style={styles.devBtnLabel}>Quitter l’aperçu non connecté</Text>
-            </Pressable>
-          ) : __DEV__ && isGuest ? (
-            <Pressable
-              onPress={() => void signOut()}
-              style={({ pressed }) => [styles.devBtn, pressed && { opacity: 0.75 }]}
-              hitSlop={8}
-            >
-              <Text style={styles.devBtnLabel}>Quitter le mode invité</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.guestHint}>Gratuit · connexion sécurisée</Text>
-          )}
-        </View>
-      </View>
+        }
+      />
     )
   }
 
   const displayName =
-    viewUser!.user_metadata?.full_name || viewUser!.email?.split('@')[0] || 'Compte'
-  const initial = (displayName[0] || viewUser!.email?.[0] || 'U').toUpperCase()
+    viewUser.user_metadata?.full_name || viewUser.email?.split('@')[0] || 'Compte'
+  const initial = (displayName[0] || viewUser.email?.[0] || 'U').toUpperCase()
+  const avatarUrl =
+    typeof viewUser.user_metadata?.avatar_url === 'string'
+      ? viewUser.user_metadata.avatar_url
+      : null
 
   return (
     <View style={styles.root}>
@@ -135,101 +165,136 @@ export function ProfileScreen() {
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + spacing.md,
-          paddingBottom: insets.bottom + 100,
+          paddingBottom: insets.bottom + 110,
           paddingHorizontal: spacing.xl,
         }}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={styles.kicker}>COMPTE</Text>
         <Text style={styles.title}>{translate('fr', 'profile.title')}</Text>
+        <Text style={styles.subtitle}>
+          Réservations, favoris et réglages — tout ton voyage au même endroit.
+        </Text>
 
-        <View style={[styles.card, shadow.soft]}>
-          <LinearGradient
-            colors={['#FF6B35', '#E85A28']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.avatar}
-          >
-            <Text style={styles.avatarText}>{initial}</Text>
-          </LinearGradient>
-          <Text style={styles.name}>{displayName}</Text>
-          <Text style={styles.email}>{viewUser!.email}</Text>
+        <View style={[styles.identity, shadow.soft]}>
+          <View style={styles.identityRow}>
+            {avatarUrl && !avatarFailed ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                style={styles.avatarImg}
+                onError={() => setAvatarFailed(true)}
+              />
+            ) : (
+              <LinearGradient
+                colors={['#FF6B35', '#E85A28']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatar}
+              >
+                <Text style={styles.avatarText}>{initial}</Text>
+              </LinearGradient>
+            )}
+            <View style={styles.identityCopy}>
+              <Text style={styles.name} numberOfLines={1}>
+                {displayName}
+              </Text>
+              {viewUser.email ? (
+                <Text style={styles.email} numberOfLines={1}>
+                  {viewUser.email}
+                </Text>
+              ) : null}
+              {isGuest ? (
+                <View style={styles.guestPill}>
+                  <Text style={styles.guestPillText}>Aperçu Expo</Text>
+                </View>
+              ) : (
+                <View style={styles.okPill}>
+                  <Text style={styles.okPillText}>Connecté</Text>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
 
-        <Pressable
-          onPress={openBookings}
-          style={({ pressed }) => [
-            styles.securityRow,
-            shadow.soft,
-            pressed && { opacity: 0.9 },
-          ]}
-        >
-          <Text style={styles.securityRowLabel}>Mes réservations</Text>
-          <Text style={styles.securityRowChevron}>›</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={openFavorites}
-          style={({ pressed }) => [
-            styles.securityRow,
-            shadow.soft,
-            pressed && { opacity: 0.9 },
-          ]}
-        >
-          <Text style={styles.securityRowLabel}>Favoris</Text>
-          <Text style={styles.securityRowChevron}>›</Text>
-        </Pressable>
+        <Text style={styles.sectionLabel}>Mon voyage</Text>
+        <View style={[styles.menuGroup, shadow.soft]}>
+          <MenuRow
+            glyph="♥"
+            tone="rose"
+            title="Favoris"
+            subtitle="Séjours, vols et activités likés"
+            onPress={openFavorites}
+          />
+          <View style={styles.menuDivider} />
+          <MenuRow
+            glyph="✈"
+            tone="warm"
+            title="Mes réservations"
+            subtitle="Confirmations vol & hôtel"
+            onPress={openBookings}
+          />
+        </View>
 
         {!isGuest ? (
-          <Pressable
-            onPress={openSecurity}
-            style={({ pressed }) => [
-              styles.securityRow,
-              shadow.soft,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.securityRowLabel}>
-              {translate('fr', 'auth.security.title')}
-            </Text>
-            <Text style={styles.securityRowChevron}>›</Text>
-          </Pressable>
-        ) : null}
-
-        <View style={[styles.infoCard, shadow.soft]}>
-          <Text style={styles.infoLabel}>API</Text>
-          <Text style={styles.infoValue} numberOfLines={1}>
-            {apiBase.replace(/^https?:\/\//, '')}
-          </Text>
-        </View>
-
-        {__DEV__ && isGuest ? (
-          <View style={[styles.infoCard, shadow.soft, { marginTop: spacing.md }]}>
-            <Text style={styles.infoLabel}>Aperçu Expo</Text>
-            <Text style={styles.infoValue}>Planner et Favoris en local, sans login Google</Text>
-          </View>
+          <>
+            <Text style={styles.sectionLabel}>Compte</Text>
+            <View style={[styles.menuGroup, shadow.soft]}>
+              <MenuRow
+                glyph="⛨"
+                title={translate('fr', 'auth.security.title')}
+                subtitle="Mot de passe et sécurité"
+                onPress={openSecurity}
+              />
+            </View>
+          </>
         ) : null}
 
         {__DEV__ ? (
-          <Pressable
-            onPress={() => setAppearLoggedOut(true)}
-            style={({ pressed }) => [
-              styles.devPreviewBtn,
-              pressed && { opacity: 0.9 },
-            ]}
-          >
-            <Text style={styles.devPreviewTitle}>Voir comme non connecté</Text>
-            <Text style={styles.devPreviewSub}>
-              Affiche les landings Compte / Favoris / Planner (dev)
-            </Text>
-          </Pressable>
+          <>
+            <Text style={styles.sectionLabel}>Développement</Text>
+            <View style={[styles.menuGroup, shadow.soft]}>
+              <View style={styles.devInfo}>
+                <Text style={styles.infoLabel}>API</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>
+                  {apiBase.replace(/^https?:\/\//, '')}
+                </Text>
+              </View>
+              {isGuest ? (
+                <>
+                  <View style={styles.menuDivider} />
+                  <View style={styles.devInfo}>
+                    <Text style={styles.infoLabel}>Aperçu Expo</Text>
+                    <Text style={styles.infoValue}>
+                      Planner et Favoris en local, sans login Google
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={() => setAppearLoggedOut(true)}
+              style={({ pressed }) => [
+                styles.devPreviewBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.devPreviewTitle}>Voir comme non connecté</Text>
+              <Text style={styles.devPreviewSub}>
+                Affiche les landings Compte / Favoris / Planner
+              </Text>
+            </Pressable>
+          </>
         ) : null}
 
-        <Button
-          variant="secondary"
-          label={translate('fr', 'auth.signOut')}
+        <Pressable
           onPress={() => void signOut()}
-          style={{ marginTop: spacing.lg }}
-        />
+          style={({ pressed }) => [
+            styles.signOutBtn,
+            pressed && { opacity: 0.9 },
+          ]}
+        >
+          <Text style={styles.signOutText}>{translate('fr', 'auth.signOut')}</Text>
+        </Pressable>
       </ScrollView>
     </View>
   )
@@ -237,48 +302,195 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  title: { ...type.title, marginBottom: spacing.xl },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    padding: spacing.xxl,
-    alignItems: 'center',
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  title: { ...type.title, marginBottom: 6 },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+    marginBottom: spacing.xl,
+  },
+  identity: {
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.lg,
+  },
+  avatarImg: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
   },
   avatarText: {
     color: colors.white,
-    fontSize: 32,
+    fontSize: 26,
     fontFamily: fonts.extrabold,
   },
+  identityCopy: { flex: 1, minWidth: 0, gap: 3 },
   name: {
     fontFamily: fonts.extrabold,
-    fontSize: 20,
+    fontSize: 18,
     color: colors.ink,
-    textAlign: 'center',
+    letterSpacing: -0.3,
   },
   email: {
-    marginTop: 4,
     fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+  },
+  guestPill: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderRadius: 999,
+    backgroundColor: colors.ink,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  guestPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    color: colors.white,
+    textTransform: 'uppercase',
+  },
+  okPill: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderRadius: 999,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  okPillText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    color: colors.success,
+    textTransform: 'uppercase',
+  },
+  sectionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: colors.faint,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  menuGroup: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    overflow: 'hidden',
+    marginBottom: spacing.xl,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  menuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuGlyph: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+  },
+  menuCopy: { flex: 1, minWidth: 0 },
+  menuTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  menuSubtitle: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 16,
+  },
+  menuChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 22,
+    color: colors.faint,
+    lineHeight: 24,
+  },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+    marginLeft: 66,
+  },
+  guestFooter: {
+    marginTop: 16,
+    alignSelf: 'stretch',
+    gap: 10,
+  },
+  guestLink: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  guestLinkLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  guestLinkChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 22,
+    color: colors.muted,
+    lineHeight: 24,
+  },
+  devBtn: {
+    marginTop: 6,
+    paddingVertical: 10,
+  },
+  devBtnLabel: {
+    fontFamily: fonts.semibold,
     fontSize: 14,
     color: colors.muted,
     textAlign: 'center',
+    textDecorationLine: 'underline',
   },
-  infoCard: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
+  devInfo: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   infoLabel: {
     fontFamily: fonts.bold,
@@ -293,169 +505,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
   },
-  securityRow: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  securityRowLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.ink,
-  },
-  securityRowChevron: {
-    fontFamily: fonts.bold,
-    fontSize: 22,
-    color: colors.muted,
-    lineHeight: 24,
-  },
-  guestWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-    alignItems: 'center',
-  },
-  guestIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
-    marginBottom: 20,
-    overflow: 'hidden',
-  },
-  guestHead: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.white,
-    marginBottom: 4,
-  },
-  guestShoulders: {
-    width: 32,
-    height: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    backgroundColor: colors.white,
-  },
-  guestKicker: {
-    fontFamily: fonts.extrabold,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: colors.primary,
-    marginBottom: 8,
-  },
-  guestTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  guestBookings: {
-    marginTop: 20,
-    width: '100%',
-    maxWidth: 320,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  guestBookingsLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.ink,
-  },
-  guestBookingsChevron: {
-    fontFamily: fonts.bold,
-    fontSize: 22,
-    color: colors.muted,
-    lineHeight: 24,
-  },
-  guestBody: {
-    marginTop: 10,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.muted,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  googleBtn: {
-    marginTop: 28,
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
-    paddingHorizontal: 18,
-  },
-  gMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gLetter: {
-    fontFamily: fonts.extrabold,
-    color: '#4285F4',
-    fontSize: 14,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  googleLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  guestHint: {
-    marginTop: 14,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.faint,
-    textAlign: 'center',
-  },
-  devBtn: {
-    marginTop: 16,
-    paddingVertical: 10,
-  },
-  devBtnLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.muted,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-  },
   devPreviewBtn: {
-    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
     backgroundColor: colors.ink,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
@@ -471,5 +524,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.65)',
     textAlign: 'center',
+  },
+  signOutBtn: {
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  signOutText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.inkSoft,
   },
 })

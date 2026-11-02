@@ -28,7 +28,7 @@ import {
   tripItemsErrorLabelFr,
 } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
-import { getApi } from '../lib/client'
+import { auth, getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
@@ -52,7 +52,7 @@ export function ActivityStepPanel(props: {
 }) {
   const { draftToken, plannedTripId, enabled = true, surface = 'my_trip' } = props
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { signInWithGoogle } = useAuth()
+  const { signInWithGoogle, user, session, viewUser } = useAuth()
   const owner = useMemo(
     () =>
       pickTripItemOwner({
@@ -69,7 +69,10 @@ export function ActivityStepPanel(props: {
   const [pendingBook, setPendingBook] = useState<ItemRow | null>(null)
   const [askBooked, setAskBooked] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
+  const [resuming, setResuming] = useState(false)
   const pendingRef = useRef<ItemRow | null>(null)
+  const authRetryRef = useRef(false)
+  const hasAccount = Boolean(user || session?.user || viewUser)
 
   const platform = Platform.OS === 'ios' ? 'ios' : 'android'
   const needsAuth = isTripItemsAuthError(error)
@@ -81,13 +84,41 @@ export function ActivityStepPanel(props: {
     try {
       const res = await getApi().listTripItems(owner)
       setItems((res.items || []) as ItemRow[])
+      authRetryRef.current = false
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
+      const msg = e instanceof Error ? e.message : 'Erreur'
+      if (isTripItemsAuthError(msg) && !authRetryRef.current) {
+        authRetryRef.current = true
+        const token = await auth.refreshAccessToken()
+        if (token) {
+          try {
+            const res = await getApi().listTripItems(owner)
+            setItems((res.items || []) as ItemRow[])
+            setError(null)
+            return
+          } catch (e2) {
+            setError(e2 instanceof Error ? e2.message : msg)
+            setItems([])
+            return
+          } finally {
+            setLoading(false)
+          }
+        }
+      }
+      setError(msg)
       setItems([])
     } finally {
       setLoading(false)
     }
   }, [owner])
+
+  const onResumeSession = async () => {
+    setResuming(true)
+    authRetryRef.current = false
+    await auth.refreshAccessToken()
+    await load()
+    setResuming(false)
+  }
 
   const onSignIn = async () => {
     setSigningIn(true)
@@ -95,6 +126,7 @@ export function ActivityStepPanel(props: {
     if (err) setError(err.message)
     else {
       setError(null)
+      authRetryRef.current = false
       await load()
     }
     setSigningIn(false)
@@ -103,6 +135,14 @@ export function ActivityStepPanel(props: {
   useEffect(() => {
     if (enabled) void load()
   }, [enabled, load])
+
+  useEffect(() => {
+    if (!enabled) return
+    if (user || session?.user) {
+      authRetryRef.current = false
+      void load()
+    }
+  }, [enabled, user?.id, session?.access_token, load])
 
   useEffect(() => {
     pendingRef.current = pendingBook
@@ -172,18 +212,40 @@ export function ActivityStepPanel(props: {
   if (needsAuth && !loading) {
     return (
       <View style={styles.authCard}>
-        <Text style={styles.authKicker}>COMPTE REQUIS</Text>
-        <Text style={styles.authTitle}>Connecte-toi pour tes activités</Text>
-        <Text style={styles.authBody}>{tripItemsErrorLabelFr(error)}</Text>
-        <Pressable
-          style={[styles.cta, signingIn && { opacity: 0.6 }]}
-          disabled={signingIn}
-          onPress={() => void onSignIn()}
-        >
-          <Text style={styles.ctaText}>
-            {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
-          </Text>
-        </Pressable>
+        <Text style={styles.authKicker}>
+          {hasAccount ? 'SESSION' : 'COMPTE REQUIS'}
+        </Text>
+        <Text style={styles.authTitle}>
+          {hasAccount
+            ? 'Reprendre ton compte'
+            : 'Connecte-toi pour tes activités'}
+        </Text>
+        <Text style={styles.authBody}>
+          {hasAccount
+            ? 'Tu es déjà connecté — on recharge tes activités avec ta session.'
+            : tripItemsErrorLabelFr(error)}
+        </Text>
+        {hasAccount ? (
+          <Pressable
+            style={[styles.cta, resuming && { opacity: 0.6 }]}
+            disabled={resuming}
+            onPress={() => void onResumeSession()}
+          >
+            <Text style={styles.ctaText}>
+              {resuming ? 'Reprise…' : 'Reprendre ma session'}
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.cta, signingIn && { opacity: 0.6 }]}
+            disabled={signingIn}
+            onPress={() => void onSignIn()}
+          >
+            <Text style={styles.ctaText}>
+              {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
+            </Text>
+          </Pressable>
+        )}
         <Pressable style={styles.secondary} onPress={openCatalog}>
           <Text style={styles.secondaryText}>Voir le catalogue</Text>
         </Pressable>

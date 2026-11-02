@@ -223,10 +223,13 @@ function PlannerGuestLanding() {
               </p>
             </div>
           </div>
-          <div className="relative mt-4 flex items-center gap-2 text-[11px] text-orange-100/55 font-medium">
-            <span className="px-2 py-0.5 rounded-md bg-white/10">Weekend</span>
-            <span className="px-2 py-0.5 rounded-md bg-white/10">2 voyageurs</span>
-            <span className="px-2 py-0.5 rounded-md bg-[#FF6B35]/30 text-orange-50">Lien prêt</span>
+          <div className="relative mt-4 flex flex-wrap items-center gap-2 text-[11px] text-orange-100/55 font-medium">
+            <span className="px-2 py-0.5 rounded-md bg-white/10">{t('planner.guest.mock.chip1')}</span>
+            <span className="px-2 py-0.5 rounded-md bg-white/10">{t('planner.guest.mock.chip2')}</span>
+            <span className="px-2 py-0.5 rounded-md bg-white/10">{t('planner.guest.mock.chip3')}</span>
+            <span className="px-2 py-0.5 rounded-md bg-[#FF6B35]/30 text-orange-50">
+              {t('planner.guest.mock.chipAccent')}
+            </span>
           </div>
         </motion.div>
 

@@ -10,7 +10,6 @@ const LABELS: Record<string, string> = {
   Deals: 'Séjours',
   Activities: 'Activités',
   Planner: 'Planner',
-  Favorites: 'Favoris',
   Profile: 'Compte',
 }
 

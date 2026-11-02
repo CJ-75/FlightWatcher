@@ -10,9 +10,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import {
   ACTIVITY_ADDED_BADGE_FR,
+  countryIsoForCityLabel,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'
 import { ReviewStars } from './ReviewStars'
 
@@ -54,6 +56,7 @@ export function ActivityCard({
       ? `${card.reviewCount.toLocaleString('fr-FR')} avis`
       : null
   const hasMeta = card.rating != null || factChips.length > 0
+  const destIso = countryIsoForCityLabel(card.destinationLabel)
 
   return (
     <View style={[styles.card, shadow.soft, added && styles.cardAdded]}>
@@ -111,9 +114,14 @@ export function ActivityCard({
           </Pressable>
         ) : null}
         <View style={styles.heroBottom} pointerEvents="none">
-          <Text style={styles.heroTitle} numberOfLines={2}>
-            {card.title}
-          </Text>
+          <View style={styles.heroTitleRow}>
+            {destIso ? (
+              <CountryFlag iso={destIso} size={{ width: 22, height: 15 }} />
+            ) : null}
+            <Text style={styles.heroTitle} numberOfLines={2}>
+              {card.title}
+            </Text>
+          </View>
         </View>
       </Pressable>
 
@@ -268,7 +276,13 @@ const styles = StyleSheet.create({
     right: 12,
     bottom: 12,
   },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   heroTitle: {
+    flex: 1,
     fontFamily: fonts.bold,
     fontSize: 15,
     letterSpacing: -0.3,

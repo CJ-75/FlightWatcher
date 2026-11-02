@@ -226,7 +226,12 @@ function MainTabs() {
       <Tab.Screen
         name="Favorites"
         component={FavoritesScreen}
-        options={{ title: 'Favoris', headerShown: false }}
+        options={{
+          title: 'Favoris',
+          headerShown: false,
+          // Accessible from Compte — not shown in the tab bar
+          href: null,
+        }}
       />
       <Tab.Screen
         name="Profile"

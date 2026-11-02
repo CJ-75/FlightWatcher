@@ -33,6 +33,7 @@ import {
   partyModeKickerFr,
   partyModeMaxPassengers,
   partyModeMinPassengers,
+  translate,
   type DatePresetId,
   type FlexibleDates,
   type PartyMode,
@@ -47,7 +48,7 @@ import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { Button } from '../components/ui/Button'
-import { GoogleGIcon } from '../components/GoogleGIcon'
+import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { JourneyCard, type JourneyDensity } from '../components/JourneyCard'
 import type { RootStackParamList } from '../navigation/types'
@@ -357,6 +358,7 @@ function PlannerGuestLanding({
 }) {
   const { signInWithGoogle } = useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
+  const t = (key: string) => translate('fr', key as never)
 
   const onLogin = async () => {
     setLoginLoading(true)
@@ -365,27 +367,23 @@ function PlannerGuestLanding({
     setLoginLoading(false)
   }
 
-  const steps = [
-    { title: 'Crée le voyage', detail: 'Dates, budget et voyageurs' },
-    { title: 'Vol puis hôtel', detail: 'Accepte un vol, compose ton séjour' },
-    { title: 'Invite tes proches', detail: 'Un lien pour amis et famille' },
-  ]
-
   return (
-    <View style={[styles.root, { paddingTop: insetsTop, paddingBottom: insetsBottom + 24 }]}>
-      <ScreenBackground />
-      <View style={styles.guestOrbA} />
-      <View style={styles.guestOrbB} />
-      <ScrollView
-        contentContainerStyle={styles.guestContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.guestKicker}>PLANNER</Text>
-        <Text style={styles.guestTitle}>Organise un voyage à plusieurs</Text>
-        <Text style={styles.guestBody}>
-          Crée un projet, scanne les prix, choisis la proposition, puis envoie un lien à tes proches.
-        </Text>
-
+    <GuestAuthLanding
+      insetsTop={insetsTop}
+      insetsBottom={insetsBottom}
+      kicker="PLANNER"
+      title={t('planner.guest.title')}
+      lead={t('planner.guest.lead')}
+      steps={[
+        { title: t('planner.guest.step1'), detail: t('planner.guest.step1.detail') },
+        { title: t('planner.guest.step2'), detail: t('planner.guest.step2.detail') },
+        { title: t('planner.guest.step3'), detail: t('planner.guest.step3.detail') },
+      ]}
+      ctaLabel={t('planner.guest.cta')}
+      hint={t('planner.guest.hint')}
+      loginLoading={loginLoading}
+      onLogin={() => void onLogin()}
+      preview={
         <View style={[styles.mockTicket, shadow.soft]}>
           <LinearGradient
             colors={['#1A120E', '#2A1A12', '#3D2418']}
@@ -396,60 +394,30 @@ function PlannerGuestLanding({
             <View style={styles.mockRow}>
               <View>
                 <Text style={styles.mockLabel}>Départ</Text>
-                <Text style={styles.mockCode}>BVA</Text>
+                <Text style={styles.mockCode}>{t('planner.guest.mock.from')}</Text>
               </View>
               <View style={styles.mockLineWrap}>
                 <View style={styles.mockLine} />
                 <Text style={styles.mockPlane}>✈</Text>
-                <Text style={styles.mockPrice}>à partir de 48€</Text>
+                <Text style={styles.mockPrice}>{t('planner.guest.mock.price')}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text style={styles.mockLabel}>Arrivée</Text>
-                <Text style={styles.mockCode}>LIS</Text>
+                <Text style={styles.mockCode}>{t('planner.guest.mock.to')}</Text>
               </View>
             </View>
             <View style={styles.mockChips}>
-              <Text style={styles.mockChip}>Weekend</Text>
-              <Text style={styles.mockChip}>2 voy.</Text>
-              <Text style={[styles.mockChip, styles.mockChipAccent]}>Lien prêt</Text>
+              <Text style={styles.mockChip}>{t('planner.guest.mock.chip1')}</Text>
+              <Text style={styles.mockChip}>{t('planner.guest.mock.chip2')}</Text>
+              <Text style={styles.mockChip}>{t('planner.guest.mock.chip3')}</Text>
+              <Text style={[styles.mockChip, styles.mockChipAccent]}>
+                {t('planner.guest.mock.chipAccent')}
+              </Text>
             </View>
           </LinearGradient>
         </View>
-
-        <View style={styles.steps}>
-          {steps.map((step, i) => (
-            <View key={step.title} style={[styles.stepCard, shadow.soft]}>
-              <View style={styles.stepNum}>
-                <Text style={styles.stepNumText}>{i + 1}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.stepTitle}>{step.title}</Text>
-                <Text style={styles.stepDetail}>{step.detail}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        <Pressable
-          onPress={() => void onLogin()}
-          disabled={loginLoading}
-          style={({ pressed }) => [
-            styles.googleBtn,
-            pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
-          ]}
-        >
-          {loginLoading ? (
-            <ActivityIndicator color={colors.ink} />
-          ) : (
-            <>
-              <GoogleGIcon size={22} />
-              <Text style={styles.googleLabel}>Continuer avec Google</Text>
-            </>
-          )}
-        </Pressable>
-        <Text style={styles.guestHint}>Gratuit · tes voyages restent privés</Text>
-      </ScrollView>
-    </View>
+      }
+    />
   )
 }
 
@@ -580,6 +548,10 @@ function CreateTripModal({
       : presetDates
 
   const selectParty = (mode: PartyMode) => {
+    if (!name.trim()) {
+      setError('Donne un nom au voyage')
+      return
+    }
     setPartyMode(mode)
     setPassengers(partyModeDefaultPassengers(mode))
     setError(null)
@@ -643,7 +615,7 @@ function CreateTripModal({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={[
             styles.sheetPanel,
-            step === 1 ? styles.sheetPanelCompact : styles.sheetPanelTall,
+            styles.sheetPanelTall,
             { paddingBottom: Math.max(insets.bottom, 12) },
           ]}
         >
@@ -664,7 +636,7 @@ function CreateTripModal({
               <Text style={styles.modalStep}>Étape {step}/2</Text>
               <Text style={styles.modalTitle} numberOfLines={1}>
                 {step === 1
-                  ? 'Avec qui tu voyages ?'
+                  ? 'Nouveau voyage'
                   : partyMode
                     ? `Voyage · ${partyModeKickerFr(partyMode)}`
                     : 'Nouveau voyage'}
@@ -674,8 +646,31 @@ function CreateTripModal({
           </View>
 
           {step === 1 ? (
-            <View style={styles.partyStepBody}>
-              <Text style={styles.partyIntro}>Solo, duo ou groupe — ça fixe les places.</Text>
+            <ScrollView
+              contentContainerStyle={styles.partyStepBody}
+              keyboardShouldPersistTaps="handled"
+              bounces={false}
+            >
+              <View>
+                <Text style={styles.fieldLabel}>Nom du voyage</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={(v) => {
+                    setName(v)
+                    if (error) setError(null)
+                  }}
+                  placeholder="Weekend Lisbonne"
+                  placeholderTextColor={colors.faint}
+                  style={styles.input}
+                  autoFocus
+                />
+              </View>
+              <View>
+                <Text style={styles.fieldLabel}>Avec qui tu voyages ?</Text>
+                <Text style={styles.partyIntro}>
+                  Solo, duo ou groupe — ça fixe les places.
+                </Text>
+              </View>
               <View style={styles.partyGrid}>
                 {PARTY_MODE_OPTIONS.map((opt) => (
                   <Pressable
@@ -693,22 +688,18 @@ function CreateTripModal({
                 ))}
               </View>
               {error ? <Text style={styles.formError}>{error}</Text> : null}
-            </View>
+            </ScrollView>
           ) : (
             <ScrollView
               contentContainerStyle={{ padding: spacing.xl, paddingBottom: 24, gap: 16 }}
               keyboardShouldPersistTaps="handled"
               style={{ maxHeight: '100%' }}
             >
-              <View>
-                <Text style={styles.fieldLabel}>Nom</Text>
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Weekend Lisbonne"
-                  placeholderTextColor={colors.faint}
-                  style={styles.input}
-                />
+              <View style={styles.nameSummary}>
+                <Text style={styles.nameSummaryKicker}>NOM DU VOYAGE</Text>
+                <Text style={styles.nameSummaryValue} numberOfLines={1}>
+                  {name.trim() || '—'}
+                </Text>
               </View>
 
               <View>
@@ -1142,59 +1133,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     marginTop: -2,
   },
-  guestOrbA: {
-    position: 'absolute',
-    top: -40,
-    right: -30,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,107,53,0.14)',
-  },
-  guestOrbB: {
-    position: 'absolute',
-    bottom: 80,
-    left: -50,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,176,136,0.22)',
-  },
-  guestContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 22,
-    paddingVertical: 28,
-  },
-  guestKicker: {
-    fontFamily: fonts.extrabold,
-    fontSize: 11,
-    letterSpacing: 2,
-    color: colors.primary,
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  guestTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  guestBody: {
-    marginTop: 10,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.muted,
-    textAlign: 'center',
-    includeFontPadding: false,
-    paddingHorizontal: 4,
-  },
   mockTicket: {
-    marginTop: 22,
     borderRadius: 22,
     overflow: 'hidden',
     alignSelf: 'stretch',
@@ -1264,86 +1203,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,107,53,0.35)',
     color: '#FFE8DC',
   },
-  steps: { alignSelf: 'stretch', marginTop: 18, gap: 8 },
-  stepCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-  },
-  stepNum: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumText: { fontFamily: fonts.extrabold, fontSize: 14, color: colors.white },
-  stepTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  stepDetail: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    includeFontPadding: false,
-  },
-  googleBtn: {
-    marginTop: 20,
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
-    paddingHorizontal: 18,
-  },
-  gMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gLetter: {
-    fontFamily: fonts.extrabold,
-    color: '#4285F4',
-    fontSize: 14,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  googleLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.ink,
-    includeFontPadding: false,
-  },
-  guestHint: {
-    marginTop: 14,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.faint,
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
   sheetRoot: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -1359,9 +1218,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     overflow: 'hidden',
   },
-  sheetPanelCompact: {},
   sheetPanelTall: {
     maxHeight: '92%',
+    minHeight: '58%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1372,6 +1231,26 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
+  },
+  nameSummary: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: 'rgba(248,250,252,0.9)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 2,
+  },
+  nameSummaryKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.muted,
+  },
+  nameSummaryValue: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
   },
   modalCancel: { fontFamily: fonts.medium, color: colors.muted, width: 60 },
   modalStep: {
@@ -1384,16 +1263,17 @@ const styles = StyleSheet.create({
   modalTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
   partyStepBody: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
-    gap: 10,
+    paddingTop: 16,
+    paddingBottom: 20,
+    gap: 14,
   },
   partyIntro: {
     fontFamily: fonts.medium,
     fontSize: 13,
     color: colors.muted,
-    textAlign: 'center',
+    textAlign: 'left',
     lineHeight: 18,
+    marginTop: 4,
   },
   partyGrid: {
     flexDirection: 'row',

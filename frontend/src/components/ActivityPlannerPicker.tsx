@@ -1,5 +1,6 @@
 /**
  * Modal: choisir le séjour / planner cible pour une activité.
+ * Charge les workspaces API + fallbacks locaux (remembered / guest-like drafts).
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -8,9 +9,14 @@ import {
   ACTIVITY_PICK_PLANNER_HINT_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
+  cityDisplayNameFr,
+  parseAirportCodes,
+  type PlannedTrip,
   type TravelWorkspace,
 } from '@flightwatcher/shared'
+import { getCurrentSession, refreshAccessToken } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
+import { listRememberedTrips } from '../utils/tripRecovery'
 
 export type ActivityPlannerTarget = {
   plannedTripId?: string
@@ -48,6 +54,78 @@ function workspaceLabel(ws: TravelWorkspace): string {
   return title || city || 'Séjour'
 }
 
+function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
+  const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  return {
+    workspace_id: `planner:${trip.id}`,
+    planned_trip_id: trip.id,
+    proposal_id: trip.accepted_proposal?.id || null,
+    scope: 'collaborative',
+    phase: trip.status === 'locked' ? 'flight_selected' : 'planning',
+    title: trip.name,
+    city: dest ? cityDisplayNameFr(dest) : 'Destination libre',
+    origin_iata: trip.departure_airport,
+    dest_iata: trip.arrival_airport,
+    out_date: trip.dates_depart?.[0]?.date || null,
+    ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
+    is_organizer: true,
+    capabilities: {
+      can_scan: trip.status !== 'locked',
+      can_choose_flight: trip.status !== 'locked',
+      can_compose_hotel: trip.status === 'locked',
+      can_view_confirmation: false,
+    },
+    pipeline: {
+      flight: trip.status === 'locked' ? 'selected' : 'none',
+      hotel: 'none',
+    },
+    planned_trip: trip,
+    updated_at: trip.updated_at || trip.created_at,
+  }
+}
+
+function rememberedAsWorkspace(row: {
+  draft_token: string
+  city?: string | null
+  at: number
+}): TravelWorkspace {
+  const city = String(row.city || '').trim() || 'Séjour'
+  return {
+    workspace_id: `draft:${row.draft_token}`,
+    draft_token: row.draft_token,
+    scope: 'personal',
+    phase: 'composing',
+    title: city,
+    city,
+    is_organizer: true,
+    capabilities: {
+      can_scan: false,
+      can_choose_flight: false,
+      can_compose_hotel: true,
+      can_view_confirmation: true,
+    },
+    pipeline: { flight: 'none', hotel: 'none' },
+    updated_at: new Date(row.at).toISOString(),
+  }
+}
+
+function mergeWorkspaces(rows: TravelWorkspace[]): TravelWorkspace[] {
+  const byKey = new Map<string, TravelWorkspace>()
+  for (const w of rows) {
+    const planned = String(w.planned_trip_id || '').trim()
+    const draft = String(w.draft_token || '').trim()
+    if (!planned && !draft) continue
+    const key = planned ? `p:${planned}` : `d:${draft}`
+    if (!byKey.has(key)) byKey.set(key, w)
+  }
+  return [...byKey.values()].sort((a, b) => {
+    const ap = a.planned_trip_id ? 0 : 1
+    const bp = b.planned_trip_id ? 0 : 1
+    if (ap !== bp) return ap - bp
+    return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
+  })
+}
+
 export function ActivityPlannerPicker({
   open,
   busy = false,
@@ -60,6 +138,7 @@ export function ActivityPlannerPicker({
 }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [authNeeded, setAuthNeeded] = useState(false)
   const [items, setItems] = useState<TravelWorkspace[]>([])
 
   useEffect(() => {
@@ -67,32 +146,72 @@ export function ActivityPlannerPicker({
     let cancelled = false
     setLoading(true)
     setError(null)
+    setAuthNeeded(false)
     void (async () => {
+      const local = listRememberedTrips().map(rememberedAsWorkspace)
+
       try {
-        const rows = await getApiClient().listTravelWorkspaces()
+        let remote: TravelWorkspace[] = []
+        try {
+          const rows = await getApiClient().listTravelWorkspaces()
+          remote = Array.isArray(rows) ? rows : []
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : ''
+          if (/401|403|auth|connect|auth_required/i.test(msg)) {
+            // Already logged in? refresh JWT and retry before asking to sign in.
+            const session = await getCurrentSession().catch(() => null)
+            if (session?.user) {
+              await refreshAccessToken()
+              try {
+                const rows = await getApiClient().listTravelWorkspaces()
+                remote = Array.isArray(rows) ? rows : []
+              } catch {
+                try {
+                  const legacy = await getApiClient().listPlannedTrips()
+                  remote = (Array.isArray(legacy) ? legacy : []).map(
+                    tripAsWorkspace,
+                  )
+                } catch {
+                  if (cancelled) return
+                  const merged = mergeWorkspaces(local)
+                  setItems(merged)
+                  if (!merged.length) {
+                    setAuthNeeded(true)
+                    setError(
+                      'Tu es connecté — impossible de charger tes séjours. Réessaie.',
+                    )
+                  }
+                  return
+                }
+              }
+            } else {
+              try {
+                const legacy = await getApiClient().listPlannedTrips()
+                remote = (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace)
+              } catch {
+                if (cancelled) return
+                const merged = mergeWorkspaces(local)
+                setItems(merged)
+                if (!merged.length) {
+                  setAuthNeeded(true)
+                  setError(ACTIVITY_SIGN_IN_TO_ADD_FR)
+                }
+                return
+              }
+            }
+          } else {
+            throw e
+          }
+        }
         if (cancelled) return
-        const usable = (Array.isArray(rows) ? rows : []).filter(
-          (w) =>
-            Boolean(String(w.planned_trip_id || '').trim()) ||
-            Boolean(String(w.draft_token || '').trim()),
-        )
-        // Prefer collaborative planners first, then personal.
-        usable.sort((a, b) => {
-          const ap = a.planned_trip_id ? 0 : 1
-          const bp = b.planned_trip_id ? 0 : 1
-          if (ap !== bp) return ap - bp
-          return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
-        })
-        setItems(usable)
+        setItems(mergeWorkspaces([...remote, ...local]))
       } catch (e) {
         if (cancelled) return
-        const msg = e instanceof Error ? e.message : 'Erreur'
-        if (/401|403|auth|connect/i.test(msg)) {
-          setError(ACTIVITY_SIGN_IN_TO_ADD_FR)
-        } else {
-          setError(msg)
+        const merged = mergeWorkspaces(local)
+        setItems(merged)
+        if (!merged.length) {
+          setError(e instanceof Error ? e.message : 'Erreur')
         }
-        setItems([])
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -129,15 +248,17 @@ export function ActivityPlannerPicker({
           {loading ? (
             <p className="text-sm text-muted py-6 text-center">Chargement…</p>
           ) : null}
-          {error ? (
+          {error && !items.length ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 space-y-2">
               <p>{error}</p>
-              <Link to="/compte" className="font-bold underline">
-                Se connecter
-              </Link>
+              {authNeeded ? (
+                <Link to="/compte" className="font-bold underline">
+                  Se connecter
+                </Link>
+              ) : null}
             </div>
           ) : null}
-          {!loading && !error && !items.length ? (
+          {!loading && !items.length && !error ? (
             <div className="rounded-xl border border-line bg-canvas px-3 py-4 text-sm text-muted space-y-2 text-center">
               <p>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</p>
               <Link to="/planner" className="font-bold text-primary-700 underline">

@@ -32,6 +32,8 @@ export interface SupabaseAuth {
   getCurrentUser: () => Promise<User | null>
   getCurrentSession: () => Promise<Session | null>
   getAccessToken: () => Promise<string | null>
+  /** Force refresh (resume after auth_required while still signed in). */
+  refreshAccessToken: () => Promise<string | null>
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<{ error: Error | null }>
@@ -179,6 +181,27 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
     getAccessToken: async () => {
       const c = await getClient()
       if (!c) return null
+      const {
+        data: { session },
+      } = await c.auth.getSession()
+      if (!session?.access_token) return null
+      // Refresh near/after expiry so API calls don't bounce with auth_required
+      // while the UI still thinks the user is logged in.
+      const expiresAt = Number(session.expires_at || 0)
+      const skewSec = 60
+      if (expiresAt > 0 && expiresAt * 1000 <= Date.now() + skewSec * 1000) {
+        const { data, error } = await c.auth.refreshSession()
+        if (!error && data.session?.access_token) {
+          return data.session.access_token
+        }
+      }
+      return session.access_token
+    },
+    refreshAccessToken: async () => {
+      const c = await getClient()
+      if (!c) return null
+      const { data, error } = await c.auth.refreshSession()
+      if (!error && data.session?.access_token) return data.session.access_token
       const {
         data: { session },
       } = await c.auth.getSession()

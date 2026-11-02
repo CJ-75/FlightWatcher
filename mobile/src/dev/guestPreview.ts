@@ -71,6 +71,8 @@ function mockTrip(
     },
     prix_total: price,
     destination_code: dest,
+    airline: 'FR',
+    provider: 'ryanair',
     is_good_deal: goodDeal,
   }
 }

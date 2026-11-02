@@ -114,8 +114,12 @@ export function FavoritesGuestLanding() {
             </div>
             <div className="relative mt-5 flex items-end justify-between">
               <div className="flex gap-2 text-[11px] font-semibold text-amber-100/60">
-                <span className="px-2 py-0.5 rounded-md bg-white/10">Weekend</span>
-                <span className="px-2 py-0.5 rounded-md bg-white/10">Aller-retour</span>
+                <span className="px-2 py-0.5 rounded-md bg-white/10">
+                  {t('favorites.guest.mock.chip1')}
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-white/10">
+                  {t('favorites.guest.mock.chip2')}
+                </span>
               </div>
               <p className="text-2xl font-black text-white tracking-tight">
                 {t('favorites.guest.mock.price')}

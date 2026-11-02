@@ -152,6 +152,10 @@ export function CreateTripModal({
   }, [departure])
 
   const selectParty = (mode: PartyMode) => {
+    if (!name.trim()) {
+      setError('Donne un nom au voyage')
+      return
+    }
     setPartyMode(mode)
     setPassengers(partyModeDefaultPassengers(mode))
     setError(null)
@@ -230,18 +234,18 @@ export function CreateTripModal({
   }
 
   return (
-    <div className={`app-dialog-root ${step === 1 ? 'sm:items-center items-end' : ''}`}>
+    <div className="app-dialog-root items-center">
       <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
       <div
-        className={`app-dialog-panel w-full overflow-hidden ${
+        className={`app-dialog-panel w-full overflow-hidden flex flex-col ${
           step === 1
-            ? 'sm:max-w-md h-auto'
-            : 'app-dialog-xl max-h-[92vh] flex flex-col'
+            ? 'sm:max-w-lg max-h-[90vh]'
+            : 'app-dialog-xl max-h-[92vh]'
         }`}
       >
         <div
           className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-white/95 backdrop-blur ${
-            step === 1 ? 'px-4 sm:px-5 py-3' : 'px-6 sm:px-8 py-4 sm:py-5'
+            step === 1 ? 'px-5 sm:px-6 py-4' : 'px-6 sm:px-8 py-4 sm:py-5'
           }`}
         >
           <button
@@ -264,11 +268,11 @@ export function CreateTripModal({
             </p>
             <h3
               className={`font-extrabold text-ink tracking-tight ${
-                step === 1 ? 'text-base sm:text-lg' : 'text-xl'
+                step === 1 ? 'text-lg sm:text-xl' : 'text-xl'
               }`}
             >
               {step === 1
-                ? 'Avec qui tu voyages ?'
+                ? 'Nouveau voyage'
                 : partyMode
                   ? `Nouveau voyage · ${partyModeKickerFr(partyMode)}`
                   : 'Nouveau voyage'}
@@ -280,48 +284,68 @@ export function CreateTripModal({
         <div
           className={
             step === 1
-              ? 'px-4 sm:px-5 pt-3 pb-4 space-y-2.5'
+              ? 'px-5 sm:px-6 pt-5 pb-6 space-y-5 overflow-y-auto'
               : 'flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6'
           }
         >
           {step === 1 ? (
-            <div className="space-y-2">
-              <p className="text-[13px] text-ink-soft text-center leading-snug">
-                Solo, duo ou groupe — ça fixe les places.
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {PARTY_MODE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.mode}
-                    type="button"
-                    onClick={() => selectParty(opt.mode)}
-                    className="rounded-xl border border-line bg-canvas px-2 py-2.5 text-center hover:border-primary-400 hover:bg-primary-50/50 transition-colors"
-                  >
-                    <p aria-hidden className="text-xl leading-none mb-1">
-                      {opt.emoji}
-                    </p>
-                    <p className="font-extrabold text-ink text-[13px] tracking-tight leading-none">
-                      {opt.label}
-                    </p>
-                    <p className="mt-1 text-[10px] font-semibold text-ink-soft leading-tight line-clamp-2">
-                      {opt.hint}
-                    </p>
-                  </button>
-                ))}
+            <div className="space-y-5">
+              <div>
+                <label className="text-sm font-bold text-ink block mb-1.5">
+                  Nom du voyage
+                </label>
+                <input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    if (error) setError(null)
+                  }}
+                  placeholder="Weekend Lisbonne"
+                  autoFocus
+                  className="w-full border border-line rounded-2xl px-4 py-3.5 font-medium text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+                />
+              </div>
+
+              <div>
+                <p className="text-sm font-bold text-ink mb-1">
+                  Avec qui tu voyages ?
+                </p>
+                <p className="text-[13px] text-ink-soft leading-snug mb-3">
+                  Solo, duo ou groupe — ça fixe les places.
+                </p>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {PARTY_MODE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.mode}
+                      type="button"
+                      onClick={() => selectParty(opt.mode)}
+                      className="rounded-2xl border border-line bg-canvas px-2.5 py-3.5 text-center hover:border-primary-400 hover:bg-primary-50/50 transition-colors"
+                    >
+                      <p aria-hidden className="text-2xl leading-none mb-1.5">
+                        {opt.emoji}
+                      </p>
+                      <p className="font-extrabold text-ink text-sm tracking-tight leading-none">
+                        {opt.label}
+                      </p>
+                      <p className="mt-1.5 text-[11px] font-semibold text-ink-soft leading-tight line-clamp-2">
+                        {opt.hint}
+                      </p>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
                 <div className="space-y-5">
-                  <div>
-                    <label className="text-sm font-bold text-ink block mb-1.5">Nom</label>
-                    <input
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Weekend Lisbonne"
-                      className="w-full border border-line rounded-2xl px-4 py-3 font-medium text-[15px] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-                    />
+                  <div className="rounded-2xl border border-line bg-slate-50/80 px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
+                      Nom du voyage
+                    </p>
+                    <p className="mt-0.5 font-extrabold text-ink text-[15px] truncate">
+                      {name.trim() || '—'}
+                    </p>
                   </div>
 
                   <div>

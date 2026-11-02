@@ -52,6 +52,29 @@ export function AccountGuestLanding({ onStartSignIn }: Props) {
           {t('profile.guest.lead')}
         </p>
 
+        <ol className="mt-6 space-y-2 text-left max-w-sm mx-auto">
+          {(
+            [
+              ['profile.guest.step1', 'profile.guest.step1.detail'],
+              ['profile.guest.step2', 'profile.guest.step2.detail'],
+              ['profile.guest.step3', 'profile.guest.step3.detail'],
+            ] as const
+          ).map(([titleKey, detailKey], i) => (
+            <li
+              key={titleKey}
+              className="flex items-center gap-3 rounded-2xl bg-white/80 border border-orange-100/80 px-3.5 py-3 shadow-sm"
+            >
+              <span className="shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-black text-sm flex items-center justify-center">
+                {i + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="block font-bold text-slate-900 text-sm">{t(titleKey)}</span>
+                <span className="block text-slate-500 text-xs mt-0.5">{t(detailKey)}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+
         <button
           type="button"
           disabled={signingIn}

@@ -1,7 +1,7 @@
 /**
  * Planner / MyTrip étape Activités — DnD ordre + Viator return prompt (Lot E).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ACTIVITY_ADD_LABEL_FR,
@@ -22,7 +22,13 @@ import {
   type AvailabilityState,
   type TripItemStatus,
 } from '@flightwatcher/shared'
-import { signInWithGoogle } from '../lib/supabase'
+import {
+  getCurrentSession,
+  getCurrentUser,
+  onAuthStateChange,
+  refreshAccessToken,
+  signInWithGoogle,
+} from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { rememberTrip } from '../utils/tripRecovery'
 
@@ -62,6 +68,9 @@ export function ActivityStepPanel(props: {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [suggestions, setSuggestions] = useState<Record<string, unknown>[]>([])
   const [signingIn, setSigningIn] = useState(false)
+  const [hasAccount, setHasAccount] = useState(false)
+  const [resuming, setResuming] = useState(false)
+  const authRetryRef = useRef(false)
 
   const load = useCallback(async () => {
     if (!owner.draft_token && !owner.planned_trip_id) return
@@ -70,8 +79,28 @@ export function ActivityStepPanel(props: {
     try {
       const res = await getApiClient().listTripItems(owner)
       setItems((res.items || []) as ItemRow[])
+      authRetryRef.current = false
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
+      const msg = e instanceof Error ? e.message : 'Erreur'
+      if (isTripItemsAuthError(msg) && !authRetryRef.current) {
+        authRetryRef.current = true
+        const token = await refreshAccessToken()
+        if (token) {
+          try {
+            const res = await getApiClient().listTripItems(owner)
+            setItems((res.items || []) as ItemRow[])
+            setError(null)
+            return
+          } catch (e2) {
+            setError(e2 instanceof Error ? e2.message : msg)
+            setItems([])
+            return
+          } finally {
+            setLoading(false)
+          }
+        }
+      }
+      setError(msg)
       setItems([])
     } finally {
       setLoading(false)
@@ -79,6 +108,14 @@ export function ActivityStepPanel(props: {
   }, [owner])
 
   const needsAuth = isTripItemsAuthError(error)
+
+  const onResumeSession = async () => {
+    setResuming(true)
+    authRetryRef.current = false
+    await refreshAccessToken()
+    await load()
+    setResuming(false)
+  }
 
   const onSignIn = async () => {
     setSigningIn(true)
@@ -94,6 +131,28 @@ export function ActivityStepPanel(props: {
 
   useEffect(() => {
     if (enabled) void load()
+  }, [enabled, load])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const [user, session] = await Promise.all([
+        getCurrentUser().catch(() => null),
+        getCurrentSession().catch(() => null),
+      ])
+      if (!cancelled) setHasAccount(Boolean(user || session?.user))
+    })()
+    const unsub = onAuthStateChange((_event, session) => {
+      setHasAccount(Boolean(session?.user))
+      if (session?.user && enabled) {
+        authRetryRef.current = false
+        void load()
+      }
+    })
+    return () => {
+      cancelled = true
+      unsub?.()
+    }
   }, [enabled, load])
 
   useEffect(() => {
@@ -234,24 +293,39 @@ export function ActivityStepPanel(props: {
       <div className="flex h-full min-h-0 flex-col justify-center rounded-xl border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white px-3.5 py-4 gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-primary-700">
-            Compte requis
+            {hasAccount ? 'Session' : 'Compte requis'}
           </p>
           <p className="mt-1 text-sm font-extrabold text-ink tracking-tight">
-            Connecte-toi pour tes activités
+            {hasAccount
+              ? 'Reprendre ton compte'
+              : 'Connecte-toi pour tes activités'}
           </p>
           <p className="mt-1 text-xs text-muted leading-snug">
-            {tripItemsErrorLabelFr(error)}
+            {hasAccount
+              ? 'Tu es déjà connecté — on recharge tes activités avec ta session.'
+              : tripItemsErrorLabelFr(error)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={signingIn}
-            onClick={() => void onSignIn()}
-            className="rounded-lg bg-primary-600 text-white text-xs font-bold px-3.5 py-2.5 min-h-[40px] disabled:opacity-60"
-          >
-            {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
-          </button>
+          {hasAccount ? (
+            <button
+              type="button"
+              disabled={resuming}
+              onClick={() => void onResumeSession()}
+              className="rounded-lg bg-primary-600 text-white text-xs font-bold px-3.5 py-2.5 min-h-[40px] disabled:opacity-60"
+            >
+              {resuming ? 'Reprise…' : 'Reprendre ma session'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={signingIn}
+              onClick={() => void onSignIn()}
+              className="rounded-lg bg-primary-600 text-white text-xs font-bold px-3.5 py-2.5 min-h-[40px] disabled:opacity-60"
+            >
+              {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
+            </button>
+          )}
           <Link
             to={catalogHref}
             onClick={() => {

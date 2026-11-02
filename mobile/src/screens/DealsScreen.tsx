@@ -20,13 +20,16 @@ import {
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
+  translate,
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { apiBase, getApi } from '../lib/client'
+import { useAuth } from '../context/AuthContext'
 import { DealCard } from '../components/DealCard'
 import { OccasionIcon } from '../components/OccasionIcon'
 import { CityAirportPicker } from '../components/CityAirportPicker'
+import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -40,6 +43,8 @@ type DurationTab = 'weekend' | 'short' | 'week'
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { viewUser, signInWithGoogle } = useAuth()
+  const [loginLoading, setLoginLoading] = useState(false)
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [loading, setLoading] = useState(true)
@@ -271,6 +276,35 @@ export function DealsScreen() {
         ]
       : gridDeals.map((d) => ({ kind: 'deal' as const, deal: d }))
 
+  if (!viewUser) {
+    const t = (key: string) => translate('fr', key as never)
+    return (
+      <GuestAuthLanding
+        insetsTop={insets.top}
+        insetsBottom={insets.bottom}
+        kicker="SÉJOURS"
+        title={t('deals.guest.title')}
+        lead={t('deals.guest.lead')}
+        steps={[
+          { title: t('deals.guest.step1'), detail: t('deals.guest.step1.detail') },
+          { title: t('deals.guest.step2'), detail: t('deals.guest.step2.detail') },
+          { title: t('deals.guest.step3'), detail: t('deals.guest.step3.detail') },
+        ]}
+        ctaLabel={t('deals.guest.cta')}
+        hint={t('deals.guest.hint')}
+        loginLoading={loginLoading}
+        onLogin={() => {
+          void (async () => {
+            setLoginLoading(true)
+            const { error } = await signInWithGoogle()
+            if (error && __DEV__) console.warn('[auth] signIn', error.message)
+            setLoginLoading(false)
+          })()
+        }}
+      />
+    )
+  }
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -301,6 +335,7 @@ export function DealsScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
+              <Text style={styles.kicker}>SÉJOURS</Text>
               <Text style={styles.title}>Séjours pas chers</Text>
               <Text style={styles.subtitle}>
                 Vol + hôtel, prix réels vérifiés. Inspire-toi, filtre, réserve.
@@ -579,6 +614,14 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: spacing.lg,
+    gap: 4,
+  },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+    marginBottom: 2,
   },
   title: {
     fontFamily: fonts.extrabold,

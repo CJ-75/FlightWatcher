@@ -4,6 +4,11 @@ import {
   FALLBACK_CITY_IMAGE,
   FALLBACK_CITY_IMAGES,
 } from './cityImages'
+import {
+  countryIsoFromIata,
+  countryToFlagIso,
+  parseCountryFromFull,
+} from './countries'
 
 export interface CityAirportGroup {
   key: string
@@ -501,6 +506,33 @@ function stripAirportNoise(label: string): string {
 
 function looksLikeIataTrigram(value: string): boolean {
   return /^[A-Za-z]{3}$/.test((value || '').trim())
+}
+
+/** Best-effort ISO flag for an activity / favoris destination label ("Lisbonne", "Rome, Italie"). */
+export function countryIsoForCityLabel(label?: string | null): string | null {
+  if (!label) return null
+  const trimmed = String(label).trim()
+  if (!trimmed) return null
+  const fromFull = countryToFlagIso(parseCountryFromFull(trimmed))
+  if (fromFull) return fromFull
+  const cityPart = trimmed.split(',')[0]?.trim() || trimmed
+  const key = normalizeCityKey(cityPart)
+  if (!key) return null
+  for (const [iata, frCity] of Object.entries(CITY_FR_BY_IATA)) {
+    if (normalizeCityKey(frCity) === key) {
+      const iso = countryIsoFromIata(iata)
+      if (iso) return iso
+    }
+  }
+  for (const a of SEED_AIRPORTS) {
+    if (
+      normalizeCityKey(a.city) === key ||
+      normalizeCityKey(cityDisplayNameFr(a.code, a.city)) === key
+    ) {
+      return countryToFlagIso(a.country) || countryIsoFromIata(a.code)
+    }
+  }
+  return countryToFlagIso(cityPart)
 }
 
 /** French display name for a city, preferring IATA then EN→FR / label. */

@@ -29,6 +29,7 @@ import { PassengerStepper } from './components/PassengerStepper'
 import type { LikedActivity, LikedDeal, TravelDeal } from './types'
 import type { ActivityCardModel } from '@flightwatcher/shared'
 import { DestinationCard } from './components/DestinationCard'
+import { FavoriteFlightCard } from './components/FavoriteFlightCard'
 import { RouletteMode } from './components/RouletteMode'
 import { PostBookLightbox } from './components/PostBookLightbox'
 import { LoadingSpinner } from './components/LoadingSpinner'
@@ -55,17 +56,28 @@ import {
   trackPartnerAnalytics,
 } from './utils/partnerBook'
 import {
+  ACTIVITY_ADDED_TO_PLANNER_FR,
+  ACTIVITY_ADD_TO_PLANNER_FR,
+  ACTIVITY_NO_PLANNER_TO_ADD_FR,
   buildBookingUrl,
+  countryIsoForCityLabel,
   findCityGroupByCodes,
   groupAirportsByCity,
+  hasTripItemOwner,
   isPastFavoriteActivity,
   isPastFavoriteDeal,
   isPastFavoriteFlight,
   parseAirportCodes,
   partitionFavoritesByPast,
+  pickTripItemOwner,
   resolvePopularAirports,
 } from '@flightwatcher/shared'
 import { CityAirportSelect } from './components/CityAirportSelect'
+import { CountryFlag } from './components/CountryFlag'
+import {
+  ActivityPlannerPicker,
+  type ActivityPlannerTarget,
+} from './components/ActivityPlannerPicker'
 
 type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'activities' | 'saved'
 
@@ -2278,7 +2290,45 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [favoritesKind, setFavoritesKind] = useState<
     'flights' | 'deals' | 'activities'
   >('flights')
+  const [pendingAddActivity, setPendingAddActivity] =
+    useState<ActivityCardModel | null>(null)
+  const [activityAddBusy, setActivityAddBusy] = useState(false)
   const intervalsRef = useRef<Record<string, NodeJS.Timeout>>({})
+
+  const confirmAddFavoriteActivity = async (target: ActivityPlannerTarget) => {
+    const card = pendingAddActivity
+    if (!card) return
+    const owner = pickTripItemOwner({
+      draftToken: target.draftToken,
+      plannedTripId: target.plannedTripId,
+    })
+    if (!hasTripItemOwner(owner)) {
+      setToastMessage(ACTIVITY_NO_PLANNER_TO_ADD_FR)
+      setToastType('error')
+      return
+    }
+    setActivityAddBusy(true)
+    try {
+      await getApiClient().addTripItem({
+        product_code: card.productCode,
+        title: card.title,
+        product_url: card.productUrl,
+        ...owner,
+        platform: 'web',
+        surface: 'favorites',
+      })
+      setPendingAddActivity(null)
+      setToastMessage(ACTIVITY_ADDED_TO_PLANNER_FR(target.label))
+      setToastType('success')
+    } catch (e) {
+      setToastMessage(
+        e instanceof Error ? e.message : 'Ajout au planner impossible',
+      )
+      setToastType('error')
+    } finally {
+      setActivityAddBusy(false)
+    }
+  }
 
   const { active: activeFlightFavorites, archived: archivedFlightFavorites } = useMemo(
     () => partitionFavoritesByPast(favorites, isPastFavoriteFlight),
@@ -3159,6 +3209,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
                     {activeLikedActivities.map((item) => {
                       const card = likedActivityToCard(item)
+                      const iso = countryIsoForCityLabel(card.destinationLabel)
                       return (
                         <article
                           key={item.id}
@@ -3184,24 +3235,41 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                             </button>
                           </div>
                           <div className="p-4 flex flex-col gap-2 flex-1">
-                            <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2">
-                              {card.title}
+                            <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2 flex items-start gap-2">
+                              {iso ? (
+                                <CountryFlag
+                                  iso={iso}
+                                  className="w-5 h-3.5 mt-0.5 shrink-0"
+                                  title={card.destinationLabel || undefined}
+                                />
+                              ) : null}
+                              <span className="min-w-0">{card.title}</span>
                             </h3>
                             <p className="text-sm text-muted">
                               {[card.destinationLabel, card.priceLabel, card.durationLabel]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </p>
-                            {card.productUrl ? (
-                              <a
-                                href={card.productUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-auto inline-flex items-center justify-center rounded-xl bg-primary-500 text-white text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-primary-600"
+                            <div className="mt-auto flex flex-col gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPendingAddActivity(card)}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-[#FFF8F3] text-primary-700 text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-orange-50"
                               >
-                                Voir l’activité
-                              </a>
-                            ) : null}
+                                <span className="text-base leading-none">+</span>
+                                {ACTIVITY_ADD_TO_PLANNER_FR}
+                              </button>
+                              {card.productUrl ? (
+                                <a
+                                  href={card.productUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center rounded-xl bg-primary-500 text-white text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-primary-600"
+                                >
+                                  Voir l’activité
+                                </a>
+                              ) : null}
+                            </div>
                           </div>
                         </article>
                       )
@@ -3229,6 +3297,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                       <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 opacity-50">
                         {archivedLikedActivities.map((item) => {
                           const card = likedActivityToCard(item)
+                          const iso = countryIsoForCityLabel(card.destinationLabel)
                           return (
                             <article
                               key={item.id}
@@ -3254,14 +3323,29 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                                 </button>
                               </div>
                               <div className="p-4 flex flex-col gap-2 flex-1">
-                                <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2">
-                                  {card.title}
+                                <h3 className="font-extrabold text-ink text-[15px] leading-snug line-clamp-2 flex items-start gap-2">
+                                  {iso ? (
+                                    <CountryFlag
+                                      iso={iso}
+                                      className="w-5 h-3.5 mt-0.5 shrink-0"
+                                      title={card.destinationLabel || undefined}
+                                    />
+                                  ) : null}
+                                  <span className="min-w-0">{card.title}</span>
                                 </h3>
                                 <p className="text-sm text-muted">
                                   {[card.destinationLabel, card.priceLabel, card.durationLabel]
                                     .filter(Boolean)
                                     .join(' · ')}
                                 </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingAddActivity(card)}
+                                  className="mt-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-orange-200 bg-[#FFF8F3] text-primary-700 text-sm font-bold px-3.5 py-2.5 min-h-[44px] hover:bg-orange-50"
+                                >
+                                  <span className="text-base leading-none">+</span>
+                                  {ACTIVITY_ADD_TO_PLANNER_FR}
+                                </button>
                               </div>
                             </article>
                           )
@@ -3354,234 +3438,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 </p>
               </div>
             </div>
-          ) : (() => {
-            const renderFlightCard = (
-              favorite: SavedFavorite,
-              index: number,
-              faded: boolean,
-            ) => (
-                  <motion.div
-                    key={favorite.id}
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.04 }}
-                    className={`group relative rounded-[28px] border overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 ${
-                      faded
-                        ? 'border-slate-200 bg-slate-50/90 opacity-50'
-                        : 'border-orange-100/70 bg-white hover:border-orange-200'
-                    }`}
-                  >
-                    <div className="p-4 sm:p-5 md:p-6">
-                      {/* En-tête avec meilleure hiérarchie */}
-                      <div className="flex flex-col sm:flex-row items-start justify-between mb-4 sm:mb-5 gap-4 sm:gap-5">
-                        <div className="flex-1 w-full sm:w-auto sm:pr-4">
-                          {/* Mobile: Layout avec statut et prix en haut à droite */}
-                          <div className="flex sm:block items-start justify-between gap-3 sm:gap-0">
-                            <div className="flex-1 sm:flex-none min-w-0">
-                              {/* Mobile: Première ligne avec statut et prix à droite */}
-                              <div className="flex sm:hidden items-start justify-between gap-2 mb-1.5">
-                                <div className="flex-1 min-w-0">
-                                  {/* Aéroport */}
-                                  <div className="text-base font-black text-slate-400 tracking-wider mb-0.5">
-                                    {favorite.trip.destination_code}
-                                  </div>
-                                  {/* Ville - Mobile: sous l'aéroport */}
-                                  <h3 className="text-lg font-black text-slate-900">
-                                    {favorite.trip.aller.destinationFull.split(',')[0]}
-                                  </h3>
-                                </div>
-                                {/* Mobile: Statut et Prix en haut à droite en colonne verticale */}
-                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                  {/* Badge statut disponibilité */}
-                                  {favorite.isStillValid !== undefined && (
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold ${
-                                      favorite.isStillValid 
-                                        ? 'bg-green-100 text-green-700 border border-green-300 shadow-sm' 
-                                        : 'bg-red-100 text-red-700 border border-red-300 shadow-sm'
-                                    }`}>
-                                      <span className={`w-1.5 h-1.5 rounded-full ${
-                                        favorite.isStillValid ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                                      }`}></span>
-                                      {favorite.isStillValid ? 'Disponible' : 'Indisponible'}
-                                    </span>
-                                  )}
-                                  {/* Prix Total - Mobile */}
-                                  <div className="flex flex-col items-end">
-                                    <span className="text-2xl font-black text-[#E85A28] leading-none">
-                                      {favorite.trip.prix_total.toFixed(0)}€
-                                    </span>
-                                    <span className="text-xs text-slate-500 font-medium">total</span>
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {/* Desktop: Code aéroport - Ville sur une ligne */}
-                              <div className="hidden sm:flex items-baseline gap-2 mb-1.5">
-                                <span className="text-lg sm:text-xl font-black text-slate-400 tracking-wider">
-                                  {favorite.trip.destination_code}
-                                </span>
-                                <span className="text-slate-400">-</span>
-                                <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900">
-                                  {favorite.trip.aller.destinationFull.split(',')[0]}
-                                </h3>
-                              </div>
-                              
-                              {/* Pays */}
-                              <p className="text-sm sm:text-base text-slate-600 font-medium mb-2 sm:mb-0">
-                                {favorite.trip.aller.destinationFull.split(',')[1]?.trim() || ''}
-                              </p>
-                              
-                              {/* Desktop: Prix Total - mis en évidence (caché sur mobile) */}
-                              <div className="hidden sm:flex items-baseline gap-2 pt-3 border-t border-slate-200">
-                                <span className="text-3xl sm:text-4xl md:text-5xl font-black text-[#E85A28] leading-none">
-                                  {favorite.trip.prix_total.toFixed(0)}€
-                                </span>
-                                <span className="text-sm sm:text-base text-slate-500 font-medium">total</span>
-                              </div>
-
-                              {/* Métadonnées */}
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-slate-500 pt-1 sm:pt-2">
-                                <span className="flex items-center gap-1">
-                                  <span>💾</span>
-                                  <span>Sauvegardé le {new Date(favorite.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                                </span>
-                                {favorite.lastChecked && (
-                                  <span className="flex items-center gap-1">
-                                    <span>•</span>
-                                    <span>Vérifié le {new Date(favorite.lastChecked).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                          </div>
-
-                          {/* Desktop: Badge statut disponibilité */}
-                          {favorite.isStillValid !== undefined && (
-                            <div className="hidden sm:block mt-3">
-                              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold ${
-                                favorite.isStillValid 
-                                  ? 'bg-green-100 text-green-700 border-2 border-green-300 shadow-sm' 
-                                  : 'bg-red-100 text-red-700 border-2 border-red-300 shadow-sm'
-                              }`}>
-                                <span className={`w-2.5 h-2.5 rounded-full ${
-                                  favorite.isStillValid ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                                }`}></span>
-                                {favorite.isStillValid ? 'Disponible' : 'Indisponible'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto">
-                          <motion.button
-                            onClick={() => handleBookFavorite(favorite)}
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.97 }}
-                            className="flex-1 sm:flex-none px-4 py-2.5 bg-[#FF6B35] text-white rounded-2xl hover:bg-[#E85A28] text-xs sm:text-sm font-bold shadow-sm shadow-orange-500/20 flex items-center justify-center gap-1.5 min-h-[44px]"
-                          >
-                            {t('card.book')}
-                          </motion.button>
-                          <motion.button
-                            onClick={() => {
-                              toggleFavoriteArchived(favorite.id)
-                              refreshData()
-                            }}
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.97 }}
-                            className={`flex-1 sm:flex-none px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 min-h-[44px] ${
-                              favorite.archived
-                                ? 'bg-[#FFF3EC] text-[#E85A28] hover:bg-[#FFE8DC]'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                            title={favorite.archived ? 'Désarchiver' : 'Archiver'}
-                          >
-                            <span className="hidden sm:inline">{favorite.archived ? 'Désarchiver' : 'Archiver'}</span>
-                            <span className="sm:hidden">{favorite.archived ? 'Désarch.' : 'Archiver'}</span>
-                          </motion.button>
-                          <motion.button
-                            onClick={() => {
-                              if (confirm(t('favorites.remove') + ' ?')) {
-                                deleteFavorite(favorite.id)
-                                refreshData()
-                              }
-                            }}
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.97 }}
-                            className="px-3.5 py-2.5 bg-white border border-red-200 text-red-600 rounded-2xl hover:bg-red-50 text-xs sm:text-sm font-bold min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            title={t('saved.delete')}
-                          >
-                            ✕
-                          </motion.button>
-                        </div>
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-5 pt-4 sm:pt-5 border-t border-orange-100">
-                        <div className="rounded-2xl p-3 sm:p-4 border border-orange-100 bg-[#FFF8F3]">
-                          <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <div className="text-xs sm:text-sm font-black text-[#E85A28] tracking-wide">
-                              ALLER
-                            </div>
-                            {favorite.trip.leg_prices_reliable !== false && favorite.trip.aller.price > 0 ? (
-                              <div className="text-lg sm:text-xl font-black text-[#E85A28]">
-                                {favorite.trip.aller.price.toFixed(0)}€
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Date</span>
-                              <span className="text-slate-600">{formatDateFr(favorite.trip.aller.departureTime)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Heure</span>
-                              <span className="text-slate-600">{new Date(favorite.trip.aller.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Vol</span>
-                              <span className="text-slate-600 font-mono">{favorite.trip.aller.flightNumber}</span>
-                            </div>
-                            <div className="flex justify-between pt-2 border-t border-orange-100">
-                              <span className="text-slate-500 text-xs">Trajet</span>
-                              <span className="text-slate-700 font-bold">{favorite.trip.aller.origin} → {favorite.trip.aller.destination}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="rounded-2xl p-3 sm:p-4 border border-slate-200 bg-slate-50/80">
-                          <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <div className="text-xs sm:text-sm font-black text-slate-700 tracking-wide">
-                              RETOUR
-                            </div>
-                            {favorite.trip.leg_prices_reliable !== false && favorite.trip.retour.price > 0 ? (
-                              <div className="text-lg sm:text-xl font-black text-slate-800">
-                                {favorite.trip.retour.price.toFixed(0)}€
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Date</span>
-                              <span className="text-slate-600">{formatDateFr(favorite.trip.retour.departureTime)}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Heure</span>
-                              <span className="text-slate-600">{new Date(favorite.trip.retour.departureTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="font-semibold text-slate-700">Vol</span>
-                              <span className="text-slate-600 font-mono">{favorite.trip.retour.flightNumber}</span>
-                            </div>
-                            <div className="flex justify-between pt-2 border-t border-slate-200">
-                              <span className="text-slate-500 text-xs">Trajet</span>
-                              <span className="text-slate-700 font-bold">{favorite.trip.retour.origin} → {favorite.trip.retour.destination}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-            )
-
-            return (
+          ) : (
               <div>
                 {activeFlightFavorites.length === 0 && archivedFlightFavorites.length > 0 ? (
                   <p className="text-sm text-slate-500 text-center mb-4">
@@ -3589,10 +3446,25 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   </p>
                 ) : null}
                 {activeFlightFavorites.length > 0 ? (
-                  <div className="grid gap-4 sm:gap-5">
-                    {activeFlightFavorites.map((favorite, index) =>
-                      renderFlightCard(favorite, index, false),
-                    )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                    {activeFlightFavorites.map((favorite) => (
+                      <FavoriteFlightCard
+                        key={favorite.id}
+                        favorite={favorite}
+                        bookLabel={t('card.book')}
+                        onBook={() => handleBookFavorite(favorite)}
+                        onRemove={() => {
+                          if (confirm('Retirer ce vol des favoris ?')) {
+                            deleteFavorite(favorite.id)
+                            void refreshData()
+                          }
+                        }}
+                        onToggleArchive={() => {
+                          toggleFavoriteArchived(favorite.id)
+                          void refreshData()
+                        }}
+                      />
+                    ))}
                   </div>
                 ) : null}
                 {archivedFlightFavorites.length > 0 ? (
@@ -3617,18 +3489,33 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                         <p className="text-xs text-slate-500 mb-3 px-1">
                           {t('favorites.archivedHint')}
                         </p>
-                        <div className="grid gap-4 sm:gap-5">
-                          {archivedFlightFavorites.map((favorite, index) =>
-                            renderFlightCard(favorite, index, true),
-                          )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                          {archivedFlightFavorites.map((favorite) => (
+                            <FavoriteFlightCard
+                              key={favorite.id}
+                              favorite={favorite}
+                              faded
+                              bookLabel={t('card.book')}
+                              onBook={() => handleBookFavorite(favorite)}
+                              onRemove={() => {
+                                if (confirm('Retirer ce vol des favoris ?')) {
+                                  deleteFavorite(favorite.id)
+                                  void refreshData()
+                                }
+                              }}
+                              onToggleArchive={() => {
+                                toggleFavoriteArchived(favorite.id)
+                                void refreshData()
+                              }}
+                            />
+                          ))}
                         </div>
                       </div>
                     ) : null}
                   </div>
                 ) : null}
               </div>
-            )
-          })()}
+            )}
         </div>
         {selectedLikedDeal ? (
           <DealDetailModal
@@ -3638,6 +3525,14 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             onClose={() => setSelectedLikedDeal(null)}
           />
         ) : null}
+        <ActivityPlannerPicker
+          open={Boolean(pendingAddActivity)}
+          busy={activityAddBusy}
+          onClose={() => {
+            if (!activityAddBusy) setPendingAddActivity(null)
+          }}
+          onPick={(target) => void confirmAddFavoriteActivity(target)}
+        />
       </div>
       </>
       )}

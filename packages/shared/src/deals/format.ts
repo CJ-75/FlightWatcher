@@ -157,19 +157,25 @@ export function dealCornerBadgeParts(deal: TravelDeal): DealCornerBadgeParts | n
     }
   }
   if (deal.badge && !/^nouveau$/i.test(String(deal.badge).trim())) {
-    const text = String(deal.badge).trim()
-    if (!text) return null
+    const raw = String(deal.badge).trim()
+    if (!raw) return null
     // Legacy long "Vol −N % …" → strip number into pct if present
-    const m = text.match(/−\s*(\d+)\s*%/)
-    if (m) {
+    const m = raw.match(/[−\-–—]\s*(\d+)\s*%/)
+    if (m && Number(m[1]) >= 15) {
       return {
         discountPct: Number(m[1]),
         text: 'Moins cher',
-        fullText: text,
+        fullText: raw,
         kind: 'discount',
       }
     }
-    return { discountPct: null, text, fullText: text, kind: 'discount' }
+    // Drop inactive % placeholders ("__%", "−%", "–%") — keep label only.
+    const text = raw
+      .replace(/[−\-–—_]{1,2}\s*%/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+    if (!text) return null
+    return { discountPct: null, text, fullText: text, kind: 'occasion' }
   }
   const occasion = occasionBadgeLabel(deal.occasion_badge)
   if (occasion && occasion.trim()) {

@@ -205,7 +205,7 @@ export function tripItemsErrorLabelFr(message?: string | null): string {
   const raw = String(message || '').trim()
   const key = raw.toLowerCase()
   if (key === 'auth_required') {
-    return 'Connecte-toi pour ajouter et gérer les activités de ce voyage.'
+    return 'Tes activités de voyage sont liées à ton compte — on reprend ta session.'
   }
   if (key === 'not_a_member') {
     return 'Tu dois faire partie du voyage pour gérer les activités.'
@@ -287,6 +287,52 @@ export function activityMatchesCategories(
     if (cat.tagIds.some((tid) => tagIds.includes(tid))) return true
     return cat.keywords.some((kw) => blob.includes(kw.toLowerCase()))
   })
+}
+
+/** Accent-insensitive normalize for activity catalogue search. */
+export function normalizeActivitySearch(q: string): string {
+  return String(q || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+export const ACTIVITY_SEARCH_PLACEHOLDER_FR = 'Musée, visite, excursion…'
+export const ACTIVITY_SEARCH_PLACEHOLDER_CITY_FR = (city: string) => {
+  const c = String(city || '').trim()
+  return c ? `Rechercher à ${c}…` : ACTIVITY_SEARCH_PLACEHOLDER_FR
+}
+
+/**
+ * Filter within the already city-scoped catalogue: title / description /
+ * category labels & keywords.
+ */
+export function activityMatchesSearchQuery(
+  raw: Record<string, unknown>,
+  query: string,
+): boolean {
+  const q = normalizeActivitySearch(query)
+  if (!q) return true
+
+  const textBlob = normalizeActivitySearch(
+    [raw.title, raw.category, raw.tag, raw.description]
+      .map((x) => String(x || ''))
+      .join(' '),
+  )
+  if (textBlob.includes(q)) return true
+
+  const catHits = ACTIVITY_CATEGORY_TAGS_FR.filter((t) => {
+    const label = normalizeActivitySearch(t.label)
+    if (label.includes(q) || q.includes(label)) return true
+    return t.keywords.some((kw) => {
+      const k = normalizeActivitySearch(kw)
+      return k.includes(q) || q.includes(k)
+    })
+  }).map((t) => t.id)
+
+  if (catHits.length && activityMatchesCategories(raw, catHits)) return true
+  return false
 }
 
 export function activityCategoriesSummaryFr(selectedIds: readonly string[]): string {

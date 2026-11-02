@@ -18,6 +18,7 @@ import {
   ACTIVITY_KEEP_ADDING_FR,
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
   ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
+  ACTIVITY_SEARCH_PLACEHOLDER_CITY_FR,
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
   activitiesCityPath,
@@ -26,6 +27,7 @@ import {
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
+  activityMatchesSearchQuery,
   hasTripItemOwner,
   pickTripItemOwner,
   savedIdeasTitleFr,
@@ -253,6 +255,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const [fallbackHint, setFallbackHint] = useState<string | null>(null)
   const [sort, setSort] = useState<'recommended' | 'price' | 'rating'>('recommended')
   const [categories, setCategories] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [detail, setDetail] = useState<ActivityCardModel | null>(null)
   const [pendingBook, setPendingBook] = useState<ActivityCardModel | null>(null)
   const [askBooked, setAskBooked] = useState(false)
@@ -307,8 +310,16 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     }
   }, [tripReady, citySlug, header, navigate])
 
+  useEffect(() => {
+    setSearchQuery('')
+  }, [citySlug])
+
   const cards = useMemo(() => {
-    const matched = items.filter((r) => activityMatchesCategories(r, categories))
+    const matched = items.filter(
+      (r) =>
+        activityMatchesCategories(r, categories) &&
+        activityMatchesSearchQuery(r, searchQuery),
+    )
     let list = matched.map((r) => toActivityCardModel(r, adults))
     if (sort === 'price') {
       list = [...list].sort((a, b) => {
@@ -320,7 +331,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       list = [...list].sort((a, b) => (b.rating || 0) - (a.rating || 0))
     }
     return list
-  }, [items, adults, sort, categories])
+  }, [items, adults, sort, categories, searchQuery])
 
   const loadCity = useCallback(
     async (slug: string) => {
@@ -759,6 +770,70 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
             if (city.slug) navigate(activitiesCityPath(city.slug, catalogNavOpts))
           }}
         />
+      </div>
+
+      <div className="mb-3 sm:mb-4">
+        <label className="sr-only" htmlFor="activity-search">
+          Rechercher une activité
+        </label>
+        <div className="relative group">
+          <span
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted group-focus-within:text-primary-500 transition-colors"
+            aria-hidden
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="11"
+                cy="11"
+                r="6.5"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <path
+                d="M16.2 16.2L20 20"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <input
+            id="activity-search"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={ACTIVITY_SEARCH_PLACEHOLDER_CITY_FR(
+              activityDestinationLabelFr(citySlug),
+            )}
+            autoComplete="off"
+            enterKeyHint="search"
+            className="w-full min-h-[44px] rounded-xl border-2 border-slate-200 bg-white pl-11 pr-11 py-2.5 sm:py-3 text-sm sm:text-base text-ink placeholder:text-muted shadow-soft hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-500 transition-colors [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-ink transition-colors"
+              aria-label="Effacer la recherche"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="M6 6l12 12M18 6L6 18"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          ) : null}
+        </div>
+        {searchQuery.trim() ? (
+          <p className="mt-1.5 text-[11px] font-semibold text-muted">
+            {cards.length === 0
+              ? `Aucun résultat pour « ${searchQuery.trim()} »`
+              : `${cards.length} résultat${cards.length > 1 ? 's' : ''} à ${activityDestinationLabelFr(citySlug)}`}
+          </p>
+        ) : null}
       </div>
 
       {addNotice ? (

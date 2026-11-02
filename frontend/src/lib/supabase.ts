@@ -257,13 +257,39 @@ export const isAuthenticated = async (): Promise<boolean> => {
 }
 
 /**
- * Obtient le token d'accès pour les appels API backend
+ * Obtient le token d'accès pour les appels API backend.
+ * Attend la config Supabase et rafraîchit le JWT s’il est proche de l’expiration.
  */
 export const getAccessToken = async (): Promise<string | null> => {
   const client = await getSupabaseClient()
   if (!client) return null
-  const { data: { session } } = await client.auth.getSession()
-  return session?.access_token || null
+  const {
+    data: { session },
+  } = await client.auth.getSession()
+  if (!session?.access_token) return null
+  const expiresAt = Number(session.expires_at || 0)
+  const skewSec = 60
+  if (expiresAt > 0 && expiresAt * 1000 <= Date.now() + skewSec * 1000) {
+    const { data, error } = await client.auth.refreshSession()
+    if (!error && data.session?.access_token) {
+      return data.session.access_token
+    }
+  }
+  return session.access_token
+}
+
+/** Force a token refresh (resume session after auth_required while still logged in). */
+export const refreshAccessToken = async (): Promise<string | null> => {
+  const client = await getSupabaseClient()
+  if (!client) return null
+  const { data, error } = await client.auth.refreshSession()
+  if (error) {
+    const {
+      data: { session },
+    } = await client.auth.getSession()
+    return session?.access_token || null
+  }
+  return data.session?.access_token || null
 }
 
 export default supabase

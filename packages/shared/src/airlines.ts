@@ -2,16 +2,24 @@
 const AIRLINE_NAMES: Record<string, string> = {
   FR: 'Ryanair',
   RK: 'Ryanair',
+  RYANAIR: 'Ryanair',
   TO: 'Transavia',
   HV: 'Transavia',
+  TRANSAVIA: 'Transavia',
   VY: 'Vueling',
+  VUELING: 'Vueling',
   U2: 'easyJet',
   EC: 'easyJet',
   DS: 'easyJet',
+  EZY: 'easyJet',
+  EASYJET: 'easyJet',
   W4: 'Wizz Air',
   W6: 'Wizz Air',
   W9: 'Wizz Air',
+  WIZZ: 'Wizz Air',
+  WIZZAIR: 'Wizz Air',
   AF: 'Air France',
+  AIRFRANCE: 'Air France',
   BA: 'British Airways',
   LH: 'Lufthansa',
   KL: 'KLM',
@@ -32,6 +40,7 @@ const AIRLINE_NAMES: Record<string, string> = {
   UX: 'Air Europa',
   LS: 'Jet2',
   V7: 'Volotea',
+  VOLOTEA: 'Volotea',
   X3: 'TUI fly',
   TB: 'TUI fly',
   BT: 'airBaltic',
@@ -47,7 +56,6 @@ const AIRLINE_NAMES: Record<string, string> = {
   QS: 'Smartwings',
   GQ: 'Sky Express',
   DE: 'Condor',
-  EZY: 'easyJet',
   MW: 'Mokulele',
   XP: 'Avelo',
   F9: 'Frontier',
@@ -62,23 +70,81 @@ const AIRLINE_NAMES: Record<string, string> = {
   LJ: 'Jin Air',
 }
 
-/**
- * Human-readable airline for trip cards.
- * Prefers mapped IATA name, then raw airline, then provider fallback.
- */
-export function formatAirlineLabel(trip: {
+/** Extract IATA-ish carrier code from a flight number ("FR4821", "FR 4821", "U2 1234"). */
+export function airlineCodeFromFlightNumber(
+  flightNumber?: string | null,
+): string | null {
+  const raw = String(flightNumber || '').trim().toUpperCase()
+  if (!raw) return null
+  const spaced = raw.match(/^([A-Z]{2,3})\s+\d{1,5}\b/)
+  if (spaced) return spaced[1]
+  const compact = raw.replace(/[^A-Z0-9]/g, '')
+  const m = compact.match(/^([A-Z]{2,3})\d{1,5}$/)
+  return m ? m[1] : null
+}
+
+function nameFromCodeOrRaw(raw?: string | null): string | null {
+  const text = String(raw || '').trim()
+  if (!text) return null
+  const key = text.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (key && AIRLINE_NAMES[key]) return AIRLINE_NAMES[key]
+  // Already a human name (not a 2–3 letter code)
+  if (text.length > 3 || /[a-z]/.test(text)) {
+    if (/^compagnie(\s|$)/i.test(text)) return null
+    return text
+  }
+  if (key && key.length >= 2 && key.length <= 3) return `Compagnie ${key}`
+  return null
+}
+
+function nameFromBookingUrl(url?: string | null): string | null {
+  const u = String(url || '').toLowerCase()
+  if (!u) return null
+  if (u.includes('ryanair')) return 'Ryanair'
+  if (u.includes('easyjet')) return 'easyJet'
+  if (u.includes('transavia')) return 'Transavia'
+  if (u.includes('vueling')) return 'Vueling'
+  if (u.includes('wizzair') || u.includes('wizz')) return 'Wizz Air'
+  if (u.includes('airfrance') || u.includes('air-france')) return 'Air France'
+  if (u.includes('volotea')) return 'Volotea'
+  if (u.includes('jet2')) return 'Jet2'
+  return null
+}
+
+export type AirlineLabelTrip = {
   airline?: string | null
   provider?: string | null
-}): string {
-  const raw = (trip.airline || '').trim()
-  const code = raw.toUpperCase()
-  if (code && AIRLINE_NAMES[code]) return AIRLINE_NAMES[code]
-  // Already a name (not a 2–3 letter code)
-  if (raw && (raw.length > 3 || /[a-z]/.test(raw))) return raw
-  if (code && code.length >= 2 && code.length <= 3) return `Compagnie ${code}`
+  booking_url?: string | null
+  aller?: { flightNumber?: string | null } | null
+  retour?: { flightNumber?: string | null } | null
+}
+
+/**
+ * Human-readable airline for trip cards / favoris / boarding pass.
+ * Prefers mapped IATA, flight-number prefix, booking URL, then provider.
+ */
+export function formatAirlineLabel(trip: AirlineLabelTrip): string {
+  const fromAirline = nameFromCodeOrRaw(trip.airline)
+  if (fromAirline && !/^Compagnie\s/i.test(fromAirline)) return fromAirline
+
+  const fromOut = nameFromCodeOrRaw(
+    airlineCodeFromFlightNumber(trip.aller?.flightNumber),
+  )
+  if (fromOut && !/^Compagnie\s/i.test(fromOut)) return fromOut
+
+  const fromRet = nameFromCodeOrRaw(
+    airlineCodeFromFlightNumber(trip.retour?.flightNumber),
+  )
+  if (fromRet && !/^Compagnie\s/i.test(fromRet)) return fromRet
+
+  const fromUrl = nameFromBookingUrl(trip.booking_url)
+  if (fromUrl) return fromUrl
 
   const provider = String(trip.provider || '').toLowerCase()
   if (provider === 'ryanair') return 'Ryanair'
-  if (provider === 'travelpayouts') return 'Multi-compagnies'
-  return 'Compagnie'
+  if (provider === 'travelpayouts' || provider === 'aviasales') {
+    return fromAirline || fromOut || fromRet || 'Multi-compagnies'
+  }
+
+  return fromAirline || fromOut || fromRet || 'Compagnie'
 }

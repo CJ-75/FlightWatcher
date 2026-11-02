@@ -12,6 +12,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  TextInput,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -24,22 +25,27 @@ import {
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_PAGE_KICKER_FR,
   ACTIVITY_PAGE_SUBTITLE_FR,
   ACTIVITY_PAGE_TITLE_FR,
   ACTIVITY_KEEP_ADDING_FR,
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
+  ACTIVITY_SEARCH_PLACEHOLDER_CITY_FR,
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
   canonicalViatorProductUrl,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
+  activityMatchesSearchQuery,
   hasTripItemOwner,
   pickTripItemOwner,
   toActivityCardModel,
   toggleActivityCategory,
+  translate,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
+import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
@@ -51,6 +57,7 @@ import {
   type ActivityPlannerTarget,
 } from '../components/ActivityPlannerPicker'
 import { ActivityTripHero } from '../components/ActivityTripHero'
+import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useLikedActivities } from '../hooks/useLikedActivities'
 import type { MainTabParamList, RootStackParamList } from '../navigation/types'
@@ -64,6 +71,8 @@ export function ActivitiesScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<MainTabParamList, 'Activities'>>()
+  const { viewUser, signInWithGoogle } = useAuth()
+  const [loginLoading, setLoginLoading] = useState(false)
   const [citySlug, setCitySlug] = useState(
     () => route.params?.city?.trim().toLowerCase() || '',
   )
@@ -83,6 +92,7 @@ export function ActivitiesScreen() {
   const [fallbackHint, setFallbackHint] = useState<string | null>(null)
   const [sort, setSort] = useState<'recommended' | 'price' | 'rating'>('recommended')
   const [categories, setCategories] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [detail, setDetail] = useState<ActivityCardModel | null>(null)
   const [pendingBook, setPendingBook] = useState<ActivityCardModel | null>(null)
   const [askBooked, setAskBooked] = useState(false)
@@ -256,8 +266,16 @@ export function ActivitiesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftFromRoute, plannedFromRoute])
 
+  useEffect(() => {
+    setSearchQuery('')
+  }, [citySlug])
+
   const cards = useMemo(() => {
-    const matched = items.filter((r) => activityMatchesCategories(r, categories))
+    const matched = items.filter(
+      (r) =>
+        activityMatchesCategories(r, categories) &&
+        activityMatchesSearchQuery(r, searchQuery),
+    )
     let list = matched.map((r) => toActivityCardModel(r, adults))
     if (sort === 'price') {
       list = [...list].sort((a, b) => {
@@ -269,7 +287,7 @@ export function ActivitiesScreen() {
       list = [...list].sort((a, b) => (b.rating || 0) - (a.rating || 0))
     }
     return list
-  }, [items, adults, sort, categories])
+  }, [items, adults, sort, categories, searchQuery])
 
   const loadCity = useCallback(
     async (slug: string, opts?: { silent?: boolean }) => {
@@ -458,6 +476,44 @@ export function ActivitiesScreen() {
     else setRefreshing(false)
   }
 
+  if (!viewUser) {
+    const t = (key: string) => translate('fr', key as never)
+    return (
+      <GuestAuthLanding
+        insetsTop={insets.top}
+        insetsBottom={insets.bottom}
+        kicker="ACTIVITÉS"
+        title={t('activities.guest.title')}
+        lead={t('activities.guest.lead')}
+        steps={[
+          {
+            title: t('activities.guest.step1'),
+            detail: t('activities.guest.step1.detail'),
+          },
+          {
+            title: t('activities.guest.step2'),
+            detail: t('activities.guest.step2.detail'),
+          },
+          {
+            title: t('activities.guest.step3'),
+            detail: t('activities.guest.step3.detail'),
+          },
+        ]}
+        ctaLabel={t('activities.guest.cta')}
+        hint={t('activities.guest.hint')}
+        loginLoading={loginLoading}
+        onLogin={() => {
+          void (async () => {
+            setLoginLoading(true)
+            const { error } = await signInWithGoogle()
+            if (error && __DEV__) console.warn('[auth] signIn', error.message)
+            setLoginLoading(false)
+          })()
+        }}
+      />
+    )
+  }
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -478,6 +534,7 @@ export function ActivitiesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
+            <Text style={styles.kicker}>{ACTIVITY_PAGE_KICKER_FR}</Text>
             <Text style={styles.title}>{ACTIVITY_PAGE_TITLE_FR}</Text>
             <Text style={styles.subtitle}>{ACTIVITY_PAGE_SUBTITLE_FR}</Text>
 
@@ -524,6 +581,45 @@ export function ActivitiesScreen() {
                 onChange={(city) => setCitySlug(city.slug)}
               />
             </View>
+
+            <View style={styles.searchShell}>
+              <View style={styles.searchIconWrap} accessibilityElementsHidden>
+                <View style={styles.searchIconCircle} />
+                <View style={styles.searchIconHandle} />
+              </View>
+              <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={ACTIVITY_SEARCH_PLACEHOLDER_CITY_FR(
+                  activityDestinationLabelFr(citySlug),
+                )}
+                placeholderTextColor={colors.muted}
+                style={styles.searchInput}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
+                accessibilityLabel="Rechercher une activité"
+              />
+              {searchQuery ? (
+                <Pressable
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={8}
+                  style={styles.searchClearBtn}
+                  accessibilityLabel="Effacer la recherche"
+                >
+                  <Text style={styles.searchClearX}>×</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.searchClearSpacer} />
+              )}
+            </View>
+            {searchQuery.trim() ? (
+              <Text style={styles.searchHint}>
+                {cards.length === 0
+                  ? `Aucun résultat pour « ${searchQuery.trim()} »`
+                  : `${cards.length} résultat${cards.length > 1 ? 's' : ''} à ${activityDestinationLabelFr(citySlug)}`}
+              </Text>
+            ) : null}
 
             <View style={styles.catBlock}>
               <View style={styles.catHeader}>
@@ -744,7 +840,15 @@ export function ActivitiesScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: { marginBottom: spacing.lg },
+  header: { marginBottom: spacing.lg, gap: 4 },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
   title: {
     fontFamily: fonts.extrabold,
     fontSize: 32,
@@ -853,6 +957,73 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 14,
     color: colors.ink,
+  },
+  searchShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 2,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    minHeight: 48,
+    paddingLeft: 12,
+    paddingRight: 6,
+    gap: 8,
+  },
+  searchIconWrap: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchIconCircle: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.muted,
+  },
+  searchIconHandle: {
+    position: 'absolute',
+    width: 7,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.muted,
+    right: 1,
+    bottom: 2,
+    transform: [{ rotate: '45deg' }],
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  searchClearBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchClearX: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    lineHeight: 22,
+    color: colors.primaryInk,
+    marginTop: -1,
+  },
+  searchClearSpacer: { width: 8 },
+  searchHint: {
+    marginTop: -8,
+    marginBottom: spacing.md,
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: colors.muted,
   },
   countRow: {
     flexDirection: 'row',

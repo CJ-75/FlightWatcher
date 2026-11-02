@@ -312,25 +312,18 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
               ]}
               pointerEvents="none"
             >
-              {corner?.kind === 'discount' ? (
+              {corner?.kind === 'discount' && corner.discountPct != null ? (
                 <View style={styles.dealBadgeRow}>
-                  <Text
-                    style={[
-                      styles.dealPct,
-                      corner.discountPct == null && { opacity: 0.4 },
-                    ]}
-                  >
-                    {corner.discountPct != null
-                      ? `−${corner.discountPct}%`
-                      : '−–%'}
-                  </Text>
-                  <Text style={styles.dealText} numberOfLines={2}>
-                    {corner.text}
-                  </Text>
+                  <Text style={styles.dealPct}>−{corner.discountPct}%</Text>
+                  {corner.text ? (
+                    <Text style={styles.dealText} numberOfLines={2}>
+                      {corner.text}
+                    </Text>
+                  ) : null}
                 </View>
               ) : (
                 <Text style={styles.dealText} numberOfLines={2}>
-                  {corner ? corner.text : 'Nouveau'}
+                  {corner?.text || 'Nouveau'}
                 </Text>
               )}
             </View>
