@@ -14,12 +14,15 @@ import {
   activitiesCityPath,
   canonicalViatorProductUrl,
   detectEventPlatform,
+  isTripItemsAuthError,
   pickTripItemOwner,
   reorderKeysMoving,
   tripItemStatusLabelFr,
+  tripItemsErrorLabelFr,
   type AvailabilityState,
   type TripItemStatus,
 } from '@flightwatcher/shared'
+import { signInWithGoogle } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { rememberTrip } from '../utils/tripRecovery'
 
@@ -58,6 +61,7 @@ export function ActivityStepPanel(props: {
   const [askBooked, setAskBooked] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [suggestions, setSuggestions] = useState<Record<string, unknown>[]>([])
+  const [signingIn, setSigningIn] = useState(false)
 
   const load = useCallback(async () => {
     if (!owner.draft_token && !owner.planned_trip_id) return
@@ -68,10 +72,25 @@ export function ActivityStepPanel(props: {
       setItems((res.items || []) as ItemRow[])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
+      setItems([])
     } finally {
       setLoading(false)
     }
   }, [owner])
+
+  const needsAuth = isTripItemsAuthError(error)
+
+  const onSignIn = async () => {
+    setSigningIn(true)
+    try {
+      sessionStorage.setItem('fw_active_tab', 'planner')
+    } catch {
+      /* ignore */
+    }
+    const { error: err } = await signInWithGoogle()
+    if (err) setError(err.message)
+    setSigningIn(false)
+  }
 
   useEffect(() => {
     if (enabled) void load()
@@ -210,6 +229,49 @@ export function ActivityStepPanel(props: {
     plannedTripId: plannedTripId || undefined,
   })
 
+  if (needsAuth && !loading) {
+    return (
+      <div className="flex h-full min-h-0 flex-col justify-center rounded-xl border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white px-3.5 py-4 gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-primary-700">
+            Compte requis
+          </p>
+          <p className="mt-1 text-sm font-extrabold text-ink tracking-tight">
+            Connecte-toi pour tes activités
+          </p>
+          <p className="mt-1 text-xs text-muted leading-snug">
+            {tripItemsErrorLabelFr(error)}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={signingIn}
+            onClick={() => void onSignIn()}
+            className="rounded-lg bg-primary-600 text-white text-xs font-bold px-3.5 py-2.5 min-h-[40px] disabled:opacity-60"
+          >
+            {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
+          </button>
+          <Link
+            to={catalogHref}
+            onClick={() => {
+              track('browse_catalog')
+              if (draftToken) {
+                rememberTrip({
+                  draft_token: draftToken,
+                  city: props.citySlug || null,
+                })
+              }
+            }}
+            className="rounded-lg border border-slate-200 text-xs font-semibold px-3.5 py-2.5 min-h-[40px] inline-flex items-center text-ink"
+          >
+            Voir le catalogue
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex flex-wrap gap-1.5 shrink-0">
@@ -245,7 +307,9 @@ export function ActivityStepPanel(props: {
       </div>
 
       {loading ? <p className="text-sm text-slate-500">Chargement…</p> : null}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-red-600">{tripItemsErrorLabelFr(error)}</p>
+      ) : null}
 
       <ul className="space-y-2">
         {items.map((it) => (

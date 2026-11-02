@@ -115,7 +115,15 @@ export function RestaurantStepPanel(props: {
     <View style={styles.wrap}>
       <Text style={styles.budget}>{RESTAURANT_BUDGET_HINT_FR}</Text>
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.err}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.err}>
+          {/^auth_required$/i.test(error)
+            ? 'Connecte-toi pour gérer les adresses de ce voyage.'
+            : /^[a-z][a-z0-9_]*$/i.test(error) && error.includes('_')
+              ? 'Impossible de charger les adresses pour le moment.'
+              : error}
+        </Text>
+      ) : null}
 
       {!loading && visible.length === 0 ? (
         <View style={[styles.empty, shadow.soft]}>

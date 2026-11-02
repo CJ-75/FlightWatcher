@@ -1882,6 +1882,142 @@ def _trip_has_active_reservation(supabase, trip_id: str) -> Optional[str]:
     return None
 
 
+def _draft_flight_locked(draft: Optional[dict]) -> bool:
+    if not draft:
+        return False
+    payload = draft.get("payload") or {}
+    status = str(
+        draft.get("flight_booking_status")
+        or payload.get("flight_booking_status")
+        or ""
+    )
+    return bool(
+        draft.get("flight_booked_at")
+        or payload.get("flight_booked")
+        or payload.get("flight_booked_at")
+        or status in _FLIGHT_BOOKED_STATUSES
+        or payload.get("flight_external")
+        or payload.get("external_flight")
+    )
+
+
+def _sync_execution_draft_to_proposal(
+    supabase,
+    draft: dict,
+    *,
+    trip: dict,
+    proposal: dict,
+) -> dict:
+    """Point a personal draft at the accepted proposal and refresh flight snapshot."""
+    proposal_id = proposal["id"]
+    trip_id = trip["id"]
+    if _draft_flight_locked(draft):
+        _persist_draft_trip_link(
+            supabase, draft, trip_id, proposal_id=proposal_id
+        )
+        return draft
+
+    flight_payload = _planner_draft_payload(
+        proposal.get("trip_data") or {},
+        int(trip.get("passengers") or 1),
+    )
+    merged = dict(draft.get("payload") or {})
+    hotel = merged.get("hotel")
+    merged.update(flight_payload)
+    if hotel and not flight_payload.get("hotel"):
+        merged["hotel"] = hotel
+
+    dates = flight_payload.get("dates") or {}
+    now = datetime.utcnow().isoformat()
+    patch = {
+        "payload": merged,
+        "source_planned_trip_id": trip_id,
+        "source_proposal_id": proposal_id,
+        "source_kind": "planner",
+        "origin_iata": flight_payload.get("origin_iata")
+        or flight_payload.get("departure_airport"),
+        "dest_iata": flight_payload.get("destination"),
+        "city_name": flight_payload.get("city"),
+        "out_date": dates.get("outbound"),
+        "ret_date": dates.get("inbound"),
+        "adults": int(flight_payload.get("adults") or trip.get("passengers") or 1),
+        "updated_at": now,
+    }
+    try:
+        res = (
+            supabase.table("my_trip_drafts")
+            .update(patch)
+            .eq("id", draft["id"])
+            .execute()
+        )
+        if res.data:
+            return res.data[0]
+    except Exception as exc:
+        print(f"⚠️ Sync draft→accepted proposal: {exc}")
+    draft.update(patch)
+    return draft
+
+
+def _ensure_execution_draft_for_accepted(
+    supabase,
+    *,
+    trip: dict,
+    proposal: dict,
+    user_id: str,
+) -> Optional[dict]:
+    """Persist the chosen flight into my_trip_drafts (boarding / booking source)."""
+    proposal_id = proposal["id"]
+    trip_id = trip["id"]
+
+    existing = (
+        supabase.table("my_trip_drafts")
+        .select("*")
+        .eq("source_proposal_id", proposal_id)
+        .eq("user_id", user_id)
+        .neq("status", "archived")
+        .order("updated_at", desc=True)
+        .limit(1)
+        .execute()
+    ).data or []
+    if existing:
+        row = existing[0]
+        if not row.get("source_planned_trip_id"):
+            _persist_draft_trip_link(
+                supabase, row, trip_id, proposal_id=proposal_id
+            )
+        return row
+
+    by_trip = (
+        supabase.table("my_trip_drafts")
+        .select("*")
+        .eq("source_planned_trip_id", trip_id)
+        .eq("user_id", user_id)
+        .neq("status", "archived")
+        .order("updated_at", desc=True)
+        .limit(5)
+        .execute()
+    ).data or []
+    if by_trip:
+        return _sync_execution_draft_to_proposal(
+            supabase, by_trip[0], trip=trip, proposal=proposal
+        )
+
+    payload = _planner_draft_payload(
+        proposal.get("trip_data") or {},
+        int(trip.get("passengers") or 1),
+    )
+    from deals.my_trips import create_draft
+
+    return create_draft(
+        supabase,
+        payload=payload,
+        user_id=user_id,
+        source_planned_trip_id=trip_id,
+        source_proposal_id=proposal_id,
+        source_kind="planner",
+    )
+
+
 def _reopen_flight_selection(supabase, trip_id: str) -> None:
     """Drop accepted flight choice and unlock planner for a new scan."""
     now = datetime.utcnow().isoformat()
@@ -2336,6 +2472,7 @@ async def auto_scan_trips(authorization: Optional[str] = Header(None)):
 @router.post("/api/planner/proposals/{proposal_id}/accept")
 @optional_auth
 async def accept_proposal(proposal_id: str, request: Request):
+    """Lock the chosen scanned flight in DB — it becomes the boarding pass."""
     user_id = _require_user(request)
     supabase = _svc()
     prop = (
@@ -2348,12 +2485,16 @@ async def accept_proposal(proposal_id: str, request: Request):
     if not prop.data:
         raise HTTPException(status_code=404, detail="Proposition introuvable")
     proposal = prop.data[0]
-    _require_organizer(supabase, proposal["trip_id"], user_id)
+    trip = _require_organizer(supabase, proposal["trip_id"], user_id)
 
-    # Reject other pending
+    blocked = _trip_has_active_reservation(supabase, proposal["trip_id"])
+    if blocked and proposal.get("status") != "accepted":
+        raise HTTPException(status_code=409, detail=blocked)
+
+    # One accepted flight per trip: demote every sibling first.
     supabase.table("trip_proposals").update({"status": "rejected"}).eq(
         "trip_id", proposal["trip_id"]
-    ).eq("status", "pending").neq("id", proposal_id).execute()
+    ).neq("id", proposal_id).in_("status", ["pending", "accepted"]).execute()
 
     res = (
         supabase.table("trip_proposals")
@@ -2361,14 +2502,43 @@ async def accept_proposal(proposal_id: str, request: Request):
         .eq("id", proposal_id)
         .execute()
     )
-    supabase.table("planned_trips").update(
-        {
-            "status": "locked",
-            "auto_scan_enabled": False,
-            "updated_at": datetime.utcnow().isoformat(),
-        }
-    ).eq("id", proposal["trip_id"]).execute()
-    return res.data[0] if res.data else proposal
+    accepted = res.data[0] if res.data else None
+    if not accepted or accepted.get("status") != "accepted":
+        raise HTTPException(
+            status_code=500,
+            detail="Impossible d'enregistrer le vol choisi",
+        )
+
+    locked = (
+        supabase.table("planned_trips")
+        .update(
+            {
+                "status": "locked",
+                "auto_scan_enabled": False,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        )
+        .eq("id", proposal["trip_id"])
+        .execute()
+    )
+    if not locked.data or locked.data[0].get("status") != "locked":
+        raise HTTPException(
+            status_code=500,
+            detail="Vol enregistré mais verrouillage du voyage échoué",
+        )
+
+    # Durable snapshot for boarding pass / booking / hotel compose.
+    try:
+        _ensure_execution_draft_for_accepted(
+            supabase,
+            trip={**trip, **(locked.data[0] or {})},
+            proposal=accepted,
+            user_id=user_id,
+        )
+    except Exception as exc:
+        print(f"⚠️ accept→execution draft {proposal_id}: {exc}")
+
+    return accepted
 
 
 @router.post("/api/planner/proposals/{proposal_id}/execution-draft")
@@ -2439,7 +2609,11 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
     ).data or []
     if by_trip:
         row = by_trip[0]
-        if not row.get("source_proposal_id"):
+        if row.get("source_proposal_id") != proposal_id:
+            row = _sync_execution_draft_to_proposal(
+                supabase, row, trip=trip, proposal=proposal
+            )
+        elif not row.get("source_planned_trip_id"):
             _persist_draft_trip_link(
                 supabase, row, proposal["trip_id"], proposal_id=proposal_id
             )
@@ -2463,32 +2637,18 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
         draft_out, draft_ret = _draft_dates(row)
         if not _dates_compatible(trip_out, trip_ret, draft_out, draft_ret):
             continue
-        _persist_draft_trip_link(
-            supabase, row, proposal["trip_id"], proposal_id=proposal_id
+        row = _sync_execution_draft_to_proposal(
+            supabase, row, trip=trip, proposal=proposal
         )
         return _execution_draft_response(row, reused=True)
 
-    payload = _planner_draft_payload(
-        proposal.get("trip_data") or {},
-        int(trip.get("passengers") or 1),
-    )
     try:
-        from deals.my_trips import create_draft
-
-        draft = create_draft(
-            supabase,
-            payload=payload,
-            user_id=user_id,
-            source_planned_trip_id=proposal["trip_id"],
-            source_proposal_id=proposal_id,
-            source_kind="planner",
+        draft_row = _ensure_execution_draft_for_accepted(
+            supabase, trip=trip, proposal=proposal, user_id=user_id
         )
-        return {
-            **draft,
-            "reused": False,
-            "source_planned_trip_id": proposal["trip_id"],
-            "source_proposal_id": proposal_id,
-        }
+        if not draft_row:
+            raise RuntimeError("empty draft")
+        return _execution_draft_response(draft_row, reused=False)
     except Exception as exc:
         # A concurrent tap may have won the partial unique index race.
         raced = (
@@ -2501,17 +2661,7 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
             .execute()
         )
         if raced.data:
-            row = raced.data[0]
-            return {
-                "id": row["id"],
-                "draft_token": row["draft_token"],
-                "status": row.get("status") or "draft",
-                "payload": row.get("payload") or {},
-                "expires_at": row.get("expires_at"),
-                "reused": True,
-                "source_planned_trip_id": row.get("source_planned_trip_id"),
-                "source_proposal_id": row.get("source_proposal_id"),
-            }
+            return _execution_draft_response(raced.data[0], reused=True)
         print(f"❌ execution draft {proposal_id}: {exc}")
         raise HTTPException(status_code=500, detail="Création du séjour échouée")
 

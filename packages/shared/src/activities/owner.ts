@@ -1,6 +1,6 @@
 /**
- * trip_items are XOR-owned: draft XOR planned.
- * Prefer collaborative Planner when both are known.
+ * trip_items are XOR-owned server-side: draft XOR planned.
+ * Send both when known — API prefers Planner membership, else draft.
  */
 
 export type TripItemOwnerKeys = {
@@ -13,10 +13,11 @@ export function pickTripItemOwner(opts: {
   plannedTripId?: string | null
 }): TripItemOwnerKeys {
   const planned = String(opts.plannedTripId || '').trim()
-  if (planned) return { planned_trip_id: planned }
   const draft = String(opts.draftToken || '').trim()
-  if (draft) return { draft_token: draft }
-  return {}
+  const out: TripItemOwnerKeys = {}
+  if (planned) out.planned_trip_id = planned
+  if (draft) out.draft_token = draft
+  return out
 }
 
 export function hasTripItemOwner(keys: TripItemOwnerKeys): boolean {

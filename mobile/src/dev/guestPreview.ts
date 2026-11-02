@@ -289,9 +289,19 @@ export async function scanGuestTrip(id: string): Promise<PlannedTripDetail | nul
   const idx = trips.findIndex((t) => t.id === id)
   if (idx < 0) return null
 
+  // Reopen like the API: drop accepted/pending before inserting a new scan.
+  const prior = trips[idx]
+  const keptRejected = (prior.proposals || [])
+    .filter((p) => p.status === 'accepted' || p.status === 'rejected')
+    .map((p) =>
+      p.status === 'accepted' ? { ...p, status: 'rejected' as const } : p,
+    )
+
   trips[idx] = {
-    ...trips[idx],
+    ...prior,
     status: 'scanning',
+    proposals: keptRejected,
+    proposals_count: 0,
   }
 
   await new Promise((r) => setTimeout(r, 900))
@@ -300,7 +310,7 @@ export async function scanGuestTrip(id: string): Promise<PlannedTripDetail | nul
   trips[idx] = {
     ...trips[idx],
     status: 'planning',
-    proposals,
+    proposals: [...proposals, ...keptRejected],
     proposals_count: proposals.length,
   }
   return cloneTrip(trips[idx])

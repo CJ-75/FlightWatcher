@@ -124,7 +124,13 @@ export function RestaurantStepPanel(props: {
       ) : null}
 
       {error ? (
-        <p className="text-sm font-semibold text-red-600">{error}</p>
+        <p className="text-sm font-semibold text-red-600">
+          {/^auth_required$/i.test(error)
+            ? 'Connecte-toi pour gérer les adresses de ce voyage.'
+            : /^[a-z][a-z0-9_]*$/i.test(error) && error.includes('_')
+              ? 'Impossible de charger les adresses pour le moment.'
+              : error}
+        </p>
       ) : null}
 
       {!loading && visible.length === 0 ? (

@@ -200,6 +200,35 @@ export function tripItemStatusLabelFr(status?: string | null): string {
   return TRIP_ITEM_STATUS_LABEL_FR[k] || 'Idée'
 }
 
+/** Raw API detail codes → human FR (never show snake_case in UI). */
+export function tripItemsErrorLabelFr(message?: string | null): string {
+  const raw = String(message || '').trim()
+  const key = raw.toLowerCase()
+  if (key === 'auth_required') {
+    return 'Connecte-toi pour ajouter et gérer les activités de ce voyage.'
+  }
+  if (key === 'not_a_member') {
+    return 'Tu dois faire partie du voyage pour gérer les activités.'
+  }
+  if (key === 'draft_token_invalid' || key === 'draft_token_mismatch') {
+    return 'Séjour introuvable — rouvre-le depuis tes réservations.'
+  }
+  if (key === 'exactly_one_owner' || key === 'orphan_item') {
+    return 'Impossible de lier les activités à ce voyage.'
+  }
+  if (/^[a-z][a-z0-9_]*$/.test(key) && key.includes('_')) {
+    return 'Impossible de charger les activités pour le moment.'
+  }
+  return raw || 'Impossible de charger les activités.'
+}
+
+export function isTripItemsAuthError(message?: string | null): boolean {
+  const key = String(message || '')
+    .trim()
+    .toLowerCase()
+  return key === 'auth_required' || key === 'not_a_member'
+}
+
 export function availabilityStateLabelFr(state?: string | null): string {
   const k = String(state || '') as AvailabilityState
   return AVAILABILITY_STATE_LABEL_FR[k] || 'Disponible'

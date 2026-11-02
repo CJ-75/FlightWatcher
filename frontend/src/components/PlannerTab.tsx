@@ -52,6 +52,24 @@ import { StayPipelineStepper } from './StayPipelineStepper'
 import { RestaurantStepPanel } from './RestaurantStepPanel'
 import { ActivityStepPanel } from './ActivityStepPanel'
 
+function PencilIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
 /** Compact label for multi-IATA departure without needing city groups. */
 function departureRouteLabel(value: string | null | undefined): string {
   const codes = parseAirportCodes(value)
@@ -1811,11 +1829,30 @@ function TripDetailView({
 
   const accept = async (id: string) => {
     setActing(id)
+    setError(null)
     try {
       await getApiClient().acceptProposal(id)
-      await load()
+      // Show boarding pass immediately — chosen flight is locked in DB.
+      setTrip((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'locked',
+              proposals: (prev.proposals || []).map((p) =>
+                p.id === id
+                  ? { ...p, status: 'accepted' as const }
+                  : p.status === 'pending' || p.status === 'accepted'
+                    ? { ...p, status: 'rejected' as const }
+                    : p,
+              ),
+            }
+          : prev,
+      )
+      setShowModalities(false)
+      await load({ silent: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
+      void load({ silent: true })
     } finally {
       setActing(null)
     }
@@ -2086,9 +2123,11 @@ function TripDetailView({
                   <button
                     type="button"
                     onClick={startRename}
-                    className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold text-white/90 hover:bg-white/20 backdrop-blur-md"
+                    aria-label="Renommer"
+                    title="Renommer"
+                    className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/10 w-9 h-9 text-white/95 hover:bg-white/20 backdrop-blur-md"
                   >
-                    Renommer
+                    <PencilIcon className="w-4 h-4" />
                   </button>
                 ) : null}
               </div>
@@ -2814,6 +2853,7 @@ function PlannerStayExtras({
           </div>
           <div className="flex flex-1 flex-col p-3.5 sm:p-4">
             <ActivityStepPanel
+              draftToken={flightDraft?.draft_token || workspace?.draft_token}
               plannedTripId={tripId}
               citySlug={citySlug}
               enabled={activitiesEnabled}
@@ -3141,9 +3181,21 @@ function SelectedFlightBoardingPass({
                     e.stopPropagation()
                     onToggleModalities?.()
                   }}
-                  className="text-[11px] font-bold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline disabled:opacity-50"
+                  aria-label={
+                    showModalities ? 'Fermer les modalités' : 'Modifier les modalités'
+                  }
+                  title={
+                    showModalities ? 'Fermer les modalités' : 'Modifier les modalités'
+                  }
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white w-8 h-8 text-slate-600 hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
                 >
-                  {showModalities ? 'Fermer' : 'Modifier'}
+                  {showModalities ? (
+                    <span className="text-sm font-bold leading-none" aria-hidden>
+                      ×
+                    </span>
+                  ) : (
+                    <PencilIcon />
+                  )}
                 </button>
                 <ModalitiesInfoTip text={MODALITIES_TIP} />
               </div>

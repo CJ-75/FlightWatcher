@@ -71,6 +71,34 @@ import { rememberTrip } from '../lib/tripRecovery'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, shadow, spacing } from '../theme'
+import Svg, { Path } from 'react-native-svg'
+
+function PencilIcon({
+  size = 14,
+  color = colors.ink,
+}: {
+  size?: number
+  color?: string
+}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 20h9"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
 
 function departureRouteLabel(value: string | null | undefined): string {
   const codes = parseAirportCodes(value)
@@ -330,10 +358,28 @@ export function TripDetailScreen() {
         else await load()
       } else {
         await getApi().acceptProposal(id)
-        await load()
+        // Show boarding pass immediately — chosen flight is locked in DB.
+        setTrip((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'locked',
+                proposals: (prev.proposals || []).map((p) =>
+                  p.id === id
+                    ? { ...p, status: 'accepted' as const }
+                    : p.status === 'pending' || p.status === 'accepted'
+                      ? { ...p, status: 'rejected' as const }
+                      : p,
+                ),
+              }
+            : prev,
+        )
+        setShowModalities(false)
+        await load({ silent: true })
       }
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Acceptation échouée')
+      void load({ silent: true })
     } finally {
       setActing(null)
     }
@@ -1085,12 +1131,14 @@ export function TripDetailScreen() {
               <Pressable
                 onPress={startRename}
                 hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Renommer"
                 style={({ pressed }) => [
                   styles.renameChip,
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={styles.renameChipText}>Renommer</Text>
+                <PencilIcon size={15} color={colors.white} />
               </Pressable>
             ) : null}
           </View>
@@ -1399,6 +1447,7 @@ export function TripDetailScreen() {
               </ImageBackground>
               <View style={styles.extrasBody}>
                 <ActivityStepPanel
+                  draftToken={flightDraft?.draft_token || workspace?.draft_token}
                   plannedTripId={tripId}
                   citySlug={citySlug}
                   enabled={plannerActivitiesEnabled}
@@ -1907,12 +1956,15 @@ function MobileBoardingPass({
                   showModalities ? 'Fermer les modalités' : 'Modifier les modalités'
                 }
                 style={({ pressed }) => [
-                  modalitiesBusy || pressed ? { opacity: 0.55 } : null,
+                  styles.ticketModifyBtn,
+                  (modalitiesBusy || pressed) && { opacity: 0.55 },
                 ]}
               >
-                <Text style={styles.ticketModifyText}>
-                  {showModalities ? 'Fermer' : 'Modifier'}
-                </Text>
+                {showModalities ? (
+                  <Text style={styles.ticketModifyClose}>×</Text>
+                ) : (
+                  <PencilIcon size={14} color={colors.inkSoft} />
+                )}
               </Pressable>
               <Pressable
                 onPress={() => Alert.alert('Modalités du vol', MODALITIES_TIP)}
@@ -1998,17 +2050,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   renameChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.14)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.28)',
-  },
-  renameChipText: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.92)',
   },
   renameOverlay: {
     flex: 1,
@@ -2425,11 +2474,20 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingRight: 2,
   },
-  ticketModifyText: {
+  ticketModifyBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.06)',
+  },
+  ticketModifyClose: {
     fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.muted,
-    textDecorationLine: 'underline',
+    fontSize: 20,
+    lineHeight: 22,
+    color: colors.inkSoft,
+    marginTop: -1,
   },
   ticketInfoBtn: {
     width: 18,

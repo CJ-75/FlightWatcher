@@ -21,10 +21,13 @@ import {
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   canonicalViatorProductUrl,
+  isTripItemsAuthError,
   pickTripItemOwner,
   reorderKeysMoving,
   tripItemStatusLabelFr,
+  tripItemsErrorLabelFr,
 } from '@flightwatcher/shared'
+import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -49,6 +52,7 @@ export function ActivityStepPanel(props: {
 }) {
   const { draftToken, plannedTripId, enabled = true, surface = 'my_trip' } = props
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { signInWithGoogle } = useAuth()
   const owner = useMemo(
     () =>
       pickTripItemOwner({
@@ -64,22 +68,37 @@ export function ActivityStepPanel(props: {
   const [suggestions, setSuggestions] = useState<Record<string, unknown>[]>([])
   const [pendingBook, setPendingBook] = useState<ItemRow | null>(null)
   const [askBooked, setAskBooked] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
   const pendingRef = useRef<ItemRow | null>(null)
 
   const platform = Platform.OS === 'ios' ? 'ios' : 'android'
+  const needsAuth = isTripItemsAuthError(error)
 
   const load = useCallback(async () => {
     if (!owner.draft_token && !owner.planned_trip_id) return
     setLoading(true)
+    setError(null)
     try {
       const res = await getApi().listTripItems(owner)
       setItems((res.items || []) as ItemRow[])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
+      setItems([])
     } finally {
       setLoading(false)
     }
   }, [owner])
+
+  const onSignIn = async () => {
+    setSigningIn(true)
+    const { error: err } = await signInWithGoogle()
+    if (err) setError(err.message)
+    else {
+      setError(null)
+      await load()
+    }
+    setSigningIn(false)
+  }
 
   useEffect(() => {
     if (enabled) void load()
@@ -134,27 +153,48 @@ export function ActivityStepPanel(props: {
     return <Text style={styles.muted}>Activités bientôt disponibles.</Text>
   }
 
+  const openCatalog = () => {
+    track('browse_catalog')
+    const city = props.citySlug || 'paris'
+    if (draftToken) {
+      void rememberTrip({ draft_token: draftToken, city })
+    }
+    navigation.navigate('Main', {
+      screen: 'Activities',
+      params: {
+        city,
+        draftToken: draftToken || undefined,
+        plannedTripId: plannedTripId || undefined,
+      },
+    })
+  }
+
+  if (needsAuth && !loading) {
+    return (
+      <View style={styles.authCard}>
+        <Text style={styles.authKicker}>COMPTE REQUIS</Text>
+        <Text style={styles.authTitle}>Connecte-toi pour tes activités</Text>
+        <Text style={styles.authBody}>{tripItemsErrorLabelFr(error)}</Text>
+        <Pressable
+          style={[styles.cta, signingIn && { opacity: 0.6 }]}
+          disabled={signingIn}
+          onPress={() => void onSignIn()}
+        >
+          <Text style={styles.ctaText}>
+            {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
+          </Text>
+        </Pressable>
+        <Pressable style={styles.secondary} onPress={openCatalog}>
+          <Text style={styles.secondaryText}>Voir le catalogue</Text>
+        </Pressable>
+      </View>
+    )
+  }
+
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <Pressable
-          style={styles.cta}
-          onPress={() => {
-            track('browse_catalog')
-            const city = props.citySlug || 'paris'
-            if (draftToken) {
-              void rememberTrip({ draft_token: draftToken, city })
-            }
-            navigation.navigate('Main', {
-              screen: 'Activities',
-              params: {
-                city,
-                draftToken: draftToken || undefined,
-                plannedTripId: plannedTripId || undefined,
-              },
-            })
-          }}
-        >
+        <Pressable style={styles.cta} onPress={openCatalog}>
           <Text style={styles.ctaText}>{ACTIVITY_BROWSE_CATALOG_FR}</Text>
         </Pressable>
         <Pressable
@@ -196,7 +236,7 @@ export function ActivityStepPanel(props: {
       </View>
 
       {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.err}>{error}</Text> : null}
+      {error ? <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text> : null}
 
       {items.map((it, idx) => (
         <View key={it.id} style={styles.card}>
@@ -336,6 +376,31 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   secondaryText: { fontFamily: fonts.semibold, color: colors.ink, fontSize: 13 },
+  authCard: {
+    gap: 10,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FED7AA',
+    backgroundColor: '#FFF8F3',
+    padding: 14,
+  },
+  authKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    color: colors.primary,
+  },
+  authTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  authBody: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+  },
   card: {
     backgroundColor: '#fff',
     borderRadius: radius.md,
