@@ -48,7 +48,10 @@ def create_draft(
         "out_date": dates.get("outbound"),
         "ret_date": dates.get("inbound"),
         "adults": int(trusted.get("adults") or 2),
-        "expires_at": (_now() + timedelta(days=7)).isoformat(),
+        # Planner execution drafts must survive reload / weeks of trip planning.
+        "expires_at": (
+            _now() + timedelta(days=365 if source_kind == "planner" else 7)
+        ).isoformat(),
         "created_at": _now().isoformat(),
         "updated_at": _now().isoformat(),
     }

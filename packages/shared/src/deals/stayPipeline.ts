@@ -59,8 +59,13 @@ export function buildStayPipeline(opts: {
   /** Organizer chose « Pas de restaurant prévu » */
   restaurantsSkipped?: boolean
 }): StayPipelineStep[] {
-  const flightDone = opts.flight === 'booked_fw' || opts.flight === 'external'
-  const flightPartial = opts.flight === 'selected_fw'
+  // Choosing a flight (Planner accept / draft payload) completes Vol in green;
+  // booked_fw / external keep a stronger "Réservé" / "ailleurs" hint.
+  const flightDone =
+    opts.flight === 'booked_fw' ||
+    opts.flight === 'external' ||
+    opts.flight === 'selected_fw'
+  const flightPartial = false
   const hotelDone = opts.hotel === 'booked' || opts.hotel === 'external'
   const hotelPartial = opts.hotel === 'selected'
   const activitiesOn = Boolean(opts.activitiesEnabled)
@@ -77,7 +82,7 @@ export function buildStayPipeline(opts: {
       : opts.flight === 'external'
         ? 'Vol ailleurs'
         : opts.flight === 'selected_fw'
-          ? 'À réserver'
+          ? 'Choisi'
           : 'Choisir'
 
   const hotelHint =
@@ -91,10 +96,10 @@ export function buildStayPipeline(opts: {
 
   // Current = first incomplete active step, unless focus overrides
   let current: StayStepId = 'flight'
-  if (flightDone || flightPartial) {
+  if (flightDone) {
     current = hotelDone ? (activitiesOn ? 'activities' : 'hotel') : 'hotel'
   }
-  if (hotelDone && (flightDone || flightPartial || opts.flight === 'none')) {
+  if (hotelDone && (flightDone || opts.flight === 'none')) {
     current = activitiesOn ? 'activities' : 'hotel'
   }
   if (activitiesOn && activitiesDone && hotelDone) {

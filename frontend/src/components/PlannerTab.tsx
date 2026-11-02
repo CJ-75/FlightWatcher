@@ -1188,15 +1188,34 @@ function TripDetailView({
         const matched =
           workspaces.find((item) => item.planned_trip_id === tripId) || null
         setWorkspace(matched)
+        const acceptedId =
+          detail.accepted_proposal?.id ||
+          (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
+          null
         if (matched?.draft_token) {
           setFlightDraft(await getApiClient().getMyTrip(matched.draft_token))
+        } else if (acceptedId) {
+          // Chosen flight is in DB — ensure séjour draft exists and keep it.
+          try {
+            const draft =
+              await getApiClient().getOrCreateExecutionDraft(acceptedId)
+            setFlightDraft(draft)
+          } catch {
+            setFlightDraft((prev) => prev)
+          }
         } else {
-          setFlightDraft(null)
+          // Keep a locally confirmed draft — don't wipe "J’ai réservé".
+          setFlightDraft((prev) => {
+            const booked = Boolean(
+              prev?.flight_booked_at ||
+                prev?.flight_booking_status === 'user_confirmed' ||
+                prev?.flight_booking_status === 'partner_confirmed',
+            )
+            return booked ? prev : null
+          })
         }
       } catch {
-        // The Planner remains usable before the manual workspace migration.
-        setWorkspace(null)
-        setFlightDraft(null)
+        // Keep current draft/workspace on transient workspace errors.
       }
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : t('app.error'))
@@ -1416,40 +1435,59 @@ function TripDetailView({
   }
 
   const confirmAirlineFlight = async () => {
-    const token = flightDraft?.draft_token || workspace?.draft_token
-    if (!token || flightBookingBusy) return
+    if (flightBookingBusy) return
     setFlightBookingBusy(true)
     setAskFlightBooked(false)
     leftForFlight.current = false
-    const nowIso = new Date().toISOString()
-    // Optimistic UI — load() must not wipe a successful confirm.
-    setFlightDraft((prev) => {
-      const base = prev || ({ draft_token: token, payload: {} } as MyTripDraft)
-      const prevPayload = (base.payload || {}) as Record<string, unknown>
-      return {
-        ...base,
-        draft_token: token,
-        flight_booked_at: nowIso,
-        flight_booking_status: 'user_confirmed',
-        payload: {
-          ...prevPayload,
-          flight_booked: true,
+    try {
+      let token = flightDraft?.draft_token || workspace?.draft_token || null
+      if (!token && accepted) {
+        const draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
+        token = draft.draft_token
+        setFlightDraft(draft)
+      }
+      if (!token) {
+        onToast('Impossible de rattacher la réservation — réessaie')
+        return
+      }
+      const nowIso = new Date().toISOString()
+      // Optimistic UI — load() must not wipe a successful confirm.
+      setFlightDraft((prev) => {
+        const base = prev || ({ draft_token: token, payload: {} } as MyTripDraft)
+        const prevPayload = (base.payload || {}) as Record<string, unknown>
+        return {
+          ...base,
+          draft_token: token,
           flight_booked_at: nowIso,
           flight_booking_status: 'user_confirmed',
-        },
-      }
-    })
-    try {
+          payload: {
+            ...prevPayload,
+            flight_booked: true,
+            flight_booked_at: nowIso,
+            flight_booking_status: 'user_confirmed',
+          },
+        }
+      })
+      setWorkspace((prev) =>
+        prev
+          ? {
+              ...prev,
+              draft_token: prev.draft_token || token,
+              flight_booking_status: 'user_confirmed',
+              pipeline: { ...prev.pipeline, flight: 'booked' },
+            }
+          : prev,
+      )
       const updated = await getApiClient().updateMyTripFlightBookingStatus(
         token,
         { status: 'user_confirmed', provider: 'ryanair' },
       )
       setFlightDraft(updated)
       onToast('Vol confirmé — ton voyage est à jour')
-      void load()
+      void load({ silent: true })
     } catch {
       onToast('Impossible de confirmer le vol — réessaie')
-      void load()
+      void load({ silent: true })
     } finally {
       setFlightBookingBusy(false)
     }
@@ -1836,22 +1874,66 @@ function TripDetailView({
     try {
       await getApiClient().acceptProposal(id)
       // Show boarding pass immediately — chosen flight is locked in DB.
-      setTrip((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: 'locked',
-              proposals: (prev.proposals || []).map((p) =>
-                p.id === id
-                  ? { ...p, status: 'accepted' as const }
-                  : p.status === 'pending' || p.status === 'accepted'
-                    ? { ...p, status: 'rejected' as const }
-                    : p,
-              ),
-            }
-          : prev,
-      )
+      setTrip((prev) => {
+        if (!prev) return prev
+        const proposals = (prev.proposals || []).map((p) =>
+          p.id === id
+            ? { ...p, status: 'accepted' as const }
+            : p.status === 'pending' || p.status === 'accepted'
+              ? { ...p, status: 'rejected' as const }
+              : p,
+        )
+        const chosen =
+          proposals.find((p) => p.id === id) || prev.accepted_proposal || null
+        return {
+          ...prev,
+          status: 'locked',
+          accepted_proposal: chosen,
+          proposals,
+        }
+      })
       setShowModalities(false)
+      // Persist séjour draft + turn Vol green in parcours immediately.
+      try {
+        const draft = await getApiClient().getOrCreateExecutionDraft(id)
+        setFlightDraft(draft)
+        setWorkspace((prev) => {
+          const base =
+            prev ||
+            (trip
+              ? tripAsWorkspace({
+                  ...trip,
+                  status: 'locked',
+                  accepted_proposal:
+                    (trip.proposals || []).find((p) => p.id === id) ||
+                    trip.accepted_proposal ||
+                    null,
+                })
+              : null)
+          if (!base) return prev
+          return {
+            ...base,
+            draft_token: draft.draft_token || base.draft_token,
+            proposal_id: id,
+            phase:
+              base.phase === 'booked' || base.phase === 'past'
+                ? base.phase
+                : 'flight_selected',
+            pipeline: {
+              ...base.pipeline,
+              flight: base.pipeline.flight === 'booked' ? 'booked' : 'selected',
+            },
+            capabilities: {
+              ...base.capabilities,
+              can_scan: false,
+              can_choose_flight: false,
+              can_compose_hotel: true,
+            },
+          }
+        })
+      } catch (draftErr) {
+        console.warn('[planner] execution draft after accept', draftErr)
+      }
       await load({ silent: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -2897,7 +2979,13 @@ function PlannerStayExtras({
 const MODALITIES_TIP =
   'Tant que le vol n’est pas réservé, tu peux changer dates, budget, voyageurs ou relancer un scan.'
 
-function ModalitiesInfoTip({ text }: { text: string }) {
+function ModalitiesInfoTip({
+  text,
+  className = '',
+}: {
+  text: string
+  className?: string
+}) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLSpanElement>(null)
 
@@ -2918,7 +3006,7 @@ function ModalitiesInfoTip({ text }: { text: string }) {
   }, [open])
 
   return (
-    <span ref={rootRef} className="relative inline-flex">
+    <span ref={rootRef} className={`relative inline-flex ${className}`}>
       <button
         type="button"
         aria-label={text}
@@ -2929,14 +3017,14 @@ function ModalitiesInfoTip({ text }: { text: string }) {
           e.preventDefault()
           setOpen((v) => !v)
         }}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[10px] font-black text-slate-500 hover:border-slate-500 hover:text-slate-800"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-[11px] font-black text-slate-500 hover:border-slate-300 hover:text-slate-800"
       >
         i
       </button>
       {open ? (
         <span
           role="tooltip"
-          className="absolute z-30 bottom-full left-1/2 mb-2 w-52 -translate-x-1/2 rounded-xl border border-line bg-white px-3 py-2 text-[11px] font-medium leading-snug text-ink shadow-lift"
+          className="absolute z-30 bottom-[calc(100%+8px)] right-0 w-56 rounded-xl border border-line bg-white px-3 py-2.5 text-[11px] font-medium leading-snug text-ink shadow-lift"
           onClick={(e) => e.stopPropagation()}
         >
           {text}
@@ -3142,57 +3230,63 @@ function SelectedFlightBoardingPass({
                 </div>
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onBook()
-              }}
-              disabled={bookingBusy || isConfirmed}
-              className={`rounded-xl px-4 py-3 text-xs font-extrabold text-white shadow-lg transition lg:w-full ${
-                isConfirmed
-                  ? 'cursor-default bg-emerald-600'
-                  : 'bg-slate-950 hover:bg-primary-600 disabled:opacity-60'
-              }`}
-            >
-              {isConfirmed
-                ? 'Vol confirmé ✓'
-                : bookingBusy
-                  ? 'Ouverture…'
-                  : bookingStatus === 'pending_partner'
-                    ? 'Revoir la réservation'
-                    : bookingStatus === 'redirected'
-                      ? 'Retourner sur le site'
-                      : 'Réserver'}
-            </button>
-            {canEditModalities ? (
-              <div className="flex items-center justify-center gap-1.5 lg:w-full">
-                <button
-                  type="button"
-                  disabled={modalitiesBusy}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onToggleModalities?.()
-                  }}
-                  aria-label={
-                    showModalities ? 'Fermer les modalités' : 'Modifier les modalités'
-                  }
-                  title={
-                    showModalities ? 'Fermer les modalités' : 'Modifier les modalités'
-                  }
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white w-8 h-8 text-slate-600 hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
-                >
-                  {showModalities ? (
-                    <span className="text-sm font-bold leading-none" aria-hidden>
-                      ×
-                    </span>
-                  ) : (
-                    <PencilIcon />
-                  )}
-                </button>
-                <ModalitiesInfoTip text={MODALITIES_TIP} />
-              </div>
-            ) : null}
+            <div className="flex items-stretch gap-2 lg:w-full">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onBook()
+                }}
+                disabled={bookingBusy || isConfirmed}
+                className={`min-h-[44px] flex-1 rounded-xl px-4 py-3 text-xs font-extrabold text-white shadow-lg transition ${
+                  isConfirmed
+                    ? 'cursor-default bg-emerald-600'
+                    : 'bg-slate-950 hover:bg-primary-600 disabled:opacity-60'
+                }`}
+              >
+                {isConfirmed
+                  ? 'Vol confirmé ✓'
+                  : bookingBusy
+                    ? 'Ouverture…'
+                    : bookingStatus === 'pending_partner'
+                      ? 'Revoir la réservation'
+                      : bookingStatus === 'redirected'
+                        ? 'Retourner sur le site'
+                        : 'Réserver'}
+              </button>
+              {canEditModalities ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={modalitiesBusy}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onToggleModalities?.()
+                    }}
+                    aria-label={
+                      showModalities
+                        ? 'Fermer les modalités'
+                        : 'Modifier les modalités'
+                    }
+                    title={
+                      showModalities
+                        ? 'Fermer les modalités'
+                        : 'Modifier les modalités'
+                    }
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
+                  >
+                    {showModalities ? (
+                      <span className="text-base font-bold leading-none" aria-hidden>
+                        ×
+                      </span>
+                    ) : (
+                      <PencilIcon className="w-4 h-4" />
+                    )}
+                  </button>
+                  <ModalitiesInfoTip text={MODALITIES_TIP} />
+                </>
+              ) : null}
+            </div>
             {!askBooked && bookingStatus === 'redirected' && !isTravelpayouts ? (
               <button
                 type="button"

@@ -1,10 +1,12 @@
 """Planner API — collaborative trip planning with price scan proposals."""
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import secrets
-from datetime import date, datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -30,6 +32,10 @@ router = APIRouter()
 
 MIN_AUTO_SCAN_INTERVAL = 900
 CRON_SECRET = (os.getenv("CRON_SECRET") or "").strip()
+# Same pattern as /api/inspire — never block the asyncio loop on live Ryanair/TP.
+_PLANNER_SCAN_POOL = ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="fw-planner-scan"
+)
 
 
 def _require_user(request: Request) -> str:
@@ -394,19 +400,22 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
     else:
         incluses = None
 
-    # limite_allers=18 : premier passage rapide (Search-like), top 10 suffit au mur
-    resultats, num_requetes = scanner_vols_api(
-        aeroport_depart=trip["departure_airport"],
-        dates_depart=dates_depart,
-        dates_retour=dates_retour,
-        budget_max=int(trip.get("budget_max") or 200),
-        limite_allers=18,
-        destinations_exclues=[],
-        destinations_incluses=incluses,
-        record_prices=True,
-        passengers=int(trip.get("passengers") or 1),
-        direct=bool(trip.get("direct") or False),
-    )
+    # Same live path as Search /inspire: full limite + search priority (not a short cache pass).
+    from search_priority import search_active
+
+    with search_active():
+        resultats, num_requetes = scanner_vols_api(
+            aeroport_depart=trip["departure_airport"],
+            dates_depart=dates_depart,
+            dates_retour=dates_retour,
+            budget_max=int(trip.get("budget_max") or 200),
+            limite_allers=0,
+            destinations_exclues=[],
+            destinations_incluses=incluses,
+            record_prices=True,
+            passengers=int(trip.get("passengers") or 1),
+            direct=bool(trip.get("direct") or False),
+        )
     enriched = enrich_trip_results(resultats, trip["departure_airport"])
     enriched.sort(key=lambda t: t.prix_total)
     top = enriched[:10]
@@ -1929,6 +1938,8 @@ def _sync_execution_draft_to_proposal(
 
     dates = flight_payload.get("dates") or {}
     now = datetime.utcnow().isoformat()
+    # Planner execution drafts must outlive the default 7-day deal expiry.
+    expires_at = (datetime.utcnow() + timedelta(days=365)).isoformat()
     patch = {
         "payload": merged,
         "source_planned_trip_id": trip_id,
@@ -1941,6 +1952,8 @@ def _sync_execution_draft_to_proposal(
         "out_date": dates.get("outbound"),
         "ret_date": dates.get("inbound"),
         "adults": int(flight_payload.get("adults") or trip.get("passengers") or 1),
+        "expires_at": expires_at,
+        "status": "draft" if draft.get("status") == "archived" else draft.get("status") or "draft",
         "updated_at": now,
     }
     try:
@@ -1980,12 +1993,10 @@ def _ensure_execution_draft_for_accepted(
         .execute()
     ).data or []
     if existing:
-        row = existing[0]
-        if not row.get("source_planned_trip_id"):
-            _persist_draft_trip_link(
-                supabase, row, trip_id, proposal_id=proposal_id
-            )
-        return row
+        # Always refresh flight snapshot + trip link (reload survival).
+        return _sync_execution_draft_to_proposal(
+            supabase, existing[0], trip=trip, proposal=proposal
+        )
 
     by_trip = (
         supabase.table("my_trip_drafts")
@@ -2008,7 +2019,7 @@ def _ensure_execution_draft_for_accepted(
     )
     from deals.my_trips import create_draft
 
-    return create_draft(
+    created = create_draft(
         supabase,
         payload=payload,
         user_id=user_id,
@@ -2016,6 +2027,18 @@ def _ensure_execution_draft_for_accepted(
         source_proposal_id=proposal_id,
         source_kind="planner",
     )
+    # create_draft returns a slim DTO — re-read so callers get draft_token + links.
+    if created and created.get("draft_token"):
+        full = (
+            supabase.table("my_trip_drafts")
+            .select("*")
+            .eq("draft_token", created["draft_token"])
+            .limit(1)
+            .execute()
+        ).data or []
+        if full:
+            return full[0]
+    return created
 
 
 def _reopen_flight_selection(supabase, trip_id: str) -> None:
@@ -2375,7 +2398,10 @@ async def scan_trip(trip_id: str, request: Request):
     ).eq("id", trip_id).execute()
 
     try:
-        return _run_trip_scan(supabase, trip)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _PLANNER_SCAN_POOL, lambda: _run_trip_scan(supabase, trip)
+        )
     except HTTPException:
         supabase.table("planned_trips").update(
             {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
@@ -2528,15 +2554,22 @@ async def accept_proposal(proposal_id: str, request: Request):
         )
 
     # Durable snapshot for boarding pass / booking / hotel compose.
+    # Must succeed — otherwise the chosen flight vanishes after reload.
     try:
-        _ensure_execution_draft_for_accepted(
+        draft = _ensure_execution_draft_for_accepted(
             supabase,
             trip={**trip, **(locked.data[0] or {})},
             proposal=accepted,
             user_id=user_id,
         )
+        if not draft or not draft.get("draft_token"):
+            raise RuntimeError("execution draft missing after accept")
     except Exception as exc:
-        print(f"⚠️ accept→execution draft {proposal_id}: {exc}")
+        print(f"❌ accept→execution draft {proposal_id}: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail="Vol choisi mais enregistrement du séjour échoué — réessaie",
+        ) from exc
 
     return accepted
 
@@ -2590,11 +2623,9 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
         .execute()
     )
     if existing.data:
-        row = existing.data[0]
-        if not row.get("source_planned_trip_id"):
-            _persist_draft_trip_link(
-                supabase, row, proposal["trip_id"], proposal_id=proposal_id
-            )
+        row = _sync_execution_draft_to_proposal(
+            supabase, existing.data[0], trip=trip, proposal=proposal
+        )
         return _execution_draft_response(row, reused=True)
 
     by_trip = (
@@ -2608,15 +2639,9 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
         .execute()
     ).data or []
     if by_trip:
-        row = by_trip[0]
-        if row.get("source_proposal_id") != proposal_id:
-            row = _sync_execution_draft_to_proposal(
-                supabase, row, trip=trip, proposal=proposal
-            )
-        elif not row.get("source_planned_trip_id"):
-            _persist_draft_trip_link(
-                supabase, row, proposal["trip_id"], proposal_id=proposal_id
-            )
+        row = _sync_execution_draft_to_proposal(
+            supabase, by_trip[0], trip=trip, proposal=proposal
+        )
         return _execution_draft_response(row, reused=True)
 
     # Reuse an unlinked personal draft that already holds the Lisbon (etc.) booking.

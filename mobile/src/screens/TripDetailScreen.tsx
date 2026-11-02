@@ -183,14 +183,33 @@ export function TripDetailScreen() {
           const matched =
             workspaces.find((item) => item.planned_trip_id === tripId) || null
           setWorkspace(matched)
+          const acceptedId =
+            detail.accepted_proposal?.id ||
+            (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
+            null
           if (matched?.draft_token) {
             setFlightDraft(await getApi().getMyTrip(matched.draft_token))
+          } else if (acceptedId) {
+            // Chosen flight is in DB — ensure séjour draft exists and keep it.
+            try {
+              const draft = await getApi().getOrCreateExecutionDraft(acceptedId)
+              setFlightDraft(draft)
+            } catch {
+              setFlightDraft((prev) => prev)
+            }
           } else {
-            setFlightDraft(null)
+            // Keep a locally confirmed draft — don't wipe "Oui, c’est réservé".
+            setFlightDraft((prev) => {
+              const booked = Boolean(
+                prev?.flight_booked_at ||
+                  prev?.flight_booking_status === 'user_confirmed' ||
+                  prev?.flight_booking_status === 'partner_confirmed',
+              )
+              return booked ? prev : null
+            })
           }
         } catch {
-          setWorkspace(null)
-          setFlightDraft(null)
+          // Keep current draft/workspace on transient workspace errors.
         }
       }
     } catch (e) {
@@ -284,8 +303,10 @@ export function TripDetailScreen() {
           })
         }
       } else {
+        // Live Search path on the API (same Ryanair+TP stack as /inspire).
         const scanRes = await getApi().scanPlannedTrip(tripId)
         const proposals = scanRes.proposals || []
+        // Paint scan results, then resync full trip (accepted + draft) from DB.
         setTrip((prev) =>
           prev
             ? {
@@ -296,7 +317,7 @@ export function TripDetailScreen() {
               }
             : prev,
         )
-        void load()
+        await load({ silent: true })
         if (proposals.length === 0) {
           const budget = scanRes.budget_max ?? 150
           const cheapest = scanRes.cheapest_found
@@ -359,22 +380,80 @@ export function TripDetailScreen() {
       } else {
         await getApi().acceptProposal(id)
         // Show boarding pass immediately — chosen flight is locked in DB.
-        setTrip((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: 'locked',
-                proposals: (prev.proposals || []).map((p) =>
-                  p.id === id
-                    ? { ...p, status: 'accepted' as const }
-                    : p.status === 'pending' || p.status === 'accepted'
-                      ? { ...p, status: 'rejected' as const }
-                      : p,
-                ),
-              }
-            : prev,
-        )
+        setTrip((prev) => {
+          if (!prev) return prev
+          const proposals = (prev.proposals || []).map((p) =>
+            p.id === id
+              ? { ...p, status: 'accepted' as const }
+              : p.status === 'pending' || p.status === 'accepted'
+                ? { ...p, status: 'rejected' as const }
+                : p,
+          )
+          const chosen =
+            proposals.find((p) => p.id === id) || prev.accepted_proposal || null
+          return {
+            ...prev,
+            status: 'locked',
+            accepted_proposal: chosen,
+            proposals,
+          }
+        })
         setShowModalities(false)
+        // Persist séjour draft + turn Vol green in parcours immediately.
+        try {
+          const draft = await getApi().getOrCreateExecutionDraft(id)
+          setFlightDraft(draft)
+          setWorkspace((prev) => {
+            if (!prev) {
+              return {
+                workspace_id: `planner:${tripId}`,
+                planned_trip_id: tripId,
+                proposal_id: id,
+                draft_token: draft.draft_token,
+                scope: 'collaborative',
+                phase: 'flight_selected',
+                title: trip?.name || 'Voyage',
+                city: null,
+                origin_iata: trip?.departure_airport || null,
+                dest_iata: trip?.arrival_airport || null,
+                out_date: trip?.dates_depart?.[0]?.date || null,
+                ret_date:
+                  trip?.dates_retour?.[trip.dates_retour.length - 1]?.date ||
+                  null,
+                is_organizer: true,
+                capabilities: {
+                  can_scan: false,
+                  can_choose_flight: false,
+                  can_compose_hotel: true,
+                  can_view_confirmation: false,
+                },
+                pipeline: { flight: 'selected', hotel: 'none' },
+                updated_at: new Date().toISOString(),
+              }
+            }
+            return {
+              ...prev,
+              draft_token: draft.draft_token || prev.draft_token,
+              proposal_id: id,
+              phase:
+                prev.phase === 'booked' || prev.phase === 'past'
+                  ? prev.phase
+                  : 'flight_selected',
+              pipeline: {
+                ...prev.pipeline,
+                flight: prev.pipeline.flight === 'booked' ? 'booked' : 'selected',
+              },
+              capabilities: {
+                ...prev.capabilities,
+                can_scan: false,
+                can_choose_flight: false,
+                can_compose_hotel: true,
+              },
+            }
+          })
+        } catch (draftErr) {
+          console.warn('[planner] execution draft after accept', draftErr)
+        }
         await load({ silent: true })
       }
     } catch (e) {
@@ -856,36 +935,61 @@ export function TripDetailScreen() {
   }
 
   const confirmAirlineFlight = async () => {
-    const token = flightDraft?.draft_token || workspace?.draft_token
-    if (!token || flightBookingBusy) return
+    if (flightBookingBusy) return
     setFlightBookingBusy(true)
     leftForFlight.current = false
     leftForFlightNeedsAsk.current = false
-    const nowIso = new Date().toISOString()
-    setFlightDraft((prev) => {
-      const base: MyTripDraft =
-        prev ||
-        ({
-          id: '',
+    try {
+      let token = flightDraft?.draft_token || workspace?.draft_token || null
+      // Draft may still be missing if user confirmed right after returning.
+      if (!token && accepted && !(__DEV__ && isGuest)) {
+        const draft = await getApi().getOrCreateExecutionDraft(accepted.id)
+        token = draft.draft_token
+        setFlightDraft(draft)
+      }
+      if (!token) {
+        Alert.alert(
+          'Erreur',
+          'Impossible de rattacher la réservation à ce voyage — réessaie.',
+        )
+        return
+      }
+
+      const nowIso = new Date().toISOString()
+      setFlightDraft((prev) => {
+        const base: MyTripDraft =
+          prev ||
+          ({
+            id: '',
+            draft_token: token,
+            status: 'draft',
+            payload: {},
+          } as MyTripDraft)
+        const prevPayload = (base.payload || {}) as Record<string, unknown>
+        return {
+          ...base,
           draft_token: token,
-          status: 'draft',
-          payload: {},
-        } as MyTripDraft)
-      const prevPayload = (base.payload || {}) as Record<string, unknown>
-      return {
-        ...base,
-        draft_token: token,
-        flight_booked_at: nowIso,
-        flight_booking_status: 'user_confirmed',
-        payload: {
-          ...prevPayload,
-          flight_booked: true,
           flight_booked_at: nowIso,
           flight_booking_status: 'user_confirmed',
-        },
-      }
-    })
-    try {
+          payload: {
+            ...prevPayload,
+            flight_booked: true,
+            flight_booked_at: nowIso,
+            flight_booking_status: 'user_confirmed',
+          },
+        }
+      })
+      setWorkspace((prev) =>
+        prev
+          ? {
+              ...prev,
+              draft_token: prev.draft_token || token,
+              flight_booking_status: 'user_confirmed',
+              pipeline: { ...prev.pipeline, flight: 'booked' },
+            }
+          : prev,
+      )
+
       const updated = await getApi().updateMyTripFlightBookingStatus(token, {
         status: 'user_confirmed',
         provider: 'ryanair',
@@ -935,29 +1039,30 @@ export function TripDetailScreen() {
         return
       }
 
+      // Ensure execution draft exists before leaving — needed for "Oui, c’est réservé".
+      if (!(__DEV__ && isGuest)) {
+        try {
+          const draft =
+            flightDraft?.draft_token
+              ? flightDraft
+              : await getApi().getOrCreateExecutionDraft(accepted.id)
+          setFlightDraft(draft)
+          const updated = await getApi().updateMyTripFlightBookingStatus(
+            draft.draft_token,
+            {
+              status: isTravelpayouts ? 'pending_partner' : 'redirected',
+              provider: partnerId,
+            },
+          )
+          setFlightDraft(updated)
+        } catch {
+          /* still open partner — confirm will recreate draft if needed */
+        }
+      }
+
       leftForFlight.current = true
       leftForFlightNeedsAsk.current = !isTravelpayouts
       setFlightBookingBusy(false)
-
-      if (!(__DEV__ && isGuest)) {
-        // Persist status in parallel while the browser sheet opens.
-        void (async () => {
-          try {
-            const draft = await getApi().getOrCreateExecutionDraft(accepted.id)
-            setFlightDraft(draft)
-            const updated = await getApi().updateMyTripFlightBookingStatus(
-              draft.draft_token,
-              {
-                status: isTravelpayouts ? 'pending_partner' : 'redirected',
-                provider: partnerId,
-              },
-            )
-            setFlightDraft(updated)
-          } catch {
-            /* booking already opening */
-          }
-        })()
-      }
 
       await openInAppBrowser(navigation, primaryUrl, 'Réserver le vol')
 
@@ -1999,7 +2104,7 @@ function MobileBoardingPass({
             </Text>
           </Pressable>
           {canEditModalities ? (
-            <View style={styles.ticketModifyRow}>
+            <>
               <Pressable
                 onPress={onToggleModalities}
                 disabled={modalitiesBusy}
@@ -2016,7 +2121,7 @@ function MobileBoardingPass({
                 {showModalities ? (
                   <Text style={styles.ticketModifyClose}>×</Text>
                 ) : (
-                  <PencilIcon size={14} color={colors.inkSoft} />
+                  <PencilIcon size={15} color={colors.inkSoft} />
                 )}
               </Pressable>
               <Pressable
@@ -2028,7 +2133,7 @@ function MobileBoardingPass({
               >
                 <Text style={styles.ticketInfoText}>i</Text>
               </Pressable>
-            </View>
+            </>
           ) : null}
         </View>
       </View>
@@ -2511,51 +2616,57 @@ const styles = StyleSheet.create({
   ticketPriceLabel: { fontFamily: fonts.bold, fontSize: 8, letterSpacing: 1, color: colors.faint },
   ticketPrice: { marginTop: 1, fontFamily: fonts.extrabold, fontSize: 26, color: colors.ink },
   ticketPassengers: { fontFamily: fonts.medium, fontSize: 10, color: colors.muted },
-  ticketActions: { alignItems: 'flex-end', gap: 8 },
+  ticketActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flexShrink: 0,
+  },
   ticketBook: {
+    minHeight: 44,
     borderRadius: 13,
     backgroundColor: '#121826',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 3,
     elevation: 3,
   },
   ticketBookText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
-  ticketModifyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingRight: 2,
-  },
   ticketModifyBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.06)',
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
   },
   ticketModifyClose: {
     fontFamily: fonts.bold,
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 22,
+    lineHeight: 24,
     color: colors.inkSoft,
     marginTop: -1,
   },
   ticketInfoBtn: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 44,
+    height: 44,
+    borderRadius: 13,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ticketInfoText: {
     fontFamily: fonts.bold,
-    fontSize: 10,
+    fontSize: 12,
     color: colors.muted,
-    lineHeight: 12,
+    lineHeight: 14,
   },
   roleHint: {
     fontFamily: fonts.medium,
