@@ -149,11 +149,15 @@ async def list_city_activities(
     adults: int = Query(2, ge=1, le=6),
     destination_id: Optional[str] = None,
 ):
+    import asyncio
+
     from activities.config import load_activities_config
     from activities.service import search_city_activities
 
     cfg = load_activities_config()
-    return search_city_activities(
+    # Sync Viator/HTTP + cache I/O — keep the event loop free.
+    return await asyncio.to_thread(
+        search_city_activities,
         _svc(),
         city_slug=city_slug,
         destination_id=destination_id,
@@ -173,6 +177,8 @@ async def activities_nearby(body: NearbyBody):
 
 @router.get("/api/activities/products/{product_code}")
 async def activity_product_detail(product_code: str):
+    import asyncio
+
     from activities.cache import cache_get, cache_set
     from activities.config import load_activities_config
     from activities.service import _normalize_product_detail
@@ -181,30 +187,37 @@ async def activity_product_detail(product_code: str):
     cfg = load_activities_config()
     sb = _svc()
     code = (product_code or "").strip()
-    # detail2: enriched fiche (photos[], description, logistics)
-    cache_key = f"{code}:detail2"
-    cached = cache_get(
-        sb, provider="viator", resource="product", cache_key=cache_key
-    )
-    if isinstance(cached, dict) and cached.get("photos") is not None:
-        return {"ok": True, "product": cached, "cached": True}
-    client = ViatorClient(cfg)
-    try:
+
+    def _load() -> dict:
+        # detail2: enriched fiche (photos[], description, logistics)
+        cache_key = f"{code}:detail2"
+        cached = cache_get(
+            sb, provider="viator", resource="product", cache_key=cache_key
+        )
+        if isinstance(cached, dict) and cached.get("photos") is not None:
+            return {"ok": True, "product": cached, "cached": True}
+        client = ViatorClient(cfg)
         raw = client.product_detail(code)
+        if not isinstance(raw, dict):
+            return {"ok": False, "error": "not_found"}
+        norm = _normalize_product_detail(raw)
+        cache_set(
+            sb,
+            provider="viator",
+            resource="product",
+            cache_key=cache_key,
+            payload=norm,
+            ttl_h=cfg.cache_ttl_h,
+        )
+        return {"ok": True, "product": norm, "cached": False}
+
+    try:
+        out = await asyncio.to_thread(_load)
     except ViatorError as e:
         raise HTTPException(status_code=502, detail=str(e))
-    if not isinstance(raw, dict):
+    if not out.get("ok"):
         raise HTTPException(status_code=404, detail="not_found")
-    norm = _normalize_product_detail(raw)
-    cache_set(
-        sb,
-        provider="viator",
-        resource="product",
-        cache_key=cache_key,
-        payload=norm,
-        ttl_h=cfg.cache_ttl_h,
-    )
-    return {"ok": True, "product": norm, "cached": False}
+    return out
 
 
 @router.get("/api/liked-activities")

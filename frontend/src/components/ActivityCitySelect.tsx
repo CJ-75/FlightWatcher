@@ -59,7 +59,7 @@ function seedFallbackCities(): CityOpt[] {
 export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
   const peeked = peekAirports()
   const [airports, setAirports] = useState(() => (peeked.length ? peeked : SEED))
-  const [loading, setLoading] = useState(() => peeked.length === 0)
+  const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -91,9 +91,17 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
     })()
   }
 
+  // Seed cities first — load full airports only when the picker opens.
   useEffect(() => {
+    if (!open) return
+    if (peekAirports().length) {
+      applyList(peekAirports())
+      setLoading(false)
+      return
+    }
     let cancelled = false
-    ;(async () => {
+    setLoading(true)
+    void (async () => {
       try {
         const list = await loadAirportsOnce()
         if (cancelled) return
@@ -111,7 +119,7 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [open])
 
   const groups = useMemo(() => groupAirportsByCity(airports), [airports])
   const catalogReady = groups.length >= 20

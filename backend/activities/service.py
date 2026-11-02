@@ -479,7 +479,6 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
         else p.get("category"),
         "tags": tags,
         "destination_label": dest_label,
-        "raw_flags": flags,
     }
 
 
@@ -748,9 +747,9 @@ def search_city_activities(
     cfg = cfg or load_activities_config()
     adults = max(1, min(6, int(adults or 2)))
     slug = (city_slug or "").strip().lower()
-    # destv4: corrected CITY ids + canonical www product deep-links (not city)
-    cache_key = f"city:{slug}:{destination_id or ''}:{adults}:destv4"
+    # destv5: lean list payload + smaller Viator page size
     dest = destination_id or _resolve_destination_id(supabase, slug)
+    cache_key = f"city:{slug}:{dest or ''}:destv5"
     cached = cache_get(
         supabase, provider="viator", resource="city_search", cache_key=cache_key
     )
@@ -776,11 +775,13 @@ def search_city_activities(
             "hint": "Ville pas encore couverte — choisis une suggestion ou une grande ville EU",
         }
 
+    # Ask Viator for slightly more than we show (gastronomy filter), not 2×.
+    page_count = min(40, max(cfg.max_results + 6, cfg.min_results + 6))
     try:
         raw = client.search_products(
             {
                 "filtering": {"destination": str(dest)},
-                "pagination": {"start": 1, "count": min(50, cfg.max_results * 2)},
+                "pagination": {"start": 1, "count": page_count},
                 "currency": "EUR",
             }
         )
