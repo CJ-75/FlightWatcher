@@ -463,7 +463,7 @@ export function DealsTab() {
           <ActivitySurfaceBanner
             surface="occasions"
             title={ACTIVITY_OCCASIONS_CTA_FR}
-            subtitle="Explore les activités Viator liées à ta sélection."
+            subtitle="Explore les activités liées à ta sélection."
           />
         </div>
       ) : null}

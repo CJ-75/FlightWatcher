@@ -9,6 +9,8 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
+  ACTIVITY_CHANGE_TRIP_FR,
+  ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_NO_TRIP_CTA_BODY_FR,
   ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
   ACTIVITY_NO_TRIP_CTA_TITLE_FR,
@@ -19,7 +21,22 @@ import {
   ACTIVITY_TRIP_PLANNER_COUNT_FR,
   cityImageUrl,
 } from '@flightwatcher/shared'
+import Svg, { Path } from 'react-native-svg'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
+
+function ChevronDownIcon({ size = 14, color = colors.ink }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 12 12" fill="none">
+      <Path
+        d="M2.1 4.2L6 8.2l3.9-4"
+        stroke={color}
+        strokeWidth={2.1}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
+}
 
 type ActiveProps = {
   mode: 'active'
@@ -29,11 +46,13 @@ type ActiveProps = {
   showSyncCity?: boolean
   onOpenPlanner: () => void
   onSyncCity?: () => void
+  onChangeTrip?: () => void
 }
 
 type EmptyProps = {
   mode: 'empty'
   onBrowseTrips: () => void
+  onChooseTrip?: () => void
 }
 
 type Props = ActiveProps | EmptyProps
@@ -54,17 +73,30 @@ export function ActivityTripHero(props: Props) {
           <Text style={styles.kickerMuted}>ACTIVITÉS + SÉJOUR</Text>
           <Text style={styles.titleEmpty}>{ACTIVITY_NO_TRIP_CTA_TITLE_FR}</Text>
           <Text style={styles.hint}>{ACTIVITY_NO_TRIP_CTA_BODY_FR}</Text>
-          <Pressable
-            onPress={props.onBrowseTrips}
-            style={({ pressed }) => [
-              styles.btnPrimary,
-              pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-            ]}
-          >
-            <Text style={styles.btnPrimaryText}>
-              {ACTIVITY_NO_TRIP_CTA_BUTTON_FR}
-            </Text>
-          </Pressable>
+          <View style={styles.actions}>
+            {props.onChooseTrip ? (
+              <Pressable
+                onPress={props.onChooseTrip}
+                style={({ pressed }) => [
+                  styles.btnPrimary,
+                  pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+                ]}
+              >
+                <Text style={styles.btnPrimaryText}>{ACTIVITY_CHOOSE_TRIP_FR}</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={props.onBrowseTrips}
+              style={({ pressed }) => [
+                styles.btnGhost,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.btnGhostText}>
+                {ACTIVITY_NO_TRIP_CTA_BUTTON_FR}
+              </Text>
+            </Pressable>
+          </View>
         </LinearGradient>
       </ImageBackground>
     )
@@ -100,7 +132,27 @@ export function ActivityTripHero(props: Props) {
         </View>
 
         <View style={styles.bottom}>
-          <Text style={styles.city}>{props.cityLabel}</Text>
+          {props.onChangeTrip ? (
+            <Pressable
+              onPress={props.onChangeTrip}
+              accessibilityLabel={ACTIVITY_CHOOSE_TRIP_FR}
+              accessibilityHint={ACTIVITY_CHANGE_TRIP_FR}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.cityBtn,
+                pressed && { opacity: 0.92 },
+              ]}
+            >
+              <Text style={styles.city} numberOfLines={1}>
+                {props.cityLabel}
+              </Text>
+              <View style={styles.changeChip}>
+                <ChevronDownIcon size={14} color={colors.ink} />
+              </View>
+            </Pressable>
+          ) : (
+            <Text style={styles.city}>{props.cityLabel}</Text>
+          )}
           <Text style={styles.hint}>{ACTIVITY_TRIP_IN_PROGRESS_HINT_FR}</Text>
           <View style={styles.actions}>
             <Pressable
@@ -149,7 +201,8 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
   liveBadge: {
@@ -189,6 +242,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.92)',
   },
+  cityBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: '100%',
+  },
+  changeChip: {
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
   kickerMuted: {
     fontFamily: fonts.extrabold,
     fontSize: 10,
@@ -198,6 +271,7 @@ const styles = StyleSheet.create({
   },
   bottom: { marginTop: 18 },
   city: {
+    flexShrink: 1,
     fontFamily: fonts.extrabold,
     fontSize: 22,
     letterSpacing: -0.5,

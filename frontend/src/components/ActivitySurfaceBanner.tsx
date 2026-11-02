@@ -35,7 +35,7 @@ export function ActivitySurfaceBanner(props: {
         </p>
         <p className="text-xs text-primary-900/80 mt-0.5">
           {props.subtitle ||
-            'Visites, billets et expériences — sélection FlightWatcher, réservation Viator.'}
+            'Visites, billets et expériences pour ton séjour.'}
         </p>
       </div>
       <Link

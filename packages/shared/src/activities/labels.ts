@@ -295,7 +295,7 @@ export function savedIdeasTitleFr(city: string): string {
 }
 
 export const ACTIVITY_TRANSFER_CTA_FR =
-  'Aéroport loin du centre ? Compare les transferts et navettes Viator.'
+  'Aéroport loin du centre ? Compare les transferts et navettes.'
 
 export const ACTIVITY_OCCASIONS_CTA_FR =
   'Complète ton occasion avec des activités sur place.'

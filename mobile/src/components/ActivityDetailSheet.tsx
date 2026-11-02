@@ -92,7 +92,6 @@ export function ActivityDetailSheet({
   const chips = [
     d.freeCancellation ? 'Annulation gratuite' : null,
     d.instantConfirmation ? 'Confirmation instantanée' : null,
-    d.durationLabel,
     d.category,
   ].filter(Boolean) as string[]
 
@@ -135,26 +134,35 @@ export function ActivityDetailSheet({
                 <Text style={styles.name}>{d.title}</Text>
                 {d.rating != null ? (
                   <View style={styles.ratingRow}>
-                    <ReviewStars rating={d.rating} size={14} />
+                    <ReviewStars rating={d.rating} size={13} />
+                    <Text style={styles.ratingValue}>
+                      {Number(d.rating).toFixed(1).replace('.', ',')}
+                    </Text>
                     {d.reviewCount != null && d.reviewCount > 0 ? (
                       <Text style={styles.reviewText} numberOfLines={1}>
-                        {d.reviewCount.toLocaleString('fr-FR')} avis
+                        · {d.reviewCount.toLocaleString('fr-FR')} avis
                       </Text>
                     ) : null}
                   </View>
                 ) : null}
                 {[
+                  d.durationLabel,
                   d.distanceLabel,
                   d.destinationLabel ? `À ${d.destinationLabel}` : null,
                 ].some(Boolean) ? (
-                  <Text style={styles.metaText} numberOfLines={2}>
+                  <View style={styles.factRow}>
                     {[
+                      d.durationLabel,
                       d.distanceLabel,
                       d.destinationLabel ? `À ${d.destinationLabel}` : null,
                     ]
                       .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
+                      .map((label) => (
+                        <View key={String(label)} style={styles.factChip}>
+                          <Text style={styles.factChipText}>{label}</Text>
+                        </View>
+                      ))}
+                  </View>
                 ) : null}
               </View>
               {d.priceLabel ? (
@@ -257,7 +265,7 @@ export function ActivityDetailSheet({
           ]}
         >
           <Pressable style={styles.cta} onPress={() => onBook(card)}>
-            <Text style={styles.ctaText}>Réserver sur Viator</Text>
+            <Text style={styles.ctaText}>Réserver</Text>
           </Pressable>
           {!alreadyAdded ? (
             <Pressable
@@ -265,6 +273,7 @@ export function ActivityDetailSheet({
               disabled={addBusy}
               onPress={() => onAdd(card)}
             >
+              <Text style={styles.secondaryPlus}>+</Text>
               <Text style={styles.secondaryText}>
                 {addLabel || ACTIVITY_ADD_TO_PLANNER_FR}
               </Text>
@@ -321,22 +330,43 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    flexWrap: 'wrap',
+    gap: 5,
     marginTop: 6,
     minHeight: 18,
   },
+  ratingValue: {
+    fontFamily: fonts.extrabold,
+    fontSize: 13,
+    color: colors.ink,
+    includeFontPadding: false,
+  },
   reviewText: {
     flexShrink: 1,
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 16,
-  },
-  metaText: {
-    marginTop: 4,
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
+    includeFontPadding: false,
+  },
+  factRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  factChip: {
+    backgroundColor: colors.canvas,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  factChipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: colors.inkSoft,
+    includeFontPadding: false,
   },
   priceBlock: { alignItems: 'flex-end' },
   price: {
@@ -425,8 +455,17 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: radius.lg,
     minHeight: 44,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+  },
+  secondaryPlus: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    lineHeight: 20,
+    color: colors.primary,
+    includeFontPadding: false,
   },
   secondaryText: {
     fontFamily: fonts.bold,

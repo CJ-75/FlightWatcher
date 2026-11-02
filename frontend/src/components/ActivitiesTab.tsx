@@ -5,12 +5,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
+  ACTIVITY_ADDED_BADGE_FR,
   ACTIVITY_ADDED_TO_PLANNER_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
+  ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_PAGE_KICKER_FR,
+  ACTIVITY_PAGE_SUBTITLE_FR,
+  ACTIVITY_PAGE_TITLE_FR,
   ACTIVITY_KEEP_ADDING_FR,
+  ACTIVITY_NO_PLANNER_TO_ADD_FR,
   ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
@@ -32,6 +38,10 @@ import { getApiClient } from '../utils/apiClient'
 import { listRememberedTrips, rememberTrip } from '../utils/tripRecovery'
 import { ActivityCitySelect } from './ActivityCitySelect'
 import { ActivityDetailSheet } from './ActivityDetailSheet'
+import {
+  ActivityPlannerPicker,
+  type ActivityPlannerTarget,
+} from './ActivityPlannerPicker'
 import { ActivityTripHero } from './ActivityTripHero'
 import { RatingStars } from './RatingStars'
 
@@ -74,6 +84,7 @@ function ActivityCard({
   addLabel = ACTIVITY_ADD_TO_PLANNER_FR,
   addDisabled = false,
   hideAdd = false,
+  added = false,
 }: {
   card: ActivityCardModel
   onOpen: () => void
@@ -84,6 +95,7 @@ function ActivityCard({
   addLabel?: string
   addDisabled?: boolean
   hideAdd?: boolean
+  added?: boolean
 }) {
   const chips = [card.durationLabel, card.distanceLabel].filter(
     Boolean,
@@ -99,7 +111,11 @@ function ActivityCard({
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
       whileHover={{ y: -3, transition: { duration: 0.18 } }}
-      className="group flex flex-col rounded-2xl overflow-hidden border border-line/80 bg-canvas shadow-soft hover:shadow-lift hover:border-primary-200 transition-all duration-200 text-left"
+      className={`group flex flex-col rounded-2xl overflow-hidden border bg-canvas shadow-soft hover:shadow-lift transition-all duration-200 text-left ${
+        added
+          ? 'border-emerald-400 hover:border-emerald-500'
+          : 'border-line/80 hover:border-primary-200'
+      }`}
     >
       <button
         type="button"
@@ -116,11 +132,19 @@ function ActivityCard({
           <div className="absolute inset-0 bg-slate-200" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/25 to-transparent" />
-        {card.freeCancellation ? (
-          <span className="absolute top-2.5 left-2.5 z-[3] rounded-md px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold shadow-soft">
-            Annulation gratuite
-          </span>
-        ) : null}
+        <div className="absolute top-2.5 left-2.5 z-[3] flex flex-col gap-1 items-start">
+          {added ? (
+            <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold shadow-soft">
+              <span aria-hidden>✓</span>
+              {ACTIVITY_ADDED_BADGE_FR}
+            </span>
+          ) : null}
+          {card.freeCancellation ? (
+            <span className="rounded-md px-2 py-1 bg-white/90 text-ink text-[10px] font-bold shadow-soft">
+              Annulation gratuite
+            </span>
+          ) : null}
+        </div>
         {onToggleLike ? (
           <span
             role="button"
@@ -191,9 +215,14 @@ function ActivityCard({
               type="button"
               onClick={onAdd}
               disabled={addDisabled}
-              className="rounded-lg border border-line text-ink text-[10px] font-bold px-2 py-1.5 min-h-[36px] hover:border-primary-200 hover:bg-primary-50/60 disabled:opacity-50"
+              aria-label={addLabel}
+              title={addLabel}
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-line text-ink text-[11px] font-bold min-h-[36px] min-w-[36px] px-2 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50"
             >
-              {addLabel}
+              <span className="text-base leading-none font-extrabold" aria-hidden>
+                +
+              </span>
+              <span>{addLabel}</span>
             </button>
           ) : null}
           <button
@@ -240,6 +269,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
+  const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
+  const [tripPickerOpen, setTripPickerOpen] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const didAutoCity = useRef(false)
 
@@ -303,10 +334,10 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
             res.error === 'unknown_city'
               ? 'Ville non reconnue — essaie Paris, Rome, Barcelone…'
               : res.error === 'viator_disabled'
-                ? 'Viator non configuré (VIATOR_API_KEY)'
+                ? 'Catalogue activités indisponible'
                 : String(res.error || '').includes('401') ||
                     String(res.error || '').includes('UNAUTHORIZED')
-                  ? 'Clé Viator invalide — vérifie VIATOR_API_KEY (sandbox)'
+                  ? 'Catalogue activités indisponible'
                   : res.error || 'Chargement impossible'
           throw new Error(hint)
         }
@@ -564,22 +595,81 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     }
   }
 
-  const onAddToPlanner = async (card: ActivityCardModel) => {
+  const bindActiveTrip = async (target: ActivityPlannerTarget) => {
+    const tripSlug = resolveActivityCitySlug({
+      citySlug: target.city || null,
+      cityLabel: target.city || target.label,
+      destIata: target.destIata || null,
+    })
+    const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === tripSlug)
+    const label =
+      target.label ||
+      String(known?.label || target.city || activityDestinationLabelFr(tripSlug))
+    setActiveTrip({
+      draftToken: target.draftToken,
+      plannedTripId: target.plannedTripId,
+      slug: tripSlug || citySlug || 'voyage',
+      label,
+    })
+    if (target.draftToken) {
+      rememberTrip({
+        draft_token: target.draftToken,
+        city: tripSlug || citySlug || null,
+      })
+    }
+    if (tripSlug && tripSlug !== citySlug) {
+      navigate(
+        activitiesCityPath(tripSlug, {
+          draftToken: target.draftToken,
+          plannedTripId: target.plannedTripId,
+        }),
+        { replace: true },
+      )
+    }
+    try {
+      const res = await getApiClient().listTripItems(
+        pickTripItemOwner({
+          draftToken: target.draftToken,
+          plannedTripId: target.plannedTripId,
+        }),
+      )
+      const codes = new Set<string>()
+      let count = 0
+      for (const raw of res.items || []) {
+        const it = raw as {
+          item_type?: string
+          status?: string
+          meta?: { product_code?: string }
+        }
+        if (it.item_type && it.item_type !== 'activity') continue
+        if (it.status === 'skipped') continue
+        count += 1
+        const code = it.meta?.product_code ? String(it.meta.product_code) : ''
+        if (code) codes.add(code)
+      }
+      setPlannerCount(count)
+      setAddedCodes(codes)
+    } catch {
+      setPlannerCount(0)
+      setAddedCodes(new Set())
+    }
+  }
+
+  const onAddToPlanner = (card: ActivityCardModel) => {
     setAddNotice(null)
+    setTripPickerOpen(false)
+    setPendingAdd(card)
+  }
+
+  const confirmAddToTarget = async (target: ActivityPlannerTarget) => {
+    const card = pendingAdd
+    if (!card) return
     const owner = pickTripItemOwner({
-      draftToken: activeTrip?.draftToken,
-      plannedTripId: activeTrip?.plannedTripId,
+      draftToken: target.draftToken,
+      plannedTripId: target.plannedTripId,
     })
     if (!hasTripItemOwner(owner)) {
-      setAddNotice(
-        'Ouvre ton séjour (planner) puis « Parcourir le catalogue » pour lier les ajouts.',
-      )
-      setDetail(card)
-      return
-    }
-    if (card.productCode && addedCodes.has(card.productCode)) {
-      setAddNotice('Déjà dans ce planner — continue avec une autre idée.')
-      setDetail(null)
+      setAddNotice(ACTIVITY_NO_PLANNER_TO_ADD_FR)
       return
     }
     setAddBusy(true)
@@ -597,9 +687,11 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       if (card.productCode) {
         setAddedCodes((prev) => new Set(prev).add(card.productCode))
       }
+      await bindActiveTrip(target)
       setAddNotice(
-        `${ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
+        `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
       )
+      setPendingAdd(null)
       setDetail(null)
     } catch (e) {
       setAddNotice(e instanceof Error ? e.message : 'Ajout impossible')
@@ -610,11 +702,12 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
 
   return (
     <div className="w-full">
-      <div className="mb-4 sm:mb-5">
-        <p className="app-kicker mb-1">Activités</p>
-        <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
-          Que faire sur place
+      <div className="mb-5 sm:mb-6">
+        <p className="app-kicker mb-1.5">{ACTIVITY_PAGE_KICKER_FR}</p>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+          {ACTIVITY_PAGE_TITLE_FR}
         </h2>
+        <p className="app-subtitle mt-1 max-w-xl">{ACTIVITY_PAGE_SUBTITLE_FR}</p>
       </div>
 
       {activeTrip && plannerHref ? (
@@ -627,9 +720,20 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           onSyncCity={() =>
             navigate(activitiesCityPath(activeTrip.slug, catalogNavOpts))
           }
+          onChangeTrip={() => {
+            setPendingAdd(null)
+            setTripPickerOpen(true)
+          }}
         />
       ) : (
-        <ActivityTripHero mode="empty" emptyHref="/sejours" />
+        <ActivityTripHero
+          mode="empty"
+          emptyHref="/sejours"
+          onChooseTrip={() => {
+            setPendingAdd(null)
+            setTripPickerOpen(true)
+          }}
+        />
       )}
 
       <div className="mb-3 sm:mb-4 space-y-1.5">
@@ -778,25 +882,20 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         </div>
       ) : cards.length ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
-          {cards.map((c) => {
-            const already = Boolean(c.productCode && addedCodes.has(c.productCode))
-            return (
+          {cards.map((c) => (
               <ActivityCard
                 key={c.productCode || c.title}
                 card={c}
                 onOpen={() => setDetail(c)}
                 onBook={() => onBook(c)}
-                onAdd={() => {
-                  void onAddToPlanner(c)
-                }}
+                onAdd={() => onAddToPlanner(c)}
                 liked={likedIds.has(c.productCode)}
                 onToggleLike={() => void toggleLike(c)}
                 addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
                 addDisabled={addBusy}
-                hideAdd={already}
+                added={Boolean(c.productCode && addedCodes.has(c.productCode))}
               />
-            )
-          })}
+          ))}
         </div>
       ) : !error && !loading ? (
         <div className="app-card p-8 text-center max-w-md mx-auto">
@@ -811,20 +910,42 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           adults={adults}
           liked={likedIds.has(detail.productCode)}
           addBusy={addBusy}
-          alreadyAdded={Boolean(
-            detail.productCode && addedCodes.has(detail.productCode),
-          )}
-          addLabel={
-            activeTrip
-              ? `Ajouter au planner · ${activeTrip.label}`
-              : ACTIVITY_ADD_TO_PLANNER_FR
-          }
+          alreadyAdded={false}
+          addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
           onToggleLike={() => void toggleLike(detail)}
           onBook={() => onBook(detail)}
-          onAdd={() => void onAddToPlanner(detail)}
+          onAdd={() => onAddToPlanner(detail)}
           onClose={() => setDetail(null)}
         />
       ) : null}
+
+      <ActivityPlannerPicker
+        open={Boolean(pendingAdd) || tripPickerOpen}
+        busy={addBusy}
+        preferredPlannedTripId={activeTrip?.plannedTripId}
+        preferredDraftToken={activeTrip?.draftToken}
+        title={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_FR}
+        hint={
+          pendingAdd
+            ? undefined
+            : 'Le séjour choisi devient le voyage en cours pour le catalogue.'
+        }
+        onClose={() => {
+          if (addBusy) return
+          setPendingAdd(null)
+          setTripPickerOpen(false)
+        }}
+        onPick={(target) => {
+          if (pendingAdd) {
+            void confirmAddToTarget(target)
+            return
+          }
+          void (async () => {
+            await bindActiveTrip(target)
+            setTripPickerOpen(false)
+          })()
+        }}
+      />
 
       {askBooked && pendingBook ? (
         <div className="app-dialog-root">

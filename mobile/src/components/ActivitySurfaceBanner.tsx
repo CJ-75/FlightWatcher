@@ -39,7 +39,7 @@ export function ActivitySurfaceBanner(props: {
         <Text style={styles.title}>{props.title || 'Activités sur place'}</Text>
         <Text style={styles.sub}>
           {props.subtitle ||
-            'Visites et expériences — sélection FlightWatcher, réservation Viator.'}
+            'Visites et expériences pour ton séjour.'}
         </Text>
       </View>
       <Pressable style={styles.cta} onPress={onPress}>

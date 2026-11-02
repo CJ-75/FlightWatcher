@@ -22,8 +22,12 @@ import {
   ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
+  ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_PAGE_SUBTITLE_FR,
+  ACTIVITY_PAGE_TITLE_FR,
   ACTIVITY_KEEP_ADDING_FR,
+  ACTIVITY_NO_PLANNER_TO_ADD_FR,
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
   canonicalViatorProductUrl,
@@ -42,6 +46,10 @@ import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { ActivityCard } from '../components/ActivityCard'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { ActivityDetailSheet } from '../components/ActivityDetailSheet'
+import {
+  ActivityPlannerPicker,
+  type ActivityPlannerTarget,
+} from '../components/ActivityPlannerPicker'
 import { ActivityTripHero } from '../components/ActivityTripHero'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useLikedActivities } from '../hooks/useLikedActivities'
@@ -90,6 +98,8 @@ export function ActivitiesScreen() {
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
+  const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
+  const [tripPickerOpen, setTripPickerOpen] = useState(false)
   const didAutoCity = useRef(false)
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedActivities()
 
@@ -262,7 +272,7 @@ export function ActivitiesScreen() {
               ? 'Ville non reconnue'
               : String(res.error || '').includes('401') ||
                   String(res.error || '').includes('UNAUTHORIZED')
-                ? 'Clé Viator invalide'
+                ? 'Catalogue activités indisponible'
                 : res.error || 'Chargement impossible'
           throw new Error(msg)
         }
@@ -316,21 +326,75 @@ export function ActivitiesScreen() {
     openInAppBrowser(navigation, url, card.title)
   }
 
-  const onAddToPlanner = async (card: ActivityCardModel) => {
+  const bindActiveTrip = async (target: ActivityPlannerTarget) => {
+    const tripSlug = resolveActivityCitySlug({
+      citySlug: target.city || null,
+      cityLabel: target.city || target.label,
+      destIata: target.destIata || null,
+    })
+    const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === tripSlug)
+    const label =
+      target.label ||
+      String(known?.label || target.city || activityDestinationLabelFr(tripSlug))
+    setActiveTrip({
+      draftToken: target.draftToken,
+      plannedTripId: target.plannedTripId,
+      slug: tripSlug || citySlug || 'voyage',
+      label,
+    })
+    if (target.draftToken) {
+      await rememberTrip({
+        draft_token: target.draftToken,
+        city: tripSlug || citySlug || null,
+      })
+    }
+    if (tripSlug && tripSlug !== citySlug) {
+      setCitySlug(tripSlug)
+    }
+    try {
+      const res = await getApi().listTripItems(
+        pickTripItemOwner({
+          draftToken: target.draftToken,
+          plannedTripId: target.plannedTripId,
+        }),
+      )
+      const codes = new Set<string>()
+      let count = 0
+      for (const raw of res.items || []) {
+        const it = raw as {
+          item_type?: string
+          status?: string
+          meta?: { product_code?: string }
+        }
+        if (it.item_type && it.item_type !== 'activity') continue
+        if (it.status === 'skipped') continue
+        count += 1
+        const code = it.meta?.product_code ? String(it.meta.product_code) : ''
+        if (code) codes.add(code)
+      }
+      setPlannerCount(count)
+      setAddedCodes(codes)
+    } catch {
+      setPlannerCount(0)
+      setAddedCodes(new Set())
+    }
+  }
+
+  const onAddToPlanner = (card: ActivityCardModel) => {
     setAddNotice(null)
+    setTripPickerOpen(false)
+    setPendingAdd(card)
+  }
+
+  const confirmAddToTarget = async (target: ActivityPlannerTarget) => {
+    const card = pendingAdd
+    if (!card) return
     const owner = pickTripItemOwner({
-      draftToken: activeTrip?.draftToken,
-      plannedTripId: activeTrip?.plannedTripId,
+      draftToken: target.draftToken,
+      plannedTripId: target.plannedTripId,
     })
     if (!hasTripItemOwner(owner)) {
-      setAddNotice(
-        'Ouvre ton séjour puis « Parcourir le catalogue » pour lier les ajouts.',
-      )
-      return
-    }
-    if (card.productCode && addedCodes.has(card.productCode)) {
-      setAddNotice('Déjà dans ce planner — continue avec une autre idée.')
-      setDetail(null)
+      setAddNotice(ACTIVITY_NO_PLANNER_TO_ADD_FR)
       return
     }
     setAddBusy(true)
@@ -348,9 +412,11 @@ export function ActivitiesScreen() {
       if (card.productCode) {
         setAddedCodes((prev) => new Set(prev).add(card.productCode))
       }
+      await bindActiveTrip(target)
       setAddNotice(
-        `${ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
+        `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
       )
+      setPendingAdd(null)
       setDetail(null)
     } catch (e) {
       setAddNotice(e instanceof Error ? e.message : 'Ajout impossible')
@@ -393,8 +459,8 @@ export function ActivitiesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Activités</Text>
-            <Text style={styles.subtitle}>Que faire sur place</Text>
+            <Text style={styles.title}>{ACTIVITY_PAGE_TITLE_FR}</Text>
+            <Text style={styles.subtitle}>{ACTIVITY_PAGE_SUBTITLE_FR}</Text>
 
             {activeTrip ? (
               <ActivityTripHero
@@ -404,11 +470,19 @@ export function ActivitiesScreen() {
                 showSyncCity={activeTrip.slug !== citySlug}
                 onOpenPlanner={openPlanner}
                 onSyncCity={() => setCitySlug(activeTrip.slug)}
+                onChangeTrip={() => {
+                  setPendingAdd(null)
+                  setTripPickerOpen(true)
+                }}
               />
             ) : (
               <ActivityTripHero
                 mode="empty"
                 onBrowseTrips={() => navigation.navigate('Deals')}
+                onChooseTrip={() => {
+                  setPendingAdd(null)
+                  setTripPickerOpen(true)
+                }}
               />
             )}
 
@@ -522,21 +596,19 @@ export function ActivitiesScreen() {
             ) : null}
           </View>
         }
-        renderItem={({ item: c }) => {
-          const already = Boolean(c.productCode && addedCodes.has(c.productCode))
-          return (
+        renderItem={({ item: c }) => (
             <ActivityCard
               card={c}
               onPress={() => setDetail(c)}
               onBook={() => onBook(c)}
-              onAdd={already ? undefined : () => void onAddToPlanner(c)}
+              onAdd={() => onAddToPlanner(c)}
               addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
               addDisabled={addBusy}
               liked={isLiked(c.productCode)}
               onToggleLike={() => void toggleLike(c)}
+              added={Boolean(c.productCode && addedCodes.has(c.productCode))}
             />
-          )
-        }}
+        )}
         ListEmptyComponent={
           loading ? null : (
             <View style={[styles.emptyCard, shadow.soft]}>
@@ -570,17 +642,49 @@ export function ActivitiesScreen() {
         card={detail}
         adults={adults}
         addBusy={addBusy}
-        alreadyAdded={Boolean(
-          detail?.productCode && addedCodes.has(detail.productCode),
-        )}
-        addLabel={
-          activeTrip
-            ? `Ajouter au planner · ${activeTrip.label}`
-            : ACTIVITY_ADD_TO_PLANNER_FR
-        }
+        alreadyAdded={false}
+        addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
         onBook={(c) => onBook(c)}
-        onAdd={(c) => void onAddToPlanner(c)}
+        onAdd={(c) => onAddToPlanner(c)}
         onClose={() => setDetail(null)}
+      />
+
+      <ActivityPlannerPicker
+        visible={Boolean(pendingAdd) || tripPickerOpen}
+        busy={addBusy}
+        preferredPlannedTripId={activeTrip?.plannedTripId}
+        preferredDraftToken={activeTrip?.draftToken}
+        title={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_FR}
+        hint={
+          pendingAdd
+            ? undefined
+            : 'Le séjour choisi devient le voyage en cours pour le catalogue.'
+        }
+        onClose={() => {
+          if (addBusy) return
+          setPendingAdd(null)
+          setTripPickerOpen(false)
+        }}
+        onPick={(target) => {
+          if (pendingAdd) {
+            void confirmAddToTarget(target)
+            return
+          }
+          void (async () => {
+            await bindActiveTrip(target)
+            setTripPickerOpen(false)
+          })()
+        }}
+        onOpenPlanner={() => {
+          setPendingAdd(null)
+          setTripPickerOpen(false)
+          navigation.navigate('Main', { screen: 'Planner' })
+        }}
+        onSignIn={() => {
+          setPendingAdd(null)
+          setTripPickerOpen(false)
+          navigation.navigate('Main', { screen: 'Profile' })
+        }}
       />
 
       <Modal visible={askBooked && !!pendingBook} transparent animationType="fade">
@@ -621,21 +725,20 @@ export function ActivitiesScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  header: { marginBottom: spacing.md },
+  header: { marginBottom: spacing.lg },
   title: {
     fontFamily: fonts.extrabold,
-    fontSize: 24,
-    letterSpacing: -0.6,
+    fontSize: 32,
+    letterSpacing: -1,
     color: colors.ink,
     includeFontPadding: false,
   },
   subtitle: {
-    marginTop: 4,
+    marginTop: 6,
     marginBottom: 12,
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 14,
     color: colors.muted,
-    lineHeight: 18,
     includeFontPadding: false,
   },
   noticeBox: {

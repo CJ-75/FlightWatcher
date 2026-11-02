@@ -8,7 +8,10 @@ import {
   Dimensions,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import type { ActivityCardModel } from '@flightwatcher/shared'
+import {
+  ACTIVITY_ADDED_BADGE_FR,
+  type ActivityCardModel,
+} from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 import { HeartIcon } from './HeartIcon'
 import { ReviewStars } from './ReviewStars'
@@ -22,6 +25,8 @@ type Props = {
   addDisabled?: boolean
   liked?: boolean
   onToggleLike?: () => void
+  /** Already in the linked / chosen séjour. */
+  added?: boolean
 }
 
 const screenW = Dimensions.get('window').width
@@ -33,19 +38,25 @@ export function ActivityCard({
   onPress,
   onBook,
   onAdd,
-  addLabel = 'Au planner',
+  addLabel = 'Ajouter',
   addDisabled = false,
   liked,
   onToggleLike,
+  added = false,
 }: Props) {
-  const chips = [card.durationLabel, card.distanceLabel].filter(Boolean).join(' · ')
+  const factChips = [card.durationLabel, card.distanceLabel].filter(
+    Boolean,
+  ) as string[]
+  const ratingValue =
+    card.rating != null ? card.rating.toFixed(1).replace('.', ',') : null
   const reviewLabel =
     card.reviewCount != null && card.reviewCount > 0
       ? `${card.reviewCount.toLocaleString('fr-FR')} avis`
       : null
+  const hasMeta = card.rating != null || factChips.length > 0
 
   return (
-    <View style={[styles.card, shadow.soft]}>
+    <View style={[styles.card, shadow.soft, added && styles.cardAdded]}>
       <Pressable onPress={onPress} style={styles.hero}>
         {card.photoUrl ? (
           <Image source={{ uri: card.photoUrl }} style={styles.image} />
@@ -65,15 +76,24 @@ export function ActivityCard({
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        {card.freeCancellation ? (
-          <View style={styles.badge} pointerEvents="none">
-            <Text style={styles.badgeText}>Annulation gratuite</Text>
-          </View>
-        ) : card.instantConfirmation ? (
-          <View style={[styles.badge, styles.badgeInk]} pointerEvents="none">
-            <Text style={styles.badgeText}>Confirmation instantanée</Text>
-          </View>
-        ) : null}
+        <View style={styles.badgeCol} pointerEvents="none">
+          {added ? (
+            <View style={styles.addedBadge}>
+              <Text style={styles.addedBadgeText}>✓ {ACTIVITY_ADDED_BADGE_FR}</Text>
+            </View>
+          ) : null}
+          {card.freeCancellation ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>Annulation gratuite</Text>
+            </View>
+          ) : card.instantConfirmation ? (
+            <View style={[styles.badge, styles.badgeInk]}>
+              <Text style={[styles.badgeText, styles.badgeInkText]}>
+                Confirmation instantanée
+              </Text>
+            </View>
+          ) : null}
+        </View>
         {onToggleLike ? (
           <Pressable
             onPress={(e) => {
@@ -98,31 +118,60 @@ export function ActivityCard({
       </Pressable>
 
       <Pressable onPress={onPress} style={styles.body}>
-        {card.rating != null || chips ? (
+        {hasMeta ? (
           <View style={styles.metaBlock}>
             {card.rating != null ? (
               <View style={styles.ratingRow}>
-                <ReviewStars rating={card.rating} size={13} />
+                <ReviewStars rating={card.rating} size={12} />
+                {ratingValue ? (
+                  <Text style={styles.ratingValue}>{ratingValue}</Text>
+                ) : null}
                 {reviewLabel ? (
                   <Text style={styles.reviewText} numberOfLines={1}>
-                    {reviewLabel}
+                    · {reviewLabel}
                   </Text>
                 ) : null}
               </View>
             ) : null}
-            {chips ? (
-              <Text style={styles.meta} numberOfLines={1}>
-                {chips}
-              </Text>
+            {factChips.length ? (
+              <View style={styles.chipRow}>
+                {factChips.map((label) => (
+                  <View key={label} style={styles.factChip}>
+                    <Text style={styles.factChipText}>{label}</Text>
+                  </View>
+                ))}
+              </View>
             ) : null}
           </View>
         ) : null}
-        <View style={styles.priceRow}>
-          <View style={{ flex: 1 }}>
+
+        <View style={styles.footer}>
+          <View style={styles.priceBlock}>
             <Text style={styles.priceLabel}>À partir de</Text>
-            <Text style={styles.price}>{card.priceLabel || 'Voir le tarif'}</Text>
+            <Text style={styles.price} numberOfLines={1}>
+              {card.priceLabel || 'Voir'}
+            </Text>
           </View>
-          <View style={styles.ctaCol}>
+          <View style={styles.ctaRow}>
+            {onAdd ? (
+              <Pressable
+                onPress={(e) => {
+                  e?.stopPropagation?.()
+                  if (!addDisabled) onAdd()
+                }}
+                disabled={addDisabled}
+                accessibilityLabel={addLabel}
+                style={({ pressed }) => [
+                  styles.ctaSecondary,
+                  pressed && { opacity: 0.9 },
+                  addDisabled && { opacity: 0.5 },
+                ]}
+                hitSlop={4}
+              >
+                <Text style={styles.ctaPlus}>+</Text>
+                <Text style={styles.ctaSecondaryText}>{addLabel}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={(e) => {
                 e?.stopPropagation?.()
@@ -133,23 +182,6 @@ export function ActivityCard({
             >
               <Text style={styles.ctaText}>Réserver</Text>
             </Pressable>
-            {onAdd ? (
-              <Pressable
-                onPress={(e) => {
-                  e?.stopPropagation?.()
-                  if (!addDisabled) onAdd()
-                }}
-                disabled={addDisabled}
-                style={({ pressed }) => [
-                  styles.ctaSecondary,
-                  pressed && { opacity: 0.9 },
-                  addDisabled && { opacity: 0.5 },
-                ]}
-                hitSlop={4}
-              >
-                <Text style={styles.ctaSecondaryText}>{addLabel}</Text>
-              </Pressable>
-            ) : null}
           </View>
         </View>
       </Pressable>
@@ -165,6 +197,27 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     marginBottom: spacing.md,
+  },
+  cardAdded: {
+    borderColor: colors.success,
+  },
+  badgeCol: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    gap: 6,
+    zIndex: 2,
+  },
+  addedBadge: {
+    backgroundColor: colors.success,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  addedBadgeText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 10,
   },
   hero: {
     width: '100%',
@@ -185,20 +238,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   badge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: colors.success,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: radius.full,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   badgeInk: { backgroundColor: colors.ink },
   badgeText: {
-    color: colors.white,
+    color: colors.ink,
     fontFamily: fonts.bold,
     fontSize: 10,
   },
+  badgeInkText: { color: colors.white },
   likeBtn: {
     position: 'absolute',
     top: 8,
@@ -228,38 +279,61 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: 10,
     paddingBottom: spacing.md,
-    gap: 8,
+    gap: 10,
   },
   metaBlock: {
-    gap: 4,
+    gap: 8,
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    minHeight: 16,
+    flexWrap: 'wrap',
+    gap: 5,
+    minHeight: 18,
+  },
+  ratingValue: {
+    fontFamily: fonts.extrabold,
+    fontSize: 13,
+    color: colors.ink,
+    includeFontPadding: false,
   },
   reviewText: {
     flexShrink: 1,
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 16,
-  },
-  meta: {
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.muted,
-    lineHeight: 16,
+    includeFontPadding: false,
   },
-  priceRow: {
+  chipRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  factChip: {
+    backgroundColor: colors.canvas,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  factChipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: colors.inkSoft,
+    includeFontPadding: false,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
-  ctaCol: { gap: 6, alignItems: 'stretch' },
+  priceBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
   priceLabel: {
     fontFamily: fonts.bold,
     fontSize: 9,
@@ -274,6 +348,12 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: colors.primary,
     includeFontPadding: false,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
   },
   cta: {
     backgroundColor: colors.primary,
@@ -292,16 +372,25 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    minHeight: 36,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 3,
     backgroundColor: colors.white,
+  },
+  ctaPlus: {
+    color: colors.primary,
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    lineHeight: 18,
+    includeFontPadding: false,
   },
   ctaSecondaryText: {
     color: colors.ink,
     fontFamily: fonts.bold,
     fontSize: 12,
+    includeFontPadding: false,
   },
 })

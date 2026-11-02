@@ -17,7 +17,7 @@ type Props = {
   adults?: number
   liked?: boolean
   addBusy?: boolean
-  /** Hide “Au planner” when already in the trip. */
+  /** Hide add CTA when already in the trip. */
   alreadyAdded?: boolean
   addLabel: string
   onToggleLike?: () => void
@@ -321,15 +321,18 @@ export function ActivityDetailSheet({
             className="flex-1 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold py-2.5 min-h-[44px] text-sm"
             onClick={onBook}
           >
-            Réserver sur Viator
+            Réserver
           </button>
           {!alreadyAdded ? (
             <button
               type="button"
               disabled={addBusy}
-              className="flex-1 rounded-xl border border-line font-bold py-2.5 min-h-[44px] text-sm disabled:opacity-50"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-line font-bold py-2.5 min-h-[44px] text-sm disabled:opacity-50 hover:border-primary-300 hover:bg-primary-50"
               onClick={onAdd}
             >
+              <span className="text-lg leading-none font-extrabold" aria-hidden>
+                +
+              </span>
               {addLabel}
             </button>
           ) : null}
