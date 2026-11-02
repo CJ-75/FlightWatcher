@@ -6,6 +6,7 @@ import logging
 import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from activities.cache import cache_get, cache_set
 from activities.config import ActivitiesConfig, load_activities_config
@@ -13,6 +14,23 @@ from activities.ranking import haversine_km, rank_activities
 from activities.viator_client import ViatorClient, ViatorError
 
 logger = logging.getLogger("activities.service")
+
+# Sandbox/RC shop hosts often resolve poorly in browsers (city landing instead of PDP).
+_VIATOR_SANDBOX_HOST_RE = re.compile(
+    r"(^|\.)((live\.)?rc\.viator\.com|sandbox\.viator\.com)$",
+    re.I,
+)
+_VIATOR_AFFILIATE_QUERY_KEYS = frozenset(
+    {
+        "pid",
+        "mcid",
+        "medium",
+        "api_version",
+        "campaign",
+        "campaign-value",
+        "cjevent",
+    }
+)
 
 # Viator taxonomy — Food & Drink + Dining Experiences (kept for Restaurants).
 _GASTRONOMY_TAG_IDS = frozenset({21911, 11890})
@@ -315,6 +333,106 @@ def _languages_from(p: Dict[str, Any]) -> List[str]:
     return out
 
 
+def _primary_destination_id(p: Dict[str, Any]) -> Optional[str]:
+    dests = p.get("destinations")
+    if not isinstance(dests, list):
+        return None
+    first: Optional[str] = None
+    for d in dests:
+        if not isinstance(d, dict):
+            continue
+        ref = d.get("ref") or d.get("destinationId") or d.get("id")
+        if ref is None:
+            continue
+        sid = str(ref).strip()
+        if not sid:
+            continue
+        if d.get("primary"):
+            return sid
+        if first is None:
+            first = sid
+    return first
+
+
+def _canonical_viator_product_url(
+    raw_url: Optional[str],
+    *,
+    product_code: Optional[str] = None,
+    destination_id: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Ensure click-out lands on the product PDP, not the city destination page.
+
+    Sandbox/RC shop hosts (shop.live.rc.viator.com) often fail open in browsers
+    and fall back to a destination landing. Rewrite those to www.viator.com while
+    keeping the /tours/.../d{dest}-{code} path + affiliate query params.
+    """
+    code = str(product_code or "").strip()
+    dest = str(destination_id or "").strip()
+    url = str(raw_url or "").strip()
+
+    path_dest: Optional[str] = None
+    path_code: Optional[str] = None
+    affiliate_qs: Dict[str, str] = {}
+    path = ""
+    host = ""
+    is_sandbox = False
+    is_dest_only = False
+
+    if url:
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            parsed = None
+        if parsed and parsed.scheme in ("http", "https") and parsed.hostname:
+            host = parsed.hostname.lower()
+            path = parsed.path or ""
+            is_sandbox = bool(
+                _VIATOR_SANDBOX_HOST_RE.search(host)
+                or host.startswith("shop.")
+            )
+            for k, v in parse_qsl(parsed.query, keep_blank_values=True):
+                if k.lower() in _VIATOR_AFFILIATE_QUERY_KEYS:
+                    affiliate_qs[k] = v
+            m = re.search(r"/d(\d+)-([A-Za-z0-9]+)/?$", path)
+            if m:
+                path_dest, path_code = m.group(1), m.group(2)
+                if path_code.lower() == "ttd":
+                    is_dest_only = True
+                    path_code = None
+                else:
+                    if not code:
+                        code = path_code
+                    if not dest:
+                        dest = path_dest
+            if re.search(r"/d\d+-ttd/?$", path, re.I):
+                is_dest_only = True
+
+    if not code and not url:
+        return None
+
+    if not dest and path_dest:
+        dest = path_dest
+
+    needs_rewrite = is_sandbox or is_dest_only or (
+        bool(url) and "viator.com" in host and "/tours/" not in path and bool(code)
+    )
+
+    if url and not needs_rewrite:
+        # Production product URL — keep verbatim for attribution.
+        return url
+
+    if is_dest_only or "/tours/" not in path:
+        if not code:
+            return url or None
+        new_path = f"/tours/d{dest}-{code}" if dest else f"/tours/{code}"
+    else:
+        new_path = path
+
+    query = urlencode(affiliate_qs) if affiliate_qs else ""
+    return urlunparse(("https", "www.viator.com", new_path, "", query, ""))
+
+
 def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -> Dict[str, Any]:
     reviews = p.get("reviews") if isinstance(p.get("reviews"), dict) else {}
     pricing = p.get("pricing") if isinstance(p.get("pricing"), dict) else {}
@@ -333,8 +451,15 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
         itin = p.get("itinerary") if isinstance(p.get("itinerary"), dict) else {}
         dur = _duration_hours_from(itin.get("duration"))
     tags = _extract_tag_ids(p.get("tags"))
+    product_code = p.get("productCode") or p.get("code")
+    dest_id = _primary_destination_id(p)
+    product_url = _canonical_viator_product_url(
+        p.get("productUrl") or p.get("url"),
+        product_code=str(product_code) if product_code else None,
+        destination_id=dest_id,
+    )
     return {
-        "product_code": p.get("productCode") or p.get("code"),
+        "product_code": product_code,
         "title": p.get("title") or p.get("name"),
         "rating": reviews.get("combinedAverageRating") or p.get("rating"),
         "review_count": reviews.get("totalReviews") or p.get("review_count"),
@@ -342,7 +467,7 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
         "price_from": from_price,
         "currency": currency,
         "photo_url": photo,
-        "product_url": p.get("productUrl") or p.get("url"),
+        "product_url": product_url,
         "free_cancellation": bool(
             flags.get("freeCancellation") or p.get("freeCancellation")
         ),
@@ -623,8 +748,8 @@ def search_city_activities(
     cfg = cfg or load_activities_config()
     adults = max(1, min(6, int(adults or 2)))
     slug = (city_slug or "").strip().lower()
-    # destv3: corrected Viator CITY ids + FR/EN aliases (busts lisbonne→LA cache)
-    cache_key = f"city:{slug}:{destination_id or ''}:{adults}:destv3"
+    # destv4: corrected CITY ids + canonical www product deep-links (not city)
+    cache_key = f"city:{slug}:{destination_id or ''}:{adults}:destv4"
     dest = destination_id or _resolve_destination_id(supabase, slug)
     cached = cache_get(
         supabase, provider="viator", resource="city_search", cache_key=cache_key
@@ -711,7 +836,7 @@ def nearby_activities(
     rlat = round(float(lat), 2)
     rlng = round(float(lng), 2)
     cell = geo_cell_key(rlat, rlng, cfg.geo_cache_cell_km)
-    cache_key = f"geo:{cell}:{adults}:destv3"
+    cache_key = f"geo:{cell}:{adults}:destv4"
     cached = cache_get(
         supabase, provider="viator", resource="geo_search", cache_key=cache_key
     )

@@ -2,6 +2,81 @@
  * Pure display helpers for activity cards — no provider calls.
  */
 
+const VIATOR_AFFILIATE_KEYS = new Set([
+  'pid',
+  'mcid',
+  'medium',
+  'api_version',
+  'campaign',
+  'campaign-value',
+  'cjevent',
+])
+
+/**
+ * Rewrite sandbox/RC shop or destination-only Viator links to the product PDP
+ * on www.viator.com (city landings like /d538-ttd are rebuilt with the code).
+ */
+export function canonicalViatorProductUrl(
+  rawUrl?: string | null,
+  opts?: { productCode?: string | null; destinationId?: string | null },
+): string | null {
+  let code = String(opts?.productCode || '').trim()
+  let dest = String(opts?.destinationId || '').trim()
+  const url = String(rawUrl || '').trim()
+  if (!url && !code) return null
+
+  let path = ''
+  let host = ''
+  let isSandbox = false
+  let isDestOnly = false
+  const affiliate = new URLSearchParams()
+
+  if (url) {
+    try {
+      const parsed = new URL(url)
+      host = parsed.hostname.toLowerCase()
+      path = parsed.pathname || ''
+      isSandbox =
+        /(^|\.)((live\.)?rc\.viator\.com|sandbox\.viator\.com)$/i.test(host) ||
+        host.startsWith('shop.')
+      parsed.searchParams.forEach((v, k) => {
+        if (VIATOR_AFFILIATE_KEYS.has(k.toLowerCase())) affiliate.set(k, v)
+      })
+      const m = path.match(/\/d(\d+)-([A-Za-z0-9]+)\/?$/i)
+      if (m) {
+        const pathDest = m[1]
+        const pathCode = m[2]
+        if (pathCode.toLowerCase() === 'ttd') {
+          isDestOnly = true
+        } else {
+          if (!code) code = pathCode
+          if (!dest) dest = pathDest
+        }
+      }
+      if (/\/d\d+-ttd\/?$/i.test(path)) isDestOnly = true
+    } catch {
+      /* keep raw */
+    }
+  }
+
+  const needsRewrite =
+    isSandbox ||
+    isDestOnly ||
+    (Boolean(url) && host.includes('viator.com') && !path.includes('/tours/') && Boolean(code))
+
+  if (url && !needsRewrite) return url
+
+  let newPath: string
+  if (isDestOnly || !path.includes('/tours/')) {
+    if (!code) return url || null
+    newPath = dest ? `/tours/d${dest}-${code}` : `/tours/${code}`
+  } else {
+    newPath = path
+  }
+  const qs = affiliate.toString()
+  return `https://www.viator.com${newPath}${qs ? `?${qs}` : ''}`
+}
+
 export type ActivityCardModel = {
   productCode: string
   title: string
@@ -102,7 +177,12 @@ export function toActivityCardModel(
       String(raw.currency || 'EUR'),
       adults,
     ),
-    productUrl: raw.product_url ? String(raw.product_url) : null,
+    productUrl: canonicalViatorProductUrl(
+      raw.product_url ? String(raw.product_url) : null,
+      {
+        productCode: String(raw.product_code || raw.productCode || '') || null,
+      },
+    ),
     freeCancellation: Boolean(raw.free_cancellation),
     instantConfirmation: Boolean(raw.instant_confirmation),
     destinationLabel: raw.destination_label

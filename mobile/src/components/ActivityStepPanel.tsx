@@ -20,6 +20,7 @@ import {
   ACTIVITY_BROWSE_CATALOG_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
+  canonicalViatorProductUrl,
   pickTripItemOwner,
   reorderKeysMoving,
   tripItemStatusLabelFr,
@@ -220,12 +221,24 @@ export function ActivityStepPanel(props: {
                 <Text style={styles.link}>{ACTIVITY_VALIDATE_LABEL_FR}</Text>
               </Pressable>
             ) : null}
-            {it.meta?.product_url ? (
+            {it.meta?.product_url || it.meta?.product_code ? (
               <Pressable
                 onPress={() => {
+                  const url = canonicalViatorProductUrl(
+                    it.meta?.product_url != null
+                      ? String(it.meta.product_url)
+                      : null,
+                    {
+                      productCode:
+                        it.meta?.product_code != null
+                          ? String(it.meta.product_code)
+                          : null,
+                    },
+                  )
+                  if (!url) return
                   if (!it.inherited) setPendingBook(it)
                   track('book_click', { trip_item_id: it.id })
-                  openInAppBrowser(navigation, String(it.meta?.product_url), titleOf(it))
+                  openInAppBrowser(navigation, url, titleOf(it))
                 }}
               >
                 <Text style={styles.linkPrimary}>{ACTIVITY_BOOK_VIATOR_FR}</Text>

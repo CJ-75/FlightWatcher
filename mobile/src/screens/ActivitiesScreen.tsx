@@ -26,6 +26,7 @@ import {
   ACTIVITY_KEEP_ADDING_FR,
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
+  canonicalViatorProductUrl,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
@@ -306,10 +307,13 @@ export function ActivitiesScreen() {
   }
 
   const onBook = (card: ActivityCardModel) => {
-    if (!card.productUrl) return
+    const url = canonicalViatorProductUrl(card.productUrl, {
+      productCode: card.productCode,
+    })
+    if (!url) return
     setPendingBook(card)
     track('book_click', card)
-    openInAppBrowser(navigation, card.productUrl, card.title)
+    openInAppBrowser(navigation, url, card.title)
   }
 
   const onAddToPlanner = async (card: ActivityCardModel) => {

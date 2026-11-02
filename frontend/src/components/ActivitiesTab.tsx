@@ -16,6 +16,7 @@ import {
   ACTIVITY_SORT_LABEL_FR,
   activitiesCityPath,
   activityCategoriesSummaryFr,
+  canonicalViatorProductUrl,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
@@ -514,10 +515,13 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   }
 
   const onBook = (card: ActivityCardModel) => {
-    if (!card.productUrl) return
+    const url = canonicalViatorProductUrl(card.productUrl, {
+      productCode: card.productCode,
+    })
+    if (!url) return
     setPendingBook(card)
     track('book_click', card)
-    openViatorSync(card.productUrl)
+    openViatorSync(url)
   }
 
   const plannerHref = activeTrip?.plannedTripId

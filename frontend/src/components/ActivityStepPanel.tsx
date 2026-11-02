@@ -12,6 +12,7 @@ import {
   ACTIVITY_VALIDATE_LABEL_FR,
   AVAILABILITY_STATE_LABEL_FR,
   activitiesCityPath,
+  canonicalViatorProductUrl,
   detectEventPlatform,
   pickTripItemOwner,
   reorderKeysMoving,
@@ -163,7 +164,10 @@ export function ActivityStepPanel(props: {
   }
 
   const onBook = (it: ItemRow) => {
-    const url = String(it.meta?.product_url || '')
+    const url = canonicalViatorProductUrl(String(it.meta?.product_url || ''), {
+      productCode:
+        it.meta?.product_code != null ? String(it.meta.product_code) : null,
+    })
     if (!url) return
     if (!it.inherited) setPendingBook(it)
     track('book_click', { trip_item_id: it.id })
