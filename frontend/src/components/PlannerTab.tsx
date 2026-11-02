@@ -2686,6 +2686,7 @@ function TripDetailView({
         <PlannerStayExtras
           tripId={tripId}
           trip={trip}
+          draftToken={flightDraft?.draft_token || workspace?.draft_token || null}
           activitiesEnabled={plannerActivitiesEnabled}
           restaurantsEnabled={plannerRestaurantsEnabled}
           hotelReady={hotelBooked || externalHotel}
@@ -2801,12 +2802,14 @@ function TripDetailView({
 function PlannerStayExtras({
   tripId,
   trip,
+  draftToken = null,
   activitiesEnabled,
   restaurantsEnabled,
   hotelReady,
 }: {
   tripId: string
   trip: PlannedTripDetail
+  draftToken?: string | null
   activitiesEnabled: boolean
   restaurantsEnabled: boolean
   hotelReady: boolean
@@ -2856,7 +2859,7 @@ function PlannerStayExtras({
           </div>
           <div className="flex flex-1 flex-col p-3.5 sm:p-4">
             <ActivityStepPanel
-              draftToken={flightDraft?.draft_token || workspace?.draft_token}
+              draftToken={draftToken}
               plannedTripId={tripId}
               citySlug={citySlug}
               enabled={activitiesEnabled}
