@@ -160,7 +160,15 @@ def archive_expired_drafts(supabase) -> Dict[str, Any]:
 
 
 def _merge_payload(row: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
-    payload = dict(row.get("payload") or {})
+    raw = row.get("payload") or {}
+    if isinstance(raw, str):
+        import json
+
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            raw = {}
+    payload = dict(raw) if isinstance(raw, dict) else {}
     payload.update(patch)
     return payload
 
@@ -180,33 +188,6 @@ def update_draft_hotel(
     row = get_draft(supabase, draft_token)
     if not row:
         return None
-    current_payload = row.get("payload") or {}
-    current_status = str(
-        row.get("flight_booking_status")
-        or current_payload.get("flight_booking_status")
-        or "not_started"
-    )
-    rank = {
-        "not_started": 0,
-        "redirected": 1,
-        "pending_partner": 2,
-        "user_confirmed": 3,
-        "partner_confirmed": 4,
-    }
-    if normalized != "cancelled" and rank.get(current_status, 0) > rank.get(
-        normalized, 0
-    ):
-        normalized = current_status
-    provider = (
-        provider
-        or row.get("flight_booking_provider")
-        or current_payload.get("flight_booking_provider")
-    )
-    reference = (
-        reference
-        or row.get("flight_booking_reference")
-        or current_payload.get("flight_booking_reference")
-    )
     now = _now().isoformat()
     from deals.draft_pricing import trust_hotel_patch
 
@@ -442,6 +423,44 @@ def update_flight_booking_status(
     row = get_draft(supabase, draft_token)
     if not row:
         return None
+    raw_payload = row.get("payload") or {}
+    if isinstance(raw_payload, str):
+        import json
+
+        try:
+            raw_payload = json.loads(raw_payload)
+        except Exception:
+            raw_payload = {}
+        row = {**row, "payload": raw_payload}
+    current_payload = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+    current_status = str(
+        row.get("flight_booking_status")
+        or current_payload.get("flight_booking_status")
+        or "not_started"
+    ).strip().lower() or "not_started"
+    rank = {
+        "not_started": 0,
+        "redirected": 1,
+        "pending_partner": 2,
+        "user_confirmed": 3,
+        "partner_confirmed": 4,
+        "cancelled": -1,
+    }
+    # Never downgrade a stronger status (except explicit cancel).
+    if normalized != "cancelled" and rank.get(current_status, 0) > rank.get(
+        normalized, 0
+    ):
+        normalized = current_status
+    provider = (
+        provider
+        or row.get("flight_booking_provider")
+        or current_payload.get("flight_booking_provider")
+    )
+    reference = (
+        reference
+        or row.get("flight_booking_reference")
+        or current_payload.get("flight_booking_reference")
+    )
     now = _now().isoformat()
     confirmed = normalized in {"user_confirmed", "partner_confirmed"}
     payload = _merge_payload(
@@ -468,6 +487,19 @@ def update_flight_booking_status(
     }
     if confirmed:
         update["flight_booked_at"] = now
+
+    def _client_row(extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        out = {**row, **(extra or {}), "payload": payload, "updated_at": now}
+        out["flight_booking_status"] = normalized
+        if provider is not None:
+            out["flight_booking_provider"] = provider
+        if reference is not None:
+            out["flight_booking_reference"] = reference
+        out["flight_booking_updated_at"] = now
+        if confirmed:
+            out["flight_booked_at"] = now
+        return out
+
     try:
         res = (
             supabase.table("my_trip_drafts")
@@ -475,17 +507,25 @@ def update_flight_booking_status(
             .eq("id", row["id"])
             .execute()
         )
-        return (res.data or [{**row, **update}])[0]
+        if res.data:
+            refreshed = get_draft(supabase, draft_token)
+            return refreshed or _client_row(res.data[0])
+        return _client_row(update)
     except Exception as e:
         # New lifecycle columns may be missing before the manual SQL migration.
         logger.warning("flight booking status columns: %s", e)
-        res = (
-            supabase.table("my_trip_drafts")
-            .update({"payload": payload, "updated_at": now})
-            .eq("id", row["id"])
-            .execute()
-        )
-        return (res.data or [{**row, "payload": payload}])[0]
+        try:
+            (
+                supabase.table("my_trip_drafts")
+                .update({"payload": payload, "updated_at": now})
+                .eq("id", row["id"])
+                .execute()
+            )
+        except Exception as e2:
+            logger.exception("flight booking payload update failed: %s", e2)
+            raise
+        refreshed = get_draft(supabase, draft_token)
+        return refreshed or _client_row()
 
 
 def mark_flight_booked(supabase, draft_token: str) -> Optional[Dict[str, Any]]:

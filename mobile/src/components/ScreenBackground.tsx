@@ -10,6 +10,7 @@ export function ScreenBackground() {
       <LinearGradient
         colors={['#FFDCC8', '#FFE8DC', '#FFF9F5']}
         locations={[0, 0.28, 1]}
+        pointerEvents="none"
         style={StyleSheet.absoluteFill}
       />
       <View pointerEvents="none" style={styles.orbA} />

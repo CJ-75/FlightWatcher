@@ -9,7 +9,7 @@ import {
   RESTAURANT_EMPTY_TITLE_FR,
   RESTAURANT_MAPS_LABEL_FR,
   RESTAURANT_NEAR_HOTEL_LABEL_FR,
-  RESTAURANT_SKIP_LABEL_FR,
+  RESTAURANT_NEEDS_HOTEL_FR,
   RESTAURANT_VALIDATE_LABEL_FR,
   tripItemStatusLabelFr,
 } from '@flightwatcher/shared'
@@ -38,6 +38,8 @@ export function RestaurantStepPanel(props: {
   cityLabel?: string | null
   dateIso?: string | null
   enabled?: boolean
+  /** Restos autour de l’hôtel — requires a booked / external hotel */
+  hotelReady?: boolean
   hotelLat?: number | null
   hotelLng?: number | null
 }) {
@@ -45,6 +47,7 @@ export function RestaurantStepPanel(props: {
     draftToken,
     plannedTripId,
     enabled = true,
+    hotelReady = true,
     citySlug,
     cityLabel,
     dateIso,
@@ -52,7 +55,6 @@ export function RestaurantStepPanel(props: {
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [skipped, setSkipped] = useState(false)
 
   const load = useCallback(async () => {
     if (!draftToken && !plannedTripId) return
@@ -65,7 +67,6 @@ export function RestaurantStepPanel(props: {
       })
       const all = (res.items || []) as ItemRow[]
       setItems(all.filter((i) => i.item_type === 'restaurant'))
-      setSkipped(all.some((i) => i.item_type === 'restaurant' && i.status === 'skipped'))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -74,8 +75,8 @@ export function RestaurantStepPanel(props: {
   }, [draftToken, plannedTripId])
 
   useEffect(() => {
-    if (enabled) void load()
-  }, [enabled, load])
+    if (enabled && hotelReady) void load()
+  }, [enabled, hotelReady, load])
 
   const city = cityLabel || citySlug || 'ta ville'
 
@@ -87,34 +88,32 @@ export function RestaurantStepPanel(props: {
     return `https://www.google.com/maps/search/?api=1&query=${q}`
   }, [city, props.hotelLat, props.hotelLng])
 
-  const skipRestaurants = async () => {
-    try {
-      await getApiClient().addTripItem({
-        product_code: `skip-resto-${Date.now()}`,
-        title: RESTAURANT_SKIP_LABEL_FR,
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-        platform: 'web',
-        surface: 'restaurants',
-        meta: { skip_restaurants: true },
-      })
-    } catch {
-      /* optional */
-    }
-    setSkipped(true)
-  }
-
   if (!enabled) {
     return (
       <p className="text-sm text-muted py-4">Adresses bientôt disponibles.</p>
     )
   }
 
+  if (!hotelReady) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3.5 py-3">
+          <p className="text-sm font-extrabold text-ink tracking-tight">
+            Après ton hôtel
+          </p>
+          <p className="mt-1 text-xs text-muted leading-snug">
+            {RESTAURANT_NEEDS_HOTEL_FR}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const visible = items.filter((i) => i.status !== 'skipped')
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs font-bold text-muted">{RESTAURANT_BUDGET_HINT_FR}</p>
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <p className="text-xs font-bold text-muted shrink-0">{RESTAURANT_BUDGET_HINT_FR}</p>
 
       {loading ? (
         <div className="space-y-2" aria-busy="true">
@@ -129,32 +128,22 @@ export function RestaurantStepPanel(props: {
       ) : null}
 
       {!loading && visible.length === 0 ? (
-        <div className="rounded-3xl border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white p-5 sm:p-6">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center text-xl shadow-md shadow-orange-500/25 mb-3">
-            🍽
-          </div>
-          <h3 className="text-lg font-extrabold text-ink tracking-tight">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-orange-100 bg-gradient-to-br from-[#FFF8F3] to-white px-3.5 py-3">
+          <h3 className="text-sm font-extrabold text-ink tracking-tight">
             {RESTAURANT_EMPTY_TITLE_FR(String(city))}
           </h3>
-          <p className="text-sm text-muted mt-1.5 max-w-md leading-relaxed">
+          <p className="text-xs text-muted mt-1 max-w-md leading-snug">
             {RESTAURANT_EMPTY_BODY_FR}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-2.5">
             <a
               href={mapsSearchUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="app-btn-primary rounded-xl px-4 py-2.5 text-sm min-h-[44px] inline-flex items-center"
+              className="app-btn-primary rounded-lg px-3 py-2 text-xs min-h-[36px] inline-flex items-center"
             >
               {RESTAURANT_NEAR_HOTEL_LABEL_FR}
             </a>
-            <button
-              type="button"
-              onClick={() => void skipRestaurants()}
-              className="rounded-xl px-3 py-2.5 text-sm font-bold text-muted hover:text-ink min-h-[44px]"
-            >
-              {RESTAURANT_SKIP_LABEL_FR}
-            </button>
           </div>
         </div>
       ) : null}
@@ -295,10 +284,6 @@ export function RestaurantStepPanel(props: {
           )
         })}
       </ul>
-
-      {skipped && visible.length === 0 ? (
-        <p className="text-sm text-muted font-medium">Pas de restaurant prévu pour ce voyage.</p>
-      ) : null}
     </div>
   )
 }

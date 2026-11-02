@@ -10,6 +10,7 @@ import {
   Share,
   Modal,
   FlatList,
+  Alert,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useFocusEffect } from '@react-navigation/native'
@@ -483,19 +484,42 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   ])
 
   const markFlight = async (yes: boolean) => {
-    setAskFlight(false)
     if (!yes) {
+      setAskFlight(false)
       void getApi().trackMyTripEvent(draftToken, 'flight_booked_no')
       return
     }
     setMarking(true)
+    const nowIso = new Date().toISOString()
+    setDraft((prev) => {
+      if (!prev) return prev
+      const prevPayload = (prev.payload || {}) as Record<string, unknown>
+      return {
+        ...prev,
+        flight_booked_at: nowIso,
+        flight_booking_status: 'user_confirmed',
+        payload: {
+          ...prevPayload,
+          flight_booked: true,
+          flight_booked_at: nowIso,
+          flight_booking_status: 'user_confirmed',
+        },
+      }
+    })
+    setAskFlight(false)
     try {
-      const row = await getApi().markMyTripFlightBooked(draftToken)
+      const row = await getApi().updateMyTripFlightBookingStatus(draftToken, {
+        status: 'user_confirmed',
+      })
       setDraft(row)
       void getApi().trackMyTripEvent(draftToken, 'flight_booked_yes')
       void refreshTripItems()
-    } catch {
-      /* non-blocking */
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible de confirmer le vol',
+      )
+      void load()
     } finally {
       setMarking(false)
     }
@@ -909,6 +933,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
               cityLabel={city ? String(city) : undefined}
               dateIso={out || null}
               enabled={plannerRestaurantsEnabled}
+              hotelReady={
+                hotelBooked ||
+                Boolean(pl.hotel_external || pl.external_hotel)
+              }
             />
           </View>
         ) : null}

@@ -405,6 +405,18 @@ export function updateGuestTripArrival(
   return cloneTrip(trips[idx])
 }
 
+export function updateGuestTripName(
+  tripId: string,
+  name: string,
+): PlannedTripDetail | null {
+  const cleaned = name.trim()
+  if (cleaned.length < 2 || cleaned.length > 80) return null
+  const idx = trips.findIndex((t) => t.id === tripId)
+  if (idx < 0) return null
+  trips[idx] = { ...trips[idx], name: cleaned }
+  return cloneTrip(trips[idx])
+}
+
 export function listGuestLikedDeals(): LikedDeal[] {
   return likedDeals
 }

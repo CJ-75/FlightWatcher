@@ -314,7 +314,7 @@ const PHASE_ACTION: Record<TravelWorkspace['phase'], string> = {
   planning: 'Ouvrir le voyage',
   flight_selected: 'Finaliser le séjour',
   composing: 'Reprendre le séjour',
-  booked: 'Voir le dossier',
+  booked: 'Ouvrir le voyage',
   past: 'Revoir le voyage',
 }
 
@@ -885,7 +885,12 @@ export function PlannerTab() {
     try {
       try {
         const list = await getApiClient().listTravelWorkspaces()
-        setWorkspaces(Array.isArray(list) ? list : [])
+        // Planner hub = planned trips only (réservations live under /trip).
+        setWorkspaces(
+          (Array.isArray(list) ? list : []).filter((w) =>
+            Boolean(w.planned_trip_id),
+          ),
+        )
       } catch {
         const legacy = await getApiClient().listPlannedTrips()
         setWorkspaces(
@@ -904,13 +909,8 @@ export function PlannerTab() {
 
   const openWorkspace = useCallback(
     (workspace: TravelWorkspace) => {
-      if (workspace.planned_trip_id) {
-        navigate(`/planner/${encodeURIComponent(workspace.planned_trip_id)}`)
-        return
-      }
-      if (workspace.draft_token) {
-        navigate(`/trip/${encodeURIComponent(workspace.draft_token)}`)
-      }
+      if (!workspace.planned_trip_id) return
+      navigate(`/planner/${encodeURIComponent(workspace.planned_trip_id)}`)
     },
     [navigate],
   )
@@ -1120,6 +1120,9 @@ function TripDetailView({
   const [skippingFlight, setSkippingFlight] = useState(false)
   const [skippingHotel, setSkippingHotel] = useState(false)
   const [hotelBusy, setHotelBusy] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
   const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
@@ -1266,8 +1269,8 @@ function TripDetailView({
     flightDraft?.hotel_booked_at ||
       draftPayload.hotel_booked ||
       draftPayload.hotel_booked_at ||
-      (workspace?.pipeline.hotel === 'booked' && !externalHotel) ||
-      (workspace?.phase === 'booked' && !externalHotel),
+      externalHotel ||
+      workspace?.pipeline.hotel === 'booked',
   )
   const hasHotel = Boolean(draftHotel || workspace?.hotel_booking_id)
   const canSkipFlight =
@@ -1347,27 +1350,41 @@ function TripDetailView({
     setFlightBookingBusy(true)
     setAskFlightBooked(false)
     try {
-      const draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
-      const source = openPartnerBookSync({
-        trip: accepted.trip_data,
-        passengers: pax,
-        language,
-        draftId: draft.id,
-        targetWindow: popup,
-      })
-      const isTravelpayouts = source.partnerId === 'aviasales'
-      const status: FlightBookingStatus = isTravelpayouts
-        ? 'pending_partner'
-        : 'redirected'
-      const updated = await getApiClient().updateMyTripFlightBookingStatus(
-        draft.draft_token,
-        { status, provider: source.partnerId },
-      )
-      setFlightDraft(updated)
-      // Ryanair / compagnie : demander au retour. Travelpayouts = postback auto.
-      if (!isTravelpayouts) {
-        leftForFlight.current = true
-        leftForFlightAt.current = Date.now()
+      let draftId: string | undefined
+      try {
+        const draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
+        draftId = draft.id
+        setFlightDraft(draft)
+        const source = openPartnerBookSync({
+          trip: accepted.trip_data,
+          passengers: pax,
+          language,
+          draftId: draft.id,
+          targetWindow: popup,
+        })
+        const isTravelpayouts = source.partnerId === 'aviasales'
+        const status: FlightBookingStatus = isTravelpayouts
+          ? 'pending_partner'
+          : 'redirected'
+        const updated = await getApiClient().updateMyTripFlightBookingStatus(
+          draft.draft_token,
+          { status, provider: source.partnerId },
+        )
+        setFlightDraft(updated)
+        // Ryanair / compagnie : demander au retour. Travelpayouts = postback auto.
+        if (!isTravelpayouts) {
+          leftForFlight.current = true
+          leftForFlightAt.current = Date.now()
+        }
+      } catch {
+        // Draft optional — still open partner booking.
+        openPartnerBookSync({
+          trip: accepted.trip_data,
+          passengers: pax,
+          language,
+          draftId,
+          targetWindow: popup,
+        })
       }
     } catch {
       popup.close()
@@ -1378,13 +1395,32 @@ function TripDetailView({
   }
 
   const confirmAirlineFlight = async () => {
-    if (!flightDraft?.draft_token || flightBookingBusy) return
+    const token = flightDraft?.draft_token || workspace?.draft_token
+    if (!token || flightBookingBusy) return
     setFlightBookingBusy(true)
     setAskFlightBooked(false)
     leftForFlight.current = false
+    const nowIso = new Date().toISOString()
+    // Optimistic UI — load() must not wipe a successful confirm.
+    setFlightDraft((prev) => {
+      const base = prev || ({ draft_token: token, payload: {} } as MyTripDraft)
+      const prevPayload = (base.payload || {}) as Record<string, unknown>
+      return {
+        ...base,
+        draft_token: token,
+        flight_booked_at: nowIso,
+        flight_booking_status: 'user_confirmed',
+        payload: {
+          ...prevPayload,
+          flight_booked: true,
+          flight_booked_at: nowIso,
+          flight_booking_status: 'user_confirmed',
+        },
+      }
+    })
     try {
       const updated = await getApiClient().updateMyTripFlightBookingStatus(
-        flightDraft.draft_token,
+        token,
         { status: 'user_confirmed', provider: 'ryanair' },
       )
       setFlightDraft(updated)
@@ -1392,6 +1428,7 @@ function TripDetailView({
       void load()
     } catch {
       onToast('Impossible de confirmer le vol — réessaie')
+      void load()
     } finally {
       setFlightBookingBusy(false)
     }
@@ -1420,6 +1457,14 @@ function TripDetailView({
       window.removeEventListener('focus', onReturn)
     }
   }, [flightBooked])
+
+  const reservationToken =
+    flightDraft?.draft_token || workspace?.draft_token || null
+
+  const openReservations = () => {
+    if (!reservationToken) return
+    navigate(`/trip/${encodeURIComponent(reservationToken)}`)
+  }
 
   const openReservation = (compose = false) => {
     if (hotelBusy) return
@@ -1456,27 +1501,19 @@ function TripDetailView({
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
-      if (externalHotel) {
-        if (flightDraft?.draft_token) {
-          navigate(`/trip/${flightDraft.draft_token}`)
-        }
+      if (hotelBooked || externalHotel) {
+        openReservations()
         return
       }
-      openReservation(!hotelBooked && !hasHotel)
+      openReservation(!hasHotel)
       return
     }
     if (id === 'flight') {
-      if (externalFlight && flightDraft?.draft_token) {
-        navigate(`/trip/${flightDraft.draft_token}`)
+      if (flightBooked || externalFlight) {
+        openReservations()
         return
       }
-      if (accepted) {
-        if (flightBooked && flightDraft?.draft_token) {
-          navigate(`/trip/${flightDraft.draft_token}`)
-          return
-        }
-        void bookSelectedFlight()
-      }
+      if (accepted) void bookSelectedFlight()
     }
   }
 
@@ -1660,6 +1697,42 @@ function TripDetailView({
     }
   }
 
+  const startRename = () => {
+    if (!trip || !isOrganizer) return
+    setNameDraft(trip.name)
+    setEditingName(true)
+  }
+
+  const cancelRename = () => {
+    setEditingName(false)
+    setNameDraft(trip?.name || '')
+  }
+
+  const saveRename = async () => {
+    if (!trip || !isOrganizer || savingName) return
+    const next = nameDraft.trim()
+    if (next.length < 2 || next.length > 80) {
+      onToast('Nom entre 2 et 80 caractères')
+      return
+    }
+    if (next === trip.name) {
+      setEditingName(false)
+      return
+    }
+    setSavingName(true)
+    setError(null)
+    try {
+      const updated = await getApiClient().updatePlannedTrip(tripId, { name: next })
+      setTrip((prev) => (prev ? { ...prev, name: updated.name } : prev))
+      setEditingName(false)
+      onToast('Nom mis à jour')
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Impossible de renommer')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
   const skipFlight = async () => {
     if (!trip || skippingFlight || !canSkipFlight) return
     if (!trip.arrival_airport) {
@@ -1685,9 +1758,33 @@ function TripDetailView({
   }
 
   const skipHotel = async () => {
-    if (!trip || skippingHotel || !canSkipHotel) return
+    if (!trip || skippingHotel) return
     setSkippingHotel(true)
     setError(null)
+    const nowIso = new Date().toISOString()
+    setFlightDraft((prev) => {
+      const token = prev?.draft_token || workspace?.draft_token || ''
+      const base: MyTripDraft =
+        prev ||
+        ({
+          id: '',
+          draft_token: token,
+          status: 'draft',
+          payload: {},
+        } as MyTripDraft)
+      const prevPayload = (base.payload || {}) as Record<string, unknown>
+      return {
+        ...base,
+        hotel_booked_at: nowIso,
+        payload: {
+          ...prevPayload,
+          hotel_external: true,
+          external_hotel: true,
+          hotel_booked: true,
+          hotel_booked_at: nowIso,
+        },
+      }
+    })
     try {
       const draft = await getApiClient().skipPlannedTripHotel(tripId)
       setFlightDraft(draft)
@@ -1695,6 +1792,10 @@ function TripDetailView({
       void load()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
+      onToast(
+        e instanceof Error ? e.message : 'Impossible de marquer l’hôtel',
+      )
+      void load()
     } finally {
       setSkippingHotel(false)
     }
@@ -1903,8 +2004,8 @@ function TripDetailView({
     cityImageUrl(destinationName || null, destinationCode || undefined)
 
   return (
-    <div className="w-full space-y-6 pb-8">
-      <section className="relative overflow-hidden rounded-[32px] min-h-[min(52vh,420px)] shadow-xl shadow-orange-950/10 border border-orange-100/60">
+    <div className="w-full space-y-6 pb-10">
+      <section className="relative isolate overflow-hidden rounded-[32px] min-h-[min(42vh,360px)] shadow-xl shadow-orange-950/10 border border-orange-100/60">
         <img
           src={destinationImage}
           alt=""
@@ -1913,7 +2014,7 @@ function TripDetailView({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/92 via-[#1a100c]/45 to-black/25" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#140c08]/55 via-transparent to-transparent" />
-        <div className="relative flex min-h-[min(52vh,420px)] flex-col justify-between p-5 sm:p-7 lg:p-9">
+        <div className="relative flex min-h-[min(42vh,360px)] flex-col justify-between p-5 sm:p-7 lg:p-9">
           <div className="flex items-start justify-between gap-3">
             <button
               type="button"
@@ -1936,9 +2037,62 @@ function TripDetailView({
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
               {destinationName}
             </p>
-            <h2 className="mt-2 text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-[1.05]">
-              {trip.name}
-            </h2>
+            {editingName ? (
+              <form
+                className="mt-2 flex flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void saveRename()
+                }}
+              >
+                <input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      cancelRename()
+                    }
+                  }}
+                  maxLength={80}
+                  disabled={savingName}
+                  className="min-w-0 flex-1 rounded-2xl border border-white/30 bg-white/15 px-4 py-2.5 text-2xl sm:text-3xl font-black text-white tracking-tight placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                  placeholder="Nom du voyage"
+                  aria-label="Nom du voyage"
+                />
+                <button
+                  type="submit"
+                  disabled={savingName}
+                  className="rounded-2xl bg-white px-4 py-2.5 text-sm font-extrabold text-[#D94D1B] disabled:opacity-60 min-h-[44px]"
+                >
+                  {savingName ? '…' : 'OK'}
+                </button>
+                <button
+                  type="button"
+                  disabled={savingName}
+                  onClick={cancelRename}
+                  className="rounded-2xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60 min-h-[44px]"
+                >
+                  Annuler
+                </button>
+              </form>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-[1.05]">
+                  {trip.name}
+                </h2>
+                {isOrganizer ? (
+                  <button
+                    type="button"
+                    onClick={startRename}
+                    className="inline-flex items-center rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-bold text-white/90 hover:bg-white/20 backdrop-blur-md"
+                  >
+                    Renommer
+                  </button>
+                ) : null}
+              </div>
+            )}
             <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
               {routeLine}
               {trip.direct ? ' · directs' : ''}
@@ -1950,30 +2104,69 @@ function TripDetailView({
             {workspace?.phase ? (
               <p className="mt-2 text-sm text-white/55">{PHASE_HINT[workspace.phase]}</p>
             ) : null}
-            {isOrganizer && trip.status !== 'locked' ? (
-              <button
-                type="button"
-                disabled={scanning}
-                onClick={() => void scan()}
-                className="mt-5 inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
-              >
-                {scanning ? t('planner.scanning') : t('planner.scan')}
-              </button>
-            ) : null}
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {isOrganizer && trip.status !== 'locked' ? (
+                <button
+                  type="button"
+                  disabled={scanning}
+                  onClick={() => void scan()}
+                  className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
+                >
+                  {scanning ? t('planner.scanning') : t('planner.scan')}
+                </button>
+              ) : null}
+              {reservationToken ? (
+                <button
+                  type="button"
+                  onClick={openReservations}
+                  className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 min-h-[48px] backdrop-blur-md"
+                >
+                  Voir les réservations
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="bg-white rounded-2xl shadow-md px-4 sm:px-6 py-4">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-2">
-          Ton parcours
-        </p>
+      <section className="relative isolate overflow-hidden rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-[#FFE8D6] via-[#FFDFC8] to-[#F5D5C0] px-3.5 sm:px-5 py-4 sm:py-5 shadow-soft">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-6 -top-10 h-36 w-36 rounded-full bg-[#FF6B35]/20 blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -left-10 bottom-[-2rem] h-28 w-28 rounded-full bg-[#E8A87C]/25 blur-2xl"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-8 top-1/2 h-px bg-[linear-gradient(90deg,transparent,rgba(217,77,27,0.28),transparent)]"
+        />
+        <div className="relative mb-3 flex items-end justify-between gap-3 px-0.5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#D94D1B]">
+              Ton parcours
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold text-[#6B4535]">
+              {[
+                pipelineForUi.find((s) => s.state === 'current')?.label,
+                pipelineForUi.find((s) => s.state === 'current')?.hint,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'Compose ton séjour étape par étape'}
+            </p>
+          </div>
+          <p className="shrink-0 rounded-full bg-[#FFF6EE]/90 px-2.5 py-1 text-[11px] font-bold text-[#8A5A45] ring-1 ring-orange-200/80">
+            {pipelineForUi.filter((s) => s.state === 'done').length}/
+            {pipelineForUi.filter((s) => s.state !== 'off').length || pipelineForUi.length}
+          </p>
+        </div>
         <StayPipelineStepper
           steps={pipelineForUi}
           onStepPress={onPipelineStep}
-          variant="light"
+          variant="journey"
         />
-      </div>
+      </section>
 
       {trip.route_ok === false ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-2">
@@ -2006,7 +2199,7 @@ function TripDetailView({
           <p className="text-sm text-muted mt-2">{routeLine}</p>
         </div>
       ) : accepted || externalFlight ? (
-        <section className="space-y-5">
+        <section className="space-y-6">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
               Étape séjour
@@ -2032,126 +2225,29 @@ function TripDetailView({
               </p>
             </div>
           ) : null}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-stretch">
             {accepted && !externalFlight ? (
-              <div className="space-y-3">
+              <div className="min-h-[280px] min-w-0 h-full">
                 <SelectedFlightBoardingPass
                   trip={accepted.trip_data}
                   passengers={pax}
                   bookingStatus={flightBookingStatus || undefined}
                   bookingBusy={flightBookingBusy}
                   askBooked={askFlightBooked}
+                  canEditModalities={isOrganizer && !flightBooked && !hotelBooked}
+                  showModalities={showModalities}
+                  modalitiesBusy={reopeningFlight || savingCriteria || scanning}
+                  onToggleModalities={() => setShowModalities((v) => !v)}
                   onBook={() => void bookSelectedFlight()}
                   onConfirm={() => void confirmAirlineFlight()}
                   onDismissAsk={dismissFlightBookAsk}
                 />
-                {isOrganizer && !flightBooked && !hotelBooked ? (
-                  <button
-                    type="button"
-                    disabled={reopeningFlight || savingCriteria || scanning}
-                    onClick={() => setShowModalities((v) => !v)}
-                    className="w-full inline-flex items-center justify-center rounded-2xl border border-line bg-white px-4 py-3 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[44px] shadow-sm"
-                  >
-                    {showModalities ? 'Fermer les modalités' : 'Modifier les modalités'}
-                  </button>
-                ) : null}
-                {isOrganizer && !flightBooked && !hotelBooked && showModalities ? (
-                  <div className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-5">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                        Modalités du vol
-                      </p>
-                      <p className="text-sm text-ink-soft mt-1">
-                        Tant que le vol n’est pas réservé, tu peux changer dates,
-                        budget, voyageurs ou relancer un scan.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="rounded-2xl border border-line bg-slate-50/70 px-4 pt-4 pb-2">
-                        <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-                          Dates
-                        </p>
-                        <DatePresets
-                          selected={editPreset}
-                          onChange={onEditPreset}
-                          onFlexibleClick={() => {
-                            setEditPreset('flexible')
-                            setShowEditFlexible(true)
-                          }}
-                        />
-                        {editDatesDepart[0] && editDatesRetour[0] ? (
-                          <p className="text-sm text-ink-soft font-medium pb-2 mt-2">
-                            {formatDateFr(editDatesDepart[0].date)} →{' '}
-                            {formatDateFr(
-                              editDatesRetour[editDatesRetour.length - 1].date,
-                            )}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 space-y-4">
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-                            Budget max / pers.
-                          </p>
-                          <BudgetSlider value={editBudget} onChange={setEditBudget} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-                            Voyageurs
-                          </p>
-                          <PassengerStepper
-                            value={editPassengers}
-                            onChange={setEditPassengers}
-                          />
-                        </div>
-                        <label className="flex items-center gap-2 text-sm font-semibold text-ink">
-                          <input
-                            type="checkbox"
-                            checked={editDirect}
-                            onChange={(e) => setEditDirect(e.target.checked)}
-                            className="rounded border-line"
-                          />
-                          Vols directs uniquement
-                        </label>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={scanning || savingCriteria || reopeningFlight}
-                        onClick={() => void updateCriteriaAndScan()}
-                        className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 disabled:opacity-60 min-h-[40px]"
-                      >
-                        {savingCriteria || scanning
-                          ? 'Scan…'
-                          : 'Enregistrer et rescanner'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={scanning || savingCriteria || reopeningFlight}
-                        onClick={() => void changeFlightChoice()}
-                        className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
-                      >
-                        {reopeningFlight ? 'Ouverture…' : 'Choisir un autre vol'}
-                      </button>
-                      {canSkipFlight ? (
-                        <button
-                          type="button"
-                          disabled={skippingFlight || scanning || savingCriteria}
-                          onClick={() => void skipFlight()}
-                          className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
-                        >
-                          {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
               </div>
             ) : null}
             {externalHotel ? (
               <div
-                className={`bg-white rounded-3xl border border-line shadow-soft p-5 ${
+                className={`min-w-0 bg-white rounded-3xl border border-line shadow-soft p-5 ${
                   externalFlight && !accepted ? 'lg:col-span-2' : ''
                 }`}
               >
@@ -2167,28 +2263,19 @@ function TripDetailView({
               </div>
             ) : (
               <div
-                className={`group relative overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 min-h-[360px] ${
+                className={`group relative isolate flex h-full min-h-[280px] min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 ${
                   externalFlight && !accepted ? 'lg:col-span-2' : ''
                 }`}
               >
-                <button
-                  type="button"
-                  disabled={hotelBusy}
-                  onClick={() => onPipelineStep('hotel')}
-                  className="relative w-full text-left disabled:opacity-60 h-full min-h-[360px]"
-                >
+                <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
                   <img
                     src={destinationImage}
                     alt=""
                     aria-hidden
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
-                  <div
-                    className={`relative flex h-full min-h-[360px] flex-col justify-end p-6 sm:p-7 ${
-                      canSkipHotel ? 'pb-20' : ''
-                    }`}
-                  >
+                  <div className="relative z-[1] flex flex-col">
                     <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
                       {hotelBooked
                         ? 'Réservation'
@@ -2196,7 +2283,7 @@ function TripDetailView({
                           ? 'Hôtel sélectionné'
                           : 'Prochaine étape'}
                     </p>
-                    <p className="mt-2 text-3xl sm:text-4xl font-black tracking-tight text-white leading-tight">
+                    <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
                       {hotelBooked
                         ? String(
                             (draftHotel as { name?: string } | null)?.name ||
@@ -2223,35 +2310,130 @@ function TripDetailView({
                         </p>
                       </div>
                     ) : null}
-                    <span className="mt-6 inline-flex items-center gap-2 self-start rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px]">
-                      {hotelBusy
-                        ? 'Ouverture…'
-                        : hotelBooked
-                          ? 'Ouvrir mon séjour'
-                          : hasHotel
-                            ? 'Reprendre l’hôtel'
-                            : 'Explorer les hôtels'}
-                      <span aria-hidden>›</span>
-                    </span>
+                    <div className="mt-5 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={hotelBusy || skippingHotel}
+                        onClick={() =>
+                          hotelBooked
+                            ? openReservations()
+                            : onPipelineStep('hotel')
+                        }
+                        className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
+                      >
+                        {hotelBusy
+                          ? 'Ouverture…'
+                          : hotelBooked
+                            ? 'Voir les réservations'
+                            : hasHotel
+                              ? 'Reprendre l’hôtel'
+                              : 'Explorer les hôtels'}
+                        <span aria-hidden>›</span>
+                      </button>
+                      {canSkipHotel ? (
+                        <button
+                          type="button"
+                          disabled={skippingHotel || hotelBusy}
+                          onClick={() => void skipHotel()}
+                          className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                        >
+                          {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-                </button>
-                {canSkipHotel ? (
-                  <div className="absolute bottom-0 inset-x-0 border-t border-white/15 bg-black/35 px-5 py-3 flex flex-wrap items-center justify-between gap-2 backdrop-blur-md">
-                    <p className="text-sm text-white/80">
-                      Tu as déjà un hôtel ailleurs ?
-                    </p>
-                    <button
-                      type="button"
-                      disabled={skippingHotel || hotelBusy}
-                      onClick={() => void skipHotel()}
-                      className="inline-flex items-center rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[40px]"
-                    >
-                      {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
-                    </button>
-                  </div>
-                ) : null}
+                </div>
               </div>
             )}
+          </div>
+          {accepted &&
+          !externalFlight &&
+          isOrganizer &&
+          !flightBooked &&
+          !hotelBooked &&
+          showModalities ? (
+            <div className="rounded-3xl border border-line bg-white p-5 sm:p-6 shadow-soft space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-line bg-slate-50/70 px-4 pt-4 pb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                    Dates
+                  </p>
+                  <DatePresets
+                    selected={editPreset}
+                    onChange={onEditPreset}
+                    onFlexibleClick={() => {
+                      setEditPreset('flexible')
+                      setShowEditFlexible(true)
+                    }}
+                  />
+                  {editDatesDepart[0] && editDatesRetour[0] ? (
+                    <p className="text-sm text-ink-soft font-medium pb-2 mt-2">
+                      {formatDateFr(editDatesDepart[0].date)} →{' '}
+                      {formatDateFr(
+                        editDatesRetour[editDatesRetour.length - 1].date,
+                      )}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 space-y-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                      Budget max / pers.
+                    </p>
+                    <BudgetSlider value={editBudget} onChange={setEditBudget} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                      Voyageurs
+                    </p>
+                    <PassengerStepper
+                      value={editPassengers}
+                      onChange={setEditPassengers}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+                    <input
+                      type="checkbox"
+                      checked={editDirect}
+                      onChange={(e) => setEditDirect(e.target.checked)}
+                      className="rounded border-line"
+                    />
+                    Vols directs uniquement
+                  </label>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={scanning || savingCriteria || reopeningFlight}
+                  onClick={() => void updateCriteriaAndScan()}
+                  className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 disabled:opacity-60 min-h-[40px]"
+                >
+                  {savingCriteria || scanning
+                    ? 'Scan…'
+                    : 'Enregistrer et rescanner'}
+                </button>
+                <button
+                  type="button"
+                  disabled={scanning || savingCriteria || reopeningFlight}
+                  onClick={() => void changeFlightChoice()}
+                  className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
+                >
+                  {reopeningFlight ? 'Ouverture…' : 'Choisir un autre vol'}
+                </button>
+                {canSkipFlight ? (
+                  <button
+                    type="button"
+                    disabled={skippingFlight || scanning || savingCriteria}
+                    onClick={() => void skipFlight()}
+                    className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
+                  >
+                    {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           </div>
           {!isOrganizer ? (
             <p className="text-sm text-muted">
@@ -2464,6 +2646,7 @@ function TripDetailView({
           trip={trip}
           activitiesEnabled={plannerActivitiesEnabled}
           restaurantsEnabled={plannerRestaurantsEnabled}
+          hotelReady={hotelBooked || externalHotel}
         />
       ) : null}
 
@@ -2578,11 +2761,13 @@ function PlannerStayExtras({
   trip,
   activitiesEnabled,
   restaurantsEnabled,
+  hotelReady,
 }: {
   tripId: string
   trip: PlannedTripDetail
   activitiesEnabled: boolean
   restaurantsEnabled: boolean
+  hotelReady: boolean
 }) {
   const arrivalCode = parseAirportCodes(trip.arrival_airport)[0] || ''
   const cityLabel = arrivalCode
@@ -2595,10 +2780,16 @@ function PlannerStayExtras({
   const both = activitiesEnabled && restaurantsEnabled
 
   return (
-    <div className={both ? 'grid gap-5 lg:grid-cols-2' : 'space-y-5'}>
+    <div
+      className={
+        both
+          ? 'grid gap-4 lg:grid-cols-2 lg:items-stretch'
+          : 'space-y-4'
+      }
+    >
       {activitiesEnabled ? (
-        <section className="group min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 bg-white shadow-xl shadow-orange-950/5">
-          <div className="relative h-44 sm:h-52 overflow-hidden">
+        <section className="group relative isolate flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-orange-100/70 bg-white shadow-lg shadow-orange-950/5">
+          <div className="relative h-28 sm:h-32 shrink-0 overflow-hidden">
             <img
               src={cityImage}
               alt=""
@@ -2606,19 +2797,19 @@ function PlannerStayExtras({
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/35 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+            <div className="absolute inset-x-0 bottom-0 px-4 py-3 sm:px-5 sm:py-3.5">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
                 À vivre sur place
               </p>
-              <h3 className="mt-1.5 text-2xl font-black tracking-tight text-white">
+              <h3 className="mt-0.5 text-lg sm:text-xl font-black tracking-tight text-white">
                 Activités à {cityLabel}
               </h3>
-              <p className="mt-1 text-sm text-white/70">
+              <p className="mt-0.5 text-xs text-white/70 line-clamp-1">
                 Transforme le séjour en souvenirs.
               </p>
             </div>
           </div>
-          <div className="p-5 sm:p-6">
+          <div className="flex flex-1 flex-col p-3.5 sm:p-4">
             <ActivityStepPanel
               plannedTripId={tripId}
               citySlug={citySlug}
@@ -2630,8 +2821,8 @@ function PlannerStayExtras({
       ) : null}
 
       {restaurantsEnabled ? (
-        <section className="group min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 bg-white shadow-xl shadow-orange-950/5">
-          <div className="relative h-44 sm:h-52 overflow-hidden">
+        <section className="group relative isolate flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-orange-100/70 bg-white shadow-lg shadow-orange-950/5">
+          <div className="relative h-28 sm:h-32 shrink-0 overflow-hidden">
             <img
               src={cityImage}
               alt=""
@@ -2639,30 +2830,83 @@ function PlannerStayExtras({
               className="absolute inset-0 h-full w-full object-cover object-[center_65%] transition-transform duration-700 group-hover:scale-[1.03]"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/40 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+            <div className="absolute inset-x-0 bottom-0 px-4 py-3 sm:px-5 sm:py-3.5">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
                 Tes bonnes adresses
               </p>
-              <h3 className="mt-1.5 text-2xl font-black tracking-tight text-white">
+              <h3 className="mt-0.5 text-lg sm:text-xl font-black tracking-tight text-white">
                 Où manger à {cityLabel}
               </h3>
-              <p className="mt-1 text-sm text-white/70">
+              <p className="mt-0.5 text-xs text-white/70 line-clamp-1">
                 Tous tes coups de cœur au même endroit.
               </p>
             </div>
           </div>
-          <div className="p-5 sm:p-6">
+          <div className="flex flex-1 flex-col p-3.5 sm:p-4">
             <RestaurantStepPanel
               plannedTripId={tripId}
               citySlug={citySlug}
               cityLabel={cityLabel}
               dateIso={dateIso}
               enabled={restaurantsEnabled}
+              hotelReady={hotelReady}
             />
           </div>
         </section>
       ) : null}
     </div>
+  )
+}
+
+const MODALITIES_TIP =
+  'Tant que le vol n’est pas réservé, tu peux changer dates, budget, voyageurs ou relancer un scan.'
+
+function ModalitiesInfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <span ref={rootRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-label={text}
+        aria-expanded={open}
+        title={text}
+        onClick={(e) => {
+          e.stopPropagation()
+          e.preventDefault()
+          setOpen((v) => !v)
+        }}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[10px] font-black text-slate-500 hover:border-slate-500 hover:text-slate-800"
+      >
+        i
+      </button>
+      {open ? (
+        <span
+          role="tooltip"
+          className="absolute z-30 bottom-full left-1/2 mb-2 w-52 -translate-x-1/2 rounded-xl border border-line bg-white px-3 py-2 text-[11px] font-medium leading-snug text-ink shadow-lift"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {text}
+        </span>
+      ) : null}
+    </span>
   )
 }
 
@@ -2672,6 +2916,10 @@ function SelectedFlightBoardingPass({
   bookingStatus,
   bookingBusy,
   askBooked,
+  canEditModalities,
+  showModalities,
+  modalitiesBusy,
+  onToggleModalities,
   onBook,
   onConfirm,
   onDismissAsk,
@@ -2681,6 +2929,10 @@ function SelectedFlightBoardingPass({
   bookingStatus?: FlightBookingStatus
   bookingBusy: boolean
   askBooked?: boolean
+  canEditModalities?: boolean
+  showModalities?: boolean
+  modalitiesBusy?: boolean
+  onToggleModalities?: () => void
   onBook: () => void
   onConfirm: () => void
   onDismissAsk?: () => void
@@ -2715,68 +2967,70 @@ function SelectedFlightBoardingPass({
 
   return (
     <motion.article
-      initial={{ opacity: 0, x: -16 }}
-      animate={{ opacity: 1, x: 0 }}
-      whileHover={{ y: -4 }}
-      transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-      className="group relative h-full min-h-[360px] overflow-hidden rounded-[28px] border border-white/20 bg-slate-950 shadow-2xl shadow-slate-950/20"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+      className="group relative isolate flex h-full min-h-[280px] overflow-hidden rounded-[28px] border border-white/20 bg-slate-950 shadow-xl shadow-slate-950/15"
     >
-      <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-[#FF6B35] via-[#FF9B70] to-[#FF6B35]" />
-      <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px]">
-        <div className="relative flex min-w-0 flex-col overflow-hidden p-6 sm:p-7">
+      <div className="grid h-full min-h-[280px] w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_148px]">
+        <div className="relative z-[1] flex min-h-[280px] min-w-0 flex-col justify-between gap-6 p-5 sm:p-6 lg:min-h-0">
           <img
             src={ticketImage}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0B1220]/95 via-[#101827]/75 to-[#101827]/35" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220] via-transparent to-black/20" />
-          <div className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full border border-white/10" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0B1220]/95 via-[#101827]/78 to-[#101827]/40" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0B1220]/90 via-transparent to-black/20" />
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-orange-300">
                 Carte d’embarquement
               </p>
-              <p className="mt-1 text-sm font-extrabold text-white">{airline}</p>
+              <p className="mt-1 truncate text-sm font-extrabold text-white">
+                {airline}
+              </p>
             </div>
-            <span className="rounded-full border border-emerald-300/25 bg-emerald-400/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-100 backdrop-blur-md">
+            <span className="shrink-0 rounded-full border border-emerald-300/25 bg-emerald-400/20 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-100 backdrop-blur-md">
               Vol choisi
             </span>
           </div>
 
-          <div className="relative my-6 flex items-center gap-3 sm:gap-5">
-            <div>
-              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-white drop-shadow-lg">
+          <div className="relative flex items-center gap-2 sm:gap-4">
+            <div className="min-w-0">
+              <p className="text-3xl sm:text-4xl font-black tracking-[-0.05em] text-white drop-shadow-lg">
                 {trip.aller.origin}
               </p>
-              <p className="mt-1 max-w-[120px] truncate text-xs font-semibold text-white/65">
+              <p className="mt-1 max-w-[110px] truncate text-xs font-semibold text-white/65">
                 {cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)}
               </p>
             </div>
-            <div className="flex min-w-[80px] flex-1 items-center" aria-hidden>
+            <div className="flex min-w-[56px] flex-1 items-center" aria-hidden>
               <span className="h-px flex-1 border-t border-dashed border-white/35" />
-              <span className="mx-2 inline-flex h-10 w-10 rotate-12 items-center justify-center rounded-full border border-white/20 bg-white/15 text-xl text-orange-200 backdrop-blur-md shadow-lg">
+              <span className="mx-1.5 inline-flex h-9 w-9 rotate-12 items-center justify-center rounded-full border border-white/20 bg-white/15 text-lg text-orange-200 backdrop-blur-md">
                 ✈
               </span>
               <span className="h-px flex-1 border-t border-dashed border-white/35" />
             </div>
-            <div className="text-right">
-              <p className="text-4xl sm:text-5xl font-black tracking-[-0.05em] text-orange-300 drop-shadow-lg">
+            <div className="min-w-0 text-right">
+              <p className="text-3xl sm:text-4xl font-black tracking-[-0.05em] text-orange-300 drop-shadow-lg">
                 {trip.aller.destination}
               </p>
-              <p className="mt-1 ml-auto max-w-[120px] truncate text-xs font-semibold text-white/65">
+              <p className="mt-1 ml-auto max-w-[110px] truncate text-xs font-semibold text-white/65">
                 {destinationCity}
               </p>
             </div>
           </div>
 
-          <div className="relative mt-auto grid grid-cols-2 gap-3">
+          <div className="relative grid grid-cols-2 gap-2.5">
             {[
               { label: 'Aller', flight: trip.aller },
               { label: 'Retour', flight: trip.retour },
             ].map(({ label, flight }) => (
-              <div key={label} className="rounded-2xl border border-white/15 bg-white/95 px-4 py-3 shadow-xl backdrop-blur-md">
+              <div
+                key={label}
+                className="rounded-2xl border border-white/15 bg-white/95 px-3.5 py-3 shadow-lg backdrop-blur-md"
+              >
                 <p className="text-[10px] font-black uppercase tracking-wider text-primary-600">
                   {label}
                 </p>
@@ -2784,10 +3038,10 @@ function SelectedFlightBoardingPass({
                   {formatBoardingDate(flight.departureTime)}
                 </p>
                 <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="text-xl font-black text-slate-950">
+                  <span className="text-lg font-black text-slate-950">
                     {formatBoardingTime(flight.departureTime)}
                   </span>
-                  <span className="truncate font-mono text-[11px] font-bold text-slate-500">
+                  <span className="truncate font-mono text-[10px] font-bold text-slate-500">
                     {flight.flightNumber || '—'}
                   </span>
                 </div>
@@ -2796,10 +3050,8 @@ function SelectedFlightBoardingPass({
           </div>
         </div>
 
-        <div className="relative flex flex-row items-center justify-between gap-4 border-t-2 border-dashed border-slate-300 bg-[#FFFCF8] p-5 lg:flex-col lg:items-stretch lg:justify-center lg:border-l-2 lg:border-t-0">
-          <span className="absolute -top-3 left-[-13px] hidden h-6 w-6 rounded-full bg-canvas lg:block" aria-hidden />
-          <span className="absolute -bottom-3 left-[-13px] hidden h-6 w-6 rounded-full bg-canvas lg:block" aria-hidden />
-          <div>
+        <div className="relative z-[1] flex flex-row items-center justify-between gap-4 border-t border-dashed border-slate-300/90 bg-[#FFFCF8] p-4 sm:p-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-center lg:gap-4 lg:border-l lg:border-t-0">
+          <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
               Prix par personne
             </p>
@@ -2812,7 +3064,7 @@ function SelectedFlightBoardingPass({
           </div>
           <div
             aria-hidden
-            className="hidden h-11 w-full opacity-60 lg:block"
+            className="hidden h-8 w-full opacity-50 lg:block"
             style={{
               backgroundImage:
                 'repeating-linear-gradient(90deg,#111827 0,#111827 2px,transparent 2px,transparent 5px)',
@@ -2856,12 +3108,15 @@ function SelectedFlightBoardingPass({
             ) : null}
             <button
               type="button"
-              onClick={onBook}
+              onClick={(e) => {
+                e.stopPropagation()
+                onBook()
+              }}
               disabled={bookingBusy || isConfirmed}
               className={`rounded-xl px-4 py-3 text-xs font-extrabold text-white shadow-lg transition lg:w-full ${
                 isConfirmed
                   ? 'cursor-default bg-emerald-600'
-                  : 'bg-slate-950 hover:-translate-y-0.5 hover:bg-primary-600 disabled:opacity-60'
+                  : 'bg-slate-950 hover:bg-primary-600 disabled:opacity-60'
               }`}
             >
               {isConfirmed
@@ -2874,6 +3129,22 @@ function SelectedFlightBoardingPass({
                       ? 'Retourner sur le site'
                       : 'Réserver'}
             </button>
+            {canEditModalities ? (
+              <div className="flex items-center justify-center gap-1.5 lg:w-full">
+                <button
+                  type="button"
+                  disabled={modalitiesBusy}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleModalities?.()
+                  }}
+                  className="text-[11px] font-bold text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline disabled:opacity-50"
+                >
+                  {showModalities ? 'Fermer' : 'Modifier'}
+                </button>
+                <ModalitiesInfoTip text={MODALITIES_TIP} />
+              </div>
+            ) : null}
             {!askBooked && bookingStatus === 'redirected' && !isTravelpayouts ? (
               <button
                 type="button"
@@ -3196,8 +3467,7 @@ function TravelersPanel({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  whileHover={{ y: -3 }}
-                  className="group flex items-center gap-3 rounded-3xl border border-slate-100 bg-white px-4 py-4 shadow-md shadow-slate-900/5 hover:border-orange-200 hover:shadow-lg transition-all"
+                  className="group flex items-center gap-3 rounded-3xl border border-slate-100 bg-white px-4 py-4 shadow-md shadow-slate-900/5 hover:border-orange-200 hover:shadow-lg transition-shadow"
                 >
                   <div
                     className={`relative w-12 h-12 rounded-full overflow-hidden flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md ring-4 ring-orange-50 ${

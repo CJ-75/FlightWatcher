@@ -41,7 +41,7 @@ export function partyModeTitleFr(mode: PartyMode): string {
 }
 
 export function partyModeSubtitleFr(mode: PartyMode): string {
-  if (mode === 'solo') return 'Tu voyages seul·e — tu peux inviter plus tard.'
+  if (mode === 'solo') return 'Tu voyages solo — tu peux inviter plus tard.'
   if (mode === 'duo') return 'À deux sur ce voyage.'
   return 'Organisez le séjour à plusieurs.'
 }
@@ -61,9 +61,10 @@ export function partyModeCreateLeadFr(mode: PartyMode): string {
 export const PARTY_MODE_OPTIONS: {
   mode: PartyMode
   label: string
+  emoji: string
   hint: string
 }[] = [
-  { mode: 'solo', label: 'Solo', hint: 'Je voyage seul·e' },
-  { mode: 'duo', label: 'Duo', hint: 'On part à deux' },
-  { mode: 'groupe', label: 'Groupe', hint: '3 personnes ou plus' },
+  { mode: 'solo', label: 'Solo', emoji: '🧍', hint: 'Je voyage solo' },
+  { mode: 'duo', label: 'Duo', emoji: '👫', hint: 'On part à deux' },
+  { mode: 'groupe', label: 'Groupe', emoji: '👥', hint: 'À plusieurs' },
 ]

@@ -230,10 +230,20 @@ export function CreateTripModal({
   }
 
   return (
-    <div className="app-dialog-root">
+    <div className={`app-dialog-root ${step === 1 ? 'sm:items-center items-end' : ''}`}>
       <button type="button" aria-label="Fermer" className="app-dialog-backdrop" onClick={onClose} />
-      <div className="app-dialog-panel app-dialog-xl w-full max-h-[92vh] flex flex-col overflow-hidden">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-white/95 backdrop-blur px-6 sm:px-8 py-4 sm:py-5">
+      <div
+        className={`app-dialog-panel w-full overflow-hidden ${
+          step === 1
+            ? 'sm:max-w-md h-auto'
+            : 'app-dialog-xl max-h-[92vh] flex flex-col'
+        }`}
+      >
+        <div
+          className={`sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-line bg-white/95 backdrop-blur ${
+            step === 1 ? 'px-4 sm:px-5 py-3' : 'px-6 sm:px-8 py-4 sm:py-5'
+          }`}
+        >
           <button
             type="button"
             onClick={() => {
@@ -244,15 +254,19 @@ export function CreateTripModal({
               }
               onClose()
             }}
-            className="text-sm font-bold text-muted hover:text-ink min-w-[72px] text-left"
+            className="text-sm font-bold text-muted hover:text-ink min-w-[64px] text-left"
           >
             {step === 2 ? 'Retour' : 'Annuler'}
           </button>
           <div className="text-center min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary-700">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-700">
               Étape {step}/2
             </p>
-            <h3 className="font-extrabold text-ink text-xl tracking-tight">
+            <h3
+              className={`font-extrabold text-ink tracking-tight ${
+                step === 1 ? 'text-base sm:text-lg' : 'text-xl'
+              }`}
+            >
               {step === 1
                 ? 'Avec qui tu voyages ?'
                 : partyMode
@@ -260,29 +274,37 @@ export function CreateTripModal({
                   : 'Nouveau voyage'}
             </h3>
           </div>
-          <span className="min-w-[72px]" />
+          <span className="min-w-[64px]" />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6">
+        <div
+          className={
+            step === 1
+              ? 'px-4 sm:px-5 pt-3 pb-4 space-y-2.5'
+              : 'flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6'
+          }
+        >
           {step === 1 ? (
-            <div className="max-w-2xl mx-auto space-y-3">
-              <p className="text-sm text-ink-soft text-center mb-2">
-                Solo, duo ou groupe — ça fixe les places dès le départ.
+            <div className="space-y-2">
+              <p className="text-[13px] text-ink-soft text-center leading-snug">
+                Solo, duo ou groupe — ça fixe les places.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 {PARTY_MODE_OPTIONS.map((opt) => (
                   <button
                     key={opt.mode}
                     type="button"
                     onClick={() => selectParty(opt.mode)}
-                    className="rounded-2xl border border-line bg-white px-4 py-5 text-left hover:border-primary-400 hover:bg-primary-50/40 transition-colors min-h-[108px]"
+                    className="rounded-xl border border-line bg-canvas px-2 py-2.5 text-center hover:border-primary-400 hover:bg-primary-50/50 transition-colors"
                   >
-                    <p className="font-extrabold text-ink text-lg tracking-tight">
+                    <p aria-hidden className="text-xl leading-none mb-1">
+                      {opt.emoji}
+                    </p>
+                    <p className="font-extrabold text-ink text-[13px] tracking-tight leading-none">
                       {opt.label}
                     </p>
-                    <p className="mt-1 text-sm text-ink-soft">{opt.hint}</p>
-                    <p className="mt-2 text-xs font-semibold text-muted">
-                      {partyModeCreateHintFr(opt.mode)}
+                    <p className="mt-1 text-[10px] font-semibold text-ink-soft leading-tight line-clamp-2">
+                      {opt.hint}
                     </p>
                   </button>
                 ))}

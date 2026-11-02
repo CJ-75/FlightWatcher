@@ -132,7 +132,12 @@ export function PlannerScreen() {
         } else {
           try {
             const list = await getApi().listTravelWorkspaces()
-            setWorkspaces(Array.isArray(list) ? list : [])
+            // Planner hub = planned trips only (réservations → TripSummary).
+            setWorkspaces(
+              (Array.isArray(list) ? list : []).filter((w) =>
+                Boolean(w.planned_trip_id),
+              ),
+            )
           } catch {
             const legacy = await getApi().listPlannedTrips()
             setWorkspaces((Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace))
@@ -186,15 +191,8 @@ export function PlannerScreen() {
   }, [counts, filter, workspaces.length])
 
   const openWorkspace = (workspace: TravelWorkspace) => {
-    if (workspace.draft_token && workspace.phase !== 'planning') {
-      navigation.navigate('TripSummary', { draftToken: workspace.draft_token })
-      return
-    }
-    if (workspace.planned_trip_id) {
-      navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
-      return
-    }
-    navigation.navigate('Bookings')
+    if (!workspace.planned_trip_id) return
+    navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
   }
 
   const density: JourneyDensity =
@@ -243,11 +241,7 @@ export function PlannerScreen() {
               <Text style={styles.kicker}>VOYAGES</Text>
               <Text style={styles.title}>Tout ton parcours</Text>
               <Text style={styles.subtitle}>
-                {density === 'solo'
-                  ? 'Ton voyage — mode solo.'
-                  : density === 'duo'
-                    ? 'Deux voyages — vue duo.'
-                    : 'Plusieurs voyages — vue groupe.'}
+                Crée, scanne les prix, invite tes proches.
               </Text>
               <View style={styles.hubTabs}>
                 {(
@@ -642,64 +636,70 @@ function CreateTripModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: colors.canvas }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={[styles.modalHeader, { paddingTop: insets.top + 8 }]}>
-          <Pressable
-            onPress={() => {
-              if (step === 2) {
-                setStep(1)
-                setError(null)
-                return
-              }
-              onClose()
-            }}
-          >
-            <Text style={styles.modalCancel}>{step === 2 ? 'Retour' : 'Annuler'}</Text>
-          </Pressable>
-          <View style={{ alignItems: 'center', flex: 1 }}>
-            <Text style={styles.modalStep}>Étape {step}/2</Text>
-            <Text style={styles.modalTitle} numberOfLines={1}>
-              {step === 1
-                ? 'Avec qui tu voyages ?'
-                : partyMode
-                  ? `Voyage · ${partyModeKickerFr(partyMode)}`
-                  : 'Nouveau voyage'}
-            </Text>
-          </View>
-          <View style={{ width: 60 }} />
-        </View>
-        <ScrollView
-          contentContainerStyle={{ padding: spacing.xl, paddingBottom: 40, gap: 16 }}
-          keyboardShouldPersistTaps="handled"
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.sheetRoot}>
+        <Pressable style={styles.sheetBackdrop} onPress={onClose} accessibilityLabel="Fermer" />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[
+            styles.sheetPanel,
+            step === 1 ? styles.sheetPanelCompact : styles.sheetPanelTall,
+            { paddingBottom: Math.max(insets.bottom, 12) },
+          ]}
         >
-          {step === 1 ? (
-            <>
-              <Text style={styles.partyIntro}>
-                Solo, duo ou groupe — ça fixe les places dès le départ.
+          <View style={styles.modalHeader}>
+            <Pressable
+              onPress={() => {
+                if (step === 2) {
+                  setStep(1)
+                  setError(null)
+                  return
+                }
+                onClose()
+              }}
+            >
+              <Text style={styles.modalCancel}>{step === 2 ? 'Retour' : 'Annuler'}</Text>
+            </Pressable>
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={styles.modalStep}>Étape {step}/2</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {step === 1
+                  ? 'Avec qui tu voyages ?'
+                  : partyMode
+                    ? `Voyage · ${partyModeKickerFr(partyMode)}`
+                    : 'Nouveau voyage'}
               </Text>
-              {PARTY_MODE_OPTIONS.map((opt) => (
-                <Pressable
-                  key={opt.mode}
-                  onPress={() => selectParty(opt.mode)}
-                  style={({ pressed }) => [
-                    styles.partyCard,
-                    pressed && { opacity: 0.92 },
-                  ]}
-                >
-                  <Text style={styles.partyHint}>{opt.label}</Text>
-                  <Text style={styles.partyLead}>{opt.hint}</Text>
-                  <Text style={styles.partyMeta}>
-                    {partyModeCreateHintFr(opt.mode)}
-                  </Text>
-                </Pressable>
-              ))}
-            </>
+            </View>
+            <View style={{ width: 60 }} />
+          </View>
+
+          {step === 1 ? (
+            <View style={styles.partyStepBody}>
+              <Text style={styles.partyIntro}>Solo, duo ou groupe — ça fixe les places.</Text>
+              <View style={styles.partyGrid}>
+                {PARTY_MODE_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.mode}
+                    onPress={() => selectParty(opt.mode)}
+                    style={({ pressed }) => [
+                      styles.partyCard,
+                      pressed && { opacity: 0.92 },
+                    ]}
+                  >
+                    <Text style={styles.partyEmoji}>{opt.emoji}</Text>
+                    <Text style={styles.partyHint}>{opt.label}</Text>
+                    <Text style={styles.partyLead}>{opt.hint}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {error ? <Text style={styles.formError}>{error}</Text> : null}
+            </View>
           ) : (
-            <>
+            <ScrollView
+              contentContainerStyle={{ padding: spacing.xl, paddingBottom: 24, gap: 16 }}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: '100%' }}
+            >
               <View>
                 <Text style={styles.fieldLabel}>Nom</Text>
                 <TextInput
@@ -802,19 +802,18 @@ function CreateTripModal({
               </View>
 
               <Button label="Créer" onPress={() => void submit()} loading={saving} />
-            </>
+              {error ? <Text style={styles.formError}>{error}</Text> : null}
+            </ScrollView>
           )}
 
-          {error ? <Text style={styles.formError}>{error}</Text> : null}
-        </ScrollView>
-
-        <FlexibleDatesModal
-          visible={showFlexible}
-          value={flexibleDates}
-          onChange={setFlexibleDates}
-          onClose={() => setShowFlexible(false)}
-        />
-      </KeyboardAvoidingView>
+          <FlexibleDatesModal
+            visible={showFlexible}
+            value={flexibleDates}
+            onChange={setFlexibleDates}
+            onClose={() => setShowFlexible(false)}
+          />
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   )
 }
@@ -1345,12 +1344,32 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     includeFontPadding: false,
   },
+  sheetRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  sheetPanel: {
+    width: '100%',
+    backgroundColor: colors.canvas,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    overflow: 'hidden',
+  },
+  sheetPanelCompact: {},
+  sheetPanelTall: {
+    maxHeight: '92%',
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
   },
@@ -1362,40 +1381,53 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'uppercase',
   },
-  modalTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
+  modalTitle: { fontFamily: fonts.bold, fontSize: 16, color: colors.ink },
+  partyStepBody: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 10,
+  },
   partyIntro: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 4,
+    lineHeight: 18,
+  },
+  partyGrid: {
+    flexDirection: 'row',
+    gap: 8,
   },
   partyCard: {
+    flex: 1,
     backgroundColor: colors.white,
-    borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    gap: 4,
+    gap: 3,
+    alignItems: 'center',
+  },
+  partyEmoji: {
+    fontSize: 20,
+    lineHeight: 24,
+    textAlign: 'center',
   },
   partyHint: {
     fontFamily: fonts.extrabold,
-    fontSize: 18,
+    fontSize: 13,
     color: colors.ink,
     letterSpacing: -0.2,
+    textAlign: 'center',
   },
   partyLead: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 10,
     color: colors.inkSoft,
-  },
-  partyMeta: {
-    marginTop: 4,
-    fontFamily: fonts.semibold,
-    fontSize: 12,
-    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 13,
   },
   partySummary: {
     backgroundColor: colors.white,

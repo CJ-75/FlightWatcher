@@ -46,8 +46,8 @@ def fetch(title: str, lang: str = "en") -> str | None:
     import re
     from urllib.parse import urlparse, urlunparse
 
-    # Keep Wikimedia's allowed width (REST summary uses 330px).
-    thumb = re.sub(r"/\d+px-", "/330px-", thumb)
+    # Hero backgrounds need a sharp thumb (330px from REST is too small).
+    thumb = re.sub(r"/\d+px-", "/1280px-", thumb)
     return urlunparse(urlparse(thumb)._replace(query=""))
 
 

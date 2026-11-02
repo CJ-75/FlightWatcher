@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 from routes.planner import (
     _best_booking,
+    _dest_compatible,
+    _heal_orphan_drafts_to_trips,
     _planner_draft_payload,
     _user_can_access,
     _workspace_phase,
@@ -117,3 +119,107 @@ def test_workspace_access_is_limited_to_organizer_and_members():
     assert _user_can_access(supabase, "trip-1", "owner") is not None
     assert _user_can_access(supabase, "trip-1", "member") is not None
     assert _user_can_access(supabase, "trip-1", "stranger") is None
+
+
+def test_dest_compatible_matches_lisbon_iata_and_city():
+    trip = {
+        "id": "trip-lis",
+        "name": "Weekend Lisbonne",
+        "arrival_airport": "LIS",
+        "dates_depart": [{"date": "2027-05-07"}],
+        "dates_retour": [{"date": "2027-05-10"}],
+    }
+    accepted = {
+        "id": "prop-1",
+        "trip_data": _proposal(),
+    }
+    draft = {
+        "id": "draft-1",
+        "city_name": "Lisbonne",
+        "dest_iata": "LIS",
+        "out_date": "2027-05-07",
+        "ret_date": "2027-05-10",
+        "payload": {"city": "Lisbonne", "destination": "LIS"},
+    }
+    assert _dest_compatible(trip, accepted, draft) is True
+    assert (
+        _dest_compatible(
+            trip,
+            accepted,
+            {
+                **draft,
+                "dest_iata": "BCN",
+                "city_name": "Barcelone",
+                "payload": {"city": "Barcelone", "destination": "BCN"},
+            },
+        )
+        is False
+    )
+
+
+def test_heal_links_orphan_lisbon_booking_draft_to_planner_trip():
+    class _HealSupabase:
+        def __init__(self):
+            self.updates = []
+
+        def table(self, name):
+            assert name == "my_trip_drafts"
+            parent = self
+
+            class _Update:
+                def update(self, patch):
+                    self.patch = patch
+                    return self
+
+                def eq(self, field, value):
+                    parent.updates.append((field, value, self.patch))
+                    return self
+
+                def execute(self):
+                    return SimpleNamespace(data=[])
+
+            return _Update()
+
+    trip = {
+        "id": "trip-lis",
+        "name": "Weekend Lisbonne",
+        "arrival_airport": "LIS",
+        "dates_depart": [{"date": "2027-05-07"}],
+        "dates_retour": [{"date": "2027-05-10"}],
+    }
+    accepted = {"id": "prop-1", "trip_data": _proposal()}
+    orphan = {
+        "id": "draft-orphan",
+        "draft_token": "tok-lis",
+        "city_name": "Lisbonne",
+        "dest_iata": "LIS",
+        "out_date": "2027-05-07",
+        "ret_date": "2027-05-10",
+        "updated_at": "2027-04-01",
+        "payload": {"city": "Lisbonne", "destination": "LIS"},
+    }
+    drafts_by_trip = {}
+    bookings_by_draft_id = {
+        "draft-orphan": [
+            {
+                "id": "booking-1",
+                "status": "confirmed",
+                "updated_at": "2027-04-02",
+            }
+        ]
+    }
+    supabase = _HealSupabase()
+    _heal_orphan_drafts_to_trips(
+        supabase,
+        trips_by_id={"trip-lis": trip},
+        accepted_by_trip={"trip-lis": accepted},
+        drafts=[orphan],
+        drafts_by_trip=drafts_by_trip,
+        bookings_by_draft_id=bookings_by_draft_id,
+        bookings_by_token={},
+    )
+    assert drafts_by_trip["trip-lis"]["id"] == "draft-orphan"
+    assert orphan["source_planned_trip_id"] == "trip-lis"
+    assert orphan["source_kind"] == "planner"
+    assert supabase.updates
+    assert supabase.updates[0][2]["source_planned_trip_id"] == "trip-lis"

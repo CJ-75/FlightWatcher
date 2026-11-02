@@ -579,6 +579,22 @@ export default function MyTrip() {
     setMarkingBooked(true)
     setAskFlightBooked(false)
     leftForFlight.current = false
+    const nowIso = new Date().toISOString()
+    setDraft((prev) => {
+      if (!prev) return prev
+      const prevPayload = (prev.payload || {}) as Record<string, unknown>
+      return {
+        ...prev,
+        flight_booked_at: nowIso,
+        flight_booking_status: 'user_confirmed',
+        payload: {
+          ...prevPayload,
+          flight_booked: true,
+          flight_booked_at: nowIso,
+          flight_booking_status: 'user_confirmed',
+        },
+      }
+    })
     try {
       const row = await getApiClient().updateMyTripFlightBookingStatus(token, {
         status: 'user_confirmed',
@@ -589,6 +605,7 @@ export default function MyTrip() {
       if (isCached) setShowPriceAsk(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible d’enregistrer')
+      void load({ silent: true })
     } finally {
       setMarkingBooked(false)
     }
@@ -1843,6 +1860,10 @@ export default function MyTrip() {
                       : null
                   }
                   enabled={plannerRestaurantsEnabled}
+                  hotelReady={
+                    hotelBooked ||
+                    Boolean(payload.hotel_external || payload.external_hotel)
+                  }
                 />
               </section>
             ) : null}

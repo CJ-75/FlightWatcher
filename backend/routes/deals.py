@@ -1135,7 +1135,10 @@ async def my_trip_flight_booked(draft_token: str):
         row = mark_flight_booked(_svc(), draft_token)
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable")
-        record_trip_event(_svc(), draft_token, "flight_booked_yes")
+        try:
+            record_trip_event(_svc(), draft_token, "flight_booked_yes")
+        except Exception:
+            pass
         return row
     except HTTPException:
         raise
@@ -1179,12 +1182,15 @@ async def my_trip_flight_booking_status(
             "user_confirmed": "flight_booked_yes",
             "cancelled": "flight_partner_cancelled",
         }[body.status]
-        record_trip_event(
-            _svc(),
-            draft_token,
-            event,
-            meta={"provider": body.provider, "reference": body.reference},
-        )
+        try:
+            record_trip_event(
+                _svc(),
+                draft_token,
+                event,
+                meta={"provider": body.provider, "reference": body.reference},
+            )
+        except Exception:
+            pass
         return row
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

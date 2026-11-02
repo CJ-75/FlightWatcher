@@ -78,7 +78,7 @@ export function buildStayPipeline(opts: {
         ? 'Vol ailleurs'
         : opts.flight === 'selected_fw'
           ? 'À réserver'
-          : 'Optionnel'
+          : 'Choisir'
 
   const hotelHint =
     opts.hotel === 'booked'
@@ -106,27 +106,29 @@ export function buildStayPipeline(opts: {
   if (opts.focus === 'activities' && activitiesOn) {
     current = 'activities'
   }
-  if (opts.focus === 'restaurants' && restaurantsOn) {
+  if (opts.focus === 'restaurants' && restaurantsOn && hotelDone) {
     current = 'restaurants'
   }
+
+  const restaurantsUnlocked = restaurantsOn && hotelDone
 
   const step = (
     id: StayStepId,
     label: string,
     shortLabel: string,
     done: boolean,
-    partial: boolean,
+    _partial: boolean,
     off: boolean,
     hint?: string,
   ): StayPipelineStep => {
     if (off) {
-      return { id, label, shortLabel, state: 'off', hint: 'Bientôt' }
+      return { id, label, shortLabel, state: 'off', hint: hint || 'Bientôt' }
     }
     if (done) return { id, label, shortLabel, state: 'done', hint }
-    if (id === current || (partial && id === current)) {
+    // Exactly one lit step — partial progress stays "upcoming" unless it is current.
+    if (id === current) {
       return { id, label, shortLabel, state: 'current', hint }
     }
-    if (partial) return { id, label, shortLabel, state: 'current', hint }
     return { id, label, shortLabel, state: 'upcoming', hint }
   }
 
@@ -148,12 +150,14 @@ export function buildStayPipeline(opts: {
       'Adresses',
       restaurantsDone,
       restaurantsPartial,
-      !restaurantsOn,
-      restaurantsOn
-        ? opts.restaurantsSkipped
-          ? 'Passé'
-          : opts.restaurantsHint || 'Choisir'
-        : 'Bientôt',
+      !restaurantsUnlocked,
+      !restaurantsOn
+        ? 'Bientôt'
+        : !hotelDone
+          ? 'Après l’hôtel'
+          : opts.restaurantsSkipped
+            ? 'Passé'
+            : opts.restaurantsHint || 'Choisir',
     ),
   ]
 }

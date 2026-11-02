@@ -95,7 +95,12 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
               accessibilityState={{ selected: isCurrent, disabled: isOff }}
               onPress={() => {
                 if (isOff) {
-                  Alert.alert('Bientôt', `${s.label} arrive bientôt sur FlightWatcher.`)
+                  Alert.alert(
+                    s.hint === 'Après l’hôtel' ? 'Adresses' : 'Bientôt',
+                    s.hint === 'Après l’hôtel'
+                      ? 'Réserve d’abord ton hôtel pour voir les restos autour.'
+                      : `${s.label} arrive bientôt sur FlightWatcher.`,
+                  )
                   return
                 }
                 onStepPress?.(s.id)

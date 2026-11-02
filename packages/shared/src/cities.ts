@@ -672,6 +672,31 @@ function fallbackImageForKey(key: string): string {
   return pool[hashCityKey(key) % pool.length] || FALLBACK_CITY_IMAGE
 }
 
+/** Hero backgrounds need >330px; Wikimedia REST thumbs are tiny by default. */
+const CITY_HERO_WIDTH = 1280
+
+export function upscaleCityHeroUrl(url: string, width = CITY_HERO_WIDTH): string {
+  const raw = (url || '').trim()
+  if (!raw) return raw
+  if (/thumb\.wikimedia\.org|upload\.wikimedia\.org/i.test(raw)) {
+    // Handles `/330px-` and `/langfr-330px-` variants.
+    return raw.replace(/(\d+)px-/i, `${width}px-`)
+  }
+  if (/images\.unsplash\.com/i.test(raw)) {
+    try {
+      const u = new URL(raw)
+      u.searchParams.set('w', String(Math.max(width, 1200)))
+      u.searchParams.set('q', u.searchParams.get('q') || '80')
+      u.searchParams.set('auto', u.searchParams.get('auto') || 'format')
+      u.searchParams.set('fit', u.searchParams.get('fit') || 'crop')
+      return u.toString()
+    } catch {
+      return raw
+    }
+  }
+  return raw
+}
+
 /**
  * Hero image for a city name (FR/EN) and optional IATA.
  * Uses Wikimedia-curated photos when available; otherwise a stable varied fallback.
@@ -683,19 +708,19 @@ export function cityImageUrl(
   const code = (iata || '').trim().toUpperCase()
   if (code && CITY_FR_BY_IATA[code]) {
     const fromIata = normalizeCityKey(CITY_FR_BY_IATA[code])
-    if (CITY_IMAGES[fromIata]) return CITY_IMAGES[fromIata]
+    if (CITY_IMAGES[fromIata]) return upscaleCityHeroUrl(CITY_IMAGES[fromIata])
   }
 
   if (city) {
     const key = normalizeCityKey(city)
-    if (CITY_IMAGES[key]) return CITY_IMAGES[key]
+    if (CITY_IMAGES[key]) return upscaleCityHeroUrl(CITY_IMAGES[key])
     const head = key.split(/[\s,\-–—/]+/)[0]
-    if (head && CITY_IMAGES[head]) return CITY_IMAGES[head]
-    return fallbackImageForKey(key || head || code)
+    if (head && CITY_IMAGES[head]) return upscaleCityHeroUrl(CITY_IMAGES[head])
+    return upscaleCityHeroUrl(fallbackImageForKey(key || head || code))
   }
 
-  if (code) return fallbackImageForKey(code)
-  return FALLBACK_CITY_IMAGE
+  if (code) return upscaleCityHeroUrl(fallbackImageForKey(code))
+  return upscaleCityHeroUrl(FALLBACK_CITY_IMAGE)
 }
 
 /**
@@ -709,7 +734,7 @@ export function resolveTripImageUrl(opts: {
 }): string {
   const raw = (opts.imageUrl || '').trim()
   if (raw && !/source\.unsplash\.com/i.test(raw) && !/placehold/i.test(raw)) {
-    return raw
+    return upscaleCityHeroUrl(raw)
   }
   return cityImageUrl(opts.city, opts.iata)
 }

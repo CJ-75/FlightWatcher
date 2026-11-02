@@ -19,7 +19,7 @@ const PHASE_META: Record<
   planning: { label: 'À organiser', action: 'Continuer', tone: '#F97316' },
   flight_selected: { label: 'Vol choisi', action: 'Finaliser', tone: '#F97316' },
   composing: { label: 'À finaliser', action: 'Reprendre', tone: '#F97316' },
-  booked: { label: 'Réservé', action: 'Voir le dossier', tone: '#0F8A5F' },
+  booked: { label: 'Réservé', action: 'Ouvrir', tone: '#0F8A5F' },
   past: { label: 'Terminé', action: 'Revoir', tone: '#64748B' },
 }
 

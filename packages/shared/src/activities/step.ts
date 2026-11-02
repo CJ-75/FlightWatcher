@@ -109,6 +109,8 @@ export const RESTAURANT_SKIP_LABEL_FR = 'Pas de restaurant prévu'
 /** @deprecated Paste-link CTA removed — prefer RESTAURANT_NEAR_HOTEL_LABEL_FR */
 export const RESTAURANT_ADD_LABEL_FR = 'Coller un lien'
 export const RESTAURANT_NEAR_HOTEL_LABEL_FR = 'Restaurants autour de ton hôtel'
+export const RESTAURANT_NEEDS_HOTEL_FR =
+  'Réserve d’abord ton hôtel pour voir les restos autour.'
 export const RESTAURANT_SEARCH_LABEL_FR = 'Chercher un restaurant'
 export const RESTAURANT_VALIDATE_LABEL_FR = 'Valider'
 export const RESTAURANT_MAPS_LABEL_FR = 'Avis et photos'

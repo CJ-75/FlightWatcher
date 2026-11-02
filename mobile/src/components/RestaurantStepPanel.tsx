@@ -14,7 +14,7 @@ import {
   RESTAURANT_EMPTY_TITLE_FR,
   RESTAURANT_MAPS_LABEL_FR,
   RESTAURANT_NEAR_HOTEL_LABEL_FR,
-  RESTAURANT_SKIP_LABEL_FR,
+  RESTAURANT_NEEDS_HOTEL_FR,
   RESTAURANT_VALIDATE_LABEL_FR,
   tripItemStatusLabelFr,
 } from '@flightwatcher/shared'
@@ -47,6 +47,7 @@ export function RestaurantStepPanel(props: {
   cityLabel?: string | null
   dateIso?: string | null
   enabled?: boolean
+  hotelReady?: boolean
   hotelLat?: number | null
   hotelLng?: number | null
 }) {
@@ -54,6 +55,7 @@ export function RestaurantStepPanel(props: {
     draftToken,
     plannedTripId,
     enabled = true,
+    hotelReady = true,
     citySlug,
     cityLabel,
     dateIso,
@@ -61,7 +63,6 @@ export function RestaurantStepPanel(props: {
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [skipped, setSkipped] = useState(false)
 
   const load = useCallback(async () => {
     if (!draftToken && !plannedTripId) return
@@ -75,7 +76,6 @@ export function RestaurantStepPanel(props: {
         (i) => i.item_type === 'restaurant',
       )
       setItems(all)
-      setSkipped(all.some((i) => i.status === 'skipped'))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -84,8 +84,8 @@ export function RestaurantStepPanel(props: {
   }, [draftToken, plannedTripId])
 
   useEffect(() => {
-    if (enabled) void load()
-  }, [enabled, load])
+    if (enabled && hotelReady) void load()
+  }, [enabled, hotelReady, load])
 
   const city = cityLabel || citySlug || 'ta ville'
   const visible = items.filter((i) => i.status !== 'skipped')
@@ -98,25 +98,17 @@ export function RestaurantStepPanel(props: {
     return `https://www.google.com/maps/search/?api=1&query=${q}`
   }, [city, props.hotelLat, props.hotelLng])
 
-  const skipRestaurants = async () => {
-    setSkipped(true)
-    try {
-      await getApi().addTripItem({
-        product_code: `skip-resto-${Date.now()}`,
-        title: RESTAURANT_SKIP_LABEL_FR,
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-        platform: 'mobile',
-        surface: 'restaurants',
-        meta: { skip_restaurants: true },
-      })
-    } catch {
-      /* optional */
-    }
-  }
-
   if (!enabled) {
     return <Text style={styles.muted}>Adresses bientôt disponibles.</Text>
+  }
+
+  if (!hotelReady) {
+    return (
+      <View style={[styles.locked, shadow.soft]}>
+        <Text style={styles.lockedTitle}>Après ton hôtel</Text>
+        <Text style={styles.lockedBody}>{RESTAURANT_NEEDS_HOTEL_FR}</Text>
+      </View>
+    )
   }
 
   return (
@@ -137,9 +129,6 @@ export function RestaurantStepPanel(props: {
             style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.92 }]}
           >
             <Text style={styles.primaryBtnText}>{RESTAURANT_NEAR_HOTEL_LABEL_FR}</Text>
-          </Pressable>
-          <Pressable onPress={() => void skipRestaurants()}>
-            <Text style={styles.skip}>{RESTAURANT_SKIP_LABEL_FR}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -241,16 +230,32 @@ export function RestaurantStepPanel(props: {
           </View>
         )
       })}
-
-      {skipped && visible.length === 0 ? (
-        <Text style={styles.muted}>Pas de restaurant prévu pour ce voyage.</Text>
-      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
+  locked: {
+    backgroundColor: colors.white,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderStyle: 'dashed',
+    gap: 6,
+  },
+  lockedTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  lockedBody: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+  },
   budget: { fontFamily: fonts.bold, fontSize: 11, color: colors.muted },
   muted: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
   err: { fontFamily: fonts.semibold, fontSize: 13, color: colors.danger },
@@ -302,13 +307,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ghostBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.inkSoft },
-  skip: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.muted,
-    textAlign: 'center',
-    paddingVertical: 4,
-  },
   secondaryBtn: {
     backgroundColor: colors.ink,
     borderRadius: 12,

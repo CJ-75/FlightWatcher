@@ -43,14 +43,6 @@ function openViatorSync(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-function SoftChip({ children }: { children: string }) {
-  return (
-    <span className="inline-flex items-center rounded-lg border border-line bg-canvas text-ink-soft px-2 py-0.5 text-[10px] font-bold leading-tight">
-      {children}
-    </span>
-  )
-}
-
 function ActivityHeartSvg({ filled }: { filled: boolean }) {
   return (
     <svg
@@ -88,26 +80,39 @@ function ActivityCard({
   addLabel?: string
   addDisabled?: boolean
 }) {
+  const meta = [
+    card.rating != null
+      ? `${card.rating.toFixed(1)} · ${card.reviewCount || 0} avis`
+      : null,
+    card.durationLabel,
+    card.distanceLabel,
+  ].filter(Boolean) as string[]
+
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      whileHover={{ y: -4, transition: { duration: 0.18 } }}
-      className="group flex flex-col h-full rounded-3xl overflow-hidden bg-white border border-line shadow-soft hover:shadow-lift hover:border-primary-200 transition-all duration-200 text-left"
+      whileHover={{ y: -3, transition: { duration: 0.18 } }}
+      className="group flex flex-col rounded-2xl overflow-hidden border border-line/80 bg-canvas shadow-soft hover:shadow-lift hover:border-primary-200 transition-all duration-200 text-left"
     >
-      <button type="button" onClick={onOpen} className="relative block w-full text-left">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative block w-full text-left aspect-[16/10] overflow-hidden"
+      >
         {card.photoUrl ? (
           <img
             src={card.photoUrl}
             alt=""
-            className="h-48 sm:h-52 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="h-48 sm:h-52 w-full bg-canvas" />
+          <div className="absolute inset-0 bg-slate-200" />
         )}
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/25 to-transparent" />
         {card.freeCancellation ? (
-          <span className="absolute top-3 left-3 z-[3] rounded-full px-2.5 py-1 bg-emerald-600 text-white text-[11px] font-bold shadow-soft">
+          <span className="absolute top-2.5 left-2.5 z-[3] rounded-md px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold shadow-soft">
             Annulation gratuite
           </span>
         ) : null}
@@ -128,55 +133,59 @@ function ActivityCard({
               }
             }}
             aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-            className={`absolute top-3 right-3 z-[3] w-10 h-10 rounded-full flex items-center justify-center shadow-soft transition-colors ${
+            className={`absolute top-2.5 right-2.5 z-[3] w-9 h-9 rounded-full flex items-center justify-center shadow-soft transition-colors ${
               liked
                 ? 'bg-white text-primary-500'
-                : 'bg-white/95 text-ink-soft hover:text-primary-500'
+                : 'bg-white/90 text-ink-soft hover:text-primary-500'
             }`}
           >
             <ActivityHeartSvg filled={!!liked} />
           </span>
         ) : null}
+        <div className="absolute inset-x-0 bottom-0 z-[2] p-3 sm:p-3.5 space-y-1.5">
+          <h3 className="font-extrabold text-white text-[15px] sm:text-base leading-snug line-clamp-2 drop-shadow-sm">
+            {card.title}
+          </h3>
+          {meta.length ? (
+            <div className="flex flex-wrap gap-1">
+              {meta.map((label) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-white/90 backdrop-blur-sm"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </button>
 
-      <div className="flex flex-col flex-1 p-4 sm:p-5 gap-2">
-        <h3 className="font-extrabold text-ink text-[15px] sm:text-base leading-snug line-clamp-2">
-          {card.title}
-        </h3>
-        <div className="flex flex-wrap gap-1.5">
-          {card.rating != null ? (
-            <SoftChip>{`${card.rating.toFixed(1)} · ${card.reviewCount || 0} avis`}</SoftChip>
-          ) : null}
-          {card.durationLabel ? <SoftChip>{card.durationLabel}</SoftChip> : null}
-          {card.distanceLabel ? <SoftChip>{card.distanceLabel}</SoftChip> : null}
+      <div className="flex items-center justify-between gap-2.5 px-3 py-2.5 sm:px-3.5 sm:py-3 bg-white/70 border-t border-line/60">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted leading-none mb-0.5">
+            À partir de
+          </p>
+          <p className="text-xl font-black text-primary-500 tabular-nums leading-none truncate">
+            {card.priceLabel || 'Voir'}
+          </p>
         </div>
-
-        <div className="mt-auto pt-3 flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted mb-0.5">
-              À partir de
-            </p>
-            <p className="text-2xl font-black text-primary-500 tabular-nums leading-none">
-              {card.priceLabel || 'Voir'}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={onBook}
-              className="rounded-xl bg-primary-500 hover:bg-primary-600 text-white text-sm font-bold px-3.5 py-2.5 min-h-[44px]"
-            >
-              Réserver
-            </button>
-            <button
-              type="button"
-              onClick={onAdd}
-              disabled={addDisabled}
-              className="rounded-xl border border-line text-ink text-xs font-bold px-3 py-2 hover:border-primary-200 hover:bg-primary-50/50 disabled:opacity-50"
-            >
-              {addLabel}
-            </button>
-          </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={addDisabled}
+            className="rounded-lg border border-line text-ink text-[11px] font-bold px-2.5 py-2 min-h-[40px] hover:border-primary-200 hover:bg-primary-50/60 disabled:opacity-50"
+          >
+            {addLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onBook}
+            className="rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-[13px] font-bold px-3 py-2 min-h-[40px]"
+          >
+            Réserver
+          </button>
         </div>
       </div>
     </motion.article>
@@ -685,20 +694,22 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="app-card overflow-hidden animate-pulse">
-              <div className="h-48 bg-canvas" />
-              <div className="p-5 space-y-3">
-                <div className="h-4 bg-canvas rounded w-4/5" />
-                <div className="h-3 bg-canvas rounded w-2/5" />
-                <div className="h-8 bg-canvas rounded w-1/3 mt-4" />
+            <div
+              key={i}
+              className="rounded-2xl overflow-hidden border border-line/80 bg-canvas animate-pulse"
+            >
+              <div className="aspect-[16/10] bg-slate-200" />
+              <div className="flex items-center justify-between gap-2 px-3 py-2.5 bg-white/70">
+                <div className="h-7 w-20 rounded bg-slate-200" />
+                <div className="h-9 w-28 rounded-lg bg-slate-200" />
               </div>
             </div>
           ))}
         </div>
       ) : cards.length ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
           {cards.map((c) => {
             const already = Boolean(c.productCode && addedCodes.has(c.productCode))
             return (

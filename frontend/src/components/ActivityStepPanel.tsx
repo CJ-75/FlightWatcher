@@ -210,8 +210,8 @@ export function ActivityStepPanel(props: {
   })
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex flex-wrap gap-1.5 shrink-0">
         <Link
           to={catalogHref}
           onClick={() => {
@@ -223,21 +223,21 @@ export function ActivityStepPanel(props: {
               })
             }
           }}
-          className="rounded-xl bg-primary-600 text-white text-sm font-bold px-4 py-2.5 min-h-[44px] inline-flex items-center"
+          className="rounded-lg bg-primary-600 text-white text-xs font-bold px-3 py-2 min-h-[36px] inline-flex items-center"
         >
           {ACTIVITY_BROWSE_CATALOG_FR}
         </Link>
         <button
           type="button"
           onClick={() => void openSuggestions()}
-          className="rounded-xl border border-slate-200 text-sm font-semibold px-4 py-2.5 min-h-[44px]"
+          className="rounded-lg border border-slate-200 text-xs font-semibold px-3 py-2 min-h-[36px]"
         >
           {ACTIVITY_ADD_LABEL_FR}
         </button>
         <button
           type="button"
           onClick={() => void skipAll()}
-          className="rounded-xl border border-slate-200 text-sm font-semibold px-4 py-2.5 min-h-[44px] text-slate-600"
+          className="rounded-lg border border-slate-200 text-xs font-semibold px-3 py-2 min-h-[36px] text-slate-600"
         >
           {ACTIVITY_SKIP_LABEL_FR}
         </button>
@@ -308,16 +308,16 @@ export function ActivityStepPanel(props: {
         ))}
       </ul>
       {!items.length && !loading ? (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-4 space-y-2">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3.5 py-3 space-y-1">
           <p className="text-sm font-semibold text-slate-800">
             Aucune activité pour l’instant
           </p>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Parcours le catalogue pour cette ville, ou ajoute une suggestion rapide.
+          <p className="text-xs text-slate-500 leading-snug">
+            Parcours le catalogue, ou ajoute une suggestion rapide.
           </p>
           <Link
             to={catalogHref}
-            className="inline-flex text-sm font-bold text-primary-700 hover:underline"
+            className="inline-flex text-xs font-bold text-primary-700 hover:underline"
           >
             {ACTIVITY_BROWSE_CATALOG_FR} →
           </Link>
@@ -384,9 +384,11 @@ export function ActivityStepPanel(props: {
         </div>
       ) : null}
 
-      <p className="text-xs text-slate-400">
-        Glisse pour réordonner · statut utilisateur ≠ disponibilité offre
-      </p>
+      {items.length > 0 ? (
+        <p className="text-[11px] text-slate-400">
+          Glisse pour réordonner · statut utilisateur ≠ disponibilité offre
+        </p>
+      ) : null}
     </div>
   )
 }

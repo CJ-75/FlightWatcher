@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -759,6 +760,276 @@ def _workspace_phase(
     return "planning"
 
 
+_ACCENT_MAP = str.maketrans(
+    {
+        "à": "a",
+        "â": "a",
+        "ä": "a",
+        "á": "a",
+        "ç": "c",
+        "é": "e",
+        "è": "e",
+        "ê": "e",
+        "ë": "e",
+        "í": "i",
+        "î": "i",
+        "ï": "i",
+        "ó": "o",
+        "ô": "o",
+        "ö": "o",
+        "ù": "u",
+        "û": "u",
+        "ü": "u",
+        "ñ": "n",
+    }
+)
+
+
+def _norm_label(value: Optional[str]) -> str:
+    text = str(value or "").lower().translate(_ACCENT_MAP)
+    return re.sub(r"[^a-z0-9]", "", text)
+
+
+def _iata_tokens(*values: Any) -> set:
+    out: set = set()
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple, set)):
+            for item in value:
+                out |= _iata_tokens(item)
+            continue
+        for part in re.split(r"[,;/|\s]+", str(value)):
+            code = part.strip().upper()
+            if len(code) == 3 and code.isalpha():
+                out.add(code)
+    return out
+
+
+def _date_close(a: Optional[str], b: Optional[str], days: int = 2) -> bool:
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    try:
+        da = date.fromisoformat(a[:10])
+        db = date.fromisoformat(b[:10])
+        return abs((da - db).days) <= days
+    except Exception:
+        return False
+
+
+def _draft_booking(
+    draft: Optional[dict],
+    bookings_by_draft_id: Dict[str, List[dict]],
+    bookings_by_token: Dict[str, List[dict]],
+) -> Optional[dict]:
+    if not draft:
+        return None
+    draft_id = str(draft.get("id") or "")
+    token = str(draft.get("draft_token") or "")
+    return _best_booking(
+        bookings_by_draft_id.get(draft_id, []) + bookings_by_token.get(token, [])
+    )
+
+
+def _draft_link_rank(
+    draft: dict,
+    bookings_by_draft_id: Dict[str, List[dict]],
+    bookings_by_token: Dict[str, List[dict]],
+) -> Tuple[int, int, str]:
+    booking = _draft_booking(draft, bookings_by_draft_id, bookings_by_token)
+    rank = _BOOKING_RANK.get(str((booking or {}).get("status") or ""), -1)
+    payload = draft.get("payload") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    hotel_done = 1 if (
+        draft.get("hotel_booked_at")
+        or payload.get("hotel_booked")
+        or payload.get("hotel_booked_at")
+        or payload.get("hotel_external")
+        or payload.get("external_hotel")
+    ) else 0
+    return (rank, hotel_done, str(draft.get("updated_at") or ""))
+
+
+def _trip_dest_iatas(trip: dict, accepted: Optional[dict]) -> set:
+    trip_data = (accepted or {}).get("trip_data") or {}
+    return _iata_tokens(
+        trip_data.get("destination_code"),
+        (trip_data.get("aller") or {}).get("destination"),
+        trip.get("arrival_airport"),
+    )
+
+
+def _trip_city_label(trip: dict, accepted: Optional[dict]) -> str:
+    trip_data = (accepted or {}).get("trip_data") or {}
+    dest_full = str((trip_data.get("aller") or {}).get("destinationFull") or "")
+    city = dest_full.split(",")[0].strip() if dest_full else ""
+    name = str(trip.get("name") or "")
+    for prefix in ("Weekend ", "Voyage ", "Séjour "):
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+            break
+    return city or name.strip()
+
+
+def _trip_dates(
+    trip: dict, accepted: Optional[dict]
+) -> Tuple[Optional[str], Optional[str]]:
+    trip_data = (accepted or {}).get("trip_data") or {}
+    out_date = _date10((trip_data.get("aller") or {}).get("departureTime")) or _date10(
+        (trip.get("dates_depart") or [{}])[0].get("date")
+    )
+    ret_date = _date10((trip_data.get("retour") or {}).get("departureTime")) or _date10(
+        (trip.get("dates_retour") or [{}])[-1].get("date")
+    )
+    return out_date, ret_date
+
+
+def _draft_dest_iatas(draft: dict) -> set:
+    payload = draft.get("payload") or {}
+    flight = payload.get("flight") or {}
+    return _iata_tokens(
+        draft.get("dest_iata"),
+        flight.get("destination_iata"),
+        payload.get("destination"),
+        payload.get("dest_iata"),
+    )
+
+
+def _draft_city_label(draft: dict) -> str:
+    payload = draft.get("payload") or {}
+    return str(draft.get("city_name") or payload.get("city") or "")
+
+
+def _draft_dates(draft: dict) -> Tuple[Optional[str], Optional[str]]:
+    payload = draft.get("payload") or {}
+    dates = payload.get("dates") or {}
+    return (
+        _date10(draft.get("out_date") or dates.get("outbound")),
+        _date10(draft.get("ret_date") or dates.get("inbound")),
+    )
+
+
+def _dest_compatible(trip: dict, accepted: Optional[dict], draft: dict) -> bool:
+    trip_codes = _trip_dest_iatas(trip, accepted)
+    draft_codes = _draft_dest_iatas(draft)
+    if trip_codes and draft_codes and trip_codes & draft_codes:
+        return True
+    trip_city = _norm_label(_trip_city_label(trip, accepted))
+    draft_city = _norm_label(_draft_city_label(draft))
+    if trip_city and draft_city and (
+        trip_city == draft_city
+        or trip_city in draft_city
+        or draft_city in trip_city
+    ):
+        return True
+    return False
+
+
+def _dates_compatible(
+    trip_out: Optional[str],
+    trip_ret: Optional[str],
+    draft_out: Optional[str],
+    draft_ret: Optional[str],
+) -> bool:
+    # Dest-only match is allowed when one side has no dates.
+    if trip_out and draft_out and not _date_close(trip_out, draft_out):
+        return False
+    if trip_ret and draft_ret and not _date_close(trip_ret, draft_ret):
+        return False
+    return True
+
+
+def _persist_draft_trip_link(
+    supabase,
+    draft: dict,
+    trip_id: str,
+    *,
+    proposal_id: Optional[str] = None,
+) -> None:
+    patch: Dict[str, Any] = {
+        "source_planned_trip_id": trip_id,
+        "source_kind": "planner",
+    }
+    if proposal_id and not draft.get("source_proposal_id"):
+        patch["source_proposal_id"] = proposal_id
+    try:
+        supabase.table("my_trip_drafts").update(patch).eq(
+            "id", draft["id"]
+        ).execute()
+    except Exception as exc:
+        print(f"⚠️ Heal draft→trip link: {exc}")
+    draft["source_planned_trip_id"] = trip_id
+    draft["source_kind"] = "planner"
+    if proposal_id and not draft.get("source_proposal_id"):
+        draft["source_proposal_id"] = proposal_id
+
+
+def _heal_orphan_drafts_to_trips(
+    supabase,
+    *,
+    trips_by_id: Dict[str, dict],
+    accepted_by_trip: Dict[str, dict],
+    drafts: List[dict],
+    drafts_by_trip: Dict[str, dict],
+    bookings_by_draft_id: Dict[str, List[dict]],
+    bookings_by_token: Dict[str, List[dict]],
+) -> None:
+    """Attach personal drafts/bookings to planner trips by dest + dates."""
+    linked_ids = {
+        str(row["id"]) for row in drafts_by_trip.values() if row.get("id")
+    }
+    orphans = [
+        draft
+        for draft in drafts
+        if draft.get("id")
+        and str(draft["id"]) not in linked_ids
+        and not draft.get("source_planned_trip_id")
+    ]
+    for draft in orphans:
+        draft_id = str(draft["id"])
+        draft_out, draft_ret = _draft_dates(draft)
+        orphan_rank = _draft_link_rank(
+            draft, bookings_by_draft_id, bookings_by_token
+        )
+        best_trip: Optional[str] = None
+        best_score: Optional[Tuple] = None
+        for trip_id, trip in trips_by_id.items():
+            accepted = accepted_by_trip.get(trip_id)
+            if not _dest_compatible(trip, accepted, draft):
+                continue
+            trip_out, trip_ret = _trip_dates(trip, accepted)
+            if not _dates_compatible(trip_out, trip_ret, draft_out, draft_ret):
+                continue
+            existing = drafts_by_trip.get(trip_id)
+            if existing:
+                existing_rank = _draft_link_rank(
+                    existing, bookings_by_draft_id, bookings_by_token
+                )
+                # Keep an already-linked draft unless the orphan clearly wins
+                # (e.g. Lisbon booking sitting on an unlinked personal draft).
+                if orphan_rank <= existing_rank:
+                    continue
+            score = (
+                orphan_rank[0],
+                1 if not existing else 0,
+                orphan_rank[1],
+            )
+            if best_score is None or score > best_score:
+                best_score = score
+                best_trip = trip_id
+        if not best_trip:
+            continue
+        proposal_id = (accepted_by_trip.get(best_trip) or {}).get("id")
+        _persist_draft_trip_link(
+            supabase, draft, best_trip, proposal_id=proposal_id
+        )
+        drafts_by_trip[best_trip] = draft
+        linked_ids.add(draft_id)
+
+
 _TRIPS_LIST_SELECT = (
     "id,organizer_id,name,departure_airport,arrival_airport,passengers,direct,"
     "dates_depart,dates_retour,budget_max,invite_token,status,"
@@ -975,17 +1246,6 @@ async def list_travel_workspaces(request: Request):
                 seen_b.add(bid)
                 bookings.append(b)
 
-    drafts_by_trip: Dict[str, dict] = {}
-    for draft in drafts:
-        source_trip = draft.get("source_planned_trip_id")
-        if not source_trip:
-            continue
-        current = drafts_by_trip.get(source_trip)
-        if not current or str(draft.get("updated_at") or "") > str(
-            current.get("updated_at") or ""
-        ):
-            drafts_by_trip[source_trip] = draft
-
     bookings_by_draft_id: Dict[str, List[dict]] = {}
     bookings_by_token: Dict[str, List[dict]] = {}
     for booking in bookings:
@@ -993,6 +1253,27 @@ async def list_travel_workspaces(request: Request):
             bookings_by_draft_id.setdefault(str(booking["draft_id"]), []).append(booking)
         if booking.get("draft_token"):
             bookings_by_token.setdefault(str(booking["draft_token"]), []).append(booking)
+
+    drafts_by_trip: Dict[str, dict] = {}
+    for draft in drafts:
+        source_trip = draft.get("source_planned_trip_id")
+        if not source_trip:
+            continue
+        current = drafts_by_trip.get(source_trip)
+        if not current or _draft_link_rank(
+            draft, bookings_by_draft_id, bookings_by_token
+        ) > _draft_link_rank(current, bookings_by_draft_id, bookings_by_token):
+            drafts_by_trip[source_trip] = draft
+
+    _heal_orphan_drafts_to_trips(
+        supabase,
+        trips_by_id=trips_by_id,
+        accepted_by_trip=accepted_by_trip,
+        drafts=drafts,
+        drafts_by_trip=drafts_by_trip,
+        bookings_by_draft_id=bookings_by_draft_id,
+        bookings_by_token=bookings_by_token,
+    )
 
     consumed_drafts = set()
     consumed_bookings = set()
@@ -1005,9 +1286,8 @@ async def list_travel_workspaces(request: Request):
         booking = None
         if draft:
             consumed_drafts.add(str(draft["id"]))
-            booking = _best_booking(
-                bookings_by_draft_id.get(str(draft["id"]), [])
-                + bookings_by_token.get(str(draft.get("draft_token") or ""), [])
+            booking = _draft_booking(
+                draft, bookings_by_draft_id, bookings_by_token
             )
         if booking:
             consumed_bookings.add(str(booking["id"]))
@@ -1301,7 +1581,13 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
 
     patch: Dict[str, Any] = {"updated_at": datetime.utcnow().isoformat()}
     if body.name is not None:
-        patch["name"] = body.name.strip()
+        name = body.name.strip()
+        if len(name) < 2 or len(name) > 80:
+            raise HTTPException(
+                status_code=400,
+                detail="Le nom du voyage doit faire entre 2 et 80 caractères",
+            )
+        patch["name"] = name
     if body.departure_airport is not None:
         patch["departure_airport"] = _normalize_departure(body.departure_airport)
     # Allow explicit null to clear arrival (inspire mode)
@@ -1794,10 +2080,25 @@ async def skip_hotel(trip_id: str, request: Request):
                 .execute()
             ).data[0]
         except Exception as exc:
-            print(f"❌ skip-hotel create from proposal {trip_id}: {exc}")
-            raise HTTPException(
-                status_code=500, detail="Impossible de préparer le séjour"
-            )
+            print(f"⚠️ skip-hotel create from proposal {trip_id}: {exc}")
+            # Unique / race — reuse any draft already linked to this trip or proposal.
+            draft_row = _user_trip_draft(supabase, trip_id, user_id)
+            if not draft_row and accepted_row.get("id"):
+                raced = (
+                    supabase.table("my_trip_drafts")
+                    .select("*")
+                    .eq("source_proposal_id", accepted_row["id"])
+                    .eq("user_id", user_id)
+                    .neq("status", "archived")
+                    .order("updated_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                draft_row = (raced.data or [None])[0]
+            if not draft_row:
+                raise HTTPException(
+                    status_code=500, detail="Impossible de préparer le séjour"
+                )
     elif not draft_row:
         # No flight chosen yet — seed an external-flight draft then mark hotel external.
         try:
@@ -1861,28 +2162,55 @@ async def skip_hotel(trip_id: str, request: Request):
                 detail="Hôtel déjà réservé sur FlightWatcher",
             )
 
+    if not isinstance(payload, dict):
+        payload = {}
     payload["hotel_external"] = True
     payload["external_hotel"] = True
-    payload.pop("hotel", None)
+    payload["hotel_booked"] = True
     now = datetime.utcnow().isoformat()
-    updated = (
-        supabase.table("my_trip_drafts")
-        .update(
-            {
-                "payload": payload,
-                "source_kind": "planner",
-                "updated_at": now,
-            }
+    payload["hotel_booked_at"] = now
+    payload.pop("hotel", None)
+    patch: Dict[str, Any] = {
+        "payload": payload,
+        "source_kind": "planner",
+        "source_planned_trip_id": trip_id,
+        "updated_at": now,
+    }
+    # Best-effort column when migration is applied.
+    try:
+        patch["hotel_booked_at"] = now
+        updated = (
+            supabase.table("my_trip_drafts")
+            .update(patch)
+            .eq("id", draft_row["id"])
+            .execute()
         )
-        .eq("id", draft_row["id"])
-        .execute()
-    )
-    data = (updated.data or [{**draft_row, "payload": payload}])[0]
+    except Exception as exc:
+        print(f"⚠️ skip-hotel column patch: {exc}")
+        patch.pop("hotel_booked_at", None)
+        updated = (
+            supabase.table("my_trip_drafts")
+            .update(patch)
+            .eq("id", draft_row["id"])
+            .execute()
+        )
+    data = (updated.data or [{**draft_row, **patch}])[0]
+    # Prefer a fresh read so clients get payload + columns consistently.
+    try:
+        from deals.my_trips import get_draft
+
+        token = str(data.get("draft_token") or draft_row.get("draft_token") or "")
+        refreshed = get_draft(supabase, token) if token else None
+        if refreshed:
+            data = refreshed
+    except Exception:
+        pass
     return _draft_response(
         data,
         reused=True,
         source_planned_trip_id=trip_id,
         hotel_external=True,
+        hotel_booked_at=data.get("hotel_booked_at") or now,
     )
 
 
@@ -2068,6 +2396,19 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
     if not trip:
         raise HTTPException(status_code=404, detail="Voyage introuvable")
 
+    def _execution_draft_response(row: dict, *, reused: bool) -> dict:
+        return {
+            "id": row["id"],
+            "draft_token": row["draft_token"],
+            "status": row.get("status") or "draft",
+            "payload": row.get("payload") or {},
+            "expires_at": row.get("expires_at"),
+            "reused": reused,
+            "source_planned_trip_id": row.get("source_planned_trip_id")
+            or proposal["trip_id"],
+            "source_proposal_id": row.get("source_proposal_id") or proposal_id,
+        }
+
     existing = (
         supabase.table("my_trip_drafts")
         .select("*")
@@ -2080,16 +2421,52 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
     )
     if existing.data:
         row = existing.data[0]
-        return {
-            "id": row["id"],
-            "draft_token": row["draft_token"],
-            "status": row.get("status") or "draft",
-            "payload": row.get("payload") or {},
-            "expires_at": row.get("expires_at"),
-            "reused": True,
-            "source_planned_trip_id": row.get("source_planned_trip_id"),
-            "source_proposal_id": row.get("source_proposal_id"),
-        }
+        if not row.get("source_planned_trip_id"):
+            _persist_draft_trip_link(
+                supabase, row, proposal["trip_id"], proposal_id=proposal_id
+            )
+        return _execution_draft_response(row, reused=True)
+
+    by_trip = (
+        supabase.table("my_trip_drafts")
+        .select("*")
+        .eq("source_planned_trip_id", proposal["trip_id"])
+        .eq("user_id", user_id)
+        .neq("status", "archived")
+        .order("updated_at", desc=True)
+        .limit(5)
+        .execute()
+    ).data or []
+    if by_trip:
+        row = by_trip[0]
+        if not row.get("source_proposal_id"):
+            _persist_draft_trip_link(
+                supabase, row, proposal["trip_id"], proposal_id=proposal_id
+            )
+        return _execution_draft_response(row, reused=True)
+
+    # Reuse an unlinked personal draft that already holds the Lisbon (etc.) booking.
+    orphans = (
+        supabase.table("my_trip_drafts")
+        .select("*")
+        .eq("user_id", user_id)
+        .is_("source_planned_trip_id", "null")
+        .neq("status", "archived")
+        .order("updated_at", desc=True)
+        .limit(20)
+        .execute()
+    ).data or []
+    for row in orphans:
+        if not _dest_compatible(trip, proposal, row):
+            continue
+        trip_out, trip_ret = _trip_dates(trip, proposal)
+        draft_out, draft_ret = _draft_dates(row)
+        if not _dates_compatible(trip_out, trip_ret, draft_out, draft_ret):
+            continue
+        _persist_draft_trip_link(
+            supabase, row, proposal["trip_id"], proposal_id=proposal_id
+        )
+        return _execution_draft_response(row, reused=True)
 
     payload = _planner_draft_payload(
         proposal.get("trip_data") or {},
