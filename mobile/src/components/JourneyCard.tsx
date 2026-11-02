@@ -51,7 +51,7 @@ export function JourneyCard({
   density?: JourneyDensity
   onPress: () => void
 }) {
-  const meta = PHASE_META[workspace.phase]
+  const meta = PHASE_META[workspace.phase] || PHASE_META.planning
   const city =
     workspace.city ||
     (workspace.dest_iata ? cityDisplayNameFr(workspace.dest_iata.split(',')[0]!) : null) ||

@@ -34,7 +34,8 @@ function patchExpoGoBrokenReload() {
       )
       return
     }
-    Promise.resolve(expoGlobal.reloadAppAsync()).catch((err) => {
+    // Expo Go expects a reason string (0-arg call → LoadBundleFromServer / arity error).
+    Promise.resolve(expoGlobal.reloadAppAsync('dev-reload')).catch((err) => {
       console.warn(
         '[expo-go] reloadAppAsync failed — kill Expo Go completely and reopen:',
         err,
