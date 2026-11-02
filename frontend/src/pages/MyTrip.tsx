@@ -5,6 +5,7 @@ import {
   ACTIVITY_TRANSFER_CTA_FR,
   activitiesCityPath,
   activityStepProgress,
+  resolveActivityCitySlug,
   airportDisplayNameFr,
   ACTIVITY_BACK_TO_PLANNER_FR,
   buildStayPipeline,
@@ -138,13 +139,29 @@ export default function MyTrip() {
     try {
       const row = await getApiClient().getMyTrip(token)
       setDraft(row)
-      rememberTrip({
-        draft_token: token,
-        city: row.city_name || (row.payload as { city?: string } | undefined)?.city,
-        booking_id:
-          (row.payload as { hotel_booking_id?: string } | undefined)?.hotel_booking_id ||
-          null,
-      })
+      {
+        const pl = (row.payload || {}) as Record<string, unknown>
+        const fl = (pl.flight || {}) as Record<string, unknown>
+        const resolvedCity = resolveActivityCitySlug({
+          citySlug: typeof pl.city_slug === 'string' ? pl.city_slug : null,
+          cityLabel:
+            row.city_name ||
+            (typeof pl.city === 'string' ? pl.city : null),
+          destIata: String(
+            fl.destination_iata ||
+              pl.destination ||
+              pl.dest_iata ||
+              row.dest_iata ||
+              '',
+          ),
+        })
+        rememberTrip({
+          draft_token: token,
+          city: resolvedCity,
+          booking_id:
+            (pl.hotel_booking_id as string | undefined) || null,
+        })
+      }
       if (!trackedView.current) {
         trackedView.current = true
         void getApiClient()
@@ -206,6 +223,29 @@ export default function MyTrip() {
   const hotel = payload.hotel || draft?.hotel
   const hotelObj = hotel && typeof hotel === 'object' ? (hotel as Record<string, any>) : null
   const city = draft?.city_name || payload.city || '—'
+  const activityCitySlug = useMemo(
+    () =>
+      resolveActivityCitySlug({
+        citySlug:
+          typeof payload.city_slug === 'string' ? payload.city_slug : null,
+        cityLabel: city !== '—' ? String(city) : null,
+        destIata: String(
+          flight.destination_iata ||
+            payload.destination ||
+            payload.dest_iata ||
+            draft?.dest_iata ||
+            '',
+        ),
+      }),
+    [
+      city,
+      draft?.dest_iata,
+      flight.destination_iata,
+      payload.city_slug,
+      payload.dest_iata,
+      payload.destination,
+    ],
+  )
   const adults = Math.max(1, Number(draft?.adults || payload.adults || 2))
   const outDate = draft?.out_date || payload.dates?.outbound
   const retDate = draft?.ret_date || payload.dates?.inbound
@@ -1554,13 +1594,7 @@ export default function MyTrip() {
                     <div className="mt-3">
                       <ActivitySurfaceBanner
                         surface="transfer"
-                        citySlug={
-                          typeof payload.city_slug === 'string'
-                            ? payload.city_slug
-                            : city
-                              ? String(city).toLowerCase()
-                              : null
-                        }
+                        citySlug={activityCitySlug}
                         title={ACTIVITY_TRANSFER_CTA_FR}
                         subtitle={distanceLine}
                       />
@@ -1778,24 +1812,14 @@ export default function MyTrip() {
                   <h2 className="font-bold text-slate-900">③ Activités</h2>
                   <div className="flex items-center gap-3">
                     <Link
-                      to={activitiesCityPath(
-                        typeof payload.city_slug === 'string'
-                          ? payload.city_slug
-                          : city
-                            ? String(city).toLowerCase().replace(/\s+/g, '-')
-                            : 'paris',
-                        { draftToken: token },
-                      )}
+                      to={activitiesCityPath(activityCitySlug, {
+                        draftToken: token,
+                      })}
                       onClick={() => {
                         if (token) {
                           rememberTrip({
                             draft_token: token,
-                            city:
-                              typeof payload.city_slug === 'string'
-                                ? payload.city_slug
-                                : city
-                                  ? String(city)
-                                  : null,
+                            city: activityCitySlug,
                           })
                         }
                       }}
@@ -1814,13 +1838,8 @@ export default function MyTrip() {
                 </div>
                 <ActivityStepPanel
                   draftToken={token}
-                  citySlug={
-                    typeof payload.city_slug === 'string'
-                      ? payload.city_slug
-                      : city
-                        ? String(city).toLowerCase()
-                        : 'paris'
-                  }
+                  plannedTripId={plannerTripId}
+                  citySlug={activityCitySlug}
                   enabled={plannerActivitiesEnabled}
                   surface="my_trip"
                 />
@@ -1851,13 +1870,7 @@ export default function MyTrip() {
                 </div>
                 <RestaurantStepPanel
                   draftToken={token}
-                  citySlug={
-                    typeof payload.city_slug === 'string'
-                      ? payload.city_slug
-                      : city
-                        ? String(city).toLowerCase()
-                        : 'paris'
-                  }
+                  citySlug={activityCitySlug}
                   cityLabel={city ? String(city) : undefined}
                   dateIso={
                     typeof payload.dates === 'object' &&

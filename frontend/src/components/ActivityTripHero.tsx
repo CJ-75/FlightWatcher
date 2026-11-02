@@ -48,7 +48,7 @@ export function ActivityTripHero(props: Props) {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={spring}
-        className="relative mb-5 sm:mb-6 overflow-hidden rounded-3xl border border-line shadow-soft min-h-[168px] sm:min-h-[188px]"
+        className="relative mb-4 sm:mb-5 overflow-hidden rounded-2xl border border-line shadow-soft min-h-[140px] sm:min-h-[156px]"
       >
         <img
           src={imageUrl}
@@ -59,21 +59,21 @@ export function ActivityTripHero(props: Props) {
           aria-hidden
         />
         <div className="absolute inset-0 bg-gradient-to-br from-ink/80 via-ink/55 to-primary-900/45" />
-        <div className="relative z-[1] flex h-full min-h-[168px] sm:min-h-[188px] flex-col justify-end gap-4 p-5 sm:p-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative z-[1] flex h-full min-h-[140px] sm:min-h-[156px] flex-col justify-end gap-3 p-4 sm:p-5 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 max-w-xl">
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/75 mb-2">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/75 mb-1.5">
               Activités + séjour
             </p>
-            <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight leading-tight">
+            <h3 className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-tight">
               {ACTIVITY_NO_TRIP_CTA_TITLE_FR}
             </h3>
-            <p className="mt-1.5 text-sm text-white/80 leading-snug">
+            <p className="mt-1 text-xs text-white/80 leading-snug">
               {ACTIVITY_NO_TRIP_CTA_BODY_FR}
             </p>
           </div>
           <Link
             to={href}
-            className="shrink-0 inline-flex items-center justify-center rounded-2xl bg-white text-ink px-5 py-3 text-sm font-extrabold shadow-lg hover:bg-white/95 min-h-[48px] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            className="shrink-0 inline-flex items-center justify-center rounded-xl bg-white text-ink px-4 py-2.5 text-xs font-extrabold shadow-lg hover:bg-white/95 min-h-[40px] transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
             {ACTIVITY_NO_TRIP_CTA_BUTTON_FR}
           </Link>
@@ -98,7 +98,7 @@ export function ActivityTripHero(props: Props) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={spring}
-      className="relative mb-5 sm:mb-6 overflow-hidden rounded-3xl border border-white/10 shadow-lift min-h-[200px] sm:min-h-[220px] group"
+      className="relative mb-4 sm:mb-5 overflow-hidden rounded-2xl border border-white/10 shadow-lift min-h-[160px] sm:min-h-[176px] group"
     >
       <img
         src={imageUrl}
@@ -110,29 +110,29 @@ export function ActivityTripHero(props: Props) {
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/20" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/35 via-transparent to-primary-600/20" />
 
-      <div className="relative z-[1] flex h-full min-h-[200px] sm:min-h-[220px] flex-col justify-between p-5 sm:p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.12em] text-white">
+      <div className="relative z-[1] flex h-full min-h-[160px] sm:min-h-[176px] flex-col justify-between p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
             {ACTIVITY_TRIP_HERO_KICKER_FR}
           </span>
-          <span className="inline-flex items-center rounded-full bg-black/35 backdrop-blur-md border border-white/10 px-3 py-1 text-[11px] font-bold text-white/90">
+          <span className="inline-flex items-center rounded-full bg-black/35 backdrop-blur-md border border-white/10 px-2.5 py-0.5 text-[10px] font-bold text-white/90">
             {ACTIVITY_TRIP_PLANNER_COUNT_FR(plannerCount)}
           </span>
         </div>
 
-        <div className="mt-auto pt-8 sm:pt-10">
-          <h3 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight drop-shadow-sm">
+        <div className="mt-auto pt-6 sm:pt-8">
+          <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight drop-shadow-sm">
             {cityLabel}
           </h3>
-          <p className="mt-1.5 max-w-lg text-sm sm:text-[15px] text-white/85 leading-snug">
+          <p className="mt-1 max-w-lg text-xs sm:text-sm text-white/85 leading-snug">
             {ACTIVITY_TRIP_IN_PROGRESS_HINT_FR}
           </p>
 
-          <div className="mt-4 flex flex-wrap gap-2.5">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Link
               to={plannerHref}
-              className="inline-flex items-center justify-center rounded-2xl bg-white text-ink px-5 py-3 text-sm font-extrabold shadow-lg hover:bg-white/95 min-h-[48px] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              className="inline-flex items-center justify-center rounded-xl bg-white text-ink px-4 py-2.5 text-xs font-extrabold shadow-lg hover:bg-white/95 min-h-[40px] transition-transform hover:scale-[1.02] active:scale-[0.98]"
             >
               {ACTIVITY_OPEN_PLANNER_FR}
             </Link>
@@ -140,7 +140,7 @@ export function ActivityTripHero(props: Props) {
               <button
                 type="button"
                 onClick={onSyncCity}
-                className="inline-flex items-center justify-center rounded-2xl bg-white/12 backdrop-blur-md border border-white/25 text-white px-4.5 py-3 text-sm font-bold hover:bg-white/20 min-h-[48px] transition-colors"
+                className="inline-flex items-center justify-center rounded-xl bg-white/12 backdrop-blur-md border border-white/25 text-white px-3.5 py-2.5 text-xs font-bold hover:bg-white/20 min-h-[40px] transition-colors"
               >
                 {ACTIVITY_SYNC_CITY_FR(cityLabel)}
               </button>

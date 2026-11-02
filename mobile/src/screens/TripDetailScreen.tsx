@@ -27,7 +27,7 @@ import type {
   TripProposal,
 } from '@flightwatcher/shared'
 import {
-  activityCitySlugFromLabel,
+  resolveActivityCitySlug,
   activityStepProgress,
   buildStayPipeline,
   cityDisplayNameFr,
@@ -559,7 +559,10 @@ export function TripDetailScreen() {
   const cityLabel = arrivalCode
     ? cityDisplayNameFr(arrivalCode)
     : trip?.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
-  const citySlug = activityCitySlugFromLabel(cityLabel)
+  const citySlug = resolveActivityCitySlug({
+    cityLabel: cityLabel !== 'ta ville' ? cityLabel : null,
+    destIata: arrivalCode || null,
+  })
   const dateIso = trip?.dates_depart?.[0]?.date || null
   const destinationImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 

@@ -175,29 +175,32 @@ async def activities_nearby(body: NearbyBody):
 async def activity_product_detail(product_code: str):
     from activities.cache import cache_get, cache_set
     from activities.config import load_activities_config
-    from activities.service import _normalize_product
+    from activities.service import _normalize_product_detail
     from activities.viator_client import ViatorClient, ViatorError
 
     cfg = load_activities_config()
     sb = _svc()
+    code = (product_code or "").strip()
+    # detail2: enriched fiche (photos[], description, logistics)
+    cache_key = f"{code}:detail2"
     cached = cache_get(
-        sb, provider="viator", resource="product", cache_key=product_code
+        sb, provider="viator", resource="product", cache_key=cache_key
     )
-    if isinstance(cached, dict):
+    if isinstance(cached, dict) and cached.get("photos") is not None:
         return {"ok": True, "product": cached, "cached": True}
     client = ViatorClient(cfg)
     try:
-        raw = client.product_detail(product_code)
+        raw = client.product_detail(code)
     except ViatorError as e:
         raise HTTPException(status_code=502, detail=str(e))
     if not isinstance(raw, dict):
         raise HTTPException(status_code=404, detail="not_found")
-    norm = _normalize_product(raw)
+    norm = _normalize_product_detail(raw)
     cache_set(
         sb,
         provider="viator",
         resource="product",
-        cache_key=product_code,
+        cache_key=cache_key,
         payload=norm,
         ttl_h=cfg.cache_ttl_h,
     )
@@ -366,8 +369,7 @@ async def get_trip_items(
         sb, request, draft_token=draft_token, planned_trip_id=planned_trip_id
     )
     items = list_trip_items(sb, draft_id=draft_id, planned_trip_id=planned)
-    # A personal execution draft inherits collaborative Planner ideas in read-only
-    # form. The rows stay owned by the Planner and are never moved or copied.
+    # Draft → Planner: personal séjour inherits collaborative ideas (read-only).
     if draft_id and not planned:
         try:
             draft_res = (
@@ -390,6 +392,31 @@ async def get_trip_items(
                     for item in inherited
                     if str(item.get("id")) not in own_ids
                 )
+        except Exception:
+            pass
+    # Planner → Draft: ideas added while bound to a linked draft must still
+    # appear on the Planner (symmetric inherit).
+    if planned and not draft_id:
+        try:
+            linked = (
+                sb.table("my_trip_drafts")
+                .select("id")
+                .eq("source_planned_trip_id", planned)
+                .limit(20)
+                .execute()
+            )
+            own_ids = {str(item.get("id")) for item in items}
+            for row in linked.data or []:
+                linked_draft_id = row.get("id")
+                if not linked_draft_id:
+                    continue
+                extras = list_trip_items(sb, draft_id=str(linked_draft_id))
+                for item in extras:
+                    iid = str(item.get("id"))
+                    if iid in own_ids:
+                        continue
+                    own_ids.add(iid)
+                    items.append({**item, "inherited": True, "from_draft": True})
         except Exception:
             pass
     return {

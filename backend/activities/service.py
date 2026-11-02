@@ -79,6 +79,242 @@ def exclude_gastronomy(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [it for it in items if not is_gastronomy_activity(it)]
 
 
+# Card/detail heroes are ~360–720 CSS px; prefer ~720–1200 wide Viator variants
+# (variants[0] is typically a 50×50 thumb → severe upscale pixelation).
+_PHOTO_TARGET_WIDTH = 720
+_PHOTO_MIN_ACCEPTABLE_WIDTH = 400
+
+
+def _variant_width(v: Dict[str, Any]) -> int:
+    for key in ("width", "Width", "w"):
+        raw = v.get(key)
+        try:
+            w = int(raw)
+            if w > 0:
+                return w
+        except (TypeError, ValueError):
+            pass
+    # Fallback: parse …-720x480 / …_720x480 from CDN path
+    url = str(v.get("url") or "")
+    m = re.search(r"[_\-](\d{2,4})x(\d{2,4})", url)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _pick_variant_url(variants: Any) -> Optional[str]:
+    if not isinstance(variants, list) or not variants:
+        return None
+    scored: List[Tuple[int, int, str]] = []
+    for i, v in enumerate(variants):
+        if not isinstance(v, dict):
+            continue
+        url = v.get("url") or v.get("href")
+        if not url:
+            continue
+        w = _variant_width(v)
+        scored.append((w, i, str(url)))
+    if not scored:
+        return None
+    # Prefer width closest to target among those >= min; else largest available.
+    good = [s for s in scored if s[0] >= _PHOTO_MIN_ACCEPTABLE_WIDTH]
+    pool = good or scored
+    pool.sort(
+        key=lambda s: (
+            abs(s[0] - _PHOTO_TARGET_WIDTH) if s[0] else 10_000,
+            -s[0],
+            s[1],
+        )
+    )
+    return pool[0][2]
+
+
+def _pick_product_photo_url(images: Any) -> Optional[str]:
+    if not isinstance(images, list) or not images:
+        return None
+    dicts = [im for im in images if isinstance(im, dict)]
+    if not dicts:
+        return None
+    cover = next(
+        (
+            im
+            for im in dicts
+            if im.get("isCover") is True or im.get("cover") is True
+        ),
+        None,
+    )
+    ordered = [cover] + [im for im in dicts if im is not cover] if cover else dicts
+    for im in ordered:
+        url = _pick_variant_url(im.get("variants"))
+        if url:
+            return url
+        for key in ("url", "imageSource", "imageUrl", "src"):
+            raw = im.get(key)
+            if raw:
+                return str(raw)
+    return None
+
+
+def _duration_hours_from(raw: Any) -> Optional[float]:
+    if not isinstance(raw, dict):
+        return None
+    fixed = raw.get("fixedDurationInMinutes")
+    if fixed is not None:
+        try:
+            return round(float(fixed) / 60.0, 2)
+        except (TypeError, ValueError):
+            pass
+    unre = raw.get("unstructuredDuration")
+    if isinstance(unre, str) and unre.strip():
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*h", unre, re.I)
+        if m:
+            try:
+                return float(m.group(1).replace(",", "."))
+            except ValueError:
+                pass
+    return None
+
+
+def _plain_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        for key in (
+            "description",
+            "text",
+            "plainText",
+            "otherDescription",
+            "name",
+            "translated",
+        ):
+            if value.get(key):
+                return _plain_text(value.get(key))
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    s = re.sub(r"</?(?:p|div|br|li|ul|ol|h[1-6]|tr|section|article)[^>]*>", "\n", s, flags=re.I)
+    s = re.sub(r"<[^>]+>", "", s)
+    s = (
+        s.replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
+    )
+    s = re.sub(r"[ \t\f\v]+", " ", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    lines = [ln.strip() for ln in s.split("\n") if ln.strip()]
+    out = "\n".join(lines).strip()
+    return out or None
+
+
+def _string_list(raw: Any, *, limit: int = 12) -> List[str]:
+    out: List[str] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        text = _plain_text(item)
+        if text and text not in out:
+            out.append(text)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _collect_product_photos(images: Any, *, limit: int = 12) -> List[Dict[str, str]]:
+    if not isinstance(images, list) or not images:
+        return []
+    dicts = [im for im in images if isinstance(im, dict)]
+    cover = next(
+        (im for im in dicts if im.get("isCover") is True or im.get("cover") is True),
+        None,
+    )
+    ordered = ([cover] + [im for im in dicts if im is not cover]) if cover else dicts
+    photos: List[Dict[str, str]] = []
+    seen: set[str] = set()
+    for im in ordered:
+        url = _pick_variant_url(im.get("variants"))
+        if not url:
+            for key in ("url", "imageSource", "imageUrl", "src"):
+                raw = im.get(key)
+                if raw:
+                    url = str(raw)
+                    break
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        thumb = None
+        variants = im.get("variants") if isinstance(im.get("variants"), list) else []
+        thumbs: List[Tuple[int, str]] = []
+        for v in variants:
+            if not isinstance(v, dict) or not v.get("url"):
+                continue
+            w = _variant_width(v)
+            if 0 < w <= 320:
+                thumbs.append((w, str(v["url"])))
+        if thumbs:
+            thumbs.sort(key=lambda t: abs(t[0] - 200))
+            thumb = thumbs[0][1]
+        photos.append({"url": url, "thumb": thumb or url})
+        if len(photos) >= limit:
+            break
+    return photos
+
+
+def _meeting_point_from(p: Dict[str, Any]) -> Optional[str]:
+    logistics = p.get("logistics") if isinstance(p.get("logistics"), dict) else {}
+    for key in ("start", "travelerPickup", "redemption"):
+        block = logistics.get(key)
+        items = block if isinstance(block, list) else [block] if isinstance(block, dict) else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            loc = item.get("location")
+            for sub in (
+                item.get("description"),
+                loc.get("name") if isinstance(loc, dict) else None,
+                loc,
+            ):
+                text = _plain_text(sub)
+                if text:
+                    return text
+    itinerary = p.get("itinerary") if isinstance(p.get("itinerary"), dict) else {}
+    points = itinerary.get("pointsOfInterest") or itinerary.get("itineraryItems")
+    if isinstance(points, list) and points:
+        first = points[0]
+        if isinstance(first, dict):
+            text = _plain_text(
+                first.get("description")
+                or first.get("pointOfInterestLocation")
+                or first.get("name")
+            )
+            if text:
+                return text
+    return None
+
+
+def _languages_from(p: Dict[str, Any]) -> List[str]:
+    out: List[str] = []
+    guides = p.get("languageGuides") or p.get("languages")
+    if not isinstance(guides, list):
+        return out
+    for g in guides:
+        if isinstance(g, str) and g.strip():
+            out.append(g.strip())
+        elif isinstance(g, dict):
+            lang = g.get("language") or g.get("code") or g.get("name")
+            if lang and str(lang).strip() not in out:
+                out.append(str(lang).strip())
+        if len(out) >= 8:
+            break
+    return out
+
+
 def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -> Dict[str, Any]:
     reviews = p.get("reviews") if isinstance(p.get("reviews"), dict) else {}
     pricing = p.get("pricing") if isinstance(p.get("pricing"), dict) else {}
@@ -90,22 +326,12 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
     elif pricing.get("fromPrice") is not None:
         from_price = pricing.get("fromPrice")
     currency = str(pricing.get("currency") or summary.get("currency") or "EUR")
-    images = p.get("images") or []
-    photo = None
-    if isinstance(images, list) and images:
-        im0 = images[0]
-        if isinstance(im0, dict):
-            variants = im0.get("variants") or []
-            if variants and isinstance(variants[0], dict):
-                photo = variants[0].get("url")
-            photo = photo or im0.get("url") or im0.get("imageSource")
+    photo = _pick_product_photo_url(p.get("images"))
     flags = p.get("flags") if isinstance(p.get("flags"), dict) else {}
-    dur = None
-    duration = p.get("duration")
-    if isinstance(duration, dict):
-        fixed = duration.get("fixedDurationInMinutes")
-        if fixed:
-            dur = round(float(fixed) / 60.0, 2)
+    dur = _duration_hours_from(p.get("duration"))
+    if dur is None:
+        itin = p.get("itinerary") if isinstance(p.get("itinerary"), dict) else {}
+        dur = _duration_hours_from(itin.get("duration"))
     tags = _extract_tag_ids(p.get("tags"))
     return {
         "product_code": p.get("productCode") or p.get("code"),
@@ -132,6 +358,39 @@ def _normalize_product(p: Dict[str, Any], *, dest_label: Optional[str] = None) -
     }
 
 
+def _normalize_product_detail(
+    p: Dict[str, Any], *, dest_label: Optional[str] = None
+) -> Dict[str, Any]:
+    """Richer product payload for lightbox / fiche activité."""
+    base = _normalize_product(p, dest_label=dest_label)
+    photos = _collect_product_photos(p.get("images"))
+    if not photos and base.get("photo_url"):
+        photos = [{"url": str(base["photo_url"]), "thumb": str(base["photo_url"])}]
+    if photos and not base.get("photo_url"):
+        base["photo_url"] = photos[0]["url"]
+
+    description = (
+        _plain_text(p.get("description"))
+        or _plain_text(p.get("descriptionTranslated"))
+        or _plain_text(p.get("shortDescription"))
+        or _plain_text(p.get("overview"))
+    )
+    inclusions = _string_list(p.get("inclusions"))
+    exclusions = _string_list(p.get("exclusions"))
+    additional = _string_list(p.get("additionalInfo"), limit=8)
+
+    return {
+        **base,
+        "photos": photos,
+        "description": description,
+        "inclusions": inclusions,
+        "exclusions": exclusions,
+        "additional_info": additional,
+        "meeting_point": _meeting_point_from(p),
+        "languages": _languages_from(p),
+    }
+
+
 def geo_cell_key(lat: float, lng: float, cell_km: float) -> str:
     # Integer cell indices — stable for nearby points inside the same cell
     dlat = cell_km / 111.0
@@ -142,97 +401,212 @@ def geo_cell_key(lat: float, lng: float, cell_km: float) -> str:
     return f"{ilat}:{ilng}:{cell_km}"
 
 
-# Fallback when viator_destination_map is empty (sandbox / before sync job).
-# IDs = Viator Partner destinationId for major EU cities.
+def _city_slugify(name: str) -> str:
+    s = (
+        str(name or "")
+        .strip()
+        .lower()
+        .replace("'", "")
+        .replace("’", "")
+    )
+    for a, b in (
+        ("é", "e"),
+        ("è", "e"),
+        ("ê", "e"),
+        ("à", "a"),
+        ("á", "a"),
+        ("ã", "a"),
+        ("í", "i"),
+        ("ó", "o"),
+        ("ô", "o"),
+        ("ú", "u"),
+        ("ü", "u"),
+        ("ñ", "n"),
+        ("ç", "c"),
+    ):
+        s = s.replace(a, b)
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+
+# FR ↔ EN slug aliases (Viator /destinations often returns localized names).
+CITY_SLUG_ALIASES: Dict[str, Tuple[str, ...]] = {
+    "lisbonne": ("lisbon", "lisboa"),
+    "lisbon": ("lisbonne", "lisboa"),
+    "lisboa": ("lisbonne", "lisbon"),
+    "londres": ("london",),
+    "london": ("londres",),
+    "barcelone": ("barcelona",),
+    "barcelona": ("barcelone",),
+    "rome": ("roma",),
+    "roma": ("rome",),
+    "milan": ("milano",),
+    "milano": ("milan",),
+    "venise": ("venice",),
+    "venice": ("venise",),
+    "vienne": ("vienna", "wien"),
+    "vienna": ("vienne", "wien"),
+    "wien": ("vienne", "vienna"),
+    "prague": ("praha",),
+    "praha": ("prague",),
+    "edimbourg": ("edinburgh",),
+    "edinburgh": ("edimbourg",),
+    "seville": ("sevilla",),
+    "sevilla": ("seville",),
+    "valence": ("valencia",),
+    "valencia": ("valence",),
+    "naples": ("napoli",),
+    "napoli": ("naples",),
+    "palerme": ("palermo",),
+    "palermo": ("palerme",),
+    "malte": ("malta", "la-valette", "valletta"),
+    "malta": ("malte", "la-valette", "valletta"),
+    "la-valette": ("malte", "malta", "valletta"),
+    "valletta": ("malte", "malta", "la-valette"),
+    "bruxelles": ("brussels",),
+    "brussels": ("bruxelles",),
+    "athenes": ("athens",),
+    "athens": ("athenes",),
+    "copenhague": ("copenhagen",),
+    "copenhagen": ("copenhague",),
+    "cracovie": ("krakow", "cracow"),
+    "krakow": ("cracovie", "cracow"),
+}
+
+
+# Fallback when viator_destination_map is empty / incomplete.
+# IDs = Viator Partner destinationId (CITY), verified via /destinations (fr-FR).
+# WARNING: do not confuse with US homonyms (e.g. 645 = Los Angeles, not Lisbon).
 FALLBACK_CITY_DESTINATIONS: Dict[str, str] = {
     "paris": "479",
     "rome": "511",
     "roma": "511",
     "barcelone": "562",
     "barcelona": "562",
-    "lisbonne": "645",
-    "lisbon": "645",
-    "lisboa": "645",
-    "porto": "667",
-    "milan": "223",
-    "milano": "223",
-    "amsterdam": "6",
+    "lisbonne": "538",
+    "lisbon": "538",
+    "lisboa": "538",
+    "porto": "26879",
+    "milan": "512",
+    "milano": "512",
+    "amsterdam": "525",
     "londres": "737",
     "london": "737",
-    "madrid": "657",
-    "berlin": "357",
-    "venise": "425",
-    "venice": "425",
-    "florence": "239",
-    "nice": "467",
-    "lyon": "404",
-    "dublin": "549",
-    "budapest": "372",
-    "prague": "501",
-    "praha": "501",
-    "vienne": "534",
-    "vienna": "534",
-    "wien": "534",
-    "malte": "662",
-    "malta": "662",
-    "palerme": "486",
-    "palermo": "486",
-    "seville": "701",
-    "sevilla": "701",
-    "valence": "732",
-    "valencia": "732",
-    "naples": "464",
-    "napoli": "464",
-    "edimbourg": "577",
-    "edinburgh": "577",
-    "manchester": "444",
-    "birmingham": "360",
+    "madrid": "566",
+    "berlin": "488",
+    "venise": "522",
+    "venice": "522",
+    "florence": "519",
+    "nice": "478",
+    "lyon": "829",
+    "dublin": "503",
+    "budapest": "499",
+    "prague": "462",
+    "praha": "462",
+    "vienne": "454",
+    "vienna": "454",
+    "wien": "454",
+    "malte": "4142",  # La Valette (CITY) — better than country 4141
+    "malta": "4142",
+    "la-valette": "4142",
+    "valletta": "4142",
+    "palerme": "4815",
+    "palermo": "4815",
+    "seville": "556",
+    "sevilla": "556",
+    "valence": "811",
+    "valencia": "811",
+    "naples": "508",  # Italy (22381 = Naples FL)
+    "napoli": "508",
+    "edimbourg": "739",
+    "edinburgh": "739",
+    "manchester": "4056",  # UK (23341 = Manchester NH)
+    "birmingham": "22776",  # UK (34184 = Birmingham AL)
+    "bruxelles": "458",
+    "brussels": "458",
+    "athenes": "496",
+    "athens": "496",
+    "copenhague": "463",
+    "copenhagen": "463",
+    "stockholm": "907",
+    "cracovie": "529",
+    "krakow": "529",
 }
 
 
-def _resolve_destination_id(supabase, slug: str) -> Optional[str]:
-    """Resolve Viator destinationId — map row, then FALLBACK, then name match (1 query)."""
-    key = (slug or "").strip().lower()
+def _slug_candidates(slug: str) -> List[str]:
+    key = _city_slugify(slug)
     if not key:
+        return []
+    out: List[str] = [key]
+    for alt in CITY_SLUG_ALIASES.get(key, ()):
+        a = _city_slugify(alt)
+        if a and a not in out:
+            out.append(a)
+    return out
+
+
+def _resolve_destination_id(supabase, slug: str) -> Optional[str]:
+    """Resolve Viator destinationId — FALLBACK (+ FR/EN aliases), then map row."""
+    candidates = _slug_candidates(slug)
+    if not candidates:
         return None
+
+    # 1) Trusted hardcoded catalogue first (avoids wrong DB / soft matches
+    #    e.g. historical bug lisbonne→645 Los Angeles).
+    for key in candidates:
+        hit = FALLBACK_CITY_DESTINATIONS.get(key)
+        if hit:
+            return hit
+
+    # 2) Exact city_slug in synced map (try all language aliases)
     if supabase:
+        for key in candidates:
+            try:
+                m = (
+                    supabase.table("viator_destination_map")
+                    .select("viator_destination_id,name,city_slug,meta")
+                    .eq("city_slug", key)
+                    .limit(3)
+                    .execute()
+                )
+                rows = [r for r in (m.data or []) if isinstance(r, dict)]
+                if not rows:
+                    continue
+                # Prefer CITY over COUNTRY/REGION when meta is present
+                for r in rows:
+                    meta = r.get("meta") if isinstance(r.get("meta"), dict) else {}
+                    dtype = str(meta.get("type") or "").upper()
+                    if dtype == "CITY":
+                        did = str(r.get("viator_destination_id") or "")
+                        if did:
+                            return did
+                did = str(rows[0].get("viator_destination_id") or "")
+                if did:
+                    return did
+            except Exception:
+                pass
+
+        # 3) Exact slugified name match (no broad %ilike% — too easy to hit
+        #    the wrong city, e.g. substring collisions).
         try:
+            needle = candidates[0].replace("-", " ")
             m = (
                 supabase.table("viator_destination_map")
-                .select("viator_destination_id")
-                .eq("city_slug", key)
-                .limit(1)
-                .execute()
-            )
-            if m.data:
-                return str(m.data[0].get("viator_destination_id") or "") or None
-        except Exception:
-            pass
-    hit = FALLBACK_CITY_DESTINATIONS.get(key)
-    if hit:
-        return hit
-    # Soft name match — still one DB hit, never mass product search
-    if supabase:
-        try:
-            needle = key.replace("-", " ")
-            m = (
-                supabase.table("viator_destination_map")
-                .select("viator_destination_id,city_slug,name")
+                .select("viator_destination_id,city_slug,name,meta")
                 .ilike("name", f"%{needle}%")
-                .limit(1)
+                .limit(20)
                 .execute()
             )
-            if m.data:
-                return str(m.data[0].get("viator_destination_id") or "") or None
-            m2 = (
-                supabase.table("viator_destination_map")
-                .select("viator_destination_id")
-                .ilike("city_slug", f"%{key}%")
-                .limit(1)
-                .execute()
-            )
-            if m2.data:
-                return str(m2.data[0].get("viator_destination_id") or "") or None
+            cand_set = set(candidates)
+            for r in m.data or []:
+                if not isinstance(r, dict):
+                    continue
+                name_slug = _city_slugify(str(r.get("name") or ""))
+                row_slug = _city_slugify(str(r.get("city_slug") or ""))
+                if name_slug in cand_set or row_slug in cand_set:
+                    did = str(r.get("viator_destination_id") or "")
+                    if did:
+                        return did
         except Exception:
             pass
     return None
@@ -249,21 +623,25 @@ def search_city_activities(
     cfg = cfg or load_activities_config()
     adults = max(1, min(6, int(adults or 2)))
     slug = (city_slug or "").strip().lower()
-    cache_key = f"city:{slug}:{destination_id or ''}:{adults}"
+    # destv3: corrected Viator CITY ids + FR/EN aliases (busts lisbonne→LA cache)
+    cache_key = f"city:{slug}:{destination_id or ''}:{adults}:destv3"
+    dest = destination_id or _resolve_destination_id(supabase, slug)
     cached = cache_get(
         supabase, provider="viator", resource="city_search", cache_key=cache_key
     )
     if isinstance(cached, dict) and cached.get("items"):
-        items = exclude_gastronomy(
-            [it for it in (cached.get("items") or []) if isinstance(it, dict)]
-        )
-        return {**cached, "items": items, "cached": True}
+        cached_dest = str(cached.get("destination_id") or "")
+        # Serve cache only when destinationId matches (guards lisbonne→LA style bugs).
+        if dest and cached_dest and cached_dest == str(dest):
+            items = exclude_gastronomy(
+                [it for it in (cached.get("items") or []) if isinstance(it, dict)]
+            )
+            return {**cached, "items": items, "cached": True}
 
     client = ViatorClient(cfg)
     if not client.enabled:
         return {"ok": False, "error": "viator_disabled", "items": []}
 
-    dest = destination_id or _resolve_destination_id(supabase, slug)
     if not dest:
         return {
             "ok": False,
@@ -333,7 +711,7 @@ def nearby_activities(
     rlat = round(float(lat), 2)
     rlng = round(float(lng), 2)
     cell = geo_cell_key(rlat, rlng, cfg.geo_cache_cell_km)
-    cache_key = f"geo:{cell}:{adults}"
+    cache_key = f"geo:{cell}:{adults}:destv3"
     cached = cache_get(
         supabase, provider="viator", resource="geo_search", cache_key=cache_key
     )
@@ -503,15 +881,7 @@ def sync_destinations_map(supabase, cfg: Optional[ActivitiesConfig] = None) -> D
         lat = d.get("latitude") or (center.get("latitude") if isinstance(center, dict) else None)
         lng = d.get("longitude") or (center.get("longitude") if isinstance(center, dict) else None)
         name = d.get("name") or d.get("destinationName") or str(dest_id)
-        slug = (
-            str(name)
-            .lower()
-            .replace(" ", "-")
-            .replace("'", "")
-            .replace("é", "e")
-            .replace("è", "e")
-            .replace("à", "a")
-        )[:80]
+        slug = _city_slugify(str(name))[:80]
         row = {
             "viator_destination_id": str(dest_id),
             "name": name,

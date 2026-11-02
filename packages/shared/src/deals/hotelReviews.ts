@@ -7,6 +7,13 @@ export function scoreToHalfStars5(scoreOutOf10?: number | null): number | null {
   return Math.round((n / 10) * 5 * 2) / 2
 }
 
+/** Note déjà sur /5 (Viator, etc.) → paliers demi-étoile. */
+export function ratingToHalfStars5(ratingOutOf5?: number | null): number | null {
+  if (ratingOutOf5 == null || Number.isNaN(Number(ratingOutOf5))) return null
+  const n = Math.min(5, Math.max(0, Number(ratingOutOf5)))
+  return Math.round(n * 2) / 2
+}
+
 /** Prefer FR-flagged reviews (LiteAPI may mix locales even with language=fr). */
 export function preferFrenchReviews(list: HotelGuestReview[]): HotelGuestReview[] {
   return [...list].sort((a, b) => {

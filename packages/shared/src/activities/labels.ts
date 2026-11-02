@@ -1,6 +1,6 @@
 /** French labels for trip items / availability — shared web + Expo. */
 
-import { PREFERRED_CITY_NAMES } from '../cities'
+import { cityDisplayNameFr, PREFERRED_CITY_NAMES } from '../cities'
 
 export type TripItemStatus = 'idea' | 'validated' | 'booked' | 'skipped'
 export type AvailabilityState = 'ok' | 'needs_check' | 'unavailable'
@@ -28,6 +28,36 @@ export function activityCitySlugFromLabel(label: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+}
+
+/**
+ * Resolve catalogue city slug from trip draft / planner destination.
+ * Prefers city_slug, then city label, then dest IATA → FR city name.
+ */
+export function resolveActivityCitySlug(opts: {
+  citySlug?: string | null
+  cityLabel?: string | null
+  destIata?: string | null
+}): string {
+  const rawSlug = String(opts.citySlug || '').trim()
+  if (rawSlug && rawSlug !== '—' && !/^[A-Za-z]{3}$/.test(rawSlug)) {
+    const s = activityCitySlugFromLabel(rawSlug)
+    if (s) return s
+  }
+  const label = String(opts.cityLabel || '').trim()
+  if (label && label !== '—') {
+    const s = activityCitySlugFromLabel(label)
+    if (s) return s
+  }
+  const iata = String(opts.destIata || rawSlug || '')
+    .trim()
+    .toUpperCase()
+  if (/^[A-Z]{3}$/.test(iata)) {
+    const city = cityDisplayNameFr(iata)
+    const s = activityCitySlugFromLabel(city || iata)
+    if (s) return s
+  }
+  return 'paris'
 }
 
 /**

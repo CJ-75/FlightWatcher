@@ -1,16 +1,20 @@
 import React from 'react'
 import { Text, StyleSheet } from 'react-native'
-import { scoreToHalfStars5 } from '@flightwatcher/shared'
+import { ratingToHalfStars5, scoreToHalfStars5 } from '@flightwatcher/shared'
 import { fonts } from '../theme'
 
 type Props = {
+  /** Note /10 (avis hôtel). */
   score?: number | null
+  /** Note déjà sur /5 (activités). */
+  rating?: number | null
   size?: number
 }
 
-/** Guest-review score (/10) as proportional ★ /5 on a single line (½ = ★ plus claire). */
-export function ReviewStars({ score, size = 14 }: Props) {
-  const stars = scoreToHalfStars5(score)
+/** Étoiles /5 sur une ligne (½ = ★ plus claire). Accepte note /10 ou /5. */
+export function ReviewStars({ score, rating, size = 14 }: Props) {
+  const stars =
+    rating != null ? ratingToHalfStars5(rating) : scoreToHalfStars5(score)
   if (stars == null) return null
   const full = Math.floor(stars)
   const half = stars - full >= 0.5

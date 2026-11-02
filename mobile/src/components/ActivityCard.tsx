@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import type { ActivityCardModel } from '@flightwatcher/shared'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 import { HeartIcon } from './HeartIcon'
+import { ReviewStars } from './ReviewStars'
 
 type Props = {
   card: ActivityCardModel
@@ -37,15 +38,11 @@ export function ActivityCard({
   liked,
   onToggleLike,
 }: Props) {
-  const meta = [
-    card.rating != null
-      ? `${card.rating.toFixed(1)}${card.reviewCount != null ? ` · ${card.reviewCount} avis` : ''}`
-      : null,
-    card.durationLabel,
-    card.distanceLabel,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const chips = [card.durationLabel, card.distanceLabel].filter(Boolean).join(' · ')
+  const reviewLabel =
+    card.reviewCount != null && card.reviewCount > 0
+      ? `${card.reviewCount.toLocaleString('fr-FR')} avis`
+      : null
 
   return (
     <View style={[styles.card, shadow.soft]}>
@@ -101,10 +98,24 @@ export function ActivityCard({
       </Pressable>
 
       <Pressable onPress={onPress} style={styles.body}>
-        {meta ? (
-          <Text style={styles.meta} numberOfLines={2}>
-            {meta}
-          </Text>
+        {card.rating != null || chips ? (
+          <View style={styles.metaBlock}>
+            {card.rating != null ? (
+              <View style={styles.ratingRow}>
+                <ReviewStars rating={card.rating} size={13} />
+                {reviewLabel ? (
+                  <Text style={styles.reviewText} numberOfLines={1}>
+                    {reviewLabel}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {chips ? (
+              <Text style={styles.meta} numberOfLines={1}>
+                {chips}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
         <View style={styles.priceRow}>
           <View style={{ flex: 1 }}>
@@ -169,32 +180,32 @@ const styles = StyleSheet.create({
   fallbackText: {
     fontFamily: fonts.bold,
     color: colors.white,
-    fontSize: 18,
+    fontSize: 15,
     textAlign: 'center',
     paddingHorizontal: 24,
   },
   badge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
+    top: 10,
+    left: 10,
     backgroundColor: colors.success,
     borderRadius: radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   badgeInk: { backgroundColor: colors.ink },
   badgeText: {
     color: colors.white,
     fontFamily: fonts.bold,
-    fontSize: 11,
+    fontSize: 10,
   },
   likeBtn: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    top: 8,
+    right: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -202,72 +213,88 @@ const styles = StyleSheet.create({
   },
   heroBottom: {
     position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 14,
+    left: 12,
+    right: 12,
+    bottom: 12,
   },
   heroTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 18,
-    letterSpacing: -0.4,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    letterSpacing: -0.3,
     color: colors.white,
     textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   body: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    gap: 10,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: 8,
+  },
+  metaBlock: {
+    gap: 4,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 16,
+  },
+  reviewText: {
+    flexShrink: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 16,
   },
   meta: {
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 12,
+    gap: 10,
   },
-  ctaCol: { gap: 8, alignItems: 'stretch' },
+  ctaCol: { gap: 6, alignItems: 'stretch' },
   priceLabel: {
     fontFamily: fonts.bold,
-    fontSize: 10,
-    letterSpacing: 0.6,
+    fontSize: 9,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: colors.muted,
     marginBottom: 2,
   },
   price: {
     fontFamily: fonts.extrabold,
-    fontSize: 26,
-    letterSpacing: -0.8,
+    fontSize: 18,
+    letterSpacing: -0.5,
     color: colors.primary,
     includeFontPadding: false,
   },
   cta: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 40,
     justifyContent: 'center',
   },
   ctaText: {
     color: colors.white,
     fontFamily: fonts.bold,
-    fontSize: 14,
+    fontSize: 13,
   },
   ctaSecondary: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.white,
@@ -275,6 +302,6 @@ const styles = StyleSheet.create({
   ctaSecondaryText: {
     color: colors.ink,
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: 12,
   },
 })

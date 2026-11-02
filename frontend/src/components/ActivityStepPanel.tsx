@@ -1,7 +1,7 @@
 /**
  * Planner / MyTrip étape Activités — DnD ordre + Viator return prompt (Lot E).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ACTIVITY_ADD_LABEL_FR,
@@ -13,6 +13,7 @@ import {
   AVAILABILITY_STATE_LABEL_FR,
   activitiesCityPath,
   detectEventPlatform,
+  pickTripItemOwner,
   reorderKeysMoving,
   tripItemStatusLabelFr,
   type AvailabilityState,
@@ -40,6 +41,14 @@ export function ActivityStepPanel(props: {
   surface?: string
 }) {
   const { draftToken, plannedTripId, enabled = true, surface = 'my_trip' } = props
+  const owner = useMemo(
+    () =>
+      pickTripItemOwner({
+        draftToken,
+        plannedTripId,
+      }),
+    [draftToken, plannedTripId],
+  )
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,21 +59,18 @@ export function ActivityStepPanel(props: {
   const [suggestions, setSuggestions] = useState<Record<string, unknown>[]>([])
 
   const load = useCallback(async () => {
-    if (!draftToken && !plannedTripId) return
+    if (!owner.draft_token && !owner.planned_trip_id) return
     setLoading(true)
     setError(null)
     try {
-      const res = await getApiClient().listTripItems({
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-      })
+      const res = await getApiClient().listTripItems(owner)
       setItems((res.items || []) as ItemRow[])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
       setLoading(false)
     }
-  }, [draftToken, plannedTripId])
+  }, [owner])
 
   useEffect(() => {
     if (enabled) void load()
@@ -85,8 +91,7 @@ export function ActivityStepPanel(props: {
         event,
         surface,
         platform: detectEventPlatform('web'),
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
+        ...owner,
         meta,
       })
       .catch(() => undefined)
@@ -109,8 +114,7 @@ export function ActivityStepPanel(props: {
         product_code: raw.product_code,
         title: raw.title,
         product_url: raw.product_url,
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
+        ...owner,
         platform: 'web',
         surface,
       })
@@ -125,7 +129,7 @@ export function ActivityStepPanel(props: {
   const patch = async (id: string, body: Record<string, unknown>) => {
     await getApiClient().patchTripItem(id, {
       ...body,
-      draft_token: draftToken || undefined,
+      draft_token: owner.draft_token,
     })
     await load()
   }
@@ -140,15 +144,11 @@ export function ActivityStepPanel(props: {
         await getApiClient().addTripItem({
           product_code: `skip-${Date.now()}`,
           title: ACTIVITY_SKIP_LABEL_FR,
-          draft_token: draftToken || undefined,
-          planned_trip_id: plannedTripId || undefined,
+          ...owner,
           platform: 'web',
           surface,
         })
-        const res = await getApiClient().listTripItems({
-          draft_token: draftToken || undefined,
-          planned_trip_id: plannedTripId || undefined,
-        })
+        const res = await getApiClient().listTripItems(owner)
         const last = (res.items || []).slice(-1)[0] as ItemRow | undefined
         if (last?.id) await patch(last.id, { status: 'skipped' })
       } catch (e) {
@@ -185,10 +185,7 @@ export function ActivityStepPanel(props: {
     const keys = reorderKeysMoving(ids, from, to)
     setDragId(null)
     try {
-      await getApiClient().reorderTripItems(keys, {
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-      })
+      await getApiClient().reorderTripItems(keys, owner)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Réordonnancement impossible')

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   ACTIVITY_BROWSE_CATALOG_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
+  pickTripItemOwner,
   reorderKeysMoving,
   tripItemStatusLabelFr,
 } from '@flightwatcher/shared'
@@ -47,6 +48,14 @@ export function ActivityStepPanel(props: {
 }) {
   const { draftToken, plannedTripId, enabled = true, surface = 'my_trip' } = props
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const owner = useMemo(
+    () =>
+      pickTripItemOwner({
+        draftToken,
+        plannedTripId,
+      }),
+    [draftToken, plannedTripId],
+  )
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,20 +68,17 @@ export function ActivityStepPanel(props: {
   const platform = Platform.OS === 'ios' ? 'ios' : 'android'
 
   const load = useCallback(async () => {
-    if (!draftToken && !plannedTripId) return
+    if (!owner.draft_token && !owner.planned_trip_id) return
     setLoading(true)
     try {
-      const res = await getApi().listTripItems({
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
-      })
+      const res = await getApi().listTripItems(owner)
       setItems((res.items || []) as ItemRow[])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
       setLoading(false)
     }
-  }, [draftToken, plannedTripId])
+  }, [owner])
 
   useEffect(() => {
     if (enabled) void load()
@@ -97,8 +103,7 @@ export function ActivityStepPanel(props: {
         event,
         surface,
         platform,
-        draft_token: draftToken || undefined,
-        planned_trip_id: plannedTripId || undefined,
+        ...owner,
         meta,
       })
       .catch(() => undefined)
@@ -107,7 +112,7 @@ export function ActivityStepPanel(props: {
   const patch = async (id: string, body: Record<string, unknown>) => {
     await getApi().patchTripItem(id, {
       ...body,
-      draft_token: draftToken || undefined,
+      draft_token: owner.draft_token,
     })
     await load()
   }
@@ -118,10 +123,7 @@ export function ActivityStepPanel(props: {
       from,
       to,
     )
-    await getApi().reorderTripItems(keys, {
-      draft_token: draftToken || undefined,
-      planned_trip_id: plannedTripId || undefined,
-    })
+    await getApi().reorderTripItems(keys, owner)
     await load()
   }
 
@@ -176,15 +178,11 @@ export function ActivityStepPanel(props: {
               await getApi().addTripItem({
                 product_code: `skip-${Date.now()}`,
                 title: ACTIVITY_SKIP_LABEL_FR,
-                draft_token: draftToken || undefined,
-                planned_trip_id: plannedTripId || undefined,
+                ...owner,
                 platform,
                 surface,
               })
-              const res = await getApi().listTripItems({
-                draft_token: draftToken || undefined,
-                planned_trip_id: plannedTripId || undefined,
-              })
+              const res = await getApi().listTripItems(owner)
               const last = (res.items || []).slice(-1)[0] as ItemRow | undefined
               if (last?.id) await patch(last.id, { status: 'skipped' })
             } catch (e) {
@@ -251,8 +249,7 @@ export function ActivityStepPanel(props: {
                       product_code: s.product_code,
                       title: s.title,
                       product_url: s.product_url,
-                      draft_token: draftToken || undefined,
-                      planned_trip_id: plannedTripId || undefined,
+                      ...owner,
                       platform,
                       surface,
                     })

@@ -7,20 +7,20 @@ import { motion } from 'framer-motion'
 import {
   ACTIVITY_ADDED_TO_PLANNER_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
-  ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CITY_OPTIONS_FR,
   ACTIVITY_KEEP_ADDING_FR,
   ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
   ACTIVITY_SEE_PLANNER_FR,
-  ACTIVITY_SESSION_ADDED_FR,
   ACTIVITY_SORT_LABEL_FR,
   activitiesCityPath,
   activityCategoriesSummaryFr,
-  activityCitySlugFromLabel,
+  resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
+  hasTripItemOwner,
+  pickTripItemOwner,
   savedIdeasTitleFr,
   toActivityCardModel,
   toggleActivityCategory,
@@ -30,7 +30,9 @@ import { getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { listRememberedTrips, rememberTrip } from '../utils/tripRecovery'
 import { ActivityCitySelect } from './ActivityCitySelect'
+import { ActivityDetailSheet } from './ActivityDetailSheet'
 import { ActivityTripHero } from './ActivityTripHero'
+import { RatingStars } from './RatingStars'
 
 const springConfig = {
   type: 'spring' as const,
@@ -70,6 +72,7 @@ function ActivityCard({
   onToggleLike,
   addLabel = ACTIVITY_ADD_TO_PLANNER_FR,
   addDisabled = false,
+  hideAdd = false,
 }: {
   card: ActivityCardModel
   onOpen: () => void
@@ -79,14 +82,15 @@ function ActivityCard({
   onToggleLike?: () => void
   addLabel?: string
   addDisabled?: boolean
+  hideAdd?: boolean
 }) {
-  const meta = [
-    card.rating != null
-      ? `${card.rating.toFixed(1)} · ${card.reviewCount || 0} avis`
-      : null,
-    card.durationLabel,
-    card.distanceLabel,
-  ].filter(Boolean) as string[]
+  const chips = [card.durationLabel, card.distanceLabel].filter(
+    Boolean,
+  ) as string[]
+  const reviewLabel =
+    card.reviewCount != null && card.reviewCount > 0
+      ? `${card.reviewCount.toLocaleString('fr-FR')} avis`
+      : null
 
   return (
     <motion.article
@@ -142,16 +146,16 @@ function ActivityCard({
             <ActivityHeartSvg filled={!!liked} />
           </span>
         ) : null}
-        <div className="absolute inset-x-0 bottom-0 z-[2] p-3 sm:p-3.5 space-y-1.5">
-          <h3 className="font-extrabold text-white text-[15px] sm:text-base leading-snug line-clamp-2 drop-shadow-sm">
+        <div className="absolute inset-x-0 bottom-0 z-[2] p-2.5 sm:p-3 space-y-1">
+          <h3 className="font-bold text-white text-[13px] sm:text-sm leading-snug line-clamp-2 drop-shadow-sm">
             {card.title}
           </h3>
-          {meta.length ? (
+          {chips.length ? (
             <div className="flex flex-wrap gap-1">
-              {meta.map((label) => (
+              {chips.map((label) => (
                 <span
                   key={label}
-                  className="inline-flex items-center rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-white/90 backdrop-blur-sm"
+                  className="inline-flex items-center rounded-md bg-white/15 px-1.5 py-0.5 text-[9px] font-semibold text-white/90 backdrop-blur-sm"
                 >
                   {label}
                 </span>
@@ -161,28 +165,40 @@ function ActivityCard({
         </div>
       </button>
 
-      <div className="flex items-center justify-between gap-2.5 px-3 py-2.5 sm:px-3.5 sm:py-3 bg-white/70 border-t border-line/60">
+      <div className="flex items-center justify-between gap-2 px-2.5 py-2 sm:px-3 sm:py-2.5 bg-white/70 border-t border-line/60">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted leading-none mb-0.5">
+          {card.rating != null ? (
+            <div className="flex items-center gap-1.5 mb-1 min-w-0">
+              <RatingStars rating={card.rating} size={12} />
+              {reviewLabel ? (
+                <span className="text-[10px] font-semibold text-muted truncate leading-none">
+                  {reviewLabel}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          <p className="text-[9px] font-bold uppercase tracking-wider text-muted leading-none mb-0.5">
             À partir de
           </p>
-          <p className="text-xl font-black text-primary-500 tabular-nums leading-none truncate">
+          <p className="text-base font-extrabold text-primary-500 tabular-nums leading-none truncate">
             {card.priceLabel || 'Voir'}
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={onAdd}
-            disabled={addDisabled}
-            className="rounded-lg border border-line text-ink text-[11px] font-bold px-2.5 py-2 min-h-[40px] hover:border-primary-200 hover:bg-primary-50/60 disabled:opacity-50"
-          >
-            {addLabel}
-          </button>
+          {!hideAdd ? (
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={addDisabled}
+              className="rounded-lg border border-line text-ink text-[10px] font-bold px-2 py-1.5 min-h-[36px] hover:border-primary-200 hover:bg-primary-50/60 disabled:opacity-50"
+            >
+              {addLabel}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onBook}
-            className="rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-[13px] font-bold px-3 py-2 min-h-[40px]"
+            className="rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold px-2.5 py-1.5 min-h-[36px]"
           >
             Réserver
           </button>
@@ -220,7 +236,6 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     label: string
   } | null>(null)
   const [plannerCount, setPlannerCount] = useState(0)
-  const [sessionAdded, setSessionAdded] = useState(0)
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
@@ -310,6 +325,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   }, [citySlug, loadCity])
 
   useEffect(() => {
+    let cancelled = false
+    didAutoCity.current = false
     const remembered = listRememberedTrips()
     const fromUrl = draftFromUrl
       ? remembered.find((t) => t.draft_token === draftFromUrl) || {
@@ -319,78 +336,123 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         }
       : null
     const latest = fromUrl || remembered[0]
-    let tripSlug = ''
-    let tripLabel = ''
 
-    if (plannedFromUrl && !draftFromUrl) {
-      const raw = (citySlug || 'paris').trim().toLowerCase()
-      tripSlug = activityCitySlugFromLabel(raw) || raw || 'paris'
-      tripLabel = activityDestinationLabelFr(tripSlug)
+    const applyTripCity = (
+      tripSlug: string,
+      tripLabel: string,
+      opts: { draftToken?: string; plannedTripId?: string },
+    ) => {
+      if (cancelled) return
       setActiveTrip({
-        plannedTripId: plannedFromUrl,
+        draftToken: opts.draftToken,
+        plannedTripId: opts.plannedTripId,
         slug: tripSlug,
         label: tripLabel,
       })
-      didAutoCity.current = true
-    } else if (latest?.draft_token) {
-      const raw = String(latest.city || citySlug || '')
-        .trim()
-        .toLowerCase()
-      const known = raw
-        ? ACTIVITY_CITY_OPTIONS_FR.find(
-            (c) => c.slug === raw || c.label.toLowerCase() === raw,
-          )
-        : null
-      tripSlug = known?.slug || (raw ? activityCitySlugFromLabel(raw) : '') || 'paris'
-      tripLabel = String(known?.label || latest.city || tripSlug)
-      setActiveTrip({
-        draftToken: latest.draft_token,
-        slug: tripSlug,
-        label: tripLabel,
-      })
-      if (draftFromUrl || fromUrl) {
-        rememberTrip({
-          draft_token: latest.draft_token,
-          city: latest.city || tripLabel,
-        })
-      }
+      // Force the Ville filter onto the trip destination city.
       if (
-        !didAutoCity.current &&
         tripSlug &&
-        (!citySlug || citySlug === 'paris') &&
-        tripSlug !== 'paris'
+        (opts.draftToken || opts.plannedTripId) &&
+        tripSlug !== citySlug
       ) {
-        didAutoCity.current = true
-        navigate(
-          activitiesCityPath(tripSlug, {
-            draftToken: latest.draft_token,
-            plannedTripId: plannedFromUrl || undefined,
-          }),
-          { replace: true },
-        )
+        if (!didAutoCity.current) {
+          didAutoCity.current = true
+          navigate(
+            activitiesCityPath(tripSlug, {
+              draftToken: opts.draftToken,
+              plannedTripId: opts.plannedTripId,
+            }),
+            { replace: true },
+          )
+        }
       } else {
         didAutoCity.current = true
       }
-    } else {
-      setActiveTrip(null)
-      didAutoCity.current = true
     }
 
-    const bindToken = latest?.draft_token
-    if (!bindToken && !plannedFromUrl) {
-      setSavedIdeas([])
-      setPlannerCount(0)
-      return
-    }
-    let cancelled = false
     void (async () => {
+      let linkedPlanned = plannedFromUrl || undefined
+      if (plannedFromUrl && !draftFromUrl) {
+        const tripSlug = resolveActivityCitySlug({
+          citySlug: citySlug || null,
+          cityLabel: citySlug || null,
+        })
+        applyTripCity(tripSlug, activityDestinationLabelFr(tripSlug), {
+          plannedTripId: plannedFromUrl,
+        })
+      } else if (latest?.draft_token) {
+        let cityLabel = String(latest.city || '').trim() || null
+        let citySlugHint: string | null = null
+        let destIata: string | null = null
+
+        if (draftFromUrl || latest.draft_token) {
+          try {
+            const row = await getApiClient().getMyTrip(latest.draft_token)
+            if (cancelled) return
+            const pl = (row.payload || {}) as Record<string, unknown>
+            const fl = (pl.flight || {}) as Record<string, unknown>
+            cityLabel =
+              String(row.city_name || pl.city || cityLabel || '').trim() || null
+            citySlugHint =
+              typeof pl.city_slug === 'string' ? pl.city_slug : null
+            destIata = String(
+              fl.destination_iata ||
+                pl.destination ||
+                pl.dest_iata ||
+                row.dest_iata ||
+                '',
+            ).trim() || null
+            linkedPlanned =
+              linkedPlanned ||
+              (row.source_planned_trip_id
+                ? String(row.source_planned_trip_id)
+                : undefined)
+          } catch {
+            /* keep remembered city */
+          }
+        }
+
+        const tripSlug = resolveActivityCitySlug({
+          citySlug: citySlugHint || cityLabel,
+          cityLabel,
+          destIata,
+        })
+        const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === tripSlug)
+        const tripLabel = String(known?.label || cityLabel || activityDestinationLabelFr(tripSlug))
+        if (draftFromUrl || fromUrl) {
+          rememberTrip({
+            draft_token: latest.draft_token,
+            city: tripSlug,
+          })
+        }
+        applyTripCity(tripSlug, tripLabel, {
+          draftToken: latest.draft_token,
+          plannedTripId: linkedPlanned,
+        })
+      } else {
+        if (!cancelled) {
+          setActiveTrip(null)
+          didAutoCity.current = true
+        }
+      }
+
+      const bindToken = latest?.draft_token
+      if (!bindToken && !linkedPlanned) {
+        if (!cancelled) {
+          setSavedIdeas([])
+          setPlannerCount(0)
+        }
+        return
+      }
       const out: { city: string; title: string; productCode?: string }[] = []
       let count = 0
       try {
-        const res = await getApiClient().listTripItems({
-          draft_token: bindToken || undefined,
-          planned_trip_id: plannedFromUrl || undefined,
-        })
+        const res = await getApiClient().listTripItems(
+          pickTripItemOwner({
+            draftToken: bindToken,
+            plannedTripId: linkedPlanned,
+          }),
+        )
         for (const raw of res.items || []) {
           const it = raw as {
             item_type?: string
@@ -403,7 +465,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           count += 1
           if (it.status === 'booked') continue
           out.push({
-            city: latest?.city || tripLabel || 'voyage',
+            city: latest?.city || citySlug || 'voyage',
             title: String(it.places?.name || it.meta?.title || 'Activité'),
             productCode: it.meta?.product_code
               ? String(it.meta.product_code)
@@ -458,10 +520,10 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     openViatorSync(card.productUrl)
   }
 
-  const plannerHref = activeTrip?.draftToken
-    ? `/trip/${encodeURIComponent(activeTrip.draftToken)}?activities=1`
-    : activeTrip?.plannedTripId
-      ? '/planner'
+  const plannerHref = activeTrip?.plannedTripId
+    ? `/planner/${encodeURIComponent(activeTrip.plannedTripId)}`
+    : activeTrip?.draftToken
+      ? `/trip/${encodeURIComponent(activeTrip.draftToken)}?activities=1`
       : null
 
   const toggleLike = async (card: ActivityCardModel) => {
@@ -500,7 +562,11 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
 
   const onAddToPlanner = async (card: ActivityCardModel) => {
     setAddNotice(null)
-    if (!activeTrip?.draftToken && !activeTrip?.plannedTripId) {
+    const owner = pickTripItemOwner({
+      draftToken: activeTrip?.draftToken,
+      plannedTripId: activeTrip?.plannedTripId,
+    })
+    if (!hasTripItemOwner(owner)) {
       setAddNotice(
         'Ouvre ton séjour (planner) puis « Parcourir le catalogue » pour lier les ajouts.',
       )
@@ -518,14 +584,12 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
-        draft_token: activeTrip.draftToken || undefined,
-        planned_trip_id: activeTrip.plannedTripId || undefined,
+        ...owner,
         platform: 'web',
         surface: 'tab',
       })
       track('add', card)
       setPlannerCount((n) => n + 1)
-      setSessionAdded((n) => n + 1)
       if (card.productCode) {
         setAddedCodes((prev) => new Set(prev).add(card.productCode))
       }
@@ -542,9 +606,9 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
 
   return (
     <div className="w-full">
-      <div className="mb-5 sm:mb-6">
-        <p className="app-kicker mb-1.5">Activités</p>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+      <div className="mb-4 sm:mb-5">
+        <p className="app-kicker mb-1">Activités</p>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
           Que faire sur place
         </h2>
       </div>
@@ -564,8 +628,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         <ActivityTripHero mode="empty" emptyHref="/sejours" />
       )}
 
-      <div className="mb-4 sm:mb-5 space-y-2">
-        <label className="text-sm font-bold text-ink">Ville</label>
+      <div className="mb-3 sm:mb-4 space-y-1.5">
+        <label className="text-xs font-bold text-ink">Ville</label>
         <ActivityCitySelect
           valueSlug={citySlug}
           valueLabel={activityDestinationLabelFr(citySlug)}
@@ -576,7 +640,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       </div>
 
       {addNotice ? (
-        <div className="mb-4 rounded-xl border border-primary-200 bg-primary-50 px-3.5 py-2.5 text-sm text-primary-800 font-medium flex flex-wrap items-center gap-2 justify-between">
+        <div className="mb-3 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-800 font-medium flex flex-wrap items-center gap-2 justify-between">
           <span>{addNotice}</span>
           <span className="flex gap-3">
             {plannerHref && addNotice.startsWith('Ajouté') ? (
@@ -593,7 +657,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         </div>
       ) : null}
 
-      <div className="mb-5 sm:mb-6 flex flex-wrap items-center gap-2">
+      <div className="mb-4 sm:mb-5 flex flex-wrap items-center gap-1.5">
         {ACTIVITY_CATEGORY_TAGS_FR.map((t) => {
           const on = categories.includes(t.id)
           return (
@@ -604,13 +668,13 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
                 setCategories((prev) => toggleActivityCategory(prev, t.id))
               }
               aria-pressed={on}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 sm:px-4 py-2.5 text-sm font-semibold border transition-colors min-h-[44px] ${
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-xs font-semibold border transition-colors min-h-[36px] ${
                 on
                   ? 'bg-primary-500 text-white border-primary-500 shadow-soft'
                   : 'bg-canvas text-ink-soft border-line hover:bg-primary-50 hover:text-primary-700'
               }`}
             >
-              <span className="text-base leading-none" aria-hidden>
+              <span className="text-sm leading-none" aria-hidden>
                 {t.emoji}
               </span>
               <span className="truncate">{t.label}</span>
@@ -621,7 +685,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           <button
             type="button"
             onClick={() => setCategories([])}
-            className="text-xs font-semibold text-primary-600 hover:underline px-2 py-2"
+            className="text-[11px] font-semibold text-primary-600 hover:underline px-2 py-1.5"
           >
             Effacer
           </button>
@@ -629,10 +693,10 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       </div>
 
       {header ? (
-        <p className="text-sm font-bold text-ink mb-3">{header}</p>
+        <p className="text-xs font-bold text-ink mb-2">{header}</p>
       ) : null}
       {fallbackHint ? (
-        <p className="text-sm text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4 font-medium">
+        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-3 font-medium">
           {fallbackHint}
         </p>
       ) : null}
@@ -644,14 +708,14 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       ) : null}
 
       {!loading && !error && cards.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <p className="text-sm font-semibold text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <p className="text-xs font-semibold text-muted">
             {cards.length} activité{cards.length > 1 ? 's' : ''}
             {categories.length
               ? ` · ${activityCategoriesSummaryFr(categories)}`
               : ''}
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {(
               Object.keys(ACTIVITY_SORT_LABEL_FR) as Array<
                 keyof typeof ACTIVITY_SORT_LABEL_FR
@@ -661,7 +725,7 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
                 key={k}
                 type="button"
                 onClick={() => setSort(k)}
-                className={`rounded-full px-3 py-1.5 text-[11px] font-bold border transition-colors ${
+                className={`rounded-full px-2.5 py-1 text-[10px] font-bold border transition-colors ${
                   sort === k
                     ? 'bg-primary-500 text-white border-primary-500'
                     : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
@@ -723,8 +787,9 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
                 }}
                 liked={likedIds.has(c.productCode)}
                 onToggleLike={() => void toggleLike(c)}
-                addLabel={already ? 'Dans le planner' : ACTIVITY_ADD_TO_PLANNER_FR}
-                addDisabled={addBusy || already}
+                addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
+                addDisabled={addBusy}
+                hideAdd={already}
               />
             )
           })}
@@ -737,67 +802,24 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
       ) : null}
 
       {detail ? (
-        <div className="app-dialog-root">
-          <button
-            type="button"
-            className="app-dialog-backdrop"
-            aria-label="Fermer"
-            onClick={() => setDetail(null)}
-          />
-          <div className="app-dialog-panel app-dialog-md p-5 sm:p-6 space-y-4">
-            {detail.photoUrl ? (
-              <img
-                src={detail.photoUrl}
-                alt=""
-                className="w-full h-48 object-cover rounded-2xl"
-              />
-            ) : null}
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="font-extrabold text-xl text-ink">{detail.title}</h3>
-              <button
-                type="button"
-                onClick={() => void toggleLike(detail)}
-                aria-label={
-                  likedIds.has(detail.productCode)
-                    ? 'Retirer des favoris'
-                    : 'Ajouter aux favoris'
-                }
-                className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center border ${
-                  likedIds.has(detail.productCode)
-                    ? 'bg-primary-50 text-primary-500 border-primary-200'
-                    : 'bg-white text-ink-soft border-line'
-                }`}
-              >
-                <ActivityHeartSvg filled={likedIds.has(detail.productCode)} />
-              </button>
-            </div>
-            <p className="text-sm text-muted">
-              {detail.priceLabel} · {detail.durationLabel || 'Durée variable'}
-            </p>
-            <button
-              type="button"
-              className="w-full rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 min-h-[48px]"
-              onClick={() => onBook(detail)}
-            >
-              Réserver sur Viator
-            </button>
-            <button
-              type="button"
-              disabled={addBusy}
-              className="w-full rounded-xl border border-line font-bold py-3 min-h-[48px] disabled:opacity-50"
-              onClick={() => void onAddToPlanner(detail)}
-            >
-              {activeTrip ? `Ajouter au planner · ${activeTrip.label}` : 'Ajouter au planner'}
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-xl border border-transparent font-semibold py-2 text-muted"
-              onClick={() => setDetail(null)}
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
+        <ActivityDetailSheet
+          card={detail}
+          adults={adults}
+          liked={likedIds.has(detail.productCode)}
+          addBusy={addBusy}
+          alreadyAdded={Boolean(
+            detail.productCode && addedCodes.has(detail.productCode),
+          )}
+          addLabel={
+            activeTrip
+              ? `Ajouter au planner · ${activeTrip.label}`
+              : ACTIVITY_ADD_TO_PLANNER_FR
+          }
+          onToggleLike={() => void toggleLike(detail)}
+          onBook={() => onBook(detail)}
+          onAdd={() => void onAddToPlanner(detail)}
+          onClose={() => setDetail(null)}
+        />
       ) : null}
 
       {askBooked && pendingBook ? (
@@ -835,24 +857,6 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         </div>
       ) : null}
 
-      {activeTrip && plannerHref && (sessionAdded > 0 || plannerCount > 0) ? (
-        <div className="sticky bottom-20 sm:bottom-4 z-30 mt-6 rounded-2xl border border-primary-200 bg-white/95 backdrop-blur shadow-lift px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-extrabold text-ink">
-              {sessionAdded > 0
-                ? ACTIVITY_SESSION_ADDED_FR(sessionAdded)
-                : ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)}
-            </p>
-            <p className="text-xs text-muted mt-0.5">{ACTIVITY_KEEP_ADDING_FR}</p>
-          </div>
-          <Link
-            to={plannerHref}
-            className="shrink-0 inline-flex items-center justify-center rounded-xl bg-ink text-white px-4 py-2.5 text-sm font-bold min-h-[44px]"
-          >
-            {ACTIVITY_BACK_TO_PLANNER_FR}
-          </Link>
-        </div>
-      ) : null}
     </div>
   )
 }

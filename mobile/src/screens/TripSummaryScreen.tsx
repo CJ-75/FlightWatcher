@@ -19,6 +19,7 @@ import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_TRANSFER_CTA_FR,
   activityStepProgress,
+  resolveActivityCitySlug,
   boardLabelFr,
   buildStayPipeline,
   distantAirportLine,
@@ -140,9 +141,18 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     try {
       const row = await getApi().getMyTrip(draftToken)
       setDraft(row)
+      const pl = (row.payload || {}) as Record<string, unknown>
+      const fl = (pl.flight || {}) as Record<string, unknown>
+      const resolved = resolveActivityCitySlug({
+        citySlug: typeof pl.city_slug === 'string' ? pl.city_slug : null,
+        cityLabel: row.city_name || (typeof pl.city === 'string' ? pl.city : null),
+        destIata: String(
+          fl.destination_iata || pl.destination || pl.dest_iata || row.dest_iata || '',
+        ),
+      })
       void rememberTrip({
         draft_token: draftToken,
-        city: row.city_name || null,
+        city: resolved,
       })
       void getApi().trackMyTripEvent(draftToken, 'view', { source: 'mobile' })
     } catch (e) {
@@ -213,6 +223,15 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   )
     .trim()
     .toUpperCase()
+  const activityCitySlug = useMemo(
+    () =>
+      resolveActivityCitySlug({
+        citySlug: typeof pl.city_slug === 'string' ? pl.city_slug : null,
+        cityLabel: city !== 'Séjour' ? city : null,
+        destIata,
+      }),
+    [city, destIata, pl.city_slug],
+  )
 
   const carrier = useMemo(() => {
     return resolveCarrierBooking({
@@ -906,7 +925,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         {plannerActivitiesEnabled && distantAirportLine(destIata, city) ? (
           <ActivitySurfaceBanner
             surface="transfer"
-            citySlug={String(pl.city_slug || city || '').toLowerCase() || null}
+            citySlug={activityCitySlug}
             title={ACTIVITY_TRANSFER_CTA_FR}
             subtitle={distantAirportLine(destIata, city) || undefined}
           />
@@ -917,7 +936,8 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             <IconLabel section label="Activités" icon={<TicketIcon size={14} />} />
             <ActivityStepPanel
               draftToken={draftToken}
-              citySlug={String(pl.city_slug || city || 'paris').toLowerCase()}
+              plannedTripId={draft?.source_planned_trip_id || null}
+              citySlug={activityCitySlug}
               enabled={plannerActivitiesEnabled}
               surface="my_trip"
             />
@@ -929,7 +949,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             <IconLabel section label="④ Adresses" icon={<TicketIcon size={14} />} />
             <RestaurantStepPanel
               draftToken={draftToken}
-              citySlug={String(pl.city_slug || city || 'paris').toLowerCase()}
+              citySlug={activityCitySlug}
               cityLabel={city ? String(city) : undefined}
               dateIso={out || null}
               enabled={plannerRestaurantsEnabled}

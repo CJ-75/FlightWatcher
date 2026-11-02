@@ -24,7 +24,7 @@ import { openPartnerBookSync } from '../utils/partnerBook'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
-  activityCitySlugFromLabel,
+  resolveActivityCitySlug,
   activityStepProgress,
   buildStayPipeline,
   arrivalDisplayLabel,
@@ -2773,7 +2773,10 @@ function PlannerStayExtras({
   const cityLabel = arrivalCode
     ? cityDisplayNameFr(arrivalCode)
     : trip.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
-  const citySlug = activityCitySlugFromLabel(cityLabel)
+  const citySlug = resolveActivityCitySlug({
+    cityLabel: cityLabel !== 'ta ville' ? cityLabel : null,
+    destIata: arrivalCode || null,
+  })
   const dateIso = trip.dates_depart?.[0]?.date || null
   const cityImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 

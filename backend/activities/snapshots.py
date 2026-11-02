@@ -54,10 +54,14 @@ def refresh_city_snapshots(
             # Bust cache key by writing a fresh search (search writes cache)
             # Delete prior cache row if present
             try:
-                cache_key = f"city:{slug}::{adults}"
-                supabase.table("provider_cache").delete().eq(
-                    "provider", "viator"
-                ).eq("resource", "city_search").eq("cache_key", cache_key).execute()
+                for cache_key in (
+                    f"city:{slug}::{adults}",
+                    f"city:{slug}::{adults}:img2",
+                    f"city:{slug}::{adults}:destv3",
+                ):
+                    supabase.table("provider_cache").delete().eq(
+                        "provider", "viator"
+                    ).eq("resource", "city_search").eq("cache_key", cache_key).execute()
             except Exception:
                 pass
             out = search_city_activities(

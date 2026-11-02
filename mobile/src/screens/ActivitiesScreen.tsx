@@ -11,7 +11,6 @@ import {
   type AppStateStatus,
   Platform,
   RefreshControl,
-  Image,
   ScrollView,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -24,14 +23,14 @@ import {
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CITY_OPTIONS_FR,
-  ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_KEEP_ADDING_FR,
   ACTIVITY_SEE_PLANNER_FR,
-  ACTIVITY_SESSION_ADDED_FR,
   ACTIVITY_SORT_LABEL_FR,
-  activityCitySlugFromLabel,
+  resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
+  hasTripItemOwner,
+  pickTripItemOwner,
   toActivityCardModel,
   toggleActivityCategory,
   type ActivityCardModel,
@@ -41,6 +40,7 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { ActivityCard } from '../components/ActivityCard'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
+import { ActivityDetailSheet } from '../components/ActivityDetailSheet'
 import { ActivityTripHero } from '../components/ActivityTripHero'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useLikedActivities } from '../hooks/useLikedActivities'
@@ -86,7 +86,6 @@ export function ActivitiesScreen() {
     label: string
   } | null>(null)
   const [plannerCount, setPlannerCount] = useState(0)
-  const [sessionAdded, setSessionAdded] = useState(0)
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
   const [addBusy, setAddBusy] = useState(false)
   const [addNotice, setAddNotice] = useState<string | null>(null)
@@ -99,6 +98,7 @@ export function ActivitiesScreen() {
 
   useEffect(() => {
     let cancelled = false
+    didAutoCity.current = false
     void (async () => {
       const remembered = await listRememberedTrips()
       const fromRoute = draftFromRoute
@@ -110,50 +110,85 @@ export function ActivitiesScreen() {
         : null
       const latest = fromRoute || remembered[0]
 
+      const syncCityFilter = (slug: string) => {
+        if (
+          slug &&
+          (draftFromRoute || plannedFromRoute || latest?.draft_token) &&
+          slug !== citySlug
+        ) {
+          if (!didAutoCity.current) {
+            didAutoCity.current = true
+            setCitySlug(slug)
+          }
+        } else {
+          didAutoCity.current = true
+        }
+      }
+
+      let linkedPlanned = plannedFromRoute || undefined
       if (plannedFromRoute && !draftFromRoute) {
-        const slug = citySlug || 'paris'
+        const slug = resolveActivityCitySlug({
+          citySlug: citySlug || null,
+          cityLabel: citySlug || null,
+        })
         if (cancelled) return
         setActiveTrip({
           plannedTripId: plannedFromRoute,
           slug,
           label: activityDestinationLabelFr(slug),
         })
-        didAutoCity.current = true
+        syncCityFilter(slug)
       } else if (latest?.draft_token) {
-        const raw = String(latest.city || citySlug || '')
-          .trim()
-          .toLowerCase()
-        const known = raw
-          ? ACTIVITY_CITY_OPTIONS_FR.find(
-              (c) => c.slug === raw || c.label.toLowerCase() === raw,
-            )
-          : null
-        const slug =
-          known?.slug || (raw ? activityCitySlugFromLabel(raw) : '') || 'paris'
-        const label = String(known?.label || latest.city || slug)
+        let cityLabel = String(latest.city || '').trim() || null
+        let citySlugHint: string | null = null
+        let destIata: string | null = null
+        try {
+          const row = await getApi().getMyTrip(latest.draft_token)
+          if (cancelled) return
+          const pl = (row.payload || {}) as Record<string, unknown>
+          const fl = (pl.flight || {}) as Record<string, unknown>
+          cityLabel =
+            String(row.city_name || pl.city || cityLabel || '').trim() || null
+          citySlugHint = typeof pl.city_slug === 'string' ? pl.city_slug : null
+          destIata =
+            String(
+              fl.destination_iata ||
+                pl.destination ||
+                pl.dest_iata ||
+                row.dest_iata ||
+                '',
+            ).trim() || null
+          linkedPlanned =
+            linkedPlanned ||
+            (row.source_planned_trip_id
+              ? String(row.source_planned_trip_id)
+              : undefined)
+        } catch {
+          /* keep remembered */
+        }
+        const slug = resolveActivityCitySlug({
+          citySlug: citySlugHint || cityLabel,
+          cityLabel,
+          destIata,
+        })
+        const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
+        const label = String(
+          known?.label || cityLabel || activityDestinationLabelFr(slug),
+        )
         if (cancelled) return
         setActiveTrip({
           draftToken: latest.draft_token,
+          plannedTripId: linkedPlanned,
           slug,
           label,
         })
         if (draftFromRoute) {
           await rememberTrip({
             draft_token: latest.draft_token,
-            city: latest.city || label,
+            city: slug,
           })
         }
-        if (
-          !didAutoCity.current &&
-          slug &&
-          slug !== 'paris' &&
-          citySlug === 'paris'
-        ) {
-          didAutoCity.current = true
-          setCitySlug(slug)
-        } else {
-          didAutoCity.current = true
-        }
+        syncCityFilter(slug)
       } else {
         if (!cancelled) {
           setActiveTrip(null)
@@ -163,10 +198,12 @@ export function ActivitiesScreen() {
       }
 
       try {
-        const res = await getApi().listTripItems({
-          draft_token: latest?.draft_token || draftFromRoute || undefined,
-          planned_trip_id: plannedFromRoute || undefined,
-        })
+        const res = await getApi().listTripItems(
+          pickTripItemOwner({
+            draftToken: latest?.draft_token || draftFromRoute,
+            plannedTripId: linkedPlanned,
+          }),
+        )
         const codes = new Set<string>()
         const n = (res.items || []).filter((raw) => {
           const it = raw as {
@@ -277,7 +314,11 @@ export function ActivitiesScreen() {
 
   const onAddToPlanner = async (card: ActivityCardModel) => {
     setAddNotice(null)
-    if (!activeTrip?.draftToken && !activeTrip?.plannedTripId) {
+    const owner = pickTripItemOwner({
+      draftToken: activeTrip?.draftToken,
+      plannedTripId: activeTrip?.plannedTripId,
+    })
+    if (!hasTripItemOwner(owner)) {
       setAddNotice(
         'Ouvre ton séjour puis « Parcourir le catalogue » pour lier les ajouts.',
       )
@@ -294,14 +335,12 @@ export function ActivitiesScreen() {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
-        draft_token: activeTrip.draftToken || undefined,
-        planned_trip_id: activeTrip.plannedTripId || undefined,
+        ...owner,
         platform: eventPlatform(),
         surface: 'tab',
       })
       track('add', card)
       setPlannerCount((n) => n + 1)
-      setSessionAdded((n) => n + 1)
       if (card.productCode) {
         setAddedCodes((prev) => new Set(prev).add(card.productCode))
       }
@@ -339,7 +378,7 @@ export function ActivitiesScreen() {
         contentContainerStyle={{
           paddingTop: insets.top + 8,
           paddingHorizontal: spacing.xl,
-          paddingBottom: insets.bottom + (sessionAdded > 0 ? 160 : 120),
+          paddingBottom: insets.bottom + 120,
         }}
         refreshControl={
           <RefreshControl
@@ -486,9 +525,9 @@ export function ActivitiesScreen() {
               card={c}
               onPress={() => setDetail(c)}
               onBook={() => onBook(c)}
-              onAdd={() => void onAddToPlanner(c)}
-              addLabel={already ? 'Dans le planner' : ACTIVITY_ADD_TO_PLANNER_FR}
-              addDisabled={addBusy || already}
+              onAdd={already ? undefined : () => void onAddToPlanner(c)}
+              addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
+              addDisabled={addBusy}
               liked={isLiked(c.productCode)}
               onToggleLike={() => void toggleLike(c)}
             />
@@ -522,39 +561,23 @@ export function ActivitiesScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      <Modal visible={!!detail} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={[styles.modalCard, shadow.soft]}>
-            {detail?.photoUrl ? (
-              <Image source={{ uri: detail.photoUrl }} style={styles.modalPhoto} />
-            ) : null}
-            <Text style={styles.modalTitle}>{detail?.title}</Text>
-            <Text style={styles.modalMeta}>
-              {detail?.priceLabel} · {detail?.durationLabel || 'Durée variable'}
-            </Text>
-            <Pressable
-              style={styles.modalCta}
-              onPress={() => detail && onBook(detail)}
-            >
-              <Text style={styles.modalCtaText}>Réserver sur Viator</Text>
-            </Pressable>
-            <Pressable
-              style={styles.modalSecondary}
-              disabled={addBusy}
-              onPress={() => detail && void onAddToPlanner(detail)}
-            >
-              <Text style={styles.modalSecondaryText}>
-                {activeTrip
-                  ? `Ajouter au planner · ${activeTrip.label}`
-                  : ACTIVITY_ADD_TO_PLANNER_FR}
-              </Text>
-            </Pressable>
-            <Pressable style={styles.modalSecondary} onPress={() => setDetail(null)}>
-              <Text style={styles.modalSecondaryText}>Fermer</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <ActivityDetailSheet
+        visible={!!detail}
+        card={detail}
+        adults={adults}
+        addBusy={addBusy}
+        alreadyAdded={Boolean(
+          detail?.productCode && addedCodes.has(detail.productCode),
+        )}
+        addLabel={
+          activeTrip
+            ? `Ajouter au planner · ${activeTrip.label}`
+            : ACTIVITY_ADD_TO_PLANNER_FR
+        }
+        onBook={(c) => onBook(c)}
+        onAdd={(c) => void onAddToPlanner(c)}
+        onClose={() => setDetail(null)}
+      />
 
       <Modal visible={askBooked && !!pendingBook} transparent animationType="fade">
         <View style={styles.modalBg}>
@@ -588,29 +611,6 @@ export function ActivitiesScreen() {
         </View>
       </Modal>
 
-      {activeTrip && (sessionAdded > 0 || plannerCount > 0) ? (
-        <View
-          style={[
-            styles.stickyBar,
-            shadow.soft,
-            { paddingBottom: Math.max(insets.bottom, 12) },
-          ]}
-        >
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.stickyTitle} numberOfLines={1}>
-              {sessionAdded > 0
-                ? ACTIVITY_SESSION_ADDED_FR(sessionAdded)
-                : ACTIVITY_ADDED_TO_PLANNER_FR(activeTrip.label)}
-            </Text>
-            <Text style={styles.stickyHint} numberOfLines={2}>
-              {ACTIVITY_KEEP_ADDING_FR}
-            </Text>
-          </View>
-          <Pressable onPress={openPlanner} style={styles.stickyCta}>
-            <Text style={styles.stickyCtaText}>{ACTIVITY_BACK_TO_PLANNER_FR}</Text>
-          </Pressable>
-        </View>
-      ) : null}
     </View>
   )
 }
@@ -620,59 +620,19 @@ const styles = StyleSheet.create({
   header: { marginBottom: spacing.md },
   title: {
     fontFamily: fonts.extrabold,
-    fontSize: 32,
-    letterSpacing: -1,
+    fontSize: 24,
+    letterSpacing: -0.6,
     color: colors.ink,
     includeFontPadding: false,
   },
   subtitle: {
-    marginTop: 6,
-    marginBottom: 14,
+    marginTop: 4,
+    marginBottom: 12,
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
-    lineHeight: 20,
+    lineHeight: 18,
     includeFontPadding: false,
-  },
-  stickyBar: {
-    position: 'absolute',
-    left: spacing.xl,
-    right: spacing.xl,
-    bottom: 78,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primaryMuted,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-  },
-  stickyTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 14,
-    color: colors.ink,
-  },
-  stickyHint: {
-    marginTop: 2,
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: colors.muted,
-    lineHeight: 15,
-  },
-  stickyCta: {
-    backgroundColor: colors.ink,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  stickyCtaText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.white,
   },
   noticeBox: {
     backgroundColor: colors.primarySoft,
@@ -712,9 +672,9 @@ const styles = StyleSheet.create({
   },
   catTitle: {
     fontFamily: fonts.extrabold,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.ink,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   catClear: {
     fontFamily: fonts.bold,
@@ -859,12 +819,6 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: 10,
     paddingBottom: 36,
-  },
-  modalPhoto: {
-    width: '100%',
-    height: 180,
-    borderRadius: radius.md,
-    marginBottom: 4,
   },
   modalTitle: {
     fontFamily: fonts.extrabold,

@@ -104,6 +104,25 @@ def assert_can_mutate_item(
     raise HTTPException(status_code=400, detail="orphan_item")
 
 
+def _draft_source_planned_trip_id(supabase, draft_id: str) -> Optional[str]:
+    if not supabase or not draft_id:
+        return None
+    try:
+        res = (
+            supabase.table("my_trip_drafts")
+            .select("source_planned_trip_id")
+            .eq("id", draft_id)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return None
+        raw = res.data[0].get("source_planned_trip_id")
+        return str(raw) if raw else None
+    except Exception:
+        return None
+
+
 def resolve_owner_for_write(
     supabase,
     request: Request,
@@ -114,10 +133,34 @@ def resolve_owner_for_write(
     """
     Returns (draft_id, planned_trip_id) after auth.
     Exactly one owner required.
+
+    Preference: collaborative Planner when available.
+    - both draft + planned → planned (if member)
+    - draft linked via source_planned_trip_id → planned (if member)
+    Otherwise keep the draft owner (solo / guest).
     """
-    if bool(draft_token) == bool(planned_trip_id):
+    has_draft = bool(draft_token and str(draft_token).strip())
+    has_planned = bool(planned_trip_id and str(planned_trip_id).strip())
+    if not has_draft and not has_planned:
         raise HTTPException(status_code=400, detail="exactly_one_owner")
-    if draft_token:
-        return require_draft_token(supabase, draft_token), None
-    require_planned_trip_member(supabase, request, str(planned_trip_id))
-    return None, str(planned_trip_id)
+
+    # Explicit planned (alone or with draft) wins when the caller is a member.
+    if has_planned:
+        try:
+            require_planned_trip_member(supabase, request, str(planned_trip_id))
+            return None, str(planned_trip_id)
+        except HTTPException:
+            if not has_draft:
+                raise
+
+    if has_draft:
+        draft_id = require_draft_token(supabase, draft_token)
+        source = _draft_source_planned_trip_id(supabase, draft_id)
+        if source:
+            uid = user_id_from_request(request)
+            if uid and user_can_access_planned_trip(supabase, source, uid):
+                # Linked séjour → ideas belong on the Planner, not only réservations.
+                return None, source
+        return draft_id, None
+
+    raise HTTPException(status_code=400, detail="exactly_one_owner")
