@@ -1,6 +1,6 @@
 /**
  * trip_items are XOR-owned server-side: draft XOR planned.
- * Send both when known — API prefers Planner membership, else draft.
+ * Prefer planned_trip_id whenever present; draft_token is solo fallback only.
  */
 
 export type TripItemOwnerKeys = {
@@ -15,7 +15,10 @@ export function pickTripItemOwner(opts: {
   const planned = String(opts.plannedTripId || '').trim()
   const draft = String(opts.draftToken || '').trim()
   const out: TripItemOwnerKeys = {}
-  if (planned) out.planned_trip_id = planned
+  if (planned) {
+    out.planned_trip_id = planned
+    return out
+  }
   if (draft) out.draft_token = draft
   return out
 }

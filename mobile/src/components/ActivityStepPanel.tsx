@@ -56,7 +56,7 @@ export function ActivityStepPanel(props: {
   const owner = useMemo(
     () =>
       pickTripItemOwner({
-        draftToken,
+        draftToken: plannedTripId ? null : draftToken,
         plannedTripId,
       }),
     [draftToken, plannedTripId],

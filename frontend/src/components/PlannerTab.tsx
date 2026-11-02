@@ -2042,6 +2042,18 @@ function TripDetailView({
     workspace?.image_url ||
     (draftPayload.image_url as string | undefined) ||
     cityImageUrl(destinationName || null, destinationCode || undefined)
+  const hotelPhoto = String(
+    (draftHotel as { photo?: string; main_photo?: string; image?: string } | null)
+      ?.photo ||
+      (draftHotel as { main_photo?: string } | null)?.main_photo ||
+      (draftHotel as { image?: string } | null)?.image ||
+      '',
+  ).trim()
+  const hotelBlockImage =
+    (hotelBooked || hasHotel) && hotelPhoto ? hotelPhoto : destinationImage
+  const hotelName = String(
+    (draftHotel as { name?: string } | null)?.name || 'Mon hôtel',
+  )
 
   return (
     <div className="w-full space-y-6 pb-10">
@@ -2163,7 +2175,7 @@ function TripDetailView({
                   onClick={openReservations}
                   className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 min-h-[48px] backdrop-blur-md"
                 >
-                  Voir les réservations
+                  Voir mon hôtel
                 </button>
               ) : null}
             </div>
@@ -2311,7 +2323,7 @@ function TripDetailView({
               >
                 <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
                   <img
-                    src={destinationImage}
+                    src={hotelBlockImage}
                     alt=""
                     aria-hidden
                     className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
@@ -2319,39 +2331,16 @@ function TripDetailView({
                   <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
                   <div className="relative z-[1] flex flex-col">
                     <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
-                      {hotelBooked
-                        ? 'Réservation'
-                        : hasHotel
-                          ? 'Hôtel sélectionné'
-                          : 'Prochaine étape'}
+                      {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
                     </p>
                     <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                      {hotelBooked
-                        ? String(
-                            (draftHotel as { name?: string } | null)?.name ||
-                              'Hôtel réservé',
-                          )
-                        : hasHotel
-                          ? String(
-                              (draftHotel as { name?: string } | null)?.name ||
-                                'Finaliser l’hôtel',
-                            )
-                          : 'Composer ton hôtel'}
+                      {hotelBooked || hasHotel ? hotelName : 'Choisir mon hôtel'}
                     </p>
                     <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
-                      {hotelBooked
-                        ? `Ta réservation à ${destinationName} est rattachée à ce voyage.`
-                        : hasHotel
-                          ? `Reprends ton séjour à ${destinationName} pour finaliser.`
-                          : `Compare les chambres à ${destinationName} et réserve en quelques clics.`}
+                      {hotelBooked || hasHotel
+                        ? `Séjour à ${destinationName}.`
+                        : `Compare les chambres à ${destinationName}.`}
                     </p>
-                    {hotelBooked ? (
-                      <div className="mt-4 inline-flex self-start rounded-2xl border border-emerald-200/30 bg-emerald-400/15 px-3 py-2 backdrop-blur-md">
-                        <p className="text-sm font-bold text-emerald-100">
-                          Réservé ✓ · dossier conservé
-                        </p>
-                      </div>
-                    ) : null}
                     <div className="mt-5 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
@@ -2365,11 +2354,9 @@ function TripDetailView({
                       >
                         {hotelBusy
                           ? 'Ouverture…'
-                          : hotelBooked
-                            ? 'Voir les réservations'
-                            : hasHotel
-                              ? 'Reprendre l’hôtel'
-                              : 'Explorer les hôtels'}
+                          : hotelBooked || hasHotel
+                            ? 'Voir mon hôtel'
+                            : 'Choisir mon hôtel'}
                         <span aria-hidden>›</span>
                       </button>
                       {canSkipHotel ? (

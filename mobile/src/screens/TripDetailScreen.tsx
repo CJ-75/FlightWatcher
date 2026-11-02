@@ -1370,7 +1370,26 @@ export function TripDetailScreen() {
           {!reservationFlags.externalHotel ? (
             <View style={[styles.nextStepCard, shadow.soft]}>
               <ImageBackground
-                source={{ uri: destinationImage }}
+                source={{
+                  uri:
+                    String(
+                      (
+                        (flightDraft?.hotel ||
+                          reservationFlags.payload.hotel) as
+                          | { photo?: string; main_photo?: string }
+                          | null
+                          | undefined
+                      )?.photo ||
+                        (
+                          (flightDraft?.hotel ||
+                            reservationFlags.payload.hotel) as
+                            | { main_photo?: string }
+                            | null
+                            | undefined
+                        )?.main_photo ||
+                        '',
+                    ).trim() || destinationImage,
+                }}
                 style={styles.nextStepImage}
                 imageStyle={styles.nextStepImageRadius}
               >
@@ -1379,18 +1398,47 @@ export function TripDetailScreen() {
                   style={StyleSheet.absoluteFill}
                 />
                 <View style={styles.nextStepContent}>
-                  <View style={styles.nextStepIcon}>
-                    <Text style={styles.nextStepIconText}>🏨</Text>
-                  </View>
                   <View style={styles.nextStepBadge}>
-                    <Text style={styles.nextStepBadgeText}>PROCHAINE ÉTAPE</Text>
+                    <Text style={styles.nextStepBadgeText}>
+                      {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                        ? 'HÔTEL'
+                        : 'PROCHAINE ÉTAPE'}
+                    </Text>
                   </View>
-                  <Text style={styles.nextStepTitle}>Composer ton hôtel</Text>
+                  <Text style={styles.nextStepTitle}>
+                    {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                      ? String(
+                          (
+                            (flightDraft?.hotel ||
+                              reservationFlags.payload.hotel) as
+                              | { name?: string }
+                              | null
+                              | undefined
+                          )?.name || 'Mon hôtel',
+                        )
+                      : 'Choisir mon hôtel'}
+                  </Text>
                   <Text style={styles.nextStepBody}>
-                    Photos, avis et prix réels pour séjourner à {cityLabel}.
+                    {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                      ? `Séjour à ${cityLabel}.`
+                      : `Photos, avis et prix réels pour séjourner à ${cityLabel}.`}
                   </Text>
                   <Pressable
-                    onPress={() => void addHotelFromTrip(accepted.trip_data, accepted.id)}
+                    onPress={() => {
+                      const token =
+                        flightDraft?.draft_token || workspace?.draft_token
+                      if (reservationFlags.hotelBooked) {
+                        navigation.navigate('Bookings')
+                        return
+                      }
+                      if (reservationFlags.hasHotel && token) {
+                        navigation.navigate('HotelCompose', {
+                          draftToken: token,
+                        })
+                        return
+                      }
+                      void addHotelFromTrip(accepted.trip_data, accepted.id)
+                    }}
                     disabled={hotelBusy || skippingHotel}
                     style={({ pressed }) => [
                       styles.nextStepButton,
@@ -1398,7 +1446,12 @@ export function TripDetailScreen() {
                     ]}
                   >
                     <Text style={styles.nextStepButtonText}>
-                      {hotelBusy ? 'Ouverture…' : 'Explorer les hôtels →'}
+                      {hotelBusy
+                        ? 'Ouverture…'
+                        : reservationFlags.hotelBooked ||
+                            reservationFlags.hasHotel
+                          ? 'Voir mon hôtel →'
+                          : 'Choisir mon hôtel →'}
                     </Text>
                   </Pressable>
                   {reservationFlags.canSkipHotel ? (

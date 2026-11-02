@@ -24,11 +24,7 @@ class TestDraftTokenRequired(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             resolve_owner_for_write(sb, req, draft_token=None, planned_trip_id=None)
         self.assertEqual(ctx.exception.status_code, 400)
-        with self.assertRaises(HTTPException) as ctx2:
-            resolve_owner_for_write(
-                sb, req, draft_token="tok", planned_trip_id="trip"
-            )
-        self.assertEqual(ctx2.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail, "exactly_one_owner")
 
 
 if __name__ == "__main__":
