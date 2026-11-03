@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import Any, Dict, List, Optional
 
 
 class FlightResponse(BaseModel):
@@ -153,6 +153,15 @@ class CreatePlannedTripRequest(BaseModel):
     passengers: int = 1
     budget_max: int = 200
     direct: Optional[bool] = False
+
+
+class CreatePlannedTripFromFlightRequest(BaseModel):
+    """Search → Planner: create trip + accept this flight in one shot."""
+
+    trip: Dict[str, Any]
+    passengers: Optional[int] = None
+    name: Optional[str] = None
+    direct: Optional[bool] = None
 
 
 class UpdatePlannedTripRequest(BaseModel):

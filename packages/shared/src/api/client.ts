@@ -2,6 +2,7 @@ import type {
   Airport,
   ApiConfig,
   AddTripMemberRequest,
+  CreatePlannedTripFromFlightRequest,
   CreatePlannedTripRequest,
   Destination,
   InspireRequest,
@@ -803,6 +804,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<TravelWorkspace[]>('/api/travel-workspaces'),
     createPlannedTrip: (body: CreatePlannedTripRequest) =>
       request<PlannedTrip>('/api/planner/trips', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    createPlannedTripFromFlight: (body: CreatePlannedTripFromFlightRequest) =>
+      request<PlannedTripDetail>('/api/planner/trips/from-flight', {
         method: 'POST',
         body: JSON.stringify(body),
       }),

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from api_models import (
     AddTripMemberRequest,
+    CreatePlannedTripFromFlightRequest,
     CreatePlannedTripRequest,
     DateAvecHoraire,
     UpdatePlannedTripRequest,
@@ -1600,6 +1601,162 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
         }
     ).execute()
     return _row_to_trip(trip, proposals_count=0)
+
+
+def _leg_date_horaire(leg: Optional[dict]) -> Optional[DateAvecHoraire]:
+    if not isinstance(leg, dict):
+        return None
+    raw = leg.get("departureTime") or leg.get("departure_time") or ""
+    date_str = str(raw).strip()[:10]
+    if len(date_str) < 10:
+        return None
+    time_part = "00:00"
+    if "T" in str(raw):
+        try:
+            time_part = str(raw).split("T", 1)[1][:5] or "00:00"
+        except Exception:
+            time_part = "00:00"
+    return DateAvecHoraire(date=date_str, heure_min=time_part, heure_max=time_part)
+
+
+def _city_label_from_trip(trip_data: dict) -> str:
+    aller = trip_data.get("aller") or {}
+    dest_full = (
+        aller.get("destinationFull")
+        or aller.get("destination_full")
+        or trip_data.get("city")
+        or ""
+    )
+    dest_full = str(dest_full).strip()
+    if dest_full:
+        # "Barcelona (BCN)" / "Barcelona" → Barcelona
+        return dest_full.split("(")[0].strip() or dest_full
+    code = _single_iata(
+        trip_data.get("destination_code") or aller.get("destination") or ""
+    )
+    return code or "Voyage"
+
+
+@router.post("/api/planner/trips/from-flight")
+@optional_auth
+async def create_trip_from_flight(
+    body: CreatePlannedTripFromFlightRequest, request: Request
+):
+    """Search → Planner: create locked trip with this flight already accepted."""
+    user_id = _require_user(request)
+    supabase = _svc()
+
+    raw = body.trip if isinstance(body.trip, dict) else {}
+    if not raw:
+        raise HTTPException(status_code=400, detail="Vol requis")
+
+    trip_data = _trip_data_json(raw)
+    aller = trip_data.get("aller") or {}
+    retour = trip_data.get("retour") or {}
+    if not aller or not retour:
+        raise HTTPException(status_code=400, detail="Vol aller/retour incomplets")
+
+    d_out = _leg_date_horaire(aller)
+    d_ret = _leg_date_horaire(retour)
+    if not d_out or not d_ret:
+        raise HTTPException(status_code=400, detail="Dates de vol invalides")
+
+    today = date.today().isoformat()
+    if d_out.date[:10] < today:
+        raise HTTPException(
+            status_code=400,
+            detail="Ce vol est déjà passé — choisis une date aujourd’hui ou plus tard",
+        )
+
+    dep = _normalize_departure(_single_iata(aller.get("origin") or ""))
+    arr = _normalize_arrival(
+        _single_iata(
+            trip_data.get("destination_code") or aller.get("destination") or ""
+        )
+    )
+    if not dep:
+        raise HTTPException(status_code=400, detail="Aéroport de départ manquant")
+
+    passengers = _clamp_passengers(
+        body.passengers
+        if body.passengers is not None
+        else (raw.get("passengers") or raw.get("adults") or 1)
+    )
+    try:
+        price = float(trip_data.get("prix_total") or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    budget_max = max(1, int(round(price)) if price > 0 else 200)
+
+    city = _city_label_from_trip(trip_data)
+    name = (body.name or "").strip() or city
+
+    direct_flag = body.direct
+    if direct_flag is None:
+        transfers = trip_data.get("transfers")
+        try:
+            direct_flag = int(transfers or 0) == 0
+        except (TypeError, ValueError):
+            direct_flag = True
+
+    token = secrets.token_hex(16)
+    now = datetime.utcnow().isoformat()
+    trip_row = {
+        "organizer_id": user_id,
+        "name": name,
+        "departure_airport": dep,
+        "arrival_airport": arr,
+        "passengers": passengers,
+        "direct": bool(direct_flag),
+        "dates_depart": [d_out.model_dump()],
+        "dates_retour": [d_ret.model_dump()],
+        "budget_max": budget_max,
+        "invite_token": token,
+        "status": "locked",
+        "updated_at": now,
+    }
+    created = supabase.table("planned_trips").insert(trip_row).execute()
+    if not created.data:
+        raise HTTPException(status_code=500, detail="Création échouée")
+    trip = created.data[0]
+    trip_id = trip["id"]
+
+    supabase.table("trip_members").insert(
+        {
+            "trip_id": trip_id,
+            "user_id": user_id,
+            "role": "organizer",
+            "status": "joined",
+            "display_name": "Organisateur",
+        }
+    ).execute()
+
+    proposal_ins = (
+        supabase.table("trip_proposals")
+        .insert(
+            {
+                "trip_id": trip_id,
+                "trip_data": trip_data,
+                "status": "accepted",
+            }
+        )
+        .execute()
+    )
+    if not proposal_ins.data:
+        raise HTTPException(status_code=500, detail="Proposition non créée")
+    proposal = proposal_ins.data[0]
+
+    try:
+        _ensure_execution_draft_for_accepted(
+            supabase, trip=trip, proposal=proposal, user_id=user_id
+        )
+    except Exception as exc:
+        print(f"⚠️ from-flight draft: {exc}")
+
+    out = _row_to_trip(trip, proposals_count=1)
+    out["accepted_proposal"] = proposal
+    out["proposals"] = [proposal]
+    return out
 
 
 @router.get("/api/planner/trips/{trip_id}")

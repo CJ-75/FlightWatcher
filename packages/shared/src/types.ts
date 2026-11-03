@@ -476,6 +476,14 @@ export interface CreatePlannedTripRequest {
   direct?: boolean
 }
 
+/** Search → Planner: create locked trip with this flight accepted. */
+export interface CreatePlannedTripFromFlightRequest {
+  trip: EnrichedTripResponse | TripResponse | Record<string, unknown>
+  passengers?: number
+  name?: string
+  direct?: boolean
+}
+
 export interface UpdatePlannedTripRequest {
   name?: string
   departure_airport?: string

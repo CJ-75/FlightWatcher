@@ -361,7 +361,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'card.bookAviasales': 'Réserver ce vol',
     'card.bookOnSite': 'Réserver ce vol',
     'card.airlineSite': 'Site de {airline}',
-    'card.addHotel': 'Ajouter un hôtel',
+    'card.addHotel': 'Ajouter au planner →',
     'card.addFavorite': 'Ajouter aux favoris',
     'card.removeFavorite': 'Retirer des favoris',
 
@@ -833,7 +833,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'card.bookAviasales': 'Book this flight',
     'card.bookOnSite': 'Book this flight',
     'card.airlineSite': '{airline} website',
-    'card.addHotel': 'Add a hotel',
+    'card.addHotel': 'Add to planner →',
     'card.addFavorite': 'Add to favorites',
     'card.removeFavorite': 'Remove from favorites',
 

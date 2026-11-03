@@ -1138,21 +1138,25 @@ function Dashboard() {
     }
   }, [])
 
-  const handleAddHotel = async (trip: EnrichedTripResponse) => {
+  const handleAddToPlanner = async (trip: EnrichedTripResponse) => {
     clearPendingHotelUpsell()
     setPostBookTrip(null)
     setPostBookDraftToken(null)
+    const user = await getCurrentUser()
+    if (!user) {
+      setToastMessage('Connecte-toi pour ajouter ce vol au planner')
+      setToastType('error')
+      return
+    }
     setHotelUpsellBusy(true)
     try {
-      const draft = await createMyTripComposeFromTrip({
+      const created = await getApiClient().createPlannedTripFromFlight({
         trip,
         passengers: searchPassengersForBook,
-        language,
-        markFlightBooked: false,
       })
-      navigate(`/trip/${draft.draft_token}?compose=1`)
+      navigate(`/planner/${encodeURIComponent(created.id)}`)
     } catch {
-      setToastMessage('Impossible de créer le voyage — réessaie')
+      setToastMessage('Impossible d’ajouter au planner — réessaie')
       setToastType('error')
     } finally {
       setHotelUpsellBusy(false)
@@ -1530,7 +1534,7 @@ function Dashboard() {
                         passengers={searchPassengersForBook}
                         onSaveFavorite={() => handleSimpleSaveFavorite(trip)}
                         onBook={() => handlePartnerBook(trip)}
-                        onAddHotel={() => void handleAddHotel(trip)}
+                        onAddHotel={() => void handleAddToPlanner(trip)}
                         isFavorite={checkIsFavorite(trip)}
                       />
                     </motion.div>

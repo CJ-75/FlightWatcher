@@ -325,6 +325,68 @@ export function addGuestTrip(body: CreatePlannedTripRequest): PlannedTrip {
   return toListItem(cloneTrip(row))
 }
 
+/** Search → Planner (guest): locked trip with flight already accepted. */
+export function addGuestTripFromFlight(opts: {
+  trip: EnrichedTripResponse
+  passengers?: number
+}): PlannedTripDetail {
+  const { trip } = opts
+  const passengers = Math.min(6, Math.max(1, opts.passengers || 1))
+  const outIso = String(trip.aller?.departureTime || '').slice(0, 10)
+  const retIso = String(trip.retour?.departureTime || '').slice(0, 10)
+  const outTime = String(trip.aller?.departureTime || '').includes('T')
+    ? String(trip.aller.departureTime).split('T')[1]?.slice(0, 5) || '00:00'
+    : '00:00'
+  const retTime = String(trip.retour?.departureTime || '').includes('T')
+    ? String(trip.retour.departureTime).split('T')[1]?.slice(0, 5) || '00:00'
+    : '00:00'
+  const city =
+    trip.aller?.destinationFull?.split('(')[0]?.trim() ||
+    trip.destination_code ||
+    'Voyage'
+  const id = `dev-trip-${Date.now()}`
+  const proposalId = `dev-prop-${Date.now()}`
+  const now = new Date().toISOString()
+  const proposal: TripProposal = {
+    id: proposalId,
+    trip_id: id,
+    trip_data: trip,
+    status: 'accepted',
+    created_at: now,
+  }
+  const row: PlannedTripDetail = {
+    id,
+    organizer_id: DEV_GUEST_USER.id,
+    name: city,
+    departure_airport: trip.aller?.origin || 'BVA',
+    arrival_airport: trip.destination_code || null,
+    passengers,
+    direct: (trip.transfers ?? 0) === 0,
+    dates_depart: [{ date: outIso, heure_min: outTime, heure_max: outTime }],
+    dates_retour: [{ date: retIso, heure_min: retTime, heure_max: retTime }],
+    budget_max: Math.max(1, Math.round(Number(trip.prix_total) || 200)),
+    invite_token: `dev-invite-${id}`,
+    status: 'locked',
+    created_at: now,
+    proposals_count: 1,
+    proposals: [proposal],
+    accepted_proposal: proposal,
+    members: [
+      {
+        id: `${id}-org`,
+        trip_id: id,
+        user_id: DEV_GUEST_USER.id,
+        display_name: 'Aperçu Expo',
+        role: 'organizer',
+        status: 'joined',
+        joined_at: now,
+      },
+    ],
+  }
+  trips = [row, ...trips]
+  return cloneTrip(row)
+}
+
 /** Simulate a price scan — always refreshes pending proposals. */
 export async function scanGuestTrip(id: string): Promise<PlannedTripDetail | null> {
   const idx = trips.findIndex((t) => t.id === id)

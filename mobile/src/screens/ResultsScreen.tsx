@@ -58,7 +58,7 @@ const PRESET_LABELS: Record<string, string> = {
 export function ResultsScreen({ route, navigation }: Props) {
   const searchInfo = route.params.searchInfo
   const insets = useSafeAreaInsets()
-  const { user } = useAuth()
+  const { user, isGuest } = useAuth()
 
   const [trips, setTrips] = useState<EnrichedTripResponse[]>(
     () => route.params.trips || [],
@@ -177,26 +177,28 @@ export function ResultsScreen({ route, navigation }: Props) {
     })
   }
 
-  const handleAddHotel = async (trip: EnrichedTripResponse) => {
+  const handleAddToPlanner = async (trip: EnrichedTripResponse) => {
     await clearPendingHotelUpsell()
     setPostBookTrip(null)
+    if (!user && !(__DEV__ && isGuest)) {
+      Alert.alert('Connexion requise', 'Connecte-toi pour ajouter ce vol au planner.')
+      return
+    }
     setHotelUpsellBusy(true)
     try {
-      const draft = await createMyTripComposeFromTrip({
+      if (__DEV__ && isGuest) {
+        const { addGuestTripFromFlight } = await import('../dev/guestPreview')
+        const created = addGuestTripFromFlight({ trip, passengers })
+        navigation.navigate('TripDetail', { tripId: created.id })
+        return
+      }
+      const created = await getApi().createPlannedTripFromFlight({
         trip,
         passengers,
-        markFlightBooked: false,
       })
-      await rememberTrip({
-        draft_token: draft.draft_token,
-        city: cityDisplayNameFr(
-          trip.destination_code,
-          trip.aller?.destinationFull?.split(',')[0]?.trim(),
-        ),
-      })
-      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
+      navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ajouter au planner — réessaie')
     } finally {
       setHotelUpsellBusy(false)
     }
@@ -544,7 +546,7 @@ export function ResultsScreen({ route, navigation }: Props) {
             isFavorite={isFavorite(item)}
             onFavorite={() => void toggleFavorite(item)}
             onBook={() => handlePartnerBook(item)}
-            onAddHotel={() => void handleAddHotel(item)}
+            onAddHotel={() => void handleAddToPlanner(item)}
             addHotelBusy={hotelUpsellBusy}
           />
         )}
