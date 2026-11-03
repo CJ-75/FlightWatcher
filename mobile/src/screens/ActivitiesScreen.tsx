@@ -15,7 +15,11 @@ import {
   TextInput,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation, useRoute } from '@react-navigation/native'
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
@@ -35,6 +39,7 @@ import {
   ACTIVITY_SORT_LABEL_FR,
   canonicalViatorProductUrl,
   cityDisplayNameFr,
+  filterActivitySwitcherWorkspaces,
   parseAirportCodes,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
@@ -46,10 +51,12 @@ import {
   toggleActivityCategory,
   translate,
   type ActivityCardModel,
+  type PlannedTrip,
+  type TravelWorkspace,
 } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
-import { getGuestTrip } from '../dev/guestPreview'
-import { getApi } from '../lib/client'
+import { getGuestTrip, listGuestTrips } from '../dev/guestPreview'
+import { auth, getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { ActivityCard } from '../components/ActivityCard'
@@ -70,16 +77,99 @@ function eventPlatform(): 'ios' | 'android' {
   return Platform.OS === 'ios' ? 'ios' : 'android'
 }
 
+function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
+  const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  return {
+    workspace_id: `planner:${trip.id}`,
+    planned_trip_id: trip.id,
+    proposal_id: trip.accepted_proposal?.id || null,
+    scope: 'collaborative',
+    phase: trip.status === 'locked' ? 'flight_selected' : 'planning',
+    title: trip.name,
+    city: dest ? cityDisplayNameFr(dest) : 'Destination libre',
+    origin_iata: trip.departure_airport,
+    dest_iata: trip.arrival_airport,
+    out_date: trip.dates_depart?.[0]?.date || null,
+    ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
+    is_organizer: true,
+    capabilities: {
+      can_scan: trip.status !== 'locked',
+      can_choose_flight: trip.status !== 'locked',
+      can_compose_hotel: trip.status === 'locked',
+      can_view_confirmation: false,
+    },
+    pipeline: {
+      flight: trip.status === 'locked' ? 'selected' : 'none',
+      hotel: 'none',
+    },
+    planned_trip: trip,
+    updated_at: trip.updated_at || trip.created_at,
+  }
+}
+
+function rememberedAsWorkspace(row: {
+  draft_token: string
+  city?: string | null
+  at: number
+}): TravelWorkspace {
+  const city = String(row.city || '').trim() || 'Séjour'
+  return {
+    workspace_id: `draft:${row.draft_token}`,
+    draft_token: row.draft_token,
+    scope: 'personal',
+    phase: 'composing',
+    title: city,
+    city,
+    is_organizer: true,
+    capabilities: {
+      can_scan: false,
+      can_choose_flight: false,
+      can_compose_hotel: true,
+      can_view_confirmation: true,
+    },
+    pipeline: { flight: 'none', hotel: 'none' },
+    updated_at: new Date(row.at).toISOString(),
+  }
+}
+
+function cityFromWorkspace(ws: TravelWorkspace): {
+  slug: string
+  label: string
+  destIata: string | null
+} {
+  const destIata = parseAirportCodes(ws.dest_iata)[0] || null
+  const cityLabel = String(ws.city || '').trim() || null
+  const slug = resolveActivityCitySlug({
+    citySlug: cityLabel,
+    cityLabel,
+    destIata,
+  })
+  const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
+  return {
+    slug,
+    label: String(
+      known?.label || cityLabel || activityDestinationLabelFr(slug),
+    ),
+    destIata,
+  }
+}
+
 export function ActivitiesScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<MainTabParamList, 'Activities'>>()
-  const { viewUser, signInWithGoogle } = useAuth()
+  const { viewUser, signInWithGoogle, user, session, isGuest, loading: authLoading } =
+    useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
+  // Première connexion / aucun séjour : Paris par défaut, écrasé dès qu’un planner est repris.
   const [citySlug, setCitySlug] = useState(
-    () => route.params?.city?.trim().toLowerCase() || '',
+    () => route.params?.city?.trim().toLowerCase() || 'paris',
   )
   const [tripReady, setTripReady] = useState(false)
+  const authKey =
+    user?.id ||
+    (isGuest ? 'guest' : '') ||
+    (session?.access_token ? 'session' : '')
 
   useEffect(() => {
     const fromRoute = route.params?.city?.trim().toLowerCase()
@@ -122,6 +212,7 @@ export function ActivitiesScreen() {
   }, [refreshLikes])
 
   useEffect(() => {
+    if (authLoading) return
     let cancelled = false
     didAutoCity.current = false
     setTripReady(false)
@@ -282,66 +373,159 @@ export function ActivitiesScreen() {
           return
         }
 
-        // Ouverture libre (pas de redirect planner) : dernier draft mémorisé.
+        // Ouverture libre : reprendre le planner actif + sa ville d’arrivée.
+        const local: TravelWorkspace[] = []
+        if (__DEV__) {
+          local.push(...listGuestTrips().map(tripAsWorkspace))
+        }
         const remembered = await listRememberedTrips()
-        const latest = remembered[0]
-        if (latest?.draft_token) {
-          let cityLabel = String(latest.city || '').trim() || null
-          let citySlugHint: string | null = null
-          let destIata: string | null = null
-          let linkedPlanned: string | undefined
-          const ownerHint = pickTripItemOwner({
-            draftToken: latest.draft_token,
-          })
-          const [row, itemsRes] = await Promise.all([
-            getApi().getMyTrip(latest.draft_token).catch(() => null),
-            hasTripItemOwner(ownerHint)
-              ? getApi().listTripItems(ownerHint).catch(() => null)
-              : Promise.resolve(null),
-          ])
-          if (cancelled) return
-          if (row) {
-            const pl = (row.payload || {}) as Record<string, unknown>
-            const fl = (pl.flight || {}) as Record<string, unknown>
-            cityLabel =
-              String(row.city_name || pl.city || cityLabel || '').trim() || null
-            citySlugHint = typeof pl.city_slug === 'string' ? pl.city_slug : null
-            destIata =
-              String(
-                fl.destination_iata ||
-                  pl.destination ||
-                  pl.dest_iata ||
-                  row.dest_iata ||
-                  '',
-              ).trim() || null
-            linkedPlanned = row.source_planned_trip_id
-              ? String(row.source_planned_trip_id)
-              : undefined
+        local.push(...remembered.map(rememberedAsWorkspace))
+
+        let remote: TravelWorkspace[] = []
+        const loadRemote = async () => {
+          try {
+            const rows = await getApi().listTravelWorkspaces()
+            return Array.isArray(rows) ? rows : []
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : ''
+            if (/401|403|auth|UNAUTHORIZED/i.test(msg)) {
+              await auth.refreshAccessToken()
+              try {
+                const rows = await getApi().listTravelWorkspaces()
+                return Array.isArray(rows) ? rows : []
+              } catch {
+                /* fall through */
+              }
+            }
+            try {
+              const legacy = await getApi().listPlannedTrips()
+              return (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace)
+            } catch {
+              return []
+            }
           }
-          const slug = resolveActivityCitySlug({
-            citySlug: citySlugHint || cityLabel,
-            cityLabel,
-            destIata,
-          })
-          const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
-          const label = String(
-            known?.label || cityLabel || activityDestinationLabelFr(slug),
-          )
+        }
+        remote = await loadRemote()
+        if (cancelled) return
+
+        const candidates = filterActivitySwitcherWorkspaces(
+          [...remote, ...local],
+          {},
+        )
+        const top = candidates[0]
+        if (top) {
+          let draftToken = top.draft_token
+            ? String(top.draft_token)
+            : undefined
+          let plannedTripId = top.planned_trip_id
+            ? String(top.planned_trip_id)
+            : undefined
+          let { slug, label } = cityFromWorkspace(top)
+
+          if (draftToken) {
+            const row = await getApi().getMyTrip(draftToken).catch(() => null)
+            if (cancelled) return
+            if (row) {
+              plannedTripId =
+                plannedTripId ||
+                (row.source_planned_trip_id
+                  ? String(row.source_planned_trip_id)
+                  : undefined)
+              // Draft seul : enrichir la ville depuis le payload.
+              if (!plannedTripId) {
+                const pl = (row.payload || {}) as Record<string, unknown>
+                const fl = (pl.flight || {}) as Record<string, unknown>
+                const cityLabel =
+                  String(row.city_name || pl.city || top.city || '').trim() ||
+                  null
+                const citySlugHint =
+                  typeof pl.city_slug === 'string' ? pl.city_slug : cityLabel
+                const destIata =
+                  String(
+                    fl.destination_iata ||
+                      pl.destination ||
+                      pl.dest_iata ||
+                      row.dest_iata ||
+                      '',
+                  ).trim() || null
+                slug = resolveActivityCitySlug({
+                  citySlug: citySlugHint || cityLabel,
+                  cityLabel,
+                  destIata,
+                })
+                const known = ACTIVITY_CITY_OPTIONS_FR.find(
+                  (c) => c.slug === slug,
+                )
+                label = String(
+                  known?.label ||
+                    cityLabel ||
+                    activityDestinationLabelFr(slug),
+                )
+              }
+            }
+          }
+
+          // Planner chargé : ville d’arrivée du trip obligatoire.
+          if (plannedTripId) {
+            const guest =
+              __DEV__ && String(plannedTripId).startsWith('dev-trip-')
+                ? getGuestTrip(plannedTripId)
+                : null
+            const trip =
+              guest ||
+              (await getApi().getPlannedTrip(plannedTripId).catch(() => null))
+            if (cancelled) return
+            if (trip) {
+              const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
+              const cityLabel = arrival
+                ? cityDisplayNameFr(arrival)
+                : String(trip.name || '').replace(/^Weekend\s+/i, '').trim() ||
+                  null
+              slug = resolveActivityCitySlug({
+                citySlug: cityLabel,
+                cityLabel,
+                destIata: arrival || null,
+              })
+              const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
+              label = String(
+                known?.label || cityLabel || activityDestinationLabelFr(slug),
+              )
+            }
+          }
+
           if (cancelled) return
           setActiveTrip({
-            draftToken: latest.draft_token,
-            plannedTripId: linkedPlanned,
+            draftToken,
+            plannedTripId,
             slug,
             label,
           })
           lockCity(slug)
-          applyItems(itemsRes?.items)
+
+          if (draftToken) {
+            await rememberTrip({ draft_token: draftToken, city: slug })
+          }
+
+          const owner = pickTripItemOwner({ draftToken, plannedTripId })
+          if (
+            hasTripItemOwner(owner) &&
+            !(plannedTripId && String(plannedTripId).startsWith('dev-trip-'))
+          ) {
+            const itemsRes = await getApi()
+              .listTripItems(owner)
+              .catch(() => null)
+            if (cancelled) return
+            applyItems(itemsRes?.items)
+          } else if (!cancelled) {
+            setPlannerCount(0)
+            setAddedCodes(new Set())
+          }
         } else if (!cancelled) {
+          // Aucun planner : filtre de base Paris (1ʳᵉ connexion).
           setActiveTrip(null)
           setPlannerCount(0)
-          if (!citySlug && !routeCity) setCitySlug('paris')
-          else if (routeCity) lockCity(routeCity)
-          didAutoCity.current = true
+          setAddedCodes(new Set())
+          lockCity(routeCity || 'paris')
         }
       } finally {
         if (!cancelled) setTripReady(true)
@@ -351,7 +535,44 @@ export function ActivitiesScreen() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftFromRoute, plannedFromRoute, route.params?.city])
+  }, [draftFromRoute, plannedFromRoute, route.params?.city, authKey, authLoading])
+
+  // Champ ville = source de vérité affichée :
+  // - planner chargé → destination du séjour
+  // - 1ʳᵉ connexion / aucun séjour → Paris
+  useEffect(() => {
+    if (activeTrip?.slug) {
+      setCitySlug((prev) =>
+        prev === activeTrip.slug ? prev : activeTrip.slug,
+      )
+      return
+    }
+    if (draftFromRoute || plannedFromRoute || route.params?.city) return
+    setCitySlug((prev) => (prev ? prev : 'paris'))
+  }, [
+    activeTrip?.slug,
+    draftFromRoute,
+    plannedFromRoute,
+    route.params?.city,
+  ])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (activeTrip?.slug) {
+        setCitySlug((prev) =>
+          prev === activeTrip.slug ? prev : activeTrip.slug,
+        )
+        return
+      }
+      if (draftFromRoute || plannedFromRoute || route.params?.city) return
+      setCitySlug((prev) => (prev ? prev : 'paris'))
+    }, [
+      activeTrip?.slug,
+      draftFromRoute,
+      plannedFromRoute,
+      route.params?.city,
+    ]),
+  )
 
   useEffect(() => {
     setSearchQuery('')
@@ -410,6 +631,7 @@ export function ActivitiesScreen() {
   useEffect(() => {
     if (!tripReady) return
     if (!citySlug) {
+      // Sécurité : 1ʳᵉ connexion sans ville → Paris.
       setCitySlug('paris')
       return
     }
@@ -634,9 +856,8 @@ export function ActivitiesScreen() {
                 mode="active"
                 cityLabel={activeTrip.label}
                 plannerCount={plannerCount}
-                showSyncCity={activeTrip.slug !== citySlug}
+                showSyncCity={false}
                 onOpenPlanner={openPlanner}
-                onSyncCity={() => setCitySlug(activeTrip.slug)}
                 onChangeTrip={() => {
                   setPendingAdd(null)
                   setTripPickerOpen(true)
@@ -667,9 +888,21 @@ export function ActivitiesScreen() {
             <Text style={styles.label}>Ville</Text>
             <View style={{ marginBottom: spacing.md }}>
               <ActivityCityPicker
-                valueSlug={citySlug}
-                valueLabel={activityDestinationLabelFr(citySlug)}
-                onChange={(city) => setCitySlug(city.slug)}
+                valueSlug={citySlug || 'paris'}
+                valueLabel={
+                  activeTrip && activeTrip.slug === citySlug
+                    ? activeTrip.label
+                    : activityDestinationLabelFr(citySlug || 'paris')
+                }
+                onChange={(city) => {
+                  // Sans planner : le champ pilote le filtre.
+                  // Avec planner : on garde la destination du séjour.
+                  if (activeTrip?.slug) {
+                    setCitySlug(activeTrip.slug)
+                    return
+                  }
+                  setCitySlug(city.slug || 'paris')
+                }}
               />
             </View>
 
