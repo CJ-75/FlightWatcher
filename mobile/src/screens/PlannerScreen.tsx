@@ -62,8 +62,14 @@ const PRESETS: { id: DatePresetId; label: string }[] = [
 const TRIPS_STALE_MS = 60_000
 type HubFilter = 'organize' | 'upcoming' | 'past'
 
-function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
+function tripAsWorkspace(
+  trip: PlannedTrip,
+  currentUserId?: string | null,
+): TravelWorkspace {
   const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  const isOrganizer = currentUserId
+    ? trip.organizer_id === currentUserId
+    : true
   return {
     workspace_id: `planner:${trip.id}`,
     planned_trip_id: trip.id,
@@ -76,10 +82,10 @@ function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
     dest_iata: trip.arrival_airport,
     out_date: trip.dates_depart?.[0]?.date || null,
     ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
-    is_organizer: true,
+    is_organizer: isOrganizer,
     capabilities: {
-      can_scan: trip.status !== 'locked',
-      can_choose_flight: trip.status !== 'locked',
+      can_scan: isOrganizer && trip.status !== 'locked',
+      can_choose_flight: isOrganizer && trip.status !== 'locked',
       can_compose_hotel: trip.status === 'locked',
       can_view_confirmation: false,
     },
@@ -128,8 +134,9 @@ export function PlannerScreen() {
       else if (workspacesLenRef.current === 0) setLoading(true)
       setError(null)
       try {
+        const uid = viewUser?.id || null
         if (__DEV__ && isGuest) {
-          setWorkspaces(listGuestTrips().map(tripAsWorkspace))
+          setWorkspaces(listGuestTrips().map((t) => tripAsWorkspace(t, uid)))
         } else {
           try {
             const list = await getApi().listTravelWorkspaces()
@@ -141,7 +148,11 @@ export function PlannerScreen() {
             )
           } catch {
             const legacy = await getApi().listPlannedTrips()
-            setWorkspaces((Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace))
+            setWorkspaces(
+              (Array.isArray(legacy) ? legacy : []).map((t) =>
+                tripAsWorkspace(t, uid),
+              ),
+            )
           }
         }
         lastFetchAtRef.current = Date.now()

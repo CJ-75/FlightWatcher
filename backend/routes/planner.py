@@ -1314,6 +1314,40 @@ async def list_travel_workspaces(request: Request):
         bookings_by_token=bookings_by_token,
     )
 
+    members_by_trip: Dict[str, list] = {tid: [] for tid in trip_ids}
+    if trip_ids:
+        try:
+            mem_res = (
+                supabase.table("trip_members")
+                .select("trip_id, display_name, role, status, joined_at, user_id")
+                .in_("trip_id", trip_ids)
+                .execute()
+            )
+            for m in mem_res.data or []:
+                tid = m.get("trip_id")
+                if tid in members_by_trip:
+                    members_by_trip[tid].append(m)
+        except Exception as e:
+            print(f"⚠️ Members batch (workspaces): {e}")
+
+    organizer_ids = list(
+        {row["organizer_id"] for row in trips_by_id.values() if row.get("organizer_id")}
+    )
+    profiles_by_id: Dict[str, dict] = {}
+    if organizer_ids:
+        try:
+            prof_res = (
+                supabase.table("user_profiles")
+                .select("id, full_name, avatar_url")
+                .in_("id", organizer_ids)
+                .execute()
+            )
+            for p in prof_res.data or []:
+                if p.get("id"):
+                    profiles_by_id[p["id"]] = p
+        except Exception as e:
+            print(f"⚠️ Profiles organisateurs (workspaces): {e}")
+
     consumed_drafts = set()
     consumed_bookings = set()
     workspaces: list = []
@@ -1389,7 +1423,11 @@ async def list_travel_workspaces(request: Request):
                         draft=draft, booking=booking, phase=phase
                     ),
                 },
-                "planned_trip": _row_to_trip(trip),
+                "planned_trip": _row_to_trip(
+                    trip,
+                    members=members_by_trip.get(trip["id"], []),
+                    organizer_profile=profiles_by_id.get(trip.get("organizer_id")),
+                ),
                 "updated_at": (draft or {}).get("updated_at")
                 or trip.get("updated_at"),
             }

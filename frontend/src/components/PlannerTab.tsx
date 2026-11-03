@@ -346,8 +346,14 @@ const FLIGHT_BOOKED_STATUSES = new Set<FlightBookingStatus>([
   'partner_confirmed',
 ])
 
-function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
+function tripAsWorkspace(
+  trip: PlannedTrip,
+  currentUserId?: string | null,
+): TravelWorkspace {
   const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  const isOrganizer = currentUserId
+    ? trip.organizer_id === currentUserId
+    : true
   return {
     workspace_id: `planner:${trip.id}`,
     planned_trip_id: trip.id,
@@ -360,10 +366,10 @@ function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
     dest_iata: trip.arrival_airport,
     out_date: trip.dates_depart?.[0]?.date || null,
     ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
-    is_organizer: true,
+    is_organizer: isOrganizer,
     capabilities: {
-      can_scan: trip.status !== 'locked',
-      can_choose_flight: trip.status !== 'locked',
+      can_scan: isOrganizer && trip.status !== 'locked',
+      can_choose_flight: isOrganizer && trip.status !== 'locked',
       can_compose_hotel: trip.status === 'locked',
       can_view_confirmation: false,
     },
@@ -374,6 +380,20 @@ function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
     planned_trip: trip,
     updated_at: trip.updated_at || trip.created_at,
   }
+}
+
+/** Uniquement si ce n’est pas mon voyage — « par Moi » est omis (évident). */
+function byOrganizerLabel(workspace: TravelWorkspace): string | null {
+  if (workspace.is_organizer) return null
+  const trip = workspace.planned_trip
+  const name =
+    trip?.organizer?.full_name?.trim() ||
+    (trip?.member_names?.[0] &&
+    trip.member_names[0] !== 'Organisateur' &&
+    trip.member_names[0] !== 'Organizer'
+      ? trip.member_names[0].trim()
+      : '')
+  return name ? `par ${name}` : 'par l’organisateur'
 }
 
 type TripGalleryDensity = 'solo' | 'duo' | 'multi'
@@ -573,6 +593,7 @@ function TripListCard({
   const shownMembers = memberNames.slice(0, maxShown)
   const extraMembers = Math.max(0, memberNames.length - shownMembers.length)
   const withLabel = shownMembers.map(firstNameOf).filter(Boolean).join(', ')
+  const byLabel = byOrganizerLabel(workspace)
 
   useEffect(() => {
     setOrgAvatarBroken(false)
@@ -743,6 +764,11 @@ function TripListCard({
               <h3 className="font-black text-3xl sm:text-4xl text-slate-900 tracking-tight leading-tight group-hover:text-[#E85A28] transition-colors">
                 {workspace.title}
               </h3>
+              {byLabel ? (
+                <p className="mt-1.5 text-sm font-semibold text-slate-500">
+                  {byLabel}
+                </p>
+              ) : null}
               <p className="hidden lg:block text-2xl font-bold text-slate-700 mt-3 tracking-tight">
                 {cityLabel}
               </p>
@@ -834,6 +860,9 @@ function TripListCard({
         >
           {workspace.title}
         </h3>
+        {byLabel ? (
+          <p className="mt-1 text-sm font-semibold text-slate-500">{byLabel}</p>
+        ) : null}
         <div className="mt-3 flex-1">{meta}</div>
         <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
           <span className="text-sm font-semibold text-[#FF6B35]">
@@ -917,7 +946,9 @@ export function PlannerTab() {
       } catch {
         const legacy = await getApiClient().listPlannedTrips()
         setWorkspaces(
-          (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace),
+          (Array.isArray(legacy) ? legacy : []).map((t) =>
+            tripAsWorkspace(t, userId),
+          ),
         )
       }
     } catch (e) {
@@ -1933,14 +1964,17 @@ function TripDetailView({
           const base =
             prev ||
             (trip
-              ? tripAsWorkspace({
-                  ...trip,
-                  status: 'locked',
-                  accepted_proposal:
-                    (trip.proposals || []).find((p) => p.id === id) ||
-                    trip.accepted_proposal ||
-                    null,
-                })
+              ? tripAsWorkspace(
+                  {
+                    ...trip,
+                    status: 'locked',
+                    accepted_proposal:
+                      (trip.proposals || []).find((p) => p.id === id) ||
+                      trip.accepted_proposal ||
+                      null,
+                  },
+                  userId,
+                )
               : null)
           if (!base) return prev
           return {

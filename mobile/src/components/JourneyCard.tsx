@@ -42,6 +42,19 @@ function partyLabel(workspace: TravelWorkspace): string {
   return partyModeKickerFr(partyModeFromCount(pax))
 }
 
+/** Uniquement si ce n’est pas mon voyage — « par Moi » est omis (évident). */
+function byOrganizerLabel(workspace: TravelWorkspace): string | null {
+  if (workspace.is_organizer) return null
+  const trip = workspace.planned_trip
+  const raw =
+    trip?.organizer?.full_name?.trim() ||
+    trip?.member_names?.[0]?.trim() ||
+    ''
+  const name =
+    raw && raw !== 'Organisateur' && raw !== 'Organizer' ? raw : ''
+  return name ? `par ${name}` : 'par l’organisateur'
+}
+
 export function JourneyCard({
   workspace,
   density = 'groupe',
@@ -60,6 +73,7 @@ export function JourneyCard({
   const out = compactDate(workspace.out_date)
   const ret = compactDate(workspace.ret_date)
   const party = partyLabel(workspace)
+  const byLabel = byOrganizerLabel(workspace)
 
   if (density === 'solo') {
     return (
@@ -97,6 +111,11 @@ export function JourneyCard({
           <Text style={styles.soloTitle} numberOfLines={2}>
             {workspace.title}
           </Text>
+          {byLabel ? (
+            <Text style={styles.byLine} numberOfLines={1}>
+              {byLabel}
+            </Text>
+          ) : null}
           {out ? (
             <Text style={styles.date}>
               {out}
@@ -166,6 +185,11 @@ export function JourneyCard({
         >
           {workspace.title}
         </Text>
+        {byLabel ? (
+          <Text style={styles.byLine} numberOfLines={1}>
+            {byLabel}
+          </Text>
+        ) : null}
         <View style={styles.metaRow}>
           {out ? (
             <Text style={styles.date} numberOfLines={1}>
@@ -276,6 +300,12 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 28,
     color: colors.ink,
+  },
+  byLine: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    marginTop: -2,
+    color: colors.muted,
   },
   metaRow: {
     flexDirection: 'row',
