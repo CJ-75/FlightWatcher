@@ -219,8 +219,35 @@ export function PlannerScreen() {
       navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
       return
     }
+    // Séjour perso → promote to planner (vol + hôtel), pas TripSummary.
     if (workspace.draft_token) {
-      navigation.navigate('TripSummary', { draftToken: workspace.draft_token })
+      void (async () => {
+        try {
+          if (__DEV__ && isGuest) {
+            const { addGuestTripFromMyTripDraft } = await import(
+              '../dev/guestPreview'
+            )
+            const draft = await getApi().getMyTrip(workspace.draft_token!)
+            const created = addGuestTripFromMyTripDraft({
+              draft,
+              city: workspace.city,
+            })
+            navigation.navigate('TripDetail', { tripId: created.id })
+            void load({ force: true })
+            return
+          }
+          const created = await getApi().createPlannedTripFromMyTrip({
+            draft_token: workspace.draft_token!,
+            name: workspace.city || workspace.title || undefined,
+          })
+          navigation.navigate('TripDetail', { tripId: created.id })
+          void load({ force: true })
+        } catch {
+          navigation.navigate('TripSummary', {
+            draftToken: workspace.draft_token!,
+          })
+        }
+      })()
       return
     }
     if (workspace.hotel_booking_id) {

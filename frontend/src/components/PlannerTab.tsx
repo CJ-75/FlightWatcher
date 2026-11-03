@@ -985,8 +985,20 @@ export function PlannerTab() {
         navigate(`/planner/${encodeURIComponent(workspace.planned_trip_id)}`)
         return
       }
+      // Séjour perso → promote to planner (vol + hôtel préchargés), not /trip.
       if (workspace.draft_token) {
-        navigate(`/trip/${encodeURIComponent(workspace.draft_token)}`)
+        void (async () => {
+          try {
+            const created = await getApiClient().createPlannedTripFromMyTrip({
+              draft_token: workspace.draft_token!,
+              name: workspace.city || workspace.title || undefined,
+            })
+            navigate(`/planner/${encodeURIComponent(created.id)}`)
+            void load({ silent: true })
+          } catch {
+            navigate(`/trip/${encodeURIComponent(workspace.draft_token!)}`)
+          }
+        })()
         return
       }
       if (workspace.hotel_booking_id) {
@@ -995,7 +1007,7 @@ export function PlannerTab() {
         )
       }
     },
-    [navigate],
+    [navigate, load],
   )
 
   useEffect(() => {
