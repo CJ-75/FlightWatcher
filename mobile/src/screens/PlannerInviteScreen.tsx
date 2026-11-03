@@ -90,7 +90,12 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
     setLoading(true)
     setError(null)
     try {
-      await rememberPendingInvite(token)
+      // Tokens de test Expo : pas de persistence (évite un reopen au prochain boot).
+      if (!(__DEV__ && String(token).startsWith('dev-invite-'))) {
+        await rememberPendingInvite(token)
+      } else {
+        await clearPendingInvite()
+      }
       const local = __DEV__ ? getDevInvitePreview(token) : null
       if (local) {
         setPreview(local)

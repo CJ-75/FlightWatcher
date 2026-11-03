@@ -14,7 +14,6 @@ import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { DEV_INVITE_TOKEN } from '../dev/guestPreview'
 import { apiBase } from '../lib/client'
-import { rememberPendingInvite } from '../lib/pendingInvite'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
@@ -89,7 +88,7 @@ export function ProfileScreen() {
   }
 
   const openInviteOnboardingPreview = () => {
-    void rememberPendingInvite(DEV_INVITE_TOKEN)
+    // Ouverture manuelle uniquement — pas de pending invite au boot.
     const root = navigation.getParent() ?? navigation
     root.dispatch(
       CommonActions.navigate({
