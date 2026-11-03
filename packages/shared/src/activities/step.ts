@@ -77,7 +77,8 @@ export const ACTIVITY_TRIP_TIMING_KICKER_FR: Record<
   upcoming: 'Prochain départ',
   ongoing: 'Voyage en cours',
   past: 'Voyage terminé',
-  undated: 'Séjour lié',
+  /** Pas de dates → même libellé que « en cours » (évite un jargon confus). */
+  undated: 'Voyage en cours',
 }
 
 export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
