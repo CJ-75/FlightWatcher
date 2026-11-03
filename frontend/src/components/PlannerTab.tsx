@@ -347,6 +347,23 @@ const FLIGHT_BOOKED_STATUSES = new Set<FlightBookingStatus>([
   'partner_confirmed',
 ])
 
+/** Planned trips + personal séjours with hôtel choisi / résa entamée. */
+function workspaceVisibleInPlanner(w: TravelWorkspace): boolean {
+  if (w.planned_trip_id) return true
+  const hotel = w.pipeline?.hotel
+  if (hotel === 'selected' || hotel === 'booked') return true
+  if (w.hotel_booking_id) return true
+  const st = String(w.hotel_booking_status || '')
+  return (
+    st === 'draft' ||
+    st === 'prebooked' ||
+    st === 'payment_pending' ||
+    st === 'payment_succeeded' ||
+    st === 'booking_pending' ||
+    st === 'confirmed'
+  )
+}
+
 function tripAsWorkspace(
   trip: PlannedTrip,
   currentUserId?: string | null,
@@ -714,6 +731,8 @@ function TripListCard({
         Hôtel
         {workspace.pipeline.hotel === 'booked' ? (
           <span className="text-emerald-700">réservé</span>
+        ) : workspace.pipeline.hotel === 'selected' ? (
+          <span className="text-primary-700">choisi</span>
         ) : null}
       </div>
       {travelersBlock}
@@ -938,11 +957,9 @@ export function PlannerTab() {
     try {
       try {
         const list = await getApiClient().listTravelWorkspaces()
-        // Planner hub = planned trips only (réservations live under /trip).
+        // Planned trips + séjours with hôtel sélectionné / résa entamée.
         setWorkspaces(
-          (Array.isArray(list) ? list : []).filter((w) =>
-            Boolean(w.planned_trip_id),
-          ),
+          (Array.isArray(list) ? list : []).filter(workspaceVisibleInPlanner),
         )
       } catch {
         const legacy = await getApiClient().listPlannedTrips()
@@ -964,8 +981,19 @@ export function PlannerTab() {
 
   const openWorkspace = useCallback(
     (workspace: TravelWorkspace) => {
-      if (!workspace.planned_trip_id) return
-      navigate(`/planner/${encodeURIComponent(workspace.planned_trip_id)}`)
+      if (workspace.planned_trip_id) {
+        navigate(`/planner/${encodeURIComponent(workspace.planned_trip_id)}`)
+        return
+      }
+      if (workspace.draft_token) {
+        navigate(`/trip/${encodeURIComponent(workspace.draft_token)}`)
+        return
+      }
+      if (workspace.hotel_booking_id) {
+        navigate(
+          `/bookings?id=${encodeURIComponent(workspace.hotel_booking_id)}`,
+        )
+      }
     },
     [navigate],
   )

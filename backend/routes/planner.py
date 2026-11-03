@@ -742,6 +742,20 @@ def _external_flight_payload(trip: dict) -> dict:
     }
 
 
+_HOTEL_BOOKED_STATUSES = {
+    "confirmed",
+    "booking_pending",
+    "payment_succeeded",
+}
+# Selected / checkout started but not finalized — still visible in Planner.
+_HOTEL_SELECTED_STATUSES = {
+    "draft",
+    "prebooked",
+    "payment_pending",
+}
+_HOTEL_DEAD_STATUSES = {"failed", "cancelled"}
+
+
 def _hotel_pipeline_state(
     *,
     draft: Optional[dict],
@@ -753,18 +767,21 @@ def _hotel_pipeline_state(
     payload = (draft or {}).get("payload") or {}
     if payload.get("hotel_external") or payload.get("external_hotel"):
         return "booked"
+    booking_status = str((booking or {}).get("status") or "")
     if (
         (draft or {}).get("hotel_booked_at")
         or payload.get("hotel_booked")
         or payload.get("hotel_booked_at")
-        or (
-            booking
-            and str(booking.get("status"))
-            in {"confirmed", "booking_pending", "payment_succeeded"}
-        )
+        or booking_status in _HOTEL_BOOKED_STATUSES
     ):
         return "booked"
-    if draft and (payload.get("hotel") or (draft or {}).get("hotel")):
+    if booking_status in _HOTEL_DEAD_STATUSES:
+        booking = None
+    if (
+        (draft and (payload.get("hotel") or (draft or {}).get("hotel")))
+        or booking_status in _HOTEL_SELECTED_STATUSES
+        or booking is not None
+    ):
         return "selected"
     return "none"
 
@@ -778,11 +795,8 @@ def _workspace_phase(
 ) -> str:
     if ret_date and ret_date < date.today().isoformat():
         return "past"
-    if booking and str(booking.get("status")) in {
-        "confirmed",
-        "booking_pending",
-        "payment_succeeded",
-    }:
+    booking_status = str((booking or {}).get("status") or "")
+    if booking_status in _HOTEL_BOOKED_STATUSES:
         return "booked"
     payload = (draft or {}).get("payload") or {} if draft else {}
     hotel_external = bool(
@@ -794,7 +808,10 @@ def _workspace_phase(
         or hotel_external
     ):
         return "booked"
+    # Hôtel choisi ou checkout entamé (prebook / payment) → séjour en cours.
     if draft:
+        return "composing"
+    if booking is not None and booking_status not in _HOTEL_DEAD_STATUSES:
         return "composing"
     if accepted:
         return "flight_selected"
@@ -1498,8 +1515,16 @@ async def list_travel_workspaces(request: Request):
     for booking in bookings:
         if str(booking["id"]) in consumed_bookings:
             continue
+        if str(booking.get("status") or "") in _HOTEL_DEAD_STATUSES:
+            continue
         snapshot = booking.get("deal_snapshot") or {}
         dates = snapshot.get("dates") or {}
+        booking_phase = _workspace_phase(
+            ret_date=_date10(dates.get("inbound")),
+            accepted=None,
+            draft=None,
+            booking=booking,
+        )
         workspaces.append(
             {
                 "workspace_id": f"booking:{booking['id']}",
@@ -1512,27 +1537,31 @@ async def list_travel_workspaces(request: Request):
                 "hotel_booking_id": booking["id"],
                 "hotel_booking_status": booking.get("status"),
                 "scope": "personal",
-                "phase": _workspace_phase(
-                    ret_date=_date10(dates.get("inbound")),
-                    accepted=None,
-                    draft=None,
-                    booking=booking,
-                ),
-                "title": snapshot.get("hotel_name") or "Réservation hôtel",
-                "city": snapshot.get("city"),
+                "phase": booking_phase,
+                "title": snapshot.get("hotel_name")
+                or booking.get("hotel_name")
+                or "Réservation hôtel",
+                "city": snapshot.get("city") or booking.get("city"),
                 "origin_iata": None,
-                "dest_iata": snapshot.get("destination"),
+                "dest_iata": snapshot.get("destination")
+                or booking.get("destination"),
                 "out_date": _date10(dates.get("outbound")),
                 "ret_date": _date10(dates.get("inbound")),
-                "image_url": snapshot.get("image_url"),
+                "image_url": snapshot.get("image_url")
+                or booking.get("hotel_photo"),
                 "is_organizer": False,
                 "capabilities": {
                     "can_scan": False,
                     "can_choose_flight": False,
-                    "can_compose_hotel": False,
+                    "can_compose_hotel": booking_phase != "booked",
                     "can_view_confirmation": True,
                 },
-                "pipeline": {"flight": "none", "hotel": "booked"},
+                "pipeline": {
+                    "flight": "none",
+                    "hotel": _hotel_pipeline_state(
+                        draft=None, booking=booking, phase=booking_phase
+                    ),
+                },
                 "planned_trip": None,
                 "updated_at": booking.get("updated_at"),
             }

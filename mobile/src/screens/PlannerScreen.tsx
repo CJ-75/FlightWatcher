@@ -140,11 +140,23 @@ export function PlannerScreen() {
         } else {
           try {
             const list = await getApi().listTravelWorkspaces()
-            // Planner hub = planned trips only (réservations → TripSummary).
+            // Planned trips + séjours with hôtel sélectionné / résa entamée.
             setWorkspaces(
-              (Array.isArray(list) ? list : []).filter((w) =>
-                Boolean(w.planned_trip_id),
-              ),
+              (Array.isArray(list) ? list : []).filter((w) => {
+                if (w.planned_trip_id) return true
+                const hotel = w.pipeline?.hotel
+                if (hotel === 'selected' || hotel === 'booked') return true
+                if (w.hotel_booking_id) return true
+                const st = String(w.hotel_booking_status || '')
+                return (
+                  st === 'draft' ||
+                  st === 'prebooked' ||
+                  st === 'payment_pending' ||
+                  st === 'payment_succeeded' ||
+                  st === 'booking_pending' ||
+                  st === 'confirmed'
+                )
+              }),
             )
           } catch {
             const legacy = await getApi().listPlannedTrips()
@@ -203,8 +215,17 @@ export function PlannerScreen() {
   }, [counts, filter, workspaces.length])
 
   const openWorkspace = (workspace: TravelWorkspace) => {
-    if (!workspace.planned_trip_id) return
-    navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
+    if (workspace.planned_trip_id) {
+      navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
+      return
+    }
+    if (workspace.draft_token) {
+      navigation.navigate('TripSummary', { draftToken: workspace.draft_token })
+      return
+    }
+    if (workspace.hotel_booking_id) {
+      navigation.navigate('Bookings')
+    }
   }
 
   const density: JourneyDensity =
