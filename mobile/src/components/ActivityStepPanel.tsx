@@ -17,6 +17,7 @@ import {
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
+  activityDestinationLabelFr,
   canonicalViatorProductUrl,
   isTripItemsAuthError,
   pickTripItemOwner,
@@ -232,21 +233,21 @@ export function ActivityStepPanel(props: {
         </Text>
         {hasAccount ? (
           <Pressable
-            style={[styles.addBtn, resuming && { opacity: 0.6 }]}
+            style={[styles.primaryBtn, resuming && { opacity: 0.6 }]}
             disabled={resuming}
             onPress={() => void onResumeSession()}
           >
-            <Text style={styles.addBtnText}>
+            <Text style={styles.primaryBtnText}>
               {resuming ? 'Reprise…' : 'Reprendre ma session'}
             </Text>
           </Pressable>
         ) : (
           <Pressable
-            style={[styles.addBtn, signingIn && { opacity: 0.6 }]}
+            style={[styles.primaryBtn, signingIn && { opacity: 0.6 }]}
             disabled={signingIn}
             onPress={() => void onSignIn()}
           >
-            <Text style={styles.addBtnText}>
+            <Text style={styles.primaryBtnText}>
               {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
             </Text>
           </Pressable>
@@ -255,24 +256,40 @@ export function ActivityStepPanel(props: {
     )
   }
 
-  const visibleCount = items.filter((i) => i.status !== 'skipped').length
+  const cityLabel = activityDestinationLabelFr(city)
 
   return (
     <View style={styles.wrap}>
       <Pressable
         onPress={openActivitiesCatalog}
         style={({ pressed }) => [
-          styles.addBtn,
+          styles.catalogBtn,
           shadow.soft,
-          pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+          pressed && {
+            backgroundColor: colors.primaryMuted,
+            transform: [{ scale: 0.985 }],
+          },
         ]}
         accessibilityRole="button"
-        accessibilityLabel={ACTIVITY_ADD_LABEL_FR}
+        accessibilityLabel={`${ACTIVITY_ADD_LABEL_FR} — ${cityLabel}`}
       >
-        <Text style={styles.addBtnPlus}>+</Text>
-        <View style={styles.addBtnCopy}>
-          <Text style={styles.addBtnText}>{ACTIVITY_ADD_LABEL_FR}</Text>
-          <Text style={styles.addBtnHint}>Catalogue · {city}</Text>
+        <View style={styles.catalogIcon}>
+          <Text style={styles.catalogIconPlus}>+</Text>
+        </View>
+        <View style={styles.catalogCopy}>
+          <Text style={styles.catalogTitle}>{ACTIVITY_ADD_LABEL_FR}</Text>
+          <View style={styles.catalogMetaRow}>
+            <View style={styles.catalogCityPill}>
+              <Text style={styles.catalogCityText} numberOfLines={1}>
+                {cityLabel}
+              </Text>
+            </View>
+            <Text style={styles.catalogMetaDot}>·</Text>
+            <Text style={styles.catalogMeta}>Catalogue</Text>
+          </View>
+        </View>
+        <View style={styles.catalogChevron}>
+          <Text style={styles.catalogChevronText}>›</Text>
         </View>
       </Pressable>
 
@@ -281,12 +298,6 @@ export function ActivityStepPanel(props: {
       ) : null}
       {error ? (
         <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text>
-      ) : null}
-
-      {!loading && visibleCount === 0 ? (
-        <Text style={styles.emptyHint}>
-          Choisis une activité dans le catalogue — elle apparaîtra ici.
-        </Text>
       ) : null}
 
       {items.map((it, idx) =>
@@ -362,7 +373,7 @@ export function ActivityStepPanel(props: {
             </Text>
             <View style={styles.modalActions}>
               <Pressable
-                style={[styles.addBtn, { flex: 1 }]}
+                style={[styles.primaryBtn, { flex: 1 }]}
                 onPress={() => {
                   if (pendingBook) void patch(pendingBook.id, { status: 'booked' })
                   track('booked_yes')
@@ -370,7 +381,7 @@ export function ActivityStepPanel(props: {
                   setAskBooked(false)
                 }}
               >
-                <Text style={styles.addBtnText}>Oui</Text>
+                <Text style={styles.primaryBtnText}>Oui</Text>
               </Pressable>
               <Pressable
                 style={[styles.ghostBtn, { flex: 1 }]}
@@ -394,40 +405,108 @@ export function ActivityStepPanel(props: {
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
-  addBtn: {
+  catalogBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 72,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+  },
+  catalogIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catalogIconPlus: {
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    color: colors.primaryDeep,
+    lineHeight: 26,
+    marginTop: -1,
+  },
+  catalogCopy: {
+    flex: 1,
+    gap: 6,
+    minWidth: 0,
+  },
+  catalogTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.ink,
+    letterSpacing: -0.3,
+  },
+  catalogMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  catalogCityPill: {
+    backgroundColor: colors.white,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    maxWidth: '70%',
+  },
+  catalogCityText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.primaryInk,
+    letterSpacing: -0.1,
+  },
+  catalogMetaDot: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.faint,
+  },
+  catalogMeta: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  catalogChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catalogChevronText: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.primaryDeep,
+    lineHeight: 22,
+    marginTop: -1,
+    marginLeft: 1,
+  },
+  primaryBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.primary,
     borderRadius: radius.lg,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  addBtnPlus: {
-    fontFamily: fonts.extrabold,
-    fontSize: 26,
-    color: colors.white,
-    lineHeight: 28,
-    marginTop: -2,
-  },
-  addBtnCopy: { flex: 1, gap: 2 },
-  addBtnText: {
+  primaryBtnText: {
     fontFamily: fonts.bold,
     fontSize: 15,
     color: colors.white,
     letterSpacing: -0.2,
-  },
-  addBtnHint: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.78)',
-    textTransform: 'capitalize',
-  },
-  emptyHint: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 18,
   },
   authCard: {
     gap: 10,
