@@ -14,6 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from api_models import (
     AddTripMemberRequest,
     CreatePlannedTripFromFlightRequest,
+    CreatePlannedTripFromMyTripRequest,
     CreatePlannedTripRequest,
     DateAvecHoraire,
     UpdatePlannedTripRequest,
@@ -1637,25 +1638,18 @@ def _city_label_from_trip(trip_data: dict) -> str:
     return code or "Voyage"
 
 
-@router.post("/api/planner/trips/from-flight")
-@optional_auth
-async def create_trip_from_flight(
-    body: CreatePlannedTripFromFlightRequest, request: Request
-):
-    """Search → Planner: create locked trip with this flight already accepted."""
-    user_id = _require_user(request)
-    supabase = _svc()
-
-    raw = body.trip if isinstance(body.trip, dict) else {}
-    if not raw:
-        raise HTTPException(status_code=400, detail="Vol requis")
-
-    trip_data = _trip_data_json(raw)
+def _insert_locked_trip_with_proposal(
+    supabase,
+    *,
+    user_id: str,
+    trip_data: dict,
+    passengers: int,
+    name: str,
+    direct: bool,
+) -> Tuple[dict, dict]:
+    """Create locked planned_trip + accepted proposal. Returns (trip, proposal)."""
     aller = trip_data.get("aller") or {}
     retour = trip_data.get("retour") or {}
-    if not aller or not retour:
-        raise HTTPException(status_code=400, detail="Vol aller/retour incomplets")
-
     d_out = _leg_date_horaire(aller)
     d_ret = _leg_date_horaire(retour)
     if not d_out or not d_ret:
@@ -1677,37 +1671,22 @@ async def create_trip_from_flight(
     if not dep:
         raise HTTPException(status_code=400, detail="Aéroport de départ manquant")
 
-    passengers = _clamp_passengers(
-        body.passengers
-        if body.passengers is not None
-        else (raw.get("passengers") or raw.get("adults") or 1)
-    )
     try:
         price = float(trip_data.get("prix_total") or 0)
     except (TypeError, ValueError):
         price = 0.0
     budget_max = max(1, int(round(price)) if price > 0 else 200)
-
-    city = _city_label_from_trip(trip_data)
-    name = (body.name or "").strip() or city
-
-    direct_flag = body.direct
-    if direct_flag is None:
-        transfers = trip_data.get("transfers")
-        try:
-            direct_flag = int(transfers or 0) == 0
-        except (TypeError, ValueError):
-            direct_flag = True
+    pax = _clamp_passengers(passengers)
 
     token = secrets.token_hex(16)
     now = datetime.utcnow().isoformat()
     trip_row = {
         "organizer_id": user_id,
-        "name": name,
+        "name": (name or "").strip() or _city_label_from_trip(trip_data),
         "departure_airport": dep,
         "arrival_airport": arr,
-        "passengers": passengers,
-        "direct": bool(direct_flag),
+        "passengers": pax,
+        "direct": bool(direct),
         "dates_depart": [d_out.model_dump()],
         "dates_retour": [d_ret.model_dump()],
         "budget_max": budget_max,
@@ -1744,7 +1723,136 @@ async def create_trip_from_flight(
     )
     if not proposal_ins.data:
         raise HTTPException(status_code=500, detail="Proposition non créée")
-    proposal = proposal_ins.data[0]
+    return trip, proposal_ins.data[0]
+
+
+def _trip_data_from_my_trip_draft(draft: dict) -> dict:
+    """Build planner proposal trip_data from a Mon voyage draft (flight snapshot)."""
+    payload = draft.get("payload") or {}
+    flight = payload.get("flight") or {}
+    origin = _single_iata(
+        flight.get("origin_iata")
+        or draft.get("origin_iata")
+        or payload.get("origin_iata")
+        or payload.get("departure_airport")
+        or ""
+    )
+    dest = _single_iata(
+        flight.get("destination_iata")
+        or draft.get("dest_iata")
+        or payload.get("destination")
+        or ""
+    )
+    out_raw = (
+        flight.get("outbound_local")
+        or flight.get("out_dep_local")
+        or draft.get("out_date")
+        or (payload.get("dates") or {}).get("outbound")
+        or ""
+    )
+    ret_raw = (
+        flight.get("inbound_local")
+        or flight.get("ret_dep_local")
+        or draft.get("ret_date")
+        or (payload.get("dates") or {}).get("inbound")
+        or ""
+    )
+    out = str(out_raw).strip()
+    ret = str(ret_raw).strip()
+    if len(out) == 10:
+        out = f"{out}T12:00:00"
+    if len(ret) == 10:
+        ret = f"{ret}T12:00:00"
+    try:
+        price = float(
+            flight.get("price_pp")
+            or payload.get("price_per_person")
+            or 0
+        )
+    except (TypeError, ValueError):
+        price = 0.0
+    city = (
+        str(draft.get("city_name") or payload.get("city") or "").strip()
+        or dest
+    )
+    direct = flight.get("direct")
+    if direct is None:
+        transfers = 0
+    else:
+        transfers = 0 if direct else 1
+    return {
+        "aller": {
+            "flightNumber": str(flight.get("flight_number") or ""),
+            "origin": origin,
+            "originFull": origin,
+            "destination": dest,
+            "destinationFull": city,
+            "departureTime": out,
+            "price": price,
+            "currency": "EUR",
+        },
+        "retour": {
+            "flightNumber": str(flight.get("return_flight_number") or ""),
+            "origin": dest,
+            "originFull": city,
+            "destination": origin,
+            "destinationFull": origin,
+            "departureTime": ret,
+            "price": 0,
+            "currency": "EUR",
+        },
+        "prix_total": price,
+        "destination_code": dest,
+        "provider": flight.get("provider"),
+        "airline": flight.get("airline") or flight.get("carrier"),
+        "transfers": transfers,
+        "booking_url": flight.get("booking_url") or payload.get("booking_url"),
+    }
+
+
+@router.post("/api/planner/trips/from-flight")
+@optional_auth
+async def create_trip_from_flight(
+    body: CreatePlannedTripFromFlightRequest, request: Request
+):
+    """Search → Planner: create locked trip with this flight already accepted."""
+    user_id = _require_user(request)
+    supabase = _svc()
+
+    raw = body.trip if isinstance(body.trip, dict) else {}
+    if not raw:
+        raise HTTPException(status_code=400, detail="Vol requis")
+
+    trip_data = _trip_data_json(raw)
+    aller = trip_data.get("aller") or {}
+    retour = trip_data.get("retour") or {}
+    if not aller or not retour:
+        raise HTTPException(status_code=400, detail="Vol aller/retour incomplets")
+
+    passengers = _clamp_passengers(
+        body.passengers
+        if body.passengers is not None
+        else (raw.get("passengers") or raw.get("adults") or 1)
+    )
+    city = _city_label_from_trip(trip_data)
+    name = (body.name or "").strip() or city
+
+    direct_flag = body.direct
+    if direct_flag is None:
+        transfers = trip_data.get("transfers")
+        try:
+            direct_flag = int(transfers or 0) == 0
+        except (TypeError, ValueError):
+            direct_flag = True
+
+    trip, proposal = _insert_locked_trip_with_proposal(
+        supabase,
+        user_id=user_id,
+        trip_data=trip_data,
+        passengers=passengers,
+        name=name,
+        direct=bool(direct_flag),
+    )
 
     try:
         _ensure_execution_draft_for_accepted(
@@ -1752,6 +1860,106 @@ async def create_trip_from_flight(
         )
     except Exception as exc:
         print(f"⚠️ from-flight draft: {exc}")
+
+    out = _row_to_trip(trip, proposals_count=1)
+    out["accepted_proposal"] = proposal
+    out["proposals"] = [proposal]
+    return out
+
+
+@router.post("/api/planner/trips/from-my-trip")
+@optional_auth
+async def create_trip_from_my_trip(
+    body: CreatePlannedTripFromMyTripRequest, request: Request
+):
+    """Séjour → Planner: promote Mon voyage draft (vol + hôtel sélectionné)."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    token = (body.draft_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Brouillon requis")
+
+    from deals.my_trips import claim_draft, get_draft
+
+    draft = get_draft(supabase, token)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Séjour introuvable")
+    owner = draft.get("user_id")
+    if owner and str(owner) != str(user_id):
+        raise HTTPException(status_code=403, detail="Séjour non accessible")
+
+    existing_trip_id = draft.get("source_planned_trip_id")
+    if existing_trip_id:
+        row = _user_can_access(supabase, str(existing_trip_id), user_id)
+        if row:
+            proposals = (
+                supabase.table("trip_proposals")
+                .select("*")
+                .eq("trip_id", existing_trip_id)
+                .order("created_at", desc=True)
+                .execute()
+            ).data or []
+            accepted = next(
+                (p for p in proposals if p.get("status") == "accepted"),
+                None,
+            )
+            out = _row_to_trip(row, proposals_count=len(proposals))
+            out["accepted_proposal"] = accepted
+            out["proposals"] = proposals
+            return out
+
+    if not owner:
+        claimed = claim_draft(supabase, token, user_id)
+        if claimed:
+            draft = claimed
+
+    trip_data = _trip_data_json(_trip_data_from_my_trip_draft(draft))
+    if not (trip_data.get("aller") and trip_data.get("retour")):
+        raise HTTPException(status_code=400, detail="Vol incomplets dans le séjour")
+
+    passengers = _clamp_passengers(
+        draft.get("adults")
+        or (draft.get("payload") or {}).get("adults")
+        or 1
+    )
+    city = (
+        str(draft.get("city_name") or (draft.get("payload") or {}).get("city") or "")
+        .strip()
+        or _city_label_from_trip(trip_data)
+    )
+    name = (body.name or "").strip() or city
+    flight = (draft.get("payload") or {}).get("flight") or {}
+    direct_flag = flight.get("direct")
+    if direct_flag is None:
+        direct_flag = int(trip_data.get("transfers") or 0) == 0
+
+    trip, proposal = _insert_locked_trip_with_proposal(
+        supabase,
+        user_id=user_id,
+        trip_data=trip_data,
+        passengers=passengers,
+        name=name,
+        direct=bool(direct_flag),
+    )
+
+    # Keep the same draft (hotel sélectionné inclus) — do not create a blank one.
+    try:
+        if not draft.get("user_id"):
+            supabase.table("my_trip_drafts").update(
+                {"user_id": user_id, "updated_at": datetime.utcnow().isoformat()}
+            ).eq("id", draft["id"]).execute()
+            draft["user_id"] = user_id
+        _sync_execution_draft_to_proposal(
+            supabase, draft, trip=trip, proposal=proposal
+        )
+    except Exception as exc:
+        print(f"⚠️ from-my-trip link draft: {exc}")
+        try:
+            _ensure_execution_draft_for_accepted(
+                supabase, trip=trip, proposal=proposal, user_id=user_id
+            )
+        except Exception as exc2:
+            print(f"⚠️ from-my-trip fallback draft: {exc2}")
 
     out = _row_to_trip(trip, proposals_count=1)
     out["accepted_proposal"] = proposal

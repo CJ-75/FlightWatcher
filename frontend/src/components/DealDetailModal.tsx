@@ -19,6 +19,7 @@ import {
 import type { HotelGuestReview } from '@flightwatcher/shared'
 import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
 import { useI18n } from '../contexts/I18nContext'
+import { getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { rememberTrip } from '../utils/tripRecovery'
 import { DealCheckoutFlow } from './DealCheckoutFlow'
@@ -393,6 +394,11 @@ export function DealDetailModal({
   }
 
   const startMyTrip = async () => {
+    const user = await getCurrentUser()
+    if (!user) {
+      onNeedLogin?.()
+      return
+    }
     setStartingTrip(true)
     try {
       const draft = await getApiClient().createMyTrip(await buildDraftPayload())
@@ -402,8 +408,18 @@ export function DealDetailModal({
           city: draft.city_name || deal.city,
         })
       }
-      onClose()
-      navigate(`/trip/${draft.draft_token}`)
+      try {
+        const created = await getApiClient().createPlannedTripFromMyTrip({
+          draft_token: draft.draft_token,
+          name: deal.city || undefined,
+        })
+        onClose()
+        navigate(`/planner/${encodeURIComponent(created.id)}`)
+      } catch {
+        // Fallback: séjour with vol + hôtel already in draft
+        onClose()
+        navigate(`/trip/${draft.draft_token}`)
+      }
     } catch {
       if (flightUrl) window.open(flightUrl, '_blank', 'noopener,noreferrer')
     } finally {
@@ -1095,7 +1111,7 @@ export function DealDetailModal({
               disabled={startingTrip}
               className="shrink-0 bg-primary-500 hover:bg-primary-600 text-white font-bold px-5 py-3 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
             >
-              {startingTrip ? '…' : 'Continuer'}
+              {startingTrip ? '…' : 'Organiser mon séjour'}
             </button>
           </div>
         </motion.div>

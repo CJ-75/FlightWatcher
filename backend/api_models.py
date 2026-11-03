@@ -164,6 +164,13 @@ class CreatePlannedTripFromFlightRequest(BaseModel):
     direct: Optional[bool] = None
 
 
+class CreatePlannedTripFromMyTripRequest(BaseModel):
+    """Séjour → Planner: lock trip from an existing Mon voyage draft (flight + hotel)."""
+
+    draft_token: str
+    name: Optional[str] = None
+
+
 class UpdatePlannedTripRequest(BaseModel):
     name: Optional[str] = None
     departure_airport: Optional[str] = None

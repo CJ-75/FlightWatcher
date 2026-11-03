@@ -32,6 +32,7 @@ import {
   reviewMetaLine,
 } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
+import { useAuth } from '../context/AuthContext'
 import { openInAppBrowser } from '../lib/openInApp'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -76,6 +77,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const { dealId } = route.params
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
+  const { user, isGuest, signInWithGoogle } = useAuth()
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
 
   // Large gallery (as before); shrink only on very short phones so 1er hôtel can peek.
@@ -395,6 +397,20 @@ export function DealDetailScreen({ route, navigation }: Props) {
   }
 
   const startMyTrip = async () => {
+    if (!user && !(__DEV__ && isGuest)) {
+      Alert.alert(
+        'Connexion requise',
+        'Connecte-toi pour organiser ce séjour dans le planner.',
+        [
+          { text: 'Annuler', style: 'cancel' },
+          {
+            text: 'Se connecter',
+            onPress: () => void signInWithGoogle(),
+          },
+        ],
+      )
+      return
+    }
     setStartingTrip(true)
     try {
       const draft = await resolveDraft()
@@ -409,12 +425,22 @@ export function DealDetailScreen({ route, navigation }: Props) {
         participants: adults,
         flight_pp: deal.flight?.price_pp,
       })
-      navigation.navigate('TripSummary', {
-        draftToken: draft.draft_token,
-        seed: draft,
+      if (__DEV__ && isGuest) {
+        const { addGuestTripFromMyTripDraft } = await import('../dev/guestPreview')
+        const created = addGuestTripFromMyTripDraft({
+          draft,
+          city: deal.city,
+        })
+        navigation.navigate('TripDetail', { tripId: created.id })
+        return
+      }
+      const created = await getApi().createPlannedTripFromMyTrip({
+        draft_token: draft.draft_token,
+        name: deal.city || undefined,
       })
+      navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      if (flightUrl) openInAppBrowser(navigation, flightUrl, 'Réserver le vol')
+      Alert.alert('Erreur', 'Impossible d’ouvrir le planner — réessaie')
     } finally {
       setStartingTrip(false)
     }

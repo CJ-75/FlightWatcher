@@ -484,6 +484,12 @@ export interface CreatePlannedTripFromFlightRequest {
   direct?: boolean
 }
 
+/** Séjour → Planner: promote Mon voyage draft (vol + hôtel). */
+export interface CreatePlannedTripFromMyTripRequest {
+  draft_token: string
+  name?: string
+}
+
 export interface UpdatePlannedTripRequest {
   name?: string
   departure_airport?: string

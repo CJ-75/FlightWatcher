@@ -5,6 +5,7 @@ import type {
   InvitePreview,
   LikedActivity,
   LikedDeal,
+  MyTripDraft,
   PlannedTrip,
   PlannedTripDetail,
   SavedFavorite,
@@ -383,6 +384,127 @@ export function addGuestTripFromFlight(opts: {
       },
     ],
   }
+  trips = [row, ...trips]
+  return cloneTrip(row)
+}
+
+/** Séjour → Planner (guest): locked trip from Mon voyage draft (vol + hôtel). */
+export function addGuestTripFromMyTripDraft(opts: {
+  draft: MyTripDraft
+  city?: string | null
+}): PlannedTripDetail {
+  const { draft } = opts
+  const payload = (draft.payload || {}) as Record<string, unknown>
+  const flight = (payload.flight || {}) as Record<string, unknown>
+  const hotel =
+    (draft.hotel as Record<string, unknown> | null | undefined) ||
+    (payload.hotel as Record<string, unknown> | null | undefined) ||
+    null
+  const origin = String(
+    flight.origin_iata || draft.origin_iata || payload.origin_iata || 'BVA',
+  )
+  const dest = String(
+    flight.destination_iata || draft.dest_iata || payload.destination || '',
+  )
+  const outRaw = String(
+    flight.outbound_local ||
+      flight.out_dep_local ||
+      draft.out_date ||
+      '',
+  )
+  const retRaw = String(
+    flight.inbound_local ||
+      flight.ret_dep_local ||
+      draft.ret_date ||
+      '',
+  )
+  const outIso = outRaw.slice(0, 10)
+  const retIso = retRaw.slice(0, 10)
+  const outTime = outRaw.includes('T')
+    ? outRaw.split('T')[1]?.slice(0, 5) || '12:00'
+    : '12:00'
+  const retTime = retRaw.includes('T')
+    ? retRaw.split('T')[1]?.slice(0, 5) || '12:00'
+    : '12:00'
+  const price = Number(flight.price_pp || payload.price_per_person || 0)
+  const city =
+    opts.city ||
+    draft.city_name ||
+    String(payload.city || '') ||
+    dest ||
+    'Voyage'
+  const passengers = Math.min(6, Math.max(1, Number(draft.adults) || 1))
+  const id = `dev-trip-${Date.now()}`
+  const proposalId = `dev-prop-${Date.now()}`
+  const now = new Date().toISOString()
+  const tripData = {
+    aller: {
+      flightNumber: '',
+      origin,
+      originFull: origin,
+      destination: dest,
+      destinationFull: city,
+      departureTime: outRaw.length === 10 ? `${outRaw}T12:00:00` : outRaw,
+      price,
+      currency: 'EUR',
+    },
+    retour: {
+      flightNumber: '',
+      origin: dest,
+      originFull: city,
+      destination: origin,
+      destinationFull: origin,
+      departureTime: retRaw.length === 10 ? `${retRaw}T12:00:00` : retRaw,
+      price: 0,
+      currency: 'EUR',
+    },
+    prix_total: price,
+    destination_code: dest,
+    provider: flight.provider as string | undefined,
+    airline: (flight.airline || flight.carrier) as string | undefined,
+    transfers: flight.direct === false ? 1 : 0,
+    booking_url: (flight.booking_url || payload.booking_url) as
+      | string
+      | undefined,
+  } as EnrichedTripResponse
+  const proposal: TripProposal = {
+    id: proposalId,
+    trip_id: id,
+    trip_data: tripData,
+    status: 'accepted',
+    created_at: now,
+  }
+  const row: PlannedTripDetail = {
+    id,
+    organizer_id: DEV_GUEST_USER.id,
+    name: city,
+    departure_airport: origin,
+    arrival_airport: dest || null,
+    passengers,
+    direct: flight.direct !== false,
+    dates_depart: [{ date: outIso, heure_min: outTime, heure_max: outTime }],
+    dates_retour: [{ date: retIso, heure_min: retTime, heure_max: retTime }],
+    budget_max: Math.max(1, Math.round(price) || 200),
+    invite_token: `dev-invite-${id}`,
+    status: 'locked',
+    created_at: now,
+    proposals_count: 1,
+    proposals: [proposal],
+    accepted_proposal: proposal,
+    members: [
+      {
+        id: `${id}-org`,
+        trip_id: id,
+        user_id: DEV_GUEST_USER.id,
+        display_name: 'Aperçu Expo',
+        role: 'organizer',
+        status: 'joined',
+        joined_at: now,
+      },
+    ],
+  }
+  // Keep hotel on a side map keyed by trip for TripDetail guest workspace
+  ;(row as PlannedTripDetail & { _guestHotel?: unknown })._guestHotel = hotel
   trips = [row, ...trips]
   return cloneTrip(row)
 }

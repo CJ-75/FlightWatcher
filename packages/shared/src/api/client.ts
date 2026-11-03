@@ -3,6 +3,7 @@ import type {
   ApiConfig,
   AddTripMemberRequest,
   CreatePlannedTripFromFlightRequest,
+  CreatePlannedTripFromMyTripRequest,
   CreatePlannedTripRequest,
   Destination,
   InspireRequest,
@@ -809,6 +810,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }),
     createPlannedTripFromFlight: (body: CreatePlannedTripFromFlightRequest) =>
       request<PlannedTripDetail>('/api/planner/trips/from-flight', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    createPlannedTripFromMyTrip: (body: CreatePlannedTripFromMyTripRequest) =>
+      request<PlannedTripDetail>('/api/planner/trips/from-my-trip', {
         method: 'POST',
         body: JSON.stringify(body),
       }),
