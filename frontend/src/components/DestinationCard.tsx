@@ -4,6 +4,7 @@ import {
   cityDisplayNameFr,
   countryIsoForAirport,
   formatAirlineLabel,
+  primaryAirportCode,
   resolveTripImageUrl,
 } from '@flightwatcher/shared';
 import { EnrichedTripResponse } from '../types';
@@ -100,9 +101,12 @@ export function DestinationCard({
     });
   };
 
-  const destCode = trip.aller.destination || trip.destination_code;
+  const destCode = primaryAirportCode(
+    trip.aller.destination || trip.destination_code,
+  );
+  const originCode = primaryAirportCode(trip.aller.origin);
   const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull);
-  const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull);
+  const originCity = cityDisplayNameFr(originCode, trip.aller.originFull);
   const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull);
   const imageUrl = resolveTripImageUrl({
     city: cityName,

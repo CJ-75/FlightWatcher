@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   cityDisplayNameFr,
   dateFromFlightIso,
+  primaryAirportCode,
   resolvePriceSourceBooking,
   type EnrichedTripResponse,
   type PriceSourceBooking,
@@ -42,23 +43,24 @@ export function resolveTripPriceSource(
   passengers: number,
   language = 'fr',
 ): PriceSourceBooking {
+  const originIata = primaryAirportCode(trip.aller?.origin)
+  const destIata = primaryAirportCode(
+    trip.destination_code || trip.aller?.destination,
+  )
   return resolvePriceSourceBooking({
     airline: trip.airline,
     provider: trip.provider,
     bookingUrl: trip.booking_url,
-    originIata: trip.aller?.origin,
-    destIata: trip.destination_code || trip.aller?.destination,
+    originIata,
+    destIata,
     outDate: dateFromFlightIso(trip.aller?.departureTime),
     retDate: dateFromFlightIso(trip.retour?.departureTime),
     outLocal: trip.aller?.departureTime,
     inLocal: trip.retour?.departureTime,
     adults: passengers,
     language,
-    originLabel: cityDisplayNameFr(trip.aller?.origin, trip.aller?.originFull),
-    arrivalLabel: cityDisplayNameFr(
-      trip.destination_code || trip.aller?.destination,
-      trip.aller?.destinationFull,
-    ),
+    originLabel: cityDisplayNameFr(originIata, trip.aller?.originFull),
+    arrivalLabel: cityDisplayNameFr(destIata, trip.aller?.destinationFull),
   })
 }
 

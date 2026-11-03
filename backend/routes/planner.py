@@ -92,10 +92,39 @@ def _normalize_departure(raw: Optional[str]) -> str:
     return dep
 
 
+def _single_iata(value: Any) -> str:
+    """One airport code for a flown leg — never CDG,ORY,BVA search criteria."""
+    raw = str(value or "").strip().upper()
+    for part in re.split(r"[,;|/\s]+", raw):
+        code = part.strip()
+        if len(code) == 3 and code.isalpha():
+            return code
+    return raw[:3] if len(raw) >= 3 and raw[:3].isalpha() else raw
+
+
 def _trip_data_json(trip) -> dict:
     if hasattr(trip, "model_dump"):
-        return trip.model_dump(mode="json")
-    return dict(trip)
+        data = trip.model_dump(mode="json")
+    else:
+        data = dict(trip)
+    # Boarding pass / accept must store a single origin & destination IATA.
+    aller = dict(data.get("aller") or {})
+    retour = dict(data.get("retour") or {})
+    if aller:
+        if aller.get("origin"):
+            aller["origin"] = _single_iata(aller.get("origin"))
+        if aller.get("destination"):
+            aller["destination"] = _single_iata(aller.get("destination"))
+        data["aller"] = aller
+    if retour:
+        if retour.get("origin"):
+            retour["origin"] = _single_iata(retour.get("origin"))
+        if retour.get("destination"):
+            retour["destination"] = _single_iata(retour.get("destination"))
+        data["retour"] = retour
+    if data.get("destination_code"):
+        data["destination_code"] = _single_iata(data.get("destination_code"))
+    return data
 
 
 def _parse_date_list(raw) -> list:
@@ -560,11 +589,12 @@ def _planner_draft_payload(trip_data: dict, passengers: int) -> dict:
     """Trusted Planner proposal snapshot -> MyTrip create payload."""
     aller = dict(trip_data.get("aller") or {})
     retour = dict(trip_data.get("retour") or {})
-    destination = (
+    destination = _single_iata(
         trip_data.get("destination_code")
         or aller.get("destination")
         or ""
     )
+    origin = _single_iata(aller.get("origin"))
     outbound = _date10(aller.get("departureTime"))
     inbound = _date10(retour.get("departureTime"))
     if not destination or not outbound or not inbound:
@@ -580,8 +610,8 @@ def _planner_draft_payload(trip_data: dict, passengers: int) -> dict:
         or destination
     )
     return {
-        "origin_iata": aller.get("origin"),
-        "departure_airport": aller.get("origin"),
+        "origin_iata": origin,
+        "departure_airport": origin,
         "destination": destination,
         "city": city,
         "dates": {"outbound": outbound, "inbound": inbound},
@@ -593,7 +623,7 @@ def _planner_draft_payload(trip_data: dict, passengers: int) -> dict:
             "airline": trip_data.get("airline"),
             "booking_url": booking_url,
             "direct": int(trip_data.get("transfers") or 0) == 0,
-            "origin_iata": aller.get("origin"),
+            "origin_iata": origin,
             "destination_iata": destination,
             "outbound_local": aller.get("departureTime") or outbound,
             "inbound_local": retour.get("departureTime") or inbound,

@@ -66,6 +66,12 @@ export function RestaurantStepPanel(props: {
 
   const load = useCallback(async () => {
     if (!draftToken && !plannedTripId) return
+    // Dev guest trips are in-memory only — never hit auth-required trip-items.
+    if (plannedTripId && String(plannedTripId).startsWith('dev-trip-')) {
+      setItems([])
+      setError(null)
+      return
+    }
     setLoading(true)
     try {
       const res = await getApi().listTripItems({

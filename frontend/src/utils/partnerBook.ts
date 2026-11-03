@@ -4,6 +4,7 @@
 import {
   cityDisplayNameFr,
   dateFromFlightIso,
+  primaryAirportCode,
   resolvePriceSourceBooking,
   type MyTripDraft,
   type PriceSourceBooking,
@@ -51,23 +52,24 @@ export function resolveTripPriceSource(
   passengers: number,
   language: string,
 ): PriceSourceBooking {
+  const originIata = primaryAirportCode(trip.aller?.origin)
+  const destIata = primaryAirportCode(
+    trip.destination_code || trip.aller?.destination,
+  )
   return resolvePriceSourceBooking({
     airline: trip.airline,
     provider: trip.provider,
     bookingUrl: trip.booking_url,
-    originIata: trip.aller?.origin,
-    destIata: trip.destination_code || trip.aller?.destination,
+    originIata,
+    destIata,
     outDate: dateFromFlightIso(trip.aller?.departureTime),
     retDate: dateFromFlightIso(trip.retour?.departureTime),
     outLocal: trip.aller?.departureTime,
     inLocal: trip.retour?.departureTime,
     adults: passengers,
     language,
-    originLabel: cityDisplayNameFr(trip.aller?.origin, trip.aller?.originFull),
-    arrivalLabel: cityDisplayNameFr(
-      trip.destination_code || trip.aller?.destination,
-      trip.aller?.destinationFull,
-    ),
+    originLabel: cityDisplayNameFr(originIata, trip.aller?.originFull),
+    arrivalLabel: cityDisplayNameFr(destIata, trip.aller?.destinationFull),
   })
 }
 
@@ -145,8 +147,8 @@ export function openPartnerBookSync(opts: {
     skipReturnBanner,
   } = opts
   const resolved = resolveTripPriceSource(trip, passengers, language)
-  let primaryUrl = resolved.primaryUrl
-  if (resolved.partnerId === 'aviasales' && draftId) {
+  let primaryUrl = String(resolved.primaryUrl || '').trim()
+  if (resolved.partnerId === 'aviasales' && draftId && primaryUrl) {
     try {
       const url = new URL(primaryUrl)
       url.searchParams.set('subid', `fw_${draftId.replace(/-/g, '_')}`)
@@ -154,6 +156,16 @@ export function openPartnerBookSync(opts: {
     } catch {
       /* Keep partner URL unchanged if it cannot be parsed. */
     }
+  }
+  if (!/^https?:\/\//i.test(primaryUrl)) {
+    if (targetWindow && !targetWindow.closed) {
+      try {
+        targetWindow.close()
+      } catch {
+        /* ignore */
+      }
+    }
+    throw new Error('Lien de réservation indisponible pour ce vol')
   }
   const ps = { ...resolved, primaryUrl }
   if (targetWindow && !targetWindow.closed) {

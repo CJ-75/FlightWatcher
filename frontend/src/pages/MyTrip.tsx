@@ -9,6 +9,7 @@ import {
   airportDisplayNameFr,
   ACTIVITY_BACK_TO_PLANNER_FR,
   buildStayPipeline,
+  primaryAirportCode,
   distantAirportLine,
   hotelCancelLabel,
   resolveCarrierBooking,
@@ -269,12 +270,12 @@ export default function MyTrip() {
 
   const nights = party.nights || Number(payload.nights) || 0
 
-  const originIata = String(
+  const originIata = primaryAirportCode(
     flight.origin_iata || payload.origin_iata || draft?.origin_iata || '',
-  ).toUpperCase()
-  const destIata = String(
+  )
+  const destIata = primaryAirportCode(
     flight.destination_iata || payload.destination || payload.dest_iata || '',
-  ).toUpperCase()
+  )
 
   const originName = airportDisplayNameFr(originIata, null)
   const arrivalName = airportDisplayNameFr(destIata, city)

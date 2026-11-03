@@ -9,6 +9,7 @@ import {
   toRyanairDate,
 } from '../dates/presets'
 import { formatAirlineLabel } from '../airlines'
+import { primaryAirportCode } from '../cities'
 
 export type CarrierBookingKind = 'deeplink' | 'homepage' | 'fallback' | 'affiliate'
 
@@ -271,12 +272,14 @@ function tryRyanairDeeplink(
   siteLabel: string,
   airlineName: string,
 ): AirlineResolved | null {
-  if (!(origin && dest && out && ret)) return null
+  const o = primaryAirportCode(origin)
+  const d = primaryAirportCode(dest)
+  if (!(o && d && out && ret)) return null
   try {
     return {
       url: buildRyanairBookingUrl(
         {
-          aller: { origin, destination: dest, departureTime: out },
+          aller: { origin: o, destination: d, departureTime: out },
           retour: { departureTime: ret },
         },
         adults,
@@ -303,8 +306,9 @@ function resolveAirlineOnly(input: ResolveCarrierBookingInput): AirlineResolved 
   const siteLabel = row?.site_label || 'la compagnie'
   const raw = String(input.bookingUrl || '').trim()
 
-  const origin = String(input.originIata || '').toUpperCase()
-  const dest = String(input.destIata || '').toUpperCase()
+  // One IATA per leg — multi-airport search criteria break carrier deeplinks.
+  const origin = primaryAirportCode(input.originIata)
+  const dest = primaryAirportCode(input.destIata)
   const out = String(input.outLocal || input.outDate || '')
   const ret = String(input.inLocal || input.retDate || '')
 

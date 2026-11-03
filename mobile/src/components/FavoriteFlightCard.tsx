@@ -15,6 +15,7 @@ import {
   cityDisplayNameFr,
   countryIsoForAirport,
   formatAirlineLabel,
+  primaryAirportCode,
   resolveTripImageUrl,
 } from '@flightwatcher/shared'
 import { CountryFlag } from './CountryFlag'
@@ -66,14 +67,17 @@ export function FavoriteFlightCard({
   onRemove: () => void
 }) {
   const trip = favorite.trip as EnrichedTripResponse
-  const destCode = trip.aller.destination || trip.destination_code
+  const originCode = primaryAirportCode(trip.aller.origin)
+  const destCode = primaryAirportCode(
+    trip.aller.destination || trip.destination_code,
+  )
   const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull)
-  const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)
+  const originCity = cityDisplayNameFr(originCode, trip.aller.originFull)
   const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull)
   const airlineLabel = formatAirlineLabel(trip)
   const imageUrl = resolveTripImageUrl({
     city: cityName,
-    iata: trip.destination_code,
+    iata: destCode || trip.destination_code,
     imageUrl: trip.image_url,
   })
   const [failed, setFailed] = useState(false)

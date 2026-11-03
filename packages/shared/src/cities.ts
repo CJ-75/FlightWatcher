@@ -540,7 +540,9 @@ export function cityDisplayNameFr(
   code?: string | null,
   label?: string | null,
 ): string {
-  const iata = (code || '').trim().toUpperCase()
+  // Prefer first IATA when search criteria leaked a multi-airport string.
+  const parsed = parseArrivalCodes(code)
+  const iata = (parsed[0] || (code || '').trim().toUpperCase())
   if (iata && CITY_FR_BY_IATA[iata]) return CITY_FR_BY_IATA[iata]
 
   const raw = (label || '').trim()
@@ -856,6 +858,62 @@ export function parseArrivalCodes(value: string | null | undefined): string[] {
 
 /** Alias — same encoding for departure multi-airport selections. */
 export const parseAirportCodes = parseArrivalCodes
+
+/**
+ * One IATA for a real flight leg / boarding pass.
+ * Multi-airport selections (CDG,ORY,BVA) are search criteria — never a ticket.
+ */
+export function primaryAirportCode(value?: string | null): string {
+  const codes = parseAirportCodes(value)
+  if (codes[0]) return codes[0]
+  const raw = (value || '').trim().toUpperCase()
+  return /^[A-Z]{3}$/.test(raw) ? raw : ''
+}
+
+type FlightLegLike = {
+  origin?: string | null
+  destination?: string | null
+  originFull?: string | null
+  destinationFull?: string | null
+  [key: string]: unknown
+}
+
+type TripAirportsLike = {
+  aller?: FlightLegLike | null
+  retour?: FlightLegLike | null
+  destination_code?: string | null
+  [key: string]: unknown
+}
+
+/**
+ * Boarding-pass safe trip: exactly one origin IATA + one destination IATA.
+ * Does not mutate the input.
+ */
+export function sanitizeTripAirports<T extends TripAirportsLike>(trip: T): T {
+  const allerIn = trip.aller || {}
+  const retourIn = trip.retour || {}
+  const origin = primaryAirportCode(allerIn.origin as string | null | undefined)
+  const destination = primaryAirportCode(
+    (allerIn.destination as string | null | undefined) ||
+      (trip.destination_code as string | null | undefined),
+  )
+  const aller = {
+    ...allerIn,
+    origin: origin || String(allerIn.origin || ''),
+    destination: destination || String(allerIn.destination || ''),
+  }
+  const retour = {
+    ...retourIn,
+    origin: destination || primaryAirportCode(retourIn.origin as string | null | undefined) || String(retourIn.origin || ''),
+    destination: origin || primaryAirportCode(retourIn.destination as string | null | undefined) || String(retourIn.destination || ''),
+  }
+  return {
+    ...trip,
+    aller,
+    retour,
+    destination_code: destination || String(trip.destination_code || ''),
+  }
+}
 
 export function encodeArrivalCodes(codes: string[]): string | null {
   const unique = [...new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))]

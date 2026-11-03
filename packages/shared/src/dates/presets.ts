@@ -148,12 +148,18 @@ export function buildRyanairBookingUrl(
   passengers = 1,
 ): string {
   const adults = Math.min(6, Math.max(1, Math.round(passengers) || 1))
+  // Ryanair selects one airport — never pass CDG,ORY,BVA criteria.
   const origin = String(trip.aller?.origin || '')
+    .split(/[,;|/]/)[0]
     .trim()
     .toUpperCase()
   const destination = String(trip.aller?.destination || '')
+    .split(/[,;|/]/)[0]
     .trim()
     .toUpperCase()
+  if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination)) {
+    throw new Error('Ryanair deeplink needs single origin and destination IATA')
+  }
   const departureDate = toRyanairDate(trip.aller?.departureTime)
   const returnDate = toRyanairDate(trip.retour?.departureTime)
 

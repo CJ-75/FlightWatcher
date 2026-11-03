@@ -35,6 +35,8 @@ import {
   formatAirlineLabel,
   formatDateFr,
   parseAirportCodes,
+  primaryAirportCode,
+  sanitizeTripAirports,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   restaurantStepProgress,
@@ -1012,12 +1014,28 @@ export function TripDetailScreen() {
     if (!accepted || flightBookingBusy) return
     setFlightBookingBusy(true)
     try {
+      // Always resolve a single-airport deeplink (never multi CDG,ORY,BVA).
+      const tripForBook = {
+        ...accepted.trip_data,
+        aller: {
+          ...accepted.trip_data.aller,
+          origin: primaryAirportCode(accepted.trip_data.aller?.origin),
+          destination: primaryAirportCode(
+            accepted.trip_data.aller?.destination ||
+              accepted.trip_data.destination_code,
+          ),
+        },
+        destination_code: primaryAirportCode(
+          accepted.trip_data.destination_code ||
+            accepted.trip_data.aller?.destination,
+        ),
+      }
       let primaryUrl = ''
       let partnerId = 'ryanair'
       let isTravelpayouts = false
       try {
         const ps = await preparePartnerBook({
-          trip: accepted.trip_data,
+          trip: tripForBook,
           passengers: pax,
         })
         primaryUrl = String(ps.primaryUrl || '').trim()
@@ -1025,13 +1043,13 @@ export function TripDetailScreen() {
         isTravelpayouts = ps.partnerId === 'aviasales'
       } catch {
         // Resolve URL even if analytics / AsyncStorage fail.
-        const ps = resolveTripPriceSource(accepted.trip_data, pax, 'fr')
+        const ps = resolveTripPriceSource(tripForBook, pax, 'fr')
         primaryUrl = String(ps.primaryUrl || '').trim()
         partnerId = ps.partnerId || partnerId
         isTravelpayouts = ps.partnerId === 'aviasales'
       }
 
-      if (!primaryUrl) {
+      if (!/^https?:\/\//i.test(primaryUrl)) {
         Alert.alert(
           'Réservation',
           'Lien de réservation indisponible pour ce vol.',
@@ -1394,7 +1412,7 @@ export function TripDetailScreen() {
       {accepted && !scanning && !reservationFlags.externalFlight ? (
         <View style={styles.section}>
           <MobileBoardingPass
-            trip={accepted.trip_data}
+            trip={sanitizeTripAirports(accepted.trip_data)}
             passengers={pax}
             bookingBusy={flightBookingBusy}
             canEditModalities={
@@ -1605,8 +1623,12 @@ export function TripDetailScreen() {
               </ImageBackground>
               <View style={styles.extrasBody}>
                 <ActivityStepPanel
-                  draftToken={flightDraft?.draft_token || workspace?.draft_token}
-                  plannedTripId={tripId}
+                  draftToken={
+                    __DEV__ && isGuest
+                      ? null
+                      : flightDraft?.draft_token || workspace?.draft_token
+                  }
+                  plannedTripId={__DEV__ && isGuest ? null : tripId}
                   citySlug={citySlug}
                   enabled={plannerActivitiesEnabled}
                   surface="planner"
@@ -1631,7 +1653,7 @@ export function TripDetailScreen() {
               </ImageBackground>
               <View style={styles.extrasBody}>
                 <RestaurantStepPanel
-                  plannedTripId={tripId}
+                  plannedTripId={__DEV__ && isGuest ? null : tripId}
                   citySlug={citySlug}
                   cityLabel={cityLabel}
                   dateIso={dateIso}
@@ -1994,11 +2016,13 @@ function MobileBoardingPass({
   onToggleModalities?: () => void
   onBook: () => void
 }) {
-  const destination = cityDisplayNameFr(
-    trip.aller.destination,
-    trip.aller.destinationFull,
+  const safe = sanitizeTripAirports(trip)
+  const originCode = primaryAirportCode(safe.aller.origin)
+  const destCode = primaryAirportCode(
+    safe.aller.destination || safe.destination_code,
   )
-  const image = trip.image_url || cityImageUrl(destination, trip.aller.destination)
+  const destination = cityDisplayNameFr(destCode, safe.aller.destinationFull)
+  const image = safe.image_url || cityImageUrl(destination, destCode)
   const formatTicketDate = (value: string) =>
     new Intl.DateTimeFormat('fr-FR', {
       weekday: 'short',
@@ -2027,7 +2051,7 @@ function MobileBoardingPass({
         <View style={styles.ticketTop}>
           <View>
             <Text style={styles.ticketKicker}>CARTE D’EMBARQUEMENT</Text>
-            <Text style={styles.ticketAirline}>{formatAirlineLabel(trip)}</Text>
+            <Text style={styles.ticketAirline}>{formatAirlineLabel(safe)}</Text>
           </View>
           <View style={styles.ticketChosen}>
             <Text style={styles.ticketChosenText}>VOL CHOISI</Text>
@@ -2036,9 +2060,9 @@ function MobileBoardingPass({
 
         <View style={styles.ticketRoute}>
           <View>
-            <Text style={styles.ticketCode}>{trip.aller.origin}</Text>
+            <Text style={styles.ticketCode}>{originCode || '—'}</Text>
             <Text style={styles.ticketCity} numberOfLines={1}>
-              {cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)}
+              {cityDisplayNameFr(originCode, safe.aller.originFull)}
             </Text>
           </View>
           <View style={styles.ticketFlightLine}>
@@ -2048,7 +2072,7 @@ function MobileBoardingPass({
           </View>
           <View style={styles.ticketDestination}>
             <Text style={[styles.ticketCode, styles.ticketCodeAccent]}>
-              {trip.aller.destination}
+              {destCode || '—'}
             </Text>
             <Text style={styles.ticketCity} numberOfLines={1}>
               {destination}
@@ -2059,20 +2083,20 @@ function MobileBoardingPass({
 
       <View style={styles.ticketDetails}>
         {[
-          { label: 'ALLER', flight: trip.aller },
-          { label: 'RETOUR', flight: trip.retour },
+          { label: 'ALLER', flight: safe.aller },
+          { label: 'RETOUR', flight: safe.retour },
         ].map(({ label, flight }) => (
           <View key={label} style={styles.ticketLeg}>
             <Text style={styles.ticketLegLabel}>{label}</Text>
             <Text style={styles.ticketLegDate}>
-              {formatTicketDate(flight.departureTime)}
+              {formatTicketDate(String(flight.departureTime || ''))}
             </Text>
             <View style={styles.ticketLegBottom}>
               <Text style={styles.ticketLegTime}>
-                {formatTicketTime(flight.departureTime)}
+                {formatTicketTime(String(flight.departureTime || ''))}
               </Text>
               <Text style={styles.ticketFlightNumber}>
-                {flight.flightNumber || '—'}
+                {String(flight.flightNumber || '—')}
               </Text>
             </View>
           </View>
@@ -2082,7 +2106,7 @@ function MobileBoardingPass({
       <View style={styles.ticketStub}>
         <View style={styles.ticketPriceBlock}>
           <Text style={styles.ticketPriceLabel}>PRIX PAR PERSONNE</Text>
-          <Text style={styles.ticketPrice}>{Math.round(trip.prix_total)}€</Text>
+          <Text style={styles.ticketPrice}>{Math.round(Number(safe.prix_total) || 0)}€</Text>
           <Text style={styles.ticketPassengers}>
             {passengers} voyageur{passengers > 1 ? 's' : ''}
           </Text>

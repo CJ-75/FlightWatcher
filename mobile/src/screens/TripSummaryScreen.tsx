@@ -26,6 +26,7 @@ import {
   restaurantStepProgress,
   hotelCancelLabel,
   hotelStarsLabel,
+  primaryAirportCode,
   resolveCarrierBooking,
   resolveDraftPartyPrice,
   resolveFlightStepStatus,
@@ -205,24 +206,20 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const inn = String(draft?.ret_date || pl.dates?.inbound || '').slice(0, 10)
   const adults = Math.max(1, Number(draft?.adults || pl.adults || 2))
 
-  const originIata = String(
+  const originIata = primaryAirportCode(
     fl.origin_iata ||
       pl.origin_iata ||
       pl.departure_airport ||
       draft?.origin_iata ||
       '',
   )
-    .trim()
-    .toUpperCase()
-  const destIata = String(
+  const destIata = primaryAirportCode(
     fl.destination_iata ||
       pl.destination_iata ||
       pl.destination ||
       draft?.dest_iata ||
       '',
   )
-    .trim()
-    .toUpperCase()
   const activityCitySlug = useMemo(
     () =>
       resolveActivityCitySlug({
@@ -764,9 +761,9 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           <Text style={styles.cardBody}>
             {[
               fl.airline || carrier.airlineName,
-              fl.origin_iata || draft.origin_iata,
+              primaryAirportCode(fl.origin_iata || draft.origin_iata),
               '→',
-              fl.destination_iata || draft.dest_iata,
+              primaryAirportCode(fl.destination_iata || draft.dest_iata),
             ]
               .filter(Boolean)
               .join(' ')}

@@ -7,6 +7,7 @@ import {
   cityDisplayNameFr,
   countryIsoForAirport,
   formatAirlineLabel,
+  primaryAirportCode,
   resolveTripImageUrl,
   type SavedFavorite,
 } from '@flightwatcher/shared'
@@ -82,9 +83,12 @@ export function FavoriteFlightCard({
   onToggleArchive: () => void
 }) {
   const trip = favorite.trip
-  const destCode = trip.aller.destination || trip.destination_code
+  const originCode = primaryAirportCode(trip.aller.origin)
+  const destCode = primaryAirportCode(
+    trip.aller.destination || trip.destination_code,
+  )
   const cityName = cityDisplayNameFr(destCode, trip.aller.destinationFull)
-  const originCity = cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)
+  const originCity = cityDisplayNameFr(originCode, trip.aller.originFull)
   const destIso = countryIsoForAirport(destCode, trip.aller.destinationFull)
   const airlineLabel = formatAirlineLabel(trip)
   const imageUrl = resolveTripImageUrl({

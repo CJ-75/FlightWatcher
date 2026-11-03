@@ -79,6 +79,15 @@ export function ActivityStepPanel(props: {
 
   const load = useCallback(async () => {
     if (!owner.draft_token && !owner.planned_trip_id) return
+    // Dev guest trips are in-memory only — never hit auth-required trip-items.
+    if (
+      owner.planned_trip_id &&
+      String(owner.planned_trip_id).startsWith('dev-trip-')
+    ) {
+      setItems([])
+      setError(null)
+      return
+    }
     setLoading(true)
     setError(null)
     try {

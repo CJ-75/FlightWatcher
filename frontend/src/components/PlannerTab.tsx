@@ -35,6 +35,8 @@ import {
   generateDatesFromPreset,
   groupAirportsByCity,
   parseAirportCodes,
+  primaryAirportCode,
+  sanitizeTripAirports,
   partyModeFromCount,
   partyModeKickerFr,
   partyModeSubtitleFr,
@@ -1390,13 +1392,29 @@ function TripDetailView({
     setFlightBookingBusy(true)
     setAskFlightBooked(false)
     try {
+      // Always resolve a single-airport deeplink (never multi CDG,ORY,BVA).
+      const tripForBook = {
+        ...accepted.trip_data,
+        aller: {
+          ...accepted.trip_data.aller,
+          origin: primaryAirportCode(accepted.trip_data.aller?.origin),
+          destination: primaryAirportCode(
+            accepted.trip_data.aller?.destination ||
+              accepted.trip_data.destination_code,
+          ),
+        },
+        destination_code: primaryAirportCode(
+          accepted.trip_data.destination_code ||
+            accepted.trip_data.aller?.destination,
+        ),
+      }
       let draftId: string | undefined
       try {
         const draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
         draftId = draft.id
         setFlightDraft(draft)
         const source = openPartnerBookSync({
-          trip: accepted.trip_data,
+          trip: tripForBook,
           passengers: pax,
           language,
           draftId: draft.id,
@@ -1416,19 +1434,33 @@ function TripDetailView({
           leftForFlight.current = true
           leftForFlightAt.current = Date.now()
         }
-      } catch {
-        // Draft optional — still open partner booking.
-        openPartnerBookSync({
-          trip: accepted.trip_data,
-          passengers: pax,
-          language,
-          draftId,
-          targetWindow: popup,
-        })
+      } catch (inner) {
+        // Draft optional — still open partner booking if URL resolves.
+        try {
+          openPartnerBookSync({
+            trip: tripForBook,
+            passengers: pax,
+            language,
+            draftId,
+            targetWindow: popup,
+          })
+        } catch {
+          throw inner instanceof Error
+            ? inner
+            : new Error('Impossible d’ouvrir la réservation')
+        }
       }
-    } catch {
-      popup.close()
-      onToast('Impossible d’ouvrir la réservation — réessaie')
+    } catch (e) {
+      try {
+        popup.close()
+      } catch {
+        /* ignore */
+      }
+      onToast(
+        e instanceof Error && e.message
+          ? e.message
+          : 'Impossible d’ouvrir la réservation — réessaie',
+      )
     } finally {
       setFlightBookingBusy(false)
     }
@@ -2366,7 +2398,7 @@ function TripDetailView({
             {accepted && !externalFlight ? (
               <div className="min-h-[280px] min-w-0 h-full">
                 <SelectedFlightBoardingPass
-                  trip={accepted.trip_data}
+                  trip={sanitizeTripAirports(accepted.trip_data)}
                   passengers={pax}
                   bookingStatus={flightBookingStatus || undefined}
                   bookingBusy={flightBookingBusy}
@@ -3076,15 +3108,20 @@ function SelectedFlightBoardingPass({
       minute: '2-digit',
     }).format(new Date(value))
 
-  const airline = formatAirlineLabel(trip)
+  const safe = sanitizeTripAirports(trip)
+  const airline = formatAirlineLabel(safe)
+  const originCode = primaryAirportCode(safe.aller.origin)
+  const destCode = primaryAirportCode(
+    safe.aller.destination || safe.destination_code,
+  )
   const destinationCity = cityDisplayNameFr(
-    trip.aller.destination,
-    trip.aller.destinationFull,
+    destCode,
+    safe.aller.destinationFull,
   )
   const ticketImage =
-    trip.image_url || cityImageUrl(destinationCity, trip.aller.destination)
+    safe.image_url || cityImageUrl(destinationCity, destCode)
   const isTravelpayouts = /travelpayouts|aviasales/i.test(
-    `${trip.provider || ''} ${trip.booking_url || ''}`,
+    `${safe.provider || ''} ${safe.booking_url || ''}`,
   )
   const isConfirmed =
     bookingStatus === 'user_confirmed' || bookingStatus === 'partner_confirmed'
@@ -3123,10 +3160,10 @@ function SelectedFlightBoardingPass({
           <div className="relative flex items-center gap-2 sm:gap-4">
             <div className="min-w-0">
               <p className="text-3xl sm:text-4xl font-black tracking-[-0.05em] text-white drop-shadow-lg">
-                {trip.aller.origin}
+                {originCode || '—'}
               </p>
               <p className="mt-1 max-w-[110px] truncate text-xs font-semibold text-white/65">
-                {cityDisplayNameFr(trip.aller.origin, trip.aller.originFull)}
+                {cityDisplayNameFr(originCode, safe.aller.originFull)}
               </p>
             </div>
             <div className="flex min-w-[56px] flex-1 items-center" aria-hidden>
@@ -3138,7 +3175,7 @@ function SelectedFlightBoardingPass({
             </div>
             <div className="min-w-0 text-right">
               <p className="text-3xl sm:text-4xl font-black tracking-[-0.05em] text-orange-300 drop-shadow-lg">
-                {trip.aller.destination}
+                {destCode || '—'}
               </p>
               <p className="mt-1 ml-auto max-w-[110px] truncate text-xs font-semibold text-white/65">
                 {destinationCity}
@@ -3148,8 +3185,8 @@ function SelectedFlightBoardingPass({
 
           <div className="relative grid grid-cols-2 gap-2.5">
             {[
-              { label: 'Aller', flight: trip.aller },
-              { label: 'Retour', flight: trip.retour },
+              { label: 'Aller', flight: safe.aller },
+              { label: 'Retour', flight: safe.retour },
             ].map(({ label, flight }) => (
               <div
                 key={label}
@@ -3159,14 +3196,14 @@ function SelectedFlightBoardingPass({
                   {label}
                 </p>
                 <p className="mt-1 text-sm font-extrabold text-slate-900">
-                  {formatBoardingDate(flight.departureTime)}
+                  {formatBoardingDate(String(flight.departureTime || ''))}
                 </p>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <span className="text-lg font-black text-slate-950">
-                    {formatBoardingTime(flight.departureTime)}
+                    {formatBoardingTime(String(flight.departureTime || ''))}
                   </span>
                   <span className="truncate font-mono text-[10px] font-bold text-slate-500">
-                    {flight.flightNumber || '—'}
+                    {String(flight.flightNumber || '—')}
                   </span>
                 </div>
               </div>
@@ -3180,7 +3217,7 @@ function SelectedFlightBoardingPass({
               Prix par personne
             </p>
             <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">
-              {Math.round(trip.prix_total)}€
+              {Math.round(Number(safe.prix_total) || 0)}€
             </p>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
               {passengers} voyageur{passengers > 1 ? 's' : ''}
