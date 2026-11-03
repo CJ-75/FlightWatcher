@@ -35,8 +35,12 @@ import {
   toggleActivityCategory,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
-import { getCurrentUser } from '../lib/supabase'
+import { getCurrentSession } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
+import {
+  fetchActivitiesCatalog,
+  peekActivitiesCatalog,
+} from '../utils/activitiesCatalogCache'
 import { listRememberedTrips, rememberTrip } from '../utils/tripRecovery'
 import { ActivityCitySelect } from './ActivityCitySelect'
 import { ActivityDetailSheet } from './ActivityDetailSheet'
@@ -240,17 +244,28 @@ function ActivityCard({
   )
 }
 
-export function ActivitiesTab(props?: { citySlug?: string }) {
+export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   const params = useParams<{ city?: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const citySlug = props?.citySlug || params.city || ''
+  const tabActive = props?.active !== false
+  // Paris immédiat si pas de ville (warm-mount / /activites nu).
+  const citySlug = (
+    props?.citySlug ||
+    params.city ||
+    'paris'
+  )
+    .trim()
+    .toLowerCase()
   const draftFromUrl = searchParams.get('draft')?.trim() || ''
   const plannedFromUrl = searchParams.get('planned')?.trim() || ''
   const [adults] = useState(2)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !peekActivitiesCatalog(citySlug, 2)?.ok)
   const [error, setError] = useState<string | null>(null)
-  const [items, setItems] = useState<Record<string, unknown>[]>([])
+  const [items, setItems] = useState<Record<string, unknown>[]>(() => {
+    const cached = peekActivitiesCatalog(citySlug, 2)
+    return cached?.ok && Array.isArray(cached.items) ? cached.items : []
+  })
   const [header, setHeader] = useState<string | null>(null)
   const [fallbackHint, setFallbackHint] = useState<string | null>(null)
   const [sort, setSort] = useState<'recommended' | 'price' | 'rating'>('recommended')
@@ -275,8 +290,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
-  const [tripReady, setTripReady] = useState(false)
   const didAutoCity = useRef(false)
+  const syncedOnOpen = useRef(false)
 
   const catalogNavOpts = useMemo(
     () => ({
@@ -290,8 +305,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     let cancelled = false
     void (async () => {
       try {
-        const user = await getCurrentUser()
-        if (!user || cancelled) return
+        const session = await getCurrentSession()
+        if (!session?.user || cancelled) return
         const ids = await getApiClient().getLikedActivityIds()
         if (!cancelled) setLikedIds(new Set(Array.isArray(ids) ? ids : []))
       } catch {
@@ -304,11 +319,44 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   }, [])
 
   useEffect(() => {
-    if (!tripReady) return
-    if (!citySlug && !header) {
-      navigate('/activites/paris', { replace: true })
+    if (!tabActive) return
+    // Remplacer /activites nu sans attendre le bootstrap trip.
+    const p = window.location.pathname.replace(/\/+$/, '') || '/'
+    if (p === '/activites' && !params.city) {
+      navigate(
+        activitiesCityPath('paris', {
+          draftToken: draftFromUrl || undefined,
+          plannedTripId: plannedFromUrl || undefined,
+        }),
+        { replace: true },
+      )
     }
-  }, [tripReady, citySlug, header, navigate])
+  }, [tabActive, params.city, draftFromUrl, plannedFromUrl, navigate])
+
+  // Une fois à l’ouverture de l’onglet : aligner la ville sur le séjour bootstrappé.
+  useEffect(() => {
+    if (!tabActive) {
+      syncedOnOpen.current = false
+      return
+    }
+    if (syncedOnOpen.current || !activeTrip?.slug) return
+    syncedOnOpen.current = true
+    if (activeTrip.slug === citySlug) return
+    navigate(
+      activitiesCityPath(activeTrip.slug, {
+        draftToken: activeTrip.draftToken,
+        plannedTripId: activeTrip.plannedTripId,
+      }),
+      { replace: true },
+    )
+  }, [
+    tabActive,
+    activeTrip?.slug,
+    activeTrip?.draftToken,
+    activeTrip?.plannedTripId,
+    citySlug,
+    navigate,
+  ])
 
   useEffect(() => {
     setSearchQuery('')
@@ -336,12 +384,19 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
   const loadCity = useCallback(
     async (slug: string) => {
       if (!slug) return
-      setLoading(true)
-      setError(null)
+      const cached = peekActivitiesCatalog(slug, adults)
+      if (cached?.ok) {
+        setItems(Array.isArray(cached.items) ? cached.items : [])
+        setError(null)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
       setHeader(null)
       setFallbackHint(null)
       try {
-        const res = await getApiClient().listCityActivities(slug, adults)
+        // Fetch public — ne bloque pas sur JWT / Supabase config.
+        const res = await fetchActivitiesCatalog(slug, adults)
         if (!res.ok) {
           const hint =
             res.error === 'unknown_city'
@@ -355,9 +410,12 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
           throw new Error(hint)
         }
         setItems(Array.isArray(res.items) ? res.items : [])
+        setError(null)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Erreur')
-        setItems([])
+        if (!cached?.ok) {
+          setError(e instanceof Error ? e.message : 'Erreur')
+          setItems([])
+        }
       } finally {
         setLoading(false)
       }
@@ -365,15 +423,15 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
     [adults],
   )
 
+  // Catalogue tout de suite — indépendant du bootstrap trip.
   useEffect(() => {
-    if (!tripReady || !citySlug) return
+    if (!citySlug) return
     void loadCity(citySlug)
-  }, [tripReady, citySlug, loadCity])
+  }, [citySlug, loadCity])
 
   useEffect(() => {
     let cancelled = false
     didAutoCity.current = false
-    setTripReady(false)
     const remembered = listRememberedTrips()
     const fromUrl = draftFromUrl
       ? remembered.find((t) => t.draft_token === draftFromUrl) || {
@@ -396,8 +454,9 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
         slug: tripSlug,
         label: tripLabel,
       })
-      // Force the Ville filter onto the trip destination city.
+      // Force the Ville filter onto the trip destination city (only on Activités).
       if (
+        tabActive &&
         tripSlug &&
         (opts.draftToken || opts.plannedTripId) &&
         tripSlug !== citySlug
@@ -540,8 +599,8 @@ export function ActivitiesTab(props?: { citySlug?: string }) {
             setPlannerCount(0)
           }
         }
-      } finally {
-        if (!cancelled) setTripReady(true)
+      } catch {
+        /* trip bootstrap best-effort */
       }
     })()
     return () => {

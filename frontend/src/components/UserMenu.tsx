@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentUser, signOut, signInWithGoogle, onAuthStateChange } from '../lib/supabase';
+import {
+  getCurrentSession,
+  getCurrentUser,
+  signOut,
+  signInWithGoogle,
+  onAuthStateChange,
+} from '../lib/supabase';
 import { migrateLocalStorageToSupabase } from '../utils/migration';
 import { useI18n } from '../contexts/I18nContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -18,30 +24,31 @@ export function UserMenu() {
   const { t } = useI18n();
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    checkUser();
+    void checkUser();
     
     // Écouter les changements d'authentification
-    const unsubscribe = onAuthStateChange(async (event, session) => {
+    const unsubscribe = onAuthStateChange((event, session) => {
       console.log('Auth event:', event, session?.user?.email);
       
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
-        await loadUserProfile(session.user.id);
-        await handleMigration(session.user.id);
+        void loadUserProfile(session.user.id);
+        void handleMigration(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserProfile(null);
         setMigrationStatus(null);
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
         setUser(session.user);
-        await loadUserProfile(session.user.id);
+        void loadUserProfile(session.user.id);
       }
     });
     
@@ -78,17 +85,21 @@ export function UserMenu() {
 
   const checkUser = async () => {
     try {
+      // Session locale d’abord → chrome immédiat, sans round-trip Auth.
+      const session = await getCurrentSession();
+      if (session?.user) {
+        setUser(session.user);
+        void loadUserProfile(session.user.id);
+        void handleMigration(session.user.id);
+      }
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-      
       if (currentUser) {
-        await loadUserProfile(currentUser.id);
-        await handleMigration(currentUser.id);
+        void loadUserProfile(currentUser.id);
+        void handleMigration(currentUser.id);
       }
     } catch (error) {
       console.error('Erreur vérification utilisateur:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -131,7 +142,7 @@ export function UserMenu() {
   };
 
   const handleSignOut = async () => {
-    setLoading(true);
+    setSigningOut(true);
     const { error } = await signOut();
     
     if (error) {
@@ -142,40 +153,20 @@ export function UserMenu() {
       setIsOpen(false);
       navigate('/login');
     }
-    setLoading(false);
+    setSigningOut(false);
   };
 
   const handleSignIn = async () => {
-    setLoading(true);
+    setSigningIn(true);
     const { error } = await signInWithGoogle();
     
     if (error) {
       console.error('Erreur connexion:', error);
       alert(`${t('auth.error.connection')}: ${error.message}`);
+      setSigningIn(false);
     }
-    setLoading(false);
+    // Sinon redirect OAuth — ne pas rebloquer le bouton en skeleton.
   };
-
-  // Précharger l'image de l'avatar pour le menu
-  useEffect(() => {
-    if (user) {
-      const avatarUrl = user.user_metadata?.avatar_url || userProfile?.avatar_url;
-      if (avatarUrl) {
-        const img = new Image();
-        img.referrerPolicy = 'no-referrer';
-        img.src = avatarUrl;
-      }
-    }
-  }, [user, userProfile]);
-
-  if (loading && !user) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-primary-50 border-2 border-line animate-pulse" />
-        <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-primary-50 border-2 border-line animate-pulse" />
-      </div>
-    );
-  }
 
   if (user) {
     const avatarUrl = user.user_metadata?.avatar_url || userProfile?.avatar_url;
@@ -340,14 +331,14 @@ export function UserMenu() {
 
                   <button
                     onClick={handleSignOut}
-                    disabled={loading}
+                    disabled={signingOut}
                     type="button"
                     className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 min-h-[44px] active:scale-[0.98]"
                   >
                     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
-                    <span>{loading ? t('auth.signOutProgress') : t('auth.signOut')}</span>
+                    <span>{signingOut ? t('auth.signOutProgress') : t('auth.signOut')}</span>
                   </button>
                 </div>
               </motion.div>
@@ -364,7 +355,7 @@ export function UserMenu() {
       <button
         ref={buttonRef}
         onClick={handleSignIn}
-        disabled={loading}
+        disabled={signingIn}
         type="button"
         className="app-icon-btn h-10 sm:h-11 px-3.5 sm:px-5 bg-white border-2 border-line rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold text-ink-soft text-sm shadow-soft hover:text-primary-700 hover:bg-primary-50"
       >
@@ -375,7 +366,7 @@ export function UserMenu() {
           <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
         </svg>
         <span className="whitespace-nowrap">
-          {loading ? t('auth.signInProgress') : t('auth.signIn')}
+          {signingIn ? t('auth.signInProgress') : t('auth.signIn')}
         </span>
       </button>
     </div>

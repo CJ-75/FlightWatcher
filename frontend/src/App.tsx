@@ -46,6 +46,7 @@ import {
 import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { getAppConfig } from './utils/configCache'
+import { prefetchActivitiesCatalog } from './utils/activitiesCatalogCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import {
@@ -86,7 +87,7 @@ const TAB_PATH: Record<Tab, string> = {
   deals: '/sejours',
   planner: '/planner',
   alerts: '/alertes',
-  activities: '/activites',
+  activities: '/activites/paris',
   saved: '/favoris',
 }
 
@@ -171,7 +172,18 @@ function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [dealsUiEnabled, setDealsUiEnabled] = useState(true)
   const [alertsUiEnabled, setAlertsUiEnabled] = useState(false)
-  const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(false)
+  // Afficher Activités immédiatement (comme Séjours) ; /api/config confirme ensuite.
+  const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(() => {
+    try {
+      const cached = localStorage.getItem('fw_activities_ui_enabled')
+      if (cached === '0') return false
+      if (cached === '1') return true
+    } catch {
+      /* ignore */
+    }
+    return true
+  })
+  const [uiFlagsReady, setUiFlagsReady] = useState(false)
   const [data, setData] = useState<ScanResponse | null>(null)
   const [simpleResults, setSimpleResults] = useState<EnrichedTripResponse[]>([])
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
@@ -484,39 +496,66 @@ function Dashboard() {
   }
 
   useEffect(() => {
-    void getAppConfig().then((cfg) => {
-      if (!cfg) return
-      const dealsOn = cfg.ui_enabled !== false
-      setDealsUiEnabled(dealsOn)
-      if (!dealsOn && activeTab === 'deals') setActiveTab('search')
-      const alertsOn = cfg.alerts_ui_enabled === true
-      setAlertsUiEnabled(alertsOn)
-      if (!alertsOn && activeTab === 'alerts') setActiveTab('search')
-      const activitiesOn = cfg.activities_ui_enabled === true
-      setActivitiesUiEnabled(activitiesOn)
-      if (!activitiesOn && activeTab === 'activities') setActiveTab('search')
-    })
+    void getAppConfig()
+      .then((cfg) => {
+        if (!cfg) return
+        const dealsOn = cfg.ui_enabled !== false
+        setDealsUiEnabled(dealsOn)
+        if (!dealsOn && activeTab === 'deals') setActiveTab('search')
+        const alertsOn = cfg.alerts_ui_enabled === true
+        setAlertsUiEnabled(alertsOn)
+        if (!alertsOn && activeTab === 'alerts') setActiveTab('search')
+        const activitiesOn = cfg.activities_ui_enabled === true
+        setActivitiesUiEnabled(activitiesOn)
+        try {
+          localStorage.setItem(
+            'fw_activities_ui_enabled',
+            activitiesOn ? '1' : '0',
+          )
+        } catch {
+          /* ignore */
+        }
+        if (!activitiesOn && activeTab === 'activities') setActiveTab('search')
+      })
+      .finally(() => setUiFlagsReady(true))
+    // Prefetch catalogue Paris dès l’idle pour ouvrir Activités sans attendre.
+    const idle =
+      typeof window !== 'undefined' && 'requestIdleCallback' in window
+        ? window.requestIdleCallback(() => prefetchActivitiesCatalog('paris'), {
+            timeout: 1800,
+          })
+        : window.setTimeout(() => prefetchActivitiesCatalog('paris'), 400)
+    return () => {
+      if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idle as number)
+      } else {
+        window.clearTimeout(idle as number)
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap flag once
   }, [])
 
   // Block deep links to /alertes when the feature switch is off
   useEffect(() => {
+    if (!uiFlagsReady) return
     if (alertsUiEnabled) return
     const p = location.pathname.replace(/\/+$/, '') || '/'
     if (p === '/alertes' || p === '/alerts') {
       navigate('/vols', { replace: true })
       if (activeTab === 'alerts') setActiveTabState('search')
     }
-  }, [activeTab, alertsUiEnabled, location.pathname, navigate])
+  }, [activeTab, alertsUiEnabled, location.pathname, navigate, uiFlagsReady])
 
   useEffect(() => {
+    // Attendre /api/config pour ne pas éjecter /activites pendant le loading.
+    if (!uiFlagsReady) return
     if (activitiesUiEnabled) return
     const p = location.pathname.replace(/\/+$/, '') || '/'
     if (p === '/activites' || p.startsWith('/activites/')) {
       navigate('/vols', { replace: true })
       if (activeTab === 'activities') setActiveTabState('search')
     }
-  }, [activeTab, activitiesUiEnabled, location.pathname, navigate])
+  }, [activeTab, activitiesUiEnabled, location.pathname, navigate, uiFlagsReady])
 
   // Lot F — deep link hôtel depuis Mon voyage
   useEffect(() => {
@@ -1247,7 +1286,7 @@ function Dashboard() {
           </nav>
         </div>
 
-        {/* Contenu selon l'onglet — Deals warm-mount so wall is ready on first tab open */}
+        {/* Contenu selon l'onglet — Deals + Activités warm-mount pour 1er open rapide */}
         {dealsUiEnabled ? (
           <div
             className={activeTab === 'deals' ? undefined : 'hidden'}
@@ -1256,12 +1295,18 @@ function Dashboard() {
             <DealsTab />
           </div>
         ) : null}
-        {activeTab === 'deals' ? null : activeTab === 'planner' ? (
-          <PlannerTab />
-        ) : activeTab === 'activities' && activitiesUiEnabled ? (
-          <div className="w-full pt-1 sm:pt-2 pb-24">
-            <ActivitiesTab />
+        {activitiesUiEnabled ? (
+          <div
+            className={
+              activeTab === 'activities' ? 'w-full pt-1 sm:pt-2 pb-24' : 'hidden'
+            }
+            aria-hidden={activeTab !== 'activities'}
+          >
+            <ActivitiesTab active={activeTab === 'activities'} />
           </div>
+        ) : null}
+        {activeTab === 'deals' || activeTab === 'activities' ? null : activeTab === 'planner' ? (
+          <PlannerTab />
         ) : activeTab === 'search' ? (
           <>
             <div className="app-col pt-5 sm:pt-8">
