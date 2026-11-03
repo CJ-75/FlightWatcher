@@ -1628,7 +1628,7 @@ export function TripDetailScreen() {
                       ? null
                       : flightDraft?.draft_token || workspace?.draft_token
                   }
-                  plannedTripId={__DEV__ && isGuest ? null : tripId}
+                  plannedTripId={tripId}
                   citySlug={citySlug}
                   enabled={plannerActivitiesEnabled}
                   surface="planner"

@@ -9,7 +9,6 @@ import {
   AppState,
   type AppStateStatus,
   Platform,
-  ScrollView,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -17,8 +16,6 @@ import {
   ACTIVITY_ADD_LABEL_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
-  ACTIVITY_BROWSE_CATALOG_FR,
-  ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   canonicalViatorProductUrl,
   isTripItemsAuthError,
@@ -32,7 +29,7 @@ import { auth, getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, radius, spacing } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 type ItemRow = {
   id: string
@@ -64,8 +61,6 @@ export function ActivityStepPanel(props: {
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [suggestions, setSuggestions] = useState<Record<string, unknown>[]>([])
   const [pendingBook, setPendingBook] = useState<ItemRow | null>(null)
   const [askBooked, setAskBooked] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
@@ -76,6 +71,7 @@ export function ActivityStepPanel(props: {
 
   const platform = Platform.OS === 'ios' ? 'ios' : 'android'
   const needsAuth = isTripItemsAuthError(error)
+  const city = (props.citySlug || 'paris').trim().toLowerCase() || 'paris'
 
   const load = useCallback(async () => {
     if (!owner.draft_token && !owner.planned_trip_id) return
@@ -196,15 +192,11 @@ export function ActivityStepPanel(props: {
     await load()
   }
 
-  const titleOf = (it: ItemRow) => String(it.places?.name || it.meta?.title || 'Activité')
+  const titleOf = (it: ItemRow) =>
+    String(it.places?.name || it.meta?.title || 'Activité')
 
-  if (!enabled) {
-    return <Text style={styles.muted}>Activités bientôt disponibles.</Text>
-  }
-
-  const openCatalog = () => {
+  const openActivitiesCatalog = () => {
     track('browse_catalog')
-    const city = props.citySlug || 'paris'
     if (draftToken) {
       void rememberTrip({ draft_token: draftToken, city })
     }
@@ -216,6 +208,10 @@ export function ActivityStepPanel(props: {
         plannedTripId: plannedTripId || undefined,
       },
     })
+  }
+
+  if (!enabled) {
+    return <Text style={styles.muted}>Activités bientôt disponibles.</Text>
   }
 
   if (needsAuth && !loading) {
@@ -236,104 +232,100 @@ export function ActivityStepPanel(props: {
         </Text>
         {hasAccount ? (
           <Pressable
-            style={[styles.cta, resuming && { opacity: 0.6 }]}
+            style={[styles.addBtn, resuming && { opacity: 0.6 }]}
             disabled={resuming}
             onPress={() => void onResumeSession()}
           >
-            <Text style={styles.ctaText}>
+            <Text style={styles.addBtnText}>
               {resuming ? 'Reprise…' : 'Reprendre ma session'}
             </Text>
           </Pressable>
         ) : (
           <Pressable
-            style={[styles.cta, signingIn && { opacity: 0.6 }]}
+            style={[styles.addBtn, signingIn && { opacity: 0.6 }]}
             disabled={signingIn}
             onPress={() => void onSignIn()}
           >
-            <Text style={styles.ctaText}>
+            <Text style={styles.addBtnText}>
               {signingIn ? 'Connexion…' : 'Se connecter avec Google'}
             </Text>
           </Pressable>
         )}
-        <Pressable style={styles.secondary} onPress={openCatalog}>
-          <Text style={styles.secondaryText}>Voir le catalogue</Text>
-        </Pressable>
       </View>
     )
   }
 
+  const visibleCount = items.filter((i) => i.status !== 'skipped').length
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.row}>
-        <Pressable style={styles.cta} onPress={openCatalog}>
-          <Text style={styles.ctaText}>{ACTIVITY_BROWSE_CATALOG_FR}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.secondary}
-          onPress={async () => {
-            setPickerOpen(true)
-            try {
-              const res = await getApi().listCityActivities(props.citySlug || 'paris', 2)
-              setSuggestions(Array.isArray(res.items) ? res.items.slice(0, 12) : [])
-            } catch {
-              setSuggestions([])
-            }
-          }}
-        >
-          <Text style={styles.secondaryText}>{ACTIVITY_ADD_LABEL_FR}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.secondary}
-          onPress={async () => {
-            track('skip')
-            try {
-              await getApi().addTripItem({
-                product_code: `skip-${Date.now()}`,
-                title: ACTIVITY_SKIP_LABEL_FR,
-                ...owner,
-                platform,
-                surface,
-              })
-              const res = await getApi().listTripItems(owner)
-              const last = (res.items || []).slice(-1)[0] as ItemRow | undefined
-              if (last?.id) await patch(last.id, { status: 'skipped' })
-            } catch (e) {
-              setError(e instanceof Error ? e.message : 'Erreur')
-            }
-          }}
-        >
-          <Text style={styles.secondaryText}>{ACTIVITY_SKIP_LABEL_FR}</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        onPress={openActivitiesCatalog}
+        style={({ pressed }) => [
+          styles.addBtn,
+          shadow.soft,
+          pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={ACTIVITY_ADD_LABEL_FR}
+      >
+        <Text style={styles.addBtnPlus}>+</Text>
+        <View style={styles.addBtnCopy}>
+          <Text style={styles.addBtnText}>{ACTIVITY_ADD_LABEL_FR}</Text>
+          <Text style={styles.addBtnHint}>Catalogue · {city}</Text>
+        </View>
+      </Pressable>
 
-      {loading ? <ActivityIndicator color={colors.primary} /> : null}
-      {error ? <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text> : null}
+      {loading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 4 }} />
+      ) : null}
+      {error ? (
+        <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text>
+      ) : null}
 
-      {items.map((it, idx) => (
-        <View key={it.id} style={styles.card}>
+      {!loading && visibleCount === 0 ? (
+        <Text style={styles.emptyHint}>
+          Choisis une activité dans le catalogue — elle apparaîtra ici.
+        </Text>
+      ) : null}
+
+      {items.map((it, idx) =>
+        it.status === 'skipped' ? null : (
+        <View key={it.id} style={[styles.card, shadow.soft]}>
           <View style={styles.itemTitleRow}>
-            <Text style={[styles.title, { flex: 1 }]}>{titleOf(it)}</Text>
-            {it.inherited ? <Text style={styles.groupBadge}>IDÉE DU GROUPE</Text> : null}
+            <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
+              {titleOf(it)}
+            </Text>
+            {it.inherited ? (
+              <Text style={styles.groupBadge}>GROUPE</Text>
+            ) : null}
           </View>
-          <Text style={styles.muted}>{tripItemStatusLabelFr(it.status)}</Text>
-          <View style={styles.row}>
+          <Text style={styles.status}>{tripItemStatusLabelFr(it.status)}</Text>
+          <View style={styles.actions}>
             {!it.inherited && idx > 0 ? (
-              <Pressable onPress={() => void move(idx, idx - 1)}>
+              <Pressable onPress={() => void move(idx, idx - 1)} hitSlop={8}>
                 <Text style={styles.link}>Monter</Text>
               </Pressable>
             ) : null}
             {!it.inherited && idx < items.length - 1 ? (
-              <Pressable onPress={() => void move(idx, idx + 1)}>
+              <Pressable onPress={() => void move(idx, idx + 1)} hitSlop={8}>
                 <Text style={styles.link}>Descendre</Text>
               </Pressable>
             ) : null}
-            {!it.inherited && it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
-              <Pressable onPress={() => void patch(it.id, { status: 'validated' })}>
+            {!it.inherited &&
+            it.status !== 'validated' &&
+            it.status !== 'booked' &&
+            it.status !== 'skipped' ? (
+              <Pressable
+                onPress={() => void patch(it.id, { status: 'validated' })}
+                hitSlop={8}
+              >
                 <Text style={styles.link}>{ACTIVITY_VALIDATE_LABEL_FR}</Text>
               </Pressable>
             ) : null}
             {it.meta?.product_url || it.meta?.product_code ? (
               <Pressable
+                hitSlop={8}
                 onPress={() => {
                   const url = canonicalViatorProductUrl(
                     it.meta?.product_url != null
@@ -357,50 +349,20 @@ export function ActivityStepPanel(props: {
             ) : null}
           </View>
         </View>
-      ))}
-
-      <Modal visible={pickerOpen} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
-            <Text style={styles.title}>Suggestions</Text>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {suggestions.map((s) => (
-                <Pressable
-                  key={String(s.product_code)}
-                  style={styles.suggest}
-                  onPress={async () => {
-                    await getApi().addTripItem({
-                      product_code: s.product_code,
-                      title: s.title,
-                      product_url: s.product_url,
-                      ...owner,
-                      platform,
-                      surface,
-                    })
-                    setPickerOpen(false)
-                    await load()
-                  }}
-                >
-                  <Text style={styles.title}>{String(s.title || '')}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <Pressable style={styles.secondary} onPress={() => setPickerOpen(false)}>
-              <Text style={styles.secondaryText}>Fermer</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        ),
+      )}
 
       <Modal visible={askBooked && !!pendingBook} transparent animationType="fade">
         <View style={styles.modalBg}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, shadow.lift]}>
             <Text style={styles.title}>
-              {ACTIVITY_BOOKED_PROMPT_FR(pendingBook ? titleOf(pendingBook) : 'cette activité')}
+              {ACTIVITY_BOOKED_PROMPT_FR(
+                pendingBook ? titleOf(pendingBook) : 'cette activité',
+              )}
             </Text>
-            <View style={styles.row}>
+            <View style={styles.modalActions}>
               <Pressable
-                style={[styles.cta, { flex: 1 }]}
+                style={[styles.addBtn, { flex: 1 }]}
                 onPress={() => {
                   if (pendingBook) void patch(pendingBook.id, { status: 'booked' })
                   track('booked_yes')
@@ -408,18 +370,19 @@ export function ActivityStepPanel(props: {
                   setAskBooked(false)
                 }}
               >
-                <Text style={styles.ctaText}>Oui</Text>
+                <Text style={styles.addBtnText}>Oui</Text>
               </Pressable>
               <Pressable
-                style={[styles.secondary, { flex: 1 }]}
+                style={[styles.ghostBtn, { flex: 1 }]}
                 onPress={() => {
-                  if (pendingBook) void patch(pendingBook.id, { status: 'validated' })
+                  if (pendingBook)
+                    void patch(pendingBook.id, { status: 'validated' })
                   track('booked_no')
                   setPendingBook(null)
                   setAskBooked(false)
                 }}
               >
-                <Text style={styles.secondaryText}>Pas encore</Text>
+                <Text style={styles.ghostBtnText}>Pas encore</Text>
               </Pressable>
             </View>
           </View>
@@ -430,29 +393,48 @@ export function ActivityStepPanel(props: {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.sm },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  cta: {
+  wrap: { gap: spacing.md },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: radius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  ctaText: { color: '#fff', fontFamily: fonts.bold, fontSize: 13 },
-  secondary: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  addBtnPlus: {
+    fontFamily: fonts.extrabold,
+    fontSize: 26,
+    color: colors.white,
+    lineHeight: 28,
+    marginTop: -2,
   },
-  secondaryText: { fontFamily: fonts.semibold, color: colors.ink, fontSize: 13 },
+  addBtnCopy: { flex: 1, gap: 2 },
+  addBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.white,
+    letterSpacing: -0.2,
+  },
+  addBtnHint: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.78)',
+    textTransform: 'capitalize',
+  },
+  emptyHint: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+  },
   authCard: {
     gap: 10,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#FED7AA',
-    backgroundColor: '#FFF8F3',
+    borderColor: colors.primaryMuted,
+    backgroundColor: colors.primarySoft,
     padding: 14,
   },
   authKicker: {
@@ -473,34 +455,62 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    padding: 12,
-    gap: 4,
+    padding: 14,
+    gap: 6,
   },
   title: { fontFamily: fonts.bold, color: colors.ink, fontSize: 14 },
   itemTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   groupBadge: {
     fontFamily: fonts.bold,
-    fontSize: 8,
+    fontSize: 9,
     color: colors.primaryInk,
     backgroundColor: colors.primarySoft,
-    borderRadius: 999,
-    paddingHorizontal: 7,
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
     paddingVertical: 4,
+    overflow: 'hidden',
   },
+  status: { fontFamily: fonts.medium, color: colors.muted, fontSize: 12 },
   muted: { fontFamily: fonts.regular, color: colors.muted, fontSize: 12 },
   err: { color: colors.danger, fontFamily: fonts.medium, fontSize: 12 },
+  actions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 4,
+  },
   link: { fontFamily: fonts.semibold, color: colors.inkSoft, fontSize: 12 },
   linkPrimary: { fontFamily: fonts.bold, color: colors.primary, fontSize: 12 },
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     padding: 20,
   },
-  modalCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 10 },
-  suggest: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  modalCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    padding: 18,
+    gap: 14,
+  },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  ghostBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.canvas,
+  },
+  ghostBtnText: {
+    fontFamily: fonts.semibold,
+    color: colors.ink,
+    fontSize: 14,
+  },
 })

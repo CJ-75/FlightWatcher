@@ -34,6 +34,8 @@ import {
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
   canonicalViatorProductUrl,
+  cityDisplayNameFr,
+  parseAirportCodes,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
@@ -46,6 +48,7 @@ import {
   type ActivityCardModel,
 } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
+import { getGuestTrip } from '../dev/guestPreview'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
@@ -122,53 +125,173 @@ export function ActivitiesScreen() {
     let cancelled = false
     didAutoCity.current = false
     setTripReady(false)
+    const routeCity = route.params?.city?.trim().toLowerCase() || ''
     void (async () => {
       try {
-        const remembered = await listRememberedTrips()
-        const fromRoute = draftFromRoute
-          ? remembered.find((t) => t.draft_token === draftFromRoute) || {
-              draft_token: draftFromRoute,
-              city: citySlug || null,
-              at: Date.now(),
+        const applyItems = (items: unknown[] | null | undefined) => {
+          const codes = new Set<string>()
+          let n = 0
+          for (const raw of items || []) {
+            const it = raw as {
+              item_type?: string
+              status?: string
+              meta?: { product_code?: string }
             }
-          : null
-        const latest = fromRoute || remembered[0]
-
-        const syncCityFilter = (slug: string) => {
-          if (
-            slug &&
-            (draftFromRoute || plannedFromRoute || latest?.draft_token) &&
-            slug !== citySlug
-          ) {
-            if (!didAutoCity.current) {
-              didAutoCity.current = true
-              setCitySlug(slug)
-            }
-          } else {
-            didAutoCity.current = true
+            if (it.item_type && it.item_type !== 'activity') continue
+            if (it.status === 'skipped') continue
+            n += 1
+            const code = it.meta?.product_code ? String(it.meta.product_code) : ''
+            if (code) codes.add(code)
           }
+          setPlannerCount(n)
+          setAddedCodes(codes)
         }
 
-        let linkedPlanned = plannedFromRoute || undefined
-        if (plannedFromRoute && !draftFromRoute) {
+        const lockCity = (slug: string) => {
+          if (!slug) {
+            didAutoCity.current = true
+            return
+          }
+          didAutoCity.current = true
+          setCitySlug(slug)
+        }
+
+        // Redirect planner → Activités : params route font foi (voyage + ville).
+        if (plannedFromRoute || draftFromRoute) {
+          let draftToken = draftFromRoute || undefined
+          let plannedTripId = plannedFromRoute || undefined
+          let cityLabel: string | null = routeCity || null
+          let citySlugHint: string | null = routeCity || null
+          let destIata: string | null = null
+
+          if (plannedFromRoute) {
+            const guest =
+              __DEV__ && String(plannedFromRoute).startsWith('dev-trip-')
+                ? getGuestTrip(plannedFromRoute)
+                : null
+            const trip =
+              guest ||
+              (await getApi()
+                .getPlannedTrip(plannedFromRoute)
+                .catch(() => null))
+            if (trip) {
+              const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
+              destIata = arrival || null
+              if (!routeCity) {
+                cityLabel = arrival
+                  ? cityDisplayNameFr(arrival)
+                  : String(trip.name || '').replace(/^Weekend\s+/i, '').trim() ||
+                    null
+                citySlugHint = cityLabel
+              } else if (!cityLabel && arrival) {
+                cityLabel = cityDisplayNameFr(arrival)
+              }
+            }
+          }
+
+          if (draftFromRoute) {
+            const remembered = await listRememberedTrips()
+            const rememberedHit = remembered.find(
+              (t) => t.draft_token === draftFromRoute,
+            )
+            if (!routeCity && rememberedHit?.city) {
+              cityLabel = String(rememberedHit.city).trim() || cityLabel
+              citySlugHint = cityLabel
+            }
+            const row = await getApi()
+              .getMyTrip(draftFromRoute)
+              .catch(() => null)
+            if (row) {
+              const pl = (row.payload || {}) as Record<string, unknown>
+              const fl = (pl.flight || {}) as Record<string, unknown>
+              if (!routeCity) {
+                cityLabel =
+                  String(row.city_name || pl.city || cityLabel || '').trim() ||
+                  null
+                citySlugHint =
+                  typeof pl.city_slug === 'string'
+                    ? pl.city_slug
+                    : cityLabel
+              }
+              destIata =
+                destIata ||
+                String(
+                  fl.destination_iata ||
+                    pl.destination ||
+                    pl.dest_iata ||
+                    row.dest_iata ||
+                    '',
+                ).trim() ||
+                null
+              plannedTripId =
+                plannedTripId ||
+                (row.source_planned_trip_id
+                  ? String(row.source_planned_trip_id)
+                  : undefined)
+            }
+          }
+
           const slug = resolveActivityCitySlug({
-            citySlug: citySlug || null,
-            cityLabel: citySlug || null,
+            citySlug: routeCity || citySlugHint || cityLabel,
+            cityLabel: cityLabel || routeCity || null,
+            destIata: routeCity ? null : destIata,
           })
+          const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
+          const label = String(
+            known?.label ||
+              cityLabel ||
+              (routeCity ? activityDestinationLabelFr(routeCity) : null) ||
+              activityDestinationLabelFr(slug),
+          )
           if (cancelled) return
           setActiveTrip({
-            plannedTripId: plannedFromRoute,
+            draftToken,
+            plannedTripId,
             slug,
-            label: activityDestinationLabelFr(slug),
+            label,
           })
-          syncCityFilter(slug)
-        } else if (latest?.draft_token) {
+          lockCity(slug)
+
+          if (draftToken) {
+            await rememberTrip({
+              draft_token: draftToken,
+              city: slug,
+            })
+          }
+
+          const owner = pickTripItemOwner({
+            draftToken,
+            plannedTripId,
+          })
+          if (
+            hasTripItemOwner(owner) &&
+            !(
+              plannedTripId &&
+              String(plannedTripId).startsWith('dev-trip-')
+            )
+          ) {
+            const itemsRes = await getApi()
+              .listTripItems(owner)
+              .catch(() => null)
+            if (cancelled) return
+            applyItems(itemsRes?.items)
+          } else if (!cancelled) {
+            setPlannerCount(0)
+            setAddedCodes(new Set())
+          }
+          return
+        }
+
+        // Ouverture libre (pas de redirect planner) : dernier draft mémorisé.
+        const remembered = await listRememberedTrips()
+        const latest = remembered[0]
+        if (latest?.draft_token) {
           let cityLabel = String(latest.city || '').trim() || null
           let citySlugHint: string | null = null
           let destIata: string | null = null
+          let linkedPlanned: string | undefined
           const ownerHint = pickTripItemOwner({
             draftToken: latest.draft_token,
-            plannedTripId: plannedFromRoute || undefined,
           })
           const [row, itemsRes] = await Promise.all([
             getApi().getMyTrip(latest.draft_token).catch(() => null),
@@ -191,11 +314,9 @@ export function ActivitiesScreen() {
                   row.dest_iata ||
                   '',
               ).trim() || null
-            linkedPlanned =
-              linkedPlanned ||
-              (row.source_planned_trip_id
-                ? String(row.source_planned_trip_id)
-                : undefined)
+            linkedPlanned = row.source_planned_trip_id
+              ? String(row.source_planned_trip_id)
+              : undefined
           }
           const slug = resolveActivityCitySlug({
             citySlug: citySlugHint || cityLabel,
@@ -213,48 +334,14 @@ export function ActivitiesScreen() {
             slug,
             label,
           })
-          if (draftFromRoute) {
-            await rememberTrip({
-              draft_token: latest.draft_token,
-              city: slug,
-            })
-          }
-          syncCityFilter(slug)
-
-          let res = itemsRes
-          const ownerFinal = pickTripItemOwner({
-            draftToken: latest.draft_token,
-            plannedTripId: linkedPlanned,
-          })
-          if (
-            linkedPlanned &&
-            ownerHint.planned_trip_id !== ownerFinal.planned_trip_id
-          ) {
-            res = await getApi().listTripItems(ownerFinal).catch(() => null)
-          }
-          if (cancelled) return
-          const codes = new Set<string>()
-          const n = (res?.items || []).filter((raw) => {
-            const it = raw as {
-              item_type?: string
-              status?: string
-              meta?: { product_code?: string }
-            }
-            if (it.item_type && it.item_type !== 'activity') return false
-            if (it.status === 'skipped') return false
-            const code = it.meta?.product_code ? String(it.meta.product_code) : ''
-            if (code) codes.add(code)
-            return true
-          }).length
-          setPlannerCount(n)
-          setAddedCodes(codes)
-        } else {
-          if (!cancelled) {
-            setActiveTrip(null)
-            setPlannerCount(0)
-            if (!citySlug) setCitySlug('paris')
-            didAutoCity.current = true
-          }
+          lockCity(slug)
+          applyItems(itemsRes?.items)
+        } else if (!cancelled) {
+          setActiveTrip(null)
+          setPlannerCount(0)
+          if (!citySlug && !routeCity) setCitySlug('paris')
+          else if (routeCity) lockCity(routeCity)
+          didAutoCity.current = true
         }
       } finally {
         if (!cancelled) setTripReady(true)
@@ -264,7 +351,7 @@ export function ActivitiesScreen() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftFromRoute, plannedFromRoute])
+  }, [draftFromRoute, plannedFromRoute, route.params?.city])
 
   useEffect(() => {
     setSearchQuery('')
@@ -463,6 +550,10 @@ export function ActivitiesScreen() {
   }
 
   const openPlanner = () => {
+    if (activeTrip?.plannedTripId) {
+      navigation.navigate('TripDetail', { tripId: activeTrip.plannedTripId })
+      return
+    }
     if (activeTrip?.draftToken) {
       navigation.navigate('TripSummary', { draftToken: activeTrip.draftToken })
       return
