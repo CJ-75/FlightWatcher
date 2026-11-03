@@ -44,7 +44,7 @@ const DOT_COLOR: Record<ActivityTripTimingStatus, string> = {
   upcoming: '#38BDF8',
   ongoing: '#34D399',
   past: 'rgba(255,255,255,0.55)',
-  undated: 'rgba(255,255,255,0.7)',
+  undated: '#38BDF8',
 }
 
 type ActiveProps = {

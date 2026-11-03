@@ -23,7 +23,7 @@ const DOT_CLASS: Record<ActivityTripTimingStatus, string> = {
   upcoming: 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]',
   ongoing: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]',
   past: 'bg-white/50',
-  undated: 'bg-white/70',
+  undated: 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]',
 }
 
 /** Chevron bas (chapeau) — ouvre le choix de séjour. */

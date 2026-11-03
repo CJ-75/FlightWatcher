@@ -27,7 +27,7 @@ export const ACTIVITY_NO_PLANNER_TO_ADD_FR =
   'Aucun séjour disponible. Crée ou ouvre un voyage dans Planner.'
 export const ACTIVITY_SIGN_IN_TO_ADD_FR =
   'Connecte-toi pour choisir un séjour et y ajouter l’activité.'
-export const ACTIVITY_TRIP_HERO_KICKER_FR = 'Voyage en cours'
+export const ACTIVITY_TRIP_HERO_KICKER_FR = 'En cours'
 export const ACTIVITY_CHANGE_TRIP_FR = 'Changer'
 export const ACTIVITY_CHOOSE_TRIP_FR = 'Choisir un séjour'
 export const ACTIVITY_TRIP_IN_PROGRESS_FR = (city: string) =>
@@ -74,11 +74,11 @@ export const ACTIVITY_TRIP_TIMING_KICKER_FR: Record<
   ActivityTripTimingStatus,
   string
 > = {
-  upcoming: 'Prochain départ',
-  ongoing: 'Voyage en cours',
-  past: 'Voyage terminé',
-  /** Pas de dates → même libellé que « en cours » (évite un jargon confus). */
-  undated: 'Voyage en cours',
+  upcoming: 'À venir',
+  ongoing: 'En cours',
+  past: 'Terminé',
+  /** Pas de dates → on traite comme un prochain séjour. */
+  undated: 'À venir',
 }
 
 export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
@@ -88,7 +88,7 @@ export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
   upcoming: 'Prépare ton séjour — les idées rejoignent ton planner.',
   ongoing: ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
   past: 'Séjour passé — tu peux encore noter des idées pour la prochaine fois.',
-  undated: ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
+  undated: 'Prépare ton séjour — les idées rejoignent ton planner.',
 }
 export const ACTIVITY_SYNC_CITY_FR = (city: string) => `Activités à ${city}`
 export const ACTIVITY_NO_TRIP_CTA_TITLE_FR = 'Ton prochain séjour commence ici'
