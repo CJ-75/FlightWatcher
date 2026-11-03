@@ -11,6 +11,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { InvitePreview } from '@flightwatcher/shared'
 import { cityDisplayNameFr, parseAirportCodes } from '@flightwatcher/shared'
+import { getDevInvitePreview } from '../dev/guestPreview'
 import { getApi } from '../lib/client'
 import {
   clearPendingInvite,
@@ -82,11 +83,22 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
     setError(null)
     try {
       await rememberPendingInvite(token)
+      const local = __DEV__ ? getDevInvitePreview(token) : null
+      if (local) {
+        setPreview(local)
+        return
+      }
       const data = await getApi().getInvitePreview(token)
       setPreview(data)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Invitation introuvable')
-      setPreview(null)
+      const fallback = __DEV__ ? getDevInvitePreview(token) : null
+      if (fallback) {
+        setPreview(fallback)
+        setError(null)
+      } else {
+        setError(e instanceof Error ? e.message : 'Invitation introuvable')
+        setPreview(null)
+      }
     } finally {
       setLoading(false)
     }

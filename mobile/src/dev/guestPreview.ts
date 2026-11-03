@@ -2,6 +2,7 @@ import type {
   ActivityCardModel,
   CreatePlannedTripRequest,
   EnrichedTripResponse,
+  InvitePreview,
   LikedActivity,
   LikedDeal,
   PlannedTrip,
@@ -12,6 +13,9 @@ import type {
   TripProposal,
   User,
 } from '@flightwatcher/shared'
+
+/** Token local pour tester l’onboarding invitation en Expo. */
+export const DEV_INVITE_TOKEN = 'dev-invite-preview'
 
 /** Fake user so Planner / Favoris / Compte show logged-in UI in Expo __DEV__. */
 export const DEV_GUEST_USER = {
@@ -245,6 +249,30 @@ function toListItem(t: PlannedTripDetail): PlannedTrip {
 
 export function listGuestTrips(): PlannedTrip[] {
   return trips.map((t) => toListItem(cloneTrip(t)))
+}
+
+/** Aperçu invitation pour tester l’onboarding (sans backend). */
+export function getDevInvitePreview(token?: string | null): InvitePreview | null {
+  const t = String(token || '').trim()
+  if (!t.startsWith('dev-invite-')) return null
+  const trip =
+    trips.find((row) => row.invite_token === t) ||
+    trips.find((row) => row.id === 'dev-trip-lisbonne') ||
+    trips[0]
+  if (!trip) return null
+  return {
+    name: trip.name,
+    departure_airport: trip.departure_airport,
+    arrival_airport: trip.arrival_airport,
+    passengers: trip.passengers,
+    dates_depart: trip.dates_depart,
+    dates_retour: trip.dates_retour,
+    budget_max: trip.budget_max,
+    organizer_name: 'Aperçu Expo',
+    accepted_trip: null,
+    members_count: trip.members?.length || 1,
+    invite_token: t || DEV_INVITE_TOKEN,
+  }
 }
 
 export function getGuestTrip(id: string): PlannedTripDetail | null {

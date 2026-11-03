@@ -12,7 +12,9 @@ import { CommonActions, useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
+import { DEV_INVITE_TOKEN } from '../dev/guestPreview'
 import { apiBase } from '../lib/client'
+import { rememberPendingInvite } from '../lib/pendingInvite'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
@@ -84,6 +86,17 @@ export function ProfileScreen() {
 
   const openFavorites = () => {
     navigation.navigate('Favorites' as never)
+  }
+
+  const openInviteOnboardingPreview = () => {
+    void rememberPendingInvite(DEV_INVITE_TOKEN)
+    const root = navigation.getParent() ?? navigation
+    root.dispatch(
+      CommonActions.navigate({
+        name: 'PlannerInvite',
+        params: { token: DEV_INVITE_TOKEN },
+      }),
+    )
   }
 
   if (!viewUser) {
@@ -281,6 +294,20 @@ export function ProfileScreen() {
               <Text style={styles.devPreviewTitle}>Voir comme non connecté</Text>
               <Text style={styles.devPreviewSub}>
                 Affiche les landings Compte / Favoris / Planner
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={openInviteOnboardingPreview}
+              style={({ pressed }) => [
+                styles.devPreviewBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.devPreviewTitle}>
+                Tester onboarding invitation
+              </Text>
+              <Text style={styles.devPreviewSub}>
+                Écran invite + parcours inscription (aperçu Expo)
               </Text>
             </Pressable>
           </>
