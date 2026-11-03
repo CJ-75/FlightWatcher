@@ -24,11 +24,13 @@ import {
   activitiesCityPath,
   activityCategoriesSummaryFr,
   canonicalViatorProductUrl,
+  cityDisplayNameFr,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
   activityMatchesSearchQuery,
   hasTripItemOwner,
+  parseAirportCodes,
   pickTripItemOwner,
   savedIdeasTitleFr,
   toActivityCardModel,
@@ -282,6 +284,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
     plannedTripId?: string
     slug: string
     label: string
+    outDate?: string | null
+    retDate?: string | null
   } | null>(null)
   const [plannerCount, setPlannerCount] = useState(0)
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
@@ -445,7 +449,12 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
     const applyTripCity = (
       tripSlug: string,
       tripLabel: string,
-      opts: { draftToken?: string; plannedTripId?: string },
+      opts: {
+        draftToken?: string
+        plannedTripId?: string
+        outDate?: string | null
+        retDate?: string | null
+      },
     ) => {
       if (cancelled) return
       setActiveTrip({
@@ -453,6 +462,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         plannedTripId: opts.plannedTripId,
         slug: tripSlug,
         label: tripLabel,
+        outDate: opts.outDate ?? null,
+        retDate: opts.retDate ?? null,
       })
       // Force the Ville filter onto the trip destination city (only on Activités).
       if (
@@ -480,17 +491,38 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       let linkedPlanned = plannedFromUrl || undefined
       try {
         if (plannedFromUrl && !draftFromUrl) {
+          const trip = await getApiClient()
+            .getPlannedTrip(plannedFromUrl)
+            .catch(() => null)
+          if (cancelled) return
+          const arrival = trip
+            ? parseAirportCodes(trip.arrival_airport)[0] || ''
+            : ''
+          const cityLabel = arrival
+            ? cityDisplayNameFr(arrival)
+            : citySlug || null
           const tripSlug = resolveActivityCitySlug({
-            citySlug: citySlug || null,
-            cityLabel: citySlug || null,
+            citySlug: cityLabel || citySlug || null,
+            cityLabel,
+            destIata: arrival || null,
           })
           applyTripCity(tripSlug, activityDestinationLabelFr(tripSlug), {
             plannedTripId: plannedFromUrl,
+            outDate: trip?.dates_depart?.[0]?.date
+              ? String(trip.dates_depart[0].date).slice(0, 10)
+              : null,
+            retDate: trip?.dates_retour?.length
+              ? String(
+                  trip.dates_retour[trip.dates_retour.length - 1]?.date || '',
+                ).slice(0, 10) || null
+              : null,
           })
         } else if (latest?.draft_token) {
           let cityLabel = String(latest.city || '').trim() || null
           let citySlugHint: string | null = null
           let destIata: string | null = null
+          let outDate: string | null = null
+          let retDate: string | null = null
 
           const tripPromise = getApiClient()
             .getMyTrip(latest.draft_token)
@@ -526,6 +558,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
               (row.source_planned_trip_id
                 ? String(row.source_planned_trip_id)
                 : undefined)
+            outDate = String(row.out_date || '').slice(0, 10) || null
+            retDate = String(row.ret_date || '').slice(0, 10) || null
           }
 
           const tripSlug = resolveActivityCitySlug({
@@ -546,6 +580,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
           applyTripCity(tripSlug, tripLabel, {
             draftToken: latest.draft_token,
             plannedTripId: linkedPlanned,
+            outDate,
+            retDate,
           })
 
           // If planned id only appeared after getMyTrip, refresh items with preferred owner.
@@ -694,6 +730,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       plannedTripId: target.plannedTripId,
       slug: tripSlug || citySlug || 'voyage',
       label,
+      outDate: target.outDate || null,
+      retDate: target.retDate || null,
     })
     if (target.draftToken) {
       rememberTrip({
@@ -800,6 +838,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
           cityLabel={activeTrip.label}
           plannerCount={plannerCount}
           plannerHref={plannerHref}
+          outDate={activeTrip.outDate}
+          retDate={activeTrip.retDate}
           showSyncCity={activeTrip.slug !== citySlug}
           onSyncCity={() =>
             navigate(activitiesCityPath(activeTrip.slug, catalogNavOpts))

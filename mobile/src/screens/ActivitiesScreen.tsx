@@ -197,6 +197,8 @@ export function ActivitiesScreen() {
     plannedTripId?: string
     slug: string
     label: string
+    outDate?: string | null
+    retDate?: string | null
   } | null>(null)
   const [plannerCount, setPlannerCount] = useState(0)
   const [addedCodes, setAddedCodes] = useState<Set<string>>(new Set())
@@ -255,6 +257,9 @@ export function ActivitiesScreen() {
           let citySlugHint: string | null = routeCity || null
           let destIata: string | null = null
 
+          let outDate: string | null = null
+          let retDate: string | null = null
+
           if (plannedFromRoute) {
             const guest =
               __DEV__ && String(plannedFromRoute).startsWith('dev-trip-')
@@ -268,6 +273,12 @@ export function ActivitiesScreen() {
             if (trip) {
               const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
               destIata = arrival || null
+              outDate =
+                String(trip.dates_depart?.[0]?.date || '').slice(0, 10) || null
+              retDate =
+                String(
+                  trip.dates_retour?.[trip.dates_retour.length - 1]?.date || '',
+                ).slice(0, 10) || null
               if (!routeCity) {
                 cityLabel = arrival
                   ? cityDisplayNameFr(arrival)
@@ -319,6 +330,14 @@ export function ActivitiesScreen() {
                 (row.source_planned_trip_id
                   ? String(row.source_planned_trip_id)
                   : undefined)
+              outDate =
+                outDate ||
+                String(row.out_date || '').slice(0, 10) ||
+                null
+              retDate =
+                retDate ||
+                String(row.ret_date || '').slice(0, 10) ||
+                null
             }
           }
 
@@ -340,6 +359,8 @@ export function ActivitiesScreen() {
             plannedTripId,
             slug,
             label,
+            outDate,
+            retDate,
           })
           lockCity(slug)
 
@@ -466,6 +487,8 @@ export function ActivitiesScreen() {
           }
 
           // Planner chargé : ville d’arrivée du trip obligatoire.
+          let outDate: string | null = null
+          let retDate: string | null = null
           if (plannedTripId) {
             const guest =
               __DEV__ && String(plannedTripId).startsWith('dev-trip-')
@@ -490,6 +513,20 @@ export function ActivitiesScreen() {
               label = String(
                 known?.label || cityLabel || activityDestinationLabelFr(slug),
               )
+              outDate =
+                String(trip.dates_depart?.[0]?.date || '').slice(0, 10) || null
+              retDate =
+                String(
+                  trip.dates_retour?.[trip.dates_retour.length - 1]?.date || '',
+                ).slice(0, 10) || null
+            }
+          } else if (draftToken) {
+            const row = await getApi()
+              .getMyTrip(draftToken)
+              .catch(() => null)
+            if (row) {
+              outDate = String(row.out_date || '').slice(0, 10) || null
+              retDate = String(row.ret_date || '').slice(0, 10) || null
             }
           }
 
@@ -499,6 +536,8 @@ export function ActivitiesScreen() {
             plannedTripId,
             slug,
             label,
+            outDate,
+            retDate,
           })
           lockCity(slug)
 
@@ -687,6 +726,8 @@ export function ActivitiesScreen() {
       plannedTripId: target.plannedTripId,
       slug: tripSlug || citySlug || 'voyage',
       label,
+      outDate: target.outDate || null,
+      retDate: target.retDate || null,
     })
     if (target.draftToken) {
       await rememberTrip({
@@ -857,6 +898,8 @@ export function ActivitiesScreen() {
                 mode="active"
                 cityLabel={activeTrip.label}
                 plannerCount={plannerCount}
+                outDate={activeTrip.outDate}
+                retDate={activeTrip.retDate}
                 showSyncCity={false}
                 onOpenPlanner={openPlanner}
                 onChangeTrip={() => {

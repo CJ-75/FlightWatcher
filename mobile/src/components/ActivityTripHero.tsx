@@ -1,5 +1,5 @@
 /** Hero CTA Activités — photo ville + overlay (parity web). */
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   View,
   Text,
@@ -16,10 +16,12 @@ import {
   ACTIVITY_NO_TRIP_CTA_TITLE_FR,
   ACTIVITY_OPEN_PLANNER_FR,
   ACTIVITY_SYNC_CITY_FR,
-  ACTIVITY_TRIP_HERO_KICKER_FR,
-  ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
   ACTIVITY_TRIP_PLANNER_COUNT_FR,
+  ACTIVITY_TRIP_TIMING_HINT_FR,
+  ACTIVITY_TRIP_TIMING_KICKER_FR,
+  activityTripTimingStatus,
   cityImageUrl,
+  type ActivityTripTimingStatus,
 } from '@flightwatcher/shared'
 import Svg, { Path } from 'react-native-svg'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
@@ -38,11 +40,20 @@ function ChevronDownIcon({ size = 14, color = colors.ink }: { size?: number; col
   )
 }
 
+const DOT_COLOR: Record<ActivityTripTimingStatus, string> = {
+  upcoming: '#38BDF8',
+  ongoing: '#34D399',
+  past: 'rgba(255,255,255,0.55)',
+  undated: 'rgba(255,255,255,0.7)',
+}
+
 type ActiveProps = {
   mode: 'active'
   cityLabel: string
   imageCity?: string
   plannerCount: number
+  outDate?: string | null
+  retDate?: string | null
   showSyncCity?: boolean
   onOpenPlanner: () => void
   onSyncCity?: () => void
@@ -102,6 +113,12 @@ export function ActivityTripHero(props: Props) {
     )
   }
 
+  const timing = useMemo(
+    () => activityTripTimingStatus(props.outDate, props.retDate),
+    [props.outDate, props.retDate],
+  )
+  const kicker = ACTIVITY_TRIP_TIMING_KICKER_FR[timing]
+  const hint = ACTIVITY_TRIP_TIMING_HINT_FR[timing]
   const imageUrl = cityImageUrl(props.imageCity || props.cityLabel)
 
   return (
@@ -121,8 +138,10 @@ export function ActivityTripHero(props: Props) {
       >
         <View style={styles.badgeRow}>
           <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>{ACTIVITY_TRIP_HERO_KICKER_FR}</Text>
+            <View
+              style={[styles.liveDot, { backgroundColor: DOT_COLOR[timing] }]}
+            />
+            <Text style={styles.liveText}>{kicker}</Text>
           </View>
           <View style={styles.countBadge}>
             <Text style={styles.countText}>
@@ -153,7 +172,7 @@ export function ActivityTripHero(props: Props) {
           ) : (
             <Text style={styles.city}>{props.cityLabel}</Text>
           )}
-          <Text style={styles.hint}>{ACTIVITY_TRIP_IN_PROGRESS_HINT_FR}</Text>
+          <Text style={styles.hint}>{hint}</Text>
           <View style={styles.actions}>
             <Pressable
               onPress={props.onOpenPlanner}
@@ -220,12 +239,11 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#34D399',
   },
   liveText: {
     fontFamily: fonts.extrabold,
     fontSize: 10,
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     color: colors.white,
   },
@@ -234,70 +252,60 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.12)',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   countText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
+    fontSize: 10,
     color: 'rgba(255,255,255,0.92)',
   },
+  bottom: { gap: 8, marginTop: 20 },
   cityBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     maxWidth: '100%',
   },
-  changeChip: {
-    backgroundColor: colors.white,
-    borderRadius: 999,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
-  },
-  kickerMuted: {
-    fontFamily: fonts.extrabold,
-    fontSize: 10,
-    letterSpacing: 1.4,
-    color: 'rgba(255,255,255,0.72)',
-    marginBottom: 8,
-  },
-  bottom: { marginTop: 18 },
   city: {
     flexShrink: 1,
     fontFamily: fonts.extrabold,
     fontSize: 22,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
     color: colors.white,
-    includeFontPadding: false,
+  },
+  changeChip: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hint: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  kickerMuted: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: 'rgba(255,255,255,0.75)',
+    marginBottom: 6,
   },
   titleEmpty: {
     fontFamily: fonts.extrabold,
     fontSize: 17,
-    letterSpacing: -0.3,
     color: colors.white,
-    lineHeight: 22,
     marginBottom: 4,
-  },
-  hint: {
-    marginTop: 4,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    lineHeight: 16,
-    color: 'rgba(255,255,255,0.86)',
   },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 10,
+    marginTop: 4,
   },
   btnPrimary: {
     backgroundColor: colors.white,
@@ -314,9 +322,9 @@ const styles = StyleSheet.create({
   },
   btnGhost: {
     backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.28)',
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
     minHeight: 40,

@@ -91,6 +91,8 @@ export type ActivityPlannerTarget = {
   label: string
   city?: string
   destIata?: string
+  outDate?: string | null
+  retDate?: string | null
 }
 
 type Props = {
@@ -313,6 +315,12 @@ export function ActivityPlannerPicker({
                       label,
                       city: String(ws.city || '').trim() || undefined,
                       destIata: String(ws.dest_iata || '').trim() || undefined,
+                      outDate: ws.out_date
+                        ? String(ws.out_date).slice(0, 10)
+                        : null,
+                      retDate: ws.ret_date
+                        ? String(ws.ret_date).slice(0, 10)
+                        : null,
                     })
                   }
                   style={({ pressed }) => [

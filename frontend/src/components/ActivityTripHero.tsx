@@ -3,19 +3,28 @@
  */
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useMemo } from 'react'
 import {
-  ACTIVITY_CHANGE_TRIP_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_NO_TRIP_CTA_BODY_FR,
   ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
   ACTIVITY_NO_TRIP_CTA_TITLE_FR,
   ACTIVITY_OPEN_PLANNER_FR,
   ACTIVITY_SYNC_CITY_FR,
-  ACTIVITY_TRIP_HERO_KICKER_FR,
-  ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
   ACTIVITY_TRIP_PLANNER_COUNT_FR,
+  ACTIVITY_TRIP_TIMING_HINT_FR,
+  ACTIVITY_TRIP_TIMING_KICKER_FR,
+  activityTripTimingStatus,
   cityImageUrl,
+  type ActivityTripTimingStatus,
 } from '@flightwatcher/shared'
+
+const DOT_CLASS: Record<ActivityTripTimingStatus, string> = {
+  upcoming: 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]',
+  ongoing: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]',
+  past: 'bg-white/50',
+  undated: 'bg-white/70',
+}
 
 /** Chevron bas (chapeau) — ouvre le choix de séjour. */
 function ChevronDownIcon({ className = '' }: { className?: string }) {
@@ -52,6 +61,8 @@ type ActiveProps = {
   imageCity?: string
   plannerCount: number
   plannerHref: string
+  outDate?: string | null
+  retDate?: string | null
   showSyncCity?: boolean
   onSyncCity?: () => void
   onChangeTrip?: () => void
@@ -124,11 +135,19 @@ export function ActivityTripHero(props: Props) {
     imageCity,
     plannerCount,
     plannerHref,
+    outDate,
+    retDate,
     showSyncCity,
     onSyncCity,
     onChangeTrip,
   } = props
   const imageUrl = cityImageUrl(imageCity || cityLabel)
+  const timing = useMemo(
+    () => activityTripTimingStatus(outDate, retDate),
+    [outDate, retDate],
+  )
+  const kicker = ACTIVITY_TRIP_TIMING_KICKER_FR[timing]
+  const hint = ACTIVITY_TRIP_TIMING_HINT_FR[timing]
 
   return (
     <motion.div
@@ -151,8 +170,10 @@ export function ActivityTripHero(props: Props) {
       <div className="relative z-[1] flex h-full min-h-[160px] sm:min-h-[176px] flex-col justify-between p-4 sm:p-5">
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.12em] text-white">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-            {ACTIVITY_TRIP_HERO_KICKER_FR}
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${DOT_CLASS[timing]}`}
+            />
+            {kicker}
           </span>
           <span className="shrink-0 inline-flex items-center rounded-full bg-black/35 backdrop-blur-md border border-white/10 px-2.5 py-0.5 text-[10px] font-bold text-white/90">
             {ACTIVITY_TRIP_PLANNER_COUNT_FR(plannerCount)}
@@ -180,7 +201,7 @@ export function ActivityTripHero(props: Props) {
             </h3>
           )}
           <p className="mt-1 max-w-lg text-xs sm:text-sm text-white/85 leading-snug">
-            {ACTIVITY_TRIP_IN_PROGRESS_HINT_FR}
+            {hint}
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2">

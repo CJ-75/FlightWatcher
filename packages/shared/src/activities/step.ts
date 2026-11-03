@@ -36,6 +36,59 @@ export const ACTIVITY_TRIP_IN_PROGRESS_HINT_FR =
   'Ajoute des idées ici — elles atterrissent dans ton planner séjour.'
 export const ACTIVITY_TRIP_PLANNER_COUNT_FR = (n: number) =>
   n <= 0 ? '0 activité' : n === 1 ? '1 activité' : `${n} activités`
+
+/** Statut séjour pour le hero Activités, calé sur la date du jour. */
+export type ActivityTripTimingStatus =
+  | 'upcoming'
+  | 'ongoing'
+  | 'past'
+  | 'undated'
+
+function dayIso(raw?: string | null): string | null {
+  const s = String(raw || '').trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+}
+
+function todayIsoLocal(now = new Date()): string {
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function activityTripTimingStatus(
+  outDate?: string | null,
+  retDate?: string | null,
+  now = new Date(),
+): ActivityTripTimingStatus {
+  const today = todayIsoLocal(now)
+  const out = dayIso(outDate)
+  const ret = dayIso(retDate) || out
+  if (!out && !ret) return 'undated'
+  if (ret && ret < today) return 'past'
+  if (out && out > today) return 'upcoming'
+  return 'ongoing'
+}
+
+export const ACTIVITY_TRIP_TIMING_KICKER_FR: Record<
+  ActivityTripTimingStatus,
+  string
+> = {
+  upcoming: 'Prochain départ',
+  ongoing: 'Voyage en cours',
+  past: 'Voyage terminé',
+  undated: 'Séjour lié',
+}
+
+export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
+  ActivityTripTimingStatus,
+  string
+> = {
+  upcoming: 'Prépare ton séjour — les idées rejoignent ton planner.',
+  ongoing: ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
+  past: 'Séjour passé — tu peux encore noter des idées pour la prochaine fois.',
+  undated: ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
+}
 export const ACTIVITY_SYNC_CITY_FR = (city: string) => `Activités à ${city}`
 export const ACTIVITY_NO_TRIP_CTA_TITLE_FR = 'Ton prochain séjour commence ici'
 export const ACTIVITY_NO_TRIP_CTA_BODY_FR =
