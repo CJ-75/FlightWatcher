@@ -497,15 +497,39 @@ const CITY_EN_TO_FR: Record<string, string> = {
 function stripAirportNoise(label: string): string {
   return label
     .replace(
-      /\b(international|intl|airport|aéroport|aeroport|airfield|terminal)\b/gi,
+      /\b(international|intl|airport|aéroport|aeroport|a[ée]rodrome|aerodrome|airfield|heliport|seaplane|hydravion|terminal)\b/gi,
       ' ',
     )
+    .replace(/^(de|du|des|d'|of|the)\s+/i, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-function looksLikeIataTrigram(value: string): boolean {
+/** True when the string is only a 3-letter IATA-like code. */
+export function looksLikeIataTrigram(value: string): boolean {
   return /^[A-Za-z]{3}$/.test((value || '').trim())
+}
+
+/** Small fields / aerodromes — exclude from Search departure & destination pickers. */
+export function isAerodromeAirport(airport: {
+  name?: string | null
+  city?: string | null
+}): boolean {
+  const blob = `${airport.name || ''} ${airport.city || ''}`
+  return /\b(a[ée]rodrome|aerodrome|airfield|heliport|ulm|seaplane|hydravion)\b/i.test(
+    blob,
+  )
+}
+
+/** Keep commercial / passenger airports for Search city pickers. */
+export function filterSearchAirports<T extends { name?: string | null; city?: string | null; code?: string | null }>(
+  airports: T[],
+): T[] {
+  return (airports || []).filter((a) => {
+    if (!a?.code || String(a.code).trim().length !== 3) return false
+    if (isAerodromeAirport(a)) return false
+    return true
+  })
 }
 
 /** Best-effort ISO flag for an activity / favoris destination label ("Lisbonne", "Rome, Italie"). */
@@ -574,6 +598,21 @@ export function cityDisplayNameFr(
   // Avoid flashing "VKO" / "EVN" as the title when the label was also a trigram
   if (beforeComma && !looksLikeIataTrigram(beforeComma)) return beforeComma
   return beforeComma || iata || ''
+}
+
+/** City label for a Destination row — never prefer bare IATA over a real name. */
+export function destinationDisplayNameFr(dest: {
+  code?: string | null
+  nom?: string | null
+  destinationFull?: string | null
+}): string {
+  const code = String(dest.code || '').trim().toUpperCase()
+  const label = dest.destinationFull || dest.nom || ''
+  const city = cityDisplayNameFr(code, label)
+  if (city && !looksLikeIataTrigram(city)) return city
+  const fromNom = cityDisplayNameFr(code, dest.nom)
+  if (fromNom && !looksLikeIataTrigram(fromNom)) return fromNom
+  return city || fromNom || code
 }
 
 /** "Paris → Moscou" — never "BVA → VKO". */
@@ -775,10 +814,11 @@ export function resolveTripImageUrl(opts: {
 
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
   const map = new Map<string, CityAirportGroup>()
-  for (const a of airports) {
-    const city = cityDisplayNameFr(a.code, a.city)
+  for (const a of filterSearchAirports(airports)) {
+    const city = cityDisplayNameFr(a.code, a.city || a.name)
     const country = (a.country || '').trim()
-    if (!city) continue
+    // Skip unresolved labels that would show as "CDG" / "VKO" in the picker.
+    if (!city || looksLikeIataTrigram(city)) continue
     const key = `${normalizeCityKey(city)}|${normalizeCityKey(country)}`
     const existing = map.get(key)
     if (existing) {

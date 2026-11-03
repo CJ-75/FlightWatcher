@@ -553,6 +553,25 @@ def translate_country_label(label: Optional[str]) -> str:
     return COUNTRY_EN_TO_FR.get(key, label.strip())
 
 
+def _looks_like_iata(value: Optional[str]) -> bool:
+    s = (value or "").strip()
+    return len(s) == 3 and s.isalpha()
+
+
+def _strip_airport_noise(label: str) -> str:
+    import re
+
+    s = re.sub(
+        r"\b(international|intl|airport|aéroport|aeroport|aérodrome|aerodrome|"
+        r"airfield|heliport|seaplane|hydravion|terminal)\b",
+        " ",
+        label or "",
+        flags=re.IGNORECASE,
+    )
+    s = re.sub(r"^(de|du|des|d'|of|the)\s+", "", s.strip(), flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def city_for_code(code: Optional[str], fallback: Optional[str] = None) -> str:
     c = (code or "").strip().upper()
     if c in CITY_FR_BY_IATA:
@@ -563,7 +582,13 @@ def city_for_code(code: Optional[str], fallback: Optional[str] = None) -> str:
         # Still English from Ryanair? try label translate
         return translate_city_label(city) or city
     if fallback:
-        return translate_city_label(fallback)
+        cleaned = _strip_airport_noise(str(fallback))
+        translated = translate_city_label(cleaned or fallback)
+        # Prefer a human label over echoing the IATA trigram.
+        if translated and not _looks_like_iata(translated):
+            return translated
+        if cleaned and not _looks_like_iata(cleaned):
+            return cleaned
     return c or ""
 
 

@@ -62,12 +62,14 @@ import {
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
   buildBookingUrl,
   countryIsoForCityLabel,
+  destinationDisplayNameFr,
   findCityGroupByCodes,
   groupAirportsByCity,
   hasTripItemOwner,
   isPastFavoriteActivity,
   isPastFavoriteDeal,
   isPastFavoriteFlight,
+  looksLikeIataTrigram,
   parseAirportCodes,
   partitionFavoritesByPast,
   pickTripItemOwner,
@@ -2135,7 +2137,14 @@ function SearchTab({
                     </div>
                     {estOuvert && (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 ml-10">
-                        {dests.map((dest) => (
+                        {dests
+                          .map((dest) => ({
+                            ...dest,
+                            label: destinationDisplayNameFr(dest),
+                          }))
+                          .filter((dest) => dest.label && !looksLikeIataTrigram(dest.label))
+                          .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+                          .map((dest) => (
                           <label
                             key={dest.code}
                             className={`flex items-center px-2 py-1 rounded text-xs cursor-pointer border transition-colors ${
@@ -2150,9 +2159,11 @@ function SearchTab({
                               onChange={() => onToggleDestination(dest.code)}
                               className="mr-2"
                             />
-                            <span className="font-semibold">{dest.code}</span>
-                            <span className="ml-1 text-gray-600 truncate" title={dest.nom}>
-                              {dest.nom}
+                            <span className="font-semibold truncate" title={dest.code}>
+                              {dest.label}
+                            </span>
+                            <span className="ml-1 text-gray-500 shrink-0">
+                              {dest.code}
                             </span>
                           </label>
                         ))}

@@ -908,6 +908,11 @@ export function normalizeAirports(data: { airports: Airport[] } | Airport[]): Ai
   for (const a of list) {
     const code = (a?.code || '').toUpperCase()
     if (!code || seen.has(code)) continue
+    // Drop aerodromes / airfields from Search & planner pickers.
+    const blob = `${a?.name || ''} ${a?.city || ''}`
+    if (/\b(a[ée]rodrome|aerodrome|airfield|heliport|ulm|seaplane|hydravion)\b/i.test(blob)) {
+      continue
+    }
     seen.add(code)
     out.push({ ...a, code })
   }
@@ -933,12 +938,29 @@ export function normalizeDestinations(
 export function destinationsToAirports(destinations: Destination[]): Airport[] {
   return destinations
     .filter((d) => d?.code && String(d.code).length === 3)
-    .map((d) => ({
-      code: String(d.code).toUpperCase(),
-      name: d.destinationFull || d.nom || d.code,
-      city: d.nom || d.code,
-      country: d.pays || 'Europe',
-    }))
+    .map((d) => {
+      const code = String(d.code).toUpperCase()
+      const full = d.destinationFull || d.nom || ''
+      // Prefer resolved city name — avoid city === "CDG".
+      let city = (d.nom || '').trim()
+      if (!city || /^[A-Za-z]{3}$/.test(city)) {
+        const beforeComma = full.split(',')[0]?.trim() || ''
+        city =
+          beforeComma && !/^[A-Za-z]{3}$/.test(beforeComma) ? beforeComma : code
+      }
+      return {
+        code,
+        name: full || city || code,
+        city,
+        country: d.pays || 'Europe',
+      }
+    })
+    .filter((a) => {
+      const blob = `${a.name} ${a.city}`
+      return !/\b(a[ée]rodrome|aerodrome|airfield|heliport|ulm|seaplane|hydravion)\b/i.test(
+        blob,
+      )
+    })
 }
 
 /** Backend shape: destinations grouped by country. */

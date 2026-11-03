@@ -4,10 +4,16 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import re
 import time
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+_AERODROME_RE = re.compile(
+    r"\b(a[ée]rodrome|aerodrome|airfield|heliport|ulm|seaplane|hydravion)\b",
+    re.IGNORECASE,
+)
 
 from city_names_fr import (
     CITY_FR_BY_IATA,
@@ -191,6 +197,9 @@ def common_airports_from_travelpayouts(
         if code in CITY_FR_BY_IATA:
             city = CITY_FR_BY_IATA[code]
         name = _airport_name_fr(item, city)
+        # Drop aerodromes / airfields from the commercial catalog.
+        if _AERODROME_RE.search(f"{name} {city}"):
+            continue
         country = country_names.get(iso, iso or "")
         out.append(
             localize_airport_dict(

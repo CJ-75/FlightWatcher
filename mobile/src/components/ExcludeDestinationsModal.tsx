@@ -10,7 +10,11 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Destination } from '@flightwatcher/shared'
+import {
+  destinationDisplayNameFr,
+  looksLikeIataTrigram,
+  type Destination,
+} from '@flightwatcher/shared'
 import { colors, fonts } from '../theme'
 
 type Props = {
@@ -36,7 +40,13 @@ export function ExcludeDestinationsModal({
   const [query, setQuery] = useState('')
 
   const sections = useMemo(() => {
-    const list = Array.isArray(destinations) ? destinations : []
+    const list = (Array.isArray(destinations) ? destinations : [])
+      .map((d) => {
+        const label = destinationDisplayNameFr(d)
+        return { ...d, nom: label }
+      })
+      // Hide unresolved bare-IATA rows from the exclude picker.
+      .filter((d) => d.nom && !looksLikeIataTrigram(d.nom))
     const q = query.trim().toLowerCase()
     const filtered = q
       ? list.filter(
@@ -54,7 +64,10 @@ export function ExcludeDestinationsModal({
     }
     return Array.from(byCountry.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([title, data]) => ({ title, data }))
+      .map(([title, data]) => ({
+        title,
+        data: data.sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+      }))
   }, [destinations, query])
 
   const toggle = (code: string) => {

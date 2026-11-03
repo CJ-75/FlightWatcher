@@ -52,6 +52,8 @@ def _generate_airports_from_api(country_names: dict) -> List[dict]:
                 continue
             name = (item.get('name') or code).strip()
             city = ((item.get('city') or {}).get('name') or name).strip()
+            if _is_aerodrome_label(name, city):
+                continue
             iso = ((item.get('country') or {}).get('code') or '').strip().upper()
             airports_list.append(
                 localize_airport_dict(
@@ -87,6 +89,22 @@ _FALLBACK_AIRPORTS = [
 ]
 
 
+_AERODROME_RE = None
+
+
+def _is_aerodrome_label(*parts: str) -> bool:
+    global _AERODROME_RE
+    if _AERODROME_RE is None:
+        import re
+
+        _AERODROME_RE = re.compile(
+            r"\b(a[ée]rodrome|aerodrome|airfield|heliport|ulm|seaplane|hydravion)\b",
+            re.IGNORECASE,
+        )
+    blob = " ".join(p for p in parts if p)
+    return bool(_AERODROME_RE.search(blob))
+
+
 def _airports_from_csv(country_names: dict) -> List[dict]:
     out: List[dict] = []
     airports_file = os.path.normpath(
@@ -110,6 +128,9 @@ def _airports_from_csv(country_names: dict) -> List[dict]:
                 iso_country = (row.get("iso_country") or "").strip()
                 airport_name = (row.get("name") or "").strip()
                 if not iata_code or len(iata_code) != 3:
+                    continue
+                # Search / picker: drop aerodromes & airfields.
+                if _is_aerodrome_label(airport_name, municipality):
                     continue
                 out.append(
                     localize_airport_dict(
@@ -286,8 +307,12 @@ def _destinations_from_catalog(*, exclude_code: str) -> dict:
         dest_code = (a.get("code") or "").strip().upper()
         if dest_code == exclude_code or len(dest_code) != 3:
             continue
+        if _is_aerodrome_label(a.get("name") or "", a.get("city") or ""):
+            continue
         pays = (a.get("country") or "Autre").strip() or "Autre"
-        city = (a.get("city") or dest_code).strip()
+        city = city_for_code(dest_code, a.get("city") or a.get("name") or dest_code)
+        if city and len(city) == 3 and city.isalpha() and city.upper() == dest_code:
+            continue
         by_country[pays][dest_code] = {
             "code": dest_code,
             "nom": city,

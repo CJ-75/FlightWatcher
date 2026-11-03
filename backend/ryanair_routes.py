@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -9,6 +10,11 @@ from collections import defaultdict
 from typing import Dict, Optional, Set, Tuple
 
 from city_names_fr import city_for_code, country_for_code
+
+_AERODROME_RE = re.compile(
+    r"\b(a[ée]rodrome|aerodrome|airfield|heliport|ulm|seaplane|hydravion)\b",
+    re.IGNORECASE,
+)
 
 # Short in-memory cache so planner create/scan don't hit Ryanair every call.
 # Empty sets are cached too (CDG/ORY return 404 — not Ryanair bases).
@@ -109,10 +115,19 @@ def fetch_destinations_by_country(departure: str) -> dict:
             if len(dest_code) != 3:
                 continue
             codes.add(dest_code)
-            city = city_for_code(
-                dest_code,
-                ((arr.get("city") or {}).get("name") or arr.get("name") or dest_code),
+            raw_city = (
+                (arr.get("city") or {}).get("name")
+                or arr.get("name")
+                or dest_code
             )
+            city = city_for_code(dest_code, raw_city)
+            # Skip unresolved / aerodrome-like labels from the exclude list.
+            blob = f"{city} {raw_city} {arr.get('name') or ''}"
+            if _AERODROME_RE.search(str(blob)):
+                continue
+            if city and len(city) == 3 and city.isalpha() and city.upper() == dest_code:
+                # Keep code for routing cache but don't surface as a city choice.
+                continue
             iso = ((arr.get("country") or {}).get("code") or "").strip().upper()
             country = country_for_code(
                 dest_code,
