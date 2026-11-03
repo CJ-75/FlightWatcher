@@ -1,10 +1,17 @@
-import React, { Suspense, useCallback, useEffect, useState } from 'react'
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  NavigationContainer,
+  DefaultTheme,
+  useNavigationContainerRef,
+} from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { readPendingInvite } from './src/lib/pendingInvite'
+import { parsePlannerInviteToken } from './src/lib/client'
+import * as Linking from 'expo-linking'
 import {
   useFonts,
   Sora_400Regular,
@@ -242,6 +249,31 @@ function MainTabs() {
   )
 }
 
+function PendingInviteResume({
+  ready,
+  navigationRef,
+}: {
+  ready: boolean
+  navigationRef: ReturnType<typeof useNavigationContainerRef<RootStackParamList>>
+}) {
+  const { user, loading, isGuest } = useAuth()
+  const handled = useRef(false)
+
+  useEffect(() => {
+    if (!ready || loading || handled.current) return
+    if (!navigationRef.isReady()) return
+    void (async () => {
+      const token = await readPendingInvite()
+      if (!token || handled.current) return
+      handled.current = true
+      // Remonter l’invitation (parcours inscription ou auto-join).
+      navigationRef.navigate('PlannerInvite', { token })
+    })()
+  }, [ready, loading, user, isGuest, navigationRef])
+
+  return null
+}
+
 function RootNavigator() {
   const { user, loading, isGuest } = useAuth()
 
@@ -389,6 +421,23 @@ export default function App() {
 
   const onLayoutRoot = useCallback(() => undefined, [])
   const ready = fontsLoaded || fontsTimedOut
+  const [navReady, setNavReady] = useState(false)
+  const navigationRef = useNavigationContainerRef<RootStackParamList>()
+
+  // HTTPS / deep link invite → ouvrir PlannerInvite + mémoriser le token.
+  useEffect(() => {
+    const openInviteUrl = (url: string | null) => {
+      const token = url ? parsePlannerInviteToken(url) : null
+      if (!token || !navigationRef.isReady()) return
+      void import('./src/lib/pendingInvite').then(({ rememberPendingInvite }) =>
+        rememberPendingInvite(token),
+      )
+      navigationRef.navigate('PlannerInvite', { token })
+    }
+    void Linking.getInitialURL().then(openInviteUrl)
+    const sub = Linking.addEventListener('url', ({ url }) => openInviteUrl(url))
+    return () => sub.remove()
+  }, [navigationRef])
 
   if (!ready) {
     return <AppSplash />
@@ -397,9 +446,15 @@ export default function App() {
   return (
     <SafeAreaProvider onLayout={onLayoutRoot}>
       <AuthProvider>
-        <NavigationContainer theme={navTheme} linking={linking as any}>
+        <NavigationContainer
+          ref={navigationRef}
+          theme={navTheme}
+          linking={linking as any}
+          onReady={() => setNavReady(true)}
+        >
           <StatusBar style="dark" />
           <RootNavigator />
+          <PendingInviteResume ready={navReady} navigationRef={navigationRef} />
         </NavigationContainer>
       </AuthProvider>
     </SafeAreaProvider>

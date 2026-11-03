@@ -254,8 +254,21 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.proposals.empty': 'Aucune proposition pour le moment.',
     'planner.invite.title': 'Tu es invité·e',
     'planner.invite.join': 'Rejoindre le voyage',
-    'planner.invite.login': 'Connecte-toi pour rejoindre',
+    'planner.invite.login': 'Créer mon compte pour rejoindre',
     'planner.invite.joined': 'Tu as rejoint le voyage !',
+    'planner.invite.back': '← Retour à l’invitation',
+    'planner.invite.signupKicker': 'Invitation',
+    'planner.invite.signupTitle': 'Rejoins le voyage',
+    'planner.invite.signupLead':
+      'Crée ton compte en un tap — tu retrouves le séjour juste après.',
+    'planner.invite.signupLeadNamed':
+      'Crée ton compte pour rejoindre « {name} » — tu retrouves le séjour juste après.',
+    'planner.invite.step1': 'Crée ton compte',
+    'planner.invite.step1.detail': 'Connexion Google rapide et sécurisée.',
+    'planner.invite.step2': 'Rejoins le voyage',
+    'planner.invite.step2.detail': 'Tu es ajouté au planner automatiquement.',
+    'planner.invite.step3': 'Suis le séjour',
+    'planner.invite.step3.detail': 'Vol, hôtel et activités — ensemble.',
     
     // Auth
     'auth.signIn': 'Se connecter',
@@ -713,8 +726,21 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.proposals.empty': 'No proposals yet.',
     'planner.invite.title': 'You’re invited',
     'planner.invite.join': 'Join the trip',
-    'planner.invite.login': 'Sign in to join',
+    'planner.invite.login': 'Create an account to join',
     'planner.invite.joined': 'You joined the trip!',
+    'planner.invite.back': '← Back to invite',
+    'planner.invite.signupKicker': 'Invite',
+    'planner.invite.signupTitle': 'Join the trip',
+    'planner.invite.signupLead':
+      'Create your account in one tap — you’ll land back on the trip right after.',
+    'planner.invite.signupLeadNamed':
+      'Create your account to join “{name}” — you’ll land back on the trip right after.',
+    'planner.invite.step1': 'Create your account',
+    'planner.invite.step1.detail': 'Fast, secure Google sign-in.',
+    'planner.invite.step2': 'Join the trip',
+    'planner.invite.step2.detail': 'You’re added to the shared planner automatically.',
+    'planner.invite.step3': 'Follow the stay',
+    'planner.invite.step3.detail': 'Flight, hotel and activities — together.',
     
     // Auth
     'auth.signIn': 'Sign in',

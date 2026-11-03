@@ -11,15 +11,16 @@ import {
   Platform,
   Alert,
   ScrollView,
+  Share,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
 import {
   partyModeFromCount,
   partyModeKickerFr,
-  partyModeSubtitleFr,
   partyModeTitleFr,
 } from '@flightwatcher/shared'
+import { plannerInviteUrl } from '../lib/client'
 import { colors, fonts, shadow } from '../theme'
 
 function memberLabel(m: TripMember, currentUserId?: string | null): string {
@@ -55,6 +56,8 @@ type Props = {
   currentUserId?: string | null
   isOrganizer: boolean
   busy?: boolean
+  inviteToken?: string | null
+  tripName?: string | null
   onAdd: (body: AddTripMemberRequest) => Promise<void>
   onRemove: (member: TripMember) => Promise<void>
 }
@@ -65,6 +68,8 @@ export function TravelersSection({
   currentUserId,
   isOrganizer,
   busy,
+  inviteToken,
+  tripName,
   onAdd,
   onRemove,
 }: Props) {
@@ -83,7 +88,24 @@ export function TravelersSection({
   const partyMode = partyModeFromCount(Math.max(seatTotal, count, 1))
   const partyTitle = partyModeTitleFr(partyMode)
   const partyKicker = partyModeKickerFr(partyMode)
-  const partySubtitle = partyModeSubtitleFr(partyMode)
+  const inviteUrl = inviteToken ? plannerInviteUrl(inviteToken) : null
+  const [inviteBusy, setInviteBusy] = useState(false)
+
+  const shareInvite = async () => {
+    if (!inviteUrl) return
+    setInviteBusy(true)
+    try {
+      const name = String(tripName || 'voyage').trim() || 'voyage'
+      await Share.share({
+        message: `Rejoins mon voyage « ${name} » sur FlightWatcher : ${inviteUrl}`,
+        url: inviteUrl,
+      })
+    } catch {
+      Alert.alert('Invitation', 'Impossible de partager le lien pour le moment.')
+    } finally {
+      setInviteBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (addOpen) {
@@ -172,13 +194,7 @@ export function TravelersSection({
         <Text style={styles.roleNote}>
           Lecture seule — seul l’organisateur gère la liste.
         </Text>
-      ) : (
-        <Text style={styles.roleNote}>
-          {partyMode === 'solo'
-            ? partySubtitle
-            : 'Ajoute un ami (prénom + email). Il pourra rejoindre via le lien ; toi tu décides du vol.'}
-        </Text>
-      )}
+      ) : null}
 
       {sorted.length === 0 ? (
         <Text style={styles.empty}>Aucun voyageur pour l’instant.</Text>
@@ -245,6 +261,34 @@ export function TravelersSection({
           })}
         </View>
       )}
+
+      {isOrganizer && inviteUrl ? (
+        <Pressable
+          onPress={() => void shareInvite()}
+          disabled={inviteBusy}
+          style={({ pressed }) => [
+            styles.inviteRow,
+            (inviteBusy || pressed) && { opacity: 0.85 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Partager le lien d’invitation"
+        >
+          <View style={styles.inviteIcon}>
+            <Text style={styles.inviteIconText}>↗</Text>
+          </View>
+          <View style={styles.inviteMeta}>
+            <Text style={styles.inviteLabel}>Lien d’invitation</Text>
+            <Text style={styles.inviteHint} numberOfLines={1}>
+              Partager avec tes voyageurs
+            </Text>
+          </View>
+          {inviteBusy ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <Text style={styles.inviteAction}>Partager</Text>
+          )}
+        </Pressable>
+      ) : null}
 
       <Modal
         visible={addOpen}
@@ -410,6 +454,49 @@ const styles = StyleSheet.create({
   pillTextOff: { color: colors.muted },
   removeBtn: { paddingHorizontal: 8, paddingVertical: 6 },
   removeText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.danger },
+  inviteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+  },
+  inviteIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+  },
+  inviteIconText: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.primaryDeep,
+    marginTop: -1,
+  },
+  inviteMeta: { flex: 1, gap: 1, minWidth: 0 },
+  inviteLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  inviteHint: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  inviteAction: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.primaryDeep,
+  },
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,

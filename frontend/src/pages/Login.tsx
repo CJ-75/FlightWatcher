@@ -13,6 +13,8 @@ export default function Login() {
   const [searchParams] = useSearchParams()
   const { t } = useI18n()
   const redirectTo = searchParams.get('redirect') || '/'
+  const inviteMatch = redirectTo.match(/^\/planner\/invite\/([^/?#]+)/)
+  const inviteMode = Boolean(inviteMatch)
 
   useEffect(() => {
     if (redirectTo.startsWith('/')) {
@@ -48,26 +50,30 @@ export default function Login() {
       <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-14">
         <div className="flex items-center justify-between mb-8 sm:mb-12">
           <Link
-            to="/vols"
+            to={inviteMode ? redirectTo : '/vols'}
             className="text-sm font-bold text-[#E85A28] hover:text-[#FF6B35]"
           >
-            {t('login.back')}
+            {inviteMode ? t('planner.invite.back') : t('login.back')}
           </Link>
           <LanguageSwitcher />
         </div>
 
         <div className="lg:grid lg:grid-cols-2 lg:gap-14 lg:items-center">
           <div className="hidden lg:block">
-            <p className="app-kicker mb-3">FlightWatcher</p>
+            <p className="app-kicker mb-3">
+              {inviteMode ? t('planner.invite.signupKicker') : 'FlightWatcher'}
+            </p>
             <h1 className="text-4xl xl:text-5xl font-extrabold text-ink tracking-tight leading-[1.1]">
-              {t('app.title')}
+              {inviteMode ? t('planner.invite.signupTitle') : t('app.title')}
             </h1>
             <p className="mt-4 text-muted text-base leading-relaxed max-w-md">
-              {t('profile.guest.lead')}
+              {inviteMode
+                ? t('planner.invite.signupLead')
+                : t('profile.guest.lead')}
             </p>
           </div>
           <div className="app-card p-6 sm:p-8">
-            <AccountGuestLanding />
+            <AccountGuestLanding inviteMode={inviteMode} />
           </div>
         </div>
       </div>

@@ -39,13 +39,11 @@ import {
   sanitizeTripAirports,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
-  restaurantStepProgress,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type StayStepId,
 } from '@flightwatcher/shared'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
-import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -148,12 +146,10 @@ export function TripDetailScreen() {
   const [savingName, setSavingName] = useState(false)
   const [showModalities, setShowModalities] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
-  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
   const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
-  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const extrasRef = useRef<View>(null)
   const leftForFlight = useRef(false)
   const leftForFlightNeedsAsk = useRef(false)
@@ -163,7 +159,6 @@ export function TripDetailScreen() {
       .getConfig()
       .then((cfg) => {
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
-        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
       .catch(() => undefined)
   }, [])
@@ -241,9 +236,8 @@ export function TripDetailScreen() {
 
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
-    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) {
+    if (!token || !plannerActivitiesEnabled) {
       setActivityItems([])
-      setRestaurantItems([])
       return
     }
     void getApi()
@@ -251,17 +245,14 @@ export function TripDetailScreen() {
       .then((res) => {
         const items = res.items || []
         setActivityItems(items.filter((i) => i.item_type === 'activity'))
-        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
       })
       .catch(() => {
         setActivityItems([])
-        setRestaurantItems([])
       })
   }, [
     flightDraft?.draft_token,
     workspace?.draft_token,
     plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
     flightDraft?.hotel_booked_at,
     flightDraft?.flight_booked_at,
   ])
@@ -269,10 +260,6 @@ export function TripDetailScreen() {
   const activityProgress = useMemo(
     () => activityStepProgress(activityItems),
     [activityItems],
-  )
-  const restaurantProgress = useMemo(
-    () => restaurantStepProgress(restaurantItems),
-    [restaurantItems],
   )
 
   const isOrganizer = !!viewUser && trip?.organizer_id === viewUser.id
@@ -643,22 +630,6 @@ export function TripDetailScreen() {
     }
   }
 
-  const confirmDelete = () => {
-    if (!trip) return
-    Alert.alert(
-      'Supprimer le voyage',
-      `Supprimer « ${trip.name} » ?\n\nLe Planner disparaît, mais tes réservations (vol / hôtel) sont conservées.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => void doDelete(),
-        },
-      ],
-    )
-  }
-
   const doDelete = async () => {
     setDeleting(true)
     try {
@@ -690,7 +661,6 @@ export function TripDetailScreen() {
     cityLabel: cityLabel !== 'ta ville' ? cityLabel : null,
     destIata: arrivalCode || null,
   })
-  const dateIso = trip?.dates_depart?.[0]?.date || null
   const destinationImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 
   const reservationFlags = useMemo(() => {
@@ -736,6 +706,12 @@ export function TripDetailScreen() {
       status !== 'partner_confirmed'
     const canSkipHotel =
       !externalHotel && !hotelBooked && !flightDraft?.hotel_booked_at
+    // Réservations FlightWatcher (pas « ailleurs ») → archiver plutôt que supprimer.
+    const hasInternalReservations = Boolean(
+      (flightBooked && !externalFlight) ||
+        (hotelBooked && !externalHotel) ||
+        workspace?.hotel_booking_id,
+    )
     return {
       payload,
       flight,
@@ -746,8 +722,28 @@ export function TripDetailScreen() {
       hasHotel,
       canSkipFlight,
       canSkipHotel,
+      hasInternalReservations,
     }
   }, [flightDraft, workspace])
+
+  const confirmDelete = () => {
+    if (!trip) return
+    const archive = reservationFlags.hasInternalReservations
+    Alert.alert(
+      archive ? 'Archiver le voyage' : 'Supprimer le voyage',
+      archive
+        ? `Archiver « ${trip.name} » ?\n\nLe Planner disparaît, tes réservations (vol / hôtel) sont conservées.`
+        : `Supprimer « ${trip.name} » ?\n\nCette action est définitive.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: archive ? 'Archiver' : 'Supprimer',
+          style: 'destructive',
+          onPress: () => void doDelete(),
+        },
+      ],
+    )
+  }
 
   const pipelineForUi = useMemo(() => {
     const {
@@ -773,6 +769,7 @@ export function TripDetailScreen() {
       hotelBooked: hotelBooked && !externalHotel,
       externalHotel,
     })
+    // Adresses : non affichées / inactives pour le moment.
     return buildStayPipeline({
       flight: flightStep,
       hotel: hotelStep,
@@ -786,19 +783,13 @@ export function TripDetailScreen() {
       activitiesDone: activityProgress.done,
       activitiesPartial: activityProgress.partial,
       activitiesHint: activityProgress.hint,
-      restaurantsEnabled: plannerRestaurantsEnabled,
-      restaurantsDone: restaurantProgress.done,
-      restaurantsPartial: restaurantProgress.partial,
-      restaurantsHint: restaurantProgress.hint,
-      restaurantsSkipped: restaurantProgress.skipped,
-    })
+      restaurantsEnabled: false,
+    }).filter((s) => s.id !== 'restaurants')
   }, [
     accepted,
     activityProgress,
     plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
     reservationFlags,
-    restaurantProgress,
   ])
 
   const changeFlightChoice = async () => {
@@ -1181,20 +1172,6 @@ export function TripDetailScreen() {
     }
     if (id === 'activities' && plannerActivitiesEnabled) {
       Alert.alert('Activités', 'Plus bas sur cette fiche : idées d’activités.')
-      return
-    }
-    if (id === 'restaurants' && plannerRestaurantsEnabled) {
-      if (!reservationFlags.hotelBooked && !reservationFlags.externalHotel) {
-        Alert.alert(
-          'Adresses',
-          'Réserve d’abord ton hôtel pour voir les restos autour.',
-        )
-        return
-      }
-      Alert.alert(
-        'Adresses',
-        'Plus bas sur cette fiche : restaurants autour de ton hôtel.',
-      )
     }
   }
 
@@ -1292,10 +1269,7 @@ export function TripDetailScreen() {
         <Text style={styles.pipelineSub}>
           Vol → Hôtel
           {plannerActivitiesEnabled ? ' → Activités' : ''}
-          {plannerRestaurantsEnabled ? ' → Adresses' : ''}
-          {!plannerActivitiesEnabled && !plannerRestaurantsEnabled
-            ? '. Activités & adresses bientôt.'
-            : '.'}
+          {plannerActivitiesEnabled ? '.' : '. Activités bientôt.'}
         </Text>
         <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
         {reservationToken ? (
@@ -1604,67 +1578,36 @@ export function TripDetailScreen() {
         </View>
       ) : null}
 
-      {!scanning && (plannerActivitiesEnabled || plannerRestaurantsEnabled) ? (
+      {!scanning && plannerActivitiesEnabled ? (
         <View ref={extrasRef} style={styles.section}>
-          {plannerActivitiesEnabled ? (
-            <View style={[styles.extrasCard, shadow.soft]}>
-              <ImageBackground
-                source={{ uri: destinationImage }}
-                style={styles.extrasHero}
-                imageStyle={styles.extrasHeroImage}
-              >
-                <LinearGradient
-                  colors={['rgba(14,24,40,0.2)', 'rgba(14,24,40,0.92)']}
-                  style={StyleSheet.absoluteFill}
-                />
-                <Text style={styles.extrasIcon}>🎟️</Text>
-                <Text style={styles.extrasKicker}>À VIVRE SUR PLACE</Text>
-                <Text style={styles.extrasTitle}>Activités à {cityLabel}</Text>
-              </ImageBackground>
-              <View style={styles.extrasBody}>
-                <ActivityStepPanel
-                  draftToken={
-                    __DEV__ && isGuest
-                      ? null
-                      : flightDraft?.draft_token || workspace?.draft_token
-                  }
-                  plannedTripId={tripId}
-                  citySlug={citySlug}
-                  enabled={plannerActivitiesEnabled}
-                  surface="planner"
-                />
-              </View>
+          <View style={[styles.extrasCard, shadow.soft]}>
+            <ImageBackground
+              source={{ uri: destinationImage }}
+              style={styles.extrasHero}
+              imageStyle={styles.extrasHeroImage}
+            >
+              <LinearGradient
+                colors={['rgba(14,24,40,0.2)', 'rgba(14,24,40,0.92)']}
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={styles.extrasIcon}>🎟️</Text>
+              <Text style={styles.extrasKicker}>À VIVRE SUR PLACE</Text>
+              <Text style={styles.extrasTitle}>Activités à {cityLabel}</Text>
+            </ImageBackground>
+            <View style={styles.extrasBody}>
+              <ActivityStepPanel
+                draftToken={
+                  __DEV__ && isGuest
+                    ? null
+                    : flightDraft?.draft_token || workspace?.draft_token
+                }
+                plannedTripId={tripId}
+                citySlug={citySlug}
+                enabled={plannerActivitiesEnabled}
+                surface="planner"
+              />
             </View>
-          ) : null}
-          {plannerRestaurantsEnabled ? (
-            <View style={[styles.extrasCard, styles.extrasCardMargin, shadow.soft]}>
-              <ImageBackground
-                source={{ uri: destinationImage }}
-                style={styles.extrasHero}
-                imageStyle={styles.extrasHeroImage}
-              >
-                <LinearGradient
-                  colors={['rgba(60,22,8,0.18)', 'rgba(60,22,8,0.94)']}
-                  style={StyleSheet.absoluteFill}
-                />
-                <Text style={styles.extrasIcon}>🍽️</Text>
-                <Text style={styles.extrasKicker}>TES BONNES ADRESSES</Text>
-                <Text style={styles.extrasTitle}>Où manger à {cityLabel}</Text>
-              </ImageBackground>
-              <View style={styles.extrasBody}>
-                <RestaurantStepPanel
-                  plannedTripId={__DEV__ && isGuest ? null : tripId}
-                  citySlug={citySlug}
-                  cityLabel={cityLabel}
-                  dateIso={dateIso}
-                  enabled={plannerRestaurantsEnabled}
-                  hotelReady={
-                    reservationFlags.hotelBooked || reservationFlags.externalHotel
-                  }
-                />
-              </View>
-            </View>
-          ) : null}
+          </View>
         </View>
       ) : null}
 
@@ -1674,6 +1617,8 @@ export function TripDetailScreen() {
         currentUserId={viewUser?.id}
         isOrganizer={!!isOrganizer}
         busy={membersBusy}
+        inviteToken={trip.invite_token}
+        tripName={trip.name}
         onAdd={addMember}
         onRemove={removeMember}
       />
@@ -1820,7 +1765,11 @@ export function TripDetailScreen() {
           {deleting ? (
             <ActivityIndicator color={colors.danger} />
           ) : (
-            <Text style={styles.deleteText}>Supprimer le voyage</Text>
+            <Text style={styles.deleteText}>
+              {reservationFlags.hasInternalReservations
+                ? 'Archiver le voyage'
+                : 'Supprimer le voyage'}
+            </Text>
           )}
         </Pressable>
       ) : null}
@@ -2308,13 +2257,13 @@ const styles = StyleSheet.create({
   heroChipText: { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
   meta: { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.74)', lineHeight: 18 },
   pipelineCard: {
-    backgroundColor: '#FFE8D6',
-    borderRadius: 20,
+    backgroundColor: colors.white,
+    borderRadius: 22,
     paddingHorizontal: 14,
     paddingTop: 16,
     paddingBottom: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,107,53,0.28)',
+    borderColor: colors.primaryMuted,
   },
   pipelineTitle: {
     fontFamily: fonts.extrabold,
@@ -2324,9 +2273,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   pipelineSub: {
-    fontFamily: fonts.regular,
+    fontFamily: fonts.medium,
     fontSize: 13,
-    color: '#6B4535',
+    color: colors.muted,
     lineHeight: 18,
     marginTop: 4,
     marginBottom: 4,

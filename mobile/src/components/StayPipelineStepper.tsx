@@ -34,7 +34,7 @@ function StepGlyph({
         <Svg {...common}>
           <Path
             fill={color}
-            d="M4 11V19H6V11H4ZM7 11V19H17V11H7ZM18 11V19H20V11H18ZM3 21H21V19H3V21ZM7 9H17C18.1 9 19 8.1 19 7V5C19 3.9 18.1 3 17 3H7C5.9 3 5 3.9 5 5V7C5 8.1 5.9 9 7 9ZM7 5H17V7H7V5Z"
+            d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7 4 8.34 4 10s1.34 3 3 3zm12-6h-8v7H3V6H1v14h2v-2h18v2h2v-8c0-2.21-1.79-4-4-4z"
           />
         </Svg>
       )
@@ -61,9 +61,10 @@ function StepGlyph({
   }
 }
 
-function iconColor(state: StayPipelineStep['state']): string {
+function iconColor(state: StayPipelineStep['state'], id: StayStepId): string {
   if (state === 'done' || state === 'current') return colors.white
   if (state === 'off') return colors.faint
+  if (id === 'hotel') return colors.primaryDeep
   return colors.inkSoft
 }
 
@@ -113,11 +114,21 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
                   shadow.soft,
                   isDone && styles.dotDone,
                   isCurrent && styles.dotCurrent,
+                  isCurrent && s.id === 'hotel' && styles.dotCurrentHotel,
                   isOff && styles.dotOff,
                   !isDone && !isCurrent && !isOff && styles.dotUpcoming,
+                  !isDone &&
+                    !isCurrent &&
+                    !isOff &&
+                    s.id === 'hotel' &&
+                    styles.dotUpcomingHotel,
                 ]}
               >
-                <StepGlyph id={s.id} color={iconColor(s.state)} size={18} />
+                <StepGlyph
+                  id={s.id}
+                  color={iconColor(s.state, s.id)}
+                  size={18}
+                />
               </View>
               <Text
                 style={[
@@ -176,7 +187,7 @@ const styles = StyleSheet.create({
   trackFill: {
     height: 3,
     borderRadius: 2,
-    backgroundColor: colors.primaryMuted,
+    backgroundColor: colors.primary,
   },
   row: {
     flexDirection: 'row',
@@ -200,16 +211,24 @@ const styles = StyleSheet.create({
     borderColor: colors.lineStrong,
   },
   dotDone: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
+    backgroundColor: '#1FA971',
+    borderColor: '#168A5B',
   },
   dotCurrent: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    borderColor: colors.primaryDeep,
+  },
+  dotCurrentHotel: {
+    backgroundColor: colors.primaryDeep,
+    borderColor: '#C44716',
   },
   dotUpcoming: {
     backgroundColor: colors.white,
     borderColor: colors.lineStrong,
+  },
+  dotUpcomingHotel: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryMuted,
   },
   dotOff: {
     backgroundColor: colors.canvas,
@@ -246,7 +265,7 @@ const styles = StyleSheet.create({
     color: colors.primaryInk,
   },
   hintDone: {
-    color: colors.success,
+    color: '#168A5B',
   },
   hintOff: {
     color: colors.faint,

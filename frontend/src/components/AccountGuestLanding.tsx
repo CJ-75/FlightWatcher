@@ -5,9 +5,16 @@ import { useI18n } from '../contexts/I18nContext'
 
 type Props = {
   onStartSignIn?: () => void
+  /** Parcours inscription dédié (ex. invitation planner). */
+  inviteMode?: boolean
+  inviteTripName?: string | null
 }
 
-export function AccountGuestLanding({ onStartSignIn }: Props) {
+export function AccountGuestLanding({
+  onStartSignIn,
+  inviteMode = false,
+  inviteTripName,
+}: Props) {
   const { t } = useI18n()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +29,28 @@ export function AccountGuestLanding({ onStartSignIn }: Props) {
       setSigningIn(false)
     }
   }
+
+  const title = inviteMode
+    ? t('planner.invite.signupTitle')
+    : t('profile.guest.title')
+  const lead = inviteMode
+    ? inviteTripName
+      ? t('planner.invite.signupLeadNamed', { name: inviteTripName })
+      : t('planner.invite.signupLead')
+    : t('profile.guest.lead')
+  const steps = (
+    inviteMode
+      ? ([
+          ['planner.invite.step1', 'planner.invite.step1.detail'],
+          ['planner.invite.step2', 'planner.invite.step2.detail'],
+          ['planner.invite.step3', 'planner.invite.step3.detail'],
+        ] as const)
+      : ([
+          ['profile.guest.step1', 'profile.guest.step1.detail'],
+          ['profile.guest.step2', 'profile.guest.step2.detail'],
+          ['profile.guest.step3', 'profile.guest.step3.detail'],
+        ] as const)
+  )
 
   return (
     <div className="relative w-full max-w-lg mx-auto overflow-hidden">
@@ -43,23 +72,17 @@ export function AccountGuestLanding({ onStartSignIn }: Props) {
         </div>
 
         <p className="text-[11px] font-black uppercase tracking-[0.22em] text-[#E85A28] mb-3">
-          {t('nav.account')}
+          {inviteMode ? t('planner.invite.signupKicker') : t('nav.account')}
         </p>
         <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-          {t('profile.guest.title')}
+          {title}
         </h2>
         <p className="mt-3 text-slate-500 text-sm sm:text-base leading-relaxed">
-          {t('profile.guest.lead')}
+          {lead}
         </p>
 
         <ol className="mt-6 space-y-2 text-left max-w-sm mx-auto">
-          {(
-            [
-              ['profile.guest.step1', 'profile.guest.step1.detail'],
-              ['profile.guest.step2', 'profile.guest.step2.detail'],
-              ['profile.guest.step3', 'profile.guest.step3.detail'],
-            ] as const
-          ).map(([titleKey, detailKey], i) => (
+          {steps.map(([titleKey, detailKey], i) => (
             <li
               key={titleKey}
               className="flex items-center gap-3 rounded-2xl bg-white/80 border border-orange-100/80 px-3.5 py-3 shadow-sm"

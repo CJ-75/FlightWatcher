@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import type { InvitePreview } from '../types'
@@ -28,6 +28,7 @@ export default function PlannerInvite() {
   const [userId, setUserId] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   const [joined, setJoined] = useState(false)
+  const autoJoinTried = useRef(false)
 
   useEffect(() => {
     void getCurrentUser().then((u) => setUserId(u?.id ?? null))
@@ -54,7 +55,7 @@ export default function PlannerInvite() {
     void load()
   }, [load])
 
-  const join = async () => {
+  const join = useCallback(async () => {
     if (!token) return
     setJoining(true)
     setError(null)
@@ -64,10 +65,18 @@ export default function PlannerInvite() {
       navigate(`/planner/${encodeURIComponent(res.trip_id)}`, { replace: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
+      setJoined(false)
     } finally {
       setJoining(false)
     }
-  }
+  }, [token, navigate])
+
+  // Après inscription / login → rejoindre automatiquement (une fois).
+  useEffect(() => {
+    if (!userId || !preview || joined || joining || autoJoinTried.current) return
+    autoJoinTried.current = true
+    void join()
+  }, [userId, preview, joined, joining, join])
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#FFF9F5]">
