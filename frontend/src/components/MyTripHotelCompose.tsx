@@ -1163,8 +1163,8 @@ export function MyTripHotelCompose({
       return
     }
     const pax = Math.max(1, Number(adults) || 2)
-    const hotelPp = Number(pick.hotel_pp)
-    const publicTotal =
+    let hotelPp = Number(pick.hotel_pp)
+    let publicTotal =
       pick.public_hotel_price != null && Number(pick.public_hotel_price) > 0
         ? Number(pick.public_hotel_price)
         : hotelPp > 0
@@ -1174,25 +1174,104 @@ export function MyTripHotelCompose({
       setError('Tarif hôtel manquant — relance la recherche puis réessaie.')
       return
     }
+    const listedTotal = publicTotal
     setSaving(true)
     setError(null)
+
+    let board = pick.board
+    let refundable = pick.refundable
+    let cancelDeadline = pick.cancel_deadline ?? null
+    let offerId: string | null = null
+    let liveHotelId = hid
+    let liveName = pick.name
+
+    try {
+      const listedPp = hotelPp > 0 ? hotelPp : listedTotal / pax
+      const displayedPp = Math.round((flightPp + listedPp) * 100) / 100
+      const res = await getApiClient().revalidateMyTripHotel(token, {
+        hotel_id: hid,
+        displayed_price_pp: displayedPp || undefined,
+        draft_token: token,
+      })
+      if (!res?.ok) {
+        setError('Cet hôtel n’est plus dispo à ce tarif — choisis-en un autre.')
+        setSaving(false)
+        return
+      }
+      const liveTotal = Number(res.public_hotel_price)
+      if (Number.isFinite(liveTotal) && liveTotal > 0) {
+        publicTotal = liveTotal
+        hotelPp = Math.round((liveTotal / pax) * 100) / 100
+      }
+      if (res.revalidated_price_pp != null && Number(res.revalidated_price_pp) > 0) {
+        const liveStayPp = Number(res.revalidated_price_pp) - flightPp
+        if (Number.isFinite(liveStayPp) && liveStayPp > 0) {
+          hotelPp = Math.round(liveStayPp * 100) / 100
+        }
+      }
+      board = res.board ?? board
+      refundable = res.refundable ?? refundable
+      cancelDeadline =
+        res.cancel_deadline !== undefined ? res.cancel_deadline : cancelDeadline
+      offerId = res.offer_id ? String(res.offer_id) : null
+      liveHotelId = String(res.hotel_id || hid)
+      liveName = res.hotel_name || liveName
+
+      const fresh: HotelUpsellOption = {
+        ...pick,
+        id: liveHotelId,
+        hotel_id: liveHotelId,
+        name: liveName,
+        board,
+        refundable,
+        cancel_deadline: cancelDeadline,
+        public_hotel_price: publicTotal,
+        hotel_pp: hotelPp,
+      }
+      setSelected(fresh)
+      setOptions((prev) =>
+        prev.map((h) =>
+          hotelIdOf(h) === hid || hotelIdOf(h) === liveHotelId ? fresh : h,
+        ),
+      )
+
+      const jumped =
+        listedTotal > 0 &&
+        publicTotal > listedTotal &&
+        (publicTotal - listedTotal >= 3 ||
+          (publicTotal - listedTotal) / listedTotal >= 0.03)
+      if (
+        jumped &&
+        typeof window !== 'undefined' &&
+        !window.confirm(
+          `Tarif LiteAPI mis à jour : ${Math.round(publicTotal)} € au lieu de ${Math.round(listedTotal)} €. Continuer ?`,
+        )
+      ) {
+        setSaving(false)
+        return
+      }
+    } catch {
+      /* soft — keep list price; checkout revalidates again */
+    }
+
     try {
       const ppForUi = hotelPp > 0 ? hotelPp : publicTotal / pax
       const totalPp = Math.round(flightPp + ppForUi)
       const row = await getApiClient().updateMyTripHotel(token, {
         hotel: {
-          id: hid,
-          hotel_id: hid,
-          name: pick.name,
+          id: liveHotelId,
+          hotel_id: liveHotelId,
+          name: liveName,
           stars: pick.stars,
           rating: pick.rating,
           photo: pick.photo || pick.thumbnail,
-          board: pick.board,
+          board,
           public_hotel_price: publicTotal,
           hotel_pp: Math.round(ppForUi * 100) / 100,
           distance_m: pick.distance_m,
-          refundable: pick.refundable,
-          cancel_deadline: pick.cancel_deadline ?? null,
+          refundable,
+          cancel_deadline: cancelDeadline,
+          ...(offerId ? { offer_id: offerId } : {}),
         },
         price_per_person: totalPp,
       })

@@ -493,8 +493,8 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       return
     }
     const pax = Math.max(1, Number(adults) || 2)
-    const hotelPpNum = Number(hotel.hotel_pp)
-    const publicTotal =
+    let hotelPpNum = Number(hotel.hotel_pp)
+    let publicTotal =
       hotel.public_hotel_price != null && Number(hotel.public_hotel_price) > 0
         ? Number(hotel.public_hotel_price)
         : hotelPpNum > 0
@@ -507,27 +507,117 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       )
       return
     }
+    const listedTotal = publicTotal
     setSaving(true)
     setEmptyKind(null)
+
+    let board = hotel.board
+    let refundable = hotel.refundable
+    let cancelDeadline = hotel.cancel_deadline ?? null
+    let offerId: string | null = null
+    let liveHotelId = hid
+    let liveName = hotel.name
+
+    try {
+      // Align list price with LiteAPI (same path as checkout) before locking.
+      const listedPp =
+        hotelPpNum > 0
+          ? hotelPpNum
+          : listedTotal / pax
+      const displayedPp = Math.round((flightPp + listedPp) * 100) / 100
+      const res = await getApi().revalidateMyTripHotel(draftToken, {
+        hotel_id: hid,
+        displayed_price_pp: displayedPp || undefined,
+        draft_token: draftToken,
+      })
+      if (!res?.ok) {
+        Alert.alert(
+          'Tarif indisponible',
+          'Cet hôtel n’est plus dispo à ce tarif — choisis-en un autre.',
+        )
+        setSaving(false)
+        return
+      }
+      const liveTotal = Number(res.public_hotel_price)
+      if (Number.isFinite(liveTotal) && liveTotal > 0) {
+        publicTotal = liveTotal
+        hotelPpNum = Math.round((liveTotal / pax) * 100) / 100
+      }
+      if (res.revalidated_price_pp != null && Number(res.revalidated_price_pp) > 0) {
+        const liveStayPp = Number(res.revalidated_price_pp) - flightPp
+        if (Number.isFinite(liveStayPp) && liveStayPp > 0) {
+          hotelPpNum = Math.round(liveStayPp * 100) / 100
+        }
+      }
+      board = res.board ?? board
+      refundable = res.refundable ?? refundable
+      cancelDeadline =
+        res.cancel_deadline !== undefined ? res.cancel_deadline : cancelDeadline
+      offerId = res.offer_id ? String(res.offer_id) : null
+      liveHotelId = String(res.hotel_id || hid)
+      liveName = res.hotel_name || liveName
+
+      const fresh: HotelUpsellOption = {
+        ...hotel,
+        id: liveHotelId,
+        hotel_id: liveHotelId,
+        name: liveName,
+        board,
+        refundable,
+        cancel_deadline: cancelDeadline,
+        public_hotel_price: publicTotal,
+        hotel_pp: hotelPpNum,
+      }
+      setSelected(fresh)
+      setOptions((prev) =>
+        prev.map((h) => (hotelIdOf(h) === hid || hotelIdOf(h) === liveHotelId ? fresh : h)),
+      )
+
+      const jumped =
+        listedTotal > 0 &&
+        publicTotal > listedTotal &&
+        (publicTotal - listedTotal >= 3 ||
+          (publicTotal - listedTotal) / listedTotal >= 0.03)
+      if (jumped) {
+        const accept = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Tarif mis à jour',
+            `LiteAPI : ${Math.round(publicTotal!)} € au lieu de ${Math.round(listedTotal)} € pour le séjour. Continuer ?`,
+            [
+              { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Continuer', onPress: () => resolve(true) },
+            ],
+          )
+        })
+        if (!accept) {
+          setSaving(false)
+          return
+        }
+      }
+    } catch {
+      // Soft fail — keep list price; checkout will revalidate again.
+    }
+
     // Close fullScreen Modal BEFORE navigate (otherwise iOS keeps modal on top → “rien ne se passe”)
     setSheetOpen(false)
     try {
-      const ppForUi = hotelPpNum > 0 ? hotelPpNum : publicTotal / pax
+      const ppForUi = hotelPpNum > 0 ? hotelPpNum : publicTotal! / pax
       const totalPp = Math.round(flightPp + ppForUi)
       await getApi().updateMyTripHotel(draftToken, {
         hotel: {
-          id: hid,
-          hotel_id: hid,
-          name: hotel.name,
+          id: liveHotelId,
+          hotel_id: liveHotelId,
+          name: liveName,
           stars: hotel.stars,
           rating: hotel.rating,
           photo: hotel.photo || hotel.thumbnail,
-          board: hotel.board,
+          board,
           public_hotel_price: publicTotal,
           hotel_pp: Math.round(ppForUi * 100) / 100,
           distance_m: hotel.distance_m,
-          refundable: hotel.refundable,
-          cancel_deadline: hotel.cancel_deadline ?? null,
+          refundable,
+          cancel_deadline: cancelDeadline,
+          ...(offerId ? { offer_id: offerId } : {}),
         },
         price_per_person: totalPp,
       })
@@ -535,7 +625,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       requestAnimationFrame(() => {
         navigation.navigate('DealCheckout', {
           draftToken,
-          hotelId: hid,
+          hotelId: liveHotelId,
         })
       })
     } catch (e) {
