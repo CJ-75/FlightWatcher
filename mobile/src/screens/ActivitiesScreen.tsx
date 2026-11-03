@@ -755,10 +755,11 @@ export function ActivitiesScreen() {
       })
       track('add', card)
       setPlannerCount((n) => n + 1)
+      await bindActiveTrip(target)
+      // Après reload items : garder le code même si meta API est en retard.
       if (card.productCode) {
         setAddedCodes((prev) => new Set(prev).add(card.productCode))
       }
-      await bindActiveTrip(target)
       setAddNotice(
         `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
       )
@@ -1081,7 +1082,9 @@ export function ActivitiesScreen() {
         card={detail}
         adults={adults}
         addBusy={addBusy}
-        alreadyAdded={false}
+        alreadyAdded={Boolean(
+          detail?.productCode && addedCodes.has(detail.productCode),
+        )}
         addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
         onBook={(c) => onBook(c)}
         onAdd={(c) => onAddToPlanner(c)}

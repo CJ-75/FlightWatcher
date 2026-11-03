@@ -23,12 +23,35 @@ const PHASE_META: Record<
   past: { label: 'Terminé', action: 'Revoir', tone: '#64748B' },
 }
 
-function compactDate(value?: string | null) {
+function compactDate(
+  value?: string | null,
+  opts?: { withYear?: boolean },
+) {
   if (!value) return null
-  return new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'short',
-  })
+  const date = new Date(`${value.slice(0, 10)}T12:00:00`)
+  const withYear =
+    opts?.withYear ?? date.getFullYear() < new Date().getFullYear()
+  return date.toLocaleDateString(
+    'fr-FR',
+    withYear
+      ? { day: 'numeric', month: 'short', year: 'numeric' }
+      : { day: 'numeric', month: 'short' },
+  )
+}
+
+function compactTripRange(
+  out?: string | null,
+  ret?: string | null,
+): string | null {
+  if (!out) return null
+  if (!ret) return compactDate(out)
+  const a = new Date(`${out.slice(0, 10)}T12:00:00`)
+  const b = new Date(`${ret.slice(0, 10)}T12:00:00`)
+  const nowYear = new Date().getFullYear()
+  const spansYears = a.getFullYear() !== b.getFullYear()
+  const showOut = spansYears || a.getFullYear() < nowYear
+  const showRet = spansYears || b.getFullYear() < nowYear
+  return `${compactDate(out, { withYear: showOut })} → ${compactDate(ret, { withYear: showRet })}`
 }
 
 function partyLabel(workspace: TravelWorkspace): string {
@@ -70,8 +93,7 @@ export function JourneyCard({
     (workspace.dest_iata ? cityDisplayNameFr(workspace.dest_iata.split(',')[0]!) : null) ||
     'Destination'
   const image = workspace.image_url || cityImageUrl(city, workspace.dest_iata?.split(',')[0])
-  const out = compactDate(workspace.out_date)
-  const ret = compactDate(workspace.ret_date)
+  const dateRange = compactTripRange(workspace.out_date, workspace.ret_date)
   const party = partyLabel(workspace)
   const byLabel = byOrganizerLabel(workspace)
 
@@ -116,12 +138,7 @@ export function JourneyCard({
               {byLabel}
             </Text>
           ) : null}
-          {out ? (
-            <Text style={styles.date}>
-              {out}
-              {ret ? ` → ${ret}` : ''}
-            </Text>
-          ) : null}
+          {dateRange ? <Text style={styles.date}>{dateRange}</Text> : null}
           <View style={styles.footer}>
             <View style={styles.steps}>
               <View
@@ -191,10 +208,9 @@ export function JourneyCard({
           </Text>
         ) : null}
         <View style={styles.metaRow}>
-          {out ? (
+          {dateRange ? (
             <Text style={styles.date} numberOfLines={1}>
-              {out}
-              {ret ? ` → ${ret}` : ''}
+              {dateRange}
             </Text>
           ) : (
             <View style={{ flex: 1 }} />

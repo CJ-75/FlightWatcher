@@ -23,7 +23,7 @@ import {
   destinationsToAirports,
   encodeAirportCodes,
   encodeArrivalCodes,
-  formatDateFr,
+  formatTripDateRangeFr,
   generateDatesFromPreset,
   normalizeDestinations,
   parseAirportCodes,
@@ -795,8 +795,10 @@ function CreateTripModal({
                 </View>
                 {dates.dates_depart[0] && dates.dates_retour[0] ? (
                   <Text style={styles.datesHint}>
-                    {formatDateFr(dates.dates_depart[0].date)} →{' '}
-                    {formatDateFr(dates.dates_retour[dates.dates_retour.length - 1].date)}
+                    {formatTripDateRangeFr(
+                      dates.dates_depart[0].date,
+                      dates.dates_retour[dates.dates_retour.length - 1].date,
+                    )}
                   </Text>
                 ) : (
                   <Text style={styles.datesHint}>Choisis tes dates libres</Text>

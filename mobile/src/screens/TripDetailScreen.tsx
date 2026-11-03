@@ -33,7 +33,7 @@ import {
   cityDisplayNameFr,
   cityImageUrl,
   formatAirlineLabel,
-  formatDateFr,
+  formatTripDateRangeFr,
   parseAirportCodes,
   primaryAirportCode,
   sanitizeTripAirports,
@@ -1251,14 +1251,13 @@ export function TripDetailScreen() {
                   : ' · inspire'}
               </Text>
             </View>
-            <View style={styles.heroChip}>
-              <Text style={styles.heroChipText}>max {trip.budget_max}€/pers</Text>
-            </View>
           </View>
           {trip.dates_depart[0] && trip.dates_retour[0] ? (
             <Text style={styles.meta}>
-              {formatDateFr(trip.dates_depart[0].date)} →{' '}
-              {formatDateFr(trip.dates_retour[trip.dates_retour.length - 1].date)}
+              {formatTripDateRangeFr(
+                trip.dates_depart[0].date,
+                trip.dates_retour[trip.dates_retour.length - 1].date,
+              )}
             </Text>
           ) : null}
         </View>

@@ -6,7 +6,11 @@ import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from '../components/DestinationCard'
-import { cityDisplayNameFr, formatDateFr, parseAirportCodes } from '@flightwatcher/shared'
+import {
+  cityDisplayNameFr,
+  formatTripDateRangeFr,
+  parseAirportCodes,
+} from '@flightwatcher/shared'
 
 function routeLabel(value?: string | null): string {
   const codes = parseAirportCodes(value || '')
@@ -172,9 +176,10 @@ export default function PlannerInvite() {
                   </span>
                   {preview.dates_depart[0] && preview.dates_retour[0] ? (
                     <span className="px-2 py-0.5 rounded-md bg-white/10">
-                      {formatDateFr(preview.dates_depart[0].date)} →{' '}
-                      {formatDateFr(
-                        preview.dates_retour[preview.dates_retour.length - 1].date,
+                      {formatTripDateRangeFr(
+                        preview.dates_depart[0].date,
+                        preview.dates_retour[preview.dates_retour.length - 1]
+                          .date,
                       )}
                     </span>
                   ) : null}

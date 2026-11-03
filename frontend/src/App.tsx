@@ -833,7 +833,11 @@ function Dashboard() {
                   'jul', 'aoû', 'sep', 'oct', 'nov', 'déc']
     // Convertir getDay() (0=dimanche, 1=lundi...) en index pour le tableau (0=lundi, 6=dimanche)
     const dayIndex = getDayOfWeekMondayBased(date) - 1; // -1 car le tableau commence à 0
-    return `${jours[dayIndex]} ${date.getDate()} ${mois[date.getMonth()]}`
+    const base = `${jours[dayIndex]} ${date.getDate()} ${mois[date.getMonth()]}`
+    // Année seulement si passée (plages cross-year → formatTripDateRangeFr côté shared).
+    return date.getFullYear() < new Date().getFullYear()
+      ? `${base} ${date.getFullYear()}`
+      : base
   }
 
   const loadDestinations = async (airport?: string) => {

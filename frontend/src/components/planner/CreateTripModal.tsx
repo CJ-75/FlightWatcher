@@ -16,6 +16,7 @@ import {
   encodeArrivalCodes,
   findCityGroupByKey,
   formatDateFr,
+  formatTripDateRangeFr,
   generateDatesFromPreset,
   groupAirportsByCity,
   parseAirportCodes,
@@ -469,8 +470,10 @@ export function CreateTripModal({
                     </div>
                     {datesDepart[0] && datesRetour[0] ? (
                       <p className="text-sm font-semibold text-muted mt-2">
-                        {formatDateFr(datesDepart[0].date)} →{' '}
-                        {formatDateFr(datesRetour[datesRetour.length - 1].date)}
+                        {formatTripDateRangeFr(
+                          datesDepart[0].date,
+                          datesRetour[datesRetour.length - 1].date,
+                        )}
                       </p>
                     ) : (
                       <p className="text-sm text-muted mt-2">Choisis tes dates libres</p>

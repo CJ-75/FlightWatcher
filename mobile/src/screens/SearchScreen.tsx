@@ -26,6 +26,7 @@ import {
   encodeAirportCodes,
   findCityGroupByCodes,
   formatDateFr,
+  formatTripDateRangeFr,
   generateDatesFromPreset,
   groupAirportsByCity,
   isValidAirportSelection,
@@ -265,7 +266,7 @@ export function SearchScreen() {
     const first = presetDates.dates_depart[0]?.date
     const last = presetDates.dates_retour[presetDates.dates_retour.length - 1]?.date
     if (!first || !last) return '—'
-    return `${formatDateFr(first)} → ${formatDateFr(last)}`
+    return formatTripDateRangeFr(first, last)
   }, [preset, presetDates, flexibleDates])
 
   const onSearch = async () => {

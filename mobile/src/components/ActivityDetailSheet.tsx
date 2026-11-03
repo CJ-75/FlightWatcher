@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ACTIVITY_ADD_TO_PLANNER_FR,
+  ACTIVITY_ADDED_BADGE_FR,
   activityDetailFromCard,
   toActivityDetailModel,
   type ActivityCardModel,
@@ -267,7 +268,16 @@ export function ActivityDetailSheet({
           <Pressable style={styles.cta} onPress={() => onBook(card)}>
             <Text style={styles.ctaText}>Réserver</Text>
           </Pressable>
-          {!alreadyAdded ? (
+          {alreadyAdded ? (
+            <View
+              style={styles.addedMark}
+              accessibilityLabel={ACTIVITY_ADDED_BADGE_FR}
+            >
+              <Text style={styles.addedMarkText}>
+                ✓ {ACTIVITY_ADDED_BADGE_FR}
+              </Text>
+            </View>
+          ) : (
             <Pressable
               style={styles.secondary}
               disabled={addBusy}
@@ -278,7 +288,7 @@ export function ActivityDetailSheet({
                 {addLabel || ACTIVITY_ADD_TO_PLANNER_FR}
               </Text>
             </Pressable>
-          ) : null}
+          )}
         </View>
       </View>
     </Modal>
@@ -471,5 +481,17 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 14,
     color: colors.ink,
+  },
+  addedMark: {
+    borderRadius: radius.lg,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.successSoft,
+  },
+  addedMarkText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.success,
   },
 })

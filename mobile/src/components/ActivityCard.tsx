@@ -162,23 +162,34 @@ export function ActivityCard({
           </View>
           <View style={styles.ctaRow}>
             {onAdd ? (
-              <Pressable
-                onPress={(e) => {
-                  e?.stopPropagation?.()
-                  if (!addDisabled) onAdd()
-                }}
-                disabled={addDisabled}
-                accessibilityLabel={addLabel}
-                style={({ pressed }) => [
-                  styles.ctaSecondary,
-                  pressed && { opacity: 0.9 },
-                  addDisabled && { opacity: 0.5 },
-                ]}
-                hitSlop={4}
-              >
-                <Text style={styles.ctaPlus}>+</Text>
-                <Text style={styles.ctaSecondaryText}>{addLabel}</Text>
-              </Pressable>
+              added ? (
+                <View
+                  style={styles.ctaAdded}
+                  accessibilityLabel={ACTIVITY_ADDED_BADGE_FR}
+                >
+                  <Text style={styles.ctaAddedText}>
+                    ✓ {ACTIVITY_ADDED_BADGE_FR}
+                  </Text>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={(e) => {
+                    e?.stopPropagation?.()
+                    if (!addDisabled) onAdd()
+                  }}
+                  disabled={addDisabled}
+                  accessibilityLabel={addLabel}
+                  style={({ pressed }) => [
+                    styles.ctaSecondary,
+                    pressed && { opacity: 0.9 },
+                    addDisabled && { opacity: 0.5 },
+                  ]}
+                  hitSlop={4}
+                >
+                  <Text style={styles.ctaPlus}>+</Text>
+                  <Text style={styles.ctaSecondaryText}>{addLabel}</Text>
+                </Pressable>
+              )
             ) : null}
             <Pressable
               onPress={(e) => {
@@ -393,6 +404,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     backgroundColor: colors.white,
+  },
+  ctaAdded: {
+    borderRadius: radius.md,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.successSoft,
+  },
+  ctaAddedText: {
+    color: colors.success,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    includeFontPadding: false,
   },
   ctaPlus: {
     color: colors.primary,

@@ -18,7 +18,7 @@ import {
   cityDisplayNameFr,
   createAsyncKVStore,
   dateFromFlightIso,
-  formatDateFr,
+  formatTripDateRangeFr,
   kvSetJson,
   parseAirportCodes,
   translate,
@@ -486,7 +486,10 @@ export function ResultsScreen({ route, navigation }: Props) {
                   <View style={styles.summaryRow}>
                     <Text style={styles.summaryLabel}>Dates</Text>
                     <Text style={styles.summaryValue}>
-                      {formatDateFr(summary.firstDepart)} → {formatDateFr(summary.firstRetour)}
+                      {formatTripDateRangeFr(
+                        summary.firstDepart,
+                        summary.firstRetour,
+                      )}
                       {summary.datesCount > 2 ? ` · ${summary.datesCount} j` : ''}
                     </Text>
                   </View>

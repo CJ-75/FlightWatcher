@@ -32,6 +32,7 @@ import {
   cityImageUrl,
   formatAirlineLabel,
   formatDateFr,
+  formatTripDateRangeFr,
   generateDatesFromPreset,
   groupAirportsByCity,
   parseAirportCodes,
@@ -683,7 +684,7 @@ function TripListCard({
       </div>
       {outDate && retDate ? (
         <p className="text-sm font-semibold text-slate-600 mt-3">
-          {formatDateFr(outDate)} → {formatDateFr(retDate)}
+          {formatTripDateRangeFr(outDate, retDate)}
         </p>
       ) : null}
       <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
@@ -2173,7 +2174,7 @@ function TripDetailView({
     trip.dates_retour[trip.dates_retour.length - 1]?.date
   const dateLine =
     outDate && retDate
-      ? `${formatDateFr(outDate)} → ${formatDateFr(retDate)}`
+      ? formatTripDateRangeFr(outDate, retDate)
       : null
   const destinationCode =
     parseAirportCodes(reservationDest)[0] ||
@@ -2298,7 +2299,6 @@ function TripDetailView({
             <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
               {routeLine}
               {trip.direct ? ' · directs' : ''}
-              {` · ${trip.budget_max}€/pers`}
             </p>
             {dateLine ? (
               <p className="mt-1 text-sm text-white/65">{dateLine}</p>
@@ -2545,8 +2545,8 @@ function TripDetailView({
                   />
                   {editDatesDepart[0] && editDatesRetour[0] ? (
                     <p className="text-sm text-ink-soft font-medium pb-2 mt-2">
-                      {formatDateFr(editDatesDepart[0].date)} →{' '}
-                      {formatDateFr(
+                      {formatTripDateRangeFr(
+                        editDatesDepart[0].date,
                         editDatesRetour[editDatesRetour.length - 1].date,
                       )}
                     </p>
@@ -2748,8 +2748,10 @@ function TripDetailView({
                 </div>
                 {editDatesDepart[0] && editDatesRetour[0] ? (
                   <p className="text-sm text-slate-600 font-medium pb-2">
-                    {formatDateFr(editDatesDepart[0].date)} →{' '}
-                    {formatDateFr(editDatesRetour[editDatesRetour.length - 1].date)}
+                    {formatTripDateRangeFr(
+                      editDatesDepart[0].date,
+                      editDatesRetour[editDatesRetour.length - 1].date,
+                    )}
                   </p>
                 ) : null}
               </div>

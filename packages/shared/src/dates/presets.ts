@@ -22,8 +22,20 @@ export function getDayOfWeekMondayBased(date: Date): number {
   return jsDay === 0 ? 7 : jsDay
 }
 
-export function formatDateFr(dateStr: string): string {
-  const date = new Date(dateStr + 'T12:00:00')
+function parseDateLocalNoon(dateStr: string): Date {
+  const s = String(dateStr || '').slice(0, 10)
+  return new Date(`${s}T12:00:00`)
+}
+
+/**
+ * Affiche l’année seulement si demandée, ou si l’année de la date est passée.
+ * Pour une plage aller/retour, préférer `formatTripDateRangeFr`.
+ */
+export function formatDateFr(
+  dateStr: string,
+  opts?: { withYear?: boolean; now?: Date },
+): string {
+  const date = parseDateLocalNoon(dateStr)
   const days = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
   const months = [
     'janv.',
@@ -39,7 +51,31 @@ export function formatDateFr(dateStr: string): string {
     'nov.',
     'déc.',
   ]
-  return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
+  const base = `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`
+  const now = opts?.now ?? new Date()
+  const withYear =
+    opts?.withYear ?? date.getFullYear() < now.getFullYear()
+  return withYear ? `${base} ${date.getFullYear()}` : base
+}
+
+/**
+ * Plage aller → retour : année si passée, ou si le séjour chevauche deux années
+ * (ex. déc. → janv.).
+ */
+export function formatTripDateRangeFr(
+  outDate: string,
+  retDate: string,
+  opts?: { now?: Date; separator?: string },
+): string {
+  const out = parseDateLocalNoon(outDate)
+  const ret = parseDateLocalNoon(retDate)
+  const now = opts?.now ?? new Date()
+  const nowYear = now.getFullYear()
+  const spansYears = out.getFullYear() !== ret.getFullYear()
+  const showOut = spansYears || out.getFullYear() < nowYear
+  const showRet = spansYears || ret.getFullYear() < nowYear
+  const sep = opts?.separator ?? ' → '
+  return `${formatDateFr(outDate, { withYear: showOut, now })}${sep}${formatDateFr(retDate, { withYear: showRet, now })}`
 }
 
 const defaultHours = { heure_min: '06:00', heure_max: '23:59' }
