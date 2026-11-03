@@ -18,6 +18,7 @@ import {
 } from '@flightwatcher/shared'
 import { getCurrentSession, refreshAccessToken } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
+import { listTravelWorkspacesCached } from '../utils/workspacesCache'
 import { listRememberedTrips } from '../utils/tripRecovery'
 
 export type ActivityPlannerTarget = {
@@ -150,7 +151,7 @@ export function ActivityPlannerPicker({
       try {
         let remote: TravelWorkspace[] = []
         try {
-          const rows = await getApiClient().listTravelWorkspaces()
+          const rows = await listTravelWorkspacesCached()
           remote = Array.isArray(rows) ? rows : []
         } catch (e) {
           const msg = e instanceof Error ? e.message : ''
@@ -160,7 +161,7 @@ export function ActivityPlannerPicker({
             if (session?.user) {
               await refreshAccessToken()
               try {
-                const rows = await getApiClient().listTravelWorkspaces()
+                const rows = await listTravelWorkspacesCached({ force: true })
                 remote = Array.isArray(rows) ? rows : []
               } catch {
                 try {

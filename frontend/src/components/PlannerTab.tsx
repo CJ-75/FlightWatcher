@@ -13,6 +13,12 @@ import type {
   UpdatePlannedTripRequest,
 } from '../types'
 import { getApiClient } from '../utils/apiClient'
+import { getAppConfig } from '../utils/configCache'
+import { listTripItemsCached } from '../utils/tripItemsCache'
+import {
+  invalidateTravelWorkspacesCache,
+  listTravelWorkspacesCached,
+} from '../utils/workspacesCache'
 import { loadAirportsOnce } from '../hooks/useAirports'
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
@@ -956,7 +962,7 @@ export function PlannerTab() {
     }
     try {
       try {
-        const list = await getApiClient().listTravelWorkspaces()
+        const list = await listTravelWorkspacesCached()
         // Planned trips + séjours with hôtel sélectionné / résa entamée.
         setWorkspaces(
           (Array.isArray(list) ? list : []).filter(workspaceVisibleInPlanner),
@@ -993,6 +999,7 @@ export function PlannerTab() {
               draft_token: workspace.draft_token!,
               name: workspace.city || workspace.title || undefined,
             })
+            invalidateTravelWorkspacesCache()
             navigate(`/planner/${encodeURIComponent(created.id)}`)
             void load({ silent: true })
           } catch {
@@ -1150,6 +1157,7 @@ export function PlannerTab() {
         <CreateTripModal
           onClose={() => setShowCreate(false)}
           onCreated={(id) => {
+            invalidateTravelWorkspacesCache()
             setShowCreate(false)
             void load()
             setAutoScanTripId(id)
@@ -1232,9 +1240,9 @@ function TripDetailView({
   const navigate = useNavigate()
 
   useEffect(() => {
-    void getApiClient()
-      .getConfig()
+    void getAppConfig()
       .then((cfg) => {
+        if (!cfg) return
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
         setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
@@ -1254,11 +1262,13 @@ function TripDetailView({
     const silent = Boolean(opts?.silent)
     if (!silent) setError(null)
     try {
-      const detail = await getApiClient().getPlannedTrip(tripId)
+      const [detail, workspaces] = await Promise.all([
+        getApiClient().getPlannedTrip(tripId),
+        listTravelWorkspacesCached({ force: silent }),
+      ])
       setTrip(detail)
       syncEditFromTrip(detail)
       try {
-        const workspaces = await getApiClient().listTravelWorkspaces()
         const matched =
           workspaces.find((item) => item.planned_trip_id === tripId) || null
         setWorkspace(matched)
@@ -1320,12 +1330,19 @@ function TripDetailView({
       setRestaurantItems([])
       return
     }
-    void getApiClient()
-      .listTripItems({ draft_token: token })
+    void listTripItemsCached({ draft_token: token })
       .then((res) => {
         const items = res.items || []
-        setActivityItems(items.filter((i) => i.item_type === 'activity'))
-        setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+        setActivityItems(
+          items.filter((i) => i.item_type === 'activity') as {
+            status?: string | null
+          }[],
+        )
+        setRestaurantItems(
+          items.filter((i) => i.item_type === 'restaurant') as {
+            status?: string | null
+          }[],
+        )
       })
       .catch(() => {
         setActivityItems([])
@@ -2132,6 +2149,7 @@ function TripDetailView({
     setError(null)
     try {
       await getApiClient().deletePlannedTrip(tripId)
+      invalidateTravelWorkspacesCache()
       onToast('Voyage supprimé — réservations conservées')
       onDeleted()
     } catch (e) {

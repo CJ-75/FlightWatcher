@@ -14,6 +14,7 @@ import {
   tripItemStatusLabelFr,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
+import { listTripItemsCached } from '../utils/tripItemsCache'
 
 type ItemRow = {
   id: string
@@ -61,7 +62,7 @@ export function RestaurantStepPanel(props: {
     setLoading(true)
     setError(null)
     try {
-      const res = await getApiClient().listTripItems({
+      const res = await listTripItemsCached({
         draft_token: draftToken || undefined,
         planned_trip_id: plannedTripId || undefined,
       })

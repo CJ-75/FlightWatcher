@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
 import {
@@ -25,12 +33,23 @@ import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApiClient } from '../utils/apiClient'
+import { getAppConfig } from '../utils/configCache'
+import { listTripItemsCached } from '../utils/tripItemsCache'
 import { getCurrentSession } from '../lib/supabase'
 import { rememberTrip } from '../utils/tripRecovery'
-import { MyTripHotelCompose } from '../components/MyTripHotelCompose'
-import { DealCheckoutFlow } from '../components/DealCheckoutFlow'
 import { PaymentCardMarks } from '../components/PaymentCardMarks'
 import { MyTripHotelPanel } from '../components/MyTripHotelPanel'
+
+const MyTripHotelCompose = lazy(() =>
+  import('../components/MyTripHotelCompose').then((m) => ({
+    default: m.MyTripHotelCompose,
+  })),
+)
+const DealCheckoutFlow = lazy(() =>
+  import('../components/DealCheckoutFlow').then((m) => ({
+    default: m.DealCheckoutFlow,
+  })),
+)
 
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return '—'
@@ -183,10 +202,18 @@ export default function MyTrip() {
   const refreshTripItems = useCallback(async () => {
     if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) return
     try {
-      const res = await getApiClient().listTripItems({ draft_token: token })
+      const res = await listTripItemsCached({ draft_token: token })
       const items = res.items || []
-      setActivityItems(items.filter((i) => i.item_type === 'activity'))
-      setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
+      setActivityItems(
+        items.filter((i) => i.item_type === 'activity') as {
+          status?: string | null
+        }[],
+      )
+      setRestaurantItems(
+        items.filter((i) => i.item_type === 'restaurant') as {
+          status?: string | null
+        }[],
+      )
     } catch {
       /* keep previous step progress */
     }
@@ -453,11 +480,12 @@ export default function MyTrip() {
   )
 
   useEffect(() => {
-    void getApiClient()
-      .getConfig()
+    void getAppConfig()
       .then((cfg) => {
+        if (!cfg) return
         setPlannerActivitiesEnabled(
-          cfg.planner_activities_enabled === true || cfg.activities_ui_enabled === true,
+          cfg.planner_activities_enabled === true ||
+            cfg.activities_ui_enabled === true,
         )
         setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
@@ -917,7 +945,7 @@ export default function MyTrip() {
           }
         }
         track('hotel_checkout_open', {
-          deal_key: deal.deal_key || key || null,
+          deal_key: deal.deal_key || draftTok || null,
           draft_token: d.draft_token || null,
         })
         setCheckoutDeal(deal)
@@ -1000,7 +1028,7 @@ export default function MyTrip() {
     if (hotelLiveKey.current === key) return
 
     let cancelled = false
-    ;(async () => {
+    const run = async () => {
       try {
         const displayedPp =
           party.perPerson > 0
@@ -1048,10 +1076,24 @@ export default function MyTrip() {
       } catch {
         /* soft — keep snapshot */
       }
-    })()
+    }
+
+    // After first paint — don't contend with getMyTrip / gallery.
+    let idleId: number | undefined
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    const ric = window.requestIdleCallback
+    if (typeof ric === 'function') {
+      idleId = ric(() => void run(), { timeout: 1800 })
+    } else {
+      timeoutId = setTimeout(() => void run(), 400)
+    }
 
     return () => {
       cancelled = true
+      if (idleId != null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId)
+      }
+      if (timeoutId) clearTimeout(timeoutId)
     }
   }, [
     adults,
@@ -1499,6 +1541,13 @@ export default function MyTrip() {
         </div>
 
         {wantsCompose && token && draft ? (
+          <Suspense
+            fallback={
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+                Chargement de la composition hôtel…
+              </div>
+            }
+          >
           <MyTripHotelCompose
             draft={draft}
             token={token}
@@ -1515,6 +1564,7 @@ export default function MyTrip() {
               void openHotelCheckout(row)
             }}
           />
+          </Suspense>
         ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
           {/* Colonne gauche */}
@@ -1945,6 +1995,7 @@ export default function MyTrip() {
       </div>
 
       {checkoutDeal && token ? (
+        <Suspense fallback={null}>
         <DealCheckoutFlow
           deal={checkoutDeal}
           hotelId={hotelObj?.id ? String(hotelObj.id) : checkoutDeal.hotel?.id}
@@ -1978,6 +2029,7 @@ export default function MyTrip() {
             void refreshTripItems()
           }}
         />
+        </Suspense>
       ) : null}
     </div>
   )

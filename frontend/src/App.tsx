@@ -1,4 +1,12 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  lazy,
+  Suspense,
+} from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { ScanResponse, TripResponse, ScanRequest, DateAvecHoraire, Destination, Airport, EnrichedTripResponse } from './types'
@@ -21,8 +29,11 @@ import { DealsTab } from './components/DealsTab'
 import { SiteFooter } from './components/SiteFooter'
 import { DealCard } from './components/DealCard'
 import { DealDetailModal } from './components/DealDetailModal'
-import { PlannerTab } from './components/PlannerTab'
 import { ActivitiesTab } from './components/ActivitiesTab'
+
+const PlannerTab = lazy(() =>
+  import('./components/PlannerTab').then((m) => ({ default: m.PlannerTab })),
+)
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { AlertsGuestLanding } from './components/AlertsGuestLanding'
 import { PassengerStepper } from './components/PassengerStepper'
@@ -1316,7 +1327,16 @@ function Dashboard() {
           </div>
         ) : null}
         {activeTab === 'deals' || activeTab === 'activities' ? null : activeTab === 'planner' ? (
-          <PlannerTab />
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4" />
+                <p className="font-medium">Chargement du planner…</p>
+              </div>
+            }
+          >
+            <PlannerTab />
+          </Suspense>
         ) : activeTab === 'search' ? (
           <>
             <div className="app-col pt-5 sm:pt-8">

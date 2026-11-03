@@ -30,6 +30,7 @@ import {
   signInWithGoogle,
 } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
+import { listTripItemsCached } from '../utils/tripItemsCache'
 import { rememberTrip } from '../utils/tripRecovery'
 
 type ItemRow = {
@@ -78,7 +79,7 @@ export function ActivityStepPanel(props: {
     setLoading(true)
     setError(null)
     try {
-      const res = await getApiClient().listTripItems(owner)
+      const res = await listTripItemsCached(owner)
       setItems((res.items || []) as ItemRow[])
       authRetryRef.current = false
     } catch (e) {
@@ -88,7 +89,7 @@ export function ActivityStepPanel(props: {
         const token = await refreshAccessToken()
         if (token) {
           try {
-            const res = await getApiClient().listTripItems(owner)
+            const res = await listTripItemsCached(owner, { force: true })
             setItems((res.items || []) as ItemRow[])
             setError(null)
             return

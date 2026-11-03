@@ -37,7 +37,7 @@ import {
   toggleActivityCategory,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
-import { getCurrentSession } from '../lib/supabase'
+import { getCurrentSession, getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import {
   fetchActivitiesCatalog,
@@ -306,6 +306,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   )
 
   useEffect(() => {
+    if (!tabActive) return
     let cancelled = false
     void (async () => {
       try {
@@ -320,7 +321,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [tabActive])
 
   useEffect(() => {
     if (!tabActive) return
@@ -434,6 +435,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   }, [citySlug, loadCity])
 
   useEffect(() => {
+    // Warm-mount: catalogue only — trip bootstrap when onglet actif.
+    if (!tabActive) return
     let cancelled = false
     didAutoCity.current = false
     const remembered = listRememberedTrips()
@@ -643,7 +646,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftFromUrl, plannedFromUrl])
+  }, [tabActive, draftFromUrl, plannedFromUrl])
 
   useEffect(() => {
     const onVis = () => {

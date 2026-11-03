@@ -1,6 +1,7 @@
 /**
  * Point d'entrée principal de l'application avec router
  */
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { I18nProvider } from './contexts/I18nContext'
@@ -9,26 +10,63 @@ import { prefetchAirports } from './hooks/useAirports'
 prefetchAirports()
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import PlannerInvite from './pages/PlannerInvite'
 import AuthCallback from './auth/callback'
-import ResetPassword from './pages/ResetPassword'
-import Security from './pages/Security'
-import MyBookings from './pages/MyBookings'
-import MyTrip from './pages/MyTrip'
-import HotelPay from './pages/HotelPay'
-import { AdminLogin } from './admin/AdminLogin'
-import { AdminLayout } from './admin/AdminLayout'
-import { AdminRoute } from './admin/AdminApp'
-import { UsersPage } from './admin/pages/UsersPage'
-import { SearchesPage } from './admin/pages/SearchesPage'
-import { ActivatedPage } from './admin/pages/ActivatedPage'
-import { PlansPage } from './admin/pages/PlansPage'
-import { SettingsPage } from './admin/pages/SettingsPage'
-import { TestsPage } from './admin/pages/TestsPage'
-import { DealsMetricsPage } from './admin/pages/DealsMetricsPage'
-import { OccasionsPage } from './admin/pages/OccasionsPage'
-import { ActivitiesAdminPage } from './admin/pages/ActivitiesAdminPage'
-import ItinerariesPage from './pages/ItinerariesPage'
+
+const PlannerInvite = lazy(() => import('./pages/PlannerInvite'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Security = lazy(() => import('./pages/Security'))
+const MyBookings = lazy(() => import('./pages/MyBookings'))
+const MyTrip = lazy(() => import('./pages/MyTrip'))
+const HotelPay = lazy(() => import('./pages/HotelPay'))
+const ItinerariesPage = lazy(() => import('./pages/ItinerariesPage'))
+const AdminLogin = lazy(() =>
+  import('./admin/AdminLogin').then((m) => ({ default: m.AdminLogin })),
+)
+const AdminLayout = lazy(() =>
+  import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
+)
+const AdminRoute = lazy(() =>
+  import('./admin/AdminApp').then((m) => ({ default: m.AdminRoute })),
+)
+const UsersPage = lazy(() =>
+  import('./admin/pages/UsersPage').then((m) => ({ default: m.UsersPage })),
+)
+const SearchesPage = lazy(() =>
+  import('./admin/pages/SearchesPage').then((m) => ({ default: m.SearchesPage })),
+)
+const ActivatedPage = lazy(() =>
+  import('./admin/pages/ActivatedPage').then((m) => ({ default: m.ActivatedPage })),
+)
+const PlansPage = lazy(() =>
+  import('./admin/pages/PlansPage').then((m) => ({ default: m.PlansPage })),
+)
+const SettingsPage = lazy(() =>
+  import('./admin/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+)
+const TestsPage = lazy(() =>
+  import('./admin/pages/TestsPage').then((m) => ({ default: m.TestsPage })),
+)
+const DealsMetricsPage = lazy(() =>
+  import('./admin/pages/DealsMetricsPage').then((m) => ({
+    default: m.DealsMetricsPage,
+  })),
+)
+const OccasionsPage = lazy(() =>
+  import('./admin/pages/OccasionsPage').then((m) => ({ default: m.OccasionsPage })),
+)
+const ActivitiesAdminPage = lazy(() =>
+  import('./admin/pages/ActivitiesAdminPage').then((m) => ({
+    default: m.ActivitiesAdminPage,
+  })),
+)
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[40vh] flex items-center justify-center text-slate-500 text-sm font-medium">
+      Chargement…
+    </div>
+  )
+}
 
 /** Preserve query string on legacy path aliases (e.g. /deals?deal=…). */
 function LegacyRedirect({ to }: { to: string }) {
@@ -41,6 +79,7 @@ function App() {
     <I18nProvider>
       <BrowserRouter>
         <Toaster position="top-right" />
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
         {/* Routes publiques */}
         <Route path="/login" element={<Login />} />
@@ -95,10 +134,10 @@ function App() {
         <Route path="/saved" element={<Navigate to="/favoris" replace />} />
         <Route path="*" element={<Navigate to="/vols" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </I18nProvider>
   )
 }
 
 export default App
-
