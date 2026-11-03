@@ -307,7 +307,7 @@ export function ProfileScreen() {
                 Tester onboarding invitation
               </Text>
               <Text style={styles.devPreviewSub}>
-                Écran invite + parcours inscription (aperçu Expo)
+                Sans Google — mode test Expo, ouvre le voyage local
               </Text>
             </Pressable>
           </>

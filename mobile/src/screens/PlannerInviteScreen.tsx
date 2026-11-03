@@ -11,7 +11,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { InvitePreview } from '@flightwatcher/shared'
 import { cityDisplayNameFr, parseAirportCodes } from '@flightwatcher/shared'
-import { getDevInvitePreview } from '../dev/guestPreview'
+import {
+  getDevInvitePreview,
+  resolveDevInviteTripId,
+} from '../dev/guestPreview'
 import { getApi } from '../lib/client'
 import {
   clearPendingInvite,
@@ -64,8 +67,13 @@ const SIGNUP_STEPS = [
 export function PlannerInviteScreen({ route, navigation }: Props) {
   const { token } = route.params
   const insets = useSafeAreaInsets()
-  const { user, isGuest, signInWithGoogle } = useAuth()
+  const { user, isGuest, signInWithGoogle, continueAsGuest, setAppearLoggedOut } =
+    useAuth()
   const loggedIn = Boolean(user) && !isGuest
+  // Bypass Google uniquement en __DEV__ sur tokens / parcours de test Expo.
+  const expoTest =
+    __DEV__ &&
+    (String(token || '').startsWith('dev-invite-') || isGuest || !loggedIn)
   const [preview, setPreview] = useState<InvitePreview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -109,10 +117,21 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
   }, [load])
 
   const join = useCallback(async () => {
-    if (!token || !loggedIn) return
+    if (!token) return
     setJoining(true)
     setError(null)
     try {
+      // Expo / __DEV__ : skip Google + API join, ouvre le trip local.
+      if (expoTest) {
+        const tripId = resolveDevInviteTripId(token)
+        if (!tripId) throw new Error('Voyage de test introuvable')
+        setAppearLoggedOut(false)
+        continueAsGuest()
+        await clearPendingInvite()
+        navigation.replace('TripDetail', { tripId })
+        return
+      }
+      if (!loggedIn) return
       const res = await getApi().joinInvite(token)
       await clearPendingInvite()
       navigation.replace('TripDetail', { tripId: res.trip_id })
@@ -122,14 +141,22 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
     } finally {
       setJoining(false)
     }
-  }, [token, loggedIn, navigation])
+  }, [
+    token,
+    loggedIn,
+    expoTest,
+    navigation,
+    continueAsGuest,
+    setAppearLoggedOut,
+  ])
 
-  // Après inscription / login → rejoindre automatiquement.
+  // Après inscription / login réel → rejoindre automatiquement.
   useEffect(() => {
+    if (expoTest) return
     if (!loggedIn || !preview || autoJoined.current || joining) return
     autoJoined.current = true
     void join()
-  }, [loggedIn, preview, joining, join])
+  }, [expoTest, loggedIn, preview, joining, join])
 
   const onSignUp = async () => {
     setSigningIn(true)
@@ -142,6 +169,11 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
       return
     }
     // OAuth redirect — on reprend au retour session.
+  }
+
+  /** Bypass Google — uniquement __DEV__ / Expo. */
+  const onExpoTestContinue = () => {
+    void join()
   }
 
   const outStr = preview?.dates_depart?.[0]?.date || ''
@@ -198,7 +230,48 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
               ) : null}
             </View>
 
-            {!loggedIn ? (
+            {expoTest && String(token || '').startsWith('dev-invite-') ? (
+              <View style={[styles.signupCard, shadow.soft]}>
+                <Text style={styles.signupKicker}>Test Expo</Text>
+                <Text style={styles.signupTitle}>
+                  Onboarding invitation — {tripLabel}
+                </Text>
+                <Text style={styles.signupLead}>
+                  Mode test non officiel : on saute Google et on ouvre le voyage
+                  local.
+                </Text>
+
+                <View style={styles.steps}>
+                  {SIGNUP_STEPS.map((step, i) => (
+                    <View key={step.title} style={styles.stepRow}>
+                      <View style={styles.stepNum}>
+                        <Text style={styles.stepNumText}>{i + 1}</Text>
+                      </View>
+                      <View style={styles.stepCopy}>
+                        <Text style={styles.stepTitle}>{step.title}</Text>
+                        <Text style={styles.stepDetail}>{step.detail}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+
+                <Pressable
+                  style={[styles.btn, joining && styles.btnDisabled]}
+                  disabled={joining}
+                  onPress={onExpoTestContinue}
+                >
+                  {joining ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.btnText}>
+                      Continuer sans Google (test)
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            ) : !loggedIn ? (
               <View style={[styles.signupCard, shadow.soft]}>
                 <Text style={styles.signupKicker}>Inscription</Text>
                 <Text style={styles.signupTitle}>

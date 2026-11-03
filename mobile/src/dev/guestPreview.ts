@@ -275,6 +275,17 @@ export function getDevInvitePreview(token?: string | null): InvitePreview | null
   }
 }
 
+/** Trip id local pour simuler un join après onboarding Expo. */
+export function resolveDevInviteTripId(token?: string | null): string | null {
+  const t = String(token || '').trim()
+  if (!t.startsWith('dev-invite-')) return null
+  const trip =
+    trips.find((row) => row.invite_token === t) ||
+    trips.find((row) => row.id === 'dev-trip-lisbonne') ||
+    trips[0]
+  return trip?.id || null
+}
+
 export function getGuestTrip(id: string): PlannedTripDetail | null {
   const trip = trips.find((t) => t.id === id)
   return trip ? cloneTrip(trip) : null
