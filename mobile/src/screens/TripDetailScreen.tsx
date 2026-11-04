@@ -32,6 +32,7 @@ import {
   buildStayPipeline,
   cityDisplayNameFr,
   cityImageUrl,
+  resolveTripImageUrl,
   formatAirlineLabel,
   formatTripDateRangeFr,
   parseAirportCodes,
@@ -654,14 +655,20 @@ export function TripDetailScreen() {
   const pax = Math.max(trip?.passengers || 1, (trip?.members || []).length || 1)
 
   const arrivalCode = parseAirportCodes(trip?.arrival_airport)[0] || ''
-  const cityLabel = arrivalCode
-    ? cityDisplayNameFr(arrivalCode)
-    : trip?.name?.replace(/^Weekend\s+/i, '') || 'ta ville'
+  const cityLabel = (() => {
+    if (arrivalCode) return cityDisplayNameFr(arrivalCode) || arrivalCode
+    const fromName = trip?.name?.replace(/^(Weekend|Voyage|Séjour)\s+/i, '')?.trim()
+    return fromName || 'ta ville'
+  })()
   const citySlug = resolveActivityCitySlug({
     cityLabel: cityLabel !== 'ta ville' ? cityLabel : null,
     destIata: arrivalCode || null,
   })
-  const destinationImage = cityImageUrl(cityLabel, arrivalCode || undefined)
+  const destinationImage = resolveTripImageUrl({
+    city: cityLabel !== 'ta ville' ? cityLabel : null,
+    iata: arrivalCode || null,
+    imageUrl: workspace?.image_url || null,
+  })
 
   const reservationFlags = useMemo(() => {
     const payload = (flightDraft?.payload || {}) as Record<string, unknown>
@@ -1970,7 +1977,11 @@ function MobileBoardingPass({
     safe.aller.destination || safe.destination_code,
   )
   const destination = cityDisplayNameFr(destCode, safe.aller.destinationFull)
-  const image = safe.image_url || cityImageUrl(destination, destCode)
+  const image = resolveTripImageUrl({
+    city: destination,
+    iata: destCode || null,
+    imageUrl: safe.image_url,
+  })
   const formatTicketDate = (value: string) =>
     new Intl.DateTimeFormat('fr-FR', {
       weekday: 'short',

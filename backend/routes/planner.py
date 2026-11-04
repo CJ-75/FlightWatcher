@@ -920,16 +920,50 @@ def _trip_dest_iatas(trip: dict, accepted: Optional[dict]) -> set:
     )
 
 
+def _strip_city_noise(value: str) -> str:
+    city = str(value or "").split(",")[0].strip().split("(")[0].strip()
+    for prefix in ("Weekend ", "Voyage ", "Séjour à ", "Séjour "):
+        if city.lower().startswith(prefix.lower()):
+            city = city[len(prefix) :].strip()
+            break
+    for noise in (
+        " Airport",
+        " Aeropuerto",
+        " Aéroport",
+        " International",
+        "-Barajas",
+        " Barajas",
+    ):
+        if noise.lower() in city.lower():
+            # Drop airport/tail noise while keeping the city token.
+            idx = city.lower().find(noise.lower())
+            if idx > 0:
+                city = city[:idx].strip(" -–—")
+    return city.strip()
+
+
+def _clean_city_label(*candidates) -> Optional[str]:
+    iata_fallback: Optional[str] = None
+    for raw in candidates:
+        if raw is None:
+            continue
+        city = _strip_city_noise(str(raw))
+        if not city:
+            continue
+        if len(city) == 3 and city.isupper():
+            iata_fallback = iata_fallback or city
+            continue
+        return city
+    return iata_fallback
+
+
 def _trip_city_label(trip: dict, accepted: Optional[dict]) -> str:
     trip_data = (accepted or {}).get("trip_data") or {}
     dest_full = str((trip_data.get("aller") or {}).get("destinationFull") or "")
-    city = dest_full.split(",")[0].strip() if dest_full else ""
-    name = str(trip.get("name") or "")
-    for prefix in ("Weekend ", "Voyage ", "Séjour "):
-        if name.startswith(prefix):
-            name = name[len(prefix) :]
-            break
-    return city or name.strip()
+    return (
+        _clean_city_label(dest_full, trip.get("name"))
+        or str(trip.get("name") or "").strip()
+    )
 
 
 def _trip_dates(
@@ -1007,22 +1041,26 @@ def _persist_draft_trip_link(
     *,
     proposal_id: Optional[str] = None,
 ) -> None:
+    """Link draft → planned trip.
+
+    Heal must NOT set source_proposal_id: the execution draft already owns
+    (proposal_id, user_id) under uq_my_trip_drafts_proposal_user. Passing
+    proposal_id is ignored for the DB patch (kept for call-site compatibility).
+    """
+    _ = proposal_id  # intentionally unused on write
     patch: Dict[str, Any] = {
         "source_planned_trip_id": trip_id,
         "source_kind": "planner",
     }
-    if proposal_id and not draft.get("source_proposal_id"):
-        patch["source_proposal_id"] = proposal_id
     try:
         supabase.table("my_trip_drafts").update(patch).eq(
             "id", draft["id"]
         ).execute()
     except Exception as exc:
         print(f"⚠️ Heal draft→trip link: {exc}")
+        return
     draft["source_planned_trip_id"] = trip_id
     draft["source_kind"] = "planner"
-    if proposal_id and not draft.get("source_proposal_id"):
-        draft["source_proposal_id"] = proposal_id
 
 
 def _heal_orphan_drafts_to_trips(
@@ -1080,11 +1118,14 @@ def _heal_orphan_drafts_to_trips(
                 best_trip = trip_id
         if not best_trip:
             continue
-        proposal_id = (accepted_by_trip.get(best_trip) or {}).get("id")
-        _persist_draft_trip_link(
-            supabase, draft, best_trip, proposal_id=proposal_id
-        )
-        drafts_by_trip[best_trip] = draft
+        # Trip already has a stronger/equal draft → only soft-link orphan to trip,
+        # keep drafts_by_trip pointing at the winner.
+        existing = drafts_by_trip.get(best_trip)
+        _persist_draft_trip_link(supabase, draft, best_trip, proposal_id=None)
+        if not existing or orphan_rank > _draft_link_rank(
+            existing, bookings_by_draft_id, bookings_by_token
+        ):
+            drafts_by_trip[best_trip] = draft
         linked_ids.add(draft_id)
 
 
@@ -1417,13 +1458,18 @@ async def list_travel_workspaces(request: Request):
                 "scope": "collaborative",
                 "phase": phase,
                 "title": trip.get("name") or "Voyage",
-                "city": payload.get("city")
-                or draft and draft.get("city_name")
-                or (trip_data.get("aller") or {}).get("destinationFull"),
+                "city": _clean_city_label(
+                    payload.get("city"),
+                    (draft or {}).get("city_name") if draft else None,
+                    (trip_data.get("aller") or {}).get("destinationFull"),
+                    trip_data.get("city"),
+                    trip.get("name"),
+                ),
                 "origin_iata": flight.get("origin_iata")
                 or (trip_data.get("aller") or {}).get("origin")
                 or trip.get("departure_airport"),
                 "dest_iata": flight.get("destination_iata")
+                or (trip_data.get("aller") or {}).get("destination")
                 or trip_data.get("destination_code")
                 or trip.get("arrival_airport"),
                 "out_date": out_date,
@@ -1487,10 +1533,19 @@ async def list_travel_workspaces(request: Request):
                 "hotel_booking_status": (booking or {}).get("status"),
                 "scope": "personal",
                 "phase": phase,
-                "title": f"Séjour à {draft.get('city_name') or payload.get('city') or 'destination'}",
-                "city": draft.get("city_name") or payload.get("city"),
+                "title": (
+                    f"Séjour à {_clean_city_label(draft.get('city_name'), payload.get('city')) or 'destination'}"
+                ),
+                "city": _clean_city_label(
+                    draft.get("city_name"),
+                    payload.get("city"),
+                    (payload.get("flight") or {}).get("destination_city"),
+                ),
                 "origin_iata": draft.get("origin_iata") or flight.get("origin_iata"),
-                "dest_iata": draft.get("dest_iata") or flight.get("destination_iata"),
+                "dest_iata": draft.get("dest_iata")
+                or flight.get("destination_iata")
+                or payload.get("dest_iata")
+                or payload.get("destination"),
                 "out_date": _date10(draft.get("out_date")),
                 "ret_date": ret_date,
                 "image_url": payload.get("image_url"),
@@ -1541,7 +1596,11 @@ async def list_travel_workspaces(request: Request):
                 "title": snapshot.get("hotel_name")
                 or booking.get("hotel_name")
                 or "Réservation hôtel",
-                "city": snapshot.get("city") or booking.get("city"),
+                "city": _clean_city_label(
+                    snapshot.get("city"),
+                    booking.get("city"),
+                    snapshot.get("hotel_city"),
+                ),
                 "origin_iata": None,
                 "dest_iata": snapshot.get("destination")
                 or booking.get("destination"),

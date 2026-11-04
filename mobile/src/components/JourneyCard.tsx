@@ -3,7 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
   cityDisplayNameFr,
-  cityImageUrl,
+  resolveTripImageUrl,
   partyModeFromCount,
   partyModeKickerFr,
   type TravelWorkspace,
@@ -88,11 +88,21 @@ export function JourneyCard({
   onPress: () => void
 }) {
   const meta = PHASE_META[workspace.phase] || PHASE_META.planning
+  const destCode = (workspace.dest_iata || '').split(/[,;]/)[0]?.trim() || ''
+  const cityRaw = String(workspace.city || '')
+    .split(',')[0]
+    ?.split('(')[0]
+    ?.trim()
   const city =
-    workspace.city ||
-    (workspace.dest_iata ? cityDisplayNameFr(workspace.dest_iata.split(',')[0]!) : null) ||
+    (cityRaw && !/^[A-Z]{3}$/.test(cityRaw) ? cityRaw : null) ||
+    (destCode ? cityDisplayNameFr(destCode) : null) ||
+    cityRaw ||
     'Destination'
-  const image = workspace.image_url || cityImageUrl(city, workspace.dest_iata?.split(',')[0])
+  const image = resolveTripImageUrl({
+    city,
+    iata: destCode || null,
+    imageUrl: workspace.image_url,
+  })
   const dateRange = compactTripRange(workspace.out_date, workspace.ret_date)
   const party = partyLabel(workspace)
   const byLabel = byOrganizerLabel(workspace)

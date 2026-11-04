@@ -36,6 +36,7 @@ import {
   arrivalDisplayLabel,
   cityDisplayNameFr,
   cityImageUrl,
+  resolveTripImageUrl,
   formatAirlineLabel,
   formatDateFr,
   formatTripDateRangeFr,
@@ -577,14 +578,23 @@ function TripListCard({
   const destIata = workspace.dest_iata || trip?.arrival_airport || null
   const originIata = workspace.origin_iata || trip?.departure_airport || null
   const arrival = arrivalDisplayLabel(destIata, cityGroups)
-  const photo =
-    workspace.image_url ||
-    (arrival.isAny
-      ? cityImageUrl(null)
-      : cityImageUrl(workspace.city || arrival.city))
   const codes = arrival.isAny ? [] : arrival.codes.split(' · ').filter(Boolean)
-  const cityLabel =
-    workspace.city || (arrival.isAny ? 'Destination libre' : arrival.city)
+  const cityLabel = (() => {
+    const raw = String(workspace.city || '').split(',')[0]?.split('(')[0]?.trim()
+    if (raw && !/^[A-Z]{3}$/.test(raw)) return raw
+    if (!arrival.isAny && arrival.city && arrival.city !== arrival.codes) {
+      return arrival.city
+    }
+    const iata = codes[0] || parseAirportCodes(destIata)[0]
+    if (iata) return cityDisplayNameFr(iata) || iata
+    if (raw) return raw
+    return arrival.isAny ? 'Destination libre' : 'Destination'
+  })()
+  const photo = resolveTripImageUrl({
+    city: cityLabel,
+    iata: codes[0] || parseAirportCodes(destIata)[0] || null,
+    imageUrl: workspace.image_url,
+  })
   const outDate = workspace.out_date || trip?.dates_depart?.[0]?.date
   const retDate =
     workspace.ret_date ||
@@ -2238,17 +2248,28 @@ function TripDetailView({
     parseAirportCodes(reservationDest)[0] ||
     parseAirportCodes(trip.arrival_airport)[0] ||
     ''
-  const destinationName =
-    workspace?.city ||
-    (draftPayload.city as string | undefined) ||
-    flightDraft?.city_name ||
-    (destinationCode
-      ? cityDisplayNameFr(destinationCode)
-      : trip.name.replace(/^Weekend\s+/i, ''))
-  const destinationImage =
-    workspace?.image_url ||
-    (draftPayload.image_url as string | undefined) ||
-    cityImageUrl(destinationName || null, destinationCode || undefined)
+  const destinationName = (() => {
+    const raw = String(
+      workspace?.city ||
+        (draftPayload.city as string | undefined) ||
+        flightDraft?.city_name ||
+        '',
+    )
+      .split(',')[0]
+      ?.split('(')[0]
+      ?.trim()
+    if (raw && !/^[A-Z]{3}$/.test(raw)) return raw
+    if (destinationCode) return cityDisplayNameFr(destinationCode) || raw || destinationCode
+    return trip.name.replace(/^(Weekend|Voyage|Séjour)\s+/i, '') || 'Destination'
+  })()
+  const destinationImage = resolveTripImageUrl({
+    city: destinationName,
+    iata: destinationCode || null,
+    imageUrl:
+      workspace?.image_url ||
+      (draftPayload.image_url as string | undefined) ||
+      null,
+  })
   const hotelPhoto = String(
     (draftHotel as { photo?: string; main_photo?: string; image?: string } | null)
       ?.photo ||
@@ -3212,8 +3233,11 @@ function SelectedFlightBoardingPass({
     destCode,
     safe.aller.destinationFull,
   )
-  const ticketImage =
-    safe.image_url || cityImageUrl(destinationCity, destCode)
+  const ticketImage = resolveTripImageUrl({
+    city: destinationCity,
+    iata: destCode || null,
+    imageUrl: safe.image_url,
+  })
   const isTravelpayouts = /travelpayouts|aviasales/i.test(
     `${safe.provider || ''} ${safe.booking_url || ''}`,
   )
