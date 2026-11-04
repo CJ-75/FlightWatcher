@@ -100,7 +100,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
   const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
-  /** Prefetched my-trip draft so « Organiser mon séjour » navigates instantly. */
+  /** Prefetched my-trip draft so « Ajouter au planner » navigates instantly. */
   const draftPrefetchRef = useRef<{
     key: string
     promise: Promise<MyTripDraft>
@@ -940,7 +940,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
         >
           <PlaneIcon size={16} color={colors.white} />
           <Text style={styles.ctaText}>
-            {startingTrip ? '…' : 'Organiser mon séjour'}
+            {startingTrip ? '…' : 'Ajouter au planner'}
           </Text>
         </Pressable>
       </View>

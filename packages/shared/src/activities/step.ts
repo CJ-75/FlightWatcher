@@ -75,7 +75,7 @@ export const ACTIVITY_TRIP_TIMING_KICKER_FR: Record<
   string
 > = {
   upcoming: 'À venir',
-  ongoing: 'En cours',
+  ongoing: 'Séjour en cours',
   past: 'Terminé',
   /** Pas de dates → on traite comme un prochain séjour. */
   undated: 'À venir',
@@ -93,8 +93,9 @@ export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
 export const ACTIVITY_SYNC_CITY_FR = (city: string) => `Activités à ${city}`
 export const ACTIVITY_NO_TRIP_CTA_TITLE_FR = 'Ton prochain séjour commence ici'
 export const ACTIVITY_NO_TRIP_CTA_BODY_FR =
-  'Ouvre un voyage en cours pour composer les activités au même endroit que ton vol et ton hôtel.'
-export const ACTIVITY_NO_TRIP_CTA_BUTTON_FR = 'Voir les séjours'
+  'Ouvre le planner pour composer les activités au même endroit que ton vol et ton hôtel.'
+export const ACTIVITY_NO_TRIP_CTA_BUTTON_FR = 'Ouvrir le planner'
+export const ACTIVITY_NO_TRIP_CTA_SECONDARY_FR = 'Voir les séjours'
 export const ACTIVITY_ADDED_BADGE_FR = 'Ajouté'
 export const ACTIVITY_ADDED_TO_PLANNER_FR = (city: string) =>
   `Ajouté au planner · ${city}`

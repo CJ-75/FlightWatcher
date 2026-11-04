@@ -912,7 +912,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
               >
                 <BedIcon size={15} />
                 <Text style={styles.secondaryBtnText}>
-                  {hotelId ? 'Changer d’hôtel' : 'Réserver mon hôtel'}
+                  {hotelId ? 'Changer d’hôtel' : 'Choisir mon hôtel'}
                 </Text>
               </Pressable>
             ) : null}

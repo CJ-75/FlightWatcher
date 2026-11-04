@@ -98,7 +98,7 @@ function OpenTripsSection({
     <div className="space-y-3">
       <div>
         <p className="text-xs font-bold uppercase tracking-wide text-muted">
-          Voyages en cours
+          Brouillons
         </p>
         <p className="text-sm text-muted mt-0.5">
           Trips générés sur cet appareil — continue la réservation hôtel.
@@ -112,7 +112,7 @@ function OpenTripsSection({
               key={t.draft_token}
               photo={photo}
               chipClass="bg-amber-50 text-amber-900 ring-1 ring-amber-200"
-              chipLabel="En cours"
+              chipLabel="Brouillon"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -785,7 +785,7 @@ export default function MyBookings() {
               <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
                 {openTrips.length
                   ? 'Tes voyages générés sont ci-dessus. Dès que tu paies un hôtel, la confirmation apparaît ici.'
-                  : 'Quand tu réserves un hôtel depuis un deal ou Mon voyage, la confirmation et le code apparaissent ici.'}
+                  : 'Quand tu réserves un hôtel depuis un deal ou le planner, il apparaît ici.'}
               </p>
               {guestMode && guestDraft ? (
                 <Link
@@ -843,7 +843,7 @@ export default function MyBookings() {
                 {(
                   [
                     ['upcoming', 'À venir', counts.upcoming],
-                    ['past', 'Passées', counts.past],
+                    ['past', 'Passés', counts.past],
                     ['all', 'Toutes', counts.all],
                   ] as const
                 ).map(([key, label, count]) => (

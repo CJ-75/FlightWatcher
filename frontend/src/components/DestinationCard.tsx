@@ -21,7 +21,7 @@ interface DestinationCardProps {
   trip: EnrichedTripResponse;
   onSaveFavorite: () => void;
   onBook?: () => void;
-  /** Secondary text link — create MyTrip hotel compose (no partner popup). */
+  /** Secondary text link — add flight to planner (logged-in). */
   onAddHotel?: () => void;
   /** Replaces book CTA (e.g. Accept on a planner proposal) */
   primaryAction?: CardAction;

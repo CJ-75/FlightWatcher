@@ -42,7 +42,7 @@ function statusMeta(status: string): { label: string; tone: string; soft: string
       return { label: 'Confirmée', tone: colors.success, soft: colors.successSoft }
     case 'booking_pending':
     case 'payment_succeeded':
-      return { label: 'En cours', tone: colors.primaryDeep, soft: colors.primarySoft }
+      return { label: 'En traitement', tone: colors.primaryDeep, soft: colors.primarySoft }
     case 'payment_pending':
     case 'prebooked':
       return { label: 'À payer', tone: colors.primaryDeep, soft: colors.primarySoft }
@@ -51,7 +51,7 @@ function statusMeta(status: string): { label: string; tone: string; soft: string
     case 'cancelled':
       return { label: 'Annulée', tone: colors.muted, soft: 'rgba(138,106,88,0.12)' }
     default:
-      return { label: 'En cours', tone: colors.muted, soft: colors.primarySoft }
+      return { label: 'Brouillon', tone: colors.muted, soft: colors.primarySoft }
   }
 }
 

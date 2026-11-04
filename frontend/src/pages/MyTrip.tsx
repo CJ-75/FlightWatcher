@@ -17,6 +17,8 @@ import {
   airportDisplayNameFr,
   ACTIVITY_BACK_TO_PLANNER_FR,
   buildStayPipeline,
+  cityDisplayNameFr,
+  HOTEL_CTA_FR,
   primaryAirportCode,
   distantAirportLine,
   hotelCancelLabel,
@@ -250,13 +252,25 @@ export default function MyTrip() {
   const flight = payload.flight || {}
   const hotel = payload.hotel || draft?.hotel
   const hotelObj = hotel && typeof hotel === 'object' ? (hotel as Record<string, any>) : null
-  const city = draft?.city_name || payload.city || '—'
+  const city =
+    draft?.city_name ||
+    payload.city ||
+    cityDisplayNameFr(
+      String(
+        flight.destination_iata ||
+          payload.destination ||
+          payload.dest_iata ||
+          draft?.dest_iata ||
+          '',
+      ),
+    ) ||
+    'Destination'
   const activityCitySlug = useMemo(
     () =>
       resolveActivityCitySlug({
         citySlug:
           typeof payload.city_slug === 'string' ? payload.city_slug : null,
-        cityLabel: city !== '—' ? String(city) : null,
+        cityLabel: city !== 'Destination' ? String(city) : null,
         destIata: String(
           flight.destination_iata ||
             payload.destination ||
@@ -1158,8 +1172,14 @@ export default function MyTrip() {
     if (base.id === 'hotel_pay' && party.hotelTotal > 0) {
       return {
         ...base,
-        label: `Réserver mon hôtel · ${Math.round(party.hotelTotal)} €`,
+        label: `${HOTEL_CTA_FR.pay} · ${Math.round(party.hotelTotal)} €`,
       }
+    }
+    if (base.id === 'hotel_pick') {
+      return { ...base, label: HOTEL_CTA_FR.choose }
+    }
+    if (base.id === 'planner') {
+      return { ...base, label: HOTEL_CTA_FR.backPlanner }
     }
     return base
   }, [

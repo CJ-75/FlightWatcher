@@ -1872,7 +1872,7 @@ export function MyTripHotelCompose({
       <div className="flex items-start justify-between gap-3 mb-3 sm:mb-5">
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#FF385C]">
-            Composer le voyage
+            Compose ton séjour
           </p>
           <h2 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-0.5 sm:mt-1 leading-tight">
             {cityLabel ? `Hôtel à ${cityLabel}` : 'Choisis ton hôtel'}

@@ -1208,7 +1208,18 @@ function Dashboard() {
       clearPendingHotelUpsell()
       setPostBookTrip(null)
       setPostBookDraftToken(null)
-      // New tab → keep Search results in the current tab
+      const user = await getCurrentUser()
+      if (user) {
+        try {
+          const created = await getApiClient().createPlannedTripFromMyTrip({
+            draft_token: draftToken,
+          })
+          navigate(`/planner/${encodeURIComponent(created.id)}`)
+          return
+        } catch {
+          // Fall through to Mon voyage compose.
+        }
+      }
       const path = `/trip/${draftToken}?compose=1`
       const opened = window.open(path, '_blank', 'noopener,noreferrer')
       if (!opened) {
@@ -1331,7 +1342,7 @@ function Dashboard() {
             fallback={
               <div className="flex flex-col items-center justify-center py-20 text-slate-500">
                 <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4" />
-                <p className="font-medium">Chargement du planner…</p>
+                <p className="font-medium">Chargement des voyages…</p>
               </div>
             }
           >
@@ -3516,9 +3527,11 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
                   ♥
                 </div>
-                <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">Aucun favori</p>
+                <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
+                  {t('favorites.empty')}
+                </p>
                 <p className="text-sm text-slate-500 max-w-md mx-auto">
-                  Ajoute des voyages depuis les résultats de recherche.
+                  {t('favorites.flightsEmptyBody')}
                 </p>
               </div>
             </div>

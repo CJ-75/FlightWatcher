@@ -168,7 +168,7 @@ function JourneyStepper({
                           isCurrent ? 'text-white/70' : 'text-slate-400',
                         ].join(' ')}
                       >
-                        {isDone ? 'Fait' : isCurrent ? 'Maintenant' : isOff ? 'Bientôt' : 'À venir'}
+                        {isDone ? 'Fait' : isCurrent ? 'Maintenant' : isOff ? 'Bientôt' : 'Ensuite'}
                       </p>
                     )}
                   </div>

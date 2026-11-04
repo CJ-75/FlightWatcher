@@ -14,7 +14,7 @@ type Props = {
 const spring = { type: 'spring' as const, stiffness: 320, damping: 28, mass: 0.55 }
 
 /**
- * Shown right after partner tab opens — CTA launches Mon voyage compose.
+ * Shown right after partner tab opens — CTA continues in Planner (or Mon voyage fallback).
  */
 export function PostBookLightbox({
   trip,
@@ -78,7 +78,7 @@ export function PostBookLightbox({
             {busy
               ? '…'
               : automaticConfirmation
-                ? 'Continuer vers mon voyage'
+                ? t('deals.cta.continuePlanner')
                 : t('upsell.yesHotel')}
           </button>
           <button

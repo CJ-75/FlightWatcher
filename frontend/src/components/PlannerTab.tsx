@@ -52,9 +52,18 @@ import {
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   restaurantStepProgress,
+  PLANNER_HUB_TABS,
+  PLANNER_HUB_EMPTY_FR,
+  PLANNER_PHASE_LABEL_FR,
+  PLANNER_PHASE_HINT_FR,
+  PLANNER_PHASE_ACTION_FR,
+  PLANNER_PROMOTE_TOAST_FR,
+  HOTEL_CTA_FR,
+  hubMatchesPhase,
   type CityAirportGroup,
   type FlightBookingStatus,
   type MyTripDraft,
+  type PlannerHubFilter,
   type StayStepId,
 } from '@flightwatcher/shared'
 import { CreateTripModal } from './planner/CreateTripModal'
@@ -310,20 +319,9 @@ function PlannerGuestLanding() {
   )
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Créé',
-  scanning: 'Scan…',
-  planning: 'Créé',
-  locked: 'Confirmé',
-}
-
-const PHASE_LABEL: Record<TravelWorkspace['phase'], string> = {
-  planning: 'En cours',
-  flight_selected: 'Vol choisi',
-  composing: 'À finaliser',
-  booked: 'Réservé',
-  past: 'Terminé',
-}
+const PHASE_LABEL = PLANNER_PHASE_LABEL_FR
+const PHASE_HINT = PLANNER_PHASE_HINT_FR
+const PHASE_ACTION = PLANNER_PHASE_ACTION_FR
 
 const PHASE_CHIP_CLASS: Record<TravelWorkspace['phase'], string> = {
   planning: 'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
@@ -333,49 +331,10 @@ const PHASE_CHIP_CLASS: Record<TravelWorkspace['phase'], string> = {
   past: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
 }
 
-const PHASE_HINT: Record<TravelWorkspace['phase'], string> = {
-  planning: 'Choisis un vol et invite tes voyageurs.',
-  flight_selected: 'Vol choisi — compose ton hôtel.',
-  composing: 'Séjour en cours — finalise la réservation.',
-  booked: 'Réservation rattachée à ce voyage.',
-  past: 'Voyage terminé — dossier conservé.',
-}
-
-const PHASE_ACTION: Record<TravelWorkspace['phase'], string> = {
-  planning: 'Ouvrir le voyage',
-  flight_selected: 'Finaliser le séjour',
-  composing: 'Reprendre le séjour',
-  booked: 'Ouvrir le voyage',
-  past: 'Revoir le voyage',
-}
-
-type HubFilter = 'organize' | 'upcoming' | 'past'
-
-const HUB_TABS: { key: HubFilter; label: string }[] = [
-  { key: 'upcoming', label: 'À venir' },
-  { key: 'organize', label: 'En cours' },
-  { key: 'past', label: 'Passés' },
-]
-
-const HUB_EMPTY: Record<HubFilter, { title: string; body: string }> = {
-  upcoming: {
-    title: 'Aucun voyage à venir',
-    body: 'Dès qu’un vol est choisi ou que le séjour est composé, le voyage apparaît ici.',
-  },
-  organize: {
-    title: 'Rien en cours',
-    body: 'Ici : les voyages encore à construire. Crée un voyage, scanne les prix, puis invite tes proches.',
-  },
-  past: {
-    title: 'Aucun voyage passé',
-    body: 'Les séjours terminés restent ici, pour les retrouver facilement.',
-  },
-}
+type HubFilter = PlannerHubFilter
 
 function hubMatches(workspace: TravelWorkspace, filter: HubFilter): boolean {
-  if (filter === 'organize') return workspace.phase === 'planning'
-  if (filter === 'past') return workspace.phase === 'past'
-  return workspace.phase !== 'planning' && workspace.phase !== 'past'
+  return hubMatchesPhase(workspace.phase, filter)
 }
 
 const FLIGHT_BOOKED_STATUSES = new Set<FlightBookingStatus>([
@@ -480,6 +439,7 @@ function TripsGallery({
   onOpen: (workspace: TravelWorkspace) => void
   onCreate?: () => void
 }) {
+  const { t } = useI18n()
   const counts = useMemo(
     () => ({
       organize: workspaces.filter((w) => hubMatches(w, 'organize')).length,
@@ -559,12 +519,12 @@ function TripsGallery({
   }
 
   const cards = filtered.map(enrichWorkspace)
-  const empty = HUB_EMPTY[filter]
+  const empty = PLANNER_HUB_EMPTY_FR[filter]
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2">
-        {HUB_TABS.map(({ key, label }) => {
+        {PLANNER_HUB_TABS.map(({ key, labelFr }) => {
           const active = filter === key
           return (
             <button
@@ -577,7 +537,7 @@ function TripsGallery({
                   : 'bg-white/80 text-slate-600 ring-1 ring-slate-200 hover:bg-white'
               }`}
             >
-              {label} · {counts[key]}
+              {labelFr} · {counts[key]}
             </button>
           )
         })}
@@ -602,7 +562,7 @@ function TripsGallery({
                 onClick={onCreate}
                 className="rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] px-6 py-3 font-bold text-white shadow-md shadow-orange-500/25"
               >
-                Créer un voyage
+                {t('planner.create')}
               </button>
             ) : null}
           </div>
@@ -1104,6 +1064,7 @@ export function PlannerTab() {
               name: workspace.city || workspace.title || undefined,
             })
             invalidateTravelWorkspacesCache()
+            setToast(PLANNER_PROMOTE_TOAST_FR)
             navigate(`/planner/${encodeURIComponent(created.id)}`)
             void load({ silent: true })
           } catch {
@@ -1118,7 +1079,7 @@ export function PlannerTab() {
         )
       }
     },
-    [navigate, load],
+    [navigate, load, setToast],
   )
 
   useEffect(() => {
@@ -1191,11 +1152,9 @@ export function PlannerTab() {
 
       <div className="relative mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <p className="app-kicker mb-1.5">Planner</p>
-          <h2 className="app-title">Tes voyages</h2>
-          <p className="app-subtitle mt-1.5">
-            Crée, scanne les prix, invite tes proches.
-          </p>
+          <p className="app-kicker mb-1.5">{t('nav.planner')}</p>
+          <h2 className="app-title">{t('planner.title')}</h2>
+          <p className="app-subtitle mt-1.5">{t('planner.subtitle')}</p>
         </div>
         <button
           type="button"
@@ -1203,7 +1162,7 @@ export function PlannerTab() {
           className="app-btn-primary shrink-0"
         >
           <span className="text-lg leading-none">+</span>
-          Nouveau
+          {t('planner.create')}
         </button>
       </div>
 
@@ -1234,17 +1193,17 @@ export function PlannerTab() {
               ✈
             </div>
             <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
-              Ton premier voyage
+              {t('planner.emptyTitle')}
             </p>
             <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto leading-relaxed">
-              Choisis une ville, scanne les prix, partage le lien.
+              {t('planner.emptyBody')}
             </p>
             <button
               type="button"
               onClick={() => setShowCreate(true)}
               className="bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-bold px-6 py-3 rounded-2xl shadow-md shadow-orange-500/25"
             >
-              Créer un voyage
+              {t('planner.create')}
             </button>
           </div>
         </div>
@@ -2310,8 +2269,9 @@ function TripDetailView({
 
   const statusLabel =
     (workspace?.phase && PHASE_LABEL[workspace.phase]) ||
-    STATUS_LABEL[trip.status] ||
-    trip.status
+    (trip.status === 'locked'
+      ? PHASE_LABEL.flight_selected
+      : PHASE_LABEL.planning)
   const reservationOrigin =
     (draftFlight.origin_iata as string | undefined) ||
     workspace?.origin_iata ||
@@ -2355,7 +2315,10 @@ function TripDetailView({
       ?.trim()
     if (raw && !/^[A-Z]{3}$/.test(raw)) return raw
     if (destinationCode) return cityDisplayNameFr(destinationCode) || raw || destinationCode
-    return trip.name.replace(/^(Weekend|Voyage|Séjour)\s+/i, '') || 'Destination'
+    return (
+      trip.name.replace(/^(Weekend|Voyage|Séjour)\s+/i, '') ||
+      t('destination.fallback')
+    )
   })()
   const destinationImage = resolveTripImageUrl({
     city: destinationName,
@@ -2497,7 +2460,7 @@ function TripDetailView({
                   onClick={openReservations}
                   className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 min-h-[48px] backdrop-blur-md"
                 >
-                  Voir mon hôtel
+                  {HOTEL_CTA_FR.view}
                 </button>
               ) : null}
             </div>
@@ -2656,7 +2619,7 @@ function TripDetailView({
                       {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
                     </p>
                     <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                      {hotelBooked || hasHotel ? hotelName : 'Choisir mon hôtel'}
+                      {hotelBooked || hasHotel ? hotelName : HOTEL_CTA_FR.choose}
                     </p>
                     <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
                       {hotelBooked || hasHotel
@@ -2677,8 +2640,8 @@ function TripDetailView({
                         {hotelBusy
                           ? 'Ouverture…'
                           : hotelBooked || hasHotel
-                            ? 'Voir mon hôtel'
-                            : 'Choisir mon hôtel'}
+                            ? HOTEL_CTA_FR.view
+                            : HOTEL_CTA_FR.choose}
                         <span aria-hidden>›</span>
                       </button>
                       {canSkipHotel ? (

@@ -12,6 +12,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
@@ -34,9 +35,13 @@ import {
   partyModeMaxPassengers,
   partyModeMinPassengers,
   translate,
+  PLANNER_HUB_TABS,
+  PLANNER_HUB_EMPTY_FR,
+  PLANNER_PROMOTE_TOAST_FR,
   type DatePresetId,
   type FlexibleDates,
   type PartyMode,
+  type PlannerHubFilter,
 } from '@flightwatcher/shared'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
@@ -60,32 +65,8 @@ const PRESETS: { id: DatePresetId; label: string }[] = [
 ]
 
 const TRIPS_STALE_MS = 60_000
-type HubFilter = 'organize' | 'upcoming' | 'past'
+type HubFilter = PlannerHubFilter
 
-const HUB_TABS: { key: HubFilter; label: string }[] = [
-  { key: 'upcoming', label: 'À venir' },
-  { key: 'organize', label: 'En cours' },
-  { key: 'past', label: 'Passés' },
-]
-
-const HUB_EMPTY: Record<
-  HubFilter,
-  { title: string; body: string; cta?: string }
-> = {
-  upcoming: {
-    title: 'Aucun voyage à venir',
-    body: 'Dès qu’un vol est choisi ou que le séjour est composé, le voyage apparaît ici.',
-  },
-  organize: {
-    title: 'Rien en cours',
-    body: 'Ici : les voyages encore à construire. Crée un voyage, scanne les prix, puis invite tes proches.',
-    cta: 'Créer un voyage',
-  },
-  past: {
-    title: 'Aucun voyage passé',
-    body: 'Les séjours terminés restent ici, pour les retrouver facilement.',
-  },
-}
 
 function tripAsWorkspace(
   trip: PlannedTrip,
@@ -268,6 +249,7 @@ export function PlannerScreen() {
             draft_token: workspace.draft_token!,
             name: workspace.city || workspace.title || undefined,
           })
+          Alert.alert('', PLANNER_PROMOTE_TOAST_FR)
           navigation.navigate('TripDetail', { tripId: created.id })
           void load({ force: true })
         } catch {
@@ -332,14 +314,14 @@ export function PlannerScreen() {
                 Crée, scanne les prix, invite tes proches.
               </Text>
               <View style={styles.hubTabs}>
-                {HUB_TABS.map(({ key, label }) => (
+                {PLANNER_HUB_TABS.map(({ key, labelFr }) => (
                   <Pressable
                     key={key}
                     onPress={() => setFilter(key)}
                     style={[styles.hubTab, filter === key && styles.hubTabActive]}
                   >
                     <Text style={[styles.hubTabText, filter === key && styles.hubTabTextActive]}>
-                      {label} · {counts[key]}
+                      {labelFr} · {counts[key]}
                     </Text>
                   </Pressable>
                 ))}
@@ -371,15 +353,15 @@ export function PlannerScreen() {
                   </View>
                   <Text style={styles.emptyTitle}>
                     {workspaces.length
-                      ? HUB_EMPTY[filter].title
+                      ? PLANNER_HUB_EMPTY_FR[filter].title
                       : 'Ton premier voyage'}
                   </Text>
                   <Text style={styles.emptyBody}>
                     {workspaces.length
-                      ? HUB_EMPTY[filter].body
-                      : 'Choisis une ville, trouve un vol, puis compose tout le séjour.'}
+                      ? PLANNER_HUB_EMPTY_FR[filter].body
+                      : 'Choisis une ville, scanne les prix, partage le lien.'}
                   </Text>
-                  {!workspaces.length || HUB_EMPTY[filter].cta ? (
+                  {!workspaces.length || PLANNER_HUB_EMPTY_FR[filter].cta ? (
                     <Pressable
                       onPress={() => setShowCreate(true)}
                       style={({ pressed }) => [
@@ -389,8 +371,8 @@ export function PlannerScreen() {
                     >
                       <Text style={styles.emptyCtaText}>
                         {workspaces.length
-                          ? HUB_EMPTY[filter].cta || 'Créer un voyage'
-                          : 'Créer un voyage'}
+                          ? PLANNER_HUB_EMPTY_FR[filter].cta || 'Nouveau voyage'
+                          : 'Nouveau voyage'}
                       </Text>
                     </Pressable>
                   ) : null}

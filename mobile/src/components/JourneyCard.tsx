@@ -6,21 +6,51 @@ import {
   resolveTripImageUrl,
   partyModeFromCount,
   partyModeKickerFr,
+  PLANNER_PHASE_LABEL_FR,
+  PLANNER_PHASE_ACTION_FR,
   type TravelWorkspace,
 } from '@flightwatcher/shared'
 import { colors, fonts, shadow } from '../theme'
 
 export type JourneyDensity = 'solo' | 'duo' | 'groupe'
 
+const PHASE_TONE: Record<TravelWorkspace['phase'], string> = {
+  planning: '#F97316',
+  flight_selected: '#F97316',
+  composing: '#F97316',
+  booked: '#0F8A5F',
+  past: '#64748B',
+}
+
 const PHASE_META: Record<
   TravelWorkspace['phase'],
   { label: string; action: string; tone: string }
 > = {
-  planning: { label: 'En cours', action: 'Continuer', tone: '#F97316' },
-  flight_selected: { label: 'Vol choisi', action: 'Finaliser', tone: '#F97316' },
-  composing: { label: 'À finaliser', action: 'Reprendre', tone: '#F97316' },
-  booked: { label: 'Réservé', action: 'Ouvrir', tone: '#0F8A5F' },
-  past: { label: 'Terminé', action: 'Revoir', tone: '#64748B' },
+  planning: {
+    label: PLANNER_PHASE_LABEL_FR.planning,
+    action: PLANNER_PHASE_ACTION_FR.planning,
+    tone: PHASE_TONE.planning,
+  },
+  flight_selected: {
+    label: PLANNER_PHASE_LABEL_FR.flight_selected,
+    action: PLANNER_PHASE_ACTION_FR.flight_selected,
+    tone: PHASE_TONE.flight_selected,
+  },
+  composing: {
+    label: PLANNER_PHASE_LABEL_FR.composing,
+    action: PLANNER_PHASE_ACTION_FR.composing,
+    tone: PHASE_TONE.composing,
+  },
+  booked: {
+    label: PLANNER_PHASE_LABEL_FR.booked,
+    action: PLANNER_PHASE_ACTION_FR.booked,
+    tone: PHASE_TONE.booked,
+  },
+  past: {
+    label: PLANNER_PHASE_LABEL_FR.past,
+    action: PLANNER_PHASE_ACTION_FR.past,
+    tone: PHASE_TONE.past,
+  },
 }
 
 function compactDate(

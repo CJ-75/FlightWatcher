@@ -203,7 +203,7 @@ export function resolveNextStayAction(opts: {
     if (hasHotel) {
       return { id: 'hotel_pay', label: 'Payer ma chambre' }
     }
-    return { id: 'hotel_pick', label: 'Réserver mon hôtel' }
+    return { id: 'hotel_pick', label: 'Choisir mon hôtel' }
   }
   if (opts.activitiesEnabled && !opts.activitiesDone) {
     return { id: 'activities', label: 'Planifier des activités' }

@@ -855,7 +855,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       ) : (
         <ActivityTripHero
           mode="empty"
-          emptyHref="/sejours"
+          emptyHref="/planner"
           onChooseTrip={() => {
             setPendingAdd(null)
             setTripPickerOpen(true)

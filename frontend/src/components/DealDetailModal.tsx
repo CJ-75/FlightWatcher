@@ -1053,7 +1053,7 @@ export function DealDetailModal({
                   : (
                     <>
                       <span className="sm:hidden">Modifier l’hôtel</span>
-                      <span className="hidden sm:inline">Modifier l’hôtel · composer le voyage</span>
+                      <span className="hidden sm:inline">Modifier l’hôtel · compose ton séjour</span>
                     </>
                   )}
               </button>
@@ -1111,7 +1111,7 @@ export function DealDetailModal({
               disabled={startingTrip}
               className="shrink-0 bg-primary-500 hover:bg-primary-600 text-white font-bold px-5 py-3 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
             >
-              {startingTrip ? '…' : 'Organiser mon séjour'}
+              {startingTrip ? '…' : 'Ajouter au planner'}
             </button>
           </div>
         </motion.div>

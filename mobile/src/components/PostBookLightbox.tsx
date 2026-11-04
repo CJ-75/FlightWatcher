@@ -73,11 +73,7 @@ export function PostBookLightbox({
             ) : (
               <View style={styles.ctaInner}>
                 <BedIcon size={16} color={colors.white} />
-                <Text style={styles.ctaText}>
-                  {automaticConfirmation
-                    ? 'Continuer vers mon voyage'
-                    : 'Oui, choisir mon hôtel'}
-                </Text>
+                <Text style={styles.ctaText}>Continuer dans le planner</Text>
               </View>
             )}
           </Pressable>
