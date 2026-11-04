@@ -16,7 +16,7 @@ const PHASE_META: Record<
   TravelWorkspace['phase'],
   { label: string; action: string; tone: string }
 > = {
-  planning: { label: 'À organiser', action: 'Continuer', tone: '#F97316' },
+  planning: { label: 'En cours', action: 'Continuer', tone: '#F97316' },
   flight_selected: { label: 'Vol choisi', action: 'Finaliser', tone: '#F97316' },
   composing: { label: 'À finaliser', action: 'Reprendre', tone: '#F97316' },
   booked: { label: 'Réservé', action: 'Ouvrir', tone: '#0F8A5F' },

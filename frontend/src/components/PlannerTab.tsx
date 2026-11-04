@@ -318,7 +318,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 const PHASE_LABEL: Record<TravelWorkspace['phase'], string> = {
-  planning: 'À organiser',
+  planning: 'En cours',
   flight_selected: 'Vol choisi',
   composing: 'À finaliser',
   booked: 'Réservé',
@@ -347,6 +347,35 @@ const PHASE_ACTION: Record<TravelWorkspace['phase'], string> = {
   composing: 'Reprendre le séjour',
   booked: 'Ouvrir le voyage',
   past: 'Revoir le voyage',
+}
+
+type HubFilter = 'organize' | 'upcoming' | 'past'
+
+const HUB_TABS: { key: HubFilter; label: string }[] = [
+  { key: 'upcoming', label: 'À venir' },
+  { key: 'organize', label: 'En cours' },
+  { key: 'past', label: 'Passés' },
+]
+
+const HUB_EMPTY: Record<HubFilter, { title: string; body: string }> = {
+  upcoming: {
+    title: 'Aucun voyage à venir',
+    body: 'Dès qu’un vol est choisi ou que le séjour est composé, le voyage apparaît ici.',
+  },
+  organize: {
+    title: 'Rien en cours',
+    body: 'Ici : les voyages encore à construire. Crée un voyage, scanne les prix, puis invite tes proches.',
+  },
+  past: {
+    title: 'Aucun voyage passé',
+    body: 'Les séjours terminés restent ici, pour les retrouver facilement.',
+  },
+}
+
+function hubMatches(workspace: TravelWorkspace, filter: HubFilter): boolean {
+  if (filter === 'organize') return workspace.phase === 'planning'
+  if (filter === 'past') return workspace.phase === 'past'
+  return workspace.phase !== 'planning' && workspace.phase !== 'past'
 }
 
 const FLIGHT_BOOKED_STATUSES = new Set<FlightBookingStatus>([
@@ -443,14 +472,38 @@ function TripsGallery({
   cityGroups,
   currentUserId,
   onOpen,
+  onCreate,
 }: {
   workspaces: TravelWorkspace[]
   cityGroups: CityAirportGroup[]
   currentUserId: string | null
   onOpen: (workspace: TravelWorkspace) => void
+  onCreate?: () => void
 }) {
+  const counts = useMemo(
+    () => ({
+      organize: workspaces.filter((w) => hubMatches(w, 'organize')).length,
+      upcoming: workspaces.filter((w) => hubMatches(w, 'upcoming')).length,
+      past: workspaces.filter((w) => hubMatches(w, 'past')).length,
+    }),
+    [workspaces],
+  )
+  const [filter, setFilter] = useState<HubFilter>('upcoming')
+  const didInitFilter = useRef(false)
+  useEffect(() => {
+    if (didInitFilter.current || !workspaces.length) return
+    didInitFilter.current = true
+    if (counts.upcoming > 0) setFilter('upcoming')
+    else if (counts.organize > 0) setFilter('organize')
+    else if (counts.past > 0) setFilter('past')
+  }, [counts, workspaces.length])
+
+  const filtered = useMemo(
+    () => workspaces.filter((w) => hubMatches(w, filter)),
+    [workspaces, filter],
+  )
   const density: TripGalleryDensity =
-    workspaces.length === 1 ? 'solo' : workspaces.length === 2 ? 'duo' : 'multi'
+    filtered.length === 1 ? 'solo' : filtered.length === 2 ? 'duo' : 'multi'
   const [selfProfile, setSelfProfile] = useState<{
     name: string
     avatarUrl?: string
@@ -505,58 +558,99 @@ function TripsGallery({
     }
   }
 
-  const cards = workspaces.map(enrichWorkspace)
-
-  if (density === 'solo') {
-    return (
-      <motion.div layout className="w-full">
-        <TripListCard
-          workspace={cards[0]}
-          cityGroups={cityGroups}
-          density="solo"
-          index={0}
-          onOpen={onOpen}
-        />
-      </motion.div>
-    )
-  }
-
-  if (density === 'duo') {
-    return (
-      <motion.div
-        layout
-        className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 min-h-[min(70vh,640px)] md:items-stretch"
-      >
-        {cards.map((workspace, index) => (
-          <TripListCard
-            key={workspace.workspace_id}
-            workspace={workspace}
-            cityGroups={cityGroups}
-            density="duo"
-            index={index}
-            onOpen={onOpen}
-          />
-        ))}
-      </motion.div>
-    )
-  }
+  const cards = filtered.map(enrichWorkspace)
+  const empty = HUB_EMPTY[filter]
 
   return (
-    <motion.div
-      layout
-      className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5"
-    >
-      {cards.map((workspace, index) => (
-        <TripListCard
-          key={workspace.workspace_id}
-          workspace={workspace}
-          cityGroups={cityGroups}
-          density="multi"
-          index={index}
-          onOpen={onOpen}
-        />
-      ))}
-    </motion.div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        {HUB_TABS.map(({ key, label }) => {
+          const active = filter === key
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setFilter(key)}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                active
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white/80 text-slate-600 ring-1 ring-slate-200 hover:bg-white'
+              }`}
+            >
+              {label} · {counts[key]}
+            </button>
+          )
+        })}
+      </div>
+
+      {cards.length === 0 ? (
+        <div className="relative overflow-hidden rounded-[28px] border border-orange-100 bg-white p-8 text-center shadow-lg sm:p-10">
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent"
+          />
+          <div className="relative">
+            <p className="mb-2 text-2xl font-black tracking-tight text-slate-900">
+              {empty.title}
+            </p>
+            <p className="mx-auto mb-6 max-w-sm text-sm leading-relaxed text-slate-500">
+              {empty.body}
+            </p>
+            {filter === 'organize' && onCreate ? (
+              <button
+                type="button"
+                onClick={onCreate}
+                className="rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] px-6 py-3 font-bold text-white shadow-md shadow-orange-500/25"
+              >
+                Créer un voyage
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : density === 'solo' ? (
+        <motion.div layout className="w-full">
+          <TripListCard
+            workspace={cards[0]}
+            cityGroups={cityGroups}
+            density="solo"
+            index={0}
+            onOpen={onOpen}
+          />
+        </motion.div>
+      ) : density === 'duo' ? (
+        <motion.div
+          layout
+          className="grid min-h-[min(70vh,640px)] grid-cols-1 gap-5 sm:gap-6 md:grid-cols-2 md:items-stretch"
+        >
+          {cards.map((workspace, index) => (
+            <TripListCard
+              key={workspace.workspace_id}
+              workspace={workspace}
+              cityGroups={cityGroups}
+              density="duo"
+              index={index}
+              onOpen={onOpen}
+            />
+          ))}
+        </motion.div>
+      ) : (
+        <motion.div
+          layout
+          className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-3"
+        >
+          {cards.map((workspace, index) => (
+            <TripListCard
+              key={workspace.workspace_id}
+              workspace={workspace}
+              cityGroups={cityGroups}
+              density="multi"
+              index={index}
+              onOpen={onOpen}
+            />
+          ))}
+        </motion.div>
+      )}
+    </div>
   )
 }
 
@@ -1160,6 +1254,7 @@ export function PlannerTab() {
           cityGroups={cityGroups}
           currentUserId={userId}
           onOpen={openWorkspace}
+          onCreate={() => setShowCreate(true)}
         />
       )}
 

@@ -62,6 +62,31 @@ const PRESETS: { id: DatePresetId; label: string }[] = [
 const TRIPS_STALE_MS = 60_000
 type HubFilter = 'organize' | 'upcoming' | 'past'
 
+const HUB_TABS: { key: HubFilter; label: string }[] = [
+  { key: 'upcoming', label: 'À venir' },
+  { key: 'organize', label: 'En cours' },
+  { key: 'past', label: 'Passés' },
+]
+
+const HUB_EMPTY: Record<
+  HubFilter,
+  { title: string; body: string; cta?: string }
+> = {
+  upcoming: {
+    title: 'Aucun voyage à venir',
+    body: 'Dès qu’un vol est choisi ou que le séjour est composé, le voyage apparaît ici.',
+  },
+  organize: {
+    title: 'Rien en cours',
+    body: 'Ici : les voyages encore à construire. Crée un voyage, scanne les prix, puis invite tes proches.',
+    cta: 'Créer un voyage',
+  },
+  past: {
+    title: 'Aucun voyage passé',
+    body: 'Les séjours terminés restent ici, pour les retrouver facilement.',
+  },
+}
+
 function tripAsWorkspace(
   trip: PlannedTrip,
   currentUserId?: string | null,
@@ -103,7 +128,7 @@ export function PlannerScreen() {
   const { viewUser, isGuest } = useAuth()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
-  const [filter, setFilter] = useState<HubFilter>('organize')
+  const [filter, setFilter] = useState<HubFilter>('upcoming')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -207,12 +232,15 @@ export function PlannerScreen() {
     [filter, workspaces],
   )
 
+  // Pick a useful default once — never yank the user off an empty tab they chose.
+  const didInitFilter = useRef(false)
   React.useEffect(() => {
-    if (!workspaces.length || counts[filter] > 0) return
-    if (counts.organize > 0) setFilter('organize')
-    else if (counts.upcoming > 0) setFilter('upcoming')
+    if (didInitFilter.current || !workspaces.length) return
+    didInitFilter.current = true
+    if (counts.upcoming > 0) setFilter('upcoming')
+    else if (counts.organize > 0) setFilter('organize')
     else if (counts.past > 0) setFilter('past')
-  }, [counts, filter, workspaces.length])
+  }, [counts, workspaces.length])
 
   const openWorkspace = (workspace: TravelWorkspace) => {
     if (workspace.planned_trip_id) {
@@ -304,13 +332,7 @@ export function PlannerScreen() {
                 Crée, scanne les prix, invite tes proches.
               </Text>
               <View style={styles.hubTabs}>
-                {(
-                  [
-                    ['organize', 'À organiser'],
-                    ['upcoming', 'À venir'],
-                    ['past', 'Passés'],
-                  ] as const
-                ).map(([key, label]) => (
+                {HUB_TABS.map(({ key, label }) => (
                   <Pressable
                     key={key}
                     onPress={() => setFilter(key)}
@@ -348,14 +370,16 @@ export function PlannerScreen() {
                     </LinearGradient>
                   </View>
                   <Text style={styles.emptyTitle}>
-                    {workspaces.length ? 'Rien dans cette catégorie' : 'Ton premier voyage'}
+                    {workspaces.length
+                      ? HUB_EMPTY[filter].title
+                      : 'Ton premier voyage'}
                   </Text>
                   <Text style={styles.emptyBody}>
                     {workspaces.length
-                      ? 'Tes voyages apparaîtront ici au fil de leur progression.'
+                      ? HUB_EMPTY[filter].body
                       : 'Choisis une ville, trouve un vol, puis compose tout le séjour.'}
                   </Text>
-                  {!workspaces.length || filter === 'organize' ? (
+                  {!workspaces.length || HUB_EMPTY[filter].cta ? (
                     <Pressable
                       onPress={() => setShowCreate(true)}
                       style={({ pressed }) => [
@@ -363,7 +387,11 @@ export function PlannerScreen() {
                         pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
                       ]}
                     >
-                      <Text style={styles.emptyCtaText}>Créer un voyage</Text>
+                      <Text style={styles.emptyCtaText}>
+                        {workspaces.length
+                          ? HUB_EMPTY[filter].cta || 'Créer un voyage'
+                          : 'Créer un voyage'}
+                      </Text>
                     </Pressable>
                   ) : null}
                 </>
