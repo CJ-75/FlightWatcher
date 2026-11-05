@@ -23,7 +23,9 @@ import {
   boardLabelFr,
   buildStayPipeline,
   distantAirportLine,
+  hotelCancelConfirmBodyFr,
   hotelCancelLabel,
+  hotelCancelSuccessBodyFr,
   hotelStarsLabel,
   primaryAirportCode,
   resolveCarrierBooking,
@@ -332,6 +334,13 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     refundable: hotelOpt?.refundable,
     cancel_deadline: hotelOpt?.cancel_deadline,
   })
+  const cancelPolicyForAction = hotelCancelLabel(
+    {
+      refundable: hotelOpt?.refundable,
+      cancel_deadline: hotelOpt?.cancel_deadline,
+    },
+    { includeNonRefundable: true },
+  )
   const distFr = formatDistance(hotelOpt?.distance_m ?? null)
 
   const flightBookingStatus = String(
@@ -687,14 +696,23 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     }
   }
 
+  const hotelPaidTotal =
+    chargedHotelTotal != null && chargedHotelTotal > 0
+      ? chargedHotelTotal
+      : party.hotelTotal > 0
+        ? party.hotelTotal
+        : pl.hotel_charged_total != null
+          ? Number(pl.hotel_charged_total)
+          : null
+
   const onCancelHotelBooking = useCallback(() => {
     if (cancellingHotel) return
-    const policyHint = cancelFr
-      ? `Conditions : ${cancelFr}`
-      : 'Selon les conditions de l’hôtel, des frais peuvent s’appliquer.'
     Alert.alert(
       'Annuler la réservation ?',
-      `${policyHint}\n\nTu pourras choisir un autre hôtel ensuite.`,
+      hotelCancelConfirmBodyFr({
+        paidTotal: hotelPaidTotal,
+        policyLabel: cancelPolicyForAction,
+      }),
       [
         { text: 'Garder', style: 'cancel' },
         {
@@ -735,7 +753,15 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                 void getApi().trackMyTripEvent(draftToken, 'hotel_cancelled', {
                   booking_id: bookingId,
                   refund_amount: res.refund_amount ?? null,
+                  cancellation_fee: res.cancellation_fee ?? null,
                 })
+                Alert.alert(
+                  'C’est fait',
+                  hotelCancelSuccessBodyFr({
+                    refundAmount: res.refund_amount,
+                    cancellationFee: res.cancellation_fee,
+                  }),
+                )
               } catch (e) {
                 Alert.alert(
                   'Annulation',
@@ -751,7 +777,13 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         },
       ],
     )
-  }, [cancelFr, cancellingHotel, draftToken, pl.hotel_booking_id])
+  }, [
+    cancelPolicyForAction,
+    cancellingHotel,
+    draftToken,
+    hotelPaidTotal,
+    pl.hotel_booking_id,
+  ])
 
   if (loading && !draft) {
     return (

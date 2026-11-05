@@ -21,7 +21,9 @@ import {
   HOTEL_CTA_FR,
   primaryAirportCode,
   distantAirportLine,
+  hotelCancelConfirmBodyFr,
   hotelCancelLabel,
+  hotelCancelSuccessBodyFr,
   resolveCarrierBooking,
   resolveDraftPartyPrice,
   resolveFlightStepStatus,
@@ -129,6 +131,7 @@ export default function MyTrip() {
   const [switchingHotel, setSwitchingHotel] = useState(false)
   const [cancellingHotel, setCancellingHotel] = useState(false)
   const [cancelHotelError, setCancelHotelError] = useState<string | null>(null)
+  const [hotelCancelNotice, setHotelCancelNotice] = useState<string | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [hotelBookingEnabled, setHotelBookingEnabled] = useState(true)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
@@ -1465,14 +1468,33 @@ export default function MyTrip() {
         }
       : null,
   )
+  const cancelPolicyForAction = hotelCancelLabel(
+    hotelObj
+      ? {
+          refundable: hotelObj.refundable as boolean | null | undefined,
+          cancel_deadline:
+            hotelObj.cancel_deadline != null
+              ? String(hotelObj.cancel_deadline)
+              : null,
+        }
+      : null,
+    { includeNonRefundable: true },
+  )
 
   const hotelBookingId = String(
     payload.hotel_booking_id || draft?.payload?.hotel_booking_id || '',
   ).trim()
+  const hotelPaidTotal =
+    payload.hotel_charged_total != null
+      ? Number(payload.hotel_charged_total)
+      : party.hotelTotal > 0
+        ? party.hotelTotal
+        : null
 
   const onCancelHotelBooking = useCallback(async () => {
     if (!token || cancellingHotel) return
     setCancelHotelError(null)
+    setHotelCancelNotice(null)
     let bookingId = hotelBookingId
     if (!bookingId) {
       try {
@@ -1493,12 +1515,12 @@ export default function MyTrip() {
       setCancelHotelError('Réservation introuvable pour ce voyage.')
       return
     }
-    const policyHint = cancelLabel
-      ? `\n\nConditions : ${cancelLabel}`
-      : '\n\nSelon les conditions de l’hôtel, des frais peuvent s’appliquer.'
     if (
       !window.confirm(
-        `Annuler la réservation d’hôtel ?${policyHint}\n\nTu pourras en choisir une autre ensuite.`,
+        `Annuler la réservation d’hôtel ?\n\n${hotelCancelConfirmBodyFr({
+          paidTotal: hotelPaidTotal,
+          policyLabel: cancelPolicyForAction,
+        })}`,
       )
     ) {
       return
@@ -1513,6 +1535,11 @@ export default function MyTrip() {
       } else {
         await load()
       }
+      const notice = hotelCancelSuccessBodyFr({
+        refundAmount: res.refund_amount,
+        cancellationFee: res.cancellation_fee,
+      })
+      setHotelCancelNotice(notice)
       track('hotel_cancelled', {
         booking_id: bookingId,
         refund_amount: res.refund_amount ?? null,
@@ -1525,7 +1552,15 @@ export default function MyTrip() {
     } finally {
       setCancellingHotel(false)
     }
-  }, [cancelLabel, cancellingHotel, hotelBookingId, load, token, track])
+  }, [
+    cancelPolicyForAction,
+    cancellingHotel,
+    hotelBookingId,
+    hotelPaidTotal,
+    load,
+    token,
+    track,
+  ])
 
   return (
     <div
@@ -1961,6 +1996,19 @@ export default function MyTrip() {
                 </div>
               ) : null}
 
+              {hotelCancelNotice && !hotelBooked ? (
+                <div className="rounded-xl bg-slate-900 text-white px-3 py-3 text-sm space-y-1">
+                  <p className="font-bold whitespace-pre-line">{hotelCancelNotice}</p>
+                  <button
+                    type="button"
+                    onClick={() => setHotelCancelNotice(null)}
+                    className="text-xs font-semibold text-white/70 underline-offset-2 hover:underline"
+                  >
+                    OK
+                  </button>
+                </div>
+              ) : null}
+
               {hotelBooked ? (
                 <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-3 text-sm space-y-3">
                   <div className="space-y-1">
@@ -1975,8 +2023,10 @@ export default function MyTrip() {
                         Confirmation envoyée à {hotelHolderEmail}
                       </p>
                     ) : null}
-                    {cancelLabel ? (
-                      <p className="text-slate-600 text-xs">{cancelLabel}</p>
+                    {cancelLabel || cancelPolicyForAction ? (
+                      <p className="text-slate-600 text-xs">
+                        {cancelLabel || cancelPolicyForAction}
+                      </p>
                     ) : null}
                   </div>
                   <button

@@ -78,6 +78,45 @@ export function hotelCancelLabel(
   return short ? 'Annul. gratuite' : 'Annulation gratuite'
 }
 
+/** Confirm copy before cancelling a paid hotel (Mon voyage). */
+export function hotelCancelConfirmBodyFr(opts: {
+  paidTotal?: number | null
+  policyLabel?: string | null
+}): string {
+  const lines: string[] = []
+  const paid = opts.paidTotal != null && Number(opts.paidTotal) > 0
+    ? Math.round(Number(opts.paidTotal))
+    : null
+  if (paid != null) lines.push(`Montant payé : ${paid} €`)
+  lines.push(
+    opts.policyLabel?.trim() ||
+      'Selon les conditions de l’hôtel, des frais peuvent s’appliquer.',
+  )
+  lines.push('Tu pourras choisir un autre hôtel ensuite.')
+  return lines.join('\n\n')
+}
+
+/** Success copy after LiteAPI cancel. */
+export function hotelCancelSuccessBodyFr(opts: {
+  refundAmount?: number | null
+  cancellationFee?: number | null
+}): string {
+  const refund =
+    opts.refundAmount != null && Number(opts.refundAmount) > 0
+      ? Math.round(Number(opts.refundAmount) * 100) / 100
+      : null
+  const fee =
+    opts.cancellationFee != null && Number(opts.cancellationFee) > 0
+      ? Math.round(Number(opts.cancellationFee) * 100) / 100
+      : null
+  if (refund != null && fee != null) {
+    return `Réservation annulée.\nRemboursement : ${refund} € · Frais : ${fee} €`
+  }
+  if (refund != null) return `Réservation annulée.\nRemboursement : ${refund} €`
+  if (fee != null) return `Réservation annulée.\nFrais d’annulation : ${fee} €`
+  return 'Réservation annulée. Le remboursement suit les conditions de l’hôtel.'
+}
+
 /** Recompute price_pp when switching hotel from alt_hotels (cache only). */
 export function pricePpWithHotel(
   deal: TravelDeal,
