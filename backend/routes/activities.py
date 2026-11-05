@@ -26,6 +26,20 @@ def _require_user(request: Request) -> str:
     return user_id
 
 
+def _liked_activities_table_missing(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return (
+        "liked_activities" in msg
+        and (
+            "does not exist" in msg
+            or "could not find" in msg
+            or "pgrst205" in msg
+            or "42p01" in msg
+            or "undefined_table" in msg
+        )
+    )
+
+
 class LikeActivityRequest(BaseModel):
     """Snapshot ActivityCardModel (camelCase) at like time."""
 
@@ -240,6 +254,11 @@ async def list_liked_activities(request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        if _liked_activities_table_missing(e):
+            print(
+                "⚠️ liked_activities table missing — apply apply_liked_activities_migration.sql"
+            )
+            return []
         raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
 
 
@@ -261,6 +280,11 @@ async def list_liked_activity_ids(request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        if _liked_activities_table_missing(e):
+            print(
+                "⚠️ liked_activities table missing — apply apply_liked_activities_migration.sql"
+            )
+            return []
         raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
 
 
@@ -307,6 +331,11 @@ async def like_activity(body: LikeActivityRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        if _liked_activities_table_missing(e):
+            raise HTTPException(
+                status_code=503,
+                detail="liked_activities manquante — appliquer apply_liked_activities_migration.sql",
+            )
         raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
 
 
@@ -328,6 +357,11 @@ async def unlike_activity(product_code: str, request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        if _liked_activities_table_missing(e):
+            raise HTTPException(
+                status_code=503,
+                detail="liked_activities manquante — appliquer apply_liked_activities_migration.sql",
+            )
         raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
 
 
