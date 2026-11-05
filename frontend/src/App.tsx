@@ -61,12 +61,15 @@ import { prefetchActivitiesCatalog } from './utils/activitiesCatalogCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import {
+  clearFlightReturnAsk,
   clearPendingHotelUpsell,
   createMyTripComposeFromTrip,
   openPartnerBookSync,
   readPendingHotelUpsell,
+  resolveTripPriceSource,
   trackPartnerAnalytics,
 } from './utils/partnerBook'
+import { shouldShowFlightReturnAsk } from '@flightwatcher/shared'
 import {
   ACTIVITY_ADDED_TO_PLANNER_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
@@ -1080,6 +1083,24 @@ function Dashboard() {
   const searchPassengersForBook =
     lastSearchInfo?.passengers || currentRequest?.passengers || 1
 
+  const revealPostBookFromPending = useCallback(() => {
+    const pending = readPendingHotelUpsell()
+    if (!pending?.trip || pending.skippedBanner) return false
+    if (!pending.awaitingReturnPrompt) return false
+    const askShape = {
+      draftToken: String(pending.draftToken || 'pending'),
+      at: pending.createdAt,
+      promptOnReturn: true as const,
+    }
+    if (!shouldShowFlightReturnAsk(askShape)) return false
+    setPostBookDraftToken(pending.draftToken || null)
+    setPostBookTrip(pending.trip)
+    leftForFlightBook.current = false
+    pendingPostBookTrip.current = null
+    pendingPostBookToken.current = null
+    return true
+  }, [])
+
   const handlePartnerBook = (trip: EnrichedTripResponse) => {
     const popup = window.open('about:blank', '_blank')
     if (!popup) {
@@ -1096,22 +1117,30 @@ function Dashboard() {
       markFlightBooked: false,
     })
       .then(async (draft) => {
+        const preview = resolveTripPriceSource(
+          trip,
+          searchPassengersForBook,
+          language,
+        )
+        const isTravelpayouts = preview.partnerId === 'aviasales'
         const source = openPartnerBookSync({
           trip,
           passengers: searchPassengersForBook,
           language,
           searchEventId: currentSearchEventId,
           draftId: draft.id,
+          draftToken: draft.draft_token,
           targetWindow: popup,
+          awaitingReturnPrompt: !isTravelpayouts,
         })
-        const isTravelpayouts = source.partnerId === 'aviasales'
         await getApiClient().updateMyTripFlightBookingStatus(draft.draft_token, {
           status: isTravelpayouts ? 'pending_partner' : 'redirected',
           provider: source.partnerId,
         })
         setPostBookDraftToken(draft.draft_token)
-        // Travelpayouts: suivi auto. Ryanair/compagnie: demander au retour de l’onglet.
+        // Travelpayouts: lightbox immédiat (suivi auto). Compagnie: au retour d’onglet.
         if (isTravelpayouts) {
+          clearFlightReturnAsk(draft.draft_token)
           setPostBookTrip(trip)
         } else {
           pendingPostBookTrip.current = trip
@@ -1131,6 +1160,7 @@ function Dashboard() {
   useEffect(() => {
     const onReturn = () => {
       if (document.visibilityState !== 'visible') return
+      if (revealPostBookFromPending()) return
       if (!leftForFlightBook.current) return
       if (Date.now() - leftForFlightBookAt.current < 1200) return
       leftForFlightBook.current = false
@@ -1147,10 +1177,16 @@ function Dashboard() {
       document.removeEventListener('visibilitychange', onReturn)
       window.removeEventListener('focus', onReturn)
     }
-  }, [])
+  }, [revealPostBookFromPending])
+
+  // Remount / refresh: restore PostBook if airline return was pending.
+  useEffect(() => {
+    revealPostBookFromPending()
+  }, [revealPostBookFromPending])
 
   const handleAddToPlanner = async (trip: EnrichedTripResponse) => {
     clearPendingHotelUpsell()
+    clearFlightReturnAsk()
     setPostBookTrip(null)
     setPostBookDraftToken(null)
     const user = await getCurrentUser()
@@ -1206,6 +1242,7 @@ function Dashboard() {
         })
       }
       clearPendingHotelUpsell()
+      clearFlightReturnAsk(draftToken)
       setPostBookTrip(null)
       setPostBookDraftToken(null)
       const user = await getCurrentUser()
@@ -1248,6 +1285,7 @@ function Dashboard() {
       })
     }
     clearPendingHotelUpsell()
+    clearFlightReturnAsk(postBookDraftToken)
     setPostBookTrip(null)
     setPostBookDraftToken(null)
   }
@@ -3242,9 +3280,19 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       {variant === 'favorites' && (
       <>
       <div className="relative mb-7 sm:mb-9">
-        <p className="app-kicker mb-1.5">{t('nav.favorites')}</p>
-        <h2 className="app-title">{t('favorites.title')}</h2>
-        <p className="app-subtitle mt-1.5">{t('favorites.subtitle')}</p>
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div>
+            <p className="app-kicker mb-1.5">{t('nav.favorites')}</p>
+            <h2 className="app-title">{t('favorites.title')}</h2>
+            <p className="app-subtitle mt-1.5">{t('favorites.subtitle')}</p>
+          </div>
+          <Link
+            to="/bookings"
+            className="inline-flex self-start sm:self-auto items-center justify-center rounded-2xl border border-orange-100 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm hover:bg-[#FFF8F3] min-h-[44px]"
+          >
+            Mes réservations
+          </Link>
+        </div>
       </div>
 
       <div className="relative">

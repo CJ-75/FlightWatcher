@@ -37,6 +37,11 @@ import { getAppConfig } from '../utils/configCache'
 import { listTripItemsCached } from '../utils/tripItemsCache'
 import { getCurrentSession } from '../lib/supabase'
 import { rememberTrip } from '../utils/tripRecovery'
+import {
+  clearFlightReturnAsk,
+  consumeFlightReturnAsk,
+  markFlightReturnAsk,
+} from '../utils/partnerBook'
 import { PaymentCardMarks } from '../components/PaymentCardMarks'
 import { MyTripHotelPanel } from '../components/MyTripHotelPanel'
 
@@ -122,6 +127,7 @@ export default function MyTrip() {
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [hotelBookingEnabled, setHotelBookingEnabled] = useState(true)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
   const activitiesSectionRef = useRef<HTMLElement | null>(null)
@@ -477,6 +483,9 @@ export default function MyTrip() {
           cfg.planner_activities_enabled === true ||
             cfg.activities_ui_enabled === true,
         )
+        setHotelBookingEnabled(
+          cfg.booking_enabled !== false && cfg.prod_readonly !== true,
+        )
       })
       .catch(() => undefined)
   }, [])
@@ -588,6 +597,12 @@ export default function MyTrip() {
   const onFlightClick = async () => {
     leftForFlight.current = true
     leftForFlightAt.current = Date.now()
+    if (token) {
+      markFlightReturnAsk({
+        draftToken: token,
+        promptOnReturn: !isTravelpayouts,
+      })
+    }
     track('company_click', { airline: airlineName, site: carrier.siteLabel })
     if (!token) return
     try {
@@ -627,6 +642,7 @@ export default function MyTrip() {
     setMarkingBooked(true)
     setAskFlightBooked(false)
     leftForFlight.current = false
+    clearFlightReturnAsk(token)
     const nowIso = new Date().toISOString()
     setDraft((prev) => {
       if (!prev) return prev
@@ -662,29 +678,47 @@ export default function MyTrip() {
   const onFlightNotYet = () => {
     setAskFlightBooked(false)
     leftForFlight.current = false
+    clearFlightReturnAsk(token)
     track('flight_booked_no')
   }
 
   useEffect(() => {
+    const maybeAsk = () => {
+      if (flightBooked) {
+        setAskFlightBooked(false)
+        clearFlightReturnAsk(token)
+        return
+      }
+      const persisted = consumeFlightReturnAsk({
+        draftToken: token,
+        alreadyBooked: flightBooked,
+      })
+      if (persisted || leftForFlight.current) {
+        if (
+          leftForFlight.current &&
+          Date.now() - leftForFlightAt.current < 1200 &&
+          !persisted
+        ) {
+          return
+        }
+        if (!isTravelpayouts) setAskFlightBooked(true)
+      }
+    }
     const onReturn = () => {
       if (document.visibilityState !== 'visible') return
       // Re-sync vol / hôtel / pipeline after partner tab or checkout.
       void load({ silent: true })
       void refreshTripItems()
-      if (flightBooked) {
-        setAskFlightBooked(false)
-        return
-      }
-      if (!leftForFlight.current) return
-      // Ignore instant focus blips right after click
-      if (Date.now() - leftForFlightAt.current < 1200) return
-      if (!isTravelpayouts) setAskFlightBooked(true)
+      maybeAsk()
     }
+    maybeAsk()
     document.addEventListener('visibilitychange', onReturn)
+    window.addEventListener('focus', onReturn)
     return () => {
       document.removeEventListener('visibilitychange', onReturn)
+      window.removeEventListener('focus', onReturn)
     }
-  }, [flightBooked, isTravelpayouts, load, refreshTripItems])
+  }, [flightBooked, isTravelpayouts, load, refreshTripItems, token])
 
   const copyRouteHint = async () => {
     if (!carrier.copyHint) return
@@ -838,6 +872,10 @@ export default function MyTrip() {
     async (overrideDraft?: MyTripDraft | null) => {
       const d = overrideDraft || draft
       if (!d || hotelBooked) return
+      if (!hotelBookingEnabled) {
+        setError('Réservation hôtel temporairement fermée (phase calibration).')
+        return
+      }
       const pl = (d.payload || {}) as Record<string, unknown>
       const hotel =
         (pl.hotel as Record<string, unknown> | undefined) ||
@@ -924,6 +962,7 @@ export default function MyTrip() {
       buildDealFromMyTrip,
       draft,
       hotelBooked,
+      hotelBookingEnabled,
       searchParams,
       setSearchParams,
       token,
@@ -1305,6 +1344,18 @@ export default function MyTrip() {
         )
       }
       if (nextAction.id === 'hotel_pay') {
+        if (!hotelBookingEnabled) {
+          return (
+            <div className="w-full space-y-2">
+              <button type="button" disabled className={`${cls} opacity-60`}>
+                Paiement hôtel bientôt disponible
+              </button>
+              <p className="text-xs text-center text-slate-500 leading-relaxed">
+                Réservation hôtel temporairement fermée (phase calibration).
+              </p>
+            </div>
+          )
+        }
         return (
           <div className="w-full space-y-2">
             <button

@@ -35,6 +35,10 @@ import {
   type MyTripDraft,
   type StayStepId,
 } from '@flightwatcher/shared'
+import {
+  clearFlightReturnAsk,
+  markFlightReturnAsk,
+} from '../lib/partnerBook'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
@@ -475,10 +479,12 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const markFlight = async (yes: boolean) => {
     if (!yes) {
       setAskFlight(false)
+      void clearFlightReturnAsk(draftToken)
       void getApi().trackMyTripEvent(draftToken, 'flight_booked_no')
       return
     }
     setMarking(true)
+    void clearFlightReturnAsk(draftToken)
     const nowIso = new Date().toISOString()
     setDraft((prev) => {
       if (!prev) return prev
@@ -535,6 +541,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     )
     leftForFlight.current = true
     askFlightOnReturn.current = !isTravelpayouts
+    void markFlightReturnAsk({
+      draftToken,
+      promptOnReturn: !isTravelpayouts,
+    })
     void getApi().trackMyTripEvent(draftToken, 'company_click', {
       site: resolved.siteLabel || carrier.siteLabel,
       source: 'mobile',

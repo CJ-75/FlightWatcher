@@ -4,8 +4,13 @@
 import {
   cityDisplayNameFr,
   dateFromFlightIso,
+  FLIGHT_RETURN_ASK_KEY,
+  parseFlightReturnAsk,
   primaryAirportCode,
   resolvePriceSourceBooking,
+  serializeFlightReturnAsk,
+  shouldShowFlightReturnAsk,
+  type FlightReturnAsk,
   type MyTripDraft,
   type PriceSourceBooking,
 } from '@flightwatcher/shared'
@@ -36,6 +41,64 @@ export type PendingHotelUpsell = {
   createdAt: number
   /** User already chose « Ajouter un hôtel » — no return banner */
   skippedBanner?: boolean
+  /** MyTrip / Vols draft — spine for ask-booked restore */
+  draftToken?: string | null
+  /** Show PostBook lightbox when user returns from airline tab */
+  awaitingReturnPrompt?: boolean
+}
+
+export function markFlightReturnAsk(opts: {
+  draftToken: string
+  promptOnReturn?: boolean
+}): void {
+  const draftToken = String(opts.draftToken || '').trim()
+  if (!draftToken) return
+  const payload: FlightReturnAsk = {
+    draftToken,
+    at: Date.now(),
+    promptOnReturn: opts.promptOnReturn !== false,
+  }
+  try {
+    sessionStorage.setItem(FLIGHT_RETURN_ASK_KEY, serializeFlightReturnAsk(payload))
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function readFlightReturnAsk(): FlightReturnAsk | null {
+  try {
+    return parseFlightReturnAsk(sessionStorage.getItem(FLIGHT_RETURN_ASK_KEY))
+  } catch {
+    return null
+  }
+}
+
+export function clearFlightReturnAsk(draftToken?: string | null): void {
+  try {
+    if (draftToken) {
+      const cur = readFlightReturnAsk()
+      if (cur && cur.draftToken !== draftToken) return
+    }
+    sessionStorage.removeItem(FLIGHT_RETURN_ASK_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function consumeFlightReturnAsk(opts?: {
+  draftToken?: string | null
+  alreadyBooked?: boolean
+}): FlightReturnAsk | null {
+  const ask = readFlightReturnAsk()
+  if (
+    !shouldShowFlightReturnAsk(ask, {
+      draftToken: opts?.draftToken,
+      alreadyBooked: opts?.alreadyBooked,
+    })
+  ) {
+    return null
+  }
+  return ask
 }
 
 export function tripBookKey(trip: EnrichedTripResponse): string {
@@ -132,10 +195,13 @@ export function openPartnerBookSync(opts: {
   searchEventId?: string | null
   /** Stable draft id used as Travelpayouts SubID for postback attribution. */
   draftId?: string | null
+  draftToken?: string | null
   /** Pre-opened tab, useful when draft creation must finish before redirect. */
   targetWindow?: Window | null
   /** If true, do not show return banner (e.g. after « Ajouter un hôtel ») */
   skipReturnBanner?: boolean
+  /** Prompt PostBook / ask-booked when user returns (airline direct). */
+  awaitingReturnPrompt?: boolean
 }): PriceSourceBooking {
   const {
     trip,
@@ -143,8 +209,10 @@ export function openPartnerBookSync(opts: {
     language,
     searchEventId,
     draftId,
+    draftToken,
     targetWindow,
     skipReturnBanner,
+    awaitingReturnPrompt,
   } = opts
   const resolved = resolveTripPriceSource(trip, passengers, language)
   let primaryUrl = String(resolved.primaryUrl || '').trim()
@@ -191,6 +259,7 @@ export function openPartnerBookSync(opts: {
     trip.aller?.destinationFull?.split(',')[0]?.trim(),
   )
 
+  const token = String(draftToken || '').trim() || null
   writePendingHotelUpsell({
     tripKey: tripBookKey(trip),
     city,
@@ -210,7 +279,12 @@ export function openPartnerBookSync(opts: {
     trip,
     createdAt: Date.now(),
     skippedBanner: Boolean(skipReturnBanner),
+    draftToken: token,
+    awaitingReturnPrompt: Boolean(awaitingReturnPrompt),
   })
+  if (token && awaitingReturnPrompt) {
+    markFlightReturnAsk({ draftToken: token, promptOnReturn: true })
+  }
 
   return ps
 }

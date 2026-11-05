@@ -6,9 +6,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   cityDisplayNameFr,
   dateFromFlightIso,
+  FLIGHT_RETURN_ASK_KEY,
+  parseFlightReturnAsk,
   primaryAirportCode,
   resolvePriceSourceBooking,
+  serializeFlightReturnAsk,
+  shouldShowFlightReturnAsk,
   type EnrichedTripResponse,
+  type FlightReturnAsk,
   type PriceSourceBooking,
 } from '@flightwatcher/shared'
 import { getApi } from './client'
@@ -90,6 +95,65 @@ export async function clearPendingHotelUpsell(): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+export async function markFlightReturnAsk(opts: {
+  draftToken: string
+  promptOnReturn?: boolean
+}): Promise<void> {
+  const draftToken = String(opts.draftToken || '').trim()
+  if (!draftToken) return
+  const payload: FlightReturnAsk = {
+    draftToken,
+    at: Date.now(),
+    promptOnReturn: opts.promptOnReturn !== false,
+  }
+  try {
+    await AsyncStorage.setItem(
+      FLIGHT_RETURN_ASK_KEY,
+      serializeFlightReturnAsk(payload),
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function readFlightReturnAsk(): Promise<FlightReturnAsk | null> {
+  try {
+    return parseFlightReturnAsk(await AsyncStorage.getItem(FLIGHT_RETURN_ASK_KEY))
+  } catch {
+    return null
+  }
+}
+
+export async function clearFlightReturnAsk(
+  draftToken?: string | null,
+): Promise<void> {
+  try {
+    if (draftToken) {
+      const cur = await readFlightReturnAsk()
+      if (cur && cur.draftToken !== draftToken) return
+    }
+    await AsyncStorage.removeItem(FLIGHT_RETURN_ASK_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function consumeFlightReturnAsk(opts?: {
+  draftToken?: string | null
+  alreadyBooked?: boolean
+}): Promise<FlightReturnAsk | null> {
+  const ask = await readFlightReturnAsk()
+  if (
+    !shouldShowFlightReturnAsk(ask, {
+      draftToken: opts?.draftToken,
+      alreadyBooked: opts?.alreadyBooked,
+    })
+  ) {
+    return null
+  }
+  return ask
 }
 
 export function trackPartnerEvent(body: Record<string, unknown>): void {

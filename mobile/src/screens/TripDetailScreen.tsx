@@ -65,6 +65,9 @@ import { TravelersSection } from '../components/TravelersSection'
 import { Button } from '../components/ui/Button'
 import {
   createMyTripComposeFromTrip,
+  clearFlightReturnAsk,
+  consumeFlightReturnAsk,
+  markFlightReturnAsk,
   preparePartnerBook,
   resolveTripPriceSource,
 } from '../lib/partnerBook'
@@ -154,6 +157,8 @@ export function TripDetailScreen() {
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
   const extrasRef = useRef<View>(null)
+  const scrollRef = useRef<ScrollView>(null)
+  const extrasOffsetY = useRef(0)
   const leftForFlight = useRef(false)
   const leftForFlightNeedsAsk = useRef(false)
 
@@ -960,6 +965,7 @@ export function TripDetailScreen() {
         )
         return
       }
+      void clearFlightReturnAsk(token)
 
       const nowIso = new Date().toISOString()
       setFlightDraft((prev) => {
@@ -1062,6 +1068,8 @@ export function TripDetailScreen() {
       }
 
       // Ensure execution draft exists before leaving — needed for "Oui, c’est réservé".
+      let askToken =
+        flightDraft?.draft_token || workspace?.draft_token || null
       if (!(__DEV__ && isGuest)) {
         try {
           const draft =
@@ -1077,6 +1085,7 @@ export function TripDetailScreen() {
             },
           )
           setFlightDraft(updated)
+          askToken = updated.draft_token || draft.draft_token
         } catch {
           /* still open partner — confirm will recreate draft if needed */
         }
@@ -1084,6 +1093,13 @@ export function TripDetailScreen() {
 
       leftForFlight.current = true
       leftForFlightNeedsAsk.current = !isTravelpayouts
+      const token = askToken
+      if (token) {
+        void markFlightReturnAsk({
+          draftToken: token,
+          promptOnReturn: !isTravelpayouts,
+        })
+      }
       setFlightBookingBusy(false)
 
       await openInAppBrowser(navigation, primaryUrl, 'Réserver le vol')
@@ -1100,7 +1116,11 @@ export function TripDetailScreen() {
           'Ton vol est réservé ?',
           'Tu reviens de Ryanair / la compagnie.',
           [
-            { text: 'Pas encore', style: 'cancel' },
+            {
+              text: 'Pas encore',
+              style: 'cancel',
+              onPress: () => void clearFlightReturnAsk(token),
+            },
             {
               text: 'Oui, c’est réservé',
               onPress: () => void confirmAirlineFlight(),
@@ -1124,23 +1144,43 @@ export function TripDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Fallback when the WebView stack screen was used instead of expo-web-browser.
-      if (!leftForFlight.current) return
+      const token =
+        flightDraft?.draft_token || workspace?.draft_token || null
+      const askFromMemory =
+        leftForFlight.current && leftForFlightNeedsAsk.current
       leftForFlight.current = false
-      if (!leftForFlightNeedsAsk.current) return
       leftForFlightNeedsAsk.current = false
-      if (reservationFlags.flightBooked) return
-      Alert.alert('Ton vol est réservé ?', 'Tu reviens de Ryanair / la compagnie.', [
-        {
-          text: 'Pas encore',
-          style: 'cancel',
-        },
-        {
-          text: 'Oui, c’est réservé',
-          onPress: () => void confirmAirlineFlight(),
-        },
-      ])
-    }, [reservationFlags.flightBooked]),
+      if (reservationFlags.flightBooked) {
+        void clearFlightReturnAsk(token)
+        return
+      }
+      void (async () => {
+        const persisted = await consumeFlightReturnAsk({
+          draftToken: token,
+          alreadyBooked: reservationFlags.flightBooked,
+        })
+        if (!askFromMemory && !persisted) return
+        Alert.alert(
+          'Ton vol est réservé ?',
+          'Tu reviens de Ryanair / la compagnie.',
+          [
+            {
+              text: 'Pas encore',
+              style: 'cancel',
+              onPress: () => void clearFlightReturnAsk(token),
+            },
+            {
+              text: 'Oui, c’est réservé',
+              onPress: () => void confirmAirlineFlight(),
+            },
+          ],
+        )
+      })()
+    }, [
+      flightDraft?.draft_token,
+      reservationFlags.flightBooked,
+      workspace?.draft_token,
+    ]),
   )
 
   const reservationToken =
@@ -1221,7 +1261,10 @@ export function TripDetailScreen() {
       return
     }
     if (id === 'activities' && plannerActivitiesEnabled) {
-      Alert.alert('Activités', 'Plus bas sur cette fiche : idées d’activités.')
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, extrasOffsetY.current - 16),
+        animated: true,
+      })
     }
   }
 
@@ -1252,6 +1295,7 @@ export function TripDetailScreen() {
     <View style={styles.root}>
       <ScreenBackground />
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         scrollEnabled={!gallerySwipeActive}
         contentContainerStyle={{
@@ -1646,7 +1690,13 @@ export function TripDetailScreen() {
       ) : null}
 
       {!scanning && plannerActivitiesEnabled ? (
-        <View ref={extrasRef} style={styles.section}>
+        <View
+          ref={extrasRef}
+          style={styles.section}
+          onLayout={(e) => {
+            extrasOffsetY.current = e.nativeEvent.layout.y
+          }}
+        >
           <View style={[styles.extrasCard, shadow.soft]}>
             <ImageBackground
               source={{ uri: destinationImage }}

@@ -26,7 +26,12 @@ import { DestinationCard } from './DestinationCard'
 import { BudgetSlider } from './BudgetSlider'
 import { PassengerStepper } from './PassengerStepper'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { openPartnerBookSync } from '../utils/partnerBook'
+import {
+  clearFlightReturnAsk,
+  consumeFlightReturnAsk,
+  markFlightReturnAsk,
+  openPartnerBookSync,
+} from '../utils/partnerBook'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
 import {
@@ -1553,7 +1558,9 @@ function TripDetailView({
           passengers: pax,
           language,
           draftId: draft.id,
+          draftToken: draft.draft_token,
           targetWindow: popup,
+          awaitingReturnPrompt: true,
         })
         const isTravelpayouts = source.partnerId === 'aviasales'
         const status: FlightBookingStatus = isTravelpayouts
@@ -1568,6 +1575,12 @@ function TripDetailView({
         if (!isTravelpayouts) {
           leftForFlight.current = true
           leftForFlightAt.current = Date.now()
+          markFlightReturnAsk({
+            draftToken: draft.draft_token,
+            promptOnReturn: true,
+          })
+        } else {
+          clearFlightReturnAsk(draft.draft_token)
         }
       } catch (inner) {
         // Draft optional — still open partner booking if URL resolves.
@@ -1617,6 +1630,7 @@ function TripDetailView({
         onToast('Impossible de rattacher la réservation — réessaie')
         return
       }
+      clearFlightReturnAsk(token)
       const nowIso = new Date().toISOString()
       // Optimistic UI — load() must not wipe a successful confirm.
       setFlightDraft((prev) => {
@@ -1663,29 +1677,47 @@ function TripDetailView({
   const dismissFlightBookAsk = () => {
     setAskFlightBooked(false)
     leftForFlight.current = false
+    clearFlightReturnAsk(
+      flightDraft?.draft_token || workspace?.draft_token || null,
+    )
   }
 
   useEffect(() => {
+    const token = flightDraft?.draft_token || workspace?.draft_token || null
     if (flightBooked) {
       setAskFlightBooked(false)
+      clearFlightReturnAsk(token)
       return
     }
-    const onReturn = () => {
-      if (document.visibilityState !== 'visible') return
+    const maybeAsk = () => {
+      const persisted = consumeFlightReturnAsk({
+        draftToken: token,
+        alreadyBooked: flightBooked,
+      })
+      if (persisted) {
+        setAskFlightBooked(true)
+        return
+      }
       if (!leftForFlight.current) return
       if (Date.now() - leftForFlightAt.current < 1200) return
       setAskFlightBooked(true)
     }
+    const onReturn = () => {
+      if (document.visibilityState !== 'visible') return
+      maybeAsk()
+    }
+    maybeAsk()
     document.addEventListener('visibilitychange', onReturn)
     window.addEventListener('focus', onReturn)
     return () => {
       document.removeEventListener('visibilitychange', onReturn)
       window.removeEventListener('focus', onReturn)
     }
-  }, [flightBooked])
+  }, [flightBooked, flightDraft?.draft_token, workspace?.draft_token])
 
   const reservationToken =
     flightDraft?.draft_token || workspace?.draft_token || null
+  const stayExtrasRef = useRef<HTMLDivElement | null>(null)
 
   const openReservations = () => {
     if (!reservationToken) return
@@ -1740,6 +1772,10 @@ function TripDetailView({
         return
       }
       if (accepted) void bookSelectedFlight()
+      return
+    }
+    if (id === 'activities' && plannerActivitiesEnabled) {
+      stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
 
@@ -2992,13 +3028,15 @@ function TripDetailView({
       )}
 
       {!scanning && trip && plannerActivitiesEnabled ? (
-        <PlannerStayExtras
-          tripId={tripId}
-          trip={trip}
-          draftToken={flightDraft?.draft_token || workspace?.draft_token || null}
-          activitiesEnabled={plannerActivitiesEnabled}
-          onActivityItemsChange={setActivityItems}
-        />
+        <div ref={stayExtrasRef}>
+          <PlannerStayExtras
+            tripId={tripId}
+            trip={trip}
+            draftToken={flightDraft?.draft_token || workspace?.draft_token || null}
+            activitiesEnabled={plannerActivitiesEnabled}
+            onActivityItemsChange={setActivityItems}
+          />
+        </div>
       ) : null}
 
       <section className="space-y-5">
