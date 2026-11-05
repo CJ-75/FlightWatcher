@@ -1196,9 +1196,10 @@ _WS_DRAFT_SELECT = (
     "flight_booking_status,flight_booking_provider,flight_booked_at,"
     "hotel_booked_at,payload,updated_at"
 )
+# hotel_name/city/photo live in deal_snapshot — not top-level columns.
 _WS_BOOKING_SELECT = (
-    "id,draft_id,draft_token,user_id,status,hotel_name,city,destination,"
-    "hotel_photo,deal_snapshot,updated_at,created_at"
+    "id,draft_id,draft_token,user_id,status,deal_snapshot,hotel_id,"
+    "updated_at,created_at"
 )
 _WS_POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="fw-ws")
 
@@ -1683,7 +1684,16 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
         if str(booking.get("status") or "") in _HOTEL_DEAD_STATUSES:
             continue
         snapshot = booking.get("deal_snapshot") or {}
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        snap_hotel = (
+            snapshot.get("hotel")
+            if isinstance(snapshot.get("hotel"), dict)
+            else {}
+        )
         dates = snapshot.get("dates") or {}
+        if not isinstance(dates, dict):
+            dates = {}
         booking_phase = _workspace_phase(
             ret_date=_date10(dates.get("inbound")),
             accepted=None,
@@ -1703,21 +1713,21 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
                 "hotel_booking_status": booking.get("status"),
                 "scope": "personal",
                 "phase": booking_phase,
-                "title": snapshot.get("hotel_name")
-                or booking.get("hotel_name")
+                "title": snap_hotel.get("name")
+                or snapshot.get("hotel_name")
                 or "Réservation hôtel",
                 "city": _clean_city_label(
                     snapshot.get("city"),
-                    booking.get("city"),
+                    snap_hotel.get("city"),
                     snapshot.get("hotel_city"),
                 ),
                 "origin_iata": None,
                 "dest_iata": snapshot.get("destination")
-                or booking.get("destination"),
+                or snapshot.get("dest"),
                 "out_date": _date10(dates.get("outbound")),
                 "ret_date": _date10(dates.get("inbound")),
                 "image_url": snapshot.get("image_url")
-                or booking.get("hotel_photo"),
+                or snap_hotel.get("photo"),
                 "is_organizer": False,
                 "capabilities": {
                     "can_scan": False,
