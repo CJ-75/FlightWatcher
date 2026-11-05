@@ -14,7 +14,7 @@ export function PassengerStepper({
   min = 1,
   max = 6,
   compact = false,
-  label = 'Voyageurs',
+  label = 'Qui part',
 }: PassengerStepperProps) {
   const n = Math.min(max, Math.max(min, value || 1))
 
@@ -44,7 +44,7 @@ export function PassengerStepper({
       >
         <button
           type="button"
-          aria-label="Moins de voyageurs"
+          aria-label="Moins de personnes"
           disabled={n <= min}
           onClick={() => onChange(Math.max(min, n - 1))}
           className={
@@ -66,7 +66,7 @@ export function PassengerStepper({
         </span>
         <button
           type="button"
-          aria-label="Plus de voyageurs"
+          aria-label="Plus de personnes"
           disabled={n >= max}
           onClick={() => onChange(Math.min(max, n + 1))}
           className={

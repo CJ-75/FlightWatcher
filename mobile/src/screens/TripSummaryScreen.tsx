@@ -109,6 +109,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [flightUnavailable, setFlightUnavailable] = useState(false)
   const [flightPriceHint, setFlightPriceHint] = useState<string | null>(null)
   const [chargedHotelTotal, setChargedHotelTotal] = useState<number | null>(null)
+  const [cancellingHotel, setCancellingHotel] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
@@ -686,6 +687,72 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     }
   }
 
+  const onCancelHotelBooking = useCallback(() => {
+    if (cancellingHotel) return
+    const policyHint = cancelFr
+      ? `Conditions : ${cancelFr}`
+      : 'Selon les conditions de l’hôtel, des frais peuvent s’appliquer.'
+    Alert.alert(
+      'Annuler la réservation ?',
+      `${policyHint}\n\nTu pourras choisir un autre hôtel ensuite.`,
+      [
+        { text: 'Garder', style: 'cancel' },
+        {
+          text: 'Annuler la résa',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setCancellingHotel(true)
+              try {
+                let bookingId = String(pl.hotel_booking_id || '').trim()
+                if (!bookingId) {
+                  const list = await getApi().listHotelBookings({
+                    draft_token: draftToken,
+                  })
+                  const hit = (list || []).find((b) =>
+                    ['confirmed', 'booking_pending'].includes(
+                      String(b.status || '').toLowerCase(),
+                    ),
+                  )
+                  bookingId = hit?.id ? String(hit.id) : ''
+                }
+                if (!bookingId) {
+                  Alert.alert(
+                    'Annulation',
+                    'Réservation introuvable pour ce voyage.',
+                  )
+                  return
+                }
+                const res = await getApi().cancelHotelBooking(bookingId, {
+                  draft_token: draftToken,
+                })
+                if (res.draft) {
+                  setDraft(res.draft as MyTripDraft)
+                } else {
+                  const row = await getApi().getMyTrip(draftToken)
+                  setDraft(row)
+                }
+                void getApi().trackMyTripEvent(draftToken, 'hotel_cancelled', {
+                  booking_id: bookingId,
+                  refund_amount: res.refund_amount ?? null,
+                })
+              } catch (e) {
+                Alert.alert(
+                  'Annulation',
+                  e instanceof Error
+                    ? e.message
+                    : 'Annulation impossible — réessaie',
+                )
+              } finally {
+                setCancellingHotel(false)
+              }
+            })()
+          },
+        },
+      ],
+    )
+  }, [cancelFr, cancellingHotel, draftToken, pl.hotel_booking_id])
+
   if (loading && !draft) {
     return (
       <View style={styles.root}>
@@ -763,7 +830,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.plannerLinkKicker}>VOYAGE DE GROUPE</Text>
-              <Text style={styles.plannerLinkTitle}>Voir le planning et les voyageurs</Text>
+              <Text style={styles.plannerLinkTitle}>Voir le séjour et qui part</Text>
             </View>
             <Text style={styles.plannerLinkArrow}>›</Text>
           </Pressable>
@@ -992,7 +1059,21 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                   {hotelId ? 'Changer d’hôtel' : 'Choisir mon hôtel'}
                 </Text>
               </Pressable>
-            ) : null}
+            ) : (
+              <Pressable
+                style={[styles.cancelHotelBtn, cancellingHotel && { opacity: 0.6 }]}
+                disabled={cancellingHotel}
+                onPress={onCancelHotelBooking}
+              >
+                {cancellingHotel ? (
+                  <ActivityIndicator color="#9F1239" />
+                ) : (
+                  <Text style={styles.cancelHotelText}>
+                    Annuler la réservation
+                  </Text>
+                )}
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -1293,6 +1374,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
   },
   hotelActions: { gap: 8, marginTop: 4 },
+  cancelHotelBtn: {
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    backgroundColor: '#FFF1F2',
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  cancelHotelText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: '#9F1239',
+  },
   primaryBtn: {
     marginTop: 4,
     backgroundColor: colors.primary,

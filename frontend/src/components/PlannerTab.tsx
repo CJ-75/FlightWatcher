@@ -2769,7 +2769,7 @@ function TripDetailView({
                   </div>
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-                      Voyageurs
+                      Qui part
                     </p>
                     <PassengerStepper
                       value={editPassengers}
@@ -2823,7 +2823,7 @@ function TripDetailView({
           {!isOrganizer ? (
             <p className="text-sm text-muted">
               Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
-              l’organisateur décide pour le groupe.
+              l’organisateur décide pour tout le monde.
             </p>
           ) : null}
         </section>
@@ -3000,7 +3000,7 @@ function TripDetailView({
           <p className="text-base text-muted mt-2 max-w-xl leading-relaxed">
             {isOrganizer
               ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
-              : 'L’organisateur scanne et choisit le vol pour le groupe.'}
+              : 'L’organisateur scanne et choisit le vol pour tout le monde.'}
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             {isOrganizer ? (
@@ -3042,7 +3042,7 @@ function TripDetailView({
       <section className="space-y-5">
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.16em] text-primary-700 mb-1">
-            Groupe
+            Séjour
           </p>
           <h3 className="font-extrabold text-2xl text-ink tracking-tight">Qui part</h3>
         </div>
@@ -3079,10 +3079,10 @@ function TripDetailView({
             <span className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <span className="min-w-0">
                 <span className="block text-xs font-semibold uppercase tracking-wide text-muted">
-                  Groupe
+                  Ensemble
                 </span>
                 <span className="mt-0.5 block text-lg font-extrabold tracking-tight text-ink">
-                  Inviter des amis
+                  Inviter des proches
                 </span>
                 <span className="mt-1 block text-sm text-ink-soft">
                   Partage le voyage pour suivre le séjour ensemble.
@@ -3209,7 +3209,7 @@ function PlannerStayExtras({
 }
 
 const MODALITIES_TIP =
-  'Tant que le vol n’est pas réservé, tu peux changer dates, budget, voyageurs ou relancer un scan.'
+  'Tant que le vol n’est pas réservé, tu peux changer dates, budget, qui part ou relancer un scan.'
 
 function ModalitiesInfoTip({
   text,
@@ -3423,7 +3423,7 @@ function SelectedFlightBoardingPass({
               {Math.round(Number(safe.prix_total) || 0)}€
             </p>
             <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              {passengers} voyageur{passengers > 1 ? 's' : ''}
+              {passengers === 1 ? '1 personne' : `${passengers} personnes`}
             </p>
           </div>
           <div

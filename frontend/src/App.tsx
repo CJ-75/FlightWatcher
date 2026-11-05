@@ -1191,7 +1191,7 @@ function Dashboard() {
     setPostBookDraftToken(null)
     const user = await getCurrentUser()
     if (!user) {
-      setToastMessage('Connecte-toi pour ajouter ce vol au planner')
+      setToastMessage('Connecte-toi pour ajouter ce vol au voyage')
       setToastType('error')
       return
     }
@@ -1203,7 +1203,7 @@ function Dashboard() {
       })
       navigate(`/planner/${encodeURIComponent(created.id)}`)
     } catch {
-      setToastMessage('Impossible d’ajouter au planner — réessaie')
+      setToastMessage('Impossible d’ajouter au voyage — réessaie')
       setToastType('error')
     } finally {
       setHotelUpsellBusy(false)
@@ -1500,7 +1500,7 @@ function Dashboard() {
                         <span className="text-slate-700">{lastSearchInfo.budget}€ / pers.</span>
                       </div>
                       <div className="flex items-start gap-2">
-                        <span className="font-bold text-primary-700">Voyageurs:</span>
+                        <span className="font-bold text-primary-700">Qui part :</span>
                         <span className="text-slate-700">{lastSearchInfo.passengers || 1}</span>
                       </div>
                       <div className="flex items-start gap-2">
@@ -2455,7 +2455,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       setToastType('success')
     } catch (e) {
       setToastMessage(
-        e instanceof Error ? e.message : 'Ajout au planner impossible',
+        e instanceof Error ? e.message : 'Ajout au voyage impossible',
       )
       setToastType('error')
     } finally {

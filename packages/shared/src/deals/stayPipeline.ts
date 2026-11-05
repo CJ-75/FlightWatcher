@@ -213,7 +213,7 @@ export function resolveNextStayAction(opts: {
     return { id: 'restaurants', label: 'Restaurants autour de ton hôtel' }
   }
   if (opts.hasPlanner) {
-    return { id: 'planner', label: 'Retour au planner' }
+    return { id: 'planner', label: 'Retour au voyage' }
   }
   return { id: 'bookings', label: 'Voir mes réservations' }
 }

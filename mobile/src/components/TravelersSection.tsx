@@ -197,7 +197,7 @@ export function TravelersSection({
       ) : null}
 
       {sorted.length === 0 ? (
-        <Text style={styles.empty}>Aucun voyageur pour l’instant.</Text>
+        <Text style={styles.empty}>Personne pour l’instant.</Text>
       ) : (
         <View style={styles.list}>
           {sorted.map((m) => {
@@ -279,7 +279,7 @@ export function TravelersSection({
           <View style={styles.inviteMeta}>
             <Text style={styles.inviteLabel}>Lien d’invitation</Text>
             <Text style={styles.inviteHint} numberOfLines={1}>
-              Partager avec tes voyageurs
+              Partager avec qui part
             </Text>
           </View>
           {inviteBusy ? (
@@ -303,7 +303,7 @@ export function TravelersSection({
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setAddOpen(false)} />
           <View style={[styles.modalCard, shadow.lift]}>
             <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Nouveau voyageur</Text>
+              <Text style={styles.modalTitle}>Ajouter quelqu’un</Text>
               <Text style={styles.modalHint}>
                 Prénom + email suffisent. Quand il rejoindra via le lien, son
                 statut passera sur l’app.

@@ -2320,7 +2320,7 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
     )
     count = len(members.data or [])
     if count >= 6:
-        raise HTTPException(status_code=400, detail="Maximum 6 voyageurs")
+        raise HTTPException(status_code=400, detail="Maximum 6 personnes")
 
     result = (
         supabase.table("trip_members")
@@ -3399,7 +3399,7 @@ async def join_invite(token: str, request: Request):
     )
     count = len(members.data or [])
     if count >= 6:
-        raise HTTPException(status_code=400, detail="Voyage complet (6 voyageurs max)")
+        raise HTTPException(status_code=400, detail="Voyage complet (6 personnes max)")
 
     supabase.table("trip_members").insert(
         {

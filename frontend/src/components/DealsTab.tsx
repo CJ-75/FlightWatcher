@@ -482,7 +482,7 @@ export function DealsTab() {
           <div className="min-w-0">
             <p className="text-sm font-bold text-ink">Affiner</p>
             <p className="text-xs text-muted truncate mt-0.5">
-              {filterLabel || 'Tous trajets · 2 voyageurs'}
+              {filterLabel || 'Tous trajets · 2 personnes'}
             </p>
           </div>
           <span

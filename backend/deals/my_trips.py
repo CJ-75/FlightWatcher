@@ -552,6 +552,7 @@ ALLOWED_TRIP_EVENTS = frozenset(
         "flight_booked_no",
         "hotel_checkout_open",
         "hotel_paid",
+        "hotel_cancelled",
         "account_cta",
         "share",
     }
@@ -769,6 +770,80 @@ def mark_hotel_booked(
                 .execute()
             )
             return (res.data or [{**row, "payload": payload}])[0]
+
+
+def mark_hotel_cancelled(
+    supabase,
+    draft_token: str,
+    *,
+    booking_id: Optional[str] = None,
+    refund_amount: Optional[float] = None,
+    cancellation_fee: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """Clear hotel booked flags after LiteAPI cancel — keep hotel choice for rebook."""
+    row = get_draft(supabase, draft_token)
+    if not row:
+        return None
+    now_iso = _now().isoformat()
+    payload0 = dict(row.get("payload") or {})
+    extra: Dict[str, Any] = {
+        "hotel_booked": False,
+        "hotel_booked_at": None,
+        "hotel_confirmation_code": None,
+        "hotel_holder_email": None,
+        "hotel_price_locked": False,
+        "hotel_cancelled_at": now_iso,
+    }
+    if booking_id:
+        extra["hotel_booking_id"] = str(booking_id)
+        extra["hotel_cancelled_booking_id"] = str(booking_id)
+    if refund_amount is not None:
+        try:
+            extra["hotel_refund_amount"] = round(float(refund_amount), 2)
+        except (TypeError, ValueError):
+            pass
+    if cancellation_fee is not None:
+        try:
+            extra["hotel_cancellation_fee"] = round(float(cancellation_fee), 2)
+        except (TypeError, ValueError):
+            pass
+    # Unlock charged total so rebook can reprice.
+    extra["hotel_charged_total"] = None
+    payload = _merge_payload(row, extra)
+    # Drop null keys that should disappear from payload
+    for k in (
+        "hotel_booked_at",
+        "hotel_confirmation_code",
+        "hotel_holder_email",
+        "hotel_charged_total",
+    ):
+        if payload.get(k) is None:
+            payload.pop(k, None)
+    payload["hotel_booked"] = False
+
+    update: Dict[str, Any] = {
+        "payload": payload,
+        "updated_at": now_iso,
+        "hotel_booked_at": None,
+    }
+    try:
+        res = (
+            supabase.table("my_trip_drafts")
+            .update(update)
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (res.data or [{**row, **update}])[0]
+    except Exception as e:
+        logger.warning("mark_hotel_cancelled: %s", e)
+        soft = {"payload": payload, "updated_at": now_iso}
+        res = (
+            supabase.table("my_trip_drafts")
+            .update(soft)
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (res.data or [{**row, **soft}])[0]
 
 
 def send_draft_email(

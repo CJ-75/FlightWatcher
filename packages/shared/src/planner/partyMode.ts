@@ -1,4 +1,4 @@
-/** Composition du voyage : Solo (1) · Duo (2) · Groupe (3+). */
+/** Composition du voyage : Solo (1) · Duo (2) · À plusieurs (3+). */
 
 export type PartyMode = 'solo' | 'duo' | 'groupe'
 
@@ -30,20 +30,20 @@ export function partyModeMaxPassengers(mode: PartyMode): number {
 export function partyModeKickerFr(mode: PartyMode): string {
   if (mode === 'solo') return 'Solo'
   if (mode === 'duo') return 'Duo'
-  return 'Groupe'
+  return 'À plusieurs'
 }
 
-/** Titre section voyageurs (remplace « Ta bande de voyage »). */
+/** Titre section « Qui part ». */
 export function partyModeTitleFr(mode: PartyMode): string {
-  if (mode === 'solo') return 'Ton voyage solo'
-  if (mode === 'duo') return 'Votre duo'
-  return 'Votre groupe'
+  if (mode === 'solo') return 'Tu pars solo'
+  if (mode === 'duo') return 'Vous partez à deux'
+  return 'Vous partez à plusieurs'
 }
 
 export function partyModeSubtitleFr(mode: PartyMode): string {
-  if (mode === 'solo') return 'Tu voyages solo — tu peux inviter plus tard.'
-  if (mode === 'duo') return 'À deux sur ce voyage.'
-  return 'Organisez le séjour à plusieurs.'
+  if (mode === 'solo') return 'Tu peux inviter quelqu’un plus tard.'
+  if (mode === 'duo') return 'Deux places sur ce séjour.'
+  return 'Jusqu’à 6 personnes sur le même séjour.'
 }
 
 export function partyModeCreateHintFr(mode: PartyMode): string {
@@ -55,7 +55,13 @@ export function partyModeCreateHintFr(mode: PartyMode): string {
 export function partyModeCreateLeadFr(mode: PartyMode): string {
   if (mode === 'solo') return 'Libre, flexible, à ton rythme.'
   if (mode === 'duo') return 'Un séjour pensé pour deux.'
-  return 'Organisez le voyage ensemble.'
+  return 'Chacun suit le séjour au même endroit.'
+}
+
+/** Libellé court pour un effectif (évite « voyageurs »). */
+export function partyPeopleCountFr(n: number): string {
+  const pax = Math.max(1, Math.floor(n) || 1)
+  return pax === 1 ? '1 personne' : `${pax} personnes`
 }
 
 export const PARTY_MODE_OPTIONS: {
@@ -64,7 +70,7 @@ export const PARTY_MODE_OPTIONS: {
   emoji: string
   hint: string
 }[] = [
-  { mode: 'solo', label: 'Solo', emoji: '🧍', hint: 'Je voyage solo' },
+  { mode: 'solo', label: 'Solo', emoji: '🧍', hint: 'Je pars seul·e' },
   { mode: 'duo', label: 'Duo', emoji: '👫', hint: 'On part à deux' },
-  { mode: 'groupe', label: 'Groupe', emoji: '👥', hint: 'À plusieurs' },
+  { mode: 'groupe', label: 'À plusieurs', emoji: '👥', hint: 'Amis ou famille' },
 ]

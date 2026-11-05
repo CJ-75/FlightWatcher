@@ -741,6 +741,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify(body) },
       ),
 
+    cancelHotelBooking: (
+      bookingId: string,
+      body?: { draft_token?: string | null },
+    ) =>
+      request<
+        HotelBooking & {
+          already_cancelled?: boolean
+          refund_amount?: number | null
+          cancellation_fee?: number | null
+          draft?: MyTripDraft
+        }
+      >(`/api/hotel-bookings/${encodeURIComponent(bookingId)}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify(body || {}),
+      }),
+
     listHotelBookings: (opts?: { draft_token?: string | null }) => {
       const q =
         opts?.draft_token != null && opts.draft_token !== ''

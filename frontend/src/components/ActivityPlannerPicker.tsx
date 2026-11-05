@@ -268,7 +268,7 @@ export function ActivityPlannerPicker({
             <div className="rounded-xl border border-line bg-canvas px-3 py-4 text-sm text-muted space-y-2 text-center">
               <p>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</p>
               <Link to="/planner" className="font-bold text-primary-700 underline">
-                Ouvrir Planner
+                Ouvrir Voyages
               </Link>
             </div>
           ) : null}
@@ -311,7 +311,7 @@ export function ActivityPlannerPicker({
                     <p className="font-bold text-ink text-sm truncate">{label}</p>
                     <p className="mt-0.5 text-xs text-muted">
                       {[
-                        planned ? 'Planner' : 'Séjour',
+                        planned ? 'Voyage' : 'Séjour',
                         dates,
                         ws.dest_iata ? String(ws.dest_iata) : null,
                       ]

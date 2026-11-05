@@ -15,7 +15,7 @@ export function PassengerStepper({
   onChange,
   min = 1,
   max = 6,
-  label = 'Voyageurs',
+  label = 'Qui part',
 }: Props) {
   const n = Math.min(max, Math.max(min, value || min))
 

@@ -154,7 +154,7 @@ function OpenTripsSection({
 
 function adultsLabel(n?: number | null) {
   if (n == null || n <= 0) return null
-  return n === 1 ? '1 voyageur' : `${n} voyageurs`
+  return n === 1 ? '1 personne' : `${n} personnes`
 }
 
 type StatusMeta = {
@@ -785,7 +785,7 @@ export default function MyBookings() {
               <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
                 {openTrips.length
                   ? 'Tes voyages générés sont ci-dessus. Dès que tu paies un hôtel, la confirmation apparaît ici.'
-                  : 'Quand tu réserves un hôtel depuis un deal ou le planner, il apparaît ici.'}
+                  : 'Quand tu réserves un hôtel depuis un deal ou un voyage, il apparaît ici.'}
               </p>
               {guestMode && guestDraft ? (
                 <Link

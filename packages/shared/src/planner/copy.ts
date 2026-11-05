@@ -41,7 +41,7 @@ export const PLANNER_PHASE_LABEL_FR: Record<TravelWorkspacePhase, string> = {
 }
 
 export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
-  planning: 'Choisis un vol et invite tes voyageurs.',
+  planning: 'Choisis un vol et invite qui part avec toi.',
   flight_selected: 'Vol choisi — compose ton hôtel.',
   composing: 'Séjour en cours — finalise la réservation.',
   booked: 'Réservation rattachée à ce voyage.',
@@ -60,10 +60,10 @@ export const HOTEL_CTA_FR = {
   choose: 'Choisir mon hôtel',
   pay: 'Payer ma chambre',
   view: 'Voir mon hôtel',
-  backPlanner: 'Retour au planner',
+  backPlanner: 'Retour au voyage',
 } as const
 
-export const PLANNER_PROMOTE_TOAST_FR = 'Séjour ajouté au planner'
+export const PLANNER_PROMOTE_TOAST_FR = 'Séjour ajouté à tes voyages'
 export const DESTINATION_FALLBACK_FR = 'Destination'
 
 export function hubMatchesPhase(

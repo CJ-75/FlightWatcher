@@ -400,7 +400,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
     if (!user && !(__DEV__ && isGuest)) {
       Alert.alert(
         'Connexion requise',
-        'Connecte-toi pour organiser ce séjour dans le planner.',
+        'Connecte-toi pour organiser ce séjour dans Voyages.',
         [
           { text: 'Annuler', style: 'cancel' },
           {
@@ -440,7 +440,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
       })
       navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      Alert.alert('Erreur', 'Impossible d’ouvrir le planner — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ouvrir le voyage — réessaie')
     } finally {
       setStartingTrip(false)
     }
@@ -529,7 +529,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
               <Text style={styles.priceHint} numberOfLines={2}>
                 {deal.price_pax_note
                   ? deal.price_pax_note
-                  : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} voyageur${adults > 1 ? 's' : ''}`}
+                  : `par personne · ${deal.nights} nuit${deal.nights > 1 ? 's' : ''} · ${adults} personne${adults > 1 ? 's' : ''}`}
                 {flightPp > 0 || hotelPp > 0
                   ? ` · vol ${flightPp || '—'} € + hôtel ${hotelPp || '—'} €`
                   : ''}
@@ -940,7 +940,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
         >
           <PlaneIcon size={16} color={colors.white} />
           <Text style={styles.ctaText}>
-            {startingTrip ? '…' : 'Ajouter au planner'}
+            {startingTrip ? '…' : 'Ajouter au voyage'}
           </Text>
         </Pressable>
       </View>

@@ -360,9 +360,9 @@ export function DealDetailModal({
         if (rv.booking_url) booking = rv.booking_url
         if (rv.checked_pp != null) flightPpLive = rv.checked_pp
         if (rv.price_note) priceNote = rv.price_note
-        else if (rv.available === false) priceNote = 'Vol à confirmer pour ce nombre de voyageurs'
+        else if (rv.available === false) priceNote = 'Vol à confirmer pour ce nombre de personnes'
         else if (rv.delta_pct != null && Math.abs(rv.delta_pct) >= 3) {
-          priceNote = `Prix vérifié pour ${adults} voyageurs`
+          priceNote = `Prix vérifié pour ${adults} personne${adults > 1 ? 's' : ''}`
         }
       } catch {
         /* keep displayed */
@@ -563,7 +563,7 @@ export function DealDetailModal({
                     <span className="text-base font-bold text-slate-500 ml-1.5">/ pers.</span>
                   </p>
                   <p className="text-sm text-slate-600 mt-2 font-medium">
-                    {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {adults} voyageur
+                    {deal.nights} nuit{deal.nights > 1 ? 's' : ''} · {adults} personne
                     {adults > 1 ? 's' : ''}
                     {adults >= 2 ? (
                       <span className="text-slate-400"> · soit {totalForParty} € à {adults}</span>
@@ -1111,7 +1111,7 @@ export function DealDetailModal({
               disabled={startingTrip}
               className="shrink-0 bg-primary-500 hover:bg-primary-600 text-white font-bold px-5 py-3 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
             >
-              {startingTrip ? '…' : 'Ajouter au planner'}
+              {startingTrip ? '…' : 'Ajouter au voyage'}
             </button>
           </div>
         </motion.div>

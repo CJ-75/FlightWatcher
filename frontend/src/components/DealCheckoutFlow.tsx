@@ -654,7 +654,7 @@ export function DealCheckoutFlow({
               ) : null}
               <span className="text-slate-400">
                 {' '}
-                · {adults} voyageur{adults > 1 ? 's' : ''}
+                · {adults} personne{adults > 1 ? 's' : ''}
               </span>
             </p>
           ) : null}

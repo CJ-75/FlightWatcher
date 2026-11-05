@@ -56,7 +56,7 @@ const SIGNUP_STEPS = [
   },
   {
     title: 'Rejoins le voyage',
-    detail: 'Tu es ajouté au planner partagé automatiquement.',
+    detail: 'Tu es ajouté au voyage partagé automatiquement.',
   },
   {
     title: 'Suis le séjour',

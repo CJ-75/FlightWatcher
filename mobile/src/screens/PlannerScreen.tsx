@@ -630,7 +630,7 @@ function CreateTripModal({
   const submit = async () => {
     if (!partyMode) {
       setStep(1)
-      setError('Choisis Solo, Duo ou Groupe')
+      setError('Choisis Solo, Duo ou À plusieurs')
       return
     }
     if (!name.trim()) {
@@ -807,7 +807,7 @@ function CreateTripModal({
               ) : (
                 <View style={styles.partySummary}>
                   <Text style={styles.partySummaryTitle}>
-                    {partyMode ? partyModeKickerFr(partyMode) : 'Voyageurs'}
+                    {partyMode ? partyModeKickerFr(partyMode) : 'Qui part'}
                   </Text>
                   <Text style={styles.partySummaryBody}>
                     {partyMode ? partyModeCreateHintFr(partyMode) : `${passengers} place(s)`}

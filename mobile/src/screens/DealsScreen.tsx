@@ -453,7 +453,7 @@ export function DealsScreen() {
                   <View style={styles.filterToggleText}>
                     <Text style={styles.filterToggleTitle}>Affiner</Text>
                     <Text style={styles.filterToggleHint} numberOfLines={1}>
-                      {filterSummary || 'Tous départs · 2 voyageurs'}
+                      {filterSummary || 'Tous départs · 2 personnes'}
                     </Text>
                   </View>
                   <Text

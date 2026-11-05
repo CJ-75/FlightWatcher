@@ -318,6 +318,18 @@ class LiteApiClient:
             retry=False,
         )
 
+    def cancel_booking(self, liteapi_booking_id: str) -> Any:
+        """PUT /bookings/{bookingId} — cancel a confirmed LiteAPI booking."""
+        bid = (liteapi_booking_id or "").strip()
+        if not bid:
+            raise LiteApiError("bookingId manquant pour annulation")
+        return self._request(
+            "PUT",
+            self.cfg.book_base,
+            f"/bookings/{bid}",
+            retry=False,
+        )
+
 
 def get_liteapi_client(cfg: Optional[DealsConfig] = None) -> LiteApiClient:
     return LiteApiClient(cfg=cfg)

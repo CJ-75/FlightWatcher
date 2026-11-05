@@ -582,7 +582,7 @@ export function addGuestTripMember(
   const trip = trips[idx]
   const name = displayName.trim()
   if (name.length < 2) throw new Error('Nom trop court')
-  if ((trip.members || []).length >= 6) throw new Error('Maximum 6 voyageurs')
+  if ((trip.members || []).length >= 6) throw new Error('Maximum 6 personnes')
   const em = (email || '').trim().toLowerCase()
   if (!em || !em.includes('@')) throw new Error('Email requis')
 

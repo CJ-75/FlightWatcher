@@ -1,5 +1,5 @@
 /**
- * Nouveau voyage — étape 1 Solo/Duo/Groupe, puis critères.
+ * Nouveau voyage — étape 1 Solo/Duo/À plusieurs, puis critères.
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { Airport, DateAvecHoraire } from '../../types'
@@ -196,7 +196,7 @@ export function CreateTripModal({
   const submit = async () => {
     if (!partyMode) {
       setStep(1)
-      setError('Choisis Solo, Duo ou Groupe')
+      setError('Choisis Solo, Duo ou À plusieurs')
       return
     }
     const depEncoded = encodeAirportCodes(parseAirportCodes(departure))
@@ -426,7 +426,7 @@ export function CreateTripModal({
                   ) : (
                     <div className="rounded-2xl border border-line bg-slate-50/80 px-4 py-3">
                       <p className="text-sm font-bold text-ink">
-                        {partyMode ? partyModeKickerFr(partyMode) : 'Voyageurs'}
+                        {partyMode ? partyModeKickerFr(partyMode) : 'Qui part'}
                       </p>
                       <p className="text-sm text-muted mt-0.5">
                         {partyMode

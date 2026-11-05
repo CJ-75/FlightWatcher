@@ -263,7 +263,7 @@ export function DestinationCard({
                 ]}
               >
                 <Text style={styles.addHotelText}>
-                  {addHotelBusy ? '…' : 'Ajouter au planner →'}
+                  {addHotelBusy ? '…' : 'Ajouter au voyage →'}
                 </Text>
               </Pressable>
             ) : null}

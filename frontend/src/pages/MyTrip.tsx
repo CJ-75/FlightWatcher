@@ -127,6 +127,8 @@ export default function MyTrip() {
   const [flightUnavailable, setFlightUnavailable] = useState(false)
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
+  const [cancellingHotel, setCancellingHotel] = useState(false)
+  const [cancelHotelError, setCancelHotelError] = useState<string | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [hotelBookingEnabled, setHotelBookingEnabled] = useState(true)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
@@ -1237,7 +1239,7 @@ export default function MyTrip() {
     )
   }
 
-  const travelersLabel = adults === 1 ? '1 voyageur' : `${adults} voyageurs`
+  const travelersLabel = adults === 1 ? '1 personne' : `${adults} personnes`
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(
     `Mon week-end à ${city} : ${typeof window !== 'undefined' ? window.location.href : ''}`,
   )}`
@@ -1463,6 +1465,67 @@ export default function MyTrip() {
         }
       : null,
   )
+
+  const hotelBookingId = String(
+    payload.hotel_booking_id || draft?.payload?.hotel_booking_id || '',
+  ).trim()
+
+  const onCancelHotelBooking = useCallback(async () => {
+    if (!token || cancellingHotel) return
+    setCancelHotelError(null)
+    let bookingId = hotelBookingId
+    if (!bookingId) {
+      try {
+        const list = await getApiClient().listHotelBookings({
+          draft_token: token,
+        })
+        const hit = (list || []).find((b) =>
+          ['confirmed', 'booking_pending'].includes(
+            String(b.status || '').toLowerCase(),
+          ),
+        )
+        bookingId = hit?.id ? String(hit.id) : ''
+      } catch {
+        bookingId = ''
+      }
+    }
+    if (!bookingId) {
+      setCancelHotelError('Réservation introuvable pour ce voyage.')
+      return
+    }
+    const policyHint = cancelLabel
+      ? `\n\nConditions : ${cancelLabel}`
+      : '\n\nSelon les conditions de l’hôtel, des frais peuvent s’appliquer.'
+    if (
+      !window.confirm(
+        `Annuler la réservation d’hôtel ?${policyHint}\n\nTu pourras en choisir une autre ensuite.`,
+      )
+    ) {
+      return
+    }
+    setCancellingHotel(true)
+    try {
+      const res = await getApiClient().cancelHotelBooking(bookingId, {
+        draft_token: token,
+      })
+      if (res.draft) {
+        setDraft(res.draft as MyTripDraft)
+      } else {
+        await load()
+      }
+      track('hotel_cancelled', {
+        booking_id: bookingId,
+        refund_amount: res.refund_amount ?? null,
+        cancellation_fee: res.cancellation_fee ?? null,
+      })
+    } catch (e) {
+      setCancelHotelError(
+        e instanceof Error ? e.message : 'Annulation impossible — réessaie',
+      )
+    } finally {
+      setCancellingHotel(false)
+    }
+  }, [cancelLabel, cancellingHotel, hotelBookingId, load, token, track])
 
   return (
     <div
@@ -1899,16 +1962,36 @@ export default function MyTrip() {
               ) : null}
 
               {hotelBooked ? (
-                <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-3 text-sm space-y-1">
-                  <p className="font-bold text-emerald-900">Hôtel réservé ✓</p>
-                  {hotelConfirmation ? (
-                    <p className="text-slate-700">
-                      N° : <strong>{hotelConfirmation}</strong>
-                    </p>
-                  ) : null}
-                  {hotelHolderEmail ? (
-                    <p className="text-slate-600 text-xs">
-                      Confirmation envoyée à {hotelHolderEmail}
+                <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-3 text-sm space-y-3">
+                  <div className="space-y-1">
+                    <p className="font-bold text-emerald-900">Hôtel réservé ✓</p>
+                    {hotelConfirmation ? (
+                      <p className="text-slate-700">
+                        N° : <strong>{hotelConfirmation}</strong>
+                      </p>
+                    ) : null}
+                    {hotelHolderEmail ? (
+                      <p className="text-slate-600 text-xs">
+                        Confirmation envoyée à {hotelHolderEmail}
+                      </p>
+                    ) : null}
+                    {cancelLabel ? (
+                      <p className="text-slate-600 text-xs">{cancelLabel}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void onCancelHotelBooking()}
+                    disabled={cancellingHotel}
+                    className="w-full text-center border border-rose-200 bg-white hover:bg-rose-50 text-rose-800 font-bold py-3 rounded-xl min-h-[44px] disabled:opacity-60"
+                  >
+                    {cancellingHotel
+                      ? 'Annulation…'
+                      : 'Annuler la réservation'}
+                  </button>
+                  {cancelHotelError ? (
+                    <p className="text-xs font-semibold text-rose-700">
+                      {cancelHotelError}
                     </p>
                   ) : null}
                 </div>

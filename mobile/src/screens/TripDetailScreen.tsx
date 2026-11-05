@@ -750,7 +750,7 @@ export function TripDetailScreen() {
     Alert.alert(
       archive ? 'Archiver le voyage' : 'Supprimer le voyage',
       archive
-        ? `Archiver « ${trip.name} » ?\n\nLe Planner disparaît, tes réservations (vol / hôtel) sont conservées.`
+        ? `Archiver « ${trip.name} » ?\n\nLe voyage disparaît de Voyages, tes réservations (vol / hôtel) sont conservées.`
         : `Supprimer « ${trip.name} » ?\n\nCette action est définitive.`,
       [
         { text: 'Annuler', style: 'cancel' },
@@ -1390,7 +1390,7 @@ export function TripDetailScreen() {
           <Text style={styles.nextStepBodyDark}>
             {isOrganizer
               ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
-              : 'L’organisateur scanne et choisit le vol pour le groupe.'}
+              : 'L’organisateur scanne et choisit le vol pour tout le monde.'}
           </Text>
           {reservationFlags.canSkipFlight && !(__DEV__ && isGuest) ? (
             <Pressable
@@ -1683,7 +1683,7 @@ export function TripDetailScreen() {
           {!isOrganizer ? (
             <Text style={styles.roleHint}>
               Tu peux réserver ton vol et composer ton hôtel pour toi. Seul
-              l’organisateur décide pour le groupe.
+              l’organisateur décide pour tout le monde.
             </Text>
           ) : null}
         </View>
@@ -1978,7 +1978,7 @@ function PriceWatchBanner({
           <Text style={styles.watchActiveKicker}>Surveillance en cours</Text>
         </View>
         <Text style={styles.watchActiveBody}>
-          On guette les vols sous {budget}€/pers et on prévient le groupe à la moindre
+          On guette les vols sous {budget}€/pers et on prévient tout le monde à la moindre
           bonne affaire.
         </Text>
         <Text style={styles.watchMeta}>
@@ -2005,13 +2005,13 @@ function PriceWatchBanner({
       <Text style={styles.watchKicker}>Astuce voyage</Text>
       <Text style={styles.watchTitle}>Les prix baissent — on vous prévient</Text>
       <Text style={styles.watchHint}>
-        Activez la surveillance : on scanne vos dates en continu et on email tout le
-        groupe dès qu’un vol passe sous {budget}€/pers.
+        Activez la surveillance : on scanne vos dates en continu et on prévient tout le
+        monde dès qu’un vol passe sous {budget}€/pers.
       </Text>
       {(
         [
           'Scan automatique, même quand l’app est fermée',
-          'Alerte email à tous les voyageurs',
+          'Alerte email à tout le monde',
           'Uniquement si le prix bat votre budget',
         ] as const
       ).map((line) => (
@@ -2179,7 +2179,7 @@ function MobileBoardingPass({
           <Text style={styles.ticketPriceLabel}>PRIX PAR PERSONNE</Text>
           <Text style={styles.ticketPrice}>{Math.round(Number(safe.prix_total) || 0)}€</Text>
           <Text style={styles.ticketPassengers}>
-            {passengers} voyageur{passengers > 1 ? 's' : ''}
+            {passengers === 1 ? '1 personne' : `${passengers} personnes`}
           </Text>
         </View>
         <View style={styles.ticketActions}>

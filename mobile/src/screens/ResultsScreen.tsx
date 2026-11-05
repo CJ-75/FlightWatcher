@@ -181,7 +181,7 @@ export function ResultsScreen({ route, navigation }: Props) {
     await clearPendingHotelUpsell()
     setPostBookTrip(null)
     if (!user && !(__DEV__ && isGuest)) {
-      Alert.alert('Connexion requise', 'Connecte-toi pour ajouter ce vol au planner.')
+      Alert.alert('Connexion requise', 'Connecte-toi pour ajouter ce vol au voyage.')
       return
     }
     setHotelUpsellBusy(true)
@@ -198,7 +198,7 @@ export function ResultsScreen({ route, navigation }: Props) {
       })
       navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      Alert.alert('Erreur', 'Impossible d’ajouter au planner — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ajouter au voyage — réessaie')
     } finally {
       setHotelUpsellBusy(false)
     }
@@ -477,7 +477,7 @@ export function ResultsScreen({ route, navigation }: Props) {
                   <Text style={styles.summaryValue}>{summary.budget}€</Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Voyageurs</Text>
+                  <Text style={styles.summaryLabel}>Qui part</Text>
                   <Text style={styles.summaryValue}>{summary.passengers}</Text>
                 </View>
                 <View style={styles.summaryRow}>

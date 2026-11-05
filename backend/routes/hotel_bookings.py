@@ -135,6 +135,10 @@ class BookRequest(BaseModel):
     sandbox_simulate: bool = False
 
 
+class CancelRequest(BaseModel):
+    draft_token: Optional[str] = None
+
+
 def _resolve_booking_actor(request: Request, draft_token: Optional[str]) -> Dict[str, Optional[str]]:
     """JWT user and/or valid my_trip draft_token. At least one required."""
     user_id = get_user_id_from_token(request)
@@ -491,6 +495,135 @@ async def book(booking_id: str, body: BookRequest, request: Request):
     updated = upd.execute()
     row = (updated.data or [booking])[0]
     return _public_booking(row)
+
+
+@router.post("/api/hotel-bookings/{booking_id}/cancel")
+@optional_auth
+async def cancel_booking(booking_id: str, body: CancelRequest, request: Request):
+    """Cancel a confirmed LiteAPI hotel booking (from Mon voyage)."""
+    actor = _resolve_booking_actor(request, body.draft_token)
+    supabase = _svc()
+    booking = _fetch_booking_for_actor(
+        supabase,
+        booking_id,
+        user_id=actor["user_id"],
+        draft_token=actor["draft_token"],
+    )
+    status_now = str(booking.get("status") or "").lower()
+    if status_now == "cancelled":
+        return {
+            **_public_booking(booking),
+            "already_cancelled": True,
+        }
+    if status_now not in ("confirmed", "booking_pending"):
+        raise HTTPException(
+            status_code=400,
+            detail="Seule une réservation confirmée (ou en attente) peut être annulée",
+        )
+
+    liteapi_booking_id = str(booking.get("liteapi_booking_id") or "").strip()
+    cfg = load_deals_config()
+    raw_cancel: Any = None
+    refund_amount: Optional[float] = None
+    cancellation_fee: Optional[float] = None
+    cancel_status = "cancelled"
+
+    if liteapi_booking_id:
+        client = LiteApiClient(cfg=cfg)
+        try:
+            raw_cancel = client.cancel_booking(liteapi_booking_id)
+        except LiteApiError as e:
+            err_detail: Any = str(e)
+            if e.body is not None:
+                err_detail = {"message": str(e), "liteapi": e.body}
+            raise HTTPException(status_code=502, detail=err_detail)
+        finally:
+            client.close()
+
+        data = raw_cancel.get("data") if isinstance(raw_cancel, dict) else None
+        if not isinstance(data, dict):
+            data = raw_cancel if isinstance(raw_cancel, dict) else {}
+        status_raw = str(
+            data.get("status") or data.get("bookingStatus") or "CANCELLED"
+        ).upper()
+        if "CHARGE" in status_raw:
+            cancel_status = "cancelled"
+        try:
+            if data.get("refund_amount") is not None:
+                refund_amount = float(data.get("refund_amount"))
+            elif data.get("refundAmount") is not None:
+                refund_amount = float(data.get("refundAmount"))
+        except (TypeError, ValueError):
+            refund_amount = None
+        try:
+            if data.get("cancellation_fee") is not None:
+                cancellation_fee = float(data.get("cancellation_fee"))
+            elif data.get("cancellationFee") is not None:
+                cancellation_fee = float(data.get("cancellationFee"))
+        except (TypeError, ValueError):
+            cancellation_fee = None
+    elif not cfg.is_sandbox:
+        raise HTTPException(
+            status_code=400,
+            detail="Identifiant LiteAPI manquant — annulation impossible",
+        )
+
+    patch: Dict[str, Any] = {
+        "status": cancel_status,
+        "updated_at": _now(),
+    }
+    if isinstance(raw_cancel, dict):
+        # Keep book payload; attach cancel response under raw_book._cancellation
+        raw_book = booking.get("raw_book")
+        if isinstance(raw_book, dict):
+            patch["raw_book"] = {**raw_book, "_cancellation": raw_cancel}
+        else:
+            patch["raw_book"] = {"_cancellation": raw_cancel}
+
+    upd = supabase.table("hotel_bookings").update(patch).eq("id", booking_id)
+    if actor["user_id"]:
+        upd = upd.eq("user_id", actor["user_id"])
+    elif actor["draft_token"]:
+        upd = upd.eq("draft_token", actor["draft_token"])
+    updated = upd.execute()
+    row = (updated.data or [{**booking, **patch}])[0]
+
+    draft_token = (
+        actor["draft_token"]
+        or str(booking.get("draft_token") or "").strip()
+        or None
+    )
+    draft_row = None
+    if draft_token:
+        try:
+            from deals.my_trips import mark_hotel_cancelled, record_trip_event
+
+            draft_row = mark_hotel_cancelled(
+                supabase,
+                draft_token,
+                booking_id=booking_id,
+                refund_amount=refund_amount,
+                cancellation_fee=cancellation_fee,
+            )
+            record_trip_event(
+                supabase,
+                draft_token,
+                "hotel_cancelled",
+                meta={
+                    "booking_id": booking_id,
+                    "refund_amount": refund_amount,
+                    "cancellation_fee": cancellation_fee,
+                },
+            )
+        except Exception:
+            draft_row = None
+
+    out = _public_booking(row)
+    out["refund_amount"] = refund_amount
+    out["cancellation_fee"] = cancellation_fee
+    if draft_row is not None:
+        out["draft"] = draft_row
+    return out
 
 
 @router.get("/api/hotel-bookings")
