@@ -786,15 +786,13 @@ def _hotel_pipeline_state(
     return "none"
 
 
-def _workspace_phase(
+def _workspace_progress_phase(
     *,
-    ret_date: Optional[str],
     accepted: Optional[dict],
     draft: Optional[dict],
     booking: Optional[dict],
 ) -> str:
-    if ret_date and ret_date < date.today().isoformat():
-        return "past"
+    """Progress through vol → hôtel, ignoring calendar."""
     booking_status = str((booking or {}).get("status") or "")
     if booking_status in _HOTEL_BOOKED_STATUSES:
         return "booked"
@@ -816,6 +814,29 @@ def _workspace_phase(
     if accepted:
         return "flight_selected"
     return "planning"
+
+
+def _workspace_phase(
+    *,
+    ret_date: Optional[str],
+    accepted: Optional[dict],
+    draft: Optional[dict],
+    booking: Optional[dict],
+) -> str:
+    """
+    Past only after the stay is really done (hôtel réservé) and return date passed.
+    Incomplete trips with past dates stay actionable (scan / hôtel / activités).
+    """
+    progress = _workspace_progress_phase(
+        accepted=accepted, draft=draft, booking=booking
+    )
+    if (
+        progress == "booked"
+        and ret_date
+        and ret_date < date.today().isoformat()
+    ):
+        return "past"
+    return progress
 
 
 _ACCENT_MAP = str.maketrans(

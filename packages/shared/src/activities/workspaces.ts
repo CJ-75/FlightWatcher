@@ -11,6 +11,8 @@ const ACTIVE_PHASES: ReadonlySet<TravelWorkspacePhase> = new Set([
   'flight_selected',
   'composing',
   'booked',
+  // Past stays stay selectable — ideas / souvenirs after return.
+  'past',
 ])
 
 function normalizeKey(value: string): string {
@@ -73,7 +75,6 @@ export function filterActivitySwitcherWorkspaces(
 
   for (const w of rows) {
     if (!w) continue
-    if (w.phase === 'past') continue
     if (!ACTIVE_PHASES.has(w.phase)) continue
     const id = String(w.workspace_id || '')
     if (id.startsWith('booking:')) continue

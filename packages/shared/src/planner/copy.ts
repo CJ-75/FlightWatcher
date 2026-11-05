@@ -45,7 +45,7 @@ export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
   flight_selected: 'Vol choisi — compose ton hôtel.',
   composing: 'Séjour en cours — finalise la réservation.',
   booked: 'Réservation rattachée à ce voyage.',
-  past: 'Voyage terminé — dossier conservé.',
+  past: 'Voyage terminé — tu peux encore ajouter des activités.',
 }
 
 export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {

@@ -47,8 +47,15 @@ export function ActivityStepPanel(props: {
   citySlug?: string | null
   enabled?: boolean
   surface?: string
+  onItemsChange?: (items: { status?: string | null }[]) => void
 }) {
-  const { draftToken, plannedTripId, enabled = true, surface = 'my_trip' } = props
+  const {
+    draftToken,
+    plannedTripId,
+    enabled = true,
+    surface = 'my_trip',
+    onItemsChange,
+  } = props
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { signInWithGoogle, user, session, viewUser } = useAuth()
   const owner = useMemo(
@@ -141,6 +148,14 @@ export function ActivityStepPanel(props: {
   useEffect(() => {
     if (enabled) void load()
   }, [enabled, load])
+
+  useEffect(() => {
+    onItemsChange?.(
+      items.map((i) => ({
+        status: i.status ?? null,
+      })),
+    )
+  }, [items, onItemsChange])
 
   useEffect(() => {
     if (!enabled) return

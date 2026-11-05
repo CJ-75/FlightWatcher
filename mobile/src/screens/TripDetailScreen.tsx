@@ -45,6 +45,7 @@ import {
   type StayStepId,
 } from '@flightwatcher/shared'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
+import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -132,6 +133,7 @@ export function TripDetailScreen() {
   const [watchBusy, setWatchBusy] = useState(false)
   const [watchInterval, setWatchInterval] = useState(3600)
   const [hotelBusy, setHotelBusy] = useState(false)
+  const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
   const [scanEmpty, setScanEmpty] = useState<{
     reason: 'budget' | 'no_flights'
     budget: number
@@ -237,12 +239,15 @@ export function TripDetailScreen() {
 
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
-    if (!token || !plannerActivitiesEnabled) {
+    if ((!tripId && !token) || !plannerActivitiesEnabled) {
       setActivityItems([])
       return
     }
+    const owner = tripId
+      ? { planned_trip_id: tripId }
+      : { draft_token: token! }
     void getApi()
-      .listTripItems({ draft_token: token })
+      .listTripItems(owner)
       .then((res) => {
         const items = res.items || []
         setActivityItems(items.filter((i) => i.item_type === 'activity'))
@@ -251,6 +256,7 @@ export function TripDetailScreen() {
         setActivityItems([])
       })
   }, [
+    tripId,
     flightDraft?.draft_token,
     workspace?.draft_token,
     plannerActivitiesEnabled,
@@ -1140,6 +1146,43 @@ export function TripDetailScreen() {
   const reservationToken =
     flightDraft?.draft_token || workspace?.draft_token || null
 
+  const draftHotel = useMemo(() => {
+    const raw =
+      (flightDraft?.hotel as Record<string, unknown> | null | undefined) ||
+      (reservationFlags.payload.hotel as Record<string, unknown> | null | undefined) ||
+      null
+    return raw
+  }, [flightDraft?.hotel, reservationFlags.payload.hotel])
+
+  const hotelId = String(
+    draftHotel?.id || draftHotel?.hotel_id || '',
+  ).trim()
+  const hotelName = String(draftHotel?.name || 'Mon hôtel')
+  const hotelPhoto = String(
+    draftHotel?.photo || draftHotel?.main_photo || draftHotel?.image || '',
+  ).trim()
+  const hotelSeedPhotos = useMemo(() => {
+    const raw = draftHotel?.photos
+    const urls: string[] = []
+    if (Array.isArray(raw)) {
+      for (const p of raw) {
+        const u =
+          typeof p === 'string'
+            ? p
+            : p && typeof p === 'object' && 'url' in p
+              ? String((p as { url?: string }).url || '')
+              : ''
+        if (u.trim()) urls.push(u.trim())
+      }
+    }
+    if (hotelPhoto && !urls.includes(hotelPhoto)) urls.unshift(hotelPhoto)
+    return urls
+  }, [draftHotel?.photos, hotelPhoto])
+  const showHotelGallery =
+    Boolean(reservationFlags.hotelBooked || reservationFlags.hasHotel) &&
+    Boolean(hotelId) &&
+    hotelId !== 'primary'
+
   const openReservations = () => {
     if (!reservationToken) return
     navigation.navigate('TripSummary', { draftToken: reservationToken })
@@ -1147,11 +1190,11 @@ export function TripDetailScreen() {
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
+      // Past incomplete stays stay composable; only booked/external hotel → résumé.
       if (
         reservationFlags.hotelBooked ||
         reservationFlags.externalHotel ||
-        workspace?.phase === 'booked' ||
-        workspace?.phase === 'past'
+        workspace?.phase === 'booked'
       ) {
         openReservations()
         return
@@ -1210,6 +1253,7 @@ export function TripDetailScreen() {
       <ScreenBackground />
       <ScrollView
         style={styles.scroll}
+        scrollEnabled={!gallerySwipeActive}
         contentContainerStyle={{
           padding: spacing.xl,
           paddingBottom: insets.bottom + 40,
@@ -1471,61 +1515,19 @@ export function TripDetailScreen() {
             </View>
           ) : null}
           {!reservationFlags.externalHotel ? (
-            <View style={[styles.nextStepCard, shadow.soft]}>
-              <ImageBackground
-                source={{
-                  uri:
-                    String(
-                      (
-                        (flightDraft?.hotel ||
-                          reservationFlags.payload.hotel) as
-                          | { photo?: string; main_photo?: string }
-                          | null
-                          | undefined
-                      )?.photo ||
-                        (
-                          (flightDraft?.hotel ||
-                            reservationFlags.payload.hotel) as
-                            | { main_photo?: string }
-                            | null
-                            | undefined
-                        )?.main_photo ||
-                        '',
-                    ).trim() || destinationImage,
-                }}
-                style={styles.nextStepImage}
-                imageStyle={styles.nextStepImageRadius}
-              >
-                <LinearGradient
-                  colors={['rgba(31,16,9,0.15)', 'rgba(31,16,9,0.94)']}
-                  style={StyleSheet.absoluteFill}
+            showHotelGallery ? (
+              <View style={[styles.hotelGalleryCard, shadow.soft]}>
+                <HotelPhotoGallery
+                  hotelId={hotelId}
+                  seedPhoto={hotelPhoto || null}
+                  seedPhotos={hotelSeedPhotos}
+                  alt={hotelName}
+                  hotelName={hotelName}
+                  cityLabel={cityLabel}
+                  height={220}
+                  onHorizontalGesture={setGallerySwipeActive}
                 />
-                <View style={styles.nextStepContent}>
-                  <View style={styles.nextStepBadge}>
-                    <Text style={styles.nextStepBadgeText}>
-                      {reservationFlags.hotelBooked || reservationFlags.hasHotel
-                        ? 'HÔTEL'
-                        : 'PROCHAINE ÉTAPE'}
-                    </Text>
-                  </View>
-                  <Text style={styles.nextStepTitle}>
-                    {reservationFlags.hotelBooked || reservationFlags.hasHotel
-                      ? String(
-                          (
-                            (flightDraft?.hotel ||
-                              reservationFlags.payload.hotel) as
-                              | { name?: string }
-                              | null
-                              | undefined
-                          )?.name || 'Mon hôtel',
-                        )
-                      : 'Choisir mon hôtel'}
-                  </Text>
-                  <Text style={styles.nextStepBody}>
-                    {reservationFlags.hotelBooked || reservationFlags.hasHotel
-                      ? `Séjour à ${cityLabel}.`
-                      : `Photos, avis et prix réels pour séjourner à ${cityLabel}.`}
-                  </Text>
+                <View style={styles.hotelGalleryActions}>
                   <Pressable
                     onPress={() => {
                       const token =
@@ -1534,46 +1536,105 @@ export function TripDetailScreen() {
                         navigation.navigate('Bookings')
                         return
                       }
-                      if (reservationFlags.hasHotel && token) {
+                      if (token) {
                         navigation.navigate('HotelCompose', {
                           draftToken: token,
                         })
-                        return
                       }
-                      void addHotelFromTrip(accepted.trip_data, accepted.id)
                     }}
                     disabled={hotelBusy || skippingHotel}
                     style={({ pressed }) => [
                       styles.nextStepButton,
+                      styles.hotelGalleryCta,
                       (pressed || hotelBusy) && { opacity: 0.88 },
                     ]}
                   >
                     <Text style={styles.nextStepButtonText}>
-                      {hotelBusy
-                        ? 'Ouverture…'
-                        : reservationFlags.hotelBooked ||
-                            reservationFlags.hasHotel
-                          ? 'Voir mon hôtel →'
-                          : 'Choisir mon hôtel →'}
+                      {hotelBusy ? 'Ouverture…' : 'Voir mon hôtel →'}
                     </Text>
                   </Pressable>
-                  {reservationFlags.canSkipHotel ? (
+                </View>
+              </View>
+            ) : (
+              <View style={[styles.nextStepCard, shadow.soft]}>
+                <ImageBackground
+                  source={{
+                    uri: hotelPhoto || destinationImage,
+                  }}
+                  style={styles.nextStepImage}
+                  imageStyle={styles.nextStepImageRadius}
+                >
+                  <LinearGradient
+                    colors={['rgba(31,16,9,0.15)', 'rgba(31,16,9,0.94)']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.nextStepContent}>
+                    <View style={styles.nextStepBadge}>
+                      <Text style={styles.nextStepBadgeText}>
+                        {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                          ? 'HÔTEL'
+                          : 'PROCHAINE ÉTAPE'}
+                      </Text>
+                    </View>
+                    <Text style={styles.nextStepTitle}>
+                      {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                        ? hotelName
+                        : 'Choisir mon hôtel'}
+                    </Text>
+                    <Text style={styles.nextStepBody}>
+                      {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                        ? `Séjour à ${cityLabel}.`
+                        : `Photos, avis et prix réels pour séjourner à ${cityLabel}.`}
+                    </Text>
                     <Pressable
-                      onPress={() => void skipHotel()}
-                      disabled={skippingHotel || hotelBusy}
+                      onPress={() => {
+                        const token =
+                          flightDraft?.draft_token || workspace?.draft_token
+                        if (reservationFlags.hotelBooked) {
+                          navigation.navigate('Bookings')
+                          return
+                        }
+                        if (reservationFlags.hasHotel && token) {
+                          navigation.navigate('HotelCompose', {
+                            draftToken: token,
+                          })
+                          return
+                        }
+                        void addHotelFromTrip(accepted.trip_data, accepted.id)
+                      }}
+                      disabled={hotelBusy || skippingHotel}
                       style={({ pressed }) => [
-                        styles.hotelSkipInCard,
-                        (skippingHotel || pressed) && { opacity: 0.7 },
+                        styles.nextStepButton,
+                        (pressed || hotelBusy) && { opacity: 0.88 },
                       ]}
                     >
-                      <Text style={styles.hotelSkipInCardText}>
-                        {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                      <Text style={styles.nextStepButtonText}>
+                        {hotelBusy
+                          ? 'Ouverture…'
+                          : reservationFlags.hotelBooked ||
+                              reservationFlags.hasHotel
+                            ? 'Voir mon hôtel →'
+                            : 'Choisir mon hôtel →'}
                       </Text>
                     </Pressable>
-                  ) : null}
-                </View>
-              </ImageBackground>
-            </View>
+                    {reservationFlags.canSkipHotel ? (
+                      <Pressable
+                        onPress={() => void skipHotel()}
+                        disabled={skippingHotel || hotelBusy}
+                        style={({ pressed }) => [
+                          styles.hotelSkipInCard,
+                          (skippingHotel || pressed) && { opacity: 0.7 },
+                        ]}
+                      >
+                        <Text style={styles.hotelSkipInCardText}>
+                          {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </ImageBackground>
+              </View>
+            )
           ) : null}
           {!isOrganizer ? (
             <Text style={styles.roleHint}>
@@ -1611,6 +1672,7 @@ export function TripDetailScreen() {
                 citySlug={citySlug}
                 enabled={plannerActivitiesEnabled}
                 surface="planner"
+                onItemsChange={setActivityItems}
               />
             </View>
           </View>
@@ -2385,6 +2447,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#21140D',
     borderRadius: 24,
     overflow: 'hidden',
+  },
+  hotelGalleryCard: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  hotelGalleryActions: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  hotelGalleryCta: {
+    alignSelf: 'flex-start',
   },
   nextStepImage: {
     minHeight: 210,

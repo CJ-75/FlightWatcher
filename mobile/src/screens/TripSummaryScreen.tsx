@@ -23,7 +23,6 @@ import {
   boardLabelFr,
   buildStayPipeline,
   distantAirportLine,
-  restaurantStepProgress,
   hotelCancelLabel,
   hotelStarsLabel,
   primaryAirportCode,
@@ -38,7 +37,6 @@ import {
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
-import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -93,11 +91,8 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [flightPriceHint, setFlightPriceHint] = useState<string | null>(null)
   const [chargedHotelTotal, setChargedHotelTotal] = useState<number | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
-  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
-  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
-  const [showRestaurants, setShowRestaurants] = useState(false)
   const leftForFlight = useRef(false)
   const askFlightOnReturn = useRef(false)
   const seededRef = useRef(Boolean(seed))
@@ -110,29 +105,26 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         setPlannerActivitiesEnabled(
           cfg.planner_activities_enabled === true || cfg.activities_ui_enabled === true,
         )
-        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
       .catch(() => undefined)
   }, [])
 
   const refreshTripItems = useCallback(async () => {
-    if (!plannerActivitiesEnabled && !plannerRestaurantsEnabled) return
+    if (!plannerActivitiesEnabled) return
     try {
       const res = await getApi().listTripItems({ draft_token: draftToken })
       const items = res.items || []
       setActivityItems(items.filter((i) => i.item_type === 'activity'))
-      setRestaurantItems(items.filter((i) => i.item_type === 'restaurant'))
     } catch {
       /* keep previous progress */
     }
-  }, [draftToken, plannerActivitiesEnabled, plannerRestaurantsEnabled])
+  }, [draftToken, plannerActivitiesEnabled])
 
   useEffect(() => {
     void refreshTripItems()
   }, [
     refreshTripItems,
     showActivities,
-    showRestaurants,
     draft?.hotel_booked_at,
     draft?.flight_booked_at,
   ])
@@ -403,10 +395,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     () => activityStepProgress(activityItems),
     [activityItems],
   )
-  const restaurantProgress = useMemo(
-    () => restaurantStepProgress(restaurantItems),
-    [restaurantItems],
-  )
 
   const pipelineSteps = useMemo(
     () =>
@@ -421,21 +409,13 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           hasHotel: Boolean(hotelId),
           hotelBooked,
         }),
-        focus: showRestaurants
-          ? 'restaurants'
-          : showActivities
-            ? 'activities'
-            : undefined,
+        focus: showActivities ? 'activities' : undefined,
         activitiesEnabled: plannerActivitiesEnabled,
         activitiesDone: activityProgress.done,
         activitiesPartial: activityProgress.partial,
         activitiesHint: activityProgress.hint,
-        restaurantsEnabled: plannerRestaurantsEnabled,
-        restaurantsDone: restaurantProgress.done,
-        restaurantsPartial: restaurantProgress.partial,
-        restaurantsHint: restaurantProgress.hint,
-        restaurantsSkipped: restaurantProgress.skipped,
-      }),
+        restaurantsEnabled: false,
+      }).filter((s) => s.id !== 'restaurants'),
     [
       fl,
       flightBooked,
@@ -444,11 +424,8 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       hotelId,
       hotelBooked,
       showActivities,
-      showRestaurants,
       plannerActivitiesEnabled,
-      plannerRestaurantsEnabled,
       activityProgress,
-      restaurantProgress,
     ],
   )
 
@@ -482,8 +459,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       hasHotelSelected: Boolean(hotelId),
       activitiesEnabled: plannerActivitiesEnabled,
       activitiesDone: activityProgress.done,
-      restaurantsEnabled: plannerRestaurantsEnabled,
-      restaurantsDone: restaurantProgress.done || restaurantProgress.skipped,
+      restaurantsEnabled: false,
       hasPlanner: Boolean(draft?.source_planned_trip_id),
     })
     return { label: next.label, action: next.id }
@@ -494,9 +470,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     hotelBooked,
     hotelId,
     plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
-    restaurantProgress.done,
-    restaurantProgress.skipped,
   ])
 
   const markFlight = async (yes: boolean) => {
@@ -590,10 +563,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       setShowActivities(true)
       return
     }
-    if (id === 'restaurants' && plannerRestaurantsEnabled) {
-      setShowRestaurants(true)
-      return
-    }
     if (id === 'flight' && flightUrl && !flightBooked) {
       openFlight()
     }
@@ -611,8 +580,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       openFlight()
     } else if (sticky.action === 'activities') {
       setShowActivities(true)
-    } else if (sticky.action === 'restaurants') {
-      setShowRestaurants(true)
     } else if (sticky.action === 'planner' && draft?.source_planned_trip_id) {
       navigation.navigate('TripDetail', {
         tripId: draft.source_planned_trip_id,
@@ -937,23 +904,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
               citySlug={activityCitySlug}
               enabled={plannerActivitiesEnabled}
               surface="my_trip"
-            />
-          </View>
-        ) : null}
-
-        {plannerRestaurantsEnabled ? (
-          <View style={[styles.card, shadow.soft, styles.addressesCard]}>
-            <IconLabel section label="④ Adresses" icon={<TicketIcon size={14} />} />
-            <RestaurantStepPanel
-              draftToken={draftToken}
-              citySlug={activityCitySlug}
-              cityLabel={city ? String(city) : undefined}
-              dateIso={out || null}
-              enabled={plannerRestaurantsEnabled}
-              hotelReady={
-                hotelBooked ||
-                Boolean(pl.hotel_external || pl.external_hotel)
-              }
             />
           </View>
         ) : null}

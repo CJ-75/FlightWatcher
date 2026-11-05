@@ -171,11 +171,19 @@ export function activityStepProgress(items: { status?: string | null }[]): {
       hint: skipped ? 'Passé' : 'Choisir',
     }
   }
+  // ≥1 activité sur le séjour → étape verte (parcours).
   const booked = active.some((i) => i.status === 'booked')
-  const validated = active.some((i) => i.status === 'validated' || i.status === 'booked')
+  const validated = active.some(
+    (i) => i.status === 'validated' || i.status === 'booked',
+  )
   if (booked) return { done: true, partial: false, hint: 'Réservée' }
-  if (validated) return { done: false, partial: true, hint: 'À réserver' }
-  return { done: false, partial: true, hint: 'Idée' }
+  if (validated) return { done: true, partial: false, hint: 'Validé' }
+  const n = active.length
+  return {
+    done: true,
+    partial: false,
+    hint: n === 1 ? '1 idée' : `${n} idées`,
+  }
 }
 
 export const RESTAURANT_SKIP_LABEL_FR = 'Pas de restaurant prévu'

@@ -50,8 +50,16 @@ export function ActivityStepPanel(props: {
   citySlug?: string | null
   enabled?: boolean
   surface?: string
+  /** Sync parcours pipeline when ideas are added / removed. */
+  onItemsChange?: (items: { status?: string | null }[]) => void
 }) {
-  const { draftToken, plannedTripId, enabled = true, surface = 'my_trip' } = props
+  const {
+    draftToken,
+    plannedTripId,
+    enabled = true,
+    surface = 'my_trip',
+    onItemsChange,
+  } = props
   const owner = useMemo(
     () =>
       pickTripItemOwner({
@@ -134,6 +142,14 @@ export function ActivityStepPanel(props: {
   useEffect(() => {
     if (enabled) void load()
   }, [enabled, load])
+
+  useEffect(() => {
+    onItemsChange?.(
+      items.map((i) => ({
+        status: i.status ?? null,
+      })),
+    )
+  }, [items, onItemsChange])
 
   useEffect(() => {
     let cancelled = false

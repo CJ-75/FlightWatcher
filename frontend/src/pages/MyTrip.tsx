@@ -27,12 +27,10 @@ import {
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   resolveNextStayAction,
-  restaurantStepProgress,
   type StayStepId,
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
-import { RestaurantStepPanel } from '../components/RestaurantStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApiClient } from '../utils/apiClient'
 import { getAppConfig } from '../utils/configCache'
@@ -124,13 +122,9 @@ export default function MyTrip() {
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
-  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
-  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
-  const [showRestaurants, setShowRestaurants] = useState(false)
   const activitiesSectionRef = useRef<HTMLElement | null>(null)
-  const restaurantsSectionRef = useRef<HTMLElement | null>(null)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
   const hotelSectionRef = useRef<HTMLElement | null>(null)
@@ -202,7 +196,7 @@ export default function MyTrip() {
   }, [token])
 
   const refreshTripItems = useCallback(async () => {
-    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) return
+    if (!token || !plannerActivitiesEnabled) return
     try {
       const res = await listTripItemsCached({ draft_token: token })
       const items = res.items || []
@@ -211,15 +205,10 @@ export default function MyTrip() {
           status?: string | null
         }[],
       )
-      setRestaurantItems(
-        items.filter((i) => i.item_type === 'restaurant') as {
-          status?: string | null
-        }[],
-      )
     } catch {
       /* keep previous step progress */
     }
-  }, [token, plannerActivitiesEnabled, plannerRestaurantsEnabled])
+  }, [token, plannerActivitiesEnabled])
 
   useEffect(() => {
     void load()
@@ -439,10 +428,6 @@ export default function MyTrip() {
     () => activityStepProgress(activityItems),
     [activityItems],
   )
-  const restaurantProgress = useMemo(
-    () => restaurantStepProgress(restaurantItems),
-    [restaurantItems],
-  )
 
   const pipelineSteps = useMemo(
     () =>
@@ -461,21 +446,15 @@ export default function MyTrip() {
         }),
         focus: wantsCompose
           ? 'hotel'
-          : showRestaurants
-            ? 'restaurants'
-            : showActivities
-              ? 'activities'
-              : undefined,
+          : showActivities
+            ? 'activities'
+            : undefined,
         activitiesEnabled: plannerActivitiesEnabled,
         activitiesDone: activityProgress.done,
         activitiesPartial: activityProgress.partial,
         activitiesHint: activityProgress.hint,
-        restaurantsEnabled: plannerRestaurantsEnabled,
-        restaurantsDone: restaurantProgress.done,
-        restaurantsPartial: restaurantProgress.partial,
-        restaurantsHint: restaurantProgress.hint,
-        restaurantsSkipped: restaurantProgress.skipped,
-      }),
+        restaurantsEnabled: false,
+      }).filter((s) => s.id !== 'restaurants'),
     [
       flight,
       flightBooked,
@@ -485,11 +464,8 @@ export default function MyTrip() {
       hotelBooked,
       wantsCompose,
       showActivities,
-      showRestaurants,
       plannerActivitiesEnabled,
-      plannerRestaurantsEnabled,
       activityProgress,
-      restaurantProgress,
     ],
   )
 
@@ -501,7 +477,6 @@ export default function MyTrip() {
           cfg.planner_activities_enabled === true ||
             cfg.activities_ui_enabled === true,
         )
-        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
       .catch(() => undefined)
   }, [])
@@ -519,26 +494,8 @@ export default function MyTrip() {
   }, [searchParams])
 
   useEffect(() => {
-    if (searchParams.get('restaurants') !== '1') return
-    setShowRestaurants(true)
-    const t = window.setTimeout(() => {
-      restaurantsSectionRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    }, 120)
-    return () => window.clearTimeout(t)
-  }, [searchParams])
-
-  useEffect(() => {
     void refreshTripItems()
-  }, [
-    refreshTripItems,
-    showActivities,
-    showRestaurants,
-    hotelBooked,
-    flightBooked,
-  ])
+  }, [refreshTripItems, showActivities, hotelBooked, flightBooked])
 
   const from = searchParams.get('from')
   const plannerTripId = draft?.source_planned_trip_id || null
@@ -584,13 +541,6 @@ export default function MyTrip() {
       setShowActivities(true)
       setTimeout(() => {
         activitiesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 50)
-      return
-    }
-    if (id === 'restaurants' && plannerRestaurantsEnabled) {
-      setShowRestaurants(true)
-      setTimeout(() => {
-        restaurantsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 50)
       return
     }
@@ -1157,7 +1107,7 @@ export default function MyTrip() {
     void openHotelCheckout()
   }, [draft, hotelBooked, loading, openHotelCheckout])
 
-  /** Sticky récap CTA — dynamique selon vol / hôtel / activités / restos. */
+  /** Sticky récap CTA — dynamique selon vol / hôtel / activités. */
   const nextAction = useMemo(() => {
     const base = resolveNextStayAction({
       flightBooked,
@@ -1165,8 +1115,7 @@ export default function MyTrip() {
       hasHotelSelected: Boolean(hotelObj?.id || hotelObj?.hotel_id),
       activitiesEnabled: plannerActivitiesEnabled,
       activitiesDone: activityProgress.done,
-      restaurantsEnabled: plannerRestaurantsEnabled,
-      restaurantsDone: restaurantProgress.done || restaurantProgress.skipped,
+      restaurantsEnabled: false,
       hasPlanner: Boolean(plannerTripId),
     })
     if (base.id === 'hotel_pay' && party.hotelTotal > 0) {
@@ -1189,10 +1138,7 @@ export default function MyTrip() {
     hotelObj,
     party.hotelTotal,
     plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
     plannerTripId,
-    restaurantProgress.done,
-    restaurantProgress.skipped,
   ])
 
   if (loading) {
@@ -1388,25 +1334,6 @@ export default function MyTrip() {
               setShowActivities(true)
               setTimeout(() => {
                 activitiesSectionRef.current?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'start',
-                })
-              }, 50)
-            }}
-            className={cls}
-          >
-            {nextAction.label}
-          </button>
-        )
-      }
-      if (nextAction.id === 'restaurants') {
-        return (
-          <button
-            type="button"
-            onClick={() => {
-              setShowRestaurants(true)
-              setTimeout(() => {
-                restaurantsSectionRef.current?.scrollIntoView({
                   behavior: 'smooth',
                   block: 'start',
                 })
@@ -1913,48 +1840,7 @@ export default function MyTrip() {
                   citySlug={activityCitySlug}
                   enabled={plannerActivitiesEnabled}
                   surface="my_trip"
-                />
-              </section>
-            ) : null}
-
-            {plannerRestaurantsEnabled ? (
-              <section
-                ref={restaurantsSectionRef}
-                className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 space-y-4 shadow-soft"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-primary-700 mb-0.5">
-                      Étape ④
-                    </p>
-                    <h2 className="font-extrabold text-ink text-lg tracking-tight">
-                      Adresses
-                    </h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs font-bold text-primary-700 hover:underline"
-                    onClick={() => setShowRestaurants(true)}
-                  >
-                    Gérer
-                  </button>
-                </div>
-                <RestaurantStepPanel
-                  draftToken={token}
-                  citySlug={activityCitySlug}
-                  cityLabel={city ? String(city) : undefined}
-                  dateIso={
-                    typeof payload.dates === 'object' &&
-                    payload.dates &&
-                    'outbound' in (payload.dates as object)
-                      ? String((payload.dates as { outbound?: string }).outbound || '')
-                      : null
-                  }
-                  enabled={plannerRestaurantsEnabled}
-                  hotelReady={
-                    hotelBooked ||
-                    Boolean(payload.hotel_external || payload.external_hotel)
-                  }
+                  onItemsChange={setActivityItems}
                 />
               </section>
             ) : null}

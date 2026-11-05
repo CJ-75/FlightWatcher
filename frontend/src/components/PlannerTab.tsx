@@ -51,7 +51,6 @@ import {
   partyModeTitleFr,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
-  restaurantStepProgress,
   PLANNER_HUB_TABS,
   PLANNER_HUB_EMPTY_FR,
   PLANNER_PHASE_LABEL_FR,
@@ -68,8 +67,8 @@ import {
 } from '@flightwatcher/shared'
 import { CreateTripModal } from './planner/CreateTripModal'
 import { StayPipelineStepper } from './StayPipelineStepper'
-import { RestaurantStepPanel } from './RestaurantStepPanel'
 import { ActivityStepPanel } from './ActivityStepPanel'
+import { HotelPhotoGallery } from './HotelPhotoGallery'
 
 function PencilIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
   return (
@@ -1295,9 +1294,7 @@ function TripDetailView({
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
   const [askFlightBooked, setAskFlightBooked] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
-  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
-  const [restaurantItems, setRestaurantItems] = useState<{ status?: string | null }[]>([])
   const autoScanStarted = useRef(false)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
@@ -1308,7 +1305,6 @@ function TripDetailView({
       .then((cfg) => {
         if (!cfg) return
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
-        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
       })
       .catch(() => undefined)
   }, [])
@@ -1389,12 +1385,14 @@ function TripDetailView({
 
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
-    if (!token || (!plannerActivitiesEnabled && !plannerRestaurantsEnabled)) {
+    if ((!tripId && !token) || !plannerActivitiesEnabled) {
       setActivityItems([])
-      setRestaurantItems([])
       return
     }
-    void listTripItemsCached({ draft_token: token })
+    const owner = tripId
+      ? { planned_trip_id: tripId }
+      : { draft_token: token! }
+    void listTripItemsCached(owner)
       .then((res) => {
         const items = res.items || []
         setActivityItems(
@@ -1402,21 +1400,15 @@ function TripDetailView({
             status?: string | null
           }[],
         )
-        setRestaurantItems(
-          items.filter((i) => i.item_type === 'restaurant') as {
-            status?: string | null
-          }[],
-        )
       })
       .catch(() => {
         setActivityItems([])
-        setRestaurantItems([])
       })
   }, [
+    tripId,
     flightDraft?.draft_token,
     workspace?.draft_token,
     plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
     flightDraft?.hotel_booked_at,
     flightDraft?.flight_booked_at,
   ])
@@ -1429,10 +1421,6 @@ function TripDetailView({
   const activityProgress = useMemo(
     () => activityStepProgress(activityItems),
     [activityItems],
-  )
-  const restaurantProgress = useMemo(
-    () => restaurantStepProgress(restaurantItems),
-    [restaurantItems],
   )
 
   const draftPayload = (flightDraft?.payload || {}) as Record<string, unknown>
@@ -1512,12 +1500,8 @@ function TripDetailView({
       activitiesDone: activityProgress.done,
       activitiesPartial: activityProgress.partial,
       activitiesHint: activityProgress.hint,
-      restaurantsEnabled: plannerRestaurantsEnabled,
-      restaurantsDone: restaurantProgress.done,
-      restaurantsPartial: restaurantProgress.partial,
-      restaurantsHint: restaurantProgress.hint,
-      restaurantsSkipped: restaurantProgress.skipped,
-    })
+      restaurantsEnabled: false,
+    }).filter((s) => s.id !== 'restaurants')
   }, [
     accepted,
     activityProgress,
@@ -1530,8 +1514,6 @@ function TripDetailView({
     hasHotel,
     hotelBooked,
     plannerActivitiesEnabled,
-    plannerRestaurantsEnabled,
-    restaurantProgress,
   ])
 
   const bookSelectedFlight = async () => {
@@ -2340,6 +2322,30 @@ function TripDetailView({
   const hotelName = String(
     (draftHotel as { name?: string } | null)?.name || 'Mon hôtel',
   )
+  const hotelId = String(
+    (draftHotel as { id?: string | number; hotel_id?: string | number } | null)
+      ?.id ||
+      (draftHotel as { hotel_id?: string | number } | null)?.hotel_id ||
+      '',
+  ).trim()
+  const hotelSeedPhotos = (() => {
+    const raw = (draftHotel as { photos?: unknown } | null)?.photos
+    if (!Array.isArray(raw)) return hotelPhoto ? [hotelPhoto] : []
+    const urls = raw
+      .map((p) =>
+        typeof p === 'string'
+          ? p
+          : p && typeof p === 'object' && 'url' in p
+            ? String((p as { url?: string }).url || '')
+            : '',
+      )
+      .map((u) => u.trim())
+      .filter(Boolean)
+    if (hotelPhoto && !urls.includes(hotelPhoto)) urls.unshift(hotelPhoto)
+    return urls
+  })()
+  const showHotelGallery =
+    Boolean(hotelBooked || hasHotel) && Boolean(hotelId) && hotelId !== 'primary'
 
   return (
     <div className="w-full space-y-6 pb-10">
@@ -2599,6 +2605,35 @@ function TripDetailView({
                 <p className="text-sm text-ink-soft mt-1 leading-relaxed">
                   Tu as sauté l’étape hôtel FlightWatcher pour {destinationName}.
                 </p>
+              </div>
+            ) : showHotelGallery ? (
+              <div
+                className={`min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 bg-white shadow-xl shadow-orange-950/10 ${
+                  externalFlight && !accepted ? 'lg:col-span-2' : ''
+                }`}
+              >
+                <HotelPhotoGallery
+                  embedded
+                  hotelId={hotelId}
+                  seedPhoto={hotelPhoto || null}
+                  seedPhotos={hotelSeedPhotos}
+                  alt={hotelName}
+                  hotelName={hotelName}
+                  cityLabel={destinationName}
+                />
+                <div className="flex flex-wrap items-center gap-2 px-5 py-4 sm:px-6">
+                  <button
+                    type="button"
+                    disabled={hotelBusy || skippingHotel}
+                    onClick={() =>
+                      hotelBooked ? openReservations() : onPipelineStep('hotel')
+                    }
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#D94D1B] px-5 py-3 text-sm font-extrabold text-white shadow-lg min-h-[48px] disabled:opacity-60"
+                  >
+                    {hotelBusy ? 'Ouverture…' : HOTEL_CTA_FR.view}
+                    <span aria-hidden>›</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div
@@ -2956,14 +2991,13 @@ function TripDetailView({
         </section>
       )}
 
-      {!scanning && trip && (plannerActivitiesEnabled || plannerRestaurantsEnabled) ? (
+      {!scanning && trip && plannerActivitiesEnabled ? (
         <PlannerStayExtras
           tripId={tripId}
           trip={trip}
           draftToken={flightDraft?.draft_token || workspace?.draft_token || null}
           activitiesEnabled={plannerActivitiesEnabled}
-          restaurantsEnabled={plannerRestaurantsEnabled}
-          hotelReady={hotelBooked || externalHotel}
+          onActivityItemsChange={setActivityItems}
         />
       ) : null}
 
@@ -3078,15 +3112,13 @@ function PlannerStayExtras({
   trip,
   draftToken = null,
   activitiesEnabled,
-  restaurantsEnabled,
-  hotelReady,
+  onActivityItemsChange,
 }: {
   tripId: string
   trip: PlannedTripDetail
   draftToken?: string | null
   activitiesEnabled: boolean
-  restaurantsEnabled: boolean
-  hotelReady: boolean
+  onActivityItemsChange?: (items: { status?: string | null }[]) => void
 }) {
   const arrivalCode = parseAirportCodes(trip.arrival_airport)[0] || ''
   const cityLabel = arrivalCode
@@ -3096,87 +3128,44 @@ function PlannerStayExtras({
     cityLabel: cityLabel !== 'ta ville' ? cityLabel : null,
     destIata: arrivalCode || null,
   })
-  const dateIso = trip.dates_depart?.[0]?.date || null
   const cityImage = cityImageUrl(cityLabel, arrivalCode || undefined)
 
-  const both = activitiesEnabled && restaurantsEnabled
+  if (!activitiesEnabled) return null
 
   return (
-    <div
-      className={
-        both
-          ? 'grid gap-4 lg:grid-cols-2 lg:items-stretch'
-          : 'space-y-4'
-      }
-    >
-      {activitiesEnabled ? (
-        <section className="group relative isolate flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-orange-100/70 bg-white shadow-lg shadow-orange-950/5">
-          <div className="relative h-28 sm:h-32 shrink-0 overflow-hidden">
-            <img
-              src={cityImage}
-              alt=""
-              aria-hidden
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/35 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 px-4 py-3 sm:px-5 sm:py-3.5">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
-                À vivre sur place
-              </p>
-              <h3 className="mt-0.5 text-lg sm:text-xl font-black tracking-tight text-white">
-                Activités à {cityLabel}
-              </h3>
-              <p className="mt-0.5 text-xs text-white/70 line-clamp-1">
-                Transforme le séjour en souvenirs.
-              </p>
-            </div>
+    <div className="space-y-4">
+      <section className="group relative isolate flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-orange-100/70 bg-white shadow-lg shadow-orange-950/5">
+        <div className="relative h-28 sm:h-32 shrink-0 overflow-hidden">
+          <img
+            src={cityImage}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/35 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 px-4 py-3 sm:px-5 sm:py-3.5">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
+              À vivre sur place
+            </p>
+            <h3 className="mt-0.5 text-lg sm:text-xl font-black tracking-tight text-white">
+              Activités à {cityLabel}
+            </h3>
+            <p className="mt-0.5 text-xs text-white/70 line-clamp-1">
+              Transforme le séjour en souvenirs.
+            </p>
           </div>
-          <div className="flex flex-1 flex-col p-3.5 sm:p-4">
-            <ActivityStepPanel
-              draftToken={draftToken}
-              plannedTripId={tripId}
-              citySlug={citySlug}
-              enabled={activitiesEnabled}
-              surface="planner"
-            />
-          </div>
-        </section>
-      ) : null}
-
-      {restaurantsEnabled ? (
-        <section className="group relative isolate flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-orange-100/70 bg-white shadow-lg shadow-orange-950/5">
-          <div className="relative h-28 sm:h-32 shrink-0 overflow-hidden">
-            <img
-              src={cityImage}
-              alt=""
-              aria-hidden
-              className="absolute inset-0 h-full w-full object-cover object-[center_65%] transition-transform duration-700 group-hover:scale-[1.03]"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/90 via-[#140c08]/40 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 px-4 py-3 sm:px-5 sm:py-3.5">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-300">
-                Tes bonnes adresses
-              </p>
-              <h3 className="mt-0.5 text-lg sm:text-xl font-black tracking-tight text-white">
-                Où manger à {cityLabel}
-              </h3>
-              <p className="mt-0.5 text-xs text-white/70 line-clamp-1">
-                Tous tes coups de cœur au même endroit.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-1 flex-col p-3.5 sm:p-4">
-            <RestaurantStepPanel
-              plannedTripId={tripId}
-              citySlug={citySlug}
-              cityLabel={cityLabel}
-              dateIso={dateIso}
-              enabled={restaurantsEnabled}
-              hotelReady={hotelReady}
-            />
-          </div>
-        </section>
-      ) : null}
+        </div>
+        <div className="flex flex-1 flex-col p-3.5 sm:p-4">
+          <ActivityStepPanel
+            draftToken={draftToken}
+            plannedTripId={tripId}
+            citySlug={citySlug}
+            enabled={activitiesEnabled}
+            surface="planner"
+            onItemsChange={onActivityItemsChange}
+          />
+        </div>
+      </section>
     </div>
   )
 }
