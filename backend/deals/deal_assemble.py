@@ -129,6 +129,8 @@ def _flight_card(flight_row: Dict[str, Any], flight_json: Dict[str, Any]) -> Dic
             duration_minutes = int(estimate_duration_minutes(origin, dest))
     except Exception:
         duration_minutes = None
+    out_fn = aller.get("flightNumber") or aller.get("flight_number")
+    in_fn = retour.get("flightNumber") or retour.get("flight_number")
     return {
         "price_pp": float(flight_row.get("price_pp") or flight_json.get("prix_total") or 0),
         "outbound_local": aller.get("departureTime") or flight_json.get("arrival_local"),
@@ -139,6 +141,24 @@ def _flight_card(flight_row: Dict[str, Any], flight_json: Dict[str, Any]) -> Dic
         "booking_url": flight_json.get("booking_url") or "",
         "origin_iata": origin,
         "destination_iata": dest,
+        "outbound_flight_number": out_fn,
+        "inbound_flight_number": in_fn,
+        "flight_number": out_fn,
+        "return_flight_number": in_fn,
+        "aller": {
+            "flightNumber": out_fn,
+            "origin": origin,
+            "destination": dest,
+            "departureTime": aller.get("departureTime")
+            or flight_json.get("arrival_local"),
+        },
+        "retour": {
+            "flightNumber": in_fn,
+            "origin": dest,
+            "destination": origin,
+            "departureTime": retour.get("departureTime")
+            or flight_json.get("return_departure_local"),
+        },
     }
 
 

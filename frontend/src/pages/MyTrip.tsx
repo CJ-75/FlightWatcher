@@ -27,6 +27,7 @@ import {
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   resolveNextStayAction,
+  pickTripItemOwner,
   type StayStepId,
 } from '@flightwatcher/shared'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
@@ -204,7 +205,13 @@ export default function MyTrip() {
   const refreshTripItems = useCallback(async () => {
     if (!token || !plannerActivitiesEnabled) return
     try {
-      const res = await listTripItemsCached({ draft_token: token })
+      // Same XOR owner as ActivityStepPanel (planned_trip_id wins over draft).
+      const owner = pickTripItemOwner({
+        draftToken: token,
+        plannedTripId: draft?.source_planned_trip_id || null,
+      })
+      if (!owner.draft_token && !owner.planned_trip_id) return
+      const res = await listTripItemsCached(owner)
       const items = res.items || []
       setActivityItems(
         items.filter((i) => i.item_type === 'activity') as {
@@ -214,7 +221,7 @@ export default function MyTrip() {
     } catch {
       /* keep previous step progress */
     }
-  }, [token, plannerActivitiesEnabled])
+  }, [token, plannerActivitiesEnabled, draft?.source_planned_trip_id])
 
   useEffect(() => {
     void load()
@@ -325,9 +332,15 @@ export default function MyTrip() {
     city
 
   const outDep =
-    flight.outbound_local || flight.out_dep_local || payload.out_dep_local
+    flight.outbound_local ||
+    flight.out_dep_local ||
+    flight.aller?.departureTime ||
+    payload.out_dep_local
   const retDep =
-    flight.inbound_local || flight.ret_dep_local || payload.ret_dep_local
+    flight.inbound_local ||
+    flight.ret_dep_local ||
+    flight.retour?.departureTime ||
+    payload.ret_dep_local
   const outTime = formatTimeLocal(outDep)
   const retTime = formatTimeLocal(retDep)
   const outArrTime = formatTimeLocal(
@@ -342,6 +355,20 @@ export default function MyTrip() {
       flight.in_arr_local ||
       payload.ret_arr_local,
   )
+  const outFlightNo = String(
+    flight.outbound_flight_number ||
+      flight.flight_number ||
+      flight.aller?.flightNumber ||
+      flight.aller?.flight_number ||
+      '',
+  ).trim()
+  const retFlightNo = String(
+    flight.inbound_flight_number ||
+      flight.return_flight_number ||
+      flight.retour?.flightNumber ||
+      flight.retour?.flight_number ||
+      '',
+  ).trim()
 
   const carrier = useMemo(
     () =>
@@ -450,9 +477,10 @@ export default function MyTrip() {
           hasHotel: Boolean(hotelId),
           hotelBooked,
         }),
+        // Don't pin focus on Activités once chosen — keeps the chip green (done).
         focus: wantsCompose
           ? 'hotel'
-          : showActivities
+          : showActivities && !activityProgress.done
             ? 'activities'
             : undefined,
         activitiesEnabled: plannerActivitiesEnabled,
@@ -1598,46 +1626,91 @@ export default function MyTrip() {
                 </div>
               ) : null}
 
-              {flightBooked ? (
-                <p className="text-sm text-slate-700">
-                  <span className="font-bold text-slate-900">
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-bold text-slate-900">
                     {airlineName || 'Compagnie'}
-                  </span>
-                  {' · '}
-                  {formatDate(outDate)} → {formatDate(retDate)}
-                  {stopsLabel ? ` · ${stopsLabel}` : ''}
-                  {outTime ? ` · ${outTime}` : ''}
-                  {retTime ? ` / ${retTime}` : ''}
-                </p>
-              ) : (
-                <>
-                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-1.5">
-                    <p className="font-bold text-slate-900">
-                      {airlineName || 'Compagnie'}
-                      {stopsLabel ? ` · ${stopsLabel}` : ''}
+                    {stopsLabel ? (
+                      <span className="font-semibold text-slate-600">
+                        {' '}
+                        · {stopsLabel}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-xs font-bold tabular-nums text-slate-500 shrink-0">
+                    {originIata || '—'} → {destIata || '—'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="rounded-xl border border-slate-200/80 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-primary-700">
+                      Aller
                     </p>
-                    <p>
-                      Aller {formatDate(outDate)}
-                      {outTime ? ` · ${outTime}` : ''}
-                      {outArrTime ? ` → ${outArrTime}` : ''}
+                    <p className="mt-1 font-extrabold text-slate-900">
+                      {formatDate(outDate)}
                     </p>
-                    <p className="text-slate-600">
+                    <div className="mt-1 flex items-baseline justify-between gap-2">
+                      <span className="text-lg font-black tabular-nums text-slate-950">
+                        {outTime || '—'}
+                        {outArrTime ? (
+                          <span className="text-sm font-bold text-slate-500">
+                            {' '}
+                            → {outArrTime}
+                          </span>
+                        ) : null}
+                      </span>
+                      {outFlightNo ? (
+                        <span className="font-mono text-[11px] font-bold text-slate-500">
+                          {outFlightNo}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600 truncate">
                       {originLabel} → {arrivalLabel}
                     </p>
-                    <p>
-                      Retour {formatDate(retDate)}
-                      {retTime ? ` · ${retTime}` : ''}
-                      {retArrTime ? ` → ${retArrTime}` : ''}
-                    </p>
-                    {payload.baggage_line ? (
-                      <p className="text-xs text-slate-600 pt-1 border-t border-slate-200">
-                        {String(payload.baggage_line)}
-                      </p>
-                    ) : null}
-                    {distanceLine ? (
-                      <p className="text-xs text-slate-500">{distanceLine}</p>
-                    ) : null}
                   </div>
+                  <div className="rounded-xl border border-slate-200/80 bg-white px-3 py-2.5">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-primary-700">
+                      Retour
+                    </p>
+                    <p className="mt-1 font-extrabold text-slate-900">
+                      {formatDate(retDate)}
+                    </p>
+                    <div className="mt-1 flex items-baseline justify-between gap-2">
+                      <span className="text-lg font-black tabular-nums text-slate-950">
+                        {retTime || '—'}
+                        {retArrTime ? (
+                          <span className="text-sm font-bold text-slate-500">
+                            {' '}
+                            → {retArrTime}
+                          </span>
+                        ) : null}
+                      </span>
+                      {retFlightNo ? (
+                        <span className="font-mono text-[11px] font-bold text-slate-500">
+                          {retFlightNo}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-600 truncate">
+                      {arrivalLabel} → {originLabel}
+                    </p>
+                  </div>
+                </div>
+
+                {payload.baggage_line ? (
+                  <p className="text-xs text-slate-600 pt-1 border-t border-slate-200">
+                    {String(payload.baggage_line)}
+                  </p>
+                ) : null}
+                {distanceLine ? (
+                  <p className="text-xs text-slate-500">{distanceLine}</p>
+                ) : null}
+              </div>
+
+              {!flightBooked ? (
+                <>
 
                   {distanceLine && plannerActivitiesEnabled ? (
                     <div className="mt-3">

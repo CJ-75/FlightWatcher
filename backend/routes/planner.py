@@ -625,12 +625,35 @@ def _planner_draft_payload(trip_data: dict, passengers: int) -> dict:
             "airline": trip_data.get("airline"),
             "booking_url": booking_url,
             "direct": int(trip_data.get("transfers") or 0) == 0,
+            "transfers": int(trip_data.get("transfers") or 0),
             "origin_iata": origin,
             "destination_iata": destination,
             "outbound_local": aller.get("departureTime") or outbound,
             "inbound_local": retour.get("departureTime") or inbound,
             "out_dep_local": aller.get("departureTime") or outbound,
             "ret_dep_local": retour.get("departureTime") or inbound,
+            "outbound_flight_number": aller.get("flightNumber")
+            or aller.get("flight_number"),
+            "inbound_flight_number": retour.get("flightNumber")
+            or retour.get("flight_number"),
+            "flight_number": aller.get("flightNumber")
+            or aller.get("flight_number"),
+            "return_flight_number": retour.get("flightNumber")
+            or retour.get("flight_number"),
+            "aller": {
+                "flightNumber": aller.get("flightNumber")
+                or aller.get("flight_number"),
+                "origin": origin,
+                "destination": destination,
+                "departureTime": aller.get("departureTime") or outbound,
+            },
+            "retour": {
+                "flightNumber": retour.get("flightNumber")
+                or retour.get("flight_number"),
+                "origin": destination,
+                "destination": origin,
+                "departureTime": retour.get("departureTime") or inbound,
+            },
         },
         "price_per_person": round(price_pp),
         "booking_url": booking_url,

@@ -108,7 +108,8 @@ export function buildStayPipeline(opts: {
   if (opts.focus === 'flight' || opts.focus === 'hotel') {
     current = opts.focus
   }
-  if (opts.focus === 'activities' && activitiesOn) {
+  // Focus only while the step is still incomplete — once done it stays green.
+  if (opts.focus === 'activities' && activitiesOn && !activitiesDone) {
     current = 'activities'
   }
   if (opts.focus === 'restaurants' && restaurantsOn && hotelDone) {

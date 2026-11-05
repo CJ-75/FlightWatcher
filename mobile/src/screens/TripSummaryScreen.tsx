@@ -31,6 +31,7 @@ import {
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   resolveNextStayAction,
+  pickTripItemOwner,
   type HotelGalleryPhoto,
   type MyTripDraft,
   type StayStepId,
@@ -71,6 +72,20 @@ function formatDate(dateStr?: string | null) {
     day: 'numeric',
     month: 'short',
   })
+}
+
+function formatTimeLocal(iso?: string | null): string {
+  if (!iso) return ''
+  const m = String(iso).match(/(\d{2}):(\d{2})/)
+  if (m) return `${m[1]}:${m[2]}`
+  try {
+    return new Date(iso).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
 }
 
 function formatDistance(m?: number | null) {
@@ -116,13 +131,21 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const refreshTripItems = useCallback(async () => {
     if (!plannerActivitiesEnabled) return
     try {
-      const res = await getApi().listTripItems({ draft_token: draftToken })
+      const owner = pickTripItemOwner({
+        draftToken,
+        plannedTripId: draft?.source_planned_trip_id || null,
+      })
+      if (!owner.draft_token && !owner.planned_trip_id) return
+      const res = await getApi().listTripItems({
+        draft_token: owner.draft_token,
+        planned_trip_id: owner.planned_trip_id,
+      })
       const items = res.items || []
       setActivityItems(items.filter((i) => i.item_type === 'activity'))
     } catch {
       /* keep previous progress */
     }
-  }, [draftToken, plannerActivitiesEnabled])
+  }, [draftToken, plannerActivitiesEnabled, draft?.source_planned_trip_id])
 
   useEffect(() => {
     void refreshTripItems()
@@ -254,6 +277,49 @@ export function TripSummaryScreen({ route, navigation }: Props) {
 
   // Always prefer resolved deeplink (never trust stored homepage / incomplete select).
   const flightUrl = String(carrier.url || '').trim()
+  const airlineName = String(
+    fl.airline || fl.carrier || carrier.airlineName || '',
+  ).trim()
+  const outDep =
+    fl.outbound_local ||
+    fl.out_dep_local ||
+    fl.aller?.departureTime ||
+    pl.out_dep_local
+  const retDep =
+    fl.inbound_local ||
+    fl.ret_dep_local ||
+    fl.retour?.departureTime ||
+    pl.ret_dep_local
+  const outTime = formatTimeLocal(outDep)
+  const retTime = formatTimeLocal(retDep)
+  const outArrTime = formatTimeLocal(
+    fl.outbound_arrival_local || fl.out_arr_local || fl.outbound_arr_local,
+  )
+  const retArrTime = formatTimeLocal(
+    fl.inbound_arrival_local || fl.ret_arr_local || fl.in_arr_local,
+  )
+  const outFlightNo = String(
+    fl.outbound_flight_number ||
+      fl.flight_number ||
+      fl.aller?.flightNumber ||
+      fl.aller?.flight_number ||
+      '',
+  ).trim()
+  const retFlightNo = String(
+    fl.inbound_flight_number ||
+      fl.return_flight_number ||
+      fl.retour?.flightNumber ||
+      fl.retour?.flight_number ||
+      '',
+  ).trim()
+  const stopsLabel =
+    fl.direct === true
+      ? 'vol direct'
+      : fl.transfers === 1 || fl.stops === 1
+        ? '1 escale'
+        : fl.transfers > 1 || fl.stops > 1
+          ? `${Number(fl.transfers || fl.stops)} escales`
+          : null
 
   const hotelId = hotelOpt ? String(hotelOpt.id || hotelOpt.hotel_id || '') : ''
   const hotelPhoto = hotelOpt
@@ -413,7 +479,8 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           hasHotel: Boolean(hotelId),
           hotelBooked,
         }),
-        focus: showActivities ? 'activities' : undefined,
+        focus:
+          showActivities && !activityProgress.done ? 'activities' : undefined,
         activitiesEnabled: plannerActivitiesEnabled,
         activitiesDone: activityProgress.done,
         activitiesPartial: activityProgress.partial,
@@ -735,16 +802,49 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             label="Vol"
             icon={<PlaneIcon size={14} />}
           />
-          <Text style={styles.cardBody}>
-            {[
-              fl.airline || carrier.airlineName,
-              primaryAirportCode(fl.origin_iata || draft.origin_iata),
-              '→',
-              primaryAirportCode(fl.destination_iata || draft.dest_iata),
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          </Text>
+          <View style={styles.flightHead}>
+            <Text style={styles.cardBody} numberOfLines={1}>
+              {airlineName || 'Compagnie'}
+              {stopsLabel ? ` · ${stopsLabel}` : ''}
+            </Text>
+            <Text style={styles.flightRouteIata}>
+              {originIata || '—'} → {destIata || '—'}
+            </Text>
+          </View>
+
+          <View style={styles.flightLegs}>
+            <View style={styles.flightLeg}>
+              <Text style={styles.flightLegKicker}>Aller</Text>
+              <Text style={styles.flightLegDate}>{formatDate(out)}</Text>
+              <View style={styles.flightLegTimeRow}>
+                <Text style={styles.flightLegTime}>
+                  {outTime || '—'}
+                  {outArrTime ? (
+                    <Text style={styles.flightLegArr}> → {outArrTime}</Text>
+                  ) : null}
+                </Text>
+                {outFlightNo ? (
+                  <Text style={styles.flightNo}>{outFlightNo}</Text>
+                ) : null}
+              </View>
+            </View>
+            <View style={styles.flightLeg}>
+              <Text style={styles.flightLegKicker}>Retour</Text>
+              <Text style={styles.flightLegDate}>{formatDate(inn)}</Text>
+              <View style={styles.flightLegTimeRow}>
+                <Text style={styles.flightLegTime}>
+                  {retTime || '—'}
+                  {retArrTime ? (
+                    <Text style={styles.flightLegArr}> → {retArrTime}</Text>
+                  ) : null}
+                </Text>
+                {retFlightNo ? (
+                  <Text style={styles.flightNo}>{retFlightNo}</Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+
           {flightPp != null ? (
             <Text style={styles.cardMeta}>
               {flightPp} €{adults > 1 ? ' / pers.' : ''}
@@ -1107,6 +1207,63 @@ const styles = StyleSheet.create({
     color: '#D97706',
   },
   cardBody: { fontFamily: fonts.semibold, fontSize: 16, color: colors.ink },
+  flightHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  flightRouteIata: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.muted,
+    flexShrink: 0,
+  },
+  flightLegs: { gap: 8 },
+  flightLeg: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  flightLegKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.primaryDeep,
+  },
+  flightLegDate: {
+    fontFamily: fonts.extrabold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  flightLegTimeRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  flightLegTime: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.ink,
+  },
+  flightLegArr: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.muted,
+  },
+  flightNo: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.muted,
+    letterSpacing: 0.4,
+  },
   cardMeta: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, lineHeight: 19 },
   priceHint: {
     fontFamily: fonts.semibold,
