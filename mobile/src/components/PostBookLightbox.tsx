@@ -73,7 +73,7 @@ export function PostBookLightbox({
             ) : (
               <View style={styles.ctaInner}>
                 <BedIcon size={16} color={colors.white} />
-                <Text style={styles.ctaText}>Continuer le voyage</Text>
+                <Text style={styles.ctaText}>Continuer dans le planner</Text>
               </View>
             )}
           </Pressable>

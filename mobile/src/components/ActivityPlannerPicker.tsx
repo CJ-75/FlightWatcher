@@ -289,7 +289,7 @@ export function ActivityPlannerPicker({
               <Text style={styles.emptyText}>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</Text>
               {onOpenPlanner ? (
                 <Pressable onPress={onOpenPlanner} style={styles.linkBtn}>
-                  <Text style={styles.linkText}>Ouvrir Voyages</Text>
+                  <Text style={styles.linkText}>Ouvrir Planner</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -336,7 +336,7 @@ export function ActivityPlannerPicker({
                     </Text>
                     <Text style={styles.rowMeta} numberOfLines={1}>
                       {[
-                        planned ? 'Voyage' : 'Séjour',
+                        planned ? 'Planner' : 'Séjour',
                         dates,
                         ws.dest_iata ? String(ws.dest_iata) : null,
                       ]

@@ -750,7 +750,7 @@ export function TripDetailScreen() {
     Alert.alert(
       archive ? 'Archiver le voyage' : 'Supprimer le voyage',
       archive
-        ? `Archiver « ${trip.name} » ?\n\nLe voyage disparaît de Voyages, tes réservations (vol / hôtel) sont conservées.`
+        ? `Archiver « ${trip.name} » ?\n\nLe Planner disparaît, tes réservations (vol / hôtel) sont conservées.`
         : `Supprimer « ${trip.name} » ?\n\nCette action est définitive.`,
       [
         { text: 'Annuler', style: 'cancel' },

@@ -1191,7 +1191,7 @@ function Dashboard() {
     setPostBookDraftToken(null)
     const user = await getCurrentUser()
     if (!user) {
-      setToastMessage('Connecte-toi pour ajouter ce vol au voyage')
+      setToastMessage('Connecte-toi pour ajouter ce vol au planner')
       setToastType('error')
       return
     }
@@ -1203,7 +1203,7 @@ function Dashboard() {
       })
       navigate(`/planner/${encodeURIComponent(created.id)}`)
     } catch {
-      setToastMessage('Impossible d’ajouter au voyage — réessaie')
+      setToastMessage('Impossible d’ajouter au planner — réessaie')
       setToastType('error')
     } finally {
       setHotelUpsellBusy(false)
@@ -2455,7 +2455,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       setToastType('success')
     } catch (e) {
       setToastMessage(
-        e instanceof Error ? e.message : 'Ajout au voyage impossible',
+        e instanceof Error ? e.message : 'Ajout au planner impossible',
       )
       setToastType('error')
     } finally {
@@ -3903,7 +3903,7 @@ function StatsCard({ trips }: { trips: TripResponse[] }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="text-center">
           <div className="text-2xl font-bold text-indigo-600">{trips.length}</div>
-          <div className="text-sm text-gray-600">Voyages</div>
+          <div className="text-sm text-gray-600">Planner</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-green-600">{minPrice.toFixed(2)}€</div>

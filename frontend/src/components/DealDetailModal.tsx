@@ -1111,7 +1111,7 @@ export function DealDetailModal({
               disabled={startingTrip}
               className="shrink-0 bg-primary-500 hover:bg-primary-600 text-white font-bold px-5 py-3 rounded-xl transition-colors disabled:opacity-60 shadow-sm"
             >
-              {startingTrip ? '…' : 'Ajouter au voyage'}
+              {startingTrip ? '…' : 'Ajouter au planner'}
             </button>
           </div>
         </motion.div>

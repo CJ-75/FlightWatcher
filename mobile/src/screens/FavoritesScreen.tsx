@@ -184,7 +184,7 @@ export function FavoritesScreen() {
     const card = pendingAdd
     if (!card) return
     if (__DEV__ && isGuest) {
-      Alert.alert('Connexion', 'Connecte-toi pour ajouter au voyage.')
+      Alert.alert('Connexion', 'Connecte-toi pour ajouter au planner.')
       setPendingAdd(null)
       return
     }
@@ -193,7 +193,7 @@ export function FavoritesScreen() {
       plannedTripId: target.plannedTripId,
     })
     if (!hasTripItemOwner(owner)) {
-      Alert.alert('Voyages', ACTIVITY_NO_PLANNER_TO_ADD_FR)
+      Alert.alert('Planner', ACTIVITY_NO_PLANNER_TO_ADD_FR)
       return
     }
     setAddBusy(true)
@@ -211,7 +211,7 @@ export function FavoritesScreen() {
     } catch (e) {
       Alert.alert(
         'Erreur',
-        e instanceof Error ? e.message : 'Ajout au voyage impossible',
+        e instanceof Error ? e.message : 'Ajout au planner impossible',
       )
     } finally {
       setAddBusy(false)

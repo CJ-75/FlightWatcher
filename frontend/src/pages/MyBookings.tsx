@@ -135,7 +135,7 @@ function OpenTripsSection({
                   to={`/trip/${t.draft_token}`}
                   className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
                 >
-                  Ouvrir le voyage
+                  Mon voyage
                 </Link>
                 <Link
                   to={`/bookings?draft=${encodeURIComponent(t.draft_token)}`}

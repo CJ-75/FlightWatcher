@@ -60,10 +60,10 @@ export const HOTEL_CTA_FR = {
   choose: 'Choisir mon hôtel',
   pay: 'Payer ma chambre',
   view: 'Voir mon hôtel',
-  backPlanner: 'Retour au voyage',
+  backPlanner: 'Retour au planner',
 } as const
 
-export const PLANNER_PROMOTE_TOAST_FR = 'Séjour ajouté à tes voyages'
+export const PLANNER_PROMOTE_TOAST_FR = 'Séjour ajouté au planner'
 export const DESTINATION_FALLBACK_FR = 'Destination'
 
 export function hubMatchesPhase(

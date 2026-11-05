@@ -400,7 +400,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
     if (!user && !(__DEV__ && isGuest)) {
       Alert.alert(
         'Connexion requise',
-        'Connecte-toi pour organiser ce séjour dans Voyages.',
+        'Connecte-toi pour organiser ce séjour dans le planner.',
         [
           { text: 'Annuler', style: 'cancel' },
           {
@@ -440,7 +440,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
       })
       navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      Alert.alert('Erreur', 'Impossible d’ouvrir le voyage — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ouvrir le planner — réessaie')
     } finally {
       setStartingTrip(false)
     }
@@ -940,7 +940,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
         >
           <PlaneIcon size={16} color={colors.white} />
           <Text style={styles.ctaText}>
-            {startingTrip ? '…' : 'Ajouter au voyage'}
+            {startingTrip ? '…' : 'Ajouter au planner'}
           </Text>
         </Pressable>
       </View>

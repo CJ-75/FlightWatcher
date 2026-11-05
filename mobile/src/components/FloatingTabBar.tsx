@@ -9,7 +9,7 @@ const LABELS: Record<string, string> = {
   Search: 'Vols',
   Deals: 'Séjours',
   Activities: 'Activités',
-  Planner: 'Voyages',
+  Planner: 'Planner',
   Profile: 'Compte',
 }
 
