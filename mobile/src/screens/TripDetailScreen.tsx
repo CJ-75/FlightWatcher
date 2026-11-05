@@ -660,9 +660,6 @@ export function TripDetailScreen() {
 
   const accepted = (trip?.proposals || []).find((p) => p.status === 'accepted')
   const pending = (trip?.proposals || []).filter((p) => p.status === 'pending')
-  const others = (trip?.proposals || []).filter(
-    (p) => p.status !== 'pending' && p.status !== 'accepted',
-  )
   const pax = Math.max(trip?.passengers || 1, (trip?.members || []).length || 1)
 
   const arrivalCode = parseAirportCodes(trip?.arrival_airport)[0] || ''
@@ -1866,12 +1863,6 @@ export function TripDetailScreen() {
             ) : null}
           </View>
         ) : null
-      ) : null}
-
-      {others.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionMuted}>Refusées ({others.length})</Text>
-        </View>
       ) : null}
 
       {isOrganizer ? (
