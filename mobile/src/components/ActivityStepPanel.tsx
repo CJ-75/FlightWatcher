@@ -92,7 +92,18 @@ function cardFromItem(it: ItemRow): ActivityCardModel | null {
 }
 
 function photoFromCatalogRow(row: Record<string, unknown>): string {
-  return String(row.photo_url || row.photoUrl || '').trim()
+  const direct = String(row.photo_url || row.photoUrl || '').trim()
+  if (direct) return direct
+  const photos = row.photos
+  if (Array.isArray(photos) && photos.length) {
+    const first = photos[0]
+    if (typeof first === 'string' && first.trim()) return first.trim()
+    if (first && typeof first === 'object') {
+      const obj = first as Record<string, unknown>
+      return String(obj.url || obj.thumb || '').trim()
+    }
+  }
+  return ''
 }
 
 function applyPhotoMap(
@@ -204,7 +215,8 @@ export function ActivityStepPanel(props: {
       const res = await getApi().listTripItems(owner)
       const rows = (res.items || []) as ItemRow[]
       setItems(rows)
-      setItems(await enrichActivityPhotos(rows, city))
+      const enriched = await enrichActivityPhotos(rows, city)
+      setItems(enriched)
       authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
@@ -495,7 +507,10 @@ export function ActivityStepPanel(props: {
                 <Text style={styles.link}>{ACTIVITY_VALIDATE_LABEL_FR}</Text>
               </Pressable>
             ) : null}
-            {it.meta?.product_url || it.meta?.product_code ? (
+            {(it.meta?.product_url || it.meta?.product_code) &&
+            it.status !== 'validated' &&
+            it.status !== 'booked' &&
+            it.status !== 'skipped' ? (
               <Pressable hitSlop={8} onPress={() => bookItem(it)}>
                 <Text style={styles.linkPrimary}>{ACTIVITY_BOOK_VIATOR_FR}</Text>
               </Pressable>
@@ -509,6 +524,11 @@ export function ActivityStepPanel(props: {
         visible={Boolean(detailCard)}
         card={detailCard}
         alreadyAdded
+        showBook={
+          detailItem?.status !== 'validated' &&
+          detailItem?.status !== 'booked' &&
+          detailItem?.status !== 'skipped'
+        }
         addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
         onBook={(c) => {
           const it =

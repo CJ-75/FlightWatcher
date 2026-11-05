@@ -32,7 +32,11 @@ import {
   signInWithGoogle,
 } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
-import { listTripItemsCached } from '../utils/tripItemsCache'
+import {
+  invalidateTripItemsCache,
+  listTripItemsCached,
+  setTripItemsCache,
+} from '../utils/tripItemsCache'
 import { rememberTrip } from '../utils/tripRecovery'
 import { ActivityDetailSheet } from './ActivityDetailSheet'
 
@@ -94,7 +98,18 @@ function cardFromItem(it: ItemRow): ActivityCardModel | null {
 }
 
 function photoFromCatalogRow(row: Record<string, unknown>): string {
-  return String(row.photo_url || row.photoUrl || '').trim()
+  const direct = String(row.photo_url || row.photoUrl || '').trim()
+  if (direct) return direct
+  const photos = row.photos
+  if (Array.isArray(photos) && photos.length) {
+    const first = photos[0]
+    if (typeof first === 'string' && first.trim()) return first.trim()
+    if (first && typeof first === 'object') {
+      const obj = first as Record<string, unknown>
+      return String(obj.url || obj.thumb || '').trim()
+    }
+  }
+  return ''
 }
 
 function applyPhotoMap(
@@ -195,21 +210,21 @@ export function ActivityStepPanel(props: {
   const [resuming, setResuming] = useState(false)
   const authRetryRef = useRef(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { force?: boolean }) => {
     if (!owner.draft_token && !owner.planned_trip_id) return
     setLoading(true)
     setError(null)
     try {
-      const res = await listTripItemsCached(owner)
+      const res = await listTripItemsCached(owner, { force: opts?.force })
       const rows = (res.items || []) as ItemRow[]
       setItems(rows)
-      setItems(
-        await enrichActivityPhotos(rows, props.citySlug, {
-          listCity: (slug, adults) =>
-            getApiClient().listCityActivities(slug, adults),
-          getProduct: (code) => getApiClient().getActivityProduct(code),
-        }),
-      )
+      const enriched = await enrichActivityPhotos(rows, props.citySlug, {
+        listCity: (slug, adults) =>
+          getApiClient().listCityActivities(slug, adults),
+        getProduct: (code) => getApiClient().getActivityProduct(code),
+      })
+      setItems(enriched)
+      setTripItemsCache(owner, enriched as Record<string, unknown>[])
       authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
@@ -221,13 +236,13 @@ export function ActivityStepPanel(props: {
             const res = await listTripItemsCached(owner, { force: true })
             const rows = (res.items || []) as ItemRow[]
             setItems(rows)
-            setItems(
-              await enrichActivityPhotos(rows, props.citySlug, {
-                listCity: (slug, adults) =>
-                  getApiClient().listCityActivities(slug, adults),
-                getProduct: (code) => getApiClient().getActivityProduct(code),
-              }),
-            )
+            const enriched = await enrichActivityPhotos(rows, props.citySlug, {
+              listCity: (slug, adults) =>
+                getApiClient().listCityActivities(slug, adults),
+              getProduct: (code) => getApiClient().getActivityProduct(code),
+            })
+            setItems(enriched)
+            setTripItemsCache(owner, enriched as Record<string, unknown>[])
             setError(null)
             return
           } catch (e2) {
@@ -340,14 +355,15 @@ export function ActivityStepPanel(props: {
         product_code: raw.product_code,
         title: raw.title,
         product_url: raw.product_url,
-        photo_url: raw.photo_url || null,
+        photo_url: photoFromCatalogRow(raw) || null,
         ...owner,
         platform: 'web',
         surface,
       })
       track('add', { product_code: raw.product_code })
       setPickerOpen(false)
-      await load()
+      invalidateTripItemsCache(owner)
+      await load({ force: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ajout impossible')
     }
@@ -358,7 +374,8 @@ export function ActivityStepPanel(props: {
       ...body,
       draft_token: owner.draft_token,
     })
-    await load()
+    invalidateTripItemsCache(owner)
+    await load({ force: true })
   }
 
   const skipAll = async () => {
@@ -416,7 +433,8 @@ export function ActivityStepPanel(props: {
     setDragId(null)
     try {
       await getApiClient().reorderTripItems(keys, owner)
-      await load()
+      invalidateTripItemsCache(owner)
+      await load({ force: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Réordonnancement impossible')
     }
@@ -600,7 +618,10 @@ export function ActivityStepPanel(props: {
                   {ACTIVITY_VALIDATE_LABEL_FR}
                 </button>
               ) : null}
-              {it.meta?.product_url || it.meta?.product_code ? (
+              {(it.meta?.product_url || it.meta?.product_code) &&
+              it.status !== 'validated' &&
+              it.status !== 'booked' &&
+              it.status !== 'skipped' ? (
                 <button
                   type="button"
                   className="text-xs font-semibold rounded-lg bg-primary-600 text-white px-2 py-1"
@@ -718,6 +739,11 @@ export function ActivityStepPanel(props: {
         <ActivityDetailSheet
           card={detailCard}
           alreadyAdded
+          showBook={
+            detailItem?.status !== 'validated' &&
+            detailItem?.status !== 'booked' &&
+            detailItem?.status !== 'skipped'
+          }
           addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
           onBook={() => {
             if (detailItem) onBook(detailItem)

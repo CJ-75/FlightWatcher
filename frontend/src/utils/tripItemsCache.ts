@@ -60,3 +60,10 @@ export function invalidateTripItemsCache(owner?: Owner) {
   cache.delete(key)
   inflight.delete(key)
 }
+
+/** Store enriched rows (e.g. after photo backfill) so thumbs survive the TTL window. */
+export function setTripItemsCache(owner: Owner, items: Record<string, unknown>[]) {
+  const key = ownerKey(owner)
+  if (!key || key === '|') return
+  cache.set(key, { at: Date.now(), data: { items } })
+}

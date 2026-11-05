@@ -479,7 +479,7 @@ async def create_trip_item(body: AddItemBody, request: Request):
     from activities.access import resolve_owner_for_write
     from activities.events import record_event
     from activities.places import upsert_place_with_ref
-    from activities.trip_items import add_activity_item
+    from activities.trip_items import add_activity_item, resolve_product_photo
 
     sb = _svc()
     draft_id, planned = resolve_owner_for_write(
@@ -490,18 +490,21 @@ async def create_trip_item(body: AddItemBody, request: Request):
     )
     place_id = body.place_id
     photo_url = (body.photo_url or "").strip() or None
+    product_code = (body.product_code or "").strip() or None
+    if not photo_url and product_code and not product_code.startswith("skip-"):
+        photo_url = resolve_product_photo(sb, product_code) or None
     place_meta: Dict[str, Any] = {}
     if body.product_url:
         place_meta["product_url"] = body.product_url
     if photo_url:
         place_meta["photo_url"] = photo_url
-    if not place_id and body.product_code:
+    if not place_id and product_code:
         place = upsert_place_with_ref(
             sb,
             kind="activity",
-            name=body.title or body.product_code,
+            name=body.title or product_code,
             provider="viator",
-            external_id=body.product_code,
+            external_id=product_code,
             location_precision="city",
             meta=place_meta or None,
         )
@@ -509,7 +512,7 @@ async def create_trip_item(body: AddItemBody, request: Request):
     if not place_id:
         raise HTTPException(status_code=400, detail="place_or_product_required")
     item_meta: Dict[str, Any] = {
-        "product_code": body.product_code,
+        "product_code": product_code,
         "product_url": body.product_url,
     }
     if photo_url:
@@ -527,6 +530,8 @@ async def create_trip_item(body: AddItemBody, request: Request):
     )
     if not item:
         raise HTTPException(status_code=500, detail="insert_failed")
+    if photo_url:
+        item = {**item, "meta": {**(item.get("meta") or {}), "photo_url": photo_url}}
     record_event(
         sb,
         domain="activity",

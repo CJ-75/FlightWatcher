@@ -51,7 +51,7 @@ def _place_row(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 def _photo_from_payload(payload: Any) -> Optional[str]:
     if not isinstance(payload, dict):
         return None
-    photo = str(payload.get("photo_url") or "").strip()
+    photo = str(payload.get("photo_url") or payload.get("photoUrl") or "").strip()
     if photo:
         return photo
     photos = payload.get("photos")
@@ -63,6 +63,17 @@ def _photo_from_payload(payload: Any) -> Optional[str]:
                 return url
         elif isinstance(first, str) and first.strip():
             return first.strip()
+    # Raw Viator product payloads store variants under images[].
+    images = payload.get("images")
+    if isinstance(images, list) and images:
+        try:
+            from activities.service import _pick_product_photo_url
+
+            picked = _pick_product_photo_url(images)
+            if picked:
+                return str(picked).strip() or None
+        except Exception:
+            pass
     return None
 
 
@@ -75,6 +86,8 @@ def _cached_product_photo(supabase, product_code: str) -> Optional[str]:
     except Exception:
         return None
     code = str(product_code).strip()
+    if not code or code.startswith("skip-"):
+        return None
     for key in (f"{code}:detail2", code):
         cached = cache_get(
             supabase, provider="viator", resource="product", cache_key=key
@@ -111,16 +124,99 @@ def _cached_product_photo(supabase, product_code: str) -> Optional[str]:
     return None
 
 
+def _live_product_photo(supabase, product_code: str) -> Optional[str]:
+    """Fetch + cache Viator product detail to recover a missing photo_url."""
+    code = str(product_code or "").strip()
+    if not code or code.startswith("skip-"):
+        return None
+    try:
+        from activities.cache import cache_set
+        from activities.config import load_activities_config
+        from activities.service import _normalize_product_detail
+        from activities.viator_client import ViatorClient, ViatorError
+    except Exception as e:
+        logger.debug("live photo imports: %s", e)
+        return None
+    try:
+        cfg = load_activities_config()
+        client = ViatorClient(cfg)
+        if not getattr(client, "enabled", False):
+            return None
+        raw = client.product_detail(code)
+        if not isinstance(raw, dict):
+            return None
+        norm = _normalize_product_detail(raw)
+        try:
+            cache_set(
+                supabase,
+                provider="viator",
+                resource="product",
+                cache_key=f"{code}:detail2",
+                payload=norm,
+                ttl_h=getattr(cfg, "cache_ttl_h", 24) or 24,
+            )
+        except Exception as e:
+            logger.debug("live photo cache_set: %s", e)
+        return _photo_from_payload(norm)
+    except ViatorError as e:
+        logger.debug("live product photo viator: %s", e)
+        return None
+    except Exception as e:
+        logger.debug("live product photo: %s", e)
+        return None
+
+
+def resolve_product_photo(
+    supabase,
+    product_code: str,
+    *,
+    allow_live: bool = True,
+) -> Optional[str]:
+    """Best-effort photo for a Viator product_code (cache, then optional live)."""
+    photo = _cached_product_photo(supabase, product_code)
+    if photo:
+        return photo
+    if allow_live:
+        return _live_product_photo(supabase, product_code)
+    return None
+
+
+def _persist_place_photo(supabase, place: Dict[str, Any], photo: str) -> Dict[str, Any]:
+    """Write photo_url onto places.meta and return the updated place dict."""
+    if not place or not photo:
+        return place
+    place_meta = (
+        dict(place.get("meta") or {})
+        if isinstance(place.get("meta"), dict)
+        else {}
+    )
+    if str(place_meta.get("photo_url") or "").strip() == photo:
+        return {**place, "meta": place_meta}
+    place_meta["photo_url"] = photo
+    pid = place.get("id")
+    if pid and supabase:
+        try:
+            supabase.table("places").update(
+                {"meta": place_meta, "updated_at": _now_iso()}
+            ).eq("id", pid).execute()
+        except Exception as e:
+            logger.debug("persist place photo: %s", e)
+    return {**place, "meta": place_meta}
+
+
 def enrich_trip_items_photos(
     supabase,
     items: List[Dict[str, Any]],
     *,
     persist: bool = True,
+    allow_live: bool = True,
+    live_limit: int = 8,
 ) -> List[Dict[str, Any]]:
     """Ensure each activity row exposes meta.photo_url for Planner thumbs."""
     if not items:
         return items
     out: List[Dict[str, Any]] = []
+    live_left = max(0, int(live_limit or 0))
     for raw in items:
         item = dict(raw)
         meta = (
@@ -129,29 +225,42 @@ def enrich_trip_items_photos(
             else {}
         )
         photo = str(meta.get("photo_url") or "").strip()
-        if not photo:
-            place = _place_row(item)
+        place = _place_row(item)
+        if not photo and place:
+            place_meta = (
+                place.get("meta")
+                if isinstance(place.get("meta"), dict)
+                else {}
+            )
+            photo = str(place_meta.get("photo_url") or "").strip()
+        code = str(meta.get("product_code") or "").strip()
+        if not photo and code and not code.startswith("skip-"):
+            photo = _cached_product_photo(supabase, code) or ""
+            if not photo and allow_live and live_left > 0:
+                live_left -= 1
+                photo = _live_product_photo(supabase, code) or ""
+        if photo:
+            if str(meta.get("photo_url") or "").strip() != photo:
+                meta["photo_url"] = photo
+                item["meta"] = meta
+                if persist and item.get("id"):
+                    try:
+                        supabase.table("trip_items").update({"meta": meta}).eq(
+                            "id", item["id"]
+                        ).execute()
+                    except Exception as e:
+                        logger.debug("persist trip_item photo: %s", e)
             if place:
-                place_meta = (
-                    place.get("meta")
-                    if isinstance(place.get("meta"), dict)
-                    else {}
+                updated_place = (
+                    _persist_place_photo(supabase, place, photo)
+                    if persist
+                    else {**place, "meta": {**(place.get("meta") or {}), "photo_url": photo}}
                 )
-                photo = str(place_meta.get("photo_url") or "").strip()
-        if not photo:
-            code = str(meta.get("product_code") or "").strip()
-            if code:
-                photo = _cached_product_photo(supabase, code) or ""
-        if photo and str(meta.get("photo_url") or "").strip() != photo:
-            meta["photo_url"] = photo
-            item["meta"] = meta
-            if persist and item.get("id"):
-                try:
-                    supabase.table("trip_items").update({"meta": meta}).eq(
-                        "id", item["id"]
-                    ).execute()
-                except Exception as e:
-                    logger.debug("persist trip_item photo: %s", e)
+                # Keep embedded places shape stable for the API response.
+                if isinstance(item.get("places"), list):
+                    item["places"] = [updated_place]
+                else:
+                    item["places"] = updated_place
         out.append(item)
     return out
 

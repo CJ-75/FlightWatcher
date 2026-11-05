@@ -1854,49 +1854,6 @@ export function TripDetailScreen() {
         </View>
       ) : null}
 
-      {!scanning &&
-      stayPriceIncludesHotel &&
-      stayParty.perPerson > 0 ? (
-        <View style={styles.section} accessibilityLabel="Prix du séjour">
-          <View style={styles.stayTotalStrip}>
-            <View style={styles.stayTotalStripMain}>
-              <Text style={styles.stayTotalStripKicker}>
-                {reservationFlags.flightBooked && reservationFlags.hotelBooked
-                  ? 'Séjour réservé'
-                  : 'Prix du séjour'}
-              </Text>
-              <View style={styles.stayTotalStripBreakdown}>
-                <Text style={styles.stayTotalStripLine}>
-                  Vol{' '}
-                  <Text style={styles.stayTotalStripStrong}>
-                    {stayParty.flightPp}€
-                  </Text>
-                </Text>
-                <Text style={styles.stayTotalStripPlus}>+</Text>
-                <Text style={styles.stayTotalStripLine}>
-                  Hôtel{' '}
-                  <Text style={styles.stayTotalStripStrong}>
-                    {Math.round(stayParty.hotelTotal / pax)}€
-                  </Text>
-                </Text>
-                <Text style={styles.stayTotalStripMuted}>/pers.</Text>
-              </View>
-            </View>
-            <View style={styles.stayTotalStripAside}>
-              <Text style={styles.stayTotalStripPrice}>
-                {stayParty.perPerson}€
-              </Text>
-              <Text style={styles.stayTotalStripPer}>par personne</Text>
-              {pax > 1 ? (
-                <Text style={styles.stayTotalStripParty}>
-                  Séjour {stayParty.total}€ · {pax} pers.
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        </View>
-      ) : null}
-
       {!scanning && plannerActivitiesEnabled ? (
         <View
           ref={extrasRef}
@@ -1932,6 +1889,70 @@ export function TripDetailScreen() {
                 surface="planner"
                 onItemsChange={setActivityItems}
               />
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {!scanning &&
+      stayPriceIncludesHotel &&
+      stayParty.perPerson > 0 ? (
+        <View style={styles.section} accessibilityLabel="Prix du séjour">
+          <View style={[styles.stayTotalStrip, shadow.soft]}>
+            <LinearGradient
+              colors={['#1A120E', '#241810', '#2E1A12']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.stayTotalGlow} />
+            <View style={styles.stayTotalStripMain}>
+              <View style={styles.stayTotalHeader}>
+                <View style={styles.stayTotalIconWrap}>
+                  <Text style={styles.stayTotalIconGlyph}>€</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.stayTotalStripKicker}>
+                    {reservationFlags.flightBooked &&
+                    reservationFlags.hotelBooked
+                      ? 'Séjour réservé'
+                      : 'Prix du séjour'}
+                  </Text>
+                  <Text style={styles.stayTotalStripHint}>
+                    Vol + hôtel, par personne
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.stayTotalStripBreakdown}>
+                <View style={styles.stayTotalChip}>
+                  <Text style={styles.stayTotalChipLabel}>✈ Vol</Text>
+                  <Text style={styles.stayTotalChipValue}>
+                    {stayParty.flightPp}€
+                  </Text>
+                </View>
+                <View style={styles.stayTotalChip}>
+                  <Text style={styles.stayTotalChipLabel}>🏨 Hôtel</Text>
+                  <Text style={styles.stayTotalChipValue}>
+                    {Math.round(stayParty.hotelTotal / pax)}€
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.stayTotalStripAside}>
+              <Text style={styles.stayTotalStripAsideLabel}>Total / pers.</Text>
+              <Text style={styles.stayTotalStripPrice}>
+                {stayParty.perPerson}
+                <Text style={styles.stayTotalStripPriceEuro}>€</Text>
+              </Text>
+              {pax > 1 ? (
+                <Text style={styles.stayTotalStripParty}>
+                  Séjour {stayParty.total}€ · {pax} pers.
+                </Text>
+              ) : (
+                <Text style={styles.stayTotalStripParty}>
+                  Tout compris vol + hôtel
+                </Text>
+              )}
             </View>
           </View>
         </View>
@@ -2722,15 +2743,42 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   stayTotalStrip: {
-    backgroundColor: '#17120f',
-    borderRadius: 22,
+    borderRadius: 26,
     overflow: 'hidden',
+    backgroundColor: '#1A120E',
+  },
+  stayTotalGlow: {
+    position: 'absolute',
+    top: -36,
+    right: -24,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255,107,53,0.22)',
   },
   stayTotalStripMain: {
     paddingHorizontal: 18,
     paddingTop: 16,
     paddingBottom: 14,
-    gap: 10,
+    gap: 14,
+  },
+  stayTotalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stayTotalIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  stayTotalIconGlyph: {
+    fontFamily: fonts.extrabold,
+    fontSize: 20,
+    color: colors.white,
   },
   stayTotalStripKicker: {
     fontFamily: fonts.extrabold,
@@ -2739,55 +2787,73 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: '#fdba74',
   },
+  stayTotalStripHint: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
+    marginTop: 2,
+  },
   stayTotalStripBreakdown: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'stretch',
+    gap: 10,
   },
-  stayTotalStripLine: {
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.65)',
+  stayTotalChip: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+    gap: 6,
   },
-  stayTotalStripStrong: {
+  stayTotalChipLabel: {
     fontFamily: fonts.bold,
-    color: '#fff',
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: 'rgba(253,186,116,0.75)',
   },
-  stayTotalStripPlus: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.25)',
-  },
-  stayTotalStripMuted: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
+  stayTotalChipValue: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.white,
+    letterSpacing: -0.3,
   },
   stayTotalStripAside: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.22)',
     paddingHorizontal: 18,
     paddingVertical: 14,
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
+  },
+  stayTotalStripAsideLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 4,
   },
   stayTotalStripPrice: {
     fontFamily: fonts.extrabold,
-    fontSize: 32,
-    color: '#fff',
-    letterSpacing: -0.5,
+    fontSize: 40,
+    color: colors.primary,
+    letterSpacing: -0.8,
   },
-  stayTotalStripPer: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
-    marginTop: 2,
+  stayTotalStripPriceEuro: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    color: colors.primary,
   },
   stayTotalStripParty: {
     fontFamily: fonts.semibold,
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
     marginTop: 6,
   },
   nextStepCard: {

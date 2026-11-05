@@ -19,6 +19,8 @@ type Props = {
   addBusy?: boolean
   /** Hide add CTA when already in the trip. */
   alreadyAdded?: boolean
+  /** Hide book CTA (e.g. activity already validated / booked in planner). */
+  showBook?: boolean
   addLabel: string
   onToggleLike?: () => void
   onBook: () => void
@@ -58,6 +60,7 @@ export function ActivityDetailSheet({
   liked = false,
   addBusy = false,
   alreadyAdded = false,
+  showBook = true,
   addLabel,
   onToggleLike,
   onBook,
@@ -315,28 +318,32 @@ export function ActivityDetailSheet({
           ) : null}
         </div>
 
-        <div className="shrink-0 border-t border-line bg-white px-4 sm:px-5 py-2.5 sm:py-3 flex flex-col sm:flex-row gap-2 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
-          <button
-            type="button"
-            className="flex-1 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold py-2.5 min-h-[44px] text-sm"
-            onClick={onBook}
-          >
-            Réserver
-          </button>
-          {!alreadyAdded ? (
-            <button
-              type="button"
-              disabled={addBusy}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-line font-bold py-2.5 min-h-[44px] text-sm disabled:opacity-50 hover:border-primary-300 hover:bg-primary-50"
-              onClick={onAdd}
-            >
-              <span className="text-lg leading-none font-extrabold" aria-hidden>
-                +
-              </span>
-              {addLabel}
-            </button>
-          ) : null}
-        </div>
+        {showBook || !alreadyAdded ? (
+          <div className="shrink-0 border-t border-line bg-white px-4 sm:px-5 py-2.5 sm:py-3 flex flex-col sm:flex-row gap-2 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
+            {showBook ? (
+              <button
+                type="button"
+                className="flex-1 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-bold py-2.5 min-h-[44px] text-sm"
+                onClick={onBook}
+              >
+                Réserver
+              </button>
+            ) : null}
+            {!alreadyAdded ? (
+              <button
+                type="button"
+                disabled={addBusy}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-line font-bold py-2.5 min-h-[44px] text-sm disabled:opacity-50 hover:border-primary-300 hover:bg-primary-50"
+                onClick={onAdd}
+              >
+                <span className="text-lg leading-none font-extrabold" aria-hidden>
+                  +
+                </span>
+                {addLabel}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

@@ -28,6 +28,8 @@ type Props = {
   adults?: number
   addBusy?: boolean
   alreadyAdded?: boolean
+  /** Hide book CTA (e.g. activity already validated / booked in planner). */
+  showBook?: boolean
   addLabel?: string
   onBook: (card: ActivityCardModel) => void
   onAdd: (card: ActivityCardModel) => void
@@ -40,6 +42,7 @@ export function ActivityDetailSheet({
   adults = 2,
   addBusy = false,
   alreadyAdded = false,
+  showBook = true,
   addLabel,
   onBook,
   onAdd,
@@ -265,9 +268,11 @@ export function ActivityDetailSheet({
             { paddingBottom: Math.max(insets.bottom, 12) },
           ]}
         >
-          <Pressable style={styles.cta} onPress={() => onBook(card)}>
-            <Text style={styles.ctaText}>Réserver</Text>
-          </Pressable>
+          {showBook ? (
+            <Pressable style={styles.cta} onPress={() => onBook(card)}>
+              <Text style={styles.ctaText}>Réserver</Text>
+            </Pressable>
+          ) : null}
           {alreadyAdded ? (
             <View
               style={styles.addedMark}
