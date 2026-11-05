@@ -10,12 +10,14 @@ import {
   Dimensions,
   PixelRatio,
   PanResponder,
+  Linking,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { GoogleGIcon, prefetchGoogleG } from '../components/GoogleGIcon'
+import { getWebOrigin } from '../lib/client'
 import { colors } from '../theme'
 import * as WebBrowser from 'expo-web-browser'
 
@@ -209,9 +211,28 @@ export function LoginScreen() {
                 >
                   <Text style={styles.guestLabel}>Continuer sans compte</Text>
                 </Pressable>
-              ) : (
-                <Text style={styles.legal}>Connexion sécurisée · recherche gratuite</Text>
-              )}
+              ) : null}
+              <Text style={styles.legal}>
+                En continuant, tu acceptes les{' '}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() =>
+                    void Linking.openURL(`${getWebOrigin()}/terms`)
+                  }
+                >
+                  CGU
+                </Text>
+                {' '}et la{' '}
+                <Text
+                  style={styles.legalLink}
+                  onPress={() =>
+                    void Linking.openURL(`${getWebOrigin()}/privacy`)
+                  }
+                >
+                  confidentialité
+                </Text>
+                .
+              </Text>
             </View>
           )}
         </LinearGradient>
@@ -345,5 +366,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
     color: 'rgba(255,255,255,0.55)',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  legalLink: {
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
+    textDecorationLine: 'underline',
   },
 })

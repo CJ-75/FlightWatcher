@@ -208,6 +208,7 @@ export function ResultsScreen({ route, navigation }: Props) {
     if (!leftForPartnerRef.current) return
     const pending = await readPendingHotelUpsell()
     if (!pending || pending.skippedBanner || !pending.trip) return
+    if (pending.source === 'planner') return
     if (Date.now() - pending.createdAt < 400) return
     leftForPartnerRef.current = false
     setPostBookTrip(pending.trip)

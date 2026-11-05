@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ACTIVITY_ADD_LABEL_FR,
+  ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_BROWSE_CATALOG_FR,
@@ -19,6 +20,7 @@ import {
   reorderKeysMoving,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
+  type ActivityCardModel,
   type AvailabilityState,
   type TripItemStatus,
 } from '@flightwatcher/shared'
@@ -32,6 +34,7 @@ import {
 import { getApiClient } from '../utils/apiClient'
 import { listTripItemsCached } from '../utils/tripItemsCache'
 import { rememberTrip } from '../utils/tripRecovery'
+import { ActivityDetailSheet } from './ActivityDetailSheet'
 
 type ItemRow = {
   id: string
@@ -41,7 +44,115 @@ type ItemRow = {
   day_offset?: number
   inherited?: boolean
   meta?: Record<string, unknown>
-  places?: { name?: string } | null
+  places?: { name?: string; meta?: Record<string, unknown> | null } | null
+}
+
+function placeOf(it: ItemRow): {
+  name?: string
+  meta?: Record<string, unknown> | null
+} | null {
+  const raw = it.places as
+    | { name?: string; meta?: Record<string, unknown> | null }
+    | Array<{ name?: string; meta?: Record<string, unknown> | null }>
+    | null
+    | undefined
+  if (Array.isArray(raw)) return raw[0] || null
+  return raw || null
+}
+
+function photoOf(it: ItemRow): string {
+  const fromMeta = String(it.meta?.photo_url || '').trim()
+  if (fromMeta) return fromMeta
+  return String(placeOf(it)?.meta?.photo_url || '').trim()
+}
+
+function titleOf(it: ItemRow) {
+  return String(placeOf(it)?.name || it.meta?.title || 'Activité')
+}
+
+function cardFromItem(it: ItemRow): ActivityCardModel | null {
+  const productCode = String(it.meta?.product_code || '').trim()
+  if (!productCode || productCode.startsWith('skip-')) return null
+  const photo = photoOf(it) || null
+  const productUrl =
+    String(it.meta?.product_url || '').trim() ||
+    canonicalViatorProductUrl(null, { productCode })
+  return {
+    productCode,
+    title: titleOf(it),
+    photoUrl: photo,
+    rating: null,
+    reviewCount: null,
+    durationLabel: null,
+    priceLabel: null,
+    productUrl,
+    freeCancellation: false,
+    instantConfirmation: false,
+    destinationLabel: null,
+    distanceLabel: null,
+  }
+}
+
+function photoFromCatalogRow(row: Record<string, unknown>): string {
+  return String(row.photo_url || row.photoUrl || '').trim()
+}
+
+function applyPhotoMap(
+  rows: ItemRow[],
+  byCode: Map<string, string>,
+): ItemRow[] {
+  if (!byCode.size) return rows
+  return rows.map((it) => {
+    if (photoOf(it)) return it
+    const code = String(it.meta?.product_code || '').trim()
+    const url = code ? byCode.get(code) : undefined
+    if (!url) return it
+    return { ...it, meta: { ...(it.meta || {}), photo_url: url } }
+  })
+}
+
+async function enrichActivityPhotos(
+  rows: ItemRow[],
+  citySlug: string | null | undefined,
+  api: {
+    listCity: (slug: string, adults: number) => Promise<{ items?: unknown[] }>
+    getProduct: (
+      code: string,
+    ) => Promise<{ product?: Record<string, unknown> }>
+  },
+): Promise<ItemRow[]> {
+  const missing = rows.filter((it) => !photoOf(it) && it.meta?.product_code)
+  if (!missing.length) return rows
+  const byCode = new Map<string, string>()
+  const slug = String(citySlug || '').trim() || 'paris'
+  try {
+    const res = await api.listCity(slug, 2)
+    for (const raw of res.items || []) {
+      const row = raw as Record<string, unknown>
+      const code = String(row.product_code || row.productCode || '').trim()
+      const url = photoFromCatalogRow(row)
+      if (code && url) byCode.set(code, url)
+    }
+  } catch {
+    /* product detail fallback below */
+  }
+  let next = applyPhotoMap(rows, byCode)
+  const stillMissing = next
+    .filter((it) => !photoOf(it))
+    .map((it) => String(it.meta?.product_code || '').trim())
+    .filter(Boolean)
+    .slice(0, 8)
+  if (!stillMissing.length) return next
+  const settled = await Promise.allSettled(
+    stillMissing.map(async (code) => {
+      const res = await api.getProduct(code)
+      const product = res.product || {}
+      const url = photoFromCatalogRow(product)
+      if (url) byCode.set(code, url)
+    }),
+  )
+  void settled
+  return applyPhotoMap(next, byCode)
 }
 
 export function ActivityStepPanel(props: {
@@ -77,6 +188,8 @@ export function ActivityStepPanel(props: {
   const [askBooked, setAskBooked] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [suggestions, setSuggestions] = useState<Record<string, unknown>[]>([])
+  const [detailCard, setDetailCard] = useState<ActivityCardModel | null>(null)
+  const [detailItem, setDetailItem] = useState<ItemRow | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const [hasAccount, setHasAccount] = useState(false)
   const [resuming, setResuming] = useState(false)
@@ -88,7 +201,15 @@ export function ActivityStepPanel(props: {
     setError(null)
     try {
       const res = await listTripItemsCached(owner)
-      setItems((res.items || []) as ItemRow[])
+      const rows = (res.items || []) as ItemRow[]
+      setItems(rows)
+      setItems(
+        await enrichActivityPhotos(rows, props.citySlug, {
+          listCity: (slug, adults) =>
+            getApiClient().listCityActivities(slug, adults),
+          getProduct: (code) => getApiClient().getActivityProduct(code),
+        }),
+      )
       authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
@@ -98,7 +219,15 @@ export function ActivityStepPanel(props: {
         if (token) {
           try {
             const res = await listTripItemsCached(owner, { force: true })
-            setItems((res.items || []) as ItemRow[])
+            const rows = (res.items || []) as ItemRow[]
+            setItems(rows)
+            setItems(
+              await enrichActivityPhotos(rows, props.citySlug, {
+                listCity: (slug, adults) =>
+                  getApiClient().listCityActivities(slug, adults),
+                getProduct: (code) => getApiClient().getActivityProduct(code),
+              }),
+            )
             setError(null)
             return
           } catch (e2) {
@@ -115,7 +244,7 @@ export function ActivityStepPanel(props: {
     } finally {
       setLoading(false)
     }
-  }, [owner])
+  }, [owner, props.citySlug])
 
   const needsAuth = isTripItemsAuthError(error)
 
@@ -211,6 +340,7 @@ export function ActivityStepPanel(props: {
         product_code: raw.product_code,
         title: raw.title,
         product_url: raw.product_url,
+        photo_url: raw.photo_url || null,
         ...owner,
         platform: 'web',
         surface,
@@ -298,8 +428,13 @@ export function ActivityStepPanel(props: {
     )
   }
 
-  const titleOf = (it: ItemRow) =>
-    String(it.places?.name || it.meta?.title || 'Activité')
+  const openDetail = (it: ItemRow) => {
+    const card = cardFromItem(it)
+    if (!card) return
+    setDetailItem(it)
+    setDetailCard(card)
+    track('open_detail', { trip_item_id: it.id, product_code: card.productCode })
+  }
 
   const catalogHref = activitiesCityPath(props.citySlug || 'paris', {
     draftToken: draftToken || undefined,
@@ -419,26 +554,40 @@ export function ActivityStepPanel(props: {
             }}
             className="rounded-xl border border-slate-200 bg-white p-3 flex flex-col gap-2"
           >
-            <div className="flex justify-between gap-2">
-              <p className="font-bold text-sm text-slate-900">
-                {titleOf(it)}
-                {it.inherited ? (
-                  <span className="ml-2 text-[9px] font-bold text-primary-700 bg-orange-50 px-2 py-1 rounded-full">
-                    Idée du groupe
-                  </span>
-                ) : null}
-              </p>
-              <span className="text-xs text-slate-500">
-                {tripItemStatusLabelFr(it.status)}
-                {it.availability_state
-                  ? ` · ${
-                      AVAILABILITY_STATE_LABEL_FR[
-                        it.availability_state as AvailabilityState
-                      ] || it.availability_state
-                    }`
-                  : ''}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={() => openDetail(it)}
+              className="flex items-start gap-3 text-left w-full rounded-lg hover:bg-slate-50/80 -m-1 p-1 transition-colors"
+            >
+              {photoOf(it) ? (
+                <img
+                  src={photoOf(it)}
+                  alt=""
+                  className="h-14 w-14 shrink-0 rounded-lg object-cover bg-slate-100"
+                  loading="lazy"
+                />
+              ) : (
+                <div
+                  aria-hidden
+                  className="h-14 w-14 shrink-0 rounded-lg bg-gradient-to-br from-orange-50 to-slate-100"
+                />
+              )}
+              <div className="min-w-0 flex-1 flex justify-between gap-2">
+                <p className="font-bold text-sm text-slate-900">
+                  {titleOf(it)}
+                </p>
+                <span className="shrink-0 text-xs text-slate-500">
+                  {tripItemStatusLabelFr(it.status)}
+                  {it.availability_state
+                    ? ` · ${
+                        AVAILABILITY_STATE_LABEL_FR[
+                          it.availability_state as AvailabilityState
+                        ] || it.availability_state
+                      }`
+                    : ''}
+                </span>
+              </div>
+            </button>
             <div className="flex flex-wrap gap-2">
               {!it.inherited && it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
                 <button
@@ -451,7 +600,7 @@ export function ActivityStepPanel(props: {
                   {ACTIVITY_VALIDATE_LABEL_FR}
                 </button>
               ) : null}
-              {it.meta?.product_url ? (
+              {it.meta?.product_url || it.meta?.product_code ? (
                 <button
                   type="button"
                   className="text-xs font-semibold rounded-lg bg-primary-600 text-white px-2 py-1"
@@ -490,19 +639,37 @@ export function ActivityStepPanel(props: {
                 Fermer
               </button>
             </div>
-            {suggestions.map((s) => (
-              <button
-                key={String(s.product_code)}
-                type="button"
-                className="w-full text-left rounded-xl border p-3 hover:bg-slate-50"
-                onClick={() => void addProduct(s)}
-              >
-                <p className="font-semibold text-sm">{String(s.title || '')}</p>
-                <p className="text-xs text-slate-500">
-                  {s.price_from != null ? `dès ${s.price_from} €` : ''}
-                </p>
-              </button>
-            ))}
+            {suggestions.map((s) => {
+              const thumb = String(s.photo_url || '').trim()
+              return (
+                <button
+                  key={String(s.product_code)}
+                  type="button"
+                  className="w-full text-left rounded-xl border p-3 hover:bg-slate-50 flex items-center gap-3"
+                  onClick={() => void addProduct(s)}
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-12 w-12 shrink-0 rounded-lg object-cover bg-slate-100"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div
+                      aria-hidden
+                      className="h-12 w-12 shrink-0 rounded-lg bg-slate-100"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm">{String(s.title || '')}</p>
+                    <p className="text-xs text-slate-500">
+                      {s.price_from != null ? `dès ${s.price_from} €` : ''}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       ) : null}
@@ -545,6 +712,25 @@ export function ActivityStepPanel(props: {
         <p className="text-[11px] text-slate-400">
           Glisse pour réordonner · statut utilisateur ≠ disponibilité offre
         </p>
+      ) : null}
+
+      {detailCard ? (
+        <ActivityDetailSheet
+          card={detailCard}
+          alreadyAdded
+          addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
+          onBook={() => {
+            if (detailItem) onBook(detailItem)
+          }}
+          onAdd={() => {
+            setDetailCard(null)
+            setDetailItem(null)
+          }}
+          onClose={() => {
+            setDetailCard(null)
+            setDetailItem(null)
+          }}
+        />
       ) : null}
     </div>
   )

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -131,7 +131,7 @@ function emptyCopy(kind: EmptyKind, city?: string | null) {
 }
 
 export function HotelComposeScreen({ route, navigation }: Props) {
-  const { draftToken, seed } = route.params
+  const { draftToken, seed, openSelected, hotelId: focusHotelId } = route.params
   const insets = useSafeAreaInsets()
 
   const [draft, setDraft] = useState<MyTripDraft | null>(seed || null)
@@ -144,7 +144,8 @@ export function HotelComposeScreen({ route, navigation }: Props) {
   const [emptyKind, setEmptyKind] = useState<EmptyKind | null>(null)
   const [cityLabel, setCityLabel] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(Boolean(openSelected))
+  const preferSelectedRef = useRef(Boolean(openSelected))
 
   const payload = (draft?.payload || {}) as Record<string, unknown>
   const flight = (payload.flight || {}) as Record<string, unknown>
@@ -200,6 +201,23 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed draft on first paint
   }, [draftToken, reloadKey])
+
+  // "Voir mon hôtel": paint the chosen fiche immediately, before the list finishes.
+  useEffect(() => {
+    if (!preferSelectedRef.current || !draft) return
+    const pl = (draft.payload || {}) as Record<string, unknown>
+    const currentHotel = (pl.hotel || draft.hotel) as HotelUpsellOption | null
+    if (!currentHotel) return
+    const preferredId = String(
+      focusHotelId || hotelIdOf(currentHotel) || '',
+    ).trim()
+    if (!preferredId) return
+    setSelected((prev) => {
+      if (prev && hotelIdOf(prev) === preferredId) return prev
+      return { ...currentHotel, id: preferredId } as HotelUpsellOption
+    })
+    setSheetOpen(true)
+  }, [draft, focusHotelId])
 
   useEffect(() => {
     if (!draft) return
@@ -259,9 +277,21 @@ export function HotelComposeScreen({ route, navigation }: Props) {
         setOptions(byPrice)
         if (meta?.city) setCityLabel(String(meta.city))
         else if (cityHint) setCityLabel(cityHint)
-        const curId = hotelIdOf(currentHotel)
-        const match = byPrice.find((h) => hotelIdOf(h) === curId)
-        setSelected(match || byPrice[0] || null)
+        const preferredId = String(focusHotelId || hotelIdOf(currentHotel) || '').trim()
+        const match = preferredId
+          ? byPrice.find((h) => hotelIdOf(h) === preferredId)
+          : undefined
+        const nextSelected =
+          match ||
+          (preferSelectedRef.current && currentHotel
+            ? ({ ...currentHotel } as HotelUpsellOption)
+            : null) ||
+          byPrice[0] ||
+          null
+        setSelected(nextSelected)
+        if (preferSelectedRef.current && nextSelected) {
+          setSheetOpen(true)
+        }
         // Paint list ASAP (cache/snapshot) while live rates may still run
         if (optsFlags?.paint && byPrice.length) {
           setLoading(false)
@@ -658,10 +688,23 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     setReloadKey((k) => k + 1)
   }
 
+  const viewingSelected = Boolean(
+    preferSelectedRef.current && sheetOpen && selected,
+  )
+
+  const closeSheet = () => {
+    if (preferSelectedRef.current) {
+      preferSelectedRef.current = false
+      navigation.goBack()
+      return
+    }
+    setSheetOpen(false)
+  }
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      {loading && !options.length ? (
+      {viewingSelected ? null : loading && !options.length ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
           <Text style={styles.hint}>On cherche les meilleures chambres…</Text>
@@ -798,20 +841,20 @@ export function HotelComposeScreen({ route, navigation }: Props) {
               <Text style={styles.laterText}>Plus tard</Text>
             </Pressable>
           </View>
-
-          <HotelComposeDetailSheet
-            visible={sheetOpen && !!selected}
-            hotel={selected}
-            cityLabel={cityLabel}
-            checkin={checkin || null}
-            checkout={checkout || null}
-            adults={adults}
-            saving={saving}
-            onClose={() => setSheetOpen(false)}
-            onConfirm={() => void confirm()}
-          />
         </>
       )}
+
+      <HotelComposeDetailSheet
+        visible={sheetOpen && !!selected}
+        hotel={selected}
+        cityLabel={cityLabel}
+        checkin={checkin || null}
+        checkout={checkout || null}
+        adults={adults}
+        saving={saving}
+        onClose={closeSheet}
+        onConfirm={() => void confirm()}
+      />
     </View>
   )
 }

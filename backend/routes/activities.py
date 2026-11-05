@@ -112,6 +112,7 @@ class AddItemBody(BaseModel):
     moment: Optional[str] = None
     title: Optional[str] = None
     product_url: Optional[str] = None
+    photo_url: Optional[str] = None
     platform: Optional[str] = None
     surface: Optional[str] = None
 
@@ -409,7 +410,7 @@ async def get_trip_items(
     planned_trip_id: Optional[str] = None,
 ):
     from activities.access import resolve_owner_for_write
-    from activities.trip_items import list_trip_items
+    from activities.trip_items import enrich_trip_items_photos, list_trip_items
 
     sb = _svc()
     draft_id, planned = resolve_owner_for_write(
@@ -466,6 +467,7 @@ async def get_trip_items(
                     items.append({**item, "inherited": True, "from_draft": True})
         except Exception:
             pass
+    items = enrich_trip_items_photos(sb, items)
     return {
         "ok": True,
         "items": items,
@@ -487,6 +489,12 @@ async def create_trip_item(body: AddItemBody, request: Request):
         planned_trip_id=body.planned_trip_id,
     )
     place_id = body.place_id
+    photo_url = (body.photo_url or "").strip() or None
+    place_meta: Dict[str, Any] = {}
+    if body.product_url:
+        place_meta["product_url"] = body.product_url
+    if photo_url:
+        place_meta["photo_url"] = photo_url
     if not place_id and body.product_code:
         place = upsert_place_with_ref(
             sb,
@@ -495,11 +503,19 @@ async def create_trip_item(body: AddItemBody, request: Request):
             provider="viator",
             external_id=body.product_code,
             location_precision="city",
-            meta={"product_url": body.product_url},
+            meta=place_meta or None,
         )
         place_id = place["id"] if place else None
     if not place_id:
         raise HTTPException(status_code=400, detail="place_or_product_required")
+    item_meta: Dict[str, Any] = {
+        "product_code": body.product_code,
+        "product_url": body.product_url,
+    }
+    if photo_url:
+        item_meta["photo_url"] = photo_url
+    if body.title:
+        item_meta["title"] = body.title
     item = add_activity_item(
         sb,
         place_id=place_id,
@@ -507,7 +523,7 @@ async def create_trip_item(body: AddItemBody, request: Request):
         planned_trip_id=planned,
         day_offset=body.day_offset,
         moment=body.moment,
-        meta={"product_code": body.product_code, "product_url": body.product_url},
+        meta=item_meta,
     )
     if not item:
         raise HTTPException(status_code=500, detail="insert_failed")

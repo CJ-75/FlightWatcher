@@ -45,6 +45,11 @@ import {
 } from '@flightwatcher/shared'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
+import {
+  invalidateTravelWorkspacesCache,
+  listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
+} from '../lib/workspacesCache'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { CityAirportPicker } from '../components/CityAirportPicker'
@@ -118,10 +123,31 @@ export function PlannerScreen() {
   const workspacesLenRef = useRef(0)
   workspacesLenRef.current = workspaces.length
 
+  const applyWorkspaceList = useCallback((list: TravelWorkspace[]) => {
+    setWorkspaces(
+      (Array.isArray(list) ? list : []).filter((w) => {
+        if (w.planned_trip_id) return true
+        const hotel = w.pipeline?.hotel
+        if (hotel === 'selected' || hotel === 'booked') return true
+        if (w.hotel_booking_id) return true
+        const st = String(w.hotel_booking_status || '')
+        return (
+          st === 'draft' ||
+          st === 'prebooked' ||
+          st === 'payment_pending' ||
+          st === 'payment_succeeded' ||
+          st === 'booking_pending' ||
+          st === 'confirmed'
+        )
+      }),
+    )
+  }, [])
+
   const load = useCallback(
-    async (opts?: { refresh?: boolean; force?: boolean }) => {
+    async (opts?: { refresh?: boolean; force?: boolean; silent?: boolean }) => {
       const isRefresh = Boolean(opts?.refresh)
       const force = Boolean(opts?.force)
+      const silent = Boolean(opts?.silent)
       if (!viewUser) {
         setWorkspaces([])
         setLoading(false)
@@ -137,33 +163,16 @@ export function PlannerScreen() {
         return
       }
       if (isRefresh) setRefreshing(true)
-      else if (workspacesLenRef.current === 0) setLoading(true)
-      setError(null)
+      else if (!silent && workspacesLenRef.current === 0) setLoading(true)
+      if (!silent) setError(null)
       try {
         const uid = viewUser?.id || null
         if (__DEV__ && isGuest) {
           setWorkspaces(listGuestTrips().map((t) => tripAsWorkspace(t, uid)))
         } else {
           try {
-            const list = await getApi().listTravelWorkspaces()
-            // Planned trips + séjours with hôtel sélectionné / résa entamée.
-            setWorkspaces(
-              (Array.isArray(list) ? list : []).filter((w) => {
-                if (w.planned_trip_id) return true
-                const hotel = w.pipeline?.hotel
-                if (hotel === 'selected' || hotel === 'booked') return true
-                if (w.hotel_booking_id) return true
-                const st = String(w.hotel_booking_status || '')
-                return (
-                  st === 'draft' ||
-                  st === 'prebooked' ||
-                  st === 'payment_pending' ||
-                  st === 'payment_succeeded' ||
-                  st === 'booking_pending' ||
-                  st === 'confirmed'
-                )
-              }),
-            )
+            const list = await listTravelWorkspacesCached({ force: force || isRefresh })
+            applyWorkspaceList(list)
           } catch {
             const legacy = await getApi().listPlannedTrips()
             setWorkspaces(
@@ -175,22 +184,35 @@ export function PlannerScreen() {
         }
         lastFetchAtRef.current = Date.now()
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Impossible de charger les voyages')
-        if (workspacesLenRef.current === 0) setWorkspaces([])
+        if (!silent) {
+          setError(e instanceof Error ? e.message : 'Impossible de charger les voyages')
+          if (workspacesLenRef.current === 0) setWorkspaces([])
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [viewUser, isGuest],
+    [viewUser, isGuest, applyWorkspaceList],
   )
 
   useFocusEffect(
     useCallback(() => {
-      // Always re-sync phase / pipeline (vol·hôtel réservés) when coming back
-      // from TripDetail / séjour — ignore the 60s stale window.
-      void load({ force: true })
-    }, [load]),
+      // Paint cached list immediately, then soft-refresh if stale.
+      const cached = peekTravelWorkspacesCache()
+      if (cached && workspacesLenRef.current === 0) {
+        applyWorkspaceList(cached)
+        setLoading(false)
+      }
+      const fresh =
+        lastFetchAtRef.current > 0 &&
+        Date.now() - lastFetchAtRef.current < TRIPS_STALE_MS
+      if (fresh && workspacesLenRef.current > 0) return
+      void load({
+        silent: workspacesLenRef.current > 0 || Boolean(cached),
+        force: false,
+      })
+    }, [load, applyWorkspaceList]),
   )
 
   const counts = useMemo(
@@ -242,6 +264,7 @@ export function PlannerScreen() {
               city: workspace.city,
             })
             navigation.navigate('TripDetail', { tripId: created.id })
+            invalidateTravelWorkspacesCache()
             void load({ force: true })
             return
           }
@@ -251,6 +274,7 @@ export function PlannerScreen() {
           })
           Alert.alert('', PLANNER_PROMOTE_TOAST_FR)
           navigation.navigate('TripDetail', { tripId: created.id })
+          invalidateTravelWorkspacesCache()
           void load({ force: true })
         } catch {
           navigation.navigate('TripSummary', {
@@ -410,6 +434,7 @@ export function PlannerScreen() {
         onClose={() => setShowCreate(false)}
         onCreated={(id) => {
           setShowCreate(false)
+          invalidateTravelWorkspacesCache()
           void load({ force: true })
           navigation.navigate('TripDetail', { tripId: id, autoScan: true })
         }}

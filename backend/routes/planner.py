@@ -1116,8 +1116,13 @@ def _heal_orphan_drafts_to_trips(
     drafts_by_trip: Dict[str, dict],
     bookings_by_draft_id: Dict[str, List[dict]],
     bookings_by_token: Dict[str, List[dict]],
+    persist: bool = True,
 ) -> None:
-    """Attach personal drafts/bookings to planner trips by dest + dates."""
+    """Attach personal drafts/bookings to planner trips by dest + dates.
+
+    On the list GET path pass persist=False: keep in-memory linking for
+    pipeline chips without blocking the response on Supabase writes.
+    """
     linked_ids = {
         str(row["id"]) for row in drafts_by_trip.values() if row.get("id")
     }
@@ -1165,7 +1170,11 @@ def _heal_orphan_drafts_to_trips(
         # Trip already has a stronger/equal draft → only soft-link orphan to trip,
         # keep drafts_by_trip pointing at the winner.
         existing = drafts_by_trip.get(best_trip)
-        _persist_draft_trip_link(supabase, draft, best_trip, proposal_id=None)
+        if persist:
+            _persist_draft_trip_link(supabase, draft, best_trip, proposal_id=None)
+        else:
+            draft["source_planned_trip_id"] = best_trip
+            draft["source_kind"] = "planner"
         if not existing or orphan_rank > _draft_link_rank(
             existing, bookings_by_draft_id, bookings_by_token
         ):
@@ -1179,6 +1188,19 @@ _TRIPS_LIST_SELECT = (
     "auto_scan_enabled,auto_scan_interval_seconds,last_scan_at,"
     "last_notified_at,last_notified_cheapest,created_at,updated_at"
 )
+# Hub list only needs accepted proposals + a few draft/booking columns.
+_WS_PROPOSAL_SELECT = "id,trip_id,status,trip_data,created_at"
+_WS_DRAFT_SELECT = (
+    "id,draft_token,user_id,status,source_planned_trip_id,source_kind,"
+    "city_name,origin_iata,dest_iata,out_date,ret_date,"
+    "flight_booking_status,flight_booking_provider,flight_booked_at,"
+    "hotel_booked_at,payload,updated_at"
+)
+_WS_BOOKING_SELECT = (
+    "id,draft_id,draft_token,user_id,status,hotel_name,city,destination,"
+    "hotel_photo,deal_snapshot,updated_at,created_at"
+)
+_WS_POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="fw-ws")
 
 
 @router.get("/api/planner/trips")
@@ -1275,25 +1297,51 @@ async def list_trips(request: Request):
     return out
 
 
-@router.get("/api/travel-workspaces")
-@optional_auth
-async def list_travel_workspaces(request: Request):
-    """Unified read model; underlying Planner/draft/booking rows stay authoritative."""
-    user_id = _require_user(request)
-    supabase = _svc()
+def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
+    """Build the Planner hub list (sync — run via asyncio.to_thread)."""
 
-    owned = (
-        supabase.table("planned_trips")
-        .select(_TRIPS_LIST_SELECT)
-        .eq("organizer_id", user_id)
-        .execute()
-    )
-    memberships = (
-        supabase.table("trip_members")
-        .select("trip_id")
-        .eq("user_id", user_id)
-        .execute()
-    )
+    def _q_owned():
+        return (
+            supabase.table("planned_trips")
+            .select(_TRIPS_LIST_SELECT)
+            .eq("organizer_id", user_id)
+            .execute()
+        )
+
+    def _q_memberships():
+        return (
+            supabase.table("trip_members")
+            .select("trip_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+    def _q_drafts_user():
+        return (
+            supabase.table("my_trip_drafts")
+            .select(_WS_DRAFT_SELECT)
+            .eq("user_id", user_id)
+            .neq("status", "archived")
+            .execute()
+        )
+
+    def _q_bookings_user():
+        return (
+            supabase.table("hotel_bookings")
+            .select(_WS_BOOKING_SELECT)
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+    fut_owned = _WS_POOL.submit(_q_owned)
+    fut_memberships = _WS_POOL.submit(_q_memberships)
+    fut_drafts = _WS_POOL.submit(_q_drafts_user)
+    fut_bookings = _WS_POOL.submit(_q_bookings_user)
+    owned = fut_owned.result()
+    memberships = fut_memberships.result()
+    drafts: list = list((fut_drafts.result().data or []))
+    bookings: list = list((fut_bookings.result().data or []))
+
     member_ids = [
         row["trip_id"]
         for row in (memberships.data or [])
@@ -1312,76 +1360,115 @@ async def list_travel_workspaces(request: Request):
         row["id"]: row for row in (owned.data or []) + member_trips
     }
     trip_ids = list(trips_by_id)
-    proposals: list = []
-    if trip_ids:
-        proposals = (
+
+    def _q_accepted():
+        if not trip_ids:
+            return []
+        return (
             supabase.table("trip_proposals")
-            .select("*")
+            .select(_WS_PROPOSAL_SELECT)
             .in_("trip_id", trip_ids)
+            .eq("status", "accepted")
             .execute()
         ).data or []
-    accepted_by_trip = {
-        row["trip_id"]: row
-        for row in proposals
-        if row.get("status") == "accepted"
-    }
 
-    drafts = (
-        supabase.table("my_trip_drafts")
-        .select("*")
-        .eq("user_id", user_id)
-        .neq("status", "archived")
-        .execute()
-    ).data or []
-    # Drafts linked to my trips may be guest-owned until claim — still drive pipeline.
-    if trip_ids:
-        linked = (
+    def _q_linked_drafts():
+        if not trip_ids:
+            return []
+        return (
             supabase.table("my_trip_drafts")
-            .select("*")
+            .select(_WS_DRAFT_SELECT)
             .in_("source_planned_trip_id", trip_ids)
             .neq("status", "archived")
             .execute()
         ).data or []
-        by_id = {str(d["id"]): d for d in drafts if d.get("id")}
-        for row in linked:
-            rid = str(row.get("id") or "")
-            if rid and rid not in by_id:
-                by_id[rid] = row
-                drafts.append(row)
-    bookings = (
-        supabase.table("hotel_bookings")
-        .select("*")
-        .eq("user_id", user_id)
-        .execute()
-    ).data or []
+
+    def _q_members():
+        if not trip_ids:
+            return []
+        try:
+            return (
+                supabase.table("trip_members")
+                .select("trip_id, display_name, role, status, joined_at, user_id")
+                .in_("trip_id", trip_ids)
+                .execute()
+            ).data or []
+        except Exception as e:
+            print(f"⚠️ Members batch (workspaces): {e}")
+            return []
+
+    organizer_ids = list(
+        {row["organizer_id"] for row in trips_by_id.values() if row.get("organizer_id")}
+    )
+
+    def _q_profiles():
+        if not organizer_ids:
+            return []
+        try:
+            return (
+                supabase.table("user_profiles")
+                .select("id, full_name, avatar_url")
+                .in_("id", organizer_ids)
+                .execute()
+            ).data or []
+        except Exception as e:
+            print(f"⚠️ Profiles organisateurs (workspaces): {e}")
+            return []
+
+    fut_accepted = _WS_POOL.submit(_q_accepted)
+    fut_linked = _WS_POOL.submit(_q_linked_drafts)
+    fut_members = _WS_POOL.submit(_q_members)
+    fut_profiles = _WS_POOL.submit(_q_profiles)
+
+    proposals = fut_accepted.result()
+    linked = fut_linked.result()
+    mem_rows = fut_members.result()
+    prof_rows = fut_profiles.result()
+
+    accepted_by_trip = {
+        row["trip_id"]: row
+        for row in proposals
+        if row.get("trip_id")
+    }
+
+    by_id = {str(d["id"]): d for d in drafts if d.get("id")}
+    for row in linked:
+        rid = str(row.get("id") or "")
+        if rid and rid not in by_id:
+            by_id[rid] = row
+            drafts.append(row)
+
     draft_tokens = [
         str(d.get("draft_token"))
         for d in drafts
         if d.get("draft_token")
     ]
     draft_row_ids = [str(d["id"]) for d in drafts if d.get("id")]
+
+    def _q_bookings_by_draft():
+        if not draft_row_ids:
+            return []
+        return (
+            supabase.table("hotel_bookings")
+            .select(_WS_BOOKING_SELECT)
+            .in_("draft_id", draft_row_ids)
+            .execute()
+        ).data or []
+
+    def _q_bookings_by_token():
+        if not draft_tokens:
+            return []
+        return (
+            supabase.table("hotel_bookings")
+            .select(_WS_BOOKING_SELECT)
+            .in_("draft_token", draft_tokens)
+            .execute()
+        ).data or []
+
     if draft_tokens or draft_row_ids:
-        extra_bookings: list = []
-        if draft_row_ids:
-            extra_bookings.extend(
-                (
-                    supabase.table("hotel_bookings")
-                    .select("*")
-                    .in_("draft_id", draft_row_ids)
-                    .execute()
-                ).data
-                or []
-            )
-        if draft_tokens:
-            extra_bookings.extend(
-                (
-                    supabase.table("hotel_bookings")
-                    .select("*")
-                    .in_("draft_token", draft_tokens)
-                    .execute()
-                ).data
-                or []
-            )
+        fut_bd = _WS_POOL.submit(_q_bookings_by_draft)
+        fut_bt = _WS_POOL.submit(_q_bookings_by_token)
+        extra_bookings = list(fut_bd.result()) + list(fut_bt.result())
         seen_b = {str(b["id"]) for b in bookings if b.get("id")}
         for b in extra_bookings:
             bid = str(b.get("id") or "")
@@ -1408,6 +1495,7 @@ async def list_travel_workspaces(request: Request):
         ) > _draft_link_rank(current, bookings_by_draft_id, bookings_by_token):
             drafts_by_trip[source_trip] = draft
 
+    # Soft-link orphans in memory only — never block the hub GET on writes.
     _heal_orphan_drafts_to_trips(
         supabase,
         trips_by_id=trips_by_id,
@@ -1416,41 +1504,19 @@ async def list_travel_workspaces(request: Request):
         drafts_by_trip=drafts_by_trip,
         bookings_by_draft_id=bookings_by_draft_id,
         bookings_by_token=bookings_by_token,
+        persist=False,
     )
 
     members_by_trip: Dict[str, list] = {tid: [] for tid in trip_ids}
-    if trip_ids:
-        try:
-            mem_res = (
-                supabase.table("trip_members")
-                .select("trip_id, display_name, role, status, joined_at, user_id")
-                .in_("trip_id", trip_ids)
-                .execute()
-            )
-            for m in mem_res.data or []:
-                tid = m.get("trip_id")
-                if tid in members_by_trip:
-                    members_by_trip[tid].append(m)
-        except Exception as e:
-            print(f"⚠️ Members batch (workspaces): {e}")
+    for m in mem_rows:
+        tid = m.get("trip_id")
+        if tid in members_by_trip:
+            members_by_trip[tid].append(m)
 
-    organizer_ids = list(
-        {row["organizer_id"] for row in trips_by_id.values() if row.get("organizer_id")}
-    )
     profiles_by_id: Dict[str, dict] = {}
-    if organizer_ids:
-        try:
-            prof_res = (
-                supabase.table("user_profiles")
-                .select("id, full_name, avatar_url")
-                .in_("id", organizer_ids)
-                .execute()
-            )
-            for p in prof_res.data or []:
-                if p.get("id"):
-                    profiles_by_id[p["id"]] = p
-        except Exception as e:
-            print(f"⚠️ Profiles organisateurs (workspaces): {e}")
+    for p in prof_rows:
+        if p.get("id"):
+            profiles_by_id[p["id"]] = p
 
     consumed_drafts = set()
     consumed_bookings = set()
@@ -1672,6 +1738,15 @@ async def list_travel_workspaces(request: Request):
 
     workspaces.sort(key=lambda row: str(row.get("updated_at") or ""), reverse=True)
     return workspaces
+
+
+@router.get("/api/travel-workspaces")
+@optional_auth
+async def list_travel_workspaces(request: Request):
+    """Unified read model; underlying Planner/draft/booking rows stay authoritative."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    return await asyncio.to_thread(_load_travel_workspaces_sync, supabase, user_id)
 
 
 @router.post("/api/planner/trips")

@@ -45,6 +45,8 @@ export type PendingHotelUpsell = {
   draftToken?: string | null
   /** Show PostBook lightbox when user returns from airline tab */
   awaitingReturnPrompt?: boolean
+  /** Search owns PostBook; Planner uses its own return ask. */
+  source?: 'search' | 'planner'
 }
 
 export function markFlightReturnAsk(opts: {
@@ -98,6 +100,8 @@ export function consumeFlightReturnAsk(opts?: {
   ) {
     return null
   }
+  // One-shot — avoid re-prompting on every focus/visibility while ask UI is open.
+  clearFlightReturnAsk(ask.draftToken)
   return ask
 }
 
@@ -202,6 +206,8 @@ export function openPartnerBookSync(opts: {
   skipReturnBanner?: boolean
   /** Prompt PostBook / ask-booked when user returns (airline direct). */
   awaitingReturnPrompt?: boolean
+  /** Defaults to search — Planner must pass 'planner' so App PostBook stays out. */
+  source?: 'search' | 'planner'
 }): PriceSourceBooking {
   const {
     trip,
@@ -213,6 +219,7 @@ export function openPartnerBookSync(opts: {
     targetWindow,
     skipReturnBanner,
     awaitingReturnPrompt,
+    source = 'search',
   } = opts
   const resolved = resolveTripPriceSource(trip, passengers, language)
   let primaryUrl = String(resolved.primaryUrl || '').trim()
@@ -260,6 +267,9 @@ export function openPartnerBookSync(opts: {
   )
 
   const token = String(draftToken || '').trim() || null
+  // Planner owns its own « Ton vol est réservé ? » — never bait Search PostBook.
+  const forSearchPostBook =
+    source === 'search' && Boolean(awaitingReturnPrompt) && !skipReturnBanner
   writePendingHotelUpsell({
     tripKey: tripBookKey(trip),
     city,
@@ -278,11 +288,12 @@ export function openPartnerBookSync(opts: {
     searchEventId: searchEventId || null,
     trip,
     createdAt: Date.now(),
-    skippedBanner: Boolean(skipReturnBanner),
+    skippedBanner: Boolean(skipReturnBanner) || source === 'planner',
     draftToken: token,
-    awaitingReturnPrompt: Boolean(awaitingReturnPrompt),
+    awaitingReturnPrompt: forSearchPostBook,
+    source,
   })
-  if (token && awaitingReturnPrompt) {
+  if (token && awaitingReturnPrompt && source !== 'planner') {
     markFlightReturnAsk({ draftToken: token, promptOnReturn: true })
   }
 

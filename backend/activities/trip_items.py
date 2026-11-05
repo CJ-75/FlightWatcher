@@ -41,6 +41,121 @@ def transfer_trip_items_draft_to_planned(
         return {"ok": False, "moved": 0, "error": str(e)}
 
 
+def _place_row(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    place = item.get("places")
+    if isinstance(place, list):
+        place = place[0] if place else None
+    return place if isinstance(place, dict) else None
+
+
+def _photo_from_payload(payload: Any) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+    photo = str(payload.get("photo_url") or "").strip()
+    if photo:
+        return photo
+    photos = payload.get("photos")
+    if isinstance(photos, list) and photos:
+        first = photos[0]
+        if isinstance(first, dict):
+            url = str(first.get("url") or first.get("thumb") or "").strip()
+            if url:
+                return url
+        elif isinstance(first, str) and first.strip():
+            return first.strip()
+    return None
+
+
+def _cached_product_photo(supabase, product_code: str) -> Optional[str]:
+    """Resolve a product photo from provider_cache without hitting Viator."""
+    if not supabase or not product_code:
+        return None
+    try:
+        from activities.cache import cache_get
+    except Exception:
+        return None
+    code = str(product_code).strip()
+    for key in (f"{code}:detail2", code):
+        cached = cache_get(
+            supabase, provider="viator", resource="product", cache_key=key
+        )
+        photo = _photo_from_payload(cached)
+        if photo:
+            return photo
+    # Fallback: recent city/geo search catalogs often already hold photo_url.
+    try:
+        for resource in ("city_search", "geo_search"):
+            res = (
+                supabase.table("provider_cache")
+                .select("payload")
+                .eq("provider", "viator")
+                .eq("resource", resource)
+                .order("fetched_at", desc=True)
+                .limit(24)
+                .execute()
+            )
+            for row in res.data or []:
+                payload = row.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                for it in payload.get("items") or []:
+                    if not isinstance(it, dict):
+                        continue
+                    if str(it.get("product_code") or "").strip() != code:
+                        continue
+                    photo = _photo_from_payload(it)
+                    if photo:
+                        return photo
+    except Exception as e:
+        logger.debug("catalog photo scan: %s", e)
+    return None
+
+
+def enrich_trip_items_photos(
+    supabase,
+    items: List[Dict[str, Any]],
+    *,
+    persist: bool = True,
+) -> List[Dict[str, Any]]:
+    """Ensure each activity row exposes meta.photo_url for Planner thumbs."""
+    if not items:
+        return items
+    out: List[Dict[str, Any]] = []
+    for raw in items:
+        item = dict(raw)
+        meta = (
+            dict(item.get("meta") or {})
+            if isinstance(item.get("meta"), dict)
+            else {}
+        )
+        photo = str(meta.get("photo_url") or "").strip()
+        if not photo:
+            place = _place_row(item)
+            if place:
+                place_meta = (
+                    place.get("meta")
+                    if isinstance(place.get("meta"), dict)
+                    else {}
+                )
+                photo = str(place_meta.get("photo_url") or "").strip()
+        if not photo:
+            code = str(meta.get("product_code") or "").strip()
+            if code:
+                photo = _cached_product_photo(supabase, code) or ""
+        if photo and str(meta.get("photo_url") or "").strip() != photo:
+            meta["photo_url"] = photo
+            item["meta"] = meta
+            if persist and item.get("id"):
+                try:
+                    supabase.table("trip_items").update({"meta": meta}).eq(
+                        "id", item["id"]
+                    ).execute()
+                except Exception as e:
+                    logger.debug("persist trip_item photo: %s", e)
+        out.append(item)
+    return out
+
+
 def list_trip_items(
     supabase,
     *,

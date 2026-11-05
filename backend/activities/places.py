@@ -50,18 +50,32 @@ def upsert_place_with_ref(
         )
         if existing.data:
             place = existing.data[0].get("places")
+            if not isinstance(place, dict):
+                pid = existing.data[0].get("place_id")
+                if pid:
+                    r = (
+                        supabase.table("places")
+                        .select("*")
+                        .eq("id", pid)
+                        .limit(1)
+                        .execute()
+                    )
+                    place = (r.data or [None])[0]
             if isinstance(place, dict):
+                # Backfill photo_url onto existing place when provided.
+                incoming_photo = str((meta or {}).get("photo_url") or "").strip()
+                if incoming_photo:
+                    place_meta = dict(place.get("meta") or {})
+                    if not place_meta.get("photo_url"):
+                        place_meta["photo_url"] = incoming_photo
+                        try:
+                            supabase.table("places").update(
+                                {"meta": place_meta, "updated_at": _now_iso()}
+                            ).eq("id", place["id"]).execute()
+                            place = {**place, "meta": place_meta}
+                        except Exception as e:
+                            logger.debug("place photo backfill: %s", e)
                 return place
-            pid = existing.data[0].get("place_id")
-            if pid:
-                r = (
-                    supabase.table("places")
-                    .select("*")
-                    .eq("id", pid)
-                    .limit(1)
-                    .execute()
-                )
-                return (r.data or [None])[0]
     except Exception as e:
         logger.debug("place_refs lookup: %s", e)
 

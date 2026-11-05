@@ -202,6 +202,7 @@ export function FavoritesScreen() {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
+        photo_url: card.photoUrl || null,
         ...owner,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         surface: 'favorites',

@@ -18,7 +18,15 @@ export function SiteFooter() {
         >
           Contact
         </a>
-        <span className="text-slate-400">Mentions légales · CGU · Confidentialité (bientôt)</span>
+        <Link to="/legal" className="hover:text-primary-600 underline-offset-2 hover:underline">
+          Mentions légales
+        </Link>
+        <Link to="/terms" className="hover:text-primary-600 underline-offset-2 hover:underline">
+          CGU
+        </Link>
+        <Link to="/privacy" className="hover:text-primary-600 underline-offset-2 hover:underline">
+          Confidentialité
+        </Link>
       </nav>
     </footer>
   )

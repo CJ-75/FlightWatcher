@@ -57,6 +57,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { getGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { auth, getApi } from '../lib/client'
+import { listTravelWorkspacesCached } from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { ActivityCard } from '../components/ActivityCard'
@@ -405,14 +406,14 @@ export function ActivitiesScreen() {
         let remote: TravelWorkspace[] = []
         const loadRemote = async () => {
           try {
-            const rows = await getApi().listTravelWorkspaces()
+            const rows = await listTravelWorkspacesCached()
             return Array.isArray(rows) ? rows : []
           } catch (e) {
             const msg = e instanceof Error ? e.message : ''
             if (/401|403|auth|UNAUTHORIZED/i.test(msg)) {
               await auth.refreshAccessToken()
               try {
-                const rows = await getApi().listTravelWorkspaces()
+                const rows = await listTravelWorkspacesCached({ force: true })
                 return Array.isArray(rows) ? rows : []
               } catch {
                 /* fall through */
@@ -790,6 +791,7 @@ export function ActivitiesScreen() {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
+        photo_url: card.photoUrl || null,
         ...owner,
         platform: eventPlatform(),
         surface: 'tab',

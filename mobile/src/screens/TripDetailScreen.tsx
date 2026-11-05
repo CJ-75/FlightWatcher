@@ -40,6 +40,7 @@ import {
   sanitizeTripAirports,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
+  computeTripPartyPrice,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type StayStepId,
@@ -47,6 +48,10 @@ import {
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { getApi } from '../lib/client'
+import {
+  invalidateTravelWorkspacesCache,
+  listTravelWorkspacesCached,
+} from '../lib/workspacesCache'
 import { useAuth } from '../context/AuthContext'
 import {
   acceptGuestProposal,
@@ -66,6 +71,7 @@ import { Button } from '../components/ui/Button'
 import {
   createMyTripComposeFromTrip,
   clearFlightReturnAsk,
+  clearPendingHotelUpsell,
   consumeFlightReturnAsk,
   markFlightReturnAsk,
   preparePartnerBook,
@@ -161,6 +167,8 @@ export function TripDetailScreen() {
   const extrasOffsetY = useRef(0)
   const leftForFlight = useRef(false)
   const leftForFlightNeedsAsk = useRef(false)
+  /** Prevents double Alert (browser close + focus) for the same return. */
+  const flightAskShownRef = useRef(false)
 
   useEffect(() => {
     void getApi()
@@ -175,16 +183,24 @@ export function TripDetailScreen() {
     const silent = Boolean(opts?.silent)
     if (!silent) setError(null)
     try {
-      const detail =
-        __DEV__ && isGuest ? getGuestTrip(tripId) : await getApi().getPlannedTrip(tripId)
-      if (!detail) throw new Error('Voyage introuvable')
-      setTrip(detail)
-      setEditBudget(detail.budget_max || 150)
-      setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
-      navigation.setOptions({ title: detail.name || 'Voyage' })
-      if (!(__DEV__ && isGuest)) {
+      if (__DEV__ && isGuest) {
+        const detail = getGuestTrip(tripId)
+        if (!detail) throw new Error('Voyage introuvable')
+        setTrip(detail)
+        setEditBudget(detail.budget_max || 150)
+        setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
+        navigation.setOptions({ title: detail.name || 'Voyage' })
+      } else {
+        const [detail, workspaces] = await Promise.all([
+          getApi().getPlannedTrip(tripId),
+          listTravelWorkspacesCached({ force: false }),
+        ])
+        if (!detail) throw new Error('Voyage introuvable')
+        setTrip(detail)
+        setEditBudget(detail.budget_max || 150)
+        setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
+        navigation.setOptions({ title: detail.name || 'Voyage' })
         try {
-          const workspaces = await getApi().listTravelWorkspaces()
           const matched =
             workspaces.find((item) => item.planned_trip_id === tripId) || null
           setWorkspace(matched)
@@ -841,6 +857,45 @@ export function TripDetailScreen() {
     )
   }
 
+  const removeSelectedFlight = async () => {
+    if (!trip || reopeningFlight || (__DEV__ && isGuest)) return
+    Alert.alert(
+      'Supprimer le vol',
+      'Le voyage repasse en planification — tu pourras en choisir un autre. Continuer ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setReopeningFlight(true)
+              try {
+                const token =
+                  flightDraft?.draft_token || workspace?.draft_token || null
+                await getApi().reopenPlannedTripFlight(tripId)
+                setShowModalities(false)
+                setFlightDraft(null)
+                setWorkspace(null)
+                void clearFlightReturnAsk(token)
+                void clearPendingHotelUpsell()
+                invalidateTravelWorkspacesCache()
+                await load({ silent: true })
+              } catch (e) {
+                Alert.alert(
+                  'Erreur',
+                  e instanceof Error ? e.message : 'Impossible de supprimer le vol',
+                )
+              } finally {
+                setReopeningFlight(false)
+              }
+            })()
+          },
+        },
+      ],
+    )
+  }
+
   const updateBudgetAndRescan = async () => {
     if (!trip) return
     const next = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
@@ -963,6 +1018,7 @@ export function TripDetailScreen() {
         return
       }
       void clearFlightReturnAsk(token)
+      void clearPendingHotelUpsell()
 
       const nowIso = new Date().toISOString()
       setFlightDraft((prev) => {
@@ -1020,6 +1076,7 @@ export function TripDetailScreen() {
   const bookSelectedFlight = async () => {
     if (!accepted || flightBookingBusy) return
     setFlightBookingBusy(true)
+    flightAskShownRef.current = false
     try {
       // Always resolve a single-airport deeplink (never multi CDG,ORY,BVA).
       const tripForBook = {
@@ -1037,25 +1094,17 @@ export function TripDetailScreen() {
             accepted.trip_data.aller?.destination,
         ),
       }
-      let primaryUrl = ''
-      let partnerId = 'ryanair'
-      let isTravelpayouts = false
-      try {
-        const ps = await preparePartnerBook({
-          trip: tripForBook,
-          passengers: pax,
-        })
-        primaryUrl = String(ps.primaryUrl || '').trim()
-        partnerId = ps.partnerId || partnerId
-        isTravelpayouts = ps.partnerId === 'aviasales'
-      } catch {
-        // Resolve URL even if analytics / AsyncStorage fail.
-        const ps = resolveTripPriceSource(tripForBook, pax, 'fr')
-        primaryUrl = String(ps.primaryUrl || '').trim()
-        partnerId = ps.partnerId || partnerId
-        isTravelpayouts = ps.partnerId === 'aviasales'
-      }
-
+      // Sync URL first — don't await AsyncStorage before opening the browser.
+      const preview = resolveTripPriceSource(tripForBook, pax, 'fr')
+      let primaryUrl = String(preview.primaryUrl || '').trim()
+      let partnerId = preview.partnerId || 'ryanair'
+      const isTravelpayouts = preview.partnerId === 'aviasales'
+      void preparePartnerBook({
+        trip: tripForBook,
+        passengers: pax,
+        skipReturnBanner: true,
+        source: 'planner',
+      }).then(() => clearPendingHotelUpsell())
       if (!/^https?:\/\//i.test(primaryUrl)) {
         Alert.alert(
           'Réservation',
@@ -1064,42 +1113,53 @@ export function TripDetailScreen() {
         return
       }
 
-      // Ensure execution draft exists before leaving — needed for "Oui, c’est réservé".
       let askToken =
         flightDraft?.draft_token || workspace?.draft_token || null
-      if (!(__DEV__ && isGuest)) {
-        try {
-          const draft =
-            flightDraft?.draft_token
-              ? flightDraft
-              : await getApi().getOrCreateExecutionDraft(accepted.id)
-          setFlightDraft(draft)
-          const updated = await getApi().updateMyTripFlightBookingStatus(
-            draft.draft_token,
-            {
-              status: isTravelpayouts ? 'pending_partner' : 'redirected',
-              provider: partnerId,
-            },
-          )
-          setFlightDraft(updated)
-          askToken = updated.draft_token || draft.draft_token
-        } catch {
-          /* still open partner — confirm will recreate draft if needed */
-        }
-      }
+      // Kick draft/status in parallel — do not block the in-app browser.
+      const draftWork =
+        __DEV__ && isGuest
+          ? Promise.resolve(null)
+          : (async () => {
+              try {
+                const draft = flightDraft?.draft_token
+                  ? flightDraft
+                  : await getApi().getOrCreateExecutionDraft(accepted.id)
+                setFlightDraft(draft)
+                const updated = await getApi().updateMyTripFlightBookingStatus(
+                  draft.draft_token,
+                  {
+                    status: isTravelpayouts ? 'pending_partner' : 'redirected',
+                    provider: partnerId,
+                  },
+                )
+                setFlightDraft(updated)
+                return updated.draft_token || draft.draft_token
+              } catch {
+                return askToken
+              }
+            })()
 
       leftForFlight.current = true
       leftForFlightNeedsAsk.current = !isTravelpayouts
-      const token = askToken
-      if (token) {
+      if (askToken) {
         void markFlightReturnAsk({
-          draftToken: token,
+          draftToken: askToken,
           promptOnReturn: !isTravelpayouts,
         })
       }
       setFlightBookingBusy(false)
 
-      await openInAppBrowser(navigation, primaryUrl, 'Réserver le vol')
+      const [, resolvedToken] = await Promise.all([
+        openInAppBrowser(navigation, primaryUrl, 'Réserver le vol'),
+        draftWork,
+      ])
+      const token = resolvedToken || askToken
+      if (token && !isTravelpayouts && token !== askToken) {
+        void markFlightReturnAsk({
+          draftToken: token,
+          promptOnReturn: true,
+        })
+      }
 
       // expo-web-browser keeps this screen focused — ask after the sheet closes.
       if (
@@ -1109,6 +1169,9 @@ export function TripDetailScreen() {
       ) {
         leftForFlight.current = false
         leftForFlightNeedsAsk.current = false
+        flightAskShownRef.current = true
+        void clearFlightReturnAsk(token)
+        void clearPendingHotelUpsell()
         Alert.alert(
           'Ton vol est réservé ?',
           'Tu reviens de Ryanair / la compagnie.',
@@ -1116,7 +1179,10 @@ export function TripDetailScreen() {
             {
               text: 'Pas encore',
               style: 'cancel',
-              onPress: () => void clearFlightReturnAsk(token),
+              onPress: () => {
+                void clearFlightReturnAsk(token)
+                void clearPendingHotelUpsell()
+              },
             },
             {
               text: 'Oui, c’est réservé',
@@ -1141,6 +1207,10 @@ export function TripDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (flightAskShownRef.current) {
+        flightAskShownRef.current = false
+        return
+      }
       const token =
         flightDraft?.draft_token || workspace?.draft_token || null
       const askFromMemory =
@@ -1157,6 +1227,9 @@ export function TripDetailScreen() {
           alreadyBooked: reservationFlags.flightBooked,
         })
         if (!askFromMemory && !persisted) return
+        if (flightAskShownRef.current) return
+        flightAskShownRef.current = true
+        void clearPendingHotelUpsell()
         Alert.alert(
           'Ton vol est réservé ?',
           'Tu reviens de Ryanair / la compagnie.',
@@ -1164,7 +1237,10 @@ export function TripDetailScreen() {
             {
               text: 'Pas encore',
               style: 'cancel',
-              onPress: () => void clearFlightReturnAsk(token),
+              onPress: () => {
+                void clearFlightReturnAsk(token)
+                void clearPendingHotelUpsell()
+              },
             },
             {
               text: 'Oui, c’est réservé',
@@ -1190,6 +1266,48 @@ export function TripDetailScreen() {
       null
     return raw
   }, [flightDraft?.hotel, reservationFlags.payload.hotel])
+
+  const stayParty = useMemo(() => {
+    const payload = reservationFlags.payload
+    const flight = reservationFlags.flight
+    const flightPp = reservationFlags.externalFlight
+      ? 0
+      : Number(accepted?.trip_data?.prix_total) ||
+        Number(flight.price_pp) ||
+        Number(payload.price_per_person) ||
+        0
+    const bd = (payload.price_breakdown || {}) as Record<string, unknown>
+    const rawHotelTotal =
+      payload.hotel_charged_total != null &&
+      Number(payload.hotel_charged_total) > 0
+        ? Number(payload.hotel_charged_total)
+        : draftHotel?.public_hotel_price != null
+          ? Number(draftHotel.public_hotel_price)
+          : bd.hotel_public_total != null
+            ? Number(bd.hotel_public_total)
+            : draftHotel?.hotel_pp != null
+              ? Number(draftHotel.hotel_pp) * pax
+              : 0
+    const includeHotel =
+      reservationFlags.hasHotel &&
+      !reservationFlags.externalHotel &&
+      Number(rawHotelTotal) > 0
+    return computeTripPartyPrice({
+      adults: pax,
+      flightPp,
+      hotelTotal: includeHotel ? rawHotelTotal : 0,
+    })
+  }, [
+    accepted?.trip_data?.prix_total,
+    draftHotel,
+    pax,
+    reservationFlags.externalFlight,
+    reservationFlags.externalHotel,
+    reservationFlags.flight,
+    reservationFlags.hasHotel,
+    reservationFlags.payload,
+  ])
+  const stayPriceIncludesHotel = stayParty.hotelTotal > 0
 
   const hotelId = String(
     draftHotel?.id || draftHotel?.hotel_id || '',
@@ -1225,19 +1343,44 @@ export function TripDetailScreen() {
     navigation.navigate('TripSummary', { draftToken: reservationToken })
   }
 
+  const openMyHotel = () => {
+    const token = flightDraft?.draft_token || workspace?.draft_token || null
+    if (
+      reservationFlags.hotelBooked ||
+      reservationFlags.externalHotel ||
+      workspace?.phase === 'booked'
+    ) {
+      if (token) {
+        navigation.navigate('TripSummary', { draftToken: token })
+        return
+      }
+      navigation.navigate('Bookings')
+      return
+    }
+    if (reservationFlags.hasHotel && token) {
+      navigation.navigate('HotelCompose', {
+        draftToken: token,
+        openSelected: true,
+        hotelId: hotelId || undefined,
+      })
+      return
+    }
+    if (token) {
+      navigation.navigate('HotelCompose', { draftToken: token })
+      return
+    }
+    if (accepted) void addHotelFromTrip(accepted.trip_data, accepted.id)
+  }
+
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
-      // Past incomplete stays stay composable; only booked/external hotel → résumé.
       if (
         reservationFlags.hotelBooked ||
         reservationFlags.externalHotel ||
+        reservationFlags.hasHotel ||
         workspace?.phase === 'booked'
       ) {
-        openReservations()
-        return
-      }
-      if (reservationToken && workspace?.pipeline.hotel !== 'none') {
-        navigation.navigate('HotelCompose', { draftToken: reservationToken })
+        openMyHotel()
         return
       }
       if (accepted) void addHotelFromTrip(accepted.trip_data, accepted.id)
@@ -1479,6 +1622,8 @@ export function TripDetailScreen() {
           <MobileBoardingPass
             trip={sanitizeTripAirports(accepted.trip_data)}
             passengers={pax}
+            pricePerPerson={stayParty.flightPp || stayParty.perPerson}
+            priceCaption="Prix du vol"
             bookingBusy={flightBookingBusy}
             canEditModalities={
               isOrganizer &&
@@ -1533,6 +1678,15 @@ export function TripDetailScreen() {
                     {reopeningFlight ? 'Ouverture…' : 'Choisir un autre vol'}
                   </Text>
                 </Pressable>
+                <Pressable
+                  onPress={() => void removeSelectedFlight()}
+                  disabled={reopeningFlight || scanning || savingCriteria}
+                  style={[styles.changeFlightBtn, styles.removeFlightBtn]}
+                >
+                  <Text style={styles.removeFlightText}>
+                    {reopeningFlight ? 'Suppression…' : 'Supprimer le vol'}
+                  </Text>
+                </Pressable>
                 {reservationFlags.canSkipFlight ? (
                   <Pressable
                     onPress={() => void skipFlight()}
@@ -1556,48 +1710,75 @@ export function TripDetailScreen() {
             </View>
           ) : null}
           {!reservationFlags.externalHotel ? (
-            showHotelGallery ? (
-              <View style={[styles.hotelGalleryCard, shadow.soft]}>
+            <View style={[styles.nextStepCard, shadow.soft]}>
+              {showHotelGallery ? (
                 <HotelPhotoGallery
+                  variant="hero"
                   hotelId={hotelId}
                   seedPhoto={hotelPhoto || null}
                   seedPhotos={hotelSeedPhotos}
                   alt={hotelName}
                   hotelName={hotelName}
                   cityLabel={cityLabel}
-                  height={220}
+                  height={280}
                   onHorizontalGesture={setGallerySwipeActive}
+                  overlay={
+                    <View style={styles.nextStepContent}>
+                      <View style={styles.nextStepBadge}>
+                        <Text style={styles.nextStepBadgeText}>
+                          {reservationFlags.hotelBooked ||
+                          reservationFlags.hasHotel
+                            ? 'HÔTEL'
+                            : 'PROCHAINE ÉTAPE'}
+                        </Text>
+                      </View>
+                      <Text style={styles.nextStepTitle}>
+                        {reservationFlags.hotelBooked ||
+                        reservationFlags.hasHotel
+                          ? hotelName
+                          : 'Choisir mon hôtel'}
+                      </Text>
+                      <Text style={styles.nextStepBody}>
+                        {reservationFlags.hotelBooked ||
+                        reservationFlags.hasHotel
+                          ? `Séjour à ${cityLabel}.`
+                          : `Photos, avis et prix réels pour séjourner à ${cityLabel}.`}
+                      </Text>
+                      <Pressable
+                        onPress={() => openMyHotel()}
+                        disabled={hotelBusy || skippingHotel}
+                        style={({ pressed }) => [
+                          styles.nextStepButton,
+                          (pressed || hotelBusy) && { opacity: 0.88 },
+                        ]}
+                      >
+                        <Text style={styles.nextStepButtonText}>
+                          {hotelBusy
+                            ? 'Ouverture…'
+                            : reservationFlags.hotelBooked ||
+                                reservationFlags.hasHotel
+                              ? 'Voir mon hôtel →'
+                              : 'Choisir mon hôtel →'}
+                        </Text>
+                      </Pressable>
+                      {reservationFlags.canSkipHotel ? (
+                        <Pressable
+                          onPress={() => void skipHotel()}
+                          disabled={skippingHotel || hotelBusy}
+                          style={({ pressed }) => [
+                            styles.hotelSkipInCard,
+                            (skippingHotel || pressed) && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={styles.hotelSkipInCardText}>
+                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  }
                 />
-                <View style={styles.hotelGalleryActions}>
-                  <Pressable
-                    onPress={() => {
-                      const token =
-                        flightDraft?.draft_token || workspace?.draft_token
-                      if (reservationFlags.hotelBooked) {
-                        navigation.navigate('Bookings')
-                        return
-                      }
-                      if (token) {
-                        navigation.navigate('HotelCompose', {
-                          draftToken: token,
-                        })
-                      }
-                    }}
-                    disabled={hotelBusy || skippingHotel}
-                    style={({ pressed }) => [
-                      styles.nextStepButton,
-                      styles.hotelGalleryCta,
-                      (pressed || hotelBusy) && { opacity: 0.88 },
-                    ]}
-                  >
-                    <Text style={styles.nextStepButtonText}>
-                      {hotelBusy ? 'Ouverture…' : 'Voir mon hôtel →'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : (
-              <View style={[styles.nextStepCard, shadow.soft]}>
+              ) : (
                 <ImageBackground
                   source={{
                     uri: hotelPhoto || destinationImage,
@@ -1612,7 +1793,8 @@ export function TripDetailScreen() {
                   <View style={styles.nextStepContent}>
                     <View style={styles.nextStepBadge}>
                       <Text style={styles.nextStepBadgeText}>
-                        {reservationFlags.hotelBooked || reservationFlags.hasHotel
+                        {reservationFlags.hotelBooked ||
+                        reservationFlags.hasHotel
                           ? 'HÔTEL'
                           : 'PROCHAINE ÉTAPE'}
                       </Text>
@@ -1628,21 +1810,7 @@ export function TripDetailScreen() {
                         : `Photos, avis et prix réels pour séjourner à ${cityLabel}.`}
                     </Text>
                     <Pressable
-                      onPress={() => {
-                        const token =
-                          flightDraft?.draft_token || workspace?.draft_token
-                        if (reservationFlags.hotelBooked) {
-                          navigation.navigate('Bookings')
-                          return
-                        }
-                        if (reservationFlags.hasHotel && token) {
-                          navigation.navigate('HotelCompose', {
-                            draftToken: token,
-                          })
-                          return
-                        }
-                        void addHotelFromTrip(accepted.trip_data, accepted.id)
-                      }}
+                      onPress={() => openMyHotel()}
                       disabled={hotelBusy || skippingHotel}
                       style={({ pressed }) => [
                         styles.nextStepButton,
@@ -1674,8 +1842,8 @@ export function TripDetailScreen() {
                     ) : null}
                   </View>
                 </ImageBackground>
-              </View>
-            )
+              )}
+            </View>
           ) : null}
           {!isOrganizer ? (
             <Text style={styles.roleHint}>
@@ -1683,6 +1851,49 @@ export function TripDetailScreen() {
               l’organisateur décide pour tout le monde.
             </Text>
           ) : null}
+        </View>
+      ) : null}
+
+      {!scanning &&
+      stayPriceIncludesHotel &&
+      stayParty.perPerson > 0 ? (
+        <View style={styles.section} accessibilityLabel="Prix du séjour">
+          <View style={styles.stayTotalStrip}>
+            <View style={styles.stayTotalStripMain}>
+              <Text style={styles.stayTotalStripKicker}>
+                {reservationFlags.flightBooked && reservationFlags.hotelBooked
+                  ? 'Séjour réservé'
+                  : 'Prix du séjour'}
+              </Text>
+              <View style={styles.stayTotalStripBreakdown}>
+                <Text style={styles.stayTotalStripLine}>
+                  Vol{' '}
+                  <Text style={styles.stayTotalStripStrong}>
+                    {stayParty.flightPp}€
+                  </Text>
+                </Text>
+                <Text style={styles.stayTotalStripPlus}>+</Text>
+                <Text style={styles.stayTotalStripLine}>
+                  Hôtel{' '}
+                  <Text style={styles.stayTotalStripStrong}>
+                    {Math.round(stayParty.hotelTotal / pax)}€
+                  </Text>
+                </Text>
+                <Text style={styles.stayTotalStripMuted}>/pers.</Text>
+              </View>
+            </View>
+            <View style={styles.stayTotalStripAside}>
+              <Text style={styles.stayTotalStripPrice}>
+                {stayParty.perPerson}€
+              </Text>
+              <Text style={styles.stayTotalStripPer}>par personne</Text>
+              {pax > 1 ? (
+                <Text style={styles.stayTotalStripParty}>
+                  Séjour {stayParty.total}€ · {pax} pers.
+                </Text>
+              ) : null}
+            </View>
+          </View>
         </View>
       ) : null}
 
@@ -2058,6 +2269,9 @@ const MODALITIES_TIP =
 function MobileBoardingPass({
   trip,
   passengers,
+  pricePerPerson,
+  priceCaption,
+  priceHint,
   bookingBusy,
   canEditModalities,
   showModalities,
@@ -2067,6 +2281,9 @@ function MobileBoardingPass({
 }: {
   trip: EnrichedTripResponse
   passengers: number
+  pricePerPerson?: number
+  priceCaption?: string
+  priceHint?: string
   bookingBusy?: boolean
   canEditModalities?: boolean
   showModalities?: boolean
@@ -2167,10 +2384,21 @@ function MobileBoardingPass({
 
       <View style={styles.ticketStub}>
         <View style={styles.ticketPriceBlock}>
-          <Text style={styles.ticketPriceLabel}>PRIX PAR PERSONNE</Text>
-          <Text style={styles.ticketPrice}>{Math.round(Number(safe.prix_total) || 0)}€</Text>
+          <Text style={styles.ticketPriceLabel}>
+            {(priceCaption || 'Prix par personne').toUpperCase()}
+          </Text>
+          <Text style={styles.ticketPrice}>
+            {Math.round(
+              pricePerPerson != null
+                ? pricePerPerson
+                : Number(safe.prix_total) || 0,
+            )}
+            €
+            <Text style={styles.ticketPricePer}> /pers.</Text>
+          </Text>
           <Text style={styles.ticketPassengers}>
-            {passengers === 1 ? '1 personne' : `${passengers} personnes`}
+            {priceHint ||
+              (passengers === 1 ? '1 personne' : `${passengers} personnes`)}
           </Text>
         </View>
         <View style={styles.ticketActions}>
@@ -2484,6 +2712,84 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.ink,
   },
+  removeFlightBtn: {
+    borderColor: colors.dangerSoft,
+    backgroundColor: colors.dangerSoft,
+  },
+  removeFlightText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.danger,
+  },
+  stayTotalStrip: {
+    backgroundColor: '#17120f',
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  stayTotalStripMain: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 14,
+    gap: 10,
+  },
+  stayTotalStripKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: '#fdba74',
+  },
+  stayTotalStripBreakdown: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stayTotalStripLine: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.65)',
+  },
+  stayTotalStripStrong: {
+    fontFamily: fonts.bold,
+    color: '#fff',
+  },
+  stayTotalStripPlus: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.25)',
+  },
+  stayTotalStripMuted: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+  },
+  stayTotalStripAside: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    alignItems: 'flex-end',
+  },
+  stayTotalStripPrice: {
+    fontFamily: fonts.extrabold,
+    fontSize: 32,
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
+  stayTotalStripPer: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  stayTotalStripParty: {
+    fontFamily: fonts.semibold,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 6,
+  },
   nextStepCard: {
     backgroundColor: '#21140D',
     borderRadius: 24,
@@ -2714,6 +3020,7 @@ const styles = StyleSheet.create({
   ticketPriceBlock: { flexShrink: 1 },
   ticketPriceLabel: { fontFamily: fonts.bold, fontSize: 8, letterSpacing: 1, color: colors.faint },
   ticketPrice: { marginTop: 1, fontFamily: fonts.extrabold, fontSize: 26, color: colors.ink },
+  ticketPricePer: { fontFamily: fonts.bold, fontSize: 12, color: colors.muted },
   ticketPassengers: { fontFamily: fonts.medium, fontSize: 10, color: colors.muted },
   ticketActions: {
     flexDirection: 'row',

@@ -64,7 +64,13 @@ export type RootStackParamList = {
   }
   Security: undefined
   Bookings: undefined
-  HotelCompose: { draftToken: string; seed?: MyTripDraft }
+  HotelCompose: {
+    draftToken: string
+    seed?: MyTripDraft
+    /** Open the already-chosen hotel fiche instead of browsing the list. */
+    openSelected?: boolean
+    hotelId?: string
+  }
   TripSummary: { draftToken: string; seed?: MyTripDraft }
   PlannerInvite: { token: string }
   DealCheckout: {

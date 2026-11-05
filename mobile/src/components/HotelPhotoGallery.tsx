@@ -30,6 +30,9 @@ export type HotelPhotoGalleryProps = {
   hotelName?: string
   cityLabel?: string
   height?: number
+  /** Planner hotel hero: carousel + previous overlay UI via `overlay`. */
+  variant?: 'default' | 'hero'
+  overlay?: React.ReactNode
   topRight?: React.ReactElement | null
   bottomLeft?: React.ReactElement | null
   onImageError?: () => void
@@ -57,6 +60,8 @@ export function HotelPhotoGallery({
   hotelName,
   cityLabel,
   height = Math.min(300, Math.round(SCREEN_W * 0.68)),
+  variant = 'default',
+  overlay,
   topRight,
   bottomLeft,
   onImageError,
@@ -79,6 +84,9 @@ export function HotelPhotoGallery({
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [blockHero, setBlockHero] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [pageWidth, setPageWidth] = useState(SCREEN_W)
+  const isHero = variant === 'hero'
+  const heroHeight = Math.max(height, 280)
 
   const setGestureActive = useCallback(
     (active: boolean) => {
@@ -143,11 +151,11 @@ export function HotelPhotoGallery({
   const onMomentum = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const x = e.nativeEvent.contentOffset.x
-      const i = Math.round(x / SCREEN_W)
+      const i = Math.round(x / Math.max(1, pageWidth))
       setIndex(Math.max(0, Math.min(i, photos.length - 1)))
       setGestureActive(false)
     },
-    [photos.length, setGestureActive],
+    [pageWidth, photos.length, setGestureActive],
   )
 
   const closeLightbox = useCallback(() => {
@@ -183,10 +191,18 @@ export function HotelPhotoGallery({
   const visible = Math.min(count, 24)
   const dots = Math.min(visible, 8)
   const lightboxOpen = lightbox != null
+  const slideW = pageWidth
+  const slideH = isHero ? heroHeight : height
 
   return (
     <>
-      <View style={[styles.hero, { height }]}>
+      <View
+        style={[styles.hero, { height: slideH }, isHero && styles.heroRounded]}
+        onLayout={(e) => {
+          const w = Math.round(e.nativeEvent.layout.width)
+          if (w > 0 && w !== pageWidth) setPageWidth(w)
+        }}
+      >
         <FlatList
           ref={listRef}
           data={photos.slice(0, 24)}
@@ -201,8 +217,8 @@ export function HotelPhotoGallery({
           overScrollMode="never"
           showsHorizontalScrollIndicator={false}
           getItemLayout={(_, i) => ({
-            length: SCREEN_W,
-            offset: SCREEN_W * i,
+            length: slideW,
+            offset: slideW * i,
             index: i,
           })}
           onScrollBeginDrag={() => {
@@ -223,7 +239,7 @@ export function HotelPhotoGallery({
                 heroMovedRef.current = false
               }}
               onPress={() => openLightbox(i)}
-              style={{ width: SCREEN_W, height }}
+              style={{ width: slideW, height: slideH }}
             >
               <Image
                 source={{ uri: item.url }}
@@ -237,8 +253,12 @@ export function HotelPhotoGallery({
         />
 
         <LinearGradient
-          colors={['rgba(12,18,34,0.35)', 'transparent', 'rgba(12,18,34,0.78)']}
-          locations={[0, 0.35, 1]}
+          colors={
+            isHero
+              ? ['rgba(31,16,9,0.15)', 'rgba(31,16,9,0.55)', 'rgba(31,16,9,0.94)']
+              : ['rgba(12,18,34,0.35)', 'transparent', 'rgba(12,18,34,0.78)']
+          }
+          locations={isHero ? [0, 0.4, 1] : [0, 0.35, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
@@ -249,36 +269,47 @@ export function HotelPhotoGallery({
             {topRight as any}
           </View>
         ) : null}
-        {bottomLeft ? (
+        {!isHero && bottomLeft ? (
           <View style={styles.bottomLeft} pointerEvents="box-none">
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {bottomLeft as any}
           </View>
         ) : null}
 
-        <View style={styles.counter}>
+        <View style={[styles.counter, isHero && styles.counterHero]}>
           <Text style={styles.counterText}>
             {loading ? '…' : `${index + 1}/${visible}`}
           </Text>
         </View>
 
-        <Pressable
-          disabled={blockHero}
-          onPress={() => openLightbox(index)}
-          style={styles.seeAll}
-          hitSlop={8}
-        >
-          <Text style={styles.seeAllText}>Photos</Text>
-        </Pressable>
+        {!isHero ? (
+          <Pressable
+            disabled={blockHero}
+            onPress={() => openLightbox(index)}
+            style={styles.seeAll}
+            hitSlop={8}
+          >
+            <Text style={styles.seeAllText}>Photos</Text>
+          </Pressable>
+        ) : null}
 
         {count > 1 ? (
-          <View style={styles.dots} pointerEvents="none">
+          <View
+            style={[styles.dots, isHero && styles.dotsHero]}
+            pointerEvents="none"
+          >
             {Array.from({ length: dots }).map((_, i) => (
               <View
                 key={i}
                 style={[styles.dot, i === Math.min(index, dots - 1) && styles.dotActive]}
               />
             ))}
+          </View>
+        ) : null}
+
+        {isHero && overlay ? (
+          <View style={styles.heroOverlay} pointerEvents="box-none">
+            {overlay}
           </View>
         ) : null}
 
@@ -402,9 +433,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
     overflow: 'hidden',
   },
+  heroRounded: {
+    borderRadius: 24,
+  },
   heroBlock: {
     zIndex: 20,
     backgroundColor: 'transparent',
+  },
+  heroOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 4,
   },
   image: { width: '100%', height: '100%' },
   topRight: {
@@ -429,6 +470,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radius.full,
     zIndex: 3,
+  },
+  counterHero: {
+    top: 14,
   },
   counterText: {
     color: colors.white,
@@ -459,6 +503,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 5,
     zIndex: 2,
+  },
+  dotsHero: {
+    top: 16,
+    bottom: undefined,
   },
   dot: {
     width: 6,

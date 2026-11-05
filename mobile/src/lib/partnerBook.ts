@@ -32,6 +32,8 @@ export type PendingHotelUpsell = {
   trip: EnrichedTripResponse
   createdAt: number
   skippedBanner?: boolean
+  /** Search owns PostBook; Planner uses its own return ask. */
+  source?: 'search' | 'planner'
 }
 
 export function tripBookKey(trip: EnrichedTripResponse): string {
@@ -153,6 +155,8 @@ export async function consumeFlightReturnAsk(opts?: {
   ) {
     return null
   }
+  // One-shot — avoid re-Alert on every focus while the prompt is open.
+  await clearFlightReturnAsk(ask.draftToken)
   return ask
 }
 
@@ -174,8 +178,15 @@ export async function preparePartnerBook(opts: {
   passengers: number
   searchEventId?: string | null
   skipReturnBanner?: boolean
+  source?: 'search' | 'planner'
 }): Promise<PriceSourceBooking> {
-  const { trip, passengers, searchEventId, skipReturnBanner } = opts
+  const {
+    trip,
+    passengers,
+    searchEventId,
+    skipReturnBanner,
+    source = 'search',
+  } = opts
   const ps = resolveTripPriceSource(trip, passengers, 'fr')
 
   trackPartnerEvent({
@@ -202,7 +213,8 @@ export async function preparePartnerBook(opts: {
     searchEventId: searchEventId || null,
     trip,
     createdAt: Date.now(),
-    skippedBanner: Boolean(skipReturnBanner),
+    skippedBanner: Boolean(skipReturnBanner) || source === 'planner',
+    source,
   })
   return ps
 }

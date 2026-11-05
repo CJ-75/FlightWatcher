@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { listGuestTrips } from '../dev/guestPreview'
 import { auth, getApi } from '../lib/client'
+import { listTravelWorkspacesCached } from '../lib/workspacesCache'
 import { listRememberedTrips } from '../lib/tripRecovery'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -181,7 +182,7 @@ export function ActivityPlannerPicker({
         }
         let remote: TravelWorkspace[] = []
         try {
-          const rows = await getApi().listTravelWorkspaces()
+          const rows = await listTravelWorkspacesCached()
           remote = Array.isArray(rows) ? rows : []
         } catch (e) {
           const msg = e instanceof Error ? e.message : ''
@@ -189,7 +190,7 @@ export function ActivityPlannerPicker({
             if (loggedIn) {
               await auth.refreshAccessToken()
               try {
-                const rows = await getApi().listTravelWorkspaces()
+                const rows = await listTravelWorkspacesCached({ force: true })
                 remote = Array.isArray(rows) ? rows : []
               } catch {
                 try {

@@ -918,6 +918,13 @@ export function createApiClient(options: ApiClientOptions = {}) {
         },
       ),
 
+    deleteAccount: (body?: { confirm?: string }) =>
+      request<{ ok: boolean; deleted?: boolean }>('/api/user/account/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: body?.confirm || 'SUPPRIMER' }),
+      }),
+
     notifyPasswordChanged: () =>
       request<{ ok: boolean; email_masked?: string }>(
         '/api/auth/password-changed-notify',

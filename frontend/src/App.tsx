@@ -1087,6 +1087,8 @@ function Dashboard() {
     const pending = readPendingHotelUpsell()
     if (!pending?.trip || pending.skippedBanner) return false
     if (!pending.awaitingReturnPrompt) return false
+    // Planner books write the same key — their return ask lives in PlannerTab.
+    if (pending.source === 'planner') return false
     const askShape = {
       draftToken: String(pending.draftToken || 'pending'),
       at: pending.createdAt,
@@ -2446,6 +2448,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
+        photo_url: card.photoUrl || null,
         ...owner,
         platform: 'web',
         surface: 'favorites',

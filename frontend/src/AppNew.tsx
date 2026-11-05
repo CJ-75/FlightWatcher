@@ -15,6 +15,7 @@ import AuthCallback from './auth/callback'
 const PlannerInvite = lazy(() => import('./pages/PlannerInvite'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Security = lazy(() => import('./pages/Security'))
+const Legal = lazy(() => import('./pages/Legal'))
 const MyBookings = lazy(() => import('./pages/MyBookings'))
 const MyTrip = lazy(() => import('./pages/MyTrip'))
 const HotelPay = lazy(() => import('./pages/HotelPay'))
@@ -86,6 +87,12 @@ function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/auth/reset-password" element={<ResetPassword />} />
         <Route path="/security" element={<Security />} />
+        <Route path="/privacy" element={<Legal />} />
+        <Route path="/confidentialite" element={<Legal />} />
+        <Route path="/terms" element={<Legal />} />
+        <Route path="/cgu" element={<Legal />} />
+        <Route path="/legal" element={<Legal />} />
+        <Route path="/mentions-legales" element={<Legal />} />
         <Route path="/planner/invite/:token" element={<PlannerInvite />} />
         <Route path="/bookings" element={<MyBookings />} />
         <Route path="/trip/:token" element={<MyTrip />} />

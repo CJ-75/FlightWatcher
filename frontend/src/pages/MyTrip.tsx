@@ -459,8 +459,12 @@ export default function MyTrip() {
   const isCached = vlevel === 'cached'
   const hotelPhoto = hotelObj?.photo || hotelObj?.thumbnail || payload.image_url || ''
   const hotelId = hotelObj?.id != null ? String(hotelObj.id) : null
+  // Already-chosen hotel: show the fiche, never dump into the compose list.
   const wantsCompose =
-    composeOpen || payload.compose_hotel === true || searchParams.get('compose') === '1'
+    !hotelBooked &&
+    (composeOpen ||
+      searchParams.get('compose') === '1' ||
+      (payload.compose_hotel === true && !hotelId))
 
   const activityProgress = useMemo(
     () => activityStepProgress(activityItems),

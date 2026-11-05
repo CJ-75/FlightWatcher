@@ -803,6 +803,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         product_code: card.productCode,
         title: card.title,
         product_url: card.productUrl,
+        photo_url: card.photoUrl || null,
         ...owner,
         platform: 'web',
         surface: 'tab',

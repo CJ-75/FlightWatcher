@@ -18,6 +18,7 @@ import { listTripItemsCached } from '../utils/tripItemsCache'
 import {
   invalidateTravelWorkspacesCache,
   listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
 } from '../utils/workspacesCache'
 import { loadAirportsOnce } from '../hooks/useAirports'
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
@@ -28,9 +29,11 @@ import { PassengerStepper } from './PassengerStepper'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   clearFlightReturnAsk,
+  clearPendingHotelUpsell,
   consumeFlightReturnAsk,
   markFlightReturnAsk,
   openPartnerBookSync,
+  resolveTripPriceSource,
 } from '../utils/partnerBook'
 import { DatePresets, type DatePreset } from './DatePresets'
 import { FlexibleDatesSelector } from './FlexibleDatesSelector'
@@ -64,6 +67,7 @@ import {
   PLANNER_PROMOTE_TOAST_FR,
   HOTEL_CTA_FR,
   hubMatchesPhase,
+  computeTripPartyPrice,
   type CityAirportGroup,
   type FlightBookingStatus,
   type MyTripDraft,
@@ -1017,21 +1021,28 @@ export function PlannerTab() {
     navigate(`/planner/${encodeURIComponent(tripQ)}`, { replace: true })
   }, [searchParams, navigate])
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
+  const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!userId) {
       setWorkspaces([])
       setLoading(false)
       return
     }
     const silent = Boolean(opts?.silent)
-    if (!silent) {
+    const force = Boolean(opts?.force)
+    const peeked = peekTravelWorkspacesCache()
+    if (peeked?.length) {
+      setWorkspaces(peeked.filter(workspaceVisibleInPlanner))
+      if (!force) setLoading(false)
+    }
+    if (!silent && !peeked?.length) {
       setLoading(true)
+      setError(null)
+    } else if (!silent) {
       setError(null)
     }
     try {
       try {
-        const list = await listTravelWorkspacesCached()
-        // Planned trips + séjours with hôtel sélectionné / résa entamée.
+        const list = await listTravelWorkspacesCached({ force })
         setWorkspaces(
           (Array.isArray(list) ? list : []).filter(workspaceVisibleInPlanner),
         )
@@ -1090,7 +1101,7 @@ export function PlannerTab() {
     void load()
   }, [load])
 
-  // Returning from /trip/... must refresh phase / pipeline chips.
+  // Soft refresh when tab becomes visible again (respects 60s cache).
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
@@ -1329,7 +1340,8 @@ function TripDetailView({
     try {
       const [detail, workspaces] = await Promise.all([
         getApiClient().getPlannedTrip(tripId),
-        listTravelWorkspacesCached({ force: silent }),
+        // Soft refresh keeps the 60s hub cache; mutations invalidate explicitly.
+        listTravelWorkspacesCached({ force: false }),
       ])
       setTrip(detail)
       syncEditFromTrip(detail)
@@ -1461,6 +1473,45 @@ function TripDetailView({
       workspace?.pipeline.hotel === 'booked',
   )
   const hasHotel = Boolean(draftHotel || workspace?.hotel_booking_id)
+  const stayParty = useMemo(() => {
+    const flightPp = externalFlight
+      ? 0
+      : Number(accepted?.trip_data?.prix_total) ||
+        Number(draftFlight.price_pp) ||
+        Number(draftPayload.price_per_person) ||
+        0
+    const bd = (draftPayload.price_breakdown || {}) as Record<string, unknown>
+    const rawHotelTotal =
+      draftPayload.hotel_charged_total != null &&
+      Number(draftPayload.hotel_charged_total) > 0
+        ? Number(draftPayload.hotel_charged_total)
+        : draftHotel?.public_hotel_price != null
+          ? Number(draftHotel.public_hotel_price)
+          : bd.hotel_public_total != null
+            ? Number(bd.hotel_public_total)
+            : draftHotel?.hotel_pp != null
+              ? Number(draftHotel.hotel_pp) * pax
+              : 0
+    const includeHotel =
+      hasHotel && !externalHotel && Number(rawHotelTotal) > 0
+    return computeTripPartyPrice({
+      adults: pax,
+      flightPp,
+      hotelTotal: includeHotel ? rawHotelTotal : 0,
+    })
+  }, [
+    accepted?.trip_data?.prix_total,
+    draftFlight.price_pp,
+    draftHotel,
+    draftPayload.hotel_charged_total,
+    draftPayload.price_breakdown,
+    draftPayload.price_per_person,
+    externalFlight,
+    externalHotel,
+    hasHotel,
+    pax,
+  ])
+  const stayPriceIncludesHotel = stayParty.hotelTotal > 0
   const canSkipFlight =
     !externalFlight &&
     !hotelBooked &&
@@ -1548,56 +1599,71 @@ function TripDetailView({
             accepted.trip_data.aller?.destination,
         ),
       }
-      let draftId: string | undefined
-      try {
-        const draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
-        draftId = draft.id
+      const preview = resolveTripPriceSource(tripForBook, pax, language)
+      const isTravelpayouts = preview.partnerId === 'aviasales'
+      let draft =
+        flightDraft?.draft_token
+          ? flightDraft
+          : null
+      // Travelpayouts needs draft id in SubID — await only then. Ryanair opens now.
+      if (isTravelpayouts && !draft) {
+        draft = await getApiClient().getOrCreateExecutionDraft(accepted.id)
         setFlightDraft(draft)
-        const source = openPartnerBookSync({
-          trip: tripForBook,
-          passengers: pax,
-          language,
-          draftId: draft.id,
-          draftToken: draft.draft_token,
-          targetWindow: popup,
-          awaitingReturnPrompt: true,
-        })
-        const isTravelpayouts = source.partnerId === 'aviasales'
-        const status: FlightBookingStatus = isTravelpayouts
-          ? 'pending_partner'
-          : 'redirected'
-        const updated = await getApiClient().updateMyTripFlightBookingStatus(
-          draft.draft_token,
-          { status, provider: source.partnerId },
-        )
-        setFlightDraft(updated)
-        // Ryanair / compagnie : demander au retour. Travelpayouts = postback auto.
-        if (!isTravelpayouts) {
-          leftForFlight.current = true
-          leftForFlightAt.current = Date.now()
+      }
+      const source = openPartnerBookSync({
+        trip: tripForBook,
+        passengers: pax,
+        language,
+        draftId: draft?.id || workspace?.draft_id || null,
+        draftToken:
+          draft?.draft_token || workspace?.draft_token || null,
+        targetWindow: popup,
+        // Planner owns return ask — never Search PostBook (hôtel / continuer).
+        awaitingReturnPrompt: false,
+        skipReturnBanner: true,
+        source: 'planner',
+      })
+      clearPendingHotelUpsell()
+      const token =
+        draft?.draft_token || workspace?.draft_token || null
+      if (!isTravelpayouts) {
+        leftForFlight.current = true
+        leftForFlightAt.current = Date.now()
+        if (token) {
           markFlightReturnAsk({
-            draftToken: draft.draft_token,
+            draftToken: token,
             promptOnReturn: true,
           })
-        } else {
-          clearFlightReturnAsk(draft.draft_token)
         }
-      } catch (inner) {
-        // Draft optional — still open partner booking if URL resolves.
-        try {
-          openPartnerBookSync({
-            trip: tripForBook,
-            passengers: pax,
-            language,
-            draftId,
-            targetWindow: popup,
-          })
-        } catch {
-          throw inner instanceof Error
-            ? inner
-            : new Error('Impossible d’ouvrir la réservation')
-        }
+      } else if (token) {
+        clearFlightReturnAsk(token)
       }
+      // Draft + status off the critical path (partner tab already open).
+      void (async () => {
+        try {
+          let d = draft
+          if (!d?.draft_token) {
+            d = await getApiClient().getOrCreateExecutionDraft(accepted.id)
+            setFlightDraft(d)
+            if (!isTravelpayouts) {
+              markFlightReturnAsk({
+                draftToken: d.draft_token,
+                promptOnReturn: true,
+              })
+            }
+          }
+          const status: FlightBookingStatus = isTravelpayouts
+            ? 'pending_partner'
+            : 'redirected'
+          const updated = await getApiClient().updateMyTripFlightBookingStatus(
+            d.draft_token,
+            { status, provider: source.partnerId },
+          )
+          setFlightDraft(updated)
+        } catch {
+          /* non-blocking — confirm can recreate draft */
+        }
+      })()
     } catch (e) {
       try {
         popup.close()
@@ -1631,6 +1697,7 @@ function TripDetailView({
         return
       }
       clearFlightReturnAsk(token)
+      clearPendingHotelUpsell()
       const nowIso = new Date().toISOString()
       // Optimistic UI — load() must not wipe a successful confirm.
       setFlightDraft((prev) => {
@@ -1680,6 +1747,7 @@ function TripDetailView({
     clearFlightReturnAsk(
       flightDraft?.draft_token || workspace?.draft_token || null,
     )
+    clearPendingHotelUpsell()
   }
 
   useEffect(() => {
@@ -1695,11 +1763,15 @@ function TripDetailView({
         alreadyBooked: flightBooked,
       })
       if (persisted) {
+        leftForFlight.current = false
+        clearPendingHotelUpsell()
         setAskFlightBooked(true)
         return
       }
       if (!leftForFlight.current) return
       if (Date.now() - leftForFlightAt.current < 1200) return
+      leftForFlight.current = false
+      clearPendingHotelUpsell()
       setAskFlightBooked(true)
     }
     const onReturn = () => {
@@ -1759,11 +1831,11 @@ function TripDetailView({
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
-      if (hotelBooked || externalHotel) {
+      if (hotelBooked || externalHotel || hasHotel) {
         openReservations()
         return
       }
-      openReservation(!hasHotel)
+      openReservation(true)
       return
     }
     if (id === 'flight') {
@@ -1952,6 +2024,37 @@ function TripDetailView({
       setWorkspace(null)
       await scan()
       onToast('Vol réouvert — nouveau scan lancé')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setReopeningFlight(false)
+    }
+  }
+
+  const removeSelectedFlight = async () => {
+    if (!trip || reopeningFlight) return
+    if (
+      !window.confirm(
+        'Supprimer ce vol ? Le voyage repasse en planification — tu pourras en choisir un autre.',
+      )
+    ) {
+      return
+    }
+    setReopeningFlight(true)
+    setError(null)
+    try {
+      await getApiClient().reopenPlannedTripFlight(tripId)
+      setShowModalities(false)
+      setAskFlightBooked(false)
+      setFlightDraft(null)
+      setWorkspace(null)
+      clearFlightReturnAsk(
+        flightDraft?.draft_token || workspace?.draft_token || null,
+      )
+      clearPendingHotelUpsell()
+      invalidateTravelWorkspacesCache()
+      await load({ silent: true })
+      onToast('Vol supprimé')
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
@@ -2613,6 +2716,8 @@ function TripDetailView({
                 <SelectedFlightBoardingPass
                   trip={sanitizeTripAirports(accepted.trip_data)}
                   passengers={pax}
+                  pricePerPerson={stayParty.flightPp || stayParty.perPerson}
+                  priceCaption="Prix du vol"
                   bookingStatus={flightBookingStatus || undefined}
                   bookingBusy={flightBookingBusy}
                   askBooked={askFlightBooked}
@@ -2642,92 +2747,124 @@ function TripDetailView({
                   Tu as sauté l’étape hôtel FlightWatcher pour {destinationName}.
                 </p>
               </div>
-            ) : showHotelGallery ? (
-              <div
-                className={`min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 bg-white shadow-xl shadow-orange-950/10 ${
-                  externalFlight && !accepted ? 'lg:col-span-2' : ''
-                }`}
-              >
-                <HotelPhotoGallery
-                  embedded
-                  hotelId={hotelId}
-                  seedPhoto={hotelPhoto || null}
-                  seedPhotos={hotelSeedPhotos}
-                  alt={hotelName}
-                  hotelName={hotelName}
-                  cityLabel={destinationName}
-                />
-                <div className="flex flex-wrap items-center gap-2 px-5 py-4 sm:px-6">
-                  <button
-                    type="button"
-                    disabled={hotelBusy || skippingHotel}
-                    onClick={() =>
-                      hotelBooked ? openReservations() : onPipelineStep('hotel')
-                    }
-                    className="inline-flex items-center gap-2 rounded-2xl bg-[#D94D1B] px-5 py-3 text-sm font-extrabold text-white shadow-lg min-h-[48px] disabled:opacity-60"
-                  >
-                    {hotelBusy ? 'Ouverture…' : HOTEL_CTA_FR.view}
-                    <span aria-hidden>›</span>
-                  </button>
-                </div>
-              </div>
             ) : (
               <div
                 className={`group relative isolate flex h-full min-h-[280px] min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 ${
                   externalFlight && !accepted ? 'lg:col-span-2' : ''
                 }`}
               >
-                <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
-                  <img
-                    src={hotelBlockImage}
-                    alt=""
-                    aria-hidden
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
-                  <div className="relative z-[1] flex flex-col">
-                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
-                      {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
-                    </p>
-                    <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                      {hotelBooked || hasHotel ? hotelName : HOTEL_CTA_FR.choose}
-                    </p>
-                    <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
-                      {hotelBooked || hasHotel
-                        ? `Séjour à ${destinationName}.`
-                        : `Compare les chambres à ${destinationName}.`}
-                    </p>
-                    <div className="mt-5 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={hotelBusy || skippingHotel}
-                        onClick={() =>
-                          hotelBooked
-                            ? openReservations()
-                            : onPipelineStep('hotel')
-                        }
-                        className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
-                      >
-                        {hotelBusy
-                          ? 'Ouverture…'
-                          : hotelBooked || hasHotel
-                            ? HOTEL_CTA_FR.view
+                {showHotelGallery ? (
+                  <HotelPhotoGallery
+                    variant="hero"
+                    className="h-full w-full"
+                    hotelId={hotelId}
+                    seedPhoto={hotelPhoto || null}
+                    seedPhotos={hotelSeedPhotos}
+                    alt={hotelName}
+                    hotelName={hotelName}
+                    cityLabel={destinationName}
+                    overlay={
+                      <div className="flex flex-col text-left">
+                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+                          {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
+                        </p>
+                        <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                          {hotelBooked || hasHotel
+                            ? hotelName
                             : HOTEL_CTA_FR.choose}
-                        <span aria-hidden>›</span>
-                      </button>
-                      {canSkipHotel ? (
+                        </p>
+                        <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                          {hotelBooked || hasHotel
+                            ? `Séjour à ${destinationName}.`
+                            : `Compare les chambres à ${destinationName}.`}
+                        </p>
+                        <div className="mt-5 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={hotelBusy || skippingHotel}
+                            onClick={() =>
+                              hotelBooked || hasHotel
+                                ? openReservations()
+                                : onPipelineStep('hotel')
+                            }
+                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
+                          >
+                            {hotelBusy
+                              ? 'Ouverture…'
+                              : hotelBooked || hasHotel
+                                ? HOTEL_CTA_FR.view
+                                : HOTEL_CTA_FR.choose}
+                            <span aria-hidden>›</span>
+                          </button>
+                          {canSkipHotel ? (
+                            <button
+                              type="button"
+                              disabled={skippingHotel || hotelBusy}
+                              onClick={() => void skipHotel()}
+                              className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                            >
+                              {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    }
+                  />
+                ) : (
+                  <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
+                    <img
+                      src={hotelBlockImage}
+                      alt=""
+                      aria-hidden
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+                    <div className="relative z-[1] flex flex-col">
+                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+                        {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
+                      </p>
+                      <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                        {hotelBooked || hasHotel
+                          ? hotelName
+                          : HOTEL_CTA_FR.choose}
+                      </p>
+                      <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                        {hotelBooked || hasHotel
+                          ? `Séjour à ${destinationName}.`
+                          : `Compare les chambres à ${destinationName}.`}
+                      </p>
+                      <div className="mt-5 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          disabled={skippingHotel || hotelBusy}
-                          onClick={() => void skipHotel()}
-                          className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                          disabled={hotelBusy || skippingHotel}
+                          onClick={() =>
+                            hotelBooked || hasHotel
+                              ? openReservations()
+                              : onPipelineStep('hotel')
+                          }
+                          className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
                         >
-                          {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          {hotelBusy
+                            ? 'Ouverture…'
+                            : hotelBooked || hasHotel
+                              ? HOTEL_CTA_FR.view
+                              : HOTEL_CTA_FR.choose}
+                          <span aria-hidden>›</span>
                         </button>
-                      ) : null}
+                        {canSkipHotel ? (
+                          <button
+                            type="button"
+                            disabled={skippingHotel || hotelBusy}
+                            onClick={() => void skipHotel()}
+                            className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                          >
+                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -2805,6 +2942,14 @@ function TripDetailView({
                   className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60 min-h-[40px]"
                 >
                   {reopeningFlight ? 'Ouverture…' : 'Choisir un autre vol'}
+                </button>
+                <button
+                  type="button"
+                  disabled={scanning || savingCriteria || reopeningFlight}
+                  onClick={() => void removeSelectedFlight()}
+                  className="inline-flex items-center rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-bold text-red-600 hover:bg-red-100 disabled:opacity-60 min-h-[40px]"
+                >
+                  {reopeningFlight ? 'Suppression…' : 'Supprimer le vol'}
                 </button>
                 {canSkipFlight ? (
                   <button
@@ -3026,6 +3171,58 @@ function TripDetailView({
           </div>
         </section>
       )}
+
+      {!scanning &&
+      stayPriceIncludesHotel &&
+      stayParty.perPerson > 0 ? (
+        <aside
+          className="overflow-hidden rounded-[22px] bg-[#17120f] text-white shadow-[0_18px_40px_-28px_rgba(23,18,15,0.85)]"
+          aria-label="Prix du séjour"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-stretch">
+            <div className="flex-1 px-5 py-4 sm:px-6 sm:py-5 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/90">
+                {flightBooked && hotelBooked
+                  ? 'Séjour réservé'
+                  : 'Prix du séjour'}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/65">
+                <span>
+                  Vol{' '}
+                  <strong className="font-bold text-white tabular-nums">
+                    {stayParty.flightPp}€
+                  </strong>
+                </span>
+                <span className="text-white/25" aria-hidden>
+                  +
+                </span>
+                <span>
+                  Hôtel{' '}
+                  <strong className="font-bold text-white tabular-nums">
+                    {Math.round(stayParty.hotelTotal / pax)}€
+                  </strong>
+                </span>
+                <span className="text-white/35">/pers.</span>
+              </div>
+            </div>
+            <div className="flex items-end justify-between gap-3 border-t border-white/10 px-5 py-4 sm:min-w-[168px] sm:flex-col sm:items-end sm:justify-center sm:border-l sm:border-t-0 sm:bg-white/[0.04] sm:px-6">
+              <div className="text-right">
+                <p className="text-3xl sm:text-4xl font-black tracking-tight tabular-nums leading-none">
+                  {stayParty.perPerson}€
+                </p>
+                <p className="mt-1 text-xs font-bold text-white/50">
+                  par personne
+                </p>
+              </div>
+              {pax > 1 ? (
+                <p className="text-[11px] font-semibold text-white/40 tabular-nums sm:mt-2">
+                  Séjour {stayParty.total}€ · {pax} pers.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </aside>
+      ) : null}
 
       {!scanning && trip && plannerActivitiesEnabled ? (
         <div ref={stayExtrasRef}>
@@ -3269,6 +3466,9 @@ function ModalitiesInfoTip({
 function SelectedFlightBoardingPass({
   trip,
   passengers,
+  pricePerPerson,
+  priceCaption,
+  priceHint,
   bookingStatus,
   bookingBusy,
   askBooked,
@@ -3282,6 +3482,10 @@ function SelectedFlightBoardingPass({
 }: {
   trip: EnrichedTripResponse
   passengers: number
+  /** Pack €/pers when hotel included; falls back to flight prix_total. */
+  pricePerPerson?: number
+  priceCaption?: string
+  priceHint?: string
   bookingStatus?: FlightBookingStatus
   bookingBusy: boolean
   askBooked?: boolean
@@ -3417,14 +3621,26 @@ function SelectedFlightBoardingPass({
         <div className="relative z-[1] flex flex-row items-center justify-between gap-4 border-t border-dashed border-slate-300/90 bg-[#FFFCF8] p-4 sm:p-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-center lg:gap-4 lg:border-l lg:border-t-0">
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
-              Prix par personne
+              {priceCaption || 'Prix par personne'}
             </p>
             <p className="mt-1 text-3xl font-black tracking-tight text-slate-950">
-              {Math.round(Number(safe.prix_total) || 0)}€
+              {Math.round(
+                pricePerPerson != null
+                  ? pricePerPerson
+                  : Number(safe.prix_total) || 0,
+              )}
+              €
+              <span className="ml-1 text-sm font-bold text-slate-500">/pers.</span>
             </p>
-            <p className="mt-1 text-[11px] font-semibold text-slate-500">
-              {passengers === 1 ? '1 personne' : `${passengers} personnes`}
-            </p>
+            {priceHint ? (
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                {priceHint}
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                {passengers === 1 ? '1 personne' : `${passengers} personnes`}
+              </p>
+            )}
           </div>
           <div
             aria-hidden

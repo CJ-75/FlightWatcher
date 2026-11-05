@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   Pressable,
   Modal,
@@ -14,6 +15,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   ACTIVITY_ADD_LABEL_FR,
+  ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
@@ -24,6 +26,7 @@ import {
   reorderKeysMoving,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
+  type ActivityCardModel,
 } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
@@ -31,6 +34,7 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { ActivityDetailSheet } from './ActivityDetailSheet'
 
 type ItemRow = {
   id: string
@@ -38,7 +42,107 @@ type ItemRow = {
   sort_key?: string
   inherited?: boolean
   meta?: Record<string, unknown>
-  places?: { name?: string } | null
+  places?: { name?: string; meta?: Record<string, unknown> | null } | null
+}
+
+function placeOf(it: ItemRow): {
+  name?: string
+  meta?: Record<string, unknown> | null
+} | null {
+  const raw = it.places as
+    | { name?: string; meta?: Record<string, unknown> | null }
+    | Array<{ name?: string; meta?: Record<string, unknown> | null }>
+    | null
+    | undefined
+  if (Array.isArray(raw)) return raw[0] || null
+  return raw || null
+}
+
+function photoOf(it: ItemRow): string {
+  const fromMeta = String(it.meta?.photo_url || '').trim()
+  if (fromMeta) return fromMeta
+  return String(placeOf(it)?.meta?.photo_url || '').trim()
+}
+
+function titleOf(it: ItemRow) {
+  return String(placeOf(it)?.name || it.meta?.title || 'Activité')
+}
+
+function cardFromItem(it: ItemRow): ActivityCardModel | null {
+  const productCode = String(it.meta?.product_code || '').trim()
+  if (!productCode || productCode.startsWith('skip-')) return null
+  const photo = photoOf(it) || null
+  const productUrl =
+    String(it.meta?.product_url || '').trim() ||
+    canonicalViatorProductUrl(null, { productCode })
+  return {
+    productCode,
+    title: titleOf(it),
+    photoUrl: photo,
+    rating: null,
+    reviewCount: null,
+    durationLabel: null,
+    priceLabel: null,
+    productUrl,
+    freeCancellation: false,
+    instantConfirmation: false,
+    destinationLabel: null,
+    distanceLabel: null,
+  }
+}
+
+function photoFromCatalogRow(row: Record<string, unknown>): string {
+  return String(row.photo_url || row.photoUrl || '').trim()
+}
+
+function applyPhotoMap(
+  rows: ItemRow[],
+  byCode: Map<string, string>,
+): ItemRow[] {
+  if (!byCode.size) return rows
+  return rows.map((it) => {
+    if (photoOf(it)) return it
+    const code = String(it.meta?.product_code || '').trim()
+    const url = code ? byCode.get(code) : undefined
+    if (!url) return it
+    return { ...it, meta: { ...(it.meta || {}), photo_url: url } }
+  })
+}
+
+async function enrichActivityPhotos(
+  rows: ItemRow[],
+  citySlug: string,
+): Promise<ItemRow[]> {
+  const missing = rows.filter((it) => !photoOf(it) && it.meta?.product_code)
+  if (!missing.length) return rows
+  const byCode = new Map<string, string>()
+  try {
+    const res = await getApi().listCityActivities(citySlug, 2)
+    for (const raw of res.items || []) {
+      const row = raw as Record<string, unknown>
+      const code = String(row.product_code || row.productCode || '').trim()
+      const url = photoFromCatalogRow(row)
+      if (code && url) byCode.set(code, url)
+    }
+  } catch {
+    /* product detail fallback below */
+  }
+  let next = applyPhotoMap(rows, byCode)
+  const stillMissing = next
+    .filter((it) => !photoOf(it))
+    .map((it) => String(it.meta?.product_code || '').trim())
+    .filter(Boolean)
+    .slice(0, 8)
+  if (!stillMissing.length) return next
+  await Promise.allSettled(
+    stillMissing.map(async (code) => {
+      const res = await getApi().getActivityProduct(code)
+      const product = (res.product || {}) as Record<string, unknown>
+      const url = photoFromCatalogRow(product)
+      if (url) byCode.set(code, url)
+    }),
+  )
+  return applyPhotoMap(next, byCode)
 }
 
 export function ActivityStepPanel(props: {
@@ -71,6 +175,8 @@ export function ActivityStepPanel(props: {
   const [error, setError] = useState<string | null>(null)
   const [pendingBook, setPendingBook] = useState<ItemRow | null>(null)
   const [askBooked, setAskBooked] = useState(false)
+  const [detailCard, setDetailCard] = useState<ActivityCardModel | null>(null)
+  const [detailItem, setDetailItem] = useState<ItemRow | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const [resuming, setResuming] = useState(false)
   const pendingRef = useRef<ItemRow | null>(null)
@@ -96,7 +202,9 @@ export function ActivityStepPanel(props: {
     setError(null)
     try {
       const res = await getApi().listTripItems(owner)
-      setItems((res.items || []) as ItemRow[])
+      const rows = (res.items || []) as ItemRow[]
+      setItems(rows)
+      setItems(await enrichActivityPhotos(rows, city))
       authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
@@ -106,7 +214,9 @@ export function ActivityStepPanel(props: {
         if (token) {
           try {
             const res = await getApi().listTripItems(owner)
-            setItems((res.items || []) as ItemRow[])
+            const rows = (res.items || []) as ItemRow[]
+            setItems(rows)
+            setItems(await enrichActivityPhotos(rows, city))
             setError(null)
             return
           } catch (e2) {
@@ -123,7 +233,7 @@ export function ActivityStepPanel(props: {
     } finally {
       setLoading(false)
     }
-  }, [owner])
+  }, [owner, city])
 
   const onResumeSession = async () => {
     setResuming(true)
@@ -208,8 +318,29 @@ export function ActivityStepPanel(props: {
     await load()
   }
 
-  const titleOf = (it: ItemRow) =>
-    String(it.places?.name || it.meta?.title || 'Activité')
+  const openDetail = (it: ItemRow) => {
+    const card = cardFromItem(it)
+    if (!card) return
+    setDetailItem(it)
+    setDetailCard(card)
+    track('open_detail', { trip_item_id: it.id, product_code: card.productCode })
+  }
+
+  const bookItem = (it: ItemRow) => {
+    const url = canonicalViatorProductUrl(
+      it.meta?.product_url != null ? String(it.meta.product_url) : null,
+      {
+        productCode:
+          it.meta?.product_code != null
+            ? String(it.meta.product_code)
+            : null,
+      },
+    )
+    if (!url) return
+    if (!it.inherited) setPendingBook(it)
+    track('book_click', { trip_item_id: it.id })
+    openInAppBrowser(navigation, url, titleOf(it))
+  }
 
   const openActivitiesCatalog = () => {
     track('browse_catalog')
@@ -318,15 +449,30 @@ export function ActivityStepPanel(props: {
       {items.map((it, idx) =>
         it.status === 'skipped' ? null : (
         <View key={it.id} style={[styles.card, shadow.soft]}>
-          <View style={styles.itemTitleRow}>
-            <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
-              {titleOf(it)}
-            </Text>
-            {it.inherited ? (
-              <Text style={styles.groupBadge}>GROUPE</Text>
-            ) : null}
-          </View>
-          <Text style={styles.status}>{tripItemStatusLabelFr(it.status)}</Text>
+          <Pressable
+            onPress={() => openDetail(it)}
+            accessibilityRole="button"
+            accessibilityLabel={`Voir ${titleOf(it)}`}
+            style={styles.itemMainRow}
+          >
+            {photoOf(it) ? (
+              <Image
+                source={{ uri: photoOf(it) }}
+                style={styles.itemPhoto}
+                accessibilityIgnoresInvertColors
+              />
+            ) : (
+              <View style={styles.itemPhotoPlaceholder} />
+            )}
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.itemTitleRow}>
+                <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
+                  {titleOf(it)}
+                </Text>
+              </View>
+              <Text style={styles.status}>{tripItemStatusLabelFr(it.status)}</Text>
+            </View>
+          </Pressable>
           <View style={styles.actions}>
             {!it.inherited && idx > 0 ? (
               <Pressable onPress={() => void move(idx, idx - 1)} hitSlop={8}>
@@ -350,26 +496,7 @@ export function ActivityStepPanel(props: {
               </Pressable>
             ) : null}
             {it.meta?.product_url || it.meta?.product_code ? (
-              <Pressable
-                hitSlop={8}
-                onPress={() => {
-                  const url = canonicalViatorProductUrl(
-                    it.meta?.product_url != null
-                      ? String(it.meta.product_url)
-                      : null,
-                    {
-                      productCode:
-                        it.meta?.product_code != null
-                          ? String(it.meta.product_code)
-                          : null,
-                    },
-                  )
-                  if (!url) return
-                  if (!it.inherited) setPendingBook(it)
-                  track('book_click', { trip_item_id: it.id })
-                  openInAppBrowser(navigation, url, titleOf(it))
-                }}
-              >
+              <Pressable hitSlop={8} onPress={() => bookItem(it)}>
                 <Text style={styles.linkPrimary}>{ACTIVITY_BOOK_VIATOR_FR}</Text>
               </Pressable>
             ) : null}
@@ -377,6 +504,30 @@ export function ActivityStepPanel(props: {
         </View>
         ),
       )}
+
+      <ActivityDetailSheet
+        visible={Boolean(detailCard)}
+        card={detailCard}
+        alreadyAdded
+        addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
+        onBook={(c) => {
+          const it =
+            detailItem ||
+            items.find(
+              (row) => String(row.meta?.product_code || '') === c.productCode,
+            ) ||
+            null
+          if (it) bookItem(it)
+        }}
+        onAdd={() => {
+          setDetailCard(null)
+          setDetailItem(null)
+        }}
+        onClose={() => {
+          setDetailCard(null)
+          setDetailItem(null)
+        }}
+      />
 
       <Modal visible={askBooked && !!pendingBook} transparent animationType="fade">
         <View style={styles.modalBg}>
@@ -556,18 +707,25 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
+  itemMainRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  itemPhoto: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.line,
+  },
+  itemPhotoPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+  },
   title: { fontFamily: fonts.bold, color: colors.ink, fontSize: 14 },
   itemTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  groupBadge: {
-    fontFamily: fonts.bold,
-    fontSize: 9,
-    color: colors.primaryInk,
-    backgroundColor: colors.primarySoft,
-    borderRadius: radius.full,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    overflow: 'hidden',
-  },
   status: { fontFamily: fonts.medium, color: colors.muted, fontSize: 12 },
   muted: { fontFamily: fonts.regular, color: colors.muted, fontSize: 12 },
   err: { color: colors.danger, fontFamily: fonts.medium, fontSize: 12 },

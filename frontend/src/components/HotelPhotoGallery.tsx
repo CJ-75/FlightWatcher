@@ -17,6 +17,14 @@ export interface HotelPhotoGalleryProps {
   embedded?: boolean
   /** Even denser mosaic for trip compose sticky panel */
   compact?: boolean
+  /**
+   * Full-bleed carousel (all breakpoints) for Planner hotel hero —
+   * keeps overlay UI (badge / title / CTA) via `overlay`.
+   */
+  variant?: 'default' | 'hero'
+  /** Absolute overlay content for `variant="hero"` (pointer-events auto on children). */
+  overlay?: ReactNode
+  className?: string
   /** Overlay controls (like / close) rendered top-right */
   topRight?: ReactNode
   /** Bottom-left overlay (badge / city) — mobile hero only */
@@ -63,6 +71,9 @@ export function HotelPhotoGallery({
   language = 'fr',
   embedded = false,
   compact = false,
+  variant = 'default',
+  overlay,
+  className = '',
   topRight,
   bottomLeft,
 }: HotelPhotoGalleryProps) {
@@ -190,9 +201,88 @@ export function HotelPhotoGallery({
   const compactExtra = Math.max(0, count - 5)
   const mobileSlides = photos.slice(0, 20)
 
+  const isHero = variant === 'hero'
+  const heroSlides = mobileSlides
+
   return (
     <>
+      {isHero ? (
+        <div
+          className={`relative isolate flex h-full min-h-[280px] w-full overflow-hidden ${className}`}
+        >
+          <div
+            ref={mobileScrollerRef}
+            className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory scrollbar-none overscroll-x-contain touch-pan-x"
+            style={{
+              scrollSnapType: 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+            }}
+            onScroll={(e) => {
+              const el = e.currentTarget
+              const w = el.clientWidth || 1
+              const i = Math.round(el.scrollLeft / w)
+              if (i !== mobileIdx) {
+                setMobileIdx(Math.max(0, Math.min(i, heroSlides.length - 1)))
+              }
+            }}
+          >
+            {heroSlides.map((p, i) => (
+              <button
+                key={`${p.url}-hero-${i}`}
+                type="button"
+                className="relative h-full min-h-[280px] w-full min-w-full shrink-0 grow-0 basis-full snap-center snap-always focus:outline-none"
+                onClick={() => openAt(i)}
+              >
+                <img
+                  src={p.url}
+                  alt={`${alt} ${i + 1}`}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  loading={i === 0 ? 'eager' : 'lazy'}
+                  draggable={false}
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+
+          {heroSlides.length > 1 ? (
+            <div className="pointer-events-none absolute left-0 right-0 top-3 z-10 flex justify-center gap-1.5">
+              {heroSlides.slice(0, 8).map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === mobileIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/45'
+                  }`}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-ink/45 px-2.5 py-1 text-[11px] font-bold tabular-nums text-white">
+            {loading ? '…' : `${mobileIdx + 1}/${heroSlides.length}`}
+          </span>
+
+          {topRight ? (
+            <div className="absolute right-3 top-3 z-10 flex gap-2 pointer-events-auto">
+              {topRight}
+            </div>
+          ) : null}
+
+          {overlay ? (
+            <div className="relative z-[1] mt-auto flex h-full min-h-[280px] w-full flex-col justify-end p-6 sm:p-7 pointer-events-none [&_button]:pointer-events-auto [&_a]:pointer-events-auto">
+              {overlay}
+            </div>
+          ) : bottomLeft ? (
+            <div className="absolute bottom-4 left-4 right-4 z-10 pointer-events-none">
+              {bottomLeft}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Mobile: full-bleed paging carousel */}
+      {!isHero ? (
       <div className={`relative sm:hidden ${embedded ? 'rounded-xl overflow-hidden' : ''}`}>
         <div
           ref={mobileScrollerRef}
@@ -277,8 +367,10 @@ export function HotelPhotoGallery({
           </span>
         )}
       </div>
+      ) : null}
 
       {/* Desktop: Booking / Airbnb mosaic (or 6-up compact grid) */}
+      {!isHero ? (
       <div
         className={`relative hidden sm:block ${embedded ? '' : 'px-4 pt-4'}`}
       >
@@ -437,6 +529,7 @@ export function HotelPhotoGallery({
           </>
         )}
       </div>
+      ) : null}
 
       {typeof document !== 'undefined'
         ? createPortal(

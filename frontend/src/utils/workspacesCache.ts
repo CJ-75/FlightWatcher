@@ -1,8 +1,8 @@
 import type { TravelWorkspace } from '@flightwatcher/shared'
 import { getApiClient } from './apiClient'
 
-/** Short TTL — Planner remount / detail share one network hit. */
-const TTL_MS = 15_000
+/** Hub + detail share one hit; mutations call invalidateTravelWorkspacesCache. */
+const TTL_MS = 60_000
 
 let cached: { at: number; data: TravelWorkspace[] } | null = null
 let inflight: Promise<TravelWorkspace[]> | null = null
@@ -26,6 +26,10 @@ export async function listTravelWorkspacesCached(opts?: {
       inflight = null
     })
   return inflight
+}
+
+export function peekTravelWorkspacesCache(): TravelWorkspace[] | null {
+  return cached?.data ?? null
 }
 
 export function invalidateTravelWorkspacesCache() {
