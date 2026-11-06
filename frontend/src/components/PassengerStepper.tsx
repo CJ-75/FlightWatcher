@@ -14,7 +14,7 @@ export function PassengerStepper({
   min = 1,
   max = 6,
   compact = false,
-  label = 'Qui part',
+  label = 'Voyageurs',
 }: PassengerStepperProps) {
   const n = Math.min(max, Math.max(min, value || 1))
 
@@ -26,15 +26,17 @@ export function PassengerStepper({
           : 'mb-6 sm:mb-8 flex items-center justify-between gap-4'
       }
     >
-      <label
-        className={
-          compact
-            ? 'text-sm font-bold text-slate-700'
-            : 'text-base sm:text-lg font-bold text-slate-900 block'
-        }
-      >
-        {label}
-      </label>
+      {label ? (
+        <label
+          className={
+            compact
+              ? 'text-sm font-bold text-slate-700'
+              : 'text-base sm:text-lg font-bold text-slate-900 block'
+          }
+        >
+          {label}
+        </label>
+      ) : null}
       <div
         className={
           compact

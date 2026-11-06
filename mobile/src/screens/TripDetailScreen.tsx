@@ -66,6 +66,7 @@ import {
   updateGuestTripName,
 } from '../dev/guestPreview'
 import { DestinationCard } from '../components/DestinationCard'
+import { PlannerScanPanel } from '../components/PlannerScanPanel'
 import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { TravelersSection } from '../components/TravelersSection'
 import { Button } from '../components/ui/Button'
@@ -667,6 +668,7 @@ export function TripDetailScreen() {
       } else {
         await getApi().completePlannedTrip(tripId)
       }
+      invalidateTravelWorkspacesCache()
       navigation.goBack()
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Archivage échoué')
@@ -683,6 +685,7 @@ export function TripDetailScreen() {
       } else {
         await getApi().deletePlannedTrip(tripId)
       }
+      invalidateTravelWorkspacesCache()
       navigation.goBack()
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Suppression échouée')
@@ -1434,12 +1437,11 @@ export function TripDetailScreen() {
     return (
       <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
         <ScreenBackground />
-        <ActivityIndicator size="large" color={colors.primary} />
         {scanning || autoScan ? (
-          <Text style={[styles.errorText, { marginTop: 16, color: colors.ink }]}>
-            Scan en cours…
-          </Text>
-        ) : null}
+          <PlannerScanPanel fromLabel="…" toLabel="inspire" compact />
+        ) : (
+          <ActivityIndicator size="large" color={colors.primary} />
+        )}
       </View>
     )
   }
@@ -1981,16 +1983,14 @@ export function TripDetailScreen() {
       />
 
       {scanning ? (
-        <View style={[styles.empty, shadow.soft]}>
-          <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.emptyTitle, { marginTop: 12 }]}>Scan en cours…</Text>
-          <Text style={styles.emptyBody}>
-            {departureRouteLabel(trip.departure_airport)}
-            {trip.arrival_airport
-              ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
-              : ' → inspire'}
-          </Text>
-        </View>
+        <PlannerScanPanel
+          fromLabel={departureRouteLabel(trip.departure_airport)}
+          toLabel={
+            trip.arrival_airport
+              ? trip.arrival_airport.replace(/,/g, ' · ')
+              : 'inspire'
+          }
+        />
       ) : null}
 
       {!scanning && pending.length > 0 ? (

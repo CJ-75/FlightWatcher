@@ -206,6 +206,15 @@ export function PlannerScreen() {
         applyWorkspaceList(cached)
         setLoading(false)
       }
+      // After delete/archive, cache is cleared → always refetch.
+      if (!cached) {
+        lastFetchAtRef.current = 0
+        void load({
+          silent: workspacesLenRef.current > 0,
+          force: true,
+        })
+        return
+      }
       const fresh =
         lastFetchAtRef.current > 0 &&
         Date.now() - lastFetchAtRef.current < TRIPS_STALE_MS
@@ -834,7 +843,7 @@ function CreateTripModal({
               ) : (
                 <View style={styles.partySummary}>
                   <Text style={styles.partySummaryTitle}>
-                    {partyMode ? partyModeKickerFr(partyMode) : 'Qui part'}
+                    {partyMode ? partyModeKickerFr(partyMode) : 'Voyageurs'}
                   </Text>
                   <Text style={styles.partySummaryBody}>
                     {partyMode ? partyModeCreateHintFr(partyMode) : `${passengers} place(s)`}

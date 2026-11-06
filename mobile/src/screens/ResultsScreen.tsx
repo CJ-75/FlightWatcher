@@ -478,7 +478,7 @@ export function ResultsScreen({ route, navigation }: Props) {
                   <Text style={styles.summaryValue}>{summary.budget}€</Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Qui part</Text>
+                  <Text style={styles.summaryLabel}>Voyageurs</Text>
                   <Text style={styles.summaryValue}>{summary.passengers}</Text>
                 </View>
                 <View style={styles.summaryRow}>

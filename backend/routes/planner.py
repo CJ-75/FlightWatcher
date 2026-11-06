@@ -7,7 +7,7 @@ import re
 import secrets
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
@@ -1351,6 +1351,7 @@ async def list_trips(request: Request):
         supabase.table("planned_trips")
         .select(_TRIPS_LIST_SELECT)
         .eq("organizer_id", user_id)
+        .neq("status", "archived")
         .order("created_at", desc=True)
         .execute()
     )
@@ -1367,6 +1368,7 @@ async def list_trips(request: Request):
             supabase.table("planned_trips")
             .select(_TRIPS_LIST_SELECT)
             .in_("id", member_ids)
+            .neq("status", "archived")
             .order("created_at", desc=True)
             .execute()
         )
@@ -1374,6 +1376,8 @@ async def list_trips(request: Request):
 
     by_id: Dict[str, dict] = {}
     for row in (owned.data or []) + member_trips:
+        if str(row.get("status") or "") == "archived":
+            continue
         by_id[row["id"]] = row
 
     trip_ids = list(by_id.keys())
@@ -1445,6 +1449,7 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
             supabase.table("planned_trips")
             .select(_TRIPS_LIST_SELECT)
             .eq("organizer_id", user_id)
+            .neq("status", "archived")
             .execute()
         )
 
@@ -1493,11 +1498,14 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
             supabase.table("planned_trips")
             .select(_TRIPS_LIST_SELECT)
             .in_("id", member_ids)
+            .neq("status", "archived")
             .execute()
         ).data or []
 
     trips_by_id = {
-        row["id"]: row for row in (owned.data or []) + member_trips
+        row["id"]: row
+        for row in (owned.data or []) + member_trips
+        if str(row.get("status") or "") != "archived"
     }
     trip_ids = list(trips_by_id)
 
@@ -1676,6 +1684,9 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
             )
         if booking:
             consumed_bookings.add(str(booking["id"]))
+        # Soft-deleted planners stay out of the hub (draft/booking rows preserved).
+        if str(trip.get("status") or "") == "archived":
+            continue
         trip_data = (accepted or {}).get("trip_data") or {}
         payload = (draft or {}).get("payload") or {}
         flight = payload.get("flight") or {}
@@ -1984,6 +1995,19 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
             ),
         )
 
+    # Exact same aller/retour slots (date + heures) → refuse duplicate planner.
+    if body.dates_depart and body.dates_retour:
+        existing = _find_organizer_trip_same_flight_slots(
+            supabase,
+            user_id,
+            d_out=body.dates_depart[0],
+            d_ret=body.dates_retour[-1],
+            departure_airport=dep,
+            arrival_airport=arr,
+        )
+        if existing:
+            raise _duplicate_flight_http(existing)
+
     token = secrets.token_hex(16)
     data = {
         "organizer_id": user_id,
@@ -2030,6 +2054,111 @@ def _leg_date_horaire(leg: Optional[dict]) -> Optional[DateAvecHoraire]:
         except Exception:
             time_part = "00:00"
     return DateAvecHoraire(date=date_str, heure_min=time_part, heure_max=time_part)
+
+
+def _flight_slot_key(raw: Any) -> Optional[Tuple[str, str, str]]:
+    """Canonical (date, heure_min, heure_max) for duplicate-flight detection."""
+    if raw is None:
+        return None
+    if isinstance(raw, DateAvecHoraire):
+        day = str(raw.date or "")[:10]
+        hmin = str(raw.heure_min or "00:00")[:5] or "00:00"
+        hmax = str(raw.heure_max or hmin)[:5] or hmin
+    elif isinstance(raw, dict):
+        day = str(raw.get("date") or "")[:10]
+        hmin = str(raw.get("heure_min") or "00:00")[:5] or "00:00"
+        hmax = str(raw.get("heure_max") or hmin)[:5] or hmin
+    else:
+        return None
+    if len(day) < 10:
+        return None
+    return (day, hmin, hmax)
+
+
+def _trip_flight_slots(
+    trip: dict,
+) -> Optional[Tuple[Tuple[str, str, str], Tuple[str, str, str]]]:
+    deps = trip.get("dates_depart") or []
+    rets = trip.get("dates_retour") or []
+    if not isinstance(deps, list) or not isinstance(rets, list):
+        return None
+    if not deps or not rets:
+        return None
+    out_key = _flight_slot_key(deps[0] if isinstance(deps[0], dict) else None)
+    ret_key = _flight_slot_key(rets[-1] if isinstance(rets[-1], dict) else None)
+    if not out_key or not ret_key:
+        return None
+    return (out_key, ret_key)
+
+
+def _iata_set(raw: Any) -> Set[str]:
+    return {
+        p.strip().upper()
+        for p in re.split(r"[,;|/\s]+", str(raw or ""))
+        if len(p.strip()) == 3 and p.strip().isalpha()
+    }
+
+
+def _find_organizer_trip_same_flight_slots(
+    supabase,
+    user_id: str,
+    *,
+    d_out: Any,
+    d_ret: Any,
+    departure_airport: Optional[str] = None,
+    arrival_airport: Optional[str] = None,
+) -> Optional[dict]:
+    """Existing non-archived trip with same aller/retour date+times (same orga)."""
+    want_out = _flight_slot_key(d_out)
+    want_ret = _flight_slot_key(d_ret)
+    if not want_out or not want_ret:
+        return None
+    want_dep = _iata_set(departure_airport)
+    want_arr = _iata_set(arrival_airport)
+    try:
+        rows = (
+            supabase.table("planned_trips")
+            .select(
+                "id,organizer_id,name,status,departure_airport,arrival_airport,"
+                "dates_depart,dates_retour,invite_token,passengers,direct,"
+                "budget_max,created_at,updated_at"
+            )
+            .eq("organizer_id", user_id)
+            .neq("status", "archived")
+            .order("updated_at", desc=True)
+            .limit(50)
+            .execute()
+        ).data or []
+    except Exception as e:
+        print(f"⚠️ duplicate flight-slot lookup: {e}")
+        return None
+    for row in rows:
+        slots = _trip_flight_slots(row)
+        if not slots or slots[0] != want_out or slots[1] != want_ret:
+            continue
+        if want_dep:
+            row_dep = _iata_set(row.get("departure_airport"))
+            if row_dep and want_dep.isdisjoint(row_dep):
+                continue
+        if want_arr:
+            row_arr = _iata_set(row.get("arrival_airport"))
+            if row_arr and want_arr.isdisjoint(row_arr):
+                continue
+        return row
+    return None
+
+
+def _duplicate_flight_http(existing: dict) -> HTTPException:
+    trip_id = str(existing.get("id") or "")
+    name = str(existing.get("name") or "ce voyage")
+    return HTTPException(
+        status_code=409,
+        detail=(
+            f"Tu as déjà un planner aux mêmes dates et heures de vol "
+            f"(« {name} »). Ouvre-le plutôt que d’en créer un autre."
+            + (f" [trip_id={trip_id}]" if trip_id else "")
+        ),
+    )
 
 
 def _city_label_from_trip(trip_data: dict) -> str:
@@ -2082,6 +2211,17 @@ def _insert_locked_trip_with_proposal(
     )
     if not dep:
         raise HTTPException(status_code=400, detail="Aéroport de départ manquant")
+
+    existing = _find_organizer_trip_same_flight_slots(
+        supabase,
+        user_id,
+        d_out=d_out,
+        d_ret=d_ret,
+        departure_airport=dep,
+        arrival_airport=arr,
+    )
+    if existing:
+        raise _duplicate_flight_http(existing)
 
     try:
         price = float(trip_data.get("prix_total") or 0)

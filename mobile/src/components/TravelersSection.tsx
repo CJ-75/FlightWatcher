@@ -271,15 +271,15 @@ export function TravelersSection({
             (inviteBusy || pressed) && { opacity: 0.85 },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Partager le lien d’invitation"
+          accessibilityLabel="Partager ce planner"
         >
           <View style={styles.inviteIcon}>
             <Text style={styles.inviteIconText}>↗</Text>
           </View>
           <View style={styles.inviteMeta}>
-            <Text style={styles.inviteLabel}>Lien d’invitation</Text>
+            <Text style={styles.inviteLabel}>Partager ce planner</Text>
             <Text style={styles.inviteHint} numberOfLines={1}>
-              Partager avec qui part
+              Envoie le lien à ceux qui viennent
             </Text>
           </View>
           {inviteBusy ? (

@@ -28,6 +28,7 @@ import { loadAirportsOnce } from '../hooks/useAirports'
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
+import { PlannerScanPanel } from './PlannerScanPanel'
 import { BudgetSlider } from './BudgetSlider'
 import { PassengerStepper } from './PassengerStepper'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -2451,11 +2452,7 @@ function TripDetailView({
           <button type="button" onClick={onBack} className="text-sm font-bold text-primary-600">
             ← {t('nav.planner')}
           </button>
-          <div className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-5 py-12 text-center">
-            <div className="mx-auto mb-3 w-9 h-9 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
-            <p className="font-bold text-slate-900">{t('planner.scan.auto')}</p>
-            <p className="text-sm text-slate-500 mt-1">On lance le scan tout de suite…</p>
-          </div>
+          <PlannerScanPanel fromLabel="…" toLabel="inspire" />
         </div>
       )
     }
@@ -2766,11 +2763,14 @@ function TripDetailView({
 
       {/* Next action */}
       {scanning ? (
-        <div className="rounded-3xl border border-line bg-white px-8 py-14 text-center shadow-soft">
-          <div className="mx-auto mb-4 w-11 h-11 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
-          <p className="font-extrabold text-ink text-xl">{t('planner.scan.auto')}</p>
-          <p className="text-sm text-muted mt-2">{routeLine}</p>
-        </div>
+        <PlannerScanPanel
+          fromLabel={departureRouteLabel(reservationOrigin)}
+          toLabel={
+            reservationDest
+              ? String(reservationDest).replace(/,/g, ' · ')
+              : 'inspire'
+          }
+        />
       ) : accepted || externalFlight ? (
         <section className="space-y-6">
           <div>
@@ -3028,12 +3028,10 @@ function TripDetailView({
                     <BudgetSlider value={editBudget} onChange={setEditBudget} />
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-                      Qui part
-                    </p>
                     <PassengerStepper
                       value={editPassengers}
                       onChange={setEditPassengers}
+                      label="Voyageurs"
                     />
                   </div>
                   <label className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -3405,14 +3403,14 @@ function TripDetailView({
                   Ensemble
                 </span>
                 <span className="mt-0.5 block text-lg font-extrabold tracking-tight text-ink">
-                  Inviter des proches
+                  Partager ce planner
                 </span>
                 <span className="mt-1 block text-sm text-ink-soft">
-                  Partage le voyage pour suivre le séjour ensemble.
+                  Envoie le lien à ceux qui viennent.
                 </span>
               </span>
               <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold min-h-[40px]">
-                Partager le lien
+                Partager
               </span>
             </span>
           </button>

@@ -426,7 +426,7 @@ export function CreateTripModal({
                   ) : (
                     <div className="rounded-2xl border border-line bg-slate-50/80 px-4 py-3">
                       <p className="text-sm font-bold text-ink">
-                        {partyMode ? partyModeKickerFr(partyMode) : 'Qui part'}
+                        {partyMode ? partyModeKickerFr(partyMode) : 'Voyageurs'}
                       </p>
                       <p className="text-sm text-muted mt-0.5">
                         {partyMode

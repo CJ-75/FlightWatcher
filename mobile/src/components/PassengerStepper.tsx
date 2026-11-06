@@ -15,13 +15,13 @@ export function PassengerStepper({
   onChange,
   min = 1,
   max = 6,
-  label = 'Qui part',
+  label = 'Voyageurs',
 }: Props) {
   const n = Math.min(max, Math.max(min, value || min))
 
   return (
     <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={styles.stepper}>
         <Pressable
           onPress={() => onChange(Math.max(min, n - 1))}
