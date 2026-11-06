@@ -16,6 +16,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
 import {
+  PLANNER_SHARE_ACTION_FR,
+  PLANNER_SHARE_HINT_FR,
+  PLANNER_SHARE_TITLE_FR,
   partyModeFromCount,
   partyModeKickerFr,
   partyModeTitleFr,
@@ -271,21 +274,21 @@ export function TravelersSection({
             (inviteBusy || pressed) && { opacity: 0.85 },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Partager ce planner"
+          accessibilityLabel={PLANNER_SHARE_TITLE_FR}
         >
           <View style={styles.inviteIcon}>
             <Text style={styles.inviteIconText}>↗</Text>
           </View>
           <View style={styles.inviteMeta}>
-            <Text style={styles.inviteLabel}>Partager ce planner</Text>
+            <Text style={styles.inviteLabel}>{PLANNER_SHARE_TITLE_FR}</Text>
             <Text style={styles.inviteHint} numberOfLines={1}>
-              Envoie le lien à ceux qui viennent
+              {PLANNER_SHARE_HINT_FR}
             </Text>
           </View>
           {inviteBusy ? (
             <ActivityIndicator color={colors.primary} size="small" />
           ) : (
-            <Text style={styles.inviteAction}>Partager</Text>
+            <Text style={styles.inviteAction}>{PLANNER_SHARE_ACTION_FR}</Text>
           )}
         </Pressable>
       ) : null}

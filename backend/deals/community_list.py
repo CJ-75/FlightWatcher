@@ -871,6 +871,12 @@ def _enrich_rows_to_deals(
 
     # Re-rank / drop hotels over 2.5× flight_pp (CPU only — no I/O)
     from deals.hotel_budget import filter_hotels_for_flight
+    from deals.pack_budget import pack_budget_pp
+
+    try:
+        pack_cap = float(pack_budget_pp() or 0)
+    except Exception:
+        pack_cap = 350.0
 
     capped_rows: List[Dict[str, Any]] = []
     for r in rows:
@@ -932,8 +938,42 @@ def _enrich_rows_to_deals(
                 distance_km=dist_map.get(dest_iata.upper()),
             ),
         }
+        # Week-end produit : aller ≤ samedi 12h, retour dimanche ≥ 17h
+        try:
+            from deals.promote import weekend_product_hours_ok
+
+            if not weekend_product_hours_ok(
+                {
+                    "out_arr_local": (enriched.get("flight_snapshot") or {}).get(
+                        "arrival_local"
+                    )
+                    or (enriched.get("flight_snapshot") or {}).get("out_arr_local"),
+                    "ret_dep_local": (enriched.get("flight_snapshot") or {}).get(
+                        "return_departure_local"
+                    )
+                    or (enriched.get("flight_snapshot") or {}).get("ret_dep_local"),
+                    "out_date": enriched.get("out_date"),
+                    "ret_date": enriched.get("ret_date"),
+                }
+            ):
+                continue
+        except Exception:
+            pass
+
         d = row_to_travel_deal(enriched, adults=adults_n, baselines_fresh=fresh)
-        if max_pp is not None and float(d.get("price_per_person") or 0) > float(max_pp):
+        # Client max_pp OR product pack budget (DEALS_BUDGET_PACK_PP, défaut 350 €)
+        effective_max = float(pack_cap or 0)
+        if max_pp is not None:
+            effective_max = (
+                min(float(max_pp), float(pack_cap))
+                if pack_cap > 0
+                else float(max_pp)
+            )
+        try:
+            shown_pp = float(d.get("price_per_person") or 0)
+        except (TypeError, ValueError):
+            shown_pp = 0.0
+        if effective_max > 0 and shown_pp > effective_max:
             continue
         if require_photo and not _deal_has_hotel_photo(d):
             continue

@@ -128,15 +128,11 @@ export function DealsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, [])
 
-  useEffect(() => {
+  const applyAffiner = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setQueryOrigin(origin)
-      setQueryAdults(adults)
-    }, 280)
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
+    setQueryOrigin(origin)
+    setQueryAdults(adults)
+    setFiltersOpen(false)
   }, [origin, adults])
 
   const load = useCallback(
@@ -479,14 +475,22 @@ export function DealsScreen() {
                       value={origin}
                       onChange={setOriginPersist}
                     />
-                    <Text style={styles.originHint}>
-                      Filtre le mur selon ton aéroport de départ. Pour une ville précise,
-                      utilise Recherche.
-                    </Text>
 
                     <View style={styles.divider} />
 
                     <PassengerStepper value={adults} onChange={setAdults} />
+
+                    <Pressable
+                      onPress={applyAffiner}
+                      style={({ pressed }) => [
+                        styles.searchBtn,
+                        pressed && { opacity: 0.92 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Rechercher"
+                    >
+                      <Text style={styles.searchBtnText}>Rechercher</Text>
+                    </Pressable>
                   </View>
                 ) : null}
               </View>
@@ -831,12 +835,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.primary,
   },
-  originHint: {
-    marginTop: 10,
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 16,
+  searchBtn: {
+    marginTop: 4,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  searchBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: colors.white,
   },
   count: {
     fontFamily: fonts.semibold,

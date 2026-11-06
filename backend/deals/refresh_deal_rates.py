@@ -201,6 +201,17 @@ def refresh_deal_rates(
             except Exception:
                 pass
 
+    pack_budget_summary: Dict[str, Any] = {}
+    try:
+        from deals.pack_budget import expire_over_budget_deals
+
+        pack_budget_summary = expire_over_budget_deals(
+            supabase, cfg=cfg, adults=int((adults or [2])[0])
+        )
+    except Exception as e:
+        logger.warning("pack budget expire after rates: %s", e)
+        pack_budget_summary = {"ok": False, "error": str(e)}
+
     summary = {
         "ok": True,
         "combos": len(combos),
@@ -217,13 +228,15 @@ def refresh_deal_rates(
         "errors": sum(1 for r in results if r.get("status") == "error"),
         "api_calls": api_calls,
         "max_calls": max_calls,
+        "pack_budget": pack_budget_summary,
         "at": datetime.now(timezone.utc).isoformat(),
     }
     logger.info(
-        "refresh_deal_rates done combos=%s ok=%s budget_skip=%s calls=%s",
+        "refresh_deal_rates done combos=%s ok=%s budget_skip=%s calls=%s pack_expired=%s",
         summary["combos"],
         summary["ok_count"],
         summary["skipped_budget"],
         summary["api_calls"],
+        (pack_budget_summary or {}).get("expired"),
     )
     return summary

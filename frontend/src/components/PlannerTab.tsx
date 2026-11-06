@@ -70,6 +70,10 @@ import {
   PLANNER_PHASE_HINT_FR,
   PLANNER_PHASE_ACTION_FR,
   PLANNER_PROMOTE_TOAST_FR,
+  PLANNER_SHARE_ACTION_FR,
+  PLANNER_SHARE_EYEBROW_FR,
+  PLANNER_SHARE_HINT_FR,
+  PLANNER_SHARE_TITLE_FR,
   HOTEL_CTA_FR,
   hubMatchesPhase,
   computeTripPartyPrice,
@@ -3400,17 +3404,17 @@ function TripDetailView({
             <span className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <span className="min-w-0">
                 <span className="block text-xs font-semibold uppercase tracking-wide text-muted">
-                  Ensemble
+                  {PLANNER_SHARE_EYEBROW_FR}
                 </span>
                 <span className="mt-0.5 block text-lg font-extrabold tracking-tight text-ink">
-                  Partager ce planner
+                  {PLANNER_SHARE_TITLE_FR}
                 </span>
                 <span className="mt-1 block text-sm text-ink-soft">
-                  Envoie le lien à ceux qui viennent.
+                  {PLANNER_SHARE_HINT_FR}.
                 </span>
               </span>
               <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold min-h-[40px]">
-                Partager
+                {PLANNER_SHARE_ACTION_FR}
               </span>
             </span>
           </button>

@@ -172,17 +172,12 @@ export function DealsTab() {
     writeStoredOrigin(value)
   }, [])
 
-  // Debounce filter → query (avoids reload on every stepper tick)
-  useEffect(() => {
+  const applyAffiner = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setQueryDestination(destination)
-      setQueryOrigin(origin)
-      setQueryAdults(adults)
-    }, 280)
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
+    setQueryDestination(destination)
+    setQueryOrigin(origin)
+    setQueryAdults(adults)
+    setFiltersOpen(false)
   }, [destination, origin, adults])
 
   const goSearch = (opts?: { destination?: string; city?: string }) => {
@@ -554,12 +549,17 @@ export function DealsTab() {
                   <CityAirportSelect value={destination} onChange={setDestination} />
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2.5">
-                {t('deals.filterRouteHint')}
-              </p>
             </div>
 
             <PassengerStepper value={adults} onChange={setAdults} min={1} max={6} />
+
+            <button
+              type="button"
+              onClick={applyAffiner}
+              className="mt-2 w-full min-h-[48px] rounded-2xl bg-primary-500 px-4 text-base font-bold text-white hover:bg-primary-600 transition-colors"
+            >
+              {t('deals.filterSearch')}
+            </button>
           </motion.div>
         ) : null}
       </div>

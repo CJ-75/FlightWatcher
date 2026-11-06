@@ -15,33 +15,6 @@ const ACTIVE_PHASES: ReadonlySet<TravelWorkspacePhase> = new Set([
   'past',
 ])
 
-function normalizeKey(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '')
-    .trim()
-}
-
-function matchesCatalogCity(
-  ws: TravelWorkspace,
-  catalogCity?: string | null,
-): boolean {
-  const needle = normalizeKey(String(catalogCity || ''))
-  if (!needle) return false
-  const candidates = [
-    ws.city,
-    ws.title,
-    ws.dest_iata,
-    ws.dest_iata ? String(ws.dest_iata).slice(0, 3) : null,
-  ]
-  return candidates.some((c) => {
-    const key = normalizeKey(String(c || ''))
-    return Boolean(key) && (key === needle || key.includes(needle) || needle.includes(key))
-  })
-}
-
 function workspaceOwnerKey(ws: TravelWorkspace): string | null {
   const planned = String(ws.planned_trip_id || '').trim()
   const draft = String(ws.draft_token || '').trim()
@@ -59,17 +32,13 @@ function preferWorkspace(a: TravelWorkspace, b: TravelWorkspace): TravelWorkspac
   return bTs.localeCompare(aTs) > 0 ? b : a
 }
 
-export type FilterActivitySwitcherOptions = {
-  catalogCity?: string | null
-}
-
 /**
  * Slim list for ActivityPlannerPicker:
- * active planners + unlinked personal drafts; no past / booking orphans / local dupes.
+ * active planners + unlinked personal drafts; no booking orphans / local dupes.
+ * Order matches planner hub: updated_at DESC (same as /api/travel-workspaces).
  */
 export function filterActivitySwitcherWorkspaces(
   rows: TravelWorkspace[],
-  opts: FilterActivitySwitcherOptions = {},
 ): TravelWorkspace[] {
   const byKey = new Map<string, TravelWorkspace>()
 
@@ -102,14 +71,7 @@ export function filterActivitySwitcherWorkspaces(
     return true
   })
 
-  const catalogCity = opts.catalogCity
-  return eligible.sort((a, b) => {
-    const aMatch = matchesCatalogCity(a, catalogCity) ? 0 : 1
-    const bMatch = matchesCatalogCity(b, catalogCity) ? 0 : 1
-    if (aMatch !== bMatch) return aMatch - bMatch
-    const aPlanned = String(a.planned_trip_id || '').trim() ? 0 : 1
-    const bPlanned = String(b.planned_trip_id || '').trim() ? 0 : 1
-    if (aPlanned !== bPlanned) return aPlanned - bPlanned
-    return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
-  })
+  return eligible.sort((a, b) =>
+    String(b.updated_at || '').localeCompare(String(a.updated_at || '')),
+  )
 }

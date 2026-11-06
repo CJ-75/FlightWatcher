@@ -96,12 +96,12 @@ class TestAttachRules(unittest.TestCase):
         self.tz = "Europe/Lisbon"
 
     def test_ok_midday(self):
-        # Explicit arrival via estimated path — midday dep should land afternoon
+        # Fri arrival + Sun retour ≥ 17:00
         trip = _trip(
             origin="BVA",
             dest="LIS",
             aller_dep="2026-10-30T10:00:00",
-            retour_dep="2026-11-01T16:00:00",
+            retour_dep="2026-11-01T17:30:00",
             price=80,
         )
         att = attach_trip_to_window(
@@ -117,7 +117,7 @@ class TestAttachRules(unittest.TestCase):
             origin="BVA",
             dest="LIS",
             aller_dep="2026-10-30T01:00:00",
-            retour_dep="2026-11-01T12:00:00",
+            retour_dep="2026-11-01T18:00:00",
             price=60,
         )
         trip.aller.arrivalTime = "2026-10-30T03:00:00"
@@ -132,7 +132,7 @@ class TestAttachRules(unittest.TestCase):
             origin="BVA",
             dest="LIS",
             aller_dep="2026-10-30T20:00:00",
-            retour_dep="2026-11-01T12:00:00",
+            retour_dep="2026-11-01T18:00:00",
             price=70,
         )
         trip.aller.arrivalTime = "2026-10-30T22:30:00"
@@ -157,20 +157,50 @@ class TestAttachRules(unittest.TestCase):
         self.assertTrue(att.ok, att.reason)
         self.assertTrue(att.late_departure)
 
-    def test_wrong_checkin_date(self):
+    def test_saturday_morning_arrival_ok(self):
+        # Week-end : arriver samedi ≤ 12:00 autorisé
         trip = _trip(
             origin="BVA",
             dest="LIS",
-            aller_dep="2026-10-31T10:00:00",
-            retour_dep="2026-11-01T12:00:00",
+            aller_dep="2026-10-31T08:00:00",
+            retour_dep="2026-11-01T18:00:00",
             price=70,
         )
-        trip.aller.arrivalTime = "2026-10-31T12:00:00"
+        trip.aller.arrivalTime = "2026-10-31T11:30:00"
+        att = attach_trip_to_window(
+            trip, checkin=self.checkin, checkout=self.checkout, dest_timezone=self.tz
+        )
+        self.assertTrue(att.ok, att.reason)
+
+    def test_saturday_afternoon_arrival_rejected(self):
+        trip = _trip(
+            origin="BVA",
+            dest="LIS",
+            aller_dep="2026-10-31T12:00:00",
+            retour_dep="2026-11-01T18:00:00",
+            price=70,
+        )
+        trip.aller.arrivalTime = "2026-10-31T14:00:00"
         att = attach_trip_to_window(
             trip, checkin=self.checkin, checkout=self.checkout, dest_timezone=self.tz
         )
         self.assertFalse(att.ok)
-        self.assertIn("arrival_date_mismatch", att.reason)
+        self.assertEqual(att.reason, "arrival_after_saturday_noon")
+
+    def test_sunday_return_before_1700_rejected(self):
+        trip = _trip(
+            origin="BVA",
+            dest="LIS",
+            aller_dep="2026-10-30T10:00:00",
+            retour_dep="2026-11-01T16:00:00",
+            price=70,
+        )
+        trip.aller.arrivalTime = "2026-10-30T12:00:00"
+        att = attach_trip_to_window(
+            trip, checkin=self.checkin, checkout=self.checkout, dest_timezone=self.tz
+        )
+        self.assertFalse(att.ok)
+        self.assertEqual(att.reason, "return_before_sunday_1700")
 
     def test_wrong_return_date(self):
         trip = _trip(
@@ -196,7 +226,7 @@ class TestPickBest(unittest.TestCase):
             origin="BVA",
             dest="LIS",
             aller_dep="2026-10-30T09:00:00",
-            retour_dep="2026-11-01T14:00:00",
+            retour_dep="2026-11-01T17:30:00",
             price=100,
             transfers=1,
         )
@@ -205,7 +235,7 @@ class TestPickBest(unittest.TestCase):
             origin="BVA",
             dest="LIS",
             aller_dep="2026-10-30T10:00:00",
-            retour_dep="2026-11-01T15:00:00",
+            retour_dep="2026-11-01T18:00:00",
             price=108,  # within 10% of 100
             transfers=0,
         )
@@ -225,7 +255,7 @@ class TestPickBest(unittest.TestCase):
             origin="BVA",
             dest="LIS",
             aller_dep="2026-10-30T10:00:00",
-            retour_dep="2026-11-01T14:00:00",
+            retour_dep="2026-11-01T18:00:00",
             price=200,
         )
         trip.aller.arrivalTime = "2026-10-30T12:00:00"

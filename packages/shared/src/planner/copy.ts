@@ -18,17 +18,17 @@ export const PLANNER_HUB_EMPTY_FR: Record<
   { title: string; body: string; cta?: string }
 > = {
   upcoming: {
-    title: 'Aucun voyage à venir',
+    title: 'Aucun séjour à venir',
     body: 'Dès qu’un vol est choisi ou que le séjour est composé, il apparaît ici.',
   },
   organize: {
     title: 'Rien en cours',
-    body: 'Ici : les voyages encore à construire. Crée un voyage, scanne les prix, puis invite tes proches.',
-    cta: 'Nouveau voyage',
+    body: 'Commence un séjour, scanne les prix, puis invite tes proches.',
+    cta: 'Nouveau séjour',
   },
   past: {
-    title: 'Aucun voyage passé',
-    body: 'Les séjours terminés restent ici.',
+    title: 'Aucun séjour passé',
+    body: 'Tes séjours terminés restent ici.',
   },
 }
 
@@ -43,17 +43,17 @@ export const PLANNER_PHASE_LABEL_FR: Record<TravelWorkspacePhase, string> = {
 export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
   planning: 'Choisis un vol et invite qui part avec toi.',
   flight_selected: 'Vol choisi — compose ton hôtel.',
-  composing: 'Séjour en cours — finalise la réservation.',
-  booked: 'Réservation rattachée à ce voyage.',
-  past: 'Voyage terminé — tu peux encore ajouter des activités.',
+  composing: 'Finalise la réservation de ton séjour.',
+  booked: 'Réservation rattachée à ce séjour.',
+  past: 'Séjour terminé — tu peux encore y ajouter des activités.',
 }
 
 export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {
   planning: 'Continuer',
   flight_selected: 'Choisir mon hôtel',
   composing: 'Reprendre',
-  booked: 'Ouvrir le voyage',
-  past: 'Revoir le voyage',
+  booked: 'Ouvrir le séjour',
+  past: 'Revoir le séjour',
 }
 
 export const HOTEL_CTA_FR = {
@@ -63,8 +63,19 @@ export const HOTEL_CTA_FR = {
   backPlanner: 'Retour au planner',
 } as const
 
-export const PLANNER_PROMOTE_TOAST_FR = 'Séjour ajouté au planner'
+export const PLANNER_PROMOTE_TOAST_FR = 'Séjour ajouté'
 export const DESTINATION_FALLBACK_FR = 'Destination'
+
+/** Invite / share block on a séjour. */
+export const PLANNER_SHARE_TITLE_FR = 'Partager le séjour'
+export const PLANNER_SHARE_HINT_FR = 'Invite ceux qui voyagent avec toi'
+export const PLANNER_SHARE_ACTION_FR = 'Partager'
+export const PLANNER_SHARE_EYEBROW_FR = 'Ensemble'
+export const PLANNER_NEW_STAY_FR = 'Nouveau séjour'
+export const PLANNER_HUB_KICKER_FR = 'SÉJOURS'
+export const PLANNER_HUB_TITLE_FR = 'Tes séjours'
+export const PLANNER_HUB_SUBTITLE_FR =
+  'Crée un séjour, scanne les prix, invite tes proches.'
 
 export function hubMatchesPhase(
   phase: TravelWorkspacePhase,

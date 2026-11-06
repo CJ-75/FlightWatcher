@@ -273,10 +273,10 @@ export function CreateTripModal({
               }`}
             >
               {step === 1
-                ? 'Nouveau voyage'
+                ? 'Nouveau séjour'
                 : partyMode
-                  ? `Nouveau voyage · ${partyModeKickerFr(partyMode)}`
-                  : 'Nouveau voyage'}
+                  ? `Nouveau séjour · ${partyModeKickerFr(partyMode)}`
+                  : 'Nouveau séjour'}
             </h3>
           </div>
           <span className="min-w-[64px]" />

@@ -12,7 +12,7 @@ import {
   ACTIVITY_CHANGE_TRIP_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_NO_TRIP_CTA_BODY_FR,
-  ACTIVITY_NO_TRIP_CTA_BUTTON_FR,
+  ACTIVITY_NO_TRIP_CTA_SECONDARY_FR,
   ACTIVITY_NO_TRIP_CTA_TITLE_FR,
   ACTIVITY_OPEN_PLANNER_FR,
   ACTIVITY_SYNC_CITY_FR,
@@ -104,7 +104,7 @@ export function ActivityTripHero(props: Props) {
               ]}
             >
               <Text style={styles.btnGhostText}>
-                {ACTIVITY_NO_TRIP_CTA_BUTTON_FR}
+                {ACTIVITY_NO_TRIP_CTA_SECONDARY_FR}
               </Text>
             </Pressable>
           </View>

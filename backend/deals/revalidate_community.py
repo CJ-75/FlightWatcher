@@ -122,6 +122,26 @@ def revalidate_deals(
                 [best], source="revalidation", sync=True
             )
 
+            # Flight alone already above pack budget → expire (no cheap séjour)
+            from deals.pack_budget import is_over_pack_budget, pack_budget_pp
+
+            if is_over_pack_budget(new_price, cfg=cfg):
+                supabase.table("deals_active").update(
+                    {
+                        "status": "expired",
+                        "updated_at": now.isoformat(),
+                        "last_verified_at": now.isoformat(),
+                    }
+                ).eq("deal_key", deal["deal_key"]).execute()
+                expired += 1
+                logger.info(
+                    "revalidate expire over pack budget deal=%s flight_pp=%s cap=%s",
+                    deal.get("deal_key"),
+                    new_price,
+                    pack_budget_pp(cfg),
+                )
+                continue
+
             snap = dict(snap)
             snap["price_pp_eur"] = new_price
             snap["booking_url"] = getattr(best, "booking_url", None) or snap.get(
@@ -140,10 +160,22 @@ def revalidate_deals(
                 bl = dict(bl)
                 bl["price_increased"] = True
                 patch["baseline_snapshot"] = bl
+            # Re-check pack (flight + hotel) after price update
+            probe = {
+                "flight_snapshot": snap,
+                "hotel_top3": deal.get("hotel_top3") or [],
+            }
+            from deals.pack_budget import estimate_pack_pp
+
+            pack = estimate_pack_pp(probe, adults=2)
+            if is_over_pack_budget(pack, cfg=cfg):
+                patch["status"] = "expired"
+                expired += 1
+            else:
+                updated += 1
             supabase.table("deals_active").update(patch).eq(
                 "deal_key", deal["deal_key"]
             ).execute()
-            updated += 1
         except Exception as e:
             logger.warning("revalidate %s: %s", deal.get("deal_key"), e)
         finally:

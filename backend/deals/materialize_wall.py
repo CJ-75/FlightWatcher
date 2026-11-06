@@ -450,6 +450,18 @@ def materialize_deals_wall(
         logger.warning("occasion retag: %s", e)
         occasion_summary = {"ok": False, "error": str(e)}
 
+    # After rates/hotels refresh: drop packs over DEALS_BUDGET_PACK_PP
+    budget_summary: Dict[str, Any] = {}
+    try:
+        from deals.pack_budget import expire_over_budget_deals
+
+        budget_summary = expire_over_budget_deals(
+            supabase, adults=int(adults or 2), limit=limit
+        )
+    except Exception as e:
+        logger.warning("pack budget expire: %s", e)
+        budget_summary = {"ok": False, "error": str(e)}
+
     try:
         from deals.community_list import invalidate_list_cache
 
@@ -470,6 +482,7 @@ def materialize_deals_wall(
         "skipped_no_unique_hotel": skipped_no_unique,
         "errors": errors,
         "occasions": occasion_summary,
+        "pack_budget": budget_summary,
         "at": now,
     }
     logger.info("materialize_deals_wall %s", summary)

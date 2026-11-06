@@ -21,6 +21,7 @@ import {
   ACTIVITY_SEARCH_PLACEHOLDER_CITY_FR,
   ACTIVITY_SEE_PLANNER_FR,
   ACTIVITY_SORT_LABEL_FR,
+  ACTIVITY_SWITCH_TRIP_HINT_FR,
   activitiesCityPath,
   activityCategoriesSummaryFr,
   canonicalViatorProductUrl,
@@ -1121,14 +1122,11 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         busy={addBusy}
         preferredPlannedTripId={activeTrip?.plannedTripId}
         preferredDraftToken={activeTrip?.draftToken}
-        catalogCity={
-          pendingAdd?.destinationLabel || citySlug || null
-        }
         title={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_FR}
         hint={
           pendingAdd
             ? undefined
-            : 'Le séjour choisi devient le voyage en cours pour le catalogue.'
+            : ACTIVITY_SWITCH_TRIP_HINT_FR
         }
         onClose={() => {
           if (addBusy) return

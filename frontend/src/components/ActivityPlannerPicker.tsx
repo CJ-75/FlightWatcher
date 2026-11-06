@@ -6,9 +6,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
+  ACTIVITY_OPEN_PLANNER_FR,
   ACTIVITY_PICK_PLANNER_HINT_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
+  ACTIVITY_STAY_KIND_SHARED_FR,
+  ACTIVITY_STAY_KIND_SOLO_FR,
   ACTIVITY_SWITCHER_SOFT_LIMIT,
   cityDisplayNameFr,
   filterActivitySwitcherWorkspaces,
@@ -36,7 +39,6 @@ type Props = {
   busy?: boolean
   preferredPlannedTripId?: string | null
   preferredDraftToken?: string | null
-  catalogCity?: string | null
   title?: string
   hint?: string
   onClose: () => void
@@ -120,7 +122,6 @@ export function ActivityPlannerPicker({
   busy = false,
   preferredPlannedTripId,
   preferredDraftToken,
-  catalogCity = null,
   title = ACTIVITY_PICK_PLANNER_TITLE_FR,
   hint = ACTIVITY_PICK_PLANNER_HINT_FR,
   onClose,
@@ -133,7 +134,7 @@ export function ActivityPlannerPicker({
   const [expanded, setExpanded] = useState(false)
 
   const applyFilter = (rows: TravelWorkspace[]) =>
-    filterActivitySwitcherWorkspaces(rows, { catalogCity })
+    filterActivitySwitcherWorkspaces(rows)
 
   useEffect(() => {
     if (!open) {
@@ -217,7 +218,7 @@ export function ActivityPlannerPicker({
     return () => {
       cancelled = true
     }
-  }, [open, catalogCity])
+  }, [open])
 
   const visibleItems = useMemo(() => {
     if (expanded || items.length <= ACTIVITY_SWITCHER_SOFT_LIMIT) return items
@@ -268,7 +269,7 @@ export function ActivityPlannerPicker({
             <div className="rounded-xl border border-line bg-canvas px-3 py-4 text-sm text-muted space-y-2 text-center">
               <p>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</p>
               <Link to="/planner" className="font-bold text-primary-700 underline">
-                Ouvrir Planner
+                {ACTIVITY_OPEN_PLANNER_FR}
               </Link>
             </div>
           ) : null}
@@ -311,7 +312,9 @@ export function ActivityPlannerPicker({
                     <p className="font-bold text-ink text-sm truncate">{label}</p>
                     <p className="mt-0.5 text-xs text-muted">
                       {[
-                        planned ? 'Planner' : 'Séjour',
+                        planned
+                          ? ACTIVITY_STAY_KIND_SHARED_FR
+                          : ACTIVITY_STAY_KIND_SOLO_FR,
                         dates,
                         ws.dest_iata ? String(ws.dest_iata) : null,
                       ]

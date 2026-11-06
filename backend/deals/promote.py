@@ -78,6 +78,49 @@ def arrival_hour_ok(out_arr_local: Optional[str]) -> bool:
         return True
 
 
+def _parse_local_dt(raw: Optional[str]) -> Optional[datetime]:
+    if not raw or len(str(raw)) < 13:
+        return None
+    try:
+        from deals.flight_attach import _parse_iso_naive
+
+        return _parse_iso_naive(str(raw))
+    except Exception:
+        try:
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00")[:19])
+        except ValueError:
+            return None
+
+
+def weekend_product_hours_ok(
+    obs: Dict[str, Any],
+    *,
+    out_date: Optional[str] = None,
+    ret_date: Optional[str] = None,
+) -> bool:
+    """
+    Séjours week-end : aller ≤ samedi 12:00, retour dimanche ≥ 17:00.
+    Missing times → no hard reject (same spirit as arrival_hour_ok).
+    """
+    from deals.flight_attach import weekend_slot_ok
+
+    out_d = str(out_date or obs.get("out_date") or "")[:10]
+    ret_d = str(ret_date or obs.get("ret_date") or "")[:10]
+    if len(out_d) < 10 or len(ret_d) < 10:
+        return True
+    try:
+        cin = date.fromisoformat(out_d)
+        cout = date.fromisoformat(ret_d)
+    except ValueError:
+        return True
+    arr = _parse_local_dt(obs.get("out_arr_local"))
+    ret = _parse_local_dt(obs.get("ret_dep_local"))
+    if arr is None and ret is None:
+        return True
+    ok, _reason = weekend_slot_ok(arr, ret, checkin=cin, checkout=cout)
+    return ok
+
+
 def deal_score(
     *,
     price_pp: float,
@@ -139,6 +182,12 @@ def eligible_candidate(
         return False
     if not arrival_hour_ok(obs.get("out_arr_local")):
         return False
+    if not weekend_product_hours_ok(
+        obs,
+        out_date=out_date,
+        ret_date=str(obs.get("ret_date") or "")[:10],
+    ):
+        return False
     if not is_fresh_enough(
         obs.get("observed_at"),
         out_date,
@@ -180,6 +229,12 @@ def eligible_candidate_soft(
     if nights < 1 or nights > 9:
         return False
     if not arrival_hour_ok(obs.get("out_arr_local")):
+        return False
+    if not weekend_product_hours_ok(
+        obs,
+        out_date=out_date,
+        ret_date=str(obs.get("ret_date") or "")[:10],
+    ):
         return False
     if not is_fresh_enough(
         obs.get("observed_at"),
@@ -568,7 +623,10 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                     "booking_url": obs.get("booking_url"),
                     "direct": obs.get("direct", True),
                     "out_dep_local": obs.get("out_dep_local"),
+                    "out_arr_local": obs.get("out_arr_local"),
                     "ret_dep_local": obs.get("ret_dep_local"),
+                    "arrival_local": obs.get("out_arr_local"),
+                    "return_departure_local": obs.get("ret_dep_local"),
                     "city_name": city_name,
                     "verification_level": vlevel,
                 },

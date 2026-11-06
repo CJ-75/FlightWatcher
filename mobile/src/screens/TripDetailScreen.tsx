@@ -773,7 +773,7 @@ export function TripDetailScreen() {
   const confirmComplete = () => {
     if (!trip) return
     Alert.alert(
-      'Archiver le voyage',
+      'Archiver le séjour',
       `Archiver « ${trip.name} » ?\n\nLe voyage passe en Terminé.`,
       [
         { text: 'Annuler', style: 'cancel' },
@@ -2118,7 +2118,7 @@ export function TripDetailScreen() {
               {deleting ? (
                 <ActivityIndicator color={colors.inkSoft} />
               ) : (
-                <Text style={styles.archiveText}>Archiver le voyage</Text>
+                <Text style={styles.archiveText}>Archiver le séjour</Text>
               )}
             </Pressable>
           ) : null}

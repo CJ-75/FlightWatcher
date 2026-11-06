@@ -14,9 +14,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
+  ACTIVITY_OPEN_PLANNER_FR,
   ACTIVITY_PICK_PLANNER_HINT_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
+  ACTIVITY_STAY_KIND_SHARED_FR,
+  ACTIVITY_STAY_KIND_SOLO_FR,
   ACTIVITY_SWITCHER_SOFT_LIMIT,
   cityDisplayNameFr,
   filterActivitySwitcherWorkspaces,
@@ -101,7 +104,6 @@ type Props = {
   busy?: boolean
   preferredPlannedTripId?: string | null
   preferredDraftToken?: string | null
-  catalogCity?: string | null
   title?: string
   hint?: string
   onClose: () => void
@@ -132,7 +134,6 @@ export function ActivityPlannerPicker({
   busy = false,
   preferredPlannedTripId,
   preferredDraftToken,
-  catalogCity = null,
   title = ACTIVITY_PICK_PLANNER_TITLE_FR,
   hint = ACTIVITY_PICK_PLANNER_HINT_FR,
   onClose,
@@ -150,7 +151,7 @@ export function ActivityPlannerPicker({
   const loggedIn = Boolean(user || session?.user)
 
   const applyFilter = (rows: TravelWorkspace[]) =>
-    filterActivitySwitcherWorkspaces(rows, { catalogCity })
+    filterActivitySwitcherWorkspaces(rows)
 
   useEffect(() => {
     if (!visible) {
@@ -246,7 +247,7 @@ export function ActivityPlannerPicker({
     return () => {
       cancelled = true
     }
-  }, [visible, isGuest, loggedIn, catalogCity])
+  }, [visible, isGuest, loggedIn])
 
   const visibleItems = useMemo(() => {
     if (expanded || items.length <= ACTIVITY_SWITCHER_SOFT_LIMIT) return items
@@ -290,7 +291,7 @@ export function ActivityPlannerPicker({
               <Text style={styles.emptyText}>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</Text>
               {onOpenPlanner ? (
                 <Pressable onPress={onOpenPlanner} style={styles.linkBtn}>
-                  <Text style={styles.linkText}>Ouvrir Planner</Text>
+                  <Text style={styles.linkText}>{ACTIVITY_OPEN_PLANNER_FR}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -337,7 +338,9 @@ export function ActivityPlannerPicker({
                     </Text>
                     <Text style={styles.rowMeta} numberOfLines={1}>
                       {[
-                        planned ? 'Planner' : 'Séjour',
+                        planned
+                          ? ACTIVITY_STAY_KIND_SHARED_FR
+                          : ACTIVITY_STAY_KIND_SOLO_FR,
                         dates,
                         ws.dest_iata ? String(ws.dest_iata) : null,
                       ]

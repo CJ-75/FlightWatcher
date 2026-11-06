@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type {
   HotelGuestReview,
-  MyTripDraft,
   TravelDeal,
   TravelDealHotel,
 } from '@flightwatcher/shared'
@@ -100,13 +99,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
   const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
-  /** Prefetched my-trip draft so « Ajouter au planner » navigates instantly. */
-  const draftPrefetchRef = useRef<{
-    key: string
-    promise: Promise<MyTripDraft>
-    draft?: MyTripDraft
-  } | null>(null)
-
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -251,59 +243,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
     : 0
   const flightUrl = deal?.flight?.booking_url || ''
 
-  const prefetchKey = useMemo(() => {
-    if (!deal) return ''
-    const hid = hotelId || deal.hotel?.id || ''
-    return `${deal.deal_key || deal.id}|${hid}|${adults}`
-  }, [deal, hotelId, adults])
-
-  // Warm createMyTrip while the user reads the fiche (before early returns — hooks).
-  useEffect(() => {
-    if (!deal || !prefetchKey) return
-    if (draftPrefetchRef.current?.key === prefetchKey) return
-    const hotel = selected || deal.hotel
-    const booking = flightUrl || deal.booking_url
-    const body = {
-      deal_key: deal.deal_key || deal.id,
-      origin_iata: deal.origin_iata || deal.departure_airport,
-      departure_airport: deal.origin_airport_label || deal.departure_airport,
-      destination: deal.destination || deal.flight?.destination_iata || undefined,
-      city: deal.city,
-      dates: deal.dates,
-      adults,
-      flight: {
-        ...deal.flight,
-        price_pp: deal.flight?.price_pp,
-        booking_url: booking,
-        destination_iata:
-          deal.flight?.destination_iata || deal.destination || undefined,
-      },
-      hotel,
-      price_per_person: pricePp,
-      booking_url: booking,
-      baggage_line: deal.baggage_line,
-      route_hint: deal.route_hint,
-      price_pax_note: deal.price_pax_note || null,
-      compose_hotel: !hotel?.id,
-    }
-    const key = prefetchKey
-    const promise = getApi()
-      .createMyTrip(body)
-      .then((d) => {
-        if (draftPrefetchRef.current?.key === key) {
-          draftPrefetchRef.current.draft = d
-        }
-        return d
-      })
-      .catch((e) => {
-        if (draftPrefetchRef.current?.key === key) {
-          draftPrefetchRef.current = null
-        }
-        throw e
-      })
-    draftPrefetchRef.current = { key, promise }
-  }, [deal, prefetchKey, adults, selected, pricePp, flightUrl])
-
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -382,17 +321,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const resolveDraft = async (opts?: { composeHotel?: boolean }) => {
     const hotel = selected || deal.hotel
     const compose = Boolean(opts?.composeHotel ?? !hotel?.id)
-    if (!compose && draftPrefetchRef.current?.key === prefetchKey) {
-      try {
-        const d =
-          draftPrefetchRef.current.draft ||
-          (await draftPrefetchRef.current.promise)
-        draftPrefetchRef.current = null
-        return d
-      } catch {
-        /* fall through */
-      }
-    }
+    // Only create a stay draft on explicit CTA — never on fiche open / card tap.
     return getApi().createMyTrip(buildDraftPayload({ composeHotel: compose }))
   }
 

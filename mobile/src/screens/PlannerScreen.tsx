@@ -37,6 +37,10 @@ import {
   translate,
   PLANNER_HUB_TABS,
   PLANNER_HUB_EMPTY_FR,
+  PLANNER_HUB_KICKER_FR,
+  PLANNER_HUB_SUBTITLE_FR,
+  PLANNER_HUB_TITLE_FR,
+  PLANNER_NEW_STAY_FR,
   PLANNER_PROMOTE_TOAST_FR,
   type DatePresetId,
   type FlexibleDates,
@@ -343,11 +347,9 @@ export function PlannerScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text style={styles.kicker}>VOYAGES</Text>
-              <Text style={styles.title}>Tout ton parcours</Text>
-              <Text style={styles.subtitle}>
-                Crée, scanne les prix, invite tes proches.
-              </Text>
+              <Text style={styles.kicker}>{PLANNER_HUB_KICKER_FR}</Text>
+              <Text style={styles.title}>{PLANNER_HUB_TITLE_FR}</Text>
+              <Text style={styles.subtitle}>{PLANNER_HUB_SUBTITLE_FR}</Text>
               <View style={styles.hubTabs}>
                 {PLANNER_HUB_TABS.map(({ key, labelFr }) => (
                   <Pressable
@@ -406,8 +408,8 @@ export function PlannerScreen() {
                     >
                       <Text style={styles.emptyCtaText}>
                         {workspaces.length
-                          ? PLANNER_HUB_EMPTY_FR[filter].cta || 'Nouveau voyage'
-                          : 'Nouveau voyage'}
+                          ? PLANNER_HUB_EMPTY_FR[filter].cta || PLANNER_NEW_STAY_FR
+                          : PLANNER_NEW_STAY_FR}
                       </Text>
                     </Pressable>
                   ) : null}
@@ -429,7 +431,7 @@ export function PlannerScreen() {
       <Pressable
         onPress={() => setShowCreate(true)}
         accessibilityRole="button"
-        accessibilityLabel="Nouveau voyage"
+        accessibilityLabel={PLANNER_NEW_STAY_FR}
         style={({ pressed }) => [
           styles.fab,
           // Scene already has tabClearance paddingBottom — don't add insets again.
@@ -741,10 +743,10 @@ function CreateTripModal({
               <Text style={styles.modalStep}>Étape {step}/2</Text>
               <Text style={styles.modalTitle} numberOfLines={1}>
                 {step === 1
-                  ? 'Nouveau voyage'
+                  ? PLANNER_NEW_STAY_FR
                   : partyMode
-                    ? `Voyage · ${partyModeKickerFr(partyMode)}`
-                    : 'Nouveau voyage'}
+                    ? `Séjour · ${partyModeKickerFr(partyMode)}`
+                    : PLANNER_NEW_STAY_FR}
               </Text>
             </View>
             <View style={{ width: 60 }} />

@@ -12,7 +12,13 @@ from deals.airport_tz import tz_for_iata
 # Arrival too early for check-in night (bad UX)
 ARRIVAL_EXCLUDE_BEFORE = time(5, 0)  # 00:00–04:59 excluded
 LATE_ARRIVAL_FROM = time(22, 0)  # 22:00–23:59
-LATE_DEPARTURE_FROM = time(18, 0)  # return dep ≥ 18:00
+LATE_DEPARTURE_FROM = time(18, 0)  # soft flag: return dep ≥ 18:00 (hôtel)
+
+# Séjours week-end (produit) — heure locale destination :
+# - aller : arrivée au plus tard samedi 12:00
+# - retour : départ au plus tôt dimanche 17:00 (si retour le dimanche)
+WEEKEND_ARRIVAL_SAT_DEADLINE = time(12, 0)
+WEEKEND_RETURN_SUN_EARLIEST = time(17, 0)
 
 # Short-haul duration estimate when no arrivalTime in scanner payload
 CRUISE_KMH = 780.0
@@ -172,6 +178,61 @@ def return_departure_local(
     return dep.replace(tzinfo=dest_tz)
 
 
+def weekend_saturday_of(checkin: date) -> date:
+    """Saturday on/after checkin (Fri→+1, Sat→same)."""
+    delta = (5 - checkin.weekday()) % 7
+    return checkin + timedelta(days=delta)
+
+
+def is_weekend_stay(checkin: date, checkout: date) -> bool:
+    """Fri/Sat → Sun/Mon, 1–3 nights — classic séjour week-end."""
+    nights = (checkout - checkin).days
+    if nights < 1 or nights > 3:
+        return False
+    return checkin.weekday() in (4, 5) and checkout.weekday() in (6, 0)
+
+
+def weekend_slot_ok(
+    arrival_local: Optional[datetime],
+    return_dep_local: Optional[datetime],
+    *,
+    checkin: date,
+    checkout: date,
+) -> Tuple[bool, str]:
+    """
+    Produit séjours week-end (heure locale dest) :
+    - arrivée ≤ samedi 12:00
+    - si retour le dimanche : départ ≥ 17:00
+    """
+    if not is_weekend_stay(checkin, checkout):
+        return True, ""
+    saturday = weekend_saturday_of(checkin)
+    if arrival_local is not None:
+        arr_date = arrival_local.date()
+        if arr_date < checkin:
+            return False, "arrival_before_checkin"
+        if arr_date > saturday:
+            return False, "arrival_after_saturday"
+        # Compare clock on Saturday; earlier days always OK time-wise
+        if arr_date == saturday:
+            arr_clock = time(
+                arrival_local.hour, arrival_local.minute, arrival_local.second
+            )
+            if arr_clock > WEEKEND_ARRIVAL_SAT_DEADLINE:
+                return False, "arrival_after_saturday_noon"
+    if return_dep_local is not None and checkout.weekday() == 6:
+        # Retour dimanche : pas avant 17:00
+        if return_dep_local.date() == checkout:
+            ret_clock = time(
+                return_dep_local.hour,
+                return_dep_local.minute,
+                return_dep_local.second,
+            )
+            if ret_clock < WEEKEND_RETURN_SUN_EARLIEST:
+                return False, "return_before_sunday_1700"
+    return True, ""
+
+
 def attach_trip_to_window(
     trip: Any,
     *,
@@ -180,11 +241,12 @@ def attach_trip_to_window(
     dest_timezone: str,
 ) -> AttachResult:
     """
-    §7 rules (destination local time):
-    - outbound arrival date == checkin, time in 05:00–23:59
-    - 00:00–04:59 arrival → exclude
+    §7 + règle produit week-end (heure locale destination) :
+    - arrivée ≥ 05:00 ; 00:00–04:59 → exclude
+    - week-end : arrivée ≤ samedi 12:00 (vendredi ou samedi matin OK)
     - 22:00–23:59 → late_arrival
-    - return departure date == checkout; ≥18:00 → late_departure
+    - retour le jour de checkout ; dimanche → ≥ 17:00 obligatoire
+    - ≥18:00 → late_departure (soft, hôtel)
     """
     aller = trip.aller if hasattr(trip, "aller") else trip.get("aller") or {}
     retour = trip.retour if hasattr(trip, "retour") else trip.get("retour") or {}
@@ -213,13 +275,23 @@ def attach_trip_to_window(
 
     arr_date = arrival.date()
     arr_clock = time(arrival.hour, arrival.minute, arrival.second)
+    weekend = is_weekend_stay(checkin, checkout)
+    saturday = weekend_saturday_of(checkin) if weekend else checkin
 
-    if arr_date != checkin:
+    if weekend:
+        if arr_date < checkin or arr_date > saturday:
+            return AttachResult(
+                ok=False,
+                reason=f"arrival_outside_weekend_window:{arr_date}",
+                arrival_local=arrival,
+            )
+    elif arr_date != checkin:
         return AttachResult(
             ok=False,
             reason=f"arrival_date_mismatch:{arr_date}!={checkin}",
             arrival_local=arrival,
         )
+
     if arr_clock < ARRIVAL_EXCLUDE_BEFORE:
         return AttachResult(
             ok=False,
@@ -243,6 +315,20 @@ def attach_trip_to_window(
         return AttachResult(
             ok=False,
             reason=f"return_date_mismatch:{ret_date}!={checkout}",
+            arrival_local=arrival,
+            return_dep_local=ret_dep,
+        )
+
+    ok_slot, slot_reason = weekend_slot_ok(
+        arrival,
+        ret_dep,
+        checkin=checkin,
+        checkout=checkout,
+    )
+    if not ok_slot:
+        return AttachResult(
+            ok=False,
+            reason=slot_reason,
             arrival_local=arrival,
             return_dep_local=ret_dep,
         )

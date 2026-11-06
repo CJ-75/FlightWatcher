@@ -22,20 +22,26 @@ export const ACTIVITY_ADD_TO_PLANNER_FR = 'Ajouter'
 export const ACTIVITY_ADD_SHORT_FR = 'Ajouter'
 export const ACTIVITY_PICK_PLANNER_TITLE_FR = 'Ajouter à quel séjour ?'
 export const ACTIVITY_PICK_PLANNER_HINT_FR =
-  'Choisis le planner (ou la réservation) qui recevra cette idée.'
+  'Choisis le séjour qui recevra cette idée.'
+/** Hint when the picker switches the active séjour (not add-flow). */
+export const ACTIVITY_SWITCH_TRIP_HINT_FR =
+  'Ce séjour devient le séjour actif pour Activités.'
 export const ACTIVITY_NO_PLANNER_TO_ADD_FR =
-  'Aucun séjour disponible. Crée ou ouvre un voyage dans le planner.'
+  'Aucun séjour pour l’instant. Crée-en un dans le planner.'
 export const ACTIVITY_SIGN_IN_TO_ADD_FR =
   'Connecte-toi pour choisir un séjour et y ajouter l’activité.'
 export const ACTIVITY_TRIP_HERO_KICKER_FR = 'En cours'
 export const ACTIVITY_CHANGE_TRIP_FR = 'Changer'
 export const ACTIVITY_CHOOSE_TRIP_FR = 'Choisir un séjour'
 export const ACTIVITY_TRIP_IN_PROGRESS_FR = (city: string) =>
-  `Voyage en cours · ${city}`
+  `Séjour · ${city}`
 export const ACTIVITY_TRIP_IN_PROGRESS_HINT_FR =
-  'Ajoute des idées ici — elles atterrissent dans ton planner séjour.'
+  'Ajoute des idées ici — elles rejoignent ce séjour.'
 export const ACTIVITY_TRIP_PLANNER_COUNT_FR = (n: number) =>
   n <= 0 ? '0 activité' : n === 1 ? '1 activité' : `${n} activités`
+/** Row badge: collaborative planned trip vs personal draft. */
+export const ACTIVITY_STAY_KIND_SHARED_FR = 'Partagé'
+export const ACTIVITY_STAY_KIND_SOLO_FR = 'Perso'
 
 /** Statut séjour pour le hero Activités, calé sur la date du jour. */
 export type ActivityTripTimingStatus =
@@ -85,25 +91,27 @@ export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
   ActivityTripTimingStatus,
   string
 > = {
-  upcoming: 'Prépare ton séjour — les idées rejoignent ton planner.',
+  upcoming: 'Prépare ton séjour — les idées s’y ajoutent au fur et à mesure.',
   ongoing: ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
   past: 'Séjour passé — tu peux encore noter des idées pour la prochaine fois.',
-  undated: 'Prépare ton séjour — les idées rejoignent ton planner.',
+  undated: 'Prépare ton séjour — les idées s’y ajoutent au fur et à mesure.',
 }
 export const ACTIVITY_SYNC_CITY_FR = (city: string) => `Activités à ${city}`
 export const ACTIVITY_NO_TRIP_CTA_TITLE_FR = 'Ton prochain séjour commence ici'
 export const ACTIVITY_NO_TRIP_CTA_BODY_FR =
-  'Ouvre le planner pour composer les activités au même endroit que ton vol et ton hôtel.'
+  'Choisis un séjour pour lier tes idées à ton vol et ton hôtel.'
+/** Ghost CTA when the action opens the planner hub. */
 export const ACTIVITY_NO_TRIP_CTA_BUTTON_FR = 'Ouvrir le planner'
+/** Ghost CTA when the action browses deals / séjours. */
 export const ACTIVITY_NO_TRIP_CTA_SECONDARY_FR = 'Voir les séjours'
 export const ACTIVITY_ADDED_BADGE_FR = 'Ajouté'
 export const ACTIVITY_ADDED_TO_PLANNER_FR = (city: string) =>
-  `Ajouté au planner · ${city}`
+  `Ajouté · ${city}`
 export const ACTIVITY_KEEP_ADDING_FR =
-  'Continue — ajoute d’autres idées, puis reviens au planner.'
+  'Ajoute d’autres idées, puis retrouve-les dans ton séjour.'
 export const ACTIVITY_SESSION_ADDED_FR = (n: number) =>
   n <= 1 ? '1 activité ajoutée' : `${n} activités ajoutées`
-export const ACTIVITY_SEE_PLANNER_FR = 'Voir le planner'
+export const ACTIVITY_SEE_PLANNER_FR = 'Voir le séjour'
 export const ACTIVITY_BACK_TO_PLANNER_FR = 'Retour au planner'
 /** Kept for later / parcours global — not shown in Affiner Activités for now. */
 export const ACTIVITY_NEARBY_LABEL_FR = 'Autour de moi'
