@@ -9,12 +9,15 @@ import { getCurrentUser, signOut } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { useI18n } from '../contexts/I18nContext'
 import { LanguageSwitcher } from '../components/LanguageSwitcher'
+import { useShellReady } from '../hooks/useShellReady'
 
 export default function Security() {
   const { t, language } = useI18n()
   const navigate = useNavigate()
+  const shellReady = useShellReady()
   const [user, setUser] = useState<User | null>(null)
   const [email, setEmail] = useState<string | null>(null)
+  const [bootLoading, setBootLoading] = useState(true)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -28,15 +31,18 @@ export default function Security() {
   const needsPasswordSetup = userNeedsPasswordSetup(user)
 
   useEffect(() => {
-    void getCurrentUser().then((u) => {
-      if (!u) {
-        navigate('/login?redirect=/security')
-        return
-      }
-      setUser(u)
-      setEmail(u.email ?? null)
-    })
-  }, [navigate])
+    if (!shellReady) return
+    void getCurrentUser()
+      .then((u) => {
+        if (!u) {
+          navigate('/login?redirect=/security')
+          return
+        }
+        setUser(u)
+        setEmail(u.email ?? null)
+      })
+      .finally(() => setBootLoading(false))
+  }, [shellReady, navigate])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -128,6 +134,16 @@ export default function Security() {
             ) : null}
           </div>
 
+          {bootLoading || !shellReady ? (
+            <div className="space-y-4 animate-pulse" aria-busy>
+              <div className="h-24 rounded-2xl bg-orange-50 border border-orange-100" />
+              <div className="h-11 rounded-xl bg-slate-100" />
+              <div className="h-11 rounded-xl bg-slate-100" />
+              <div className="h-11 w-40 rounded-xl bg-slate-200" />
+            </div>
+          ) : null}
+
+          {bootLoading || !shellReady ? null : (
           <form
             onSubmit={(e) => void submit(e)}
             className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-4 py-4 space-y-3"
@@ -205,7 +221,9 @@ export default function Security() {
               <p className="text-sm font-medium text-red-600">{err}</p>
             ) : null}
           </form>
+          )}
 
+          {bootLoading || !shellReady ? null : (
           <div className="rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-4">
             <button
               type="button"
@@ -221,6 +239,7 @@ export default function Security() {
               <p className="mt-3 text-sm font-medium text-red-600">{deleteErr}</p>
             ) : null}
           </div>
+          )}
         </div>
       </div>
     </div>

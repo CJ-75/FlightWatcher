@@ -2,6 +2,7 @@
  * Onglet Activités — UI alignée Séjours / Deals (grille desktop 3 col).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useShellReady } from '../hooks/useShellReady'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -263,6 +264,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   const draftFromUrl = searchParams.get('draft')?.trim() || ''
   const plannedFromUrl = searchParams.get('planned')?.trim() || ''
   const [adults] = useState(2)
+  const shellReady = useShellReady()
   const [loading, setLoading] = useState(() => !peekActivitiesCatalog(citySlug, 2)?.ok)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<Record<string, unknown>[]>(() => {
@@ -429,11 +431,11 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
     [adults],
   )
 
-  // Catalogue tout de suite — indépendant du bootstrap trip.
+  // Shell (header + skeleton) first, then catalogue — indépendant du bootstrap trip.
   useEffect(() => {
-    if (!citySlug) return
+    if (!shellReady || !citySlug) return
     void loadCity(citySlug)
-  }, [citySlug, loadCity])
+  }, [shellReady, citySlug, loadCity])
 
   useEffect(() => {
     // Warm-mount: catalogue only — trip bootstrap when onglet actif.

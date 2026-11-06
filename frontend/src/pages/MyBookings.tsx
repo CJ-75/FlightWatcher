@@ -5,6 +5,7 @@ import {
   useState,
 } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useShellReady } from '../hooks/useShellReady'
 import {
   boardLabelFr,
   cityImageUrl,
@@ -610,6 +611,7 @@ function BookingCard({
 }
 
 export default function MyBookings() {
+  const shellReady = useShellReady()
   const [searchParams, setSearchParams] = useSearchParams()
   const focusId = searchParams.get('id')
   const draftFromUrl = searchParams.get('draft')
@@ -700,9 +702,10 @@ export default function MyBookings() {
   }, [draftFromUrl])
 
   useEffect(() => {
+    if (!shellReady) return
     // Cache → paint now; always revalidate in background
     void load({ background: Boolean(cached?.length) })
-  }, [load, cached])
+  }, [shellReady, load, cached])
 
   useEffect(() => {
     if (focusId) setExpandedId(focusId)
@@ -772,13 +775,27 @@ export default function MyBookings() {
               </div>
             ) : null}
           </div>
-        ) : loading ? (
+        ) : loading || !shellReady ? (
           <div className="space-y-4" aria-busy="true" aria-label="Chargement">
-            {[0, 1].map((i) => (
+            <div className="flex flex-wrap gap-2 mb-1">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-9 w-24 rounded-full bg-white border border-line animate-pulse"
+                />
+              ))}
+            </div>
+            {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="h-40 rounded-3xl bg-white border border-line animate-pulse"
-              />
+                className="rounded-3xl bg-white border border-line overflow-hidden animate-pulse"
+              >
+                <div className="h-28 bg-slate-100" />
+                <div className="p-4 space-y-3">
+                  <div className="h-5 w-2/3 rounded bg-slate-100" />
+                  <div className="h-4 w-1/2 rounded bg-slate-100" />
+                </div>
+              </div>
             ))}
           </div>
         ) : error && bookings.length === 0 ? (

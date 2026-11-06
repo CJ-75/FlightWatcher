@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react'
 import { getSupabaseClient, getCurrentUser } from '../lib/supabase'
+import { useShellReady } from '../hooks/useShellReady'
 
 interface UserProfile {
   id: string
@@ -15,6 +16,7 @@ interface UserProfile {
 }
 
 export default function UserProfile() {
+  const shellReady = useShellReady()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -22,8 +24,9 @@ export default function UserProfile() {
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    loadProfile()
-  }, [])
+    if (!shellReady) return
+    void loadProfile()
+  }, [shellReady])
 
   const loadProfile = async () => {
     try {
@@ -133,10 +136,17 @@ export default function UserProfile() {
     }
   }
 
-  if (loading) {
+  if (loading || !shellReady) {
     return (
-      <div className="p-4 bg-white rounded-lg shadow">
-        <div className="text-gray-600">Chargement du profil...</div>
+      <div className="p-6 bg-white rounded-lg shadow-xl animate-pulse" aria-busy>
+        <div className="h-8 w-40 rounded bg-slate-200 mb-6" />
+        <div className="space-y-4">
+          <div className="h-4 w-28 rounded bg-slate-200" />
+          <div className="h-11 w-full rounded-xl bg-slate-100" />
+          <div className="h-4 w-24 rounded bg-slate-200" />
+          <div className="h-11 w-48 rounded-xl bg-slate-100" />
+          <div className="h-11 w-36 rounded-xl bg-slate-200 mt-2" />
+        </div>
       </div>
     )
   }

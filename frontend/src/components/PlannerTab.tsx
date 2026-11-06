@@ -25,6 +25,7 @@ import {
   peekTravelWorkspacesCache,
 } from '../utils/workspacesCache'
 import { loadAirportsOnce } from '../hooks/useAirports'
+import { useShellReady } from '../hooks/useShellReady'
 import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
@@ -1014,6 +1015,7 @@ export function PlannerTab() {
   const [authReady, setAuthReady] = useState(false)
   const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
   const [airports, setAirports] = useState<Airport[]>([])
+  const shellReady = useShellReady()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -1128,8 +1130,9 @@ export function PlannerTab() {
   )
 
   useEffect(() => {
+    if (!shellReady) return
     void load()
-  }, [load])
+  }, [shellReady, load])
 
   // Soft refresh when tab becomes visible again (respects 60s cache).
   useEffect(() => {
@@ -1212,9 +1215,34 @@ export function PlannerTab() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-          <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin mb-4" />
-          <p className="font-medium">{t('planner.loading')}</p>
+        <div
+          className="space-y-4"
+          aria-busy="true"
+          aria-label={t('planner.loading')}
+        >
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-9 w-24 rounded-full bg-white/80 border border-orange-100 animate-pulse"
+              />
+            ))}
+          </div>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-[28px] border border-orange-100 bg-white p-5 sm:p-6 shadow-lg animate-pulse"
+            >
+              <div className="flex gap-4">
+                <div className="h-20 w-20 rounded-2xl bg-orange-50 shrink-0" />
+                <div className="flex-1 space-y-3 py-1">
+                  <div className="h-5 w-2/3 rounded bg-orange-50" />
+                  <div className="h-4 w-1/2 rounded bg-orange-50" />
+                  <div className="h-4 w-1/3 rounded bg-orange-50" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : error ? (
         <div className="bg-white/90 backdrop-blur rounded-3xl border border-orange-100 shadow-lg p-8 text-center">

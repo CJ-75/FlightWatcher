@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  InteractionManager,
 } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -43,6 +42,11 @@ const ORIGIN_LS_KEY = 'fw_deals_origin'
 const DEALS_PAGE = 36
 const DEALS_MAX = 96
 type DurationTab = 'weekend' | 'short' | 'week'
+
+type DealsListItem =
+  | { kind: 'deal'; deal: TravelDeal }
+  | { kind: 'filler_header' }
+  | { kind: 'skeleton'; id: string }
 
 export function DealsScreen() {
   const insets = useSafeAreaInsets()
@@ -234,20 +238,18 @@ export function DealsScreen() {
     [refreshLikes, queryOrigin, queryAdults, occasion, durationTab, uiEnabled],
   )
 
-  // Paint header + skeleton first, then fetch (after origin hydrate + interactions)
+  // Paint header + skeleton first, then fetch (after origin hydrate)
   useEffect(() => {
     if (!originReady) return
     setFetchLimit(DEALS_PAGE)
     setHasMore(false)
     let cancelled = false
-    const handle = InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        if (!cancelled) void load({ force: true, limit: DEALS_PAGE })
-      })
-    })
+    const timer = setTimeout(() => {
+      if (!cancelled) void load({ force: true, limit: DEALS_PAGE })
+    }, 0)
     return () => {
       cancelled = true
-      handle.cancel?.()
+      clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
   }, [originReady, queryOrigin, queryAdults, occasion, durationTab])
@@ -317,7 +319,7 @@ export function DealsScreen() {
   const showSkeleton =
     (loading || !originReady) && deals.length === 0 && !error && !refreshing
 
-  const listData = showSkeleton
+  const listData: DealsListItem[] = showSkeleton
     ? Array.from({ length: 4 }, (_, i) => ({
         kind: 'skeleton' as const,
         id: `sk-${i}`,
@@ -365,13 +367,11 @@ export function DealsScreen() {
 
       <FlatList
           data={listData}
-          keyExtractor={(item, i) =>
-            item.kind === 'skeleton'
-              ? item.id
-              : item.kind === 'filler_header'
-                ? 'filler-header'
-                : item.deal.id || String(i)
-          }
+          keyExtractor={(item, i) => {
+            if (item.kind === 'skeleton') return item.id
+            if (item.kind === 'filler_header') return 'filler-header'
+            return item.deal.id || String(i)
+          }}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
@@ -470,7 +470,7 @@ export function DealsScreen() {
                           >
                             {f.label || f.slug}
                           </Text>
-                          {f.count > 0 ? (
+                          {(f.count ?? 0) > 0 ? (
                             <Text
                               style={[styles.occasionCount, on && styles.occasionCountOn]}
                             >

@@ -25,6 +25,7 @@ import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
+import { useShellReady } from '../hooks/useShellReady'
 
 const springConfig = {
   type: 'spring' as const,
@@ -90,8 +91,8 @@ export function DealsTab() {
   const { t } = useI18n()
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  const shellReady = useShellReady()
   const [loading, setLoading] = useState(true)
-  const [shellReady, setShellReady] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [fetchLimit, setFetchLimit] = useState(DEALS_PAGE)
   const [hasMore, setHasMore] = useState(false)
@@ -317,11 +318,6 @@ export function DealsTab() {
   )
 
   // First paint: header + skeleton, then kick off API
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setShellReady(true))
-    return () => cancelAnimationFrame(id)
-  }, [])
-
   useEffect(() => {
     if (!shellReady) return
     setFetchLimit(DEALS_PAGE)
