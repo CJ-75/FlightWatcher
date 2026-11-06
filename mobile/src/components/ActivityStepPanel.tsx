@@ -23,7 +23,6 @@ import {
   canonicalViatorProductUrl,
   isTripItemsAuthError,
   pickTripItemOwner,
-  reorderKeysMoving,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
   type ActivityCardModel,
@@ -320,16 +319,6 @@ export function ActivityStepPanel(props: {
     await load()
   }
 
-  const move = async (from: number, to: number) => {
-    const keys = reorderKeysMoving(
-      items.map((i) => i.id),
-      from,
-      to,
-    )
-    await getApi().reorderTripItems(keys, owner)
-    await load()
-  }
-
   const openDetail = (it: ItemRow) => {
     const card = cardFromItem(it)
     if (!card) return
@@ -458,7 +447,7 @@ export function ActivityStepPanel(props: {
         <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text>
       ) : null}
 
-      {items.map((it, idx) =>
+      {items.map((it) =>
         it.status === 'skipped' ? null : (
         <View key={it.id} style={[styles.card, shadow.soft]}>
           <Pressable
@@ -486,16 +475,6 @@ export function ActivityStepPanel(props: {
             </View>
           </Pressable>
           <View style={styles.actions}>
-            {!it.inherited && idx > 0 ? (
-              <Pressable onPress={() => void move(idx, idx - 1)} hitSlop={8}>
-                <Text style={styles.link}>Monter</Text>
-              </Pressable>
-            ) : null}
-            {!it.inherited && idx < items.length - 1 ? (
-              <Pressable onPress={() => void move(idx, idx + 1)} hitSlop={8}>
-                <Text style={styles.link}>Descendre</Text>
-              </Pressable>
-            ) : null}
             {!it.inherited &&
             it.status !== 'validated' &&
             it.status !== 'booked' &&
