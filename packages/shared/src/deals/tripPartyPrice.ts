@@ -10,11 +10,13 @@ export type TripPartyPrice = {
   flightPp: number
   /** Flight total for the party */
   flightTotal: number
-  /** Hotel stay total (all rooms / nights) */
+  /** Hotel € per person (rounded from stay total ÷ adults) */
+  hotelPp: number
+  /** Hotel stay total aligned to hotelPp × adults (euro-exact with perPerson) */
   hotelTotal: number
-  /** flightTotal + hotelTotal */
+  /** flightTotal + hotelTotal === perPerson × adults */
   total: number
-  /** total ÷ adults, rounded to € (only meaningful for display when adults > 1) */
+  /** flightPp + hotelPp — always euro-exact with the line items */
   perPerson: number
   /** Optional city tax payable on site (already rounded €) */
   cityTax: number | null
@@ -115,10 +117,13 @@ export function computeTripPartyPrice(input: {
 }): TripPartyPrice {
   const adults = Math.max(1, Math.min(6, Math.round(Number(input.adults) || 1)))
   const flightPp = euro(Number(input.flightPp) || 0)
-  const hotelTotal = euro(Number(input.hotelTotal) || 0)
+  // Round each €/pers line first, then rebuild party totals so:
+  // flightPp + hotelPp === perPerson and perPerson * adults === total.
+  const hotelPp = euro((Number(input.hotelTotal) || 0) / adults)
   const flightTotal = flightPp * adults
-  const total = flightTotal + hotelTotal
-  const perPerson = euro(total / adults)
+  const hotelTotal = hotelPp * adults
+  const perPerson = flightPp + hotelPp
+  const total = perPerson * adults
   const nights =
     input.nights != null && Number(input.nights) > 0
       ? Math.round(Number(input.nights))
@@ -132,6 +137,7 @@ export function computeTripPartyPrice(input: {
     nights,
     flightPp,
     flightTotal,
+    hotelPp,
     hotelTotal,
     total,
     perPerson,

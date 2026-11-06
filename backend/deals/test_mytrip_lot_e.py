@@ -8,18 +8,26 @@ from deals.launch_metrics import collect_my_trip_funnel
 from deals.my_trips import ALLOWED_TRIP_EVENTS, record_trip_event
 
 
+def _euro(n: float) -> int:
+    """Match JS Math.round for positive euros (half-up, not banker's round)."""
+    x = float(n or 0)
+    return int(x + 0.5) if x >= 0 else int(x - 0.5)
+
+
 def party_euros(*, adults: int, flight_pp: float, hotel_total: float):
     """Mirror shared computeTripPartyPrice (€ round components then sum)."""
     adults = max(1, min(6, int(adults or 1)))
-    flight_pp_eur = int(round(float(flight_pp or 0)))
-    hotel_eur = int(round(float(hotel_total or 0)))
+    flight_pp_eur = _euro(flight_pp)
+    hotel_pp_eur = _euro(float(hotel_total or 0) / adults) if adults else 0
     flight_total = flight_pp_eur * adults
-    total = flight_total + hotel_eur
-    per_person = int(round(total / adults)) if adults else total
+    hotel_eur = hotel_pp_eur * adults
+    per_person = flight_pp_eur + hotel_pp_eur
+    total = per_person * adults
     return {
         "adults": adults,
         "flight_pp_eur": flight_pp_eur,
         "flight_total_eur": flight_total,
+        "hotel_pp_eur": hotel_pp_eur,
         "hotel_total_eur": hotel_eur,
         "total_eur": total,
         "per_person_eur": per_person,
@@ -53,16 +61,32 @@ class PartyPriceTests(unittest.TestCase):
     def test_duo_components_sum(self):
         p = party_euros(adults=2, flight_pp=68, hotel_total=434)
         self.assertEqual(p["flight_total_eur"], 136)
+        self.assertEqual(p["hotel_pp_eur"], 217)
         self.assertEqual(p["total_eur"], 570)
         self.assertEqual(p["per_person_eur"], 285)
+        self.assertEqual(p["per_person_eur"] * 2, p["total_eur"])
+
+    def test_duo_odd_hotel_stays_euro_exact(self):
+        """Odd hotel totals must not break perPerson × adults === total."""
+        p = party_euros(adults=2, flight_pp=50, hotel_total=101)
+        self.assertEqual(p["hotel_pp_eur"], 51)
+        self.assertEqual(p["hotel_total_eur"], 102)
+        self.assertEqual(p["per_person_eur"], 101)
+        self.assertEqual(p["total_eur"], 202)
+        self.assertEqual(
+            p["flight_pp_eur"] + p["hotel_pp_eur"], p["per_person_eur"]
+        )
+        self.assertEqual(p["per_person_eur"] * 2, p["total_eur"])
 
     def test_four_pax(self):
         p = party_euros(adults=4, flight_pp=50.4, hotel_total=199.6)
         self.assertEqual(p["flight_pp_eur"], 50)
+        self.assertEqual(p["hotel_pp_eur"], 50)
         self.assertEqual(p["hotel_total_eur"], 200)
         self.assertEqual(p["flight_total_eur"], 200)
         self.assertEqual(p["total_eur"], 400)
         self.assertEqual(p["per_person_eur"], 100)
+        self.assertEqual(p["per_person_eur"] * 4, p["total_eur"])
 
 
 class BoardLabelTests(unittest.TestCase):

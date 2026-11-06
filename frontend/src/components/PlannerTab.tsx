@@ -3188,78 +3188,52 @@ function TripDetailView({
       stayPriceIncludesHotel &&
       stayParty.perPerson > 0 ? (
         <aside
-          className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#1A120E] via-[#241810] to-[#2E1A12] text-white shadow-[0_22px_50px_-28px_rgba(26,18,14,0.9)] ring-1 ring-white/10"
+          className="overflow-hidden rounded-[24px] border border-orange-100/70 bg-white shadow-lg shadow-orange-950/5"
           aria-label="Prix du séjour"
         >
-          <div
-            className="pointer-events-none absolute -right-8 -top-10 h-44 w-44 rounded-full bg-[#FF6B35]/25 blur-3xl"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute -left-10 bottom-0 h-32 w-32 rounded-full bg-orange-500/10 blur-2xl"
-            aria-hidden
-          />
-          <div className="relative flex flex-col gap-5 p-5 sm:flex-row sm:items-stretch sm:gap-0 sm:p-0">
-            <div className="min-w-0 flex-1 space-y-4 sm:px-6 sm:py-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-lg font-black text-white shadow-lg shadow-orange-500/30">
-                  €
-                </span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300/90">
-                    {flightBooked && hotelBooked
-                      ? 'Séjour réservé'
-                      : 'Prix du séjour'}
-                  </p>
-                  <p className="mt-0.5 text-sm font-semibold text-white/55">
-                    Vol + hôtel, par personne
-                  </p>
-                </div>
+          <header className="border-b border-orange-50 bg-[#FFF8F3] px-5 py-3.5 sm:px-6">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E85A28]">
+              Récapitulatif
+            </p>
+            <h3 className="mt-0.5 text-lg sm:text-xl font-black tracking-tight text-ink">
+              {flightBooked && hotelBooked
+                ? 'Séjour réservé'
+                : 'Prix du séjour'}
+            </h3>
+            <p className="mt-0.5 text-xs font-medium text-slate-500">
+              Vol + hôtel · par personne
+            </p>
+          </header>
+
+          <div className="px-5 py-4 sm:px-6 sm:py-5">
+            <dl className="space-y-3">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm font-semibold text-slate-500">Vol</dt>
+                <dd className="text-sm font-bold tabular-nums text-ink">
+                  {stayParty.flightPp}&nbsp;€
+                </dd>
               </div>
-              <div className="grid grid-cols-2 gap-2.5 max-w-md">
-                <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-3.5 py-3">
-                  <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-orange-200/70">
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
-                      <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
-                    </svg>
-                    Vol
-                  </div>
-                  <p className="mt-1.5 text-2xl font-black tabular-nums tracking-tight text-white">
-                    {stayParty.flightPp}
-                    <span className="text-base font-bold text-white/50">€</span>
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-white/[0.07] ring-1 ring-white/10 px-3.5 py-3">
-                  <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-orange-200/70">
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
-                      <path d="M4 11v8h2v-8H4zm3 0v8h10v-8H7zm11 0v8h2v-8h-2zM3 21h18v-2H3v2zM7 9h10c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2H7C5.9 3 5 3.9 5 5v2c0 1.1.9 2 2 2zm0-4h10v2H7V5z" />
-                    </svg>
-                    Hôtel
-                  </div>
-                  <p className="mt-1.5 text-2xl font-black tabular-nums tracking-tight text-white">
-                    {Math.round(stayParty.hotelTotal / pax)}
-                    <span className="text-base font-bold text-white/50">€</span>
-                  </p>
-                </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-sm font-semibold text-slate-500">Hôtel</dt>
+                <dd className="text-sm font-bold tabular-nums text-ink">
+                  {stayParty.hotelPp}&nbsp;€
+                </dd>
               </div>
-            </div>
-            <div className="flex flex-col justify-center gap-1 border-t border-white/10 pt-4 sm:min-w-[200px] sm:border-l sm:border-t-0 sm:bg-black/20 sm:px-6 sm:py-5 sm:pt-5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40 sm:text-right">
-                Total / pers.
-              </p>
-              <p className="text-5xl font-black tracking-tight tabular-nums leading-none text-[#FF6B35] sm:text-right">
+            </dl>
+
+            <div className="mt-5 flex items-end justify-between gap-4 border-t border-orange-50 pt-4">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-ink">Par personne</p>
+                {pax > 1 ? (
+                  <p className="mt-1 text-xs font-medium text-slate-500 tabular-nums">
+                    Soit {stayParty.total}&nbsp;€ pour {pax} personnes
+                  </p>
+                ) : null}
+              </div>
+              <p className="shrink-0 text-3xl font-black tracking-tight tabular-nums leading-none text-[#FF6B35]">
                 {stayParty.perPerson}
-                <span className="text-3xl">€</span>
+                <span className="ml-0.5 text-xl font-bold">€</span>
               </p>
-              {pax > 1 ? (
-                <p className="mt-2 text-xs font-semibold text-white/45 tabular-nums sm:text-right">
-                  Séjour {stayParty.total}€ · {pax} pers.
-                </p>
-              ) : (
-                <p className="mt-2 text-xs font-semibold text-white/40 sm:text-right">
-                  Tout compris vol + hôtel
-                </p>
-              )}
             </div>
           </div>
         </aside>
