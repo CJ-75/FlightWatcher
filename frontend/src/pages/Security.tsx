@@ -1,5 +1,5 @@
 /**
- * Compte → Sécurité : mot de passe, légal, suppression de compte.
+ * Compte → Sécurité : mot de passe + suppression de compte.
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -18,7 +18,6 @@ export default function Security() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [deleteErr, setDeleteErr] = useState<string | null>(null)
 
@@ -61,6 +60,25 @@ export default function Security() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const onDelete = () => {
+    if (!window.confirm(t('auth.security.deletePopup'))) return
+    void (async () => {
+      setDeleteErr(null)
+      setDeleting(true)
+      try {
+        await getApiClient().deleteAccount({ confirm: deleteWord })
+        await signOut()
+        navigate('/login', { replace: true })
+      } catch (e) {
+        setDeleteErr(
+          e instanceof Error ? e.message : t('auth.security.deleteError'),
+        )
+      } finally {
+        setDeleting(false)
+      }
+    })()
   }
 
   return (
@@ -156,65 +174,11 @@ export default function Security() {
             ) : null}
           </form>
 
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 space-y-2">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-400">
-              Légal
-            </p>
-            <div className="flex flex-wrap gap-3 text-sm font-bold">
-              <Link to="/privacy" className="text-primary-600 hover:underline">
-                {t('auth.security.legalPrivacy')}
-              </Link>
-              <Link to="/terms" className="text-primary-600 hover:underline">
-                {t('auth.security.legalTerms')}
-              </Link>
-              <Link to="/legal" className="text-primary-600 hover:underline">
-                {t('auth.security.legalMentions')}
-              </Link>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-4 space-y-3">
-            <h2 className="font-bold text-rose-950">
-              {t('auth.security.deleteTitle')}
-            </h2>
-            <p className="text-sm text-rose-900/80 leading-relaxed">
-              {t('auth.security.deleteHint')}
-            </p>
-            <p className="text-xs text-rose-800/80">
-              {t('auth.security.deleteConfirm')}
-            </p>
-            <input
-              type="text"
-              value={deleteConfirm}
-              onChange={(e) => setDeleteConfirm(e.target.value)}
-              placeholder={deleteWord}
-              autoComplete="off"
-              className="w-full rounded-2xl border border-rose-200 bg-white px-4 py-3 text-sm font-medium focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
-            />
+          <div className="rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-4">
             <button
               type="button"
-              disabled={
-                deleting || deleteConfirm.trim().toUpperCase() !== deleteWord
-              }
-              onClick={() => {
-                void (async () => {
-                  setDeleteErr(null)
-                  setDeleting(true)
-                  try {
-                    await getApiClient().deleteAccount({ confirm: deleteWord })
-                    await signOut()
-                    navigate('/login', { replace: true })
-                  } catch (e) {
-                    setDeleteErr(
-                      e instanceof Error
-                        ? e.message
-                        : t('auth.security.deleteError'),
-                    )
-                  } finally {
-                    setDeleting(false)
-                  }
-                })()
-              }}
+              disabled={deleting}
+              onClick={onDelete}
               className="w-full rounded-2xl border border-rose-300 bg-white px-5 py-3 text-sm font-bold text-rose-800 hover:bg-rose-100 disabled:opacity-50 min-h-[44px]"
             >
               {deleting
@@ -222,7 +186,7 @@ export default function Security() {
                 : t('auth.security.deleteButton')}
             </button>
             {deleteErr ? (
-              <p className="text-sm font-medium text-red-600">{deleteErr}</p>
+              <p className="mt-3 text-sm font-medium text-red-600">{deleteErr}</p>
             ) : null}
           </div>
         </div>

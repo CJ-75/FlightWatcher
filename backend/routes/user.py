@@ -85,20 +85,39 @@ async def update_user_profile(request: Request):
         raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
 
 
-def _best_effort_delete_user_rows(svc, user_id: str) -> None:
-    """Remove app data before auth user deletion (ignore missing tables)."""
-    table_cols = (
+def _best_effort_detach_then_delete_user(svc, user_id: str) -> None:
+    """Hard-delete auth user + profile/likes only.
+
+    Keep operational rows (bookings, drafts, planned trips + their dates):
+    detach user FKs, then delete auth.users (SET NULL where migrated).
+    """
+    now = datetime.now().isoformat()
+
+    # Detach — do not delete stay/booking history.
+    detach_updates = (
+        ("hotel_bookings", {"user_id": None, "updated_at": now}),
+        ("my_trip_drafts", {"user_id": None, "updated_at": now}),
+        ("planned_trips", {"organizer_id": None, "updated_at": now}),
+    )
+    for table, patch in detach_updates:
+        try:
+            col = "organizer_id" if table == "planned_trips" else "user_id"
+            svc.table(table).update(patch).eq(col, user_id).execute()
+        except Exception as e:
+            logger.debug("delete_account detach %s: %s", table, e)
+
+    # Personal prefs / profile — safe to remove with the account.
+    delete_rows = (
         ("user_profiles", "id"),
         ("liked_deals", "user_id"),
         ("liked_activities", "user_id"),
         ("liked_airports", "user_id"),
         ("saved_searches", "user_id"),
         ("price_alerts", "user_id"),
+        ("saved_favorites", "user_id"),
         ("planned_trip_members", "user_id"),
-        ("my_trip_drafts", "user_id"),
-        ("hotel_bookings", "user_id"),
     )
-    for table, col in table_cols:
+    for table, col in delete_rows:
         try:
             svc.table(table).delete().eq(col, user_id).execute()
         except Exception as e:
@@ -114,7 +133,7 @@ def _delete_account_for_user(user_id: str, confirm: str) -> dict:
     svc = get_supabase_service_client()
     if not svc:
         raise HTTPException(status_code=503, detail="Service auth indisponible")
-    _best_effort_delete_user_rows(svc, user_id)
+    _best_effort_detach_then_delete_user(svc, user_id)
     try:
         svc.auth.admin.delete_user(user_id)
     except Exception as e:
@@ -123,7 +142,7 @@ def _delete_account_for_user(user_id: str, confirm: str) -> dict:
             status_code=500,
             detail="Impossible de supprimer le compte — réessaie ou contacte le support",
         )
-    return {"ok": True, "deleted": True}
+    return {"ok": True, "deleted": True, "data_preserved": True}
 
 
 @router.post("/api/user/account/delete")

@@ -64,14 +64,20 @@ export function useLikedActivities() {
         } else {
           await getApi().likeActivity(card)
         }
-      } catch {
+      } catch (e) {
         setLikedIds((prev) => {
           const next = new Set(prev)
           if (currentlyLiked) next.add(card.productCode)
           else next.delete(card.productCode)
           return next
         })
-        Alert.alert('Erreur', 'Impossible de mettre à jour le favori')
+        const detail = e instanceof Error ? e.message : ''
+        Alert.alert(
+          'Erreur',
+          detail.includes('liked_activities')
+            ? 'Table liked_activities manquante — applique apply_liked_activities_migration.sql dans Supabase.'
+            : detail || 'Impossible de mettre à jour le favori',
+        )
       }
     },
     [user, isGuest, likedIds],

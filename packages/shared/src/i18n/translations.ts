@@ -343,10 +343,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.pageTitle': 'Sécurité du compte',
     'auth.security.deleteTitle': 'Supprimer mon compte',
     'auth.security.deleteHint':
-      'Supprime définitivement ton compte FlightWatcher (favoris, voyages, profil). Les réservations déjà confirmées chez les partenaires restent soumises à leurs conditions.',
-    'auth.security.deleteConfirm':
-      'Écris SUPPRIMER pour confirmer. Cette action est irréversible.',
-    'auth.security.deleteButton': 'Supprimer mon compte',
+      'Compte, profil et favoris sont effacés. Les réservations et leurs dates restent en base.',
+    'auth.security.deletePopup':
+      'On supprime ton compte, ton profil et tes favoris.\n\nOn conserve en base tes réservations (vol / hôtel) et leurs dates.\n\nIrréversible — continuer ?',
+    'auth.security.deleteConfirm': 'Confirme pour supprimer définitivement.',
+    'auth.security.deleteButton': 'Supprimer',
     'auth.security.deleteBusy': 'Suppression…',
     'auth.security.deleteDone': 'Compte supprimé',
     'auth.security.deleteError': 'Suppression impossible — réessaie',
@@ -883,10 +884,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.pageTitle': 'Account security',
     'auth.security.deleteTitle': 'Delete my account',
     'auth.security.deleteHint':
-      'Permanently deletes your FlightWatcher account (favorites, trips, profile). Confirmed partner bookings remain subject to their own terms.',
-    'auth.security.deleteConfirm':
-      'Type DELETE to confirm. This cannot be undone.',
-    'auth.security.deleteButton': 'Delete my account',
+      'Account, profile and favorites are removed. Bookings and their dates stay in the database.',
+    'auth.security.deletePopup':
+      'We delete your account, profile and favorites.\n\nBookings (flight / hotel) and their dates stay in the database.\n\nThis cannot be undone — continue?',
+    'auth.security.deleteConfirm': 'Confirm to permanently delete.',
+    'auth.security.deleteButton': 'Delete',
     'auth.security.deleteBusy': 'Deleting…',
     'auth.security.deleteDone': 'Account deleted',
     'auth.security.deleteError': 'Could not delete account — try again',

@@ -1,10 +1,14 @@
 from types import SimpleNamespace
 
+from datetime import datetime, timedelta, timezone
+
 from routes.planner import (
     _best_booking,
     _dest_compatible,
     _heal_orphan_drafts_to_trips,
+    _parse_wall_dt,
     _planner_draft_payload,
+    _stay_starts_at,
     _user_can_access,
     _workspace_phase,
 )
@@ -102,6 +106,58 @@ def test_workspace_phase_distinguishes_choice_from_booking():
         )
         == "booked"
     )
+
+
+def test_workspace_phase_past_when_start_datetime_elapsed():
+    past = datetime.now(timezone.utc) - timedelta(hours=1)
+    future = datetime.now(timezone.utc) + timedelta(days=3)
+    assert (
+        _workspace_phase(
+            ret_date=future.date().isoformat(),
+            out_date=past.date().isoformat(),
+            accepted={"id": "proposal"},
+            draft={"id": "draft", "payload": {}},
+            booking={"status": "confirmed"},
+            starts_at=past,
+        )
+        == "past"
+    )
+    assert (
+        _workspace_phase(
+            ret_date=future.date().isoformat(),
+            out_date=future.date().isoformat(),
+            accepted={"id": "proposal"},
+            draft={"id": "draft", "payload": {}},
+            booking={"status": "confirmed"},
+            starts_at=future,
+        )
+        == "booked"
+    )
+    # Incomplete séjour whose start elapsed is also retired from "en cours".
+    assert (
+        _workspace_phase(
+            ret_date="2099-01-02",
+            accepted=None,
+            draft=None,
+            booking=None,
+            starts_at=past,
+        )
+        == "past"
+    )
+
+
+def test_stay_starts_at_prefers_outbound_flight_local_time():
+    starts = _stay_starts_at(
+        accepted={
+            "trip_data": {
+                "aller": {"departureTime": "2027-05-07T08:10:00"},
+                "retour": {"departureTime": "2027-05-10T19:40:00"},
+            }
+        }
+    )
+    assert starts is not None
+    assert starts.hour == 8 and starts.minute == 10
+    assert _parse_wall_dt("2027-05-07T08:10:00") is not None
 
 
 def test_best_booking_prefers_confirmed_over_newer_retry():

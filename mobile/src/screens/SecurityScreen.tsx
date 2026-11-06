@@ -8,13 +8,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
-  Linking,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
-import { getApi, getWebOrigin } from '../lib/client'
+import { getApi } from '../lib/client'
 import { Button } from '../components/ui/Button'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
@@ -28,12 +26,7 @@ export function SecurityScreen() {
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
-
-  const openLegal = (path: string) => {
-    void Linking.openURL(`${getWebOrigin()}${path}`)
-  }
 
   const onDeleteAccount = () => {
     if (isGuest) {
@@ -43,16 +36,9 @@ export function SecurityScreen() {
       )
       return
     }
-    if (deleteConfirm.trim().toUpperCase() !== 'SUPPRIMER') {
-      Alert.alert(
-        translate('fr', 'auth.security.deleteTitle'),
-        translate('fr', 'auth.security.deleteConfirm'),
-      )
-      return
-    }
     Alert.alert(
       translate('fr', 'auth.security.deleteTitle'),
-      translate('fr', 'auth.security.deleteHint'),
+      translate('fr', 'auth.security.deletePopup'),
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -214,47 +200,9 @@ export function SecurityScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
 
-          <View style={[styles.card, shadow.soft, { marginTop: spacing.lg }]}>
-            <Text style={styles.cardTitle}>Légal</Text>
-            <View style={styles.legalRow}>
-              <Pressable onPress={() => openLegal('/privacy')}>
-                <Text style={styles.legalLink}>
-                  {translate('fr', 'auth.security.legalPrivacy')}
-                </Text>
-              </Pressable>
-              <Pressable onPress={() => openLegal('/terms')}>
-                <Text style={styles.legalLink}>
-                  {translate('fr', 'auth.security.legalTerms')}
-                </Text>
-              </Pressable>
-              <Pressable onPress={() => openLegal('/legal')}>
-                <Text style={styles.legalLink}>
-                  {translate('fr', 'auth.security.legalMentions')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
           <View style={[styles.dangerCard, shadow.soft, { marginTop: spacing.lg }]}>
-            <Text style={styles.dangerTitle}>
-              {translate('fr', 'auth.security.deleteTitle')}
-            </Text>
-            <Text style={styles.dangerHint}>
-              {translate('fr', 'auth.security.deleteHint')}
-            </Text>
-            <Text style={styles.dangerConfirm}>
-              {translate('fr', 'auth.security.deleteConfirm')}
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={deleteConfirm}
-              onChangeText={setDeleteConfirm}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              placeholder="SUPPRIMER"
-              placeholderTextColor={colors.faint}
-            />
             <Button
+              variant="ghost"
               label={
                 deleting
                   ? translate('fr', 'auth.security.deleteBusy')
@@ -262,10 +210,7 @@ export function SecurityScreen() {
               }
               onPress={onDeleteAccount}
               loading={deleting}
-              disabled={
-                deleting || deleteConfirm.trim().toUpperCase() !== 'SUPPRIMER'
-              }
-              style={{ marginTop: spacing.md }}
+              disabled={deleting}
             />
           </View>
         </ScrollView>
@@ -348,42 +293,11 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     lineHeight: 18,
   },
-  legalRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    marginTop: 8,
-  },
-  legalLink: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.primaryDeep,
-  },
   dangerCard: {
     backgroundColor: '#FFF1F2',
     borderRadius: 18,
     padding: 18,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#FECDD3',
-    gap: 6,
-  },
-  dangerTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: '#9F1239',
-  },
-  dangerHint: {
-    fontFamily: fonts.regular,
-    fontSize: 13,
-    color: '#9F1239',
-    lineHeight: 18,
-    opacity: 0.85,
-  },
-  dangerConfirm: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: '#9F1239',
-    lineHeight: 16,
-    marginBottom: 4,
   },
 })

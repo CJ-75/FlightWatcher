@@ -707,14 +707,19 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         setAddNotice('Ajouté aux favoris')
       }
       track(wasLiked ? 'unlike' : 'like', card)
-    } catch {
+    } catch (e) {
       setLikedIds((prev) => {
         const next = new Set(prev)
         if (wasLiked) next.add(card.productCode)
         else next.delete(card.productCode)
         return next
       })
-      setAddNotice('Impossible de mettre à jour le favori')
+      const detail = e instanceof Error ? e.message : ''
+      setAddNotice(
+        detail.includes('liked_activities')
+          ? 'Table liked_activities manquante — applique apply_liked_activities_migration.sql dans Supabase.'
+          : detail || 'Impossible de mettre à jour le favori',
+      )
     }
   }
 

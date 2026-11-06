@@ -267,6 +267,134 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Flight / hotel wall times are local FR (naive ISO without offset).
+_STAY_TZ = timezone(timedelta(hours=1))  # fallback if zoneinfo missing
+try:
+    from zoneinfo import ZoneInfo
+
+    _STAY_TZ = ZoneInfo("Europe/Paris")
+except Exception:
+    pass
+
+
+def _as_stay_aware(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=_STAY_TZ)
+    return dt
+
+
+def _parse_wall_dt(raw: Any) -> Optional[datetime]:
+    """Parse flight/hotel local datetime; naive values → Europe/Paris."""
+    if not raw:
+        return None
+    try:
+        s = str(raw).strip().replace("Z", "+00:00")
+        if len(s) == 10:
+            s = f"{s}T23:59:00"
+        dt = datetime.fromisoformat(s)
+        return _as_stay_aware(dt)
+    except Exception:
+        return None
+
+
+def _ends_from_date_and_time(
+    date_str: Optional[str], time_str: Optional[str] = None
+) -> Optional[datetime]:
+    day = _date10(date_str)
+    if not day:
+        return None
+    hhmm = str(time_str or "23:59").strip()[:5] or "23:59"
+    if len(hhmm) < 5:
+        hhmm = "23:59"
+    return _parse_wall_dt(f"{day}T{hhmm}:00")
+
+
+def _stay_starts_at(
+    *,
+    trip: Optional[dict] = None,
+    accepted: Optional[dict] = None,
+    draft: Optional[dict] = None,
+    booking: Optional[dict] = None,
+) -> Optional[datetime]:
+    """Start of séjour = vol aller local, else dates_depart, else hotel check-in."""
+    trip_data = (accepted or {}).get("trip_data") or {}
+    if isinstance(trip_data, dict):
+        aller = trip_data.get("aller") or {}
+        if isinstance(aller, dict):
+            dt = _parse_wall_dt(
+                aller.get("departureTime") or aller.get("departure_time")
+            )
+            if dt:
+                return dt
+
+    if draft:
+        payload = (draft.get("payload") or {}) if isinstance(draft, dict) else {}
+        if not isinstance(payload, dict):
+            payload = {}
+        flight = payload.get("flight") or {}
+        if isinstance(flight, dict):
+            for key in (
+                "outbound_local",
+                "out_dep_local",
+                "outbound_dep_local",
+                "departure_local",
+            ):
+                dt = _parse_wall_dt(flight.get(key))
+                if dt:
+                    return dt
+        dates = payload.get("dates") or {}
+        if not isinstance(dates, dict):
+            dates = {}
+        dt = _ends_from_date_and_time(
+            _date10(draft.get("out_date") or dates.get("outbound")),
+            "00:00",
+        )
+        if dt:
+            return dt
+
+    if trip:
+        dates_depart = trip.get("dates_depart") or []
+        if isinstance(dates_depart, list) and dates_depart:
+            first = dates_depart[0]
+            if isinstance(first, dict):
+                dt = _ends_from_date_and_time(
+                    first.get("date"),
+                    first.get("heure_min") or first.get("heure_max") or "00:00",
+                )
+                if dt:
+                    return dt
+
+    if booking:
+        snapshot = booking.get("deal_snapshot") or {}
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        dates = snapshot.get("dates") or {}
+        if not isinstance(dates, dict):
+            dates = {}
+        hotel = snapshot.get("hotel") if isinstance(snapshot.get("hotel"), dict) else {}
+        checkin = (
+            hotel.get("checkin_time")
+            or hotel.get("check_in_time")
+            or hotel.get("checkin")
+            or "00:00"
+        )
+        dt = _ends_from_date_and_time(
+            _date10(dates.get("outbound") or dates.get("check_in")),
+            str(checkin)[:5] if checkin else "00:00",
+        )
+        if dt:
+            return dt
+
+    return None
+
+
+def _stay_start_elapsed(starts_at: Optional[datetime]) -> bool:
+    """True when current datetime is past the séjour start."""
+    if starts_at is None:
+        return False
+    return _utcnow() >= _as_stay_aware(starts_at)
+
+
 def _proposal_prix_total(prop: dict) -> Optional[float]:
     data = prop.get("trip_data") or {}
     if isinstance(data, str):
@@ -846,24 +974,29 @@ def _workspace_phase(
     draft: Optional[dict],
     booking: Optional[dict],
     trip_status: Optional[str] = None,
+    starts_at: Optional[datetime] = None,
+    out_date: Optional[str] = None,
 ) -> str:
     """
-    Past after organizer archives (status=completed), or when the stay is done
-    (hôtel réservé) and return date passed.
-    Incomplete trips with past dates stay actionable (scan / hôtel / activités).
+    Past (= retiré des séjours en cours) when:
+    - organizer archived (status=completed), or
+    - current datetime >= séjour start (aller / check-in date+time).
     """
+    # ret_date kept for call-site compat; retirement uses start, not end.
+    _ = ret_date
     if str(trip_status or "") == "completed":
         return "past"
-    progress = _workspace_progress_phase(
+    if starts_at is None:
+        starts_at = _stay_starts_at(
+            accepted=accepted, draft=draft, booking=booking
+        )
+        if starts_at is None and out_date:
+            starts_at = _ends_from_date_and_time(out_date, "00:00")
+    if _stay_start_elapsed(starts_at):
+        return "past"
+    return _workspace_progress_phase(
         accepted=accepted, draft=draft, booking=booking
     )
-    if (
-        progress == "booked"
-        and ret_date
-        and ret_date < date.today().isoformat()
-    ):
-        return "past"
-    return progress
 
 
 _ACCENT_MAP = str.maketrans(
@@ -1550,13 +1683,36 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
             _date10((trip_data.get("retour") or {}).get("departureTime"))
             or _date10((trip.get("dates_retour") or [{}])[-1].get("date"))
         )
+        starts_at = _stay_starts_at(
+            trip=trip, accepted=accepted, draft=draft, booking=booking
+        )
         phase = _workspace_phase(
             ret_date=ret_date,
+            out_date=out_date,
             accepted=accepted,
             draft=draft,
             booking=booking,
             trip_status=trip.get("status"),
+            starts_at=starts_at,
         )
+        # Début de séjour dépassé → Terminé (retire des séjours en cours).
+        if (
+            phase == "past"
+            and str(trip.get("status") or "") not in ("completed", "archived")
+            and _stay_start_elapsed(starts_at)
+        ):
+            try:
+                now_iso = datetime.utcnow().isoformat()
+                supabase.table("planned_trips").update(
+                    {
+                        "status": "completed",
+                        "auto_scan_enabled": False,
+                        "updated_at": now_iso,
+                    }
+                ).eq("id", trip_id).execute()
+                trip["status"] = "completed"
+            except Exception as e:
+                print(f"⚠️ auto-complete past trip {trip_id}: {e}")
         is_organizer = trip.get("organizer_id") == user_id
         workspaces.append(
             {
@@ -1628,11 +1784,15 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
         payload = draft.get("payload") or {}
         flight = payload.get("flight") or {}
         ret_date = _date10(draft.get("ret_date"))
+        out_date = _date10(draft.get("out_date"))
+        starts_at = _stay_starts_at(draft=draft, booking=booking)
         phase = _workspace_phase(
             ret_date=ret_date,
+            out_date=out_date,
             accepted=None,
             draft=draft,
             booking=booking,
+            starts_at=starts_at,
         )
         workspaces.append(
             {
@@ -1699,11 +1859,14 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
         dates = snapshot.get("dates") or {}
         if not isinstance(dates, dict):
             dates = {}
+        booking_starts = _stay_starts_at(booking=booking)
         booking_phase = _workspace_phase(
             ret_date=_date10(dates.get("inbound")),
+            out_date=_date10(dates.get("outbound") or dates.get("check_in")),
             accepted=None,
             draft=None,
             booking=booking,
+            starts_at=booking_starts,
         )
         workspaces.append(
             {
@@ -3089,11 +3252,71 @@ def _require_cron(authorization: Optional[str]) -> None:
         raise HTTPException(status_code=403, detail="Secret cron invalide")
 
 
+def _auto_complete_elapsed_trips(supabase) -> int:
+    """Mark planned trips Terminé when séjour start datetime is past."""
+    rows = (
+        supabase.table("planned_trips")
+        .select("id,status,dates_depart")
+        .neq("status", "archived")
+        .neq("status", "completed")
+        .execute()
+    ).data or []
+    if not rows:
+        return 0
+    trip_ids = [str(r["id"]) for r in rows if r.get("id")]
+    accepted_by_trip: Dict[str, dict] = {}
+    if trip_ids:
+        try:
+            props = (
+                supabase.table("trip_proposals")
+                .select("id,trip_id,trip_data,status")
+                .in_("trip_id", trip_ids)
+                .eq("status", "accepted")
+                .execute()
+            ).data or []
+            for p in props:
+                tid = str(p.get("trip_id") or "")
+                if tid and tid not in accepted_by_trip:
+                    accepted_by_trip[tid] = p
+        except Exception as e:
+            print(f"⚠️ auto-complete proposals: {e}")
+
+    done = 0
+    now_iso = datetime.utcnow().isoformat()
+    for trip in rows:
+        trip_id = str(trip.get("id") or "")
+        if not trip_id:
+            continue
+        starts_at = _stay_starts_at(
+            trip=trip, accepted=accepted_by_trip.get(trip_id)
+        )
+        if not _stay_start_elapsed(starts_at):
+            continue
+        try:
+            supabase.table("planned_trips").update(
+                {
+                    "status": "completed",
+                    "auto_scan_enabled": False,
+                    "updated_at": now_iso,
+                }
+            ).eq("id", trip_id).execute()
+            done += 1
+        except Exception as e:
+            print(f"⚠️ auto-complete {trip_id}: {e}")
+    return done
+
+
 @router.post("/api/planner/auto-scan")
 async def auto_scan_trips(authorization: Optional[str] = Header(None)):
-    """Cron job: scan planning trips with auto_scan_enabled when interval elapsed."""
+    """Cron job: complete elapsed stays, then scan watched planning trips."""
     _require_cron(authorization)
     supabase = _svc()
+
+    completed_past = 0
+    try:
+        completed_past = _auto_complete_elapsed_trips(supabase)
+    except Exception as e:
+        print(f"⚠️ auto-complete past trips: {e}")
 
     result = (
         supabase.table("planned_trips")
@@ -3153,6 +3376,7 @@ async def auto_scan_trips(authorization: Optional[str] = Header(None)):
         "scanned": scanned,
         "notified": notified,
         "skipped": skipped,
+        "completed_past": completed_past,
         "errors": errors,
     }
 
