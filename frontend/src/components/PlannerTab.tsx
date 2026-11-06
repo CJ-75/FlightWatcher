@@ -392,6 +392,8 @@ function tripAsWorkspace(
     out_date: trip.dates_depart?.[0]?.date || null,
     ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
     is_organizer: isOrganizer,
+    is_invitee: !isOrganizer,
+    membership_joined_via: isOrganizer ? 'created' : 'invite',
     capabilities: {
       can_scan: isOrganizer && trip.status !== 'locked',
       can_choose_flight: isOrganizer && trip.status !== 'locked',
@@ -780,6 +782,11 @@ function TripListCard({
         >
           {PHASE_LABEL[workspace.phase]}
         </span>
+        {workspace.is_invitee ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-50 text-violet-800 ring-1 ring-violet-200">
+            {t('planner.tag.invitee')}
+          </span>
+        ) : null}
       </div>
       {outDate && retDate ? (
         <p className="text-sm font-semibold text-slate-600 mt-3">
@@ -842,11 +849,18 @@ function TripListCard({
               <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-slate-200" />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-black/10 lg:to-black/40" />
-            <span
-              className={`absolute top-5 right-5 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
-            >
-              {PHASE_LABEL[workspace.phase]}
-            </span>
+            <div className="absolute top-5 right-5 flex flex-col items-end gap-1.5">
+              <span
+                className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
+              >
+                {PHASE_LABEL[workspace.phase]}
+              </span>
+              {workspace.is_invitee ? (
+                <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-violet-500/90 text-white">
+                  {t('planner.tag.invitee')}
+                </span>
+              ) : null}
+            </div>
             <div className="absolute bottom-6 left-6 right-6 lg:hidden">
               <p className="text-white text-4xl font-black tracking-tight">
                 {cityLabel}
@@ -925,11 +939,18 @@ function TripListCard({
           <div className="absolute inset-0 bg-gradient-to-br from-primary-100 to-slate-200" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" />
-        <span
-          className={`absolute top-4 right-4 text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
-        >
-          {PHASE_LABEL[workspace.phase]}
-        </span>
+        <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5">
+          <span
+            className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
+          >
+            {PHASE_LABEL[workspace.phase]}
+          </span>
+          {workspace.is_invitee ? (
+            <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-violet-500/90 text-white">
+              {t('planner.tag.invitee')}
+            </span>
+          ) : null}
+        </div>
         <div className="absolute bottom-4 left-5 right-5">
           <p
             className={`text-white font-black tracking-tight ${

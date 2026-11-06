@@ -1382,7 +1382,9 @@ async def list_trips(request: Request):
     if trip_ids:
         mem_res = (
             supabase.table("trip_members")
-            .select("trip_id, display_name, role, status, joined_at, user_id")
+            .select(
+                "trip_id, display_name, role, status, joined_via, joined_at, user_id"
+            )
             .in_("trip_id", trip_ids)
             .execute()
         )
@@ -1527,7 +1529,9 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
         try:
             return (
                 supabase.table("trip_members")
-                .select("trip_id, display_name, role, status, joined_at, user_id")
+                .select(
+                "trip_id, display_name, role, status, joined_via, joined_at, user_id"
+            )
                 .in_("trip_id", trip_ids)
                 .execute()
             ).data or []
@@ -1714,6 +1718,22 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
             except Exception as e:
                 print(f"⚠️ auto-complete past trip {trip_id}: {e}")
         is_organizer = trip.get("organizer_id") == user_id
+        my_membership = next(
+            (
+                m
+                for m in members_by_trip.get(trip["id"], [])
+                if m.get("user_id") == user_id
+            ),
+            None,
+        )
+        joined_via = (my_membership or {}).get("joined_via")
+        if not joined_via and my_membership:
+            # Legacy rows before joined_via column / backfill.
+            joined_via = "created" if is_organizer else "invite"
+        is_invitee = (not is_organizer) and (
+            joined_via == "invite"
+            or (my_membership is not None and not is_organizer)
+        )
         workspaces.append(
             {
                 "workspace_id": f"planner:{trip_id}",
@@ -1748,6 +1768,8 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
                 "ret_date": ret_date,
                 "image_url": trip_data.get("image_url") or payload.get("image_url"),
                 "is_organizer": is_organizer,
+                "is_invitee": bool(is_invitee),
+                "membership_joined_via": joined_via,
                 "capabilities": {
                     "can_scan": is_organizer and phase == "planning",
                     "can_choose_flight": is_organizer and phase == "planning",
@@ -1826,6 +1848,8 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
                 "ret_date": ret_date,
                 "image_url": payload.get("image_url"),
                 "is_organizer": False,
+                "is_invitee": False,
+                "membership_joined_via": None,
                 "capabilities": {
                     "can_scan": False,
                     "can_choose_flight": False,
@@ -1889,6 +1913,8 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
                     snap_hotel.get("city"),
                     snapshot.get("hotel_city"),
                 ),
+                "is_invitee": False,
+                "membership_joined_via": None,
                 "origin_iata": None,
                 "dest_iata": snapshot.get("destination")
                 or snapshot.get("dest"),
@@ -1983,6 +2009,7 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
             "user_id": user_id,
             "role": "organizer",
             "status": "joined",
+            "joined_via": "created",
             "display_name": "Organisateur",
         }
     ).execute()
@@ -2091,6 +2118,7 @@ def _insert_locked_trip_with_proposal(
             "user_id": user_id,
             "role": "organizer",
             "status": "joined",
+            "joined_via": "created",
             "display_name": "Organisateur",
         }
     ).execute()
@@ -2592,6 +2620,7 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
                 "email": email,
                 "role": "traveler",
                 "status": "guest",
+                "joined_via": "manual",
             }
         )
         .execute()
@@ -3708,6 +3737,11 @@ async def join_invite(token: str, request: Request):
                 "user_id": user_id,
                 "status": "joined",
                 "role": "traveler" if row["organizer_id"] != user_id else "organizer",
+                "joined_via": (
+                    "created"
+                    if row["organizer_id"] == user_id
+                    else "invite"
+                ),
             }
         ).eq("id", guest["id"]).execute()
         return {"ok": True, "trip_id": trip_id, "claimed_guest": True}
@@ -3728,6 +3762,9 @@ async def join_invite(token: str, request: Request):
             "user_id": user_id,
             "role": "traveler" if row["organizer_id"] != user_id else "organizer",
             "status": "joined",
+            "joined_via": (
+                "created" if row["organizer_id"] == user_id else "invite"
+            ),
         }
     ).execute()
 

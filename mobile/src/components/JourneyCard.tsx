@@ -154,8 +154,15 @@ export function JourneyCard({
             colors={['rgba(20,12,8,0.05)', 'rgba(20,12,8,0.88)']}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.phase, { backgroundColor: meta.tone }]}>
-            <Text style={styles.phaseText}>{meta.label}</Text>
+          <View style={styles.phaseStack}>
+            <View style={[styles.phase, { backgroundColor: meta.tone }]}>
+              <Text style={styles.phaseText}>{meta.label}</Text>
+            </View>
+            {workspace.is_invitee ? (
+              <View style={styles.inviteeTag}>
+                <Text style={styles.inviteeTagText}>Invité</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.soloParty}>
             <Text style={styles.soloPartyText}>{party}</Text>
@@ -220,8 +227,15 @@ export function JourneyCard({
           colors={['rgba(20,12,8,0.08)', 'rgba(20,12,8,0.86)']}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.phase, { backgroundColor: meta.tone }]}>
-          <Text style={styles.phaseText}>{meta.label}</Text>
+        <View style={styles.phaseStack}>
+          <View style={[styles.phase, { backgroundColor: meta.tone }]}>
+            <Text style={styles.phaseText}>{meta.label}</Text>
+          </View>
+          {workspace.is_invitee ? (
+            <View style={styles.inviteeTag}>
+              <Text style={styles.inviteeTagText}>Invité</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.heroCopy}>
           <Text
@@ -306,15 +320,31 @@ const styles = StyleSheet.create({
     height: 280,
     justifyContent: 'flex-end',
   },
-  phase: {
+  phaseStack: {
     position: 'absolute',
     left: 14,
     top: 14,
+    gap: 6,
+    alignItems: 'flex-start',
+    zIndex: 2,
+  },
+  phase: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
   phaseText: { fontFamily: fonts.bold, fontSize: 10, color: colors.white },
+  inviteeTag: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(109, 40, 217, 0.92)',
+  },
+  inviteeTagText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: colors.white,
+  },
   soloParty: {
     position: 'absolute',
     right: 14,

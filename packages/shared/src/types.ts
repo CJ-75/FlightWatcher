@@ -357,6 +357,8 @@ export type PlannedTripStatus =
 export type TripProposalStatus = 'pending' | 'accepted' | 'rejected'
 export type TripMemberRole = 'organizer' | 'traveler'
 export type TripMemberStatus = 'joined' | 'guest'
+/** How the member entered the trip — traced in DB (`trip_members.joined_via`). */
+export type TripMemberJoinedVia = 'created' | 'invite' | 'manual'
 
 export interface PlannedTrip {
   id: string
@@ -413,6 +415,8 @@ export interface TripMember {
   email?: string | null
   role: TripMemberRole
   status: TripMemberStatus
+  /** created | invite | manual — null on legacy rows until backfilled */
+  joined_via?: TripMemberJoinedVia | null
   joined_at: string
 }
 
@@ -457,6 +461,9 @@ export interface TravelWorkspace {
   ret_date?: string | null
   image_url?: string | null
   is_organizer: boolean
+  /** True when current user joined via invite (not the organizer). */
+  is_invitee?: boolean
+  membership_joined_via?: TripMemberJoinedVia | null
   capabilities: {
     can_scan: boolean
     can_choose_flight: boolean

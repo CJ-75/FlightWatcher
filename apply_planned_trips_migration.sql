@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS trip_members (
         CHECK (role IN ('organizer', 'traveler')),
     status TEXT NOT NULL DEFAULT 'joined'
         CHECK (status IN ('joined')),
+    -- created | invite | manual — see apply_trip_members_joined_via_migration.sql
+    joined_via TEXT,
     joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (trip_id, user_id)
 );

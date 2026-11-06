@@ -94,6 +94,8 @@ function tripAsWorkspace(
     out_date: trip.dates_depart?.[0]?.date || null,
     ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
     is_organizer: isOrganizer,
+    is_invitee: !isOrganizer,
+    membership_joined_via: isOrganizer ? 'created' : 'invite',
     capabilities: {
       can_scan: isOrganizer && trip.status !== 'locked',
       can_choose_flight: isOrganizer && trip.status !== 'locked',
