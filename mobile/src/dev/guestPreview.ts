@@ -249,7 +249,9 @@ function toListItem(t: PlannedTripDetail): PlannedTrip {
 }
 
 export function listGuestTrips(): PlannedTrip[] {
-  return trips.map((t) => toListItem(cloneTrip(t)))
+  return trips
+    .filter((t) => t.status !== 'archived')
+    .map((t) => toListItem(cloneTrip(t)))
 }
 
 /** Aperçu invitation pour tester l’onboarding (sans backend). */
@@ -619,10 +621,28 @@ export function removeGuestTripMember(
   return cloneTrip(trips[idx])
 }
 
+export function completeGuestTrip(tripId: string): PlannedTripDetail | null {
+  const idx = trips.findIndex((t) => t.id === tripId)
+  if (idx < 0) return null
+  trips[idx] = {
+    ...trips[idx],
+    status: 'completed',
+    auto_scan_enabled: false,
+    updated_at: new Date().toISOString(),
+  }
+  return cloneTrip(trips[idx])
+}
+
 export function deleteGuestTrip(tripId: string): boolean {
-  const before = trips.length
-  trips = trips.filter((t) => t.id !== tripId)
-  return trips.length < before
+  const idx = trips.findIndex((t) => t.id === tripId)
+  if (idx < 0) return false
+  trips[idx] = {
+    ...trips[idx],
+    status: 'archived',
+    auto_scan_enabled: false,
+    updated_at: new Date().toISOString(),
+  }
+  return true
 }
 
 export function updateGuestTripArrival(

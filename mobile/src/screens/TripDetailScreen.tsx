@@ -56,6 +56,7 @@ import { useAuth } from '../context/AuthContext'
 import {
   acceptGuestProposal,
   addGuestTripMember,
+  completeGuestTrip,
   deleteGuestTrip,
   getGuestTrip,
   rejectGuestProposal,
@@ -658,6 +659,22 @@ export function TripDetailScreen() {
     }
   }
 
+  const doComplete = async () => {
+    setDeleting(true)
+    try {
+      if (__DEV__ && isGuest) {
+        if (!completeGuestTrip(tripId)) throw new Error('Voyage introuvable')
+      } else {
+        await getApi().completePlannedTrip(tripId)
+      }
+      navigation.goBack()
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Archivage échoué')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const doDelete = async () => {
     setDeleting(true)
     try {
@@ -737,12 +754,6 @@ export function TripDetailScreen() {
       status !== 'partner_confirmed'
     const canSkipHotel =
       !externalHotel && !hotelBooked && !flightDraft?.hotel_booked_at
-    // Réservations FlightWatcher (pas « ailleurs ») → archiver plutôt que supprimer.
-    const hasInternalReservations = Boolean(
-      (flightBooked && !externalFlight) ||
-        (hotelBooked && !externalHotel) ||
-        workspace?.hotel_booking_id,
-    )
     return {
       payload,
       flight,
@@ -753,22 +764,33 @@ export function TripDetailScreen() {
       hasHotel,
       canSkipFlight,
       canSkipHotel,
-      hasInternalReservations,
     }
   }, [flightDraft, workspace])
 
-  const confirmDelete = () => {
+  const confirmComplete = () => {
     if (!trip) return
-    const archive = reservationFlags.hasInternalReservations
     Alert.alert(
-      archive ? 'Archiver le voyage' : 'Supprimer le voyage',
-      archive
-        ? `Archiver « ${trip.name} » ?\n\nLe Planner disparaît, tes réservations (vol / hôtel) sont conservées.`
-        : `Supprimer « ${trip.name} » ?\n\nCette action est définitive.`,
+      'Archiver le voyage',
+      `Archiver « ${trip.name} » ?\n\nLe voyage passe en Terminé.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: archive ? 'Archiver' : 'Supprimer',
+          text: 'Archiver',
+          onPress: () => void doComplete(),
+        },
+      ],
+    )
+  }
+
+  const confirmDelete = () => {
+    if (!trip) return
+    Alert.alert(
+      'Supprimer le voyage',
+      `Supprimer « ${trip.name} » ?\n\nLe voyage disparaît de ta liste (tes réservations restent).`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
           style: 'destructive',
           onPress: () => void doDelete(),
         },
@@ -2086,21 +2108,32 @@ export function TripDetailScreen() {
       ) : null}
 
       {isOrganizer ? (
-        <Pressable
-          onPress={confirmDelete}
-          disabled={deleting}
-          style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
-        >
-          {deleting ? (
-            <ActivityIndicator color={colors.danger} />
-          ) : (
-            <Text style={styles.deleteText}>
-              {reservationFlags.hasInternalReservations
-                ? 'Archiver le voyage'
-                : 'Supprimer le voyage'}
-            </Text>
-          )}
-        </Pressable>
+        <View style={styles.tripDangerZone}>
+          {trip.status !== 'completed' ? (
+            <Pressable
+              onPress={confirmComplete}
+              disabled={deleting}
+              style={[styles.archiveBtn, deleting && { opacity: 0.5 }]}
+            >
+              {deleting ? (
+                <ActivityIndicator color={colors.inkSoft} />
+              ) : (
+                <Text style={styles.archiveText}>Archiver le voyage</Text>
+              )}
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={confirmDelete}
+            disabled={deleting}
+            style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
+          >
+            {deleting ? (
+              <ActivityIndicator color={colors.danger} />
+            ) : (
+              <Text style={styles.deleteText}>Supprimer le voyage</Text>
+            )}
+          </Pressable>
+        </View>
       ) : null}
     </ScrollView>
 
@@ -3179,9 +3212,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   routeWarnBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
-  deleteBtn: {
+  tripDangerZone: {
     marginTop: 48,
     marginBottom: 16,
+    gap: 10,
+  },
+  archiveBtn: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border || '#E5E7EB',
+    backgroundColor: colors.surface || '#F8FAFC',
+  },
+  archiveText: { fontFamily: fonts.bold, fontSize: 15, color: colors.inkSoft },
+  deleteBtn: {
     paddingVertical: 16,
     alignItems: 'center',
     borderRadius: 14,

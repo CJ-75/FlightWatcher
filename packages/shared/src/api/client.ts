@@ -896,10 +896,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
+    completePlannedTrip: (id: string) =>
+      request<PlannedTrip>(
+        `/api/planner/trips/${encodeURIComponent(id)}/complete`,
+        { method: 'POST' },
+      ),
     deletePlannedTrip: (id: string) =>
-      request<void>(`/api/planner/trips/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      }),
+      request<{ ok: boolean; archived?: boolean; reservations_preserved?: boolean }>(
+        `/api/planner/trips/${encodeURIComponent(id)}`,
+        {
+          method: 'DELETE',
+        },
+      ),
     addTripMember: (tripId: string, body: AddTripMemberRequest) =>
       request<TripMember>(
         `/api/planner/trips/${encodeURIComponent(tripId)}/members`,

@@ -21,12 +21,17 @@ import {
   ACTIVITY_VALIDATE_LABEL_FR,
   activityDestinationLabelFr,
   canonicalViatorProductUrl,
+  formatActivityPrice,
   isTripItemsAuthError,
   pickTripItemOwner,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
   type ActivityCardModel,
 } from '@flightwatcher/shared'
+import {
+  StayBookingCard,
+  stayBookingLinkBtn,
+} from './StayBookingCard'
 import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -67,6 +72,32 @@ function titleOf(it: ItemRow) {
   return String(placeOf(it)?.name || it.meta?.title || 'Activité')
 }
 
+function rawPriceOf(it: ItemRow): number | null {
+  const meta = (it.meta || {}) as Record<string, unknown>
+  const placeMeta = (placeOf(it)?.meta || {}) as Record<string, unknown>
+  const raw =
+    meta.price_from ?? meta.price ?? placeMeta.price_from ?? placeMeta.price
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+function priceOf(it: ItemRow): string | null {
+  const meta = (it.meta || {}) as Record<string, unknown>
+  const placeMeta = (placeOf(it)?.meta || {}) as Record<string, unknown>
+  const labeled = String(meta.price_label || placeMeta.price_label || '').trim()
+  if (labeled) return labeled
+  const currency = String(meta.currency || placeMeta.currency || 'EUR')
+  return formatActivityPrice(rawPriceOf(it), currency, 1)
+}
+
+function priceFromCatalogRow(row: Record<string, unknown>): number | null {
+  const pf = row.price_from ?? row.priceFrom ?? row.price
+  if (pf == null || pf === '') return null
+  const n = Number(pf)
+  return Number.isFinite(n) ? n : null
+}
+
 function cardFromItem(it: ItemRow): ActivityCardModel | null {
   const productCode = String(it.meta?.product_code || '').trim()
   if (!productCode || productCode.startsWith('skip-')) return null
@@ -81,7 +112,7 @@ function cardFromItem(it: ItemRow): ActivityCardModel | null {
     rating: null,
     reviewCount: null,
     durationLabel: null,
-    priceLabel: null,
+    priceLabel: priceOf(it),
     productUrl,
     freeCancellation: false,
     instantConfirmation: false,
@@ -108,14 +139,29 @@ function photoFromCatalogRow(row: Record<string, unknown>): string {
 function applyPhotoMap(
   rows: ItemRow[],
   byCode: Map<string, string>,
+  priceByCode?: Map<string, number>,
 ): ItemRow[] {
-  if (!byCode.size) return rows
+  if (!byCode.size && !priceByCode?.size) return rows
   return rows.map((it) => {
-    if (photoOf(it)) return it
     const code = String(it.meta?.product_code || '').trim()
-    const url = code ? byCode.get(code) : undefined
-    if (!url) return it
-    return { ...it, meta: { ...(it.meta || {}), photo_url: url } }
+    const meta = (it.meta || {}) as Record<string, unknown>
+    const url = !photoOf(it) && code ? byCode.get(code) : undefined
+    const hasPrice =
+      rawPriceOf(it) != null ||
+      Boolean(String(meta.price_label || '').trim())
+    const price =
+      !hasPrice && code && priceByCode?.has(code)
+        ? priceByCode.get(code)
+        : undefined
+    if (!url && price == null) return it
+    return {
+      ...it,
+      meta: {
+        ...meta,
+        ...(url ? { photo_url: url } : {}),
+        ...(price != null ? { price_from: price } : {}),
+      },
+    }
   })
 }
 
@@ -123,9 +169,14 @@ async function enrichActivityPhotos(
   rows: ItemRow[],
   citySlug: string,
 ): Promise<ItemRow[]> {
-  const missing = rows.filter((it) => !photoOf(it) && it.meta?.product_code)
-  if (!missing.length) return rows
+  const needsEnrich = rows.some(
+    (it) =>
+      Boolean(it.meta?.product_code) &&
+      (!photoOf(it) || rawPriceOf(it) == null),
+  )
+  if (!needsEnrich) return rows
   const byCode = new Map<string, string>()
+  const priceByCode = new Map<string, number>()
   try {
     const res = await getApi().listCityActivities(citySlug, 2)
     for (const raw of res.items || []) {
@@ -133,13 +184,19 @@ async function enrichActivityPhotos(
       const code = String(row.product_code || row.productCode || '').trim()
       const url = photoFromCatalogRow(row)
       if (code && url) byCode.set(code, url)
+      const pf = priceFromCatalogRow(row)
+      if (code && pf != null) priceByCode.set(code, pf)
     }
   } catch {
     /* product detail fallback below */
   }
-  let next = applyPhotoMap(rows, byCode)
+  let next = applyPhotoMap(rows, byCode, priceByCode)
   const stillMissing = next
-    .filter((it) => !photoOf(it))
+    .filter(
+      (it) =>
+        Boolean(it.meta?.product_code) &&
+        (!photoOf(it) || rawPriceOf(it) == null),
+    )
     .map((it) => String(it.meta?.product_code || '').trim())
     .filter(Boolean)
     .slice(0, 8)
@@ -150,9 +207,11 @@ async function enrichActivityPhotos(
       const product = (res.product || {}) as Record<string, unknown>
       const url = photoFromCatalogRow(product)
       if (url) byCode.set(code, url)
+      const pf = priceFromCatalogRow(product)
+      if (pf != null) priceByCode.set(code, pf)
     }),
   )
-  return applyPhotoMap(next, byCode)
+  return applyPhotoMap(next, byCode, priceByCode)
 }
 
 export function ActivityStepPanel(props: {
@@ -162,6 +221,7 @@ export function ActivityStepPanel(props: {
   enabled?: boolean
   surface?: string
   onItemsChange?: (items: { status?: string | null }[]) => void
+  layout?: 'default' | 'booking_cards'
 }) {
   const {
     draftToken,
@@ -169,6 +229,7 @@ export function ActivityStepPanel(props: {
     enabled = true,
     surface = 'my_trip',
     onItemsChange,
+    layout = 'default',
   } = props
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { signInWithGoogle, user, session, viewUser } = useAuth()
@@ -406,7 +467,8 @@ export function ActivityStepPanel(props: {
   const cityLabel = activityDestinationLabelFr(city)
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, layout === 'booking_cards' && styles.wrapTight]}>
+      {layout !== 'booking_cards' ? (
       <Pressable
         onPress={openActivitiesCatalog}
         style={({ pressed }) => [
@@ -439,6 +501,7 @@ export function ActivityStepPanel(props: {
           <Text style={styles.catalogChevronText}>›</Text>
         </View>
       </Pressable>
+      ) : null}
 
       {loading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 4 }} />
@@ -447,8 +510,67 @@ export function ActivityStepPanel(props: {
         <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text>
       ) : null}
 
-      {items.map((it) =>
-        it.status === 'skipped' ? null : (
+      {items.map((it) => {
+        if (it.status === 'skipped') return null
+        const price = priceOf(it)
+        const booked =
+          it.status === 'booked' || it.status === 'validated'
+        if (layout === 'booking_cards') {
+          return (
+            <StayBookingCard
+              key={it.id}
+              photo={photoOf(it) || null}
+              kicker="Activité"
+              title={titleOf(it)}
+              subtitle={tripItemStatusLabelFr(it.status)}
+              priceLabel={price}
+              style={{ marginBottom: 0 }}
+              badge={
+                booked
+                  ? {
+                      label: tripItemStatusLabelFr(it.status),
+                      tone: colors.success,
+                      soft: colors.successSoft,
+                    }
+                  : {
+                      label: 'À réserver',
+                      tone: colors.primaryDeep,
+                      soft: colors.primarySoft,
+                    }
+              }
+              onPress={() => openDetail(it)}
+              footer={
+                <>
+                  {!it.inherited &&
+                  it.status !== 'validated' &&
+                  it.status !== 'booked' ? (
+                    <Pressable
+                      style={stayBookingLinkBtn.btn}
+                      onPress={() => void patch(it.id, { status: 'validated' })}
+                    >
+                      <Text style={stayBookingLinkBtn.text}>
+                        {ACTIVITY_VALIDATE_LABEL_FR}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {(it.meta?.product_url || it.meta?.product_code) &&
+                  it.status !== 'validated' &&
+                  it.status !== 'booked' ? (
+                    <Pressable
+                      style={stayBookingLinkBtn.btn}
+                      onPress={() => bookItem(it)}
+                    >
+                      <Text style={stayBookingLinkBtn.text}>
+                        {ACTIVITY_BOOK_VIATOR_FR}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </>
+              }
+            />
+          )
+        }
+        return (
         <View key={it.id} style={[styles.card, shadow.soft]}>
           <Pressable
             onPress={() => openDetail(it)}
@@ -470,6 +592,9 @@ export function ActivityStepPanel(props: {
                 <Text style={[styles.title, { flex: 1 }]} numberOfLines={2}>
                   {titleOf(it)}
                 </Text>
+                {price ? (
+                  <Text style={styles.price}>{price}</Text>
+                ) : null}
               </View>
               <Text style={styles.status}>{tripItemStatusLabelFr(it.status)}</Text>
             </View>
@@ -496,8 +621,8 @@ export function ActivityStepPanel(props: {
             ) : null}
           </View>
         </View>
-        ),
-      )}
+        )
+      })}
 
       <ActivityDetailSheet
         visible={Boolean(detailCard)}
@@ -570,6 +695,7 @@ export function ActivityStepPanel(props: {
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
+  wrapTight: { gap: 8 },
   catalogBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -725,6 +851,12 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: fonts.bold, color: colors.ink, fontSize: 14 },
   itemTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  price: {
+    fontFamily: fonts.extrabold,
+    color: colors.ink,
+    fontSize: 14,
+    flexShrink: 0,
+  },
   status: { fontFamily: fonts.medium, color: colors.muted, fontSize: 12 },
   muted: { fontFamily: fonts.regular, color: colors.muted, fontSize: 12 },
   err: { color: colors.danger, fontFamily: fonts.medium, fontSize: 12 },

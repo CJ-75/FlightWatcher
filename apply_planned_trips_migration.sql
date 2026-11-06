@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS planned_trips (
     budget_max INTEGER NOT NULL DEFAULT 200,
     invite_token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
     status TEXT NOT NULL DEFAULT 'draft'
-        CHECK (status IN ('draft', 'scanning', 'planning', 'locked')),
+        CHECK (status IN (
+            'draft', 'scanning', 'planning', 'locked', 'completed', 'archived'
+        )),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

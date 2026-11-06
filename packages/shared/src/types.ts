@@ -347,7 +347,13 @@ export interface MyTripDraft {
   reused?: boolean
 }
 
-export type PlannedTripStatus = 'draft' | 'scanning' | 'planning' | 'locked'
+export type PlannedTripStatus =
+  | 'draft'
+  | 'scanning'
+  | 'planning'
+  | 'locked'
+  | 'completed'
+  | 'archived'
 export type TripProposalStatus = 'pending' | 'accepted' | 'rejected'
 export type TripMemberRole = 'organizer' | 'traveler'
 export type TripMemberStatus = 'joined' | 'guest'

@@ -349,6 +349,69 @@ export function TicketIcon({ size = 18, color = colors.primaryDeep }: IconProps)
   )
 }
 
+/**
+ * External link (box + arrow). View-based — do not import react-native-svg
+ * here: UiIcons is loaded broadly and a second SVG native registry crashes Metro.
+ */
+export function ExternalLinkIcon({
+  size = 18,
+  color = colors.primaryDeep,
+}: IconProps) {
+  const s = size
+  const t = Math.max(1.5, Math.round(s * 0.12))
+  const box = s * 0.52
+  return (
+    <View style={{ width: s, height: s }}>
+      <View
+        style={{
+          position: 'absolute',
+          left: 0,
+          bottom: 0,
+          width: box,
+          height: box,
+          borderWidth: t,
+          borderColor: color,
+          borderRadius: Math.max(1, s * 0.08),
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: s * 0.04,
+          right: s * 0.04,
+          width: s * 0.4,
+          height: t,
+          backgroundColor: color,
+          borderRadius: t,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: s * 0.04,
+          right: s * 0.04,
+          width: t,
+          height: s * 0.4,
+          backgroundColor: color,
+          borderRadius: t,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: s * 0.18,
+          right: s * 0.14,
+          width: s * 0.46,
+          height: t,
+          backgroundColor: color,
+          borderRadius: t,
+          transform: [{ rotate: '-45deg' }],
+        }}
+      />
+    </View>
+  )
+}
+
 /** Check mark in circle. */
 export function CheckIcon({ size = 18, color = colors.success }: IconProps) {
   const s = size

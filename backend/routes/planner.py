@@ -845,11 +845,15 @@ def _workspace_phase(
     accepted: Optional[dict],
     draft: Optional[dict],
     booking: Optional[dict],
+    trip_status: Optional[str] = None,
 ) -> str:
     """
-    Past only after the stay is really done (hôtel réservé) and return date passed.
+    Past after organizer archives (status=completed), or when the stay is done
+    (hôtel réservé) and return date passed.
     Incomplete trips with past dates stay actionable (scan / hôtel / activités).
     """
+    if str(trip_status or "") == "completed":
+        return "past"
     progress = _workspace_progress_phase(
         accepted=accepted, draft=draft, booking=booking
     )
@@ -1551,6 +1555,7 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
             accepted=accepted,
             draft=draft,
             booking=booking,
+            trip_status=trip.get("status"),
         )
         is_organizer = trip.get("organizer_id") == user_id
         workspaces.append(
@@ -2190,7 +2195,7 @@ async def get_trip(trip_id: str, request: Request):
     user_id = _require_user(request)
     supabase = _svc()
     row = _user_can_access(supabase, trip_id, user_id)
-    if not row:
+    if not row or row.get("status") == "archived":
         raise HTTPException(status_code=404, detail="Voyage introuvable")
 
     proposals = (
@@ -2319,55 +2324,62 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
     return _row_to_trip(result.data[0])
 
 
-@router.delete("/api/planner/trips/{trip_id}")
+@router.post("/api/planner/trips/{trip_id}/complete")
 @optional_auth
-async def delete_trip(trip_id: str, request: Request):
-    """Delete the collaborative Planner only.
-
-    Personal execution drafts and hotel bookings stay. Provenance FKs are
-    nulled first so a missing/wrong ON DELETE rule cannot cascade into
-    reservations.
-    """
+async def complete_trip(trip_id: str, request: Request):
+    """Archiver le voyage → statut Terminé (completed). Phase hub = past."""
     user_id = _require_user(request)
     supabase = _svc()
     _require_organizer(supabase, trip_id, user_id)
-
-    # Detach reservations before removing the planner graph (proposals CASCADE).
-    # Never delete my_trip_drafts / hotel_bookings here.
+    now = datetime.utcnow().isoformat()
     try:
-        now = datetime.utcnow().isoformat()
-        detach = {
-            "source_planned_trip_id": None,
-            "source_proposal_id": None,
-            "updated_at": now,
-        }
-        supabase.table("my_trip_drafts").update(detach).eq(
-            "source_planned_trip_id", trip_id
-        ).execute()
-        proposal_rows = (
-            supabase.table("trip_proposals")
-            .select("id")
-            .eq("trip_id", trip_id)
+        result = (
+            supabase.table("planned_trips")
+            .update(
+                {
+                    "status": "completed",
+                    "auto_scan_enabled": False,
+                    "updated_at": now,
+                }
+            )
+            .eq("id", trip_id)
             .execute()
         )
-        proposal_ids = [
-            str(row["id"])
-            for row in (proposal_rows.data or [])
-            if row.get("id")
-        ]
-        if proposal_ids:
-            supabase.table("my_trip_drafts").update(detach).in_(
-                "source_proposal_id", proposal_ids
-            ).execute()
     except Exception as e:
-        print(f"⚠️ detach drafts before planner delete: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Impossible de détacher les réservations — suppression annulée",
-        )
+        print(f"❌ complete planned_trip failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+    return _row_to_trip(result.data[0])
 
-    supabase.table("planned_trips").delete().eq("id", trip_id).execute()
-    return {"ok": True, "reservations_preserved": True}
+
+@router.delete("/api/planner/trips/{trip_id}")
+@optional_auth
+async def delete_trip(trip_id: str, request: Request):
+    """Soft-delete: status=archived. Row + réservations restent dans Supabase."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    _require_organizer(supabase, trip_id, user_id)
+    now = datetime.utcnow().isoformat()
+    try:
+        result = (
+            supabase.table("planned_trips")
+            .update(
+                {
+                    "status": "archived",
+                    "auto_scan_enabled": False,
+                    "updated_at": now,
+                }
+            )
+            .eq("id", trip_id)
+            .execute()
+        )
+    except Exception as e:
+        print(f"❌ archive planned_trip failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+    return {"ok": True, "archived": True, "reservations_preserved": True}
 
 
 @router.post("/api/planner/trips/{trip_id}/members")

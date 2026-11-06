@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Share,
   Modal,
   Alert,
 } from 'react-native'
@@ -17,6 +16,7 @@ import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_TRANSFER_CTA_FR,
   resolveActivityCitySlug,
+  resolveTripImageUrl,
   boardLabelFr,
   distantAirportLine,
   hotelCancelConfirmBodyFr,
@@ -41,7 +41,7 @@ import {
   StayBookingCard,
   stayBookingLinkBtn,
 } from '../components/StayBookingCard'
-import { getApi, getWebOrigin } from '../lib/client'
+import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import { toUpsellHotel } from '../lib/hotelUpsell'
@@ -51,9 +51,8 @@ import {
   BedIcon,
   CalendarIcon,
   CardIcon,
-  IconLabel,
+  ExternalLinkIcon,
   PlaneIcon,
-  ShareIcon,
   TicketIcon,
   UsersIcon,
 } from '../components/UiIcons'
@@ -592,12 +591,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       })
     } else if (sticky.action === 'flight') {
       openFlight()
-    } else if (sticky.action === 'planner' && draft?.source_planned_trip_id) {
+    } else if (draft?.source_planned_trip_id) {
       navigation.navigate('TripDetail', {
         tripId: draft.source_planned_trip_id,
       })
-    } else {
-      navigation.navigate('Bookings')
     }
   }
 
@@ -606,19 +603,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     navigation.navigate('TripDetail', {
       tripId: draft.source_planned_trip_id,
     })
-  }
-
-  const share = async () => {
-    const url = `${getWebOrigin()}/trip/${draftToken}`
-    try {
-      await Share.share({
-        message: `Mon week-end à ${city} sur FlightWatcher : ${url}`,
-        url,
-      })
-      void getApi().trackMyTripEvent(draftToken, 'share')
-    } catch {
-      /* cancelled */
-    }
   }
 
   const hotelPaidTotal =
@@ -813,11 +797,9 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     )
   }
 
-  const flightCtaLabel = flightBooked
-    ? 'Revoir mon billet'
-    : carrier.siteLabel
-      ? `Réserver sur ${carrier.siteLabel}`
-      : 'Réserver mon vol'
+  const flightCtaLabel = carrier.siteLabel
+    ? `Réserver sur ${carrier.siteLabel}`
+    : 'Réserver mon vol'
 
   return (
     <View style={styles.root}>
@@ -854,14 +836,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
               <Text style={styles.sub}>{adults} pers.</Text>
             </View>
           </View>
-          <Pressable
-            onPress={() => void share()}
-            style={({ pressed }) => [styles.shareBtn, pressed && styles.sharePressed]}
-            hitSlop={8}
-          >
-            <ShareIcon size={14} />
-            <Text style={styles.share}>Partager</Text>
-          </Pressable>
         </View>
 
         {out && out < new Date().toISOString().slice(0, 10) ? (
@@ -885,6 +859,14 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         ) : null}
 
         <StayBookingCard
+          photo={resolveTripImageUrl({
+            city,
+            iata: destIata || null,
+            imageUrl:
+              (pl.image_url as string | undefined) ||
+              (fl.image_url as string | undefined) ||
+              null,
+          })}
           kicker={`Vol · ${originIata || '—'} → ${destIata || '—'}`}
           title={`${airlineName || 'Compagnie'}${stopsLabel ? ` · ${stopsLabel}` : ''}`}
           subtitle={`${formatDate(out)} → ${formatDate(inn)}${
@@ -920,8 +902,33 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           emptyIcon={<PlaneIcon size={22} color={colors.faint} />}
           footer={
             flightUrl ? (
-              <Pressable style={stayBookingLinkBtn.btn} onPress={openFlight}>
-                <Text style={stayBookingLinkBtn.text}>{flightCtaLabel}</Text>
+              <Pressable
+                style={[
+                  flightBooked
+                    ? stayBookingLinkBtn.invoice
+                    : stayBookingLinkBtn.btn,
+                  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+                ]}
+                onPress={openFlight}
+                accessibilityRole="link"
+                accessibilityLabel={
+                  flightBooked
+                    ? 'Réservé — ouvrir le site de la compagnie'
+                    : flightCtaLabel
+                }
+              >
+                <Text
+                  style={
+                    flightBooked
+                      ? stayBookingLinkBtn.invoiceText
+                      : stayBookingLinkBtn.text
+                  }
+                >
+                  {flightBooked ? 'Réservé' : flightCtaLabel}
+                </Text>
+                {flightBooked ? (
+                  <ExternalLinkIcon size={14} color="#065F46" />
+                ) : null}
               </Pressable>
             ) : null
           }
@@ -1058,27 +1065,18 @@ export function TripSummaryScreen({ route, navigation }: Props) {
         ) : null}
 
         {plannerActivitiesEnabled ? (
-          <View style={[styles.card, shadow.soft]}>
-            <IconLabel section label="Activités" icon={<TicketIcon size={14} />} />
+          <View style={{ marginBottom: 8 }}>
+            <Text style={styles.activitiesHeading}>Activités</Text>
             <ActivityStepPanel
               draftToken={draftToken}
               plannedTripId={draft?.source_planned_trip_id || null}
               citySlug={activityCitySlug}
               enabled={plannerActivitiesEnabled}
               surface="my_trip"
+              layout="booking_cards"
             />
           </View>
         ) : null}
-
-        <Pressable
-          onPress={() => navigation.navigate('Bookings')}
-          style={({ pressed }) => [
-            styles.bookingsLink,
-            pressed && { opacity: 0.85 },
-          ]}
-        >
-          <Text style={styles.bookingsLinkText}>Mes réservations →</Text>
-        </Pressable>
       </ScrollView>
 
       <View style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -1093,14 +1091,14 @@ export function TripSummaryScreen({ route, navigation }: Props) {
             <TicketIcon size={16} color={colors.white} />
           )}
           <Text style={styles.btnText}>
-            {sticky.action === 'planner'
+            {sticky.action === 'planner' || sticky.action === 'bookings'
               ? ACTIVITY_BACK_TO_PLANNER_FR
-              : sticky.action === 'bookings'
-                ? 'Mes réservations'
-                : sticky.label}
+              : sticky.label}
           </Text>
         </Pressable>
-        {draft?.source_planned_trip_id && sticky.action !== 'planner' ? (
+        {draft?.source_planned_trip_id &&
+        sticky.action !== 'planner' &&
+        sticky.action !== 'bookings' ? (
           <Pressable style={styles.stickySecondary} onPress={goPlanner}>
             <Text style={styles.stickySecondaryText}>
               {ACTIVITY_BACK_TO_PLANNER_FR}
@@ -1200,31 +1198,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primaryDeep,
   },
-  bookingsLink: {
-    alignSelf: 'center',
-    paddingVertical: 12,
-    marginTop: 4,
-    marginBottom: 8,
+  activitiesHeading: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    letterSpacing: -0.3,
+    color: colors.ink,
+    marginBottom: 6,
   },
-  bookingsLinkText: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.primaryDeep,
-  },
-  shareBtn: {
-    marginTop: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: colors.primarySoft,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primaryMuted,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  sharePressed: { backgroundColor: colors.primaryMuted },
-  share: { fontFamily: fonts.semibold, fontSize: 13, color: colors.primaryDeep },
   card: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,

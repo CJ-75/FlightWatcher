@@ -87,7 +87,7 @@ export function StayBookingCard({
 
         {confirmationCode ? (
           <View style={styles.codeRow}>
-            <Text style={styles.codeLabel}>Réf.</Text>
+            <Text style={styles.codeLabel}>Référence :</Text>
             <Text style={styles.codeValue} numberOfLines={1}>
               {confirmationCode}
             </Text>

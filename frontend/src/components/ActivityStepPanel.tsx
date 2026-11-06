@@ -4,7 +4,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ACTIVITY_ADD_LABEL_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
@@ -15,6 +14,7 @@ import {
   activitiesCityPath,
   canonicalViatorProductUrl,
   detectEventPlatform,
+  formatActivityPrice,
   isTripItemsAuthError,
   pickTripItemOwner,
   reorderKeysMoving,
@@ -24,6 +24,7 @@ import {
   type AvailabilityState,
   type TripItemStatus,
 } from '@flightwatcher/shared'
+import { StayCardShell } from './StayCardShell'
 import {
   getCurrentSession,
   getCurrentUser,
@@ -74,6 +75,52 @@ function titleOf(it: ItemRow) {
   return String(placeOf(it)?.name || it.meta?.title || 'Activité')
 }
 
+function rawPriceOf(it: ItemRow): number | null {
+  const meta = (it.meta || {}) as Record<string, unknown>
+  const placeMeta = (placeOf(it)?.meta || {}) as Record<string, unknown>
+  const raw =
+    meta.price_from ?? meta.price ?? placeMeta.price_from ?? placeMeta.price
+  if (raw == null || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+function priceOf(it: ItemRow): string | null {
+  const meta = (it.meta || {}) as Record<string, unknown>
+  const placeMeta = (placeOf(it)?.meta || {}) as Record<string, unknown>
+  const labeled = String(meta.price_label || placeMeta.price_label || '').trim()
+  if (labeled) return labeled
+  const currency = String(meta.currency || placeMeta.currency || 'EUR')
+  return formatActivityPrice(rawPriceOf(it), currency, 1)
+}
+
+function priceFromCatalogRow(row: Record<string, unknown>): number | null {
+  const pf = row.price_from ?? row.priceFrom ?? row.price
+  if (pf == null || pf === '') return null
+  const n = Number(pf)
+  return Number.isFinite(n) ? n : null
+}
+
+function statusChip(it: ItemRow): { label: string; chipClass: string } {
+  const label = tripItemStatusLabelFr(it.status)
+  if (it.status === 'booked' || it.status === 'validated') {
+    return {
+      label,
+      chipClass: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200',
+    }
+  }
+  if (it.status === 'skipped') {
+    return {
+      label,
+      chipClass: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
+    }
+  }
+  return {
+    label: label || 'À réserver',
+    chipClass: 'bg-amber-50 text-amber-900 ring-1 ring-amber-200',
+  }
+}
+
 function cardFromItem(it: ItemRow): ActivityCardModel | null {
   const productCode = String(it.meta?.product_code || '').trim()
   if (!productCode || productCode.startsWith('skip-')) return null
@@ -88,7 +135,7 @@ function cardFromItem(it: ItemRow): ActivityCardModel | null {
     rating: null,
     reviewCount: null,
     durationLabel: null,
-    priceLabel: null,
+    priceLabel: priceOf(it),
     productUrl,
     freeCancellation: false,
     instantConfirmation: false,
@@ -115,14 +162,29 @@ function photoFromCatalogRow(row: Record<string, unknown>): string {
 function applyPhotoMap(
   rows: ItemRow[],
   byCode: Map<string, string>,
+  priceByCode?: Map<string, number>,
 ): ItemRow[] {
-  if (!byCode.size) return rows
+  if (!byCode.size && !priceByCode?.size) return rows
   return rows.map((it) => {
-    if (photoOf(it)) return it
     const code = String(it.meta?.product_code || '').trim()
-    const url = code ? byCode.get(code) : undefined
-    if (!url) return it
-    return { ...it, meta: { ...(it.meta || {}), photo_url: url } }
+    const meta = (it.meta || {}) as Record<string, unknown>
+    const url = !photoOf(it) && code ? byCode.get(code) : undefined
+    const hasPrice =
+      rawPriceOf(it) != null ||
+      Boolean(String(meta.price_label || '').trim())
+    const price =
+      !hasPrice && code && priceByCode?.has(code)
+        ? priceByCode.get(code)
+        : undefined
+    if (!url && price == null) return it
+    return {
+      ...it,
+      meta: {
+        ...meta,
+        ...(url ? { photo_url: url } : {}),
+        ...(price != null ? { price_from: price } : {}),
+      },
+    }
   })
 }
 
@@ -136,9 +198,14 @@ async function enrichActivityPhotos(
     ) => Promise<{ product?: Record<string, unknown> }>
   },
 ): Promise<ItemRow[]> {
-  const missing = rows.filter((it) => !photoOf(it) && it.meta?.product_code)
-  if (!missing.length) return rows
+  const needsEnrich = rows.some(
+    (it) =>
+      Boolean(it.meta?.product_code) &&
+      (!photoOf(it) || rawPriceOf(it) == null),
+  )
+  if (!needsEnrich) return rows
   const byCode = new Map<string, string>()
+  const priceByCode = new Map<string, number>()
   const slug = String(citySlug || '').trim() || 'paris'
   try {
     const res = await api.listCity(slug, 2)
@@ -147,13 +214,19 @@ async function enrichActivityPhotos(
       const code = String(row.product_code || row.productCode || '').trim()
       const url = photoFromCatalogRow(row)
       if (code && url) byCode.set(code, url)
+      const pf = priceFromCatalogRow(row)
+      if (code && pf != null) priceByCode.set(code, pf)
     }
   } catch {
     /* product detail fallback below */
   }
-  let next = applyPhotoMap(rows, byCode)
+  let next = applyPhotoMap(rows, byCode, priceByCode)
   const stillMissing = next
-    .filter((it) => !photoOf(it))
+    .filter(
+      (it) =>
+        Boolean(it.meta?.product_code) &&
+        (!photoOf(it) || rawPriceOf(it) == null),
+    )
     .map((it) => String(it.meta?.product_code || '').trim())
     .filter(Boolean)
     .slice(0, 8)
@@ -164,10 +237,12 @@ async function enrichActivityPhotos(
       const product = res.product || {}
       const url = photoFromCatalogRow(product)
       if (url) byCode.set(code, url)
+      const pf = priceFromCatalogRow(product)
+      if (pf != null) priceByCode.set(code, pf)
     }),
   )
   void settled
-  return applyPhotoMap(next, byCode)
+  return applyPhotoMap(next, byCode, priceByCode)
 }
 
 export function ActivityStepPanel(props: {
@@ -178,6 +253,8 @@ export function ActivityStepPanel(props: {
   surface?: string
   /** Sync parcours pipeline when ideas are added / removed. */
   onItemsChange?: (items: { status?: string | null }[]) => void
+  /** Mon voyage: cartes type réservations (photo + prix). */
+  layout?: 'default' | 'booking_cards'
 }) {
   const {
     draftToken,
@@ -185,6 +262,7 @@ export function ActivityStepPanel(props: {
     enabled = true,
     surface = 'my_trip',
     onItemsChange,
+    layout = 'default',
   } = props
   const owner = useMemo(
     () =>
@@ -519,6 +597,7 @@ export function ActivityStepPanel(props: {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
+      {layout !== 'booking_cards' ? (
       <div className="flex flex-wrap gap-1.5 shrink-0">
         <Link
           to={catalogHref}
@@ -537,25 +616,107 @@ export function ActivityStepPanel(props: {
         </Link>
         <button
           type="button"
-          onClick={() => void openSuggestions()}
-          className="rounded-lg border border-slate-200 text-xs font-semibold px-3 py-2 min-h-[36px]"
-        >
-          {ACTIVITY_ADD_LABEL_FR}
-        </button>
-        <button
-          type="button"
           onClick={() => void skipAll()}
           className="rounded-lg border border-slate-200 text-xs font-semibold px-3 py-2 min-h-[36px] text-slate-600"
         >
           {ACTIVITY_SKIP_LABEL_FR}
         </button>
       </div>
+      ) : null}
 
       {loading ? <p className="text-sm text-slate-500">Chargement…</p> : null}
       {error ? (
         <p className="text-sm text-red-600">{tripItemsErrorLabelFr(error)}</p>
       ) : null}
 
+      {layout === 'booking_cards' ? (
+        <ul className="space-y-2">
+          {items
+            .filter((it) => it.status !== 'skipped')
+            .map((it) => {
+              const chip = statusChip(it)
+              const price = priceOf(it)
+              return (
+                <StayCardShell
+                  key={it.id}
+                  as="li"
+                  photo={photoOf(it) || null}
+                  chipClass={chip.chipClass}
+                  chipLabel={chip.label}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                        Activité
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openDetail(it)}
+                        className="text-left w-full"
+                      >
+                        <h3 className="text-lg font-extrabold text-ink tracking-tight mt-0.5">
+                          {titleOf(it)}
+                        </h3>
+                      </button>
+                      {it.availability_state ? (
+                        <p className="text-xs text-muted mt-1">
+                          {AVAILABILITY_STATE_LABEL_FR[
+                            it.availability_state as AvailabilityState
+                          ] || it.availability_state}
+                        </p>
+                      ) : null}
+                    </div>
+                    {price ? (
+                      <div className="text-right shrink-0">
+                        <p className="text-2xl font-extrabold text-ink tracking-tight tabular-nums leading-none">
+                          {price}
+                        </p>
+                        <p className="text-[11px] text-muted font-medium mt-1">
+                          Activité
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                    {!it.inherited &&
+                    it.status !== 'validated' &&
+                    it.status !== 'booked' ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 min-h-[40px]"
+                        onClick={() =>
+                          void patch(it.id, {
+                            status: 'validated' as TripItemStatus,
+                          })
+                        }
+                      >
+                        {ACTIVITY_VALIDATE_LABEL_FR}
+                      </button>
+                    ) : null}
+                    {(it.meta?.product_url || it.meta?.product_code) &&
+                    it.status !== 'validated' &&
+                    it.status !== 'booked' ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
+                        onClick={() => onBook(it)}
+                      >
+                        {ACTIVITY_BOOK_VIATOR_FR}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-slate-50 min-h-[40px]"
+                      onClick={() => openDetail(it)}
+                    >
+                      Détails
+                    </button>
+                  </div>
+                </StayCardShell>
+              )
+            })}
+        </ul>
+      ) : (
       <ul className="space-y-2">
         {items.map((it) => (
           <li
@@ -591,9 +752,16 @@ export function ActivityStepPanel(props: {
                 />
               )}
               <div className="min-w-0 flex-1 flex justify-between gap-2">
-                <p className="font-bold text-sm text-slate-900">
-                  {titleOf(it)}
-                </p>
+                <div className="min-w-0">
+                  <p className="font-bold text-sm text-slate-900">
+                    {titleOf(it)}
+                  </p>
+                  {priceOf(it) ? (
+                    <p className="text-xs font-bold text-ink mt-0.5">
+                      {priceOf(it)}
+                    </p>
+                  ) : null}
+                </div>
                 <span className="shrink-0 text-xs text-slate-500">
                   {tripItemStatusLabelFr(it.status)}
                   {it.availability_state
@@ -634,6 +802,7 @@ export function ActivityStepPanel(props: {
           </li>
         ))}
       </ul>
+      )}
       {!items.length && !loading ? (
         <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3.5 py-3 space-y-1">
           <p className="text-sm font-semibold text-slate-800">

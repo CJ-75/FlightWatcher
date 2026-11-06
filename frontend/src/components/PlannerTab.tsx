@@ -2365,11 +2365,35 @@ function TripDetailView({
     }
   }
 
+  const doComplete = async () => {
+    if (!trip) return
+    if (
+      !window.confirm(
+        t('planner.archiveConfirm').replace('{name}', trip.name),
+      )
+    ) {
+      return
+    }
+    setDeleting(true)
+    setError(null)
+    try {
+      const updated = await getApiClient().completePlannedTrip(tripId)
+      setTrip((prev) => (prev ? { ...prev, ...updated, status: 'completed' } : prev))
+      setWorkspace((prev) => (prev ? { ...prev, phase: 'past' } : prev))
+      invalidateTravelWorkspacesCache()
+      onToast(t('planner.archiveDone'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const doDelete = async () => {
     if (!trip) return
     if (
       !window.confirm(
-        `Supprimer « ${trip.name} » ?\n\nLe voyage Planner disparaît, mais tes réservations (vol / hôtel) sont conservées.`,
+        t('planner.deleteConfirm').replace('{name}', trip.name),
       )
     ) {
       return
@@ -2379,7 +2403,7 @@ function TripDetailView({
     try {
       await getApiClient().deletePlannedTrip(tripId)
       invalidateTravelWorkspacesCache()
-      onToast('Voyage supprimé — réservations conservées')
+      onToast(t('planner.deleteDone'))
       onDeleted()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -3375,7 +3399,17 @@ function TripDetailView({
       </section>
 
       {isOrganizer ? (
-        <div className="pt-2 border-t border-slate-100">
+        <div className="pt-2 border-t border-slate-100 flex flex-col items-start gap-1">
+          {trip.status !== 'completed' ? (
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => void doComplete()}
+              className="text-sm font-bold text-ink-soft hover:text-ink px-1 py-2 disabled:opacity-50"
+            >
+              {deleting ? '…' : t('planner.archive')}
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={deleting}
