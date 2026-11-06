@@ -320,6 +320,26 @@ export function ProfileScreen() {
                 Sans Google — mode test Expo, ouvre le voyage local
               </Text>
             </Pressable>
+            <Pressable
+              onPress={() => {
+                const root = navigation.getParent() ?? navigation
+                root.dispatch(
+                  CommonActions.navigate({
+                    name: 'NotFound',
+                    params: { path: '/dev/preview-404' },
+                  }),
+                )
+              }}
+              style={({ pressed }) => [
+                styles.devPreviewBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.devPreviewTitle}>Voir la page 404</Text>
+              <Text style={styles.devPreviewSub}>
+                Aperçu de l’écran page introuvable
+              </Text>
+            </Pressable>
           </>
         ) : null}
 

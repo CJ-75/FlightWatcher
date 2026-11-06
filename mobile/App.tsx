@@ -137,6 +137,9 @@ const ItineraryDetailScreen = lazyScreen(() =>
 const SecurityScreen = lazyScreen(() =>
   import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
 )
+const NotFoundScreen = lazyScreen(() =>
+  import('./src/screens/NotFoundScreen').then((m) => ({ default: m.NotFoundScreen })),
+)
 
 function MainTabs() {
   const insets = useSafeAreaInsets()
@@ -357,6 +360,11 @@ function RootNavigator() {
             component={ItineraryDetailScreen}
             options={stackHeaderOptions('Parcours')}
           />
+          <Stack.Screen
+            name="NotFound"
+            component={NotFoundScreen}
+            options={{ headerShown: false }}
+          />
         </>
       ) : (
         <>
@@ -365,6 +373,11 @@ function RootNavigator() {
             name="PlannerInvite"
             component={PlannerInviteScreen}
             options={stackHeaderOptions('Invitation')}
+          />
+          <Stack.Screen
+            name="NotFound"
+            component={NotFoundScreen}
+            options={{ headerShown: false }}
           />
         </>
       )}
@@ -391,6 +404,7 @@ const linking = {
         },
       },
       ItineraryDetail: 'parcours/:itineraryId',
+      NotFound: '*',
     },
   },
 }

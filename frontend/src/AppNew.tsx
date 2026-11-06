@@ -20,6 +20,7 @@ const MyBookings = lazy(() => import('./pages/MyBookings'))
 const MyTrip = lazy(() => import('./pages/MyTrip'))
 const HotelPay = lazy(() => import('./pages/HotelPay'))
 const ItinerariesPage = lazy(() => import('./pages/ItinerariesPage'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 const AdminLogin = lazy(() =>
   import('./admin/AdminLogin').then((m) => ({ default: m.AdminLogin })),
 )
@@ -139,7 +140,8 @@ function App() {
         <Route path="/deals" element={<LegacyRedirect to="/sejours" />} />
         <Route path="/alerts" element={<Navigate to="/alertes" replace />} />
         <Route path="/saved" element={<Navigate to="/favoris" replace />} />
-        <Route path="*" element={<Navigate to="/vols" replace />} />
+        <Route path="/404" element={<NotFound />} />
+        <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
       </BrowserRouter>

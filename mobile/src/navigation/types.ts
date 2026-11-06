@@ -93,4 +93,5 @@ export type RootStackParamList = {
   }
   InAppBrowser: { url: string; title?: string }
   ItineraryDetail: { itineraryId: string }
+  NotFound: { path?: string } | undefined
 }
