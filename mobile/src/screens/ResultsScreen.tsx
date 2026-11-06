@@ -593,6 +593,11 @@ export function ResultsScreen({ route, navigation }: Props) {
           setShowRoulette(false)
           handlePartnerBook(t)
         }}
+        onAddHotel={(t) => {
+          setShowRoulette(false)
+          void handleAddToPlanner(t)
+        }}
+        addHotelBusy={hotelUpsellBusy}
         onFavorite={(t) => void toggleFavorite(t)}
         isFavorite={isFavorite}
       />

@@ -1652,6 +1652,10 @@ function Dashboard() {
             setShowRoulette(false)
             handlePartnerBook(trip)
           }}
+          onAddHotel={(trip) => {
+            setShowRoulette(false)
+            void handleAddToPlanner(trip)
+          }}
           checkIsFavorite={checkIsFavorite}
         />
       )}
