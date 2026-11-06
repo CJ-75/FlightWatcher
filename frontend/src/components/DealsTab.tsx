@@ -83,11 +83,17 @@ function expandOriginToCity(encoded: string, airports: Airport[]): string {
   return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
 }
 
+const DEALS_PAGE = 36
+const DEALS_MAX = 96
+
 export function DealsTab() {
   const { t } = useI18n()
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [fetchLimit, setFetchLimit] = useState(DEALS_PAGE)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<TravelDeal | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -252,40 +258,95 @@ export function DealsTab() {
   const dealsRef = useRef(deals)
   dealsRef.current = deals
 
-  const load = useCallback(async () => {
-    // Phase 3 — SWR: skeleton only when empty; keep cards while refetching
-    setError(null)
-    const empty = dealsRef.current.length === 0
-    if (empty) setLoading(true)
-    try {
-      const listPromise = getApiClient().getDeals({
-        origin: queryOrigin || undefined,
-        destination: queryDestination || undefined,
-        adults: queryAdults,
-        occasion: occasion || undefined,
-        duration: durationTab,
-        limit: 96,
-      })
-      void loadLikes()
-      void loadOccasions()
-      const list = await listPromise
-      // Deals = hôtel photo only; hide when Paris outbound start is past.
-      const withHotelPhoto = (Array.isArray(list) ? list : []).filter((d) => {
-        if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim())) return false
-        return dealStartStillUpcoming(d)
-      })
-      setDeals(withHotelPhoto)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('app.error'))
-      if (dealsRef.current.length === 0) setDeals([])
-    } finally {
-      setLoading(false)
-    }
-  }, [t, loadLikes, loadOccasions, queryOrigin, queryDestination, queryAdults, occasion, durationTab])
+  const load = useCallback(
+    async (opts?: { limit?: number; more?: boolean }) => {
+      // Phase 3 — SWR: skeleton only when empty; keep cards while refetching
+      const limit = Math.min(
+        Math.max(opts?.limit ?? DEALS_PAGE, DEALS_PAGE),
+        DEALS_MAX,
+      )
+      const more = Boolean(opts?.more)
+      setError(null)
+      const empty = dealsRef.current.length === 0
+      if (more) setLoadingMore(true)
+      else if (empty) setLoading(true)
+      try {
+        const listPromise = getApiClient().getDeals({
+          origin: queryOrigin || undefined,
+          destination: queryDestination || undefined,
+          adults: queryAdults,
+          occasion: occasion || undefined,
+          duration: durationTab,
+          limit,
+        })
+        if (!more) {
+          void loadLikes()
+          void loadOccasions()
+        }
+        const list = await listPromise
+        const raw = Array.isArray(list) ? list : []
+        // Deals = hôtel photo only; hide when Paris outbound start is past.
+        const withHotelPhoto = raw.filter((d) => {
+          if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim()))
+            return false
+          return dealStartStillUpcoming(d)
+        })
+        setDeals(withHotelPhoto)
+        setFetchLimit(limit)
+        setHasMore(raw.length >= limit && limit < DEALS_MAX)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t('app.error'))
+        if (dealsRef.current.length === 0) setDeals([])
+        if (!more) setHasMore(false)
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
+      }
+    },
+    [
+      t,
+      loadLikes,
+      loadOccasions,
+      queryOrigin,
+      queryDestination,
+      queryAdults,
+      occasion,
+      durationTab,
+    ],
+  )
 
   useEffect(() => {
-    void load()
+    setFetchLimit(DEALS_PAGE)
+    setHasMore(false)
+    void load({ limit: DEALS_PAGE })
   }, [load])
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || !hasMore) return
+    const next = Math.min(fetchLimit + DEALS_PAGE, DEALS_MAX)
+    if (next <= fetchLimit) return
+    void load({ limit: next, more: true })
+  }, [loadingMore, loading, hasMore, fetchLimit, load])
+
+  const loadMoreRef = useRef(loadMore)
+  loadMoreRef.current = loadMore
+  const scrollSentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // Infinite scroll — load next page when sentinel enters viewport
+  useEffect(() => {
+    const el = scrollSentinelRef.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          loadMoreRef.current()
+        }
+      },
+      { root: null, rootMargin: '320px 0px', threshold: 0 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, fetchLimit, deals.length])
 
   // Lot F — deep link from Mon voyage hôtel CTA (?deal=&book_hotel=1)
   useEffect(() => {
@@ -619,7 +680,7 @@ export function DealsTab() {
           <p className="text-sm text-muted mb-4 line-clamp-3">{error}</p>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void load({ limit: DEALS_PAGE })}
             className="app-btn-primary rounded-2xl px-5 py-2.5 text-sm"
           >
             {t('deals.retry')}
@@ -700,6 +761,17 @@ export function DealsTab() {
                   />
                 ))}
               </motion.div>
+            </div>
+          ) : null}
+          {hasMore ? (
+            <div
+              ref={scrollSentinelRef}
+              className="flex justify-center py-6 min-h-[48px]"
+              aria-hidden
+            >
+              {loadingMore ? (
+                <span className="text-sm font-semibold text-muted">Chargement…</span>
+              ) : null}
             </div>
           ) : null}
         </div>

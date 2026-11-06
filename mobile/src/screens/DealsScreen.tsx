@@ -38,7 +38,9 @@ import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const STALE_MS = 90_000
-const ORIGIN_LS_KEY = 'fw_deals_origin'
+const ORIGIN_STORAGE_KEY = 'fw_deals_origin'
+const DEALS_PAGE = 36
+const DEALS_MAX = 96
 type DurationTab = 'weekend' | 'short' | 'week'
 
 export function DealsScreen() {
@@ -49,6 +51,9 @@ export function DealsScreen() {
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [fetchLimit, setFetchLimit] = useState(DEALS_PAGE)
+  const [hasMore, setHasMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** Affiner = départ (+ voyageurs). Arrivée = job Recherche. */
@@ -64,6 +69,8 @@ export function DealsScreen() {
   const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [uiEnabled, setUiEnabled] = useState(true)
   const [readonlyBanner, setReadonlyBanner] = useState(false)
+  /** Wait for Paris/stored origin before first /api/deals (avoid empty→Paris double fetch). */
+  const [originReady, setOriginReady] = useState(false)
   const configLoadedRef = useRef(false)
   const lastFetchAtRef = useRef(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -97,18 +104,22 @@ export function DealsScreen() {
           if (expanded !== stored) {
             void AsyncStorage.setItem(ORIGIN_LS_KEY, expanded).catch(() => undefined)
           }
+          setOriginReady(true)
           return
         }
       } catch {
         /* ignore */
       }
       const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
-      if (!paris) return
-      const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
-      if (!encoded) return
-      setOrigin(encoded)
-      setQueryOrigin(encoded)
-      void AsyncStorage.setItem(ORIGIN_LS_KEY, encoded).catch(() => undefined)
+      if (paris) {
+        const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+        if (encoded) {
+          setOrigin(encoded)
+          setQueryOrigin(encoded)
+          void AsyncStorage.setItem(ORIGIN_LS_KEY, encoded).catch(() => undefined)
+        }
+      }
+      setOriginReady(true)
     })()
   }, [airports])
 
@@ -136,19 +147,31 @@ export function DealsScreen() {
   }, [origin, adults])
 
   const load = useCallback(
-    async (opts?: { refresh?: boolean; force?: boolean }) => {
+    async (opts?: {
+      refresh?: boolean
+      force?: boolean
+      more?: boolean
+      limit?: number
+    }) => {
       const isRefresh = Boolean(opts?.refresh)
       const force = Boolean(opts?.force)
-      if (!force && !isRefresh && lastFetchAtRef.current > 0) {
+      const more = Boolean(opts?.more)
+      const limit = Math.min(
+        Math.max(opts?.limit ?? DEALS_PAGE, DEALS_PAGE),
+        DEALS_MAX,
+      )
+      if (!force && !isRefresh && !more && lastFetchAtRef.current > 0) {
         const age = Date.now() - lastFetchAtRef.current
         if (age < STALE_MS) return
       }
-      if (isRefresh) setRefreshing(true)
+      if (more) setLoadingMore(true)
+      else if (isRefresh) setRefreshing(true)
       else setLoading(true)
       setError(null)
       try {
         if (uiEnabled === false) {
           setDeals([])
+          setHasMore(false)
           return
         }
         const listPromise = getApi().getDeals({
@@ -156,55 +179,75 @@ export function DealsScreen() {
           adults: queryAdults,
           occasion: occasion || undefined,
           duration: durationTab,
-          limit: 36,
+          limit,
         })
-        void refreshLikes()
-        void getApi()
-          .getDealOccasions({
-            origin: queryOrigin || undefined,
-            adults: queryAdults,
-            duration: durationTab,
-          })
-          .then((res) => {
-            const seen = new Set<string>()
-            const all: DealOccasionChip[] = []
-            for (const c of [...(res?.main || []), ...(res?.more || [])]) {
-              if (!c?.slug || seen.has(c.slug)) continue
-              seen.add(c.slug)
-              all.push(c)
-            }
-            setOccasionChips(all)
-            setOccasion((prev) => {
-              if (!prev) return null
-              return all.some((c) => c.slug === prev) ? prev : null
+        if (!more) {
+          void refreshLikes()
+          void getApi()
+            .getDealOccasions({
+              origin: queryOrigin || undefined,
+              adults: queryAdults,
+              duration: durationTab,
             })
-          })
-          .catch(() => {
-            setOccasionChips([])
-          })
+            .then((res) => {
+              const seen = new Set<string>()
+              const all: DealOccasionChip[] = []
+              for (const c of [...(res?.main || []), ...(res?.more || [])]) {
+                if (!c?.slug || seen.has(c.slug)) continue
+                seen.add(c.slug)
+                all.push(c)
+              }
+              setOccasionChips(all)
+              setOccasion((prev) => {
+                if (!prev) return null
+                return all.some((c) => c.slug === prev) ? prev : null
+              })
+            })
+            .catch(() => {
+              setOccasionChips([])
+            })
+        }
         const list = await listPromise
-        const withHotelPhoto = (Array.isArray(list) ? list : []).filter((d) => {
-          if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim())) return false
+        const raw = Array.isArray(list) ? list : []
+        const withHotelPhoto = raw.filter((d) => {
+          if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim()))
+            return false
           return dealStartStillUpcoming(d)
         })
         setDeals(withHotelPhoto)
+        setFetchLimit(limit)
+        setHasMore(raw.length >= limit && limit < DEALS_MAX)
         lastFetchAtRef.current = Date.now()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les deals')
-        setDeals([])
+        if (!more) {
+          setDeals([])
+          setHasMore(false)
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
+        setLoadingMore(false)
       }
     },
     [refreshLikes, queryOrigin, queryAdults, occasion, durationTab, uiEnabled],
   )
 
-  // Filter changes → always refetch
+  // Filter changes → always refetch (after origin hydrate)
   useEffect(() => {
-    void load({ force: true })
+    if (!originReady) return
+    setFetchLimit(DEALS_PAGE)
+    setHasMore(false)
+    void load({ force: true, limit: DEALS_PAGE })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
-  }, [queryOrigin, queryAdults, occasion, durationTab])
+  }, [originReady, queryOrigin, queryAdults, occasion, durationTab])
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || loading || !hasMore) return
+    const next = Math.min(fetchLimit + DEALS_PAGE, DEALS_MAX)
+    if (next <= fetchLimit) return
+    void load({ force: true, more: true, limit: next })
+  }, [loadingMore, loading, hasMore, fetchLimit, load])
 
   // Tab focus → refetch only if stale (skip first mount: filter effect owns it)
   useFocusEffect(
@@ -592,6 +635,19 @@ export function DealsScreen() {
               />
             )
           }}
+          onEndReachedThreshold={0.4}
+          onEndReached={() => {
+            if (hasMore) loadMore()
+          }}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.moreFooter}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : (
+              <View style={styles.moreFooterSpacer} />
+            )
+          }
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -900,6 +956,14 @@ const styles = StyleSheet.create({
   },
   sortChipTextActive: {
     color: colors.white,
+  },
+  moreFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreFooterSpacer: {
+    height: 12,
   },
   fillerHeader: {
     marginTop: 8,

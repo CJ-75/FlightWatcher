@@ -1414,10 +1414,12 @@ def list_community_deals(
     except Exception:
         with _list_cache_lock:
             epoch = _list_cache_epoch
+    # Limit is applied after cache so 36 / 48 / 96 share one wall assemble.
+    shared_n = max(target, min(wall_max, 96))
     cache_key = (
-        f"hp5|{epoch}|{origin or ''}|{destination or ''}|"
+        f"hp6|{epoch}|{origin or ''}|{destination or ''}|"
         f"{adults_n}|{max_pp}|{occasion_slug or ''}|{duration_tab or ''}|"
-        f"{target}|min{WALL_MIN_DEALS}"
+        f"shared{shared_n}|min{WALL_MIN_DEALS}"
     )
     now = time.monotonic()
     today = _today_iso()
@@ -1425,14 +1427,15 @@ def list_community_deals(
         hit = _list_cache.get(cache_key)
         if hit and now - hit[0] < _LIST_CACHE_TTL_S:
             fresh_hit = [dict(d) for d in hit[1] if _deal_out_date_ok(d, today)]
+            sliced = fresh_hit[:target]
             log.info(
                 "list_community_deals cache_hit origin=%s dest=%s n=%s ms=%.0f",
                 origin,
                 destination,
-                len(fresh_hit),
+                len(sliced),
                 (time.monotonic() - t0) * 1000,
             )
-            return fresh_hit
+            return sliced
 
     # L2 shared file cache (multi-worker) — Phase 3 latency
     try:
@@ -1443,14 +1446,15 @@ def list_community_deals(
             fresh_shared = [dict(d) for d in shared if _deal_out_date_ok(d, today)]
             with _list_cache_lock:
                 _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in shared])
+            sliced = fresh_shared[:target]
             log.info(
                 "list_community_deals l2_hit origin=%s dest=%s n=%s ms=%.0f",
                 origin,
                 destination,
-                len(fresh_shared),
+                len(sliced),
                 (time.monotonic() - t0) * 1000,
             )
-            return fresh_shared
+            return sliced
     except Exception:
         pass
 
@@ -1474,7 +1478,7 @@ def list_community_deals(
     origin_set = set(origin_codes)
     dest_set = set(dest_codes)
     # Oversample: duration + diversify shrink the pool — aim well above floor
-    fetch_n = max(target * 5, 120)
+    fetch_n = max(shared_n * 5, 120)
 
     all_rows = _fetch_active_rows(
         supabase, codes=None, limit=fetch_n, occasion=occasion_slug
@@ -1574,7 +1578,7 @@ def list_community_deals(
     if duration_tab:
         out = _apply_duration_with_floor(out, duration_tab, min_deals=WALL_MIN_DEALS)
     out = [d for d in out if _deal_out_date_ok(d, today)]
-    out = diversify_wall_min(out, target=target, min_deals=WALL_MIN_DEALS)
+    out = diversify_wall_min(out, target=shared_n, min_deals=WALL_MIN_DEALS)
     snap = [dict(d) for d in out]
     with _list_cache_lock:
         _list_cache[cache_key] = (time.monotonic(), snap)
@@ -1588,12 +1592,13 @@ def list_community_deals(
         _l2_set(cache_key, snap)
     except Exception:
         pass
+    sliced = [dict(d) for d in snap[:target]]
     elapsed_ms = (time.monotonic() - t0) * 1000
     log.info(
         "list_community_deals origin=%s dest=%s n=%s ms=%.0f",
         origin,
         destination,
-        len(out),
+        len(sliced),
         elapsed_ms,
     )
     if elapsed_ms > 300:
@@ -1603,7 +1608,7 @@ def list_community_deals(
             destination,
             elapsed_ms,
         )
-    return out
+    return sliced
 
 
 def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
@@ -1643,8 +1648,9 @@ def get_community_deal(supabase, deal_key: str) -> Optional[Dict[str, Any]]:
 
 
 def warm_deals_wall() -> None:
-    """Startup warm-up: populate L1+L2 for default weekend wall before first client."""
+    """Startup warm-up: populate L1+L2 for default + Paris weekend (client first paint)."""
     import logging
+    import os
 
     log = logging.getLogger("deals.community_list")
     try:
@@ -1655,14 +1661,18 @@ def warm_deals_wall() -> None:
             log.warning("warm_deals_wall: no supabase")
             return
         t0 = time.monotonic()
-        # Default wall (no duration) + weekend tab — peupler L1/L2 avant 1er tap
+        paris = (
+            os.getenv("DEALS_WARM_ORIGIN", "CDG,ORY,BVA") or "CDG,ORY,BVA"
+        ).strip()
+        # Shared size 96 — covers web/mobile/occasions after limit-agnostic cache
+        warm_limit = min(_wall_max_deals(), 96)
         deals = list_community_deals(
             sb,
             origin=None,
             destination=None,
             adults=2,
             duration=None,
-            limit=36,
+            limit=warm_limit,
         )
         weekend = list_community_deals(
             sb,
@@ -1670,17 +1680,26 @@ def warm_deals_wall() -> None:
             destination=None,
             adults=2,
             duration="weekend",
-            limit=36,
+            limit=warm_limit,
+        )
+        paris_weekend = list_community_deals(
+            sb,
+            origin=paris,
+            destination=None,
+            adults=2,
+            duration="weekend",
+            limit=warm_limit,
         )
         log.info(
-            "warm_deals_wall default=%s weekend=%s ms=%.0f",
+            "warm_deals_wall default=%s weekend=%s paris=%s ms=%.0f",
             len(deals or []),
             len(weekend or []),
+            len(paris_weekend or []),
             (time.monotonic() - t0) * 1000,
         )
         print(
             f"✅ Deals wall warm: {len(deals or [])} "
-            f"(weekend {len(weekend or [])})"
+            f"(weekend {len(weekend or [])}, paris {len(paris_weekend or [])})"
         )
     except Exception as e:
         log.warning("warm_deals_wall: %s", e)

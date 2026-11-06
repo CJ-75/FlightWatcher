@@ -65,14 +65,14 @@ def list_active_occasions(
     today = today or date.today()
     from deals.community_list import list_community_deals
 
-    # Same wall filters as GET /api/deals so chip counts match the grid
+    # Same wall filters as GET /api/deals — limit 36 shares L1/L2 with mur (hp6).
     deals = list_community_deals(
         supabase,
         origin=origin,
         destination=destination,
         adults=adults,
         duration=duration,
-        limit=48,
+        limit=36,
     )
     counts: Dict[str, int] = {}
     for d in deals:
