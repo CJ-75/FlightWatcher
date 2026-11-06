@@ -100,9 +100,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (__DEV__ && url) console.log('[auth] AuthContext ignore (not callback)')
         return
       }
+      // Prefer openOAuthSession path; Linking is a backup. Skip if already signed in.
+      try {
+        const existing = await auth.getCurrentSession()
+        if (existing?.user) {
+          if (__DEV__) console.log('[auth] AuthContext already signed in — skip URL')
+          applySession(existing)
+          return
+        }
+      } catch {
+        /* continue */
+      }
       if (__DEV__) console.log('[auth] AuthContext createSessionFromUrl…')
       const { session: s, error } = await auth.createSessionFromUrl(url)
       if (error) {
+        // Benign if openOAuthSession already consumed the PKCE code
+        const again = await auth.getCurrentSession().catch(() => null)
+        if (again?.user) {
+          applySession(again)
+          return
+        }
         console.warn('[auth] AuthContext createSessionFromUrl FAILED', error.message)
         return
       }

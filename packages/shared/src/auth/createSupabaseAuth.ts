@@ -82,8 +82,20 @@ async function applySessionFromUrl(
   }
 
   if (params.code) {
+    // Another listener (Linking) may have already exchanged this one-shot code.
+    const {
+      data: { session: existing },
+    } = await client.auth.getSession()
+    if (existing) return { session: existing, error: null }
+
     const { data, error } = await client.auth.exchangeCodeForSession(params.code)
-    if (error) return { session: null, error: new Error(error.message) }
+    if (error) {
+      const {
+        data: { session: after },
+      } = await client.auth.getSession()
+      if (after) return { session: after, error: null }
+      return { session: null, error: new Error(error.message) }
+    }
     return { session: data.session, error: null }
   }
 
@@ -250,16 +262,35 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
         })
         if (!resultUrl) {
           console.warn('[auth] openAuthSession returned null (cancel / timeout / fallback open only)')
+          // Linking may still have completed the session in the background.
+          const {
+            data: { session: maybe },
+          } = await c.auth.getSession()
+          if (maybe) {
+            console.log('[auth] session present after null return')
+            return { error: null }
+          }
           return { error: null }
         }
         console.log('[auth] applySessionFromUrl…')
-        const { error: sessionError } = await applySessionFromUrl(c, resultUrl)
-        if (sessionError) {
+        const { session, error: sessionError } = await applySessionFromUrl(
+          c,
+          resultUrl,
+        )
+        if (sessionError && !session) {
+          // Last chance: Linking handler may have won the race.
+          const {
+            data: { session: late },
+          } = await c.auth.getSession()
+          if (late) {
+            console.log('[auth] applySessionFromUrl race OK via getSession')
+            return { error: null }
+          }
           console.warn('[auth] applySessionFromUrl FAILED', sessionError.message)
-        } else {
-          console.log('[auth] applySessionFromUrl OK')
+          return { error: sessionError }
         }
-        return { error: sessionError }
+        console.log('[auth] applySessionFromUrl OK')
+        return { error: null }
       } catch (e) {
         console.warn('[auth] openAuthSession / applySession threw', e)
         return { error: e instanceof Error ? e : new Error(String(e)) }
@@ -274,13 +305,8 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
     signOut: async () => {
       const c = await getClient()
       if (!c) return { error: new Error('Supabase is not configured') }
-      // Always clear local session first so logout works offline / if revoke fails.
+      // Local only — global revoke can interfere with the next OAuth/PKCE login.
       const { error } = await c.auth.signOut({ scope: 'local' })
-      try {
-        await c.auth.signOut({ scope: 'global' })
-      } catch {
-        /* ignore */
-      }
       return { error: error ? new Error(error.message) : null }
     },
     onAuthStateChange: (callback) => {

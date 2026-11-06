@@ -92,7 +92,13 @@ if (__DEV__) {
     EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN: env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN') ?? null,
     EXPO_PUBLIC_WEB_ORIGIN: env('EXPO_PUBLIC_WEB_ORIGIN') ?? null,
     redirectTo,
+    appOwnership: Constants.appOwnership,
   })
+  if (Constants.appOwnership === 'expo' && !env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN')) {
+    console.warn(
+      '[auth] Expo Go: set EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN to your live cloudflared URL (→ :8000)',
+    )
+  }
 }
 
 function authLog(...args: unknown[]) {

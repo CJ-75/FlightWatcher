@@ -122,9 +122,12 @@ export function LoginScreen() {
 
   const onLogin = async () => {
     setLoading(true)
-    const { error: err } = await signInWithGoogle()
-    if (err && __DEV__) console.warn('[auth] signIn', err.message)
-    setLoading(false)
+    try {
+      const { error: err } = await signInWithGoogle()
+      if (err && __DEV__) console.warn('[auth] signIn', err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const current = SLIDES[slide]

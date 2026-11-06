@@ -209,8 +209,8 @@ export const signInWithGoogle = async (): Promise<{ error: Error | null }> => {
 }
 
 /**
- * Se déconnecter — clear local session always (global revoke is best-effort).
- * Without scope:local, a failed network revoke can leave the user "stuck" logged in.
+ * Se déconnecter — clear local session (reliable).
+ * Avoid awaiting global revoke: it can race PKCE storage and break the next Google login.
  */
 export const signOut = async (): Promise<{ error: Error | null }> => {
   const client = await getSupabaseClient()
@@ -218,13 +218,8 @@ export const signOut = async (): Promise<{ error: Error | null }> => {
     return { error: new Error("Supabase n'est pas configuré") }
   }
 
-  const { error: localError } = await client.auth.signOut({ scope: 'local' })
-  try {
-    await client.auth.signOut({ scope: 'global' })
-  } catch {
-    /* offline / revoke blocked — local session already cleared */
-  }
-  return { error: localError }
+  const { error } = await client.auth.signOut({ scope: 'local' })
+  return { error }
 }
 
 /**

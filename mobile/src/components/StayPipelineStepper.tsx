@@ -61,10 +61,13 @@ function StepGlyph({
   }
 }
 
-function iconColor(state: StayPipelineStep['state'], id: StayStepId): string {
+/** Teal parcours — distinct from brand orange CTAs */
+const RAIL_TEAL = '#0F766E'
+const RAIL_TEAL_INK = '#115E59'
+
+function iconColor(state: StayPipelineStep['state'], _id: StayStepId): string {
   if (state === 'done' || state === 'current') return colors.white
   if (state === 'off') return colors.faint
-  if (id === 'hotel') return colors.primaryDeep
   return colors.inkSoft
 }
 
@@ -114,14 +117,8 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
                   shadow.soft,
                   isDone && styles.dotDone,
                   isCurrent && styles.dotCurrent,
-                  isCurrent && s.id === 'hotel' && styles.dotCurrentHotel,
                   isOff && styles.dotOff,
                   !isDone && !isCurrent && !isOff && styles.dotUpcoming,
-                  !isDone &&
-                    !isCurrent &&
-                    !isOff &&
-                    s.id === 'hotel' &&
-                    styles.dotUpcomingHotel,
                 ]}
               >
                 <StepGlyph
@@ -181,13 +178,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 3,
     borderRadius: 2,
-    backgroundColor: colors.line,
+    backgroundColor: '#E2E8F0',
     overflow: 'hidden',
   },
   trackFill: {
     height: 3,
     borderRadius: 2,
-    backgroundColor: colors.primary,
+    backgroundColor: RAIL_TEAL,
   },
   row: {
     flexDirection: 'row',
@@ -215,20 +212,12 @@ const styles = StyleSheet.create({
     borderColor: '#168A5B',
   },
   dotCurrent: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryDeep,
-  },
-  dotCurrentHotel: {
-    backgroundColor: colors.primaryDeep,
-    borderColor: '#C44716',
+    backgroundColor: RAIL_TEAL,
+    borderColor: RAIL_TEAL_INK,
   },
   dotUpcoming: {
     backgroundColor: colors.white,
     borderColor: colors.lineStrong,
-  },
-  dotUpcomingHotel: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primaryMuted,
   },
   dotOff: {
     backgroundColor: colors.canvas,
@@ -245,7 +234,7 @@ const styles = StyleSheet.create({
   },
   labelCurrent: {
     fontFamily: fonts.extrabold,
-    color: colors.ink,
+    color: RAIL_TEAL_INK,
   },
   labelDone: {
     color: colors.inkSoft,
@@ -262,7 +251,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   hintCurrent: {
-    color: colors.primaryInk,
+    color: RAIL_TEAL,
   },
   hintDone: {
     color: '#168A5B',

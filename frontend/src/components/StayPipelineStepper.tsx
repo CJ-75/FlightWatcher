@@ -8,6 +8,16 @@ type Props = {
   variant?: 'light' | 'dark' | 'journey'
 }
 
+/** Parcours progress — teal, distinct from brand orange CTAs */
+const RAIL = {
+  track: 'bg-slate-200/90',
+  fill: 'bg-gradient-to-r from-teal-700 via-teal-600 to-cyan-500',
+  current: 'bg-teal-700 text-white shadow-md shadow-teal-900/20 ring-2 ring-teal-200',
+  done: 'bg-emerald-500 text-white ring-2 ring-emerald-100',
+  upcoming: 'bg-white text-slate-600 border border-slate-200 shadow-sm',
+  off: 'bg-slate-50 text-slate-400 border border-dashed border-slate-200',
+}
+
 function StepGlyph({
   id,
   className,
@@ -51,6 +61,21 @@ function StepGlyph({
   }
 }
 
+function progressPercent(steps: StayPipelineStep[]): number {
+  const n = Math.max(steps.length, 1)
+  const currentIdx = steps.findIndex((s) => s.state === 'current')
+  let lastDone = -1
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i]?.state === 'done') lastDone = i
+  }
+  // Fill through completed steps; include half-step toward current
+  if (currentIdx >= 0) {
+    return (currentIdx / Math.max(n - 1, 1)) * 100
+  }
+  if (lastDone < 0) return 0
+  return (lastDone / Math.max(n - 1, 1)) * 100
+}
+
 function JourneyStepper({
   steps,
   onStepPress,
@@ -58,27 +83,51 @@ function JourneyStepper({
   steps: StayPipelineStep[]
   onStepPress?: (id: StayStepId) => void
 }) {
+  const n = Math.max(steps.length, 1)
+  const fillPct = progressPercent(steps)
+
   return (
-    <nav aria-label="Étapes du séjour" className="relative select-none">
-      <ol className="flex items-stretch gap-1.5 sm:gap-2">
+    <nav aria-label="Étapes du séjour" className="relative select-none pt-1 pb-0.5">
+      {/* Progress rail */}
+      <div
+        className="pointer-events-none absolute left-0 right-0 top-[22px] h-[3px] sm:top-[24px]"
+        aria-hidden
+        style={{
+          marginLeft: `calc(100% / ${n} / 2)`,
+          marginRight: `calc(100% / ${n} / 2)`,
+        }}
+      >
+        <div className={`h-full w-full rounded-full ${RAIL.track}`} />
+        <motion.div
+          className={`absolute inset-y-0 left-0 rounded-full ${RAIL.fill}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${fillPct}%` }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </div>
+
+      <ol
+        className="relative z-[1] grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
+      >
         {steps.map((s, index) => {
           const isOff = s.state === 'off'
           const isDone = s.state === 'done'
           const isCurrent = s.state === 'current'
           return (
-            <li key={s.id} className="min-w-0 flex-1">
+            <li key={s.id} className="min-w-0">
               <motion.button
                 type="button"
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{
                   type: 'spring',
-                  stiffness: 380,
+                  stiffness: 400,
                   damping: 28,
-                  delay: index * 0.05,
+                  delay: index * 0.04,
                 }}
-                whileHover={isOff ? undefined : { y: -2 }}
-                whileTap={isOff ? undefined : { scale: 0.98 }}
+                whileHover={isOff ? undefined : { y: -1 }}
+                whileTap={isOff ? undefined : { scale: 0.97 }}
                 onClick={() => {
                   if (isOff) {
                     window.alert(
@@ -90,99 +139,84 @@ function JourneyStepper({
                   }
                   onStepPress?.(s.id)
                 }}
-                className={[
-                  'relative flex h-full w-full flex-col gap-2 rounded-2xl px-2.5 py-3 text-left transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 sm:px-3',
-                  isCurrent
-                    ? 'bg-[#FF6B35] text-white shadow-lg shadow-orange-500/30 ring-1 ring-orange-400/40'
-                    : isDone
-                      ? 'bg-emerald-100/90 text-emerald-950 ring-1 ring-emerald-200/80'
-                      : isOff
-                        ? 'bg-[#F3E6DC]/70 text-slate-400 ring-1 ring-dashed ring-orange-200/60'
-                        : 'bg-[#FFF6EE]/85 text-ink ring-1 ring-orange-200/70 shadow-sm',
-                ].join(' ')}
+                className="flex w-full flex-col items-center gap-1.5 rounded-2xl px-0.5 py-1 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300"
               >
-                <div className="flex items-center gap-2">
+                <span
+                  className={[
+                    'relative z-[1] inline-flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full ring-[3px] ring-[#FFF9F5]',
+                    isDone
+                      ? RAIL.done
+                      : isCurrent
+                        ? RAIL.current
+                        : isOff
+                          ? RAIL.off
+                          : RAIL.upcoming,
+                  ].join(' ')}
+                >
+                  {isDone ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <StepGlyph id={s.id} className="h-4 w-4" />
+                  )}
+                </span>
+                <span
+                  className={[
+                    'text-[11px] sm:text-[12px] leading-tight px-0.5',
+                    isCurrent
+                      ? 'font-extrabold text-teal-900'
+                      : isDone
+                        ? 'font-bold text-slate-700'
+                        : isOff
+                          ? 'font-semibold text-slate-400'
+                          : 'font-bold text-slate-600',
+                  ].join(' ')}
+                >
+                  {s.label}
+                </span>
+                {s.hint ? (
                   <span
                     className={[
-                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                      'text-[10px] font-semibold leading-none max-w-full truncate px-0.5',
                       isCurrent
-                        ? 'bg-white/20 text-white'
+                        ? 'text-teal-700'
                         : isDone
-                          ? 'bg-emerald-500 text-white'
-                          : isOff
-                            ? 'bg-[#EAD9CC] text-slate-400'
-                            : 'bg-[#F0E0D4] text-slate-700',
+                          ? 'text-emerald-700'
+                          : 'text-slate-400',
                     ].join(' ')}
                   >
-                    {isDone ? (
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-4 w-4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden
-                      >
-                        <path d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <StepGlyph id={s.id} className="h-4 w-4" />
-                    )}
+                    {s.hint}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={[
-                        'truncate text-[12px] leading-tight sm:text-[13px]',
-                        isCurrent
-                          ? 'font-extrabold text-white'
-                          : isDone
-                            ? 'font-bold text-emerald-900'
-                            : isOff
-                              ? 'font-semibold text-slate-400'
-                              : 'font-bold text-ink',
-                      ].join(' ')}
-                    >
-                      {s.label}
-                    </p>
-                    {s.hint ? (
-                      <p
-                        className={[
-                          'mt-0.5 truncate text-[10px] font-semibold leading-none sm:text-[11px]',
-                          isCurrent
-                            ? 'text-white/80'
-                            : isDone
-                              ? 'text-emerald-700/80'
-                              : isOff
-                                ? 'text-slate-400'
-                                : 'text-slate-500',
-                        ].join(' ')}
-                      >
-                        {s.hint}
-                      </p>
-                    ) : (
-                      <p
-                        className={[
-                          'mt-0.5 text-[10px] font-semibold leading-none',
-                          isCurrent ? 'text-white/70' : 'text-slate-400',
-                        ].join(' ')}
-                      >
-                        {isDone ? 'Fait' : isCurrent ? 'Maintenant' : isOff ? 'Bientôt' : 'Ensuite'}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                {isCurrent ? (
-                  <motion.span
-                    aria-hidden
-                    className="absolute inset-x-3 bottom-1.5 h-0.5 rounded-full bg-white/50"
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{ duration: 0.45, ease: 'easeOut', delay: 0.15 }}
-                    style={{ transformOrigin: 'left' }}
-                  />
-                ) : null}
+                ) : (
+                  <span
+                    className={[
+                      'text-[10px] font-semibold leading-none',
+                      isCurrent
+                        ? 'text-teal-600'
+                        : isDone
+                          ? 'text-emerald-600'
+                          : 'text-slate-400',
+                    ].join(' ')}
+                  >
+                    {isDone
+                      ? 'Fait'
+                      : isCurrent
+                        ? 'Maintenant'
+                        : isOff
+                          ? 'Bientôt'
+                          : 'Ensuite'}
+                  </span>
+                )}
               </motion.button>
             </li>
           )
@@ -203,16 +237,12 @@ function ClassicStepper({
   dark: boolean
 }) {
   const n = Math.max(steps.length, 1)
-  let lastDone = -1
-  for (let i = 0; i < steps.length; i++) {
-    if (steps[i]?.state === 'done') lastDone = i
-  }
-  const progressPct = lastDone < 0 ? 0 : (lastDone / Math.max(n - 1, 1)) * 100
+  const progressPct = progressPercent(steps)
 
   return (
     <nav aria-label="Étapes du séjour" className="relative py-2 select-none">
       <div
-        className="pointer-events-none absolute top-[26px] left-0 right-0 h-[2px]"
+        className="pointer-events-none absolute top-[26px] left-0 right-0 h-[3px]"
         aria-hidden
         style={{
           marginLeft: `calc(100% / ${n} / 2)`,
@@ -221,14 +251,14 @@ function ClassicStepper({
       >
         <div
           className={`h-full w-full rounded-full ${
-            dark ? 'bg-white/12' : 'bg-line'
+            dark ? 'bg-white/12' : 'bg-slate-200'
           }`}
         />
         <div
           className={`absolute inset-y-0 left-0 rounded-full ${
             dark
-              ? 'bg-gradient-to-r from-[#FF6B35] to-[#FFB088]'
-              : 'bg-primary-300'
+              ? 'bg-gradient-to-r from-teal-400 to-cyan-300'
+              : 'bg-gradient-to-r from-teal-700 via-teal-600 to-cyan-500'
           }`}
           style={{ width: `${progressPct}%` }}
         />
@@ -258,7 +288,7 @@ function ClassicStepper({
                   onStepPress?.(s.id)
                 }}
                 className={[
-                  'flex w-full flex-col items-center gap-1.5 text-center rounded-2xl px-1 py-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300',
+                  'flex w-full flex-col items-center gap-1.5 text-center rounded-2xl px-1 py-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300',
                   dark && isCurrent ? 'bg-white/10' : '',
                 ].join(' ')}
               >
@@ -271,8 +301,8 @@ function ClassicStepper({
                       ? 'bg-emerald-500 text-white shadow-[0_0_0_1px_rgba(16,185,129,0.35)]'
                       : isCurrent
                         ? dark
-                          ? 'bg-[#FF6B35] text-white shadow-[0_8px_20px_rgba(255,107,53,0.35)]'
-                          : 'bg-primary-500 text-white shadow-soft'
+                          ? 'bg-teal-500 text-white shadow-[0_8px_20px_rgba(13,148,136,0.35)]'
+                          : 'bg-teal-700 text-white shadow-soft'
                         : isOff
                           ? dark
                             ? 'bg-white/10 text-white/35 border border-dashed border-white/20'
@@ -296,7 +326,7 @@ function ClassicStepper({
                             ? 'font-bold text-white/80'
                             : 'font-bold text-white/55'
                       : isCurrent
-                        ? 'font-extrabold text-ink'
+                        ? 'font-extrabold text-teal-900'
                         : isDone
                           ? 'font-bold text-ink-soft'
                           : isOff
@@ -312,12 +342,12 @@ function ClassicStepper({
                       'text-[10px] font-semibold leading-none',
                       dark
                         ? isCurrent
-                          ? 'text-orange-200'
+                          ? 'text-teal-200'
                           : isDone
                             ? 'text-emerald-300/90'
                             : 'text-white/30'
                         : isCurrent
-                          ? 'text-primary-700'
+                          ? 'text-teal-700'
                           : isDone
                             ? 'text-emerald-700'
                             : 'text-ink-faint',
@@ -341,7 +371,6 @@ export function StayPipelineStepper({
   variant = 'journey',
 }: Props) {
   if (variant === 'journey' || variant === 'light') {
-    // light pages also get the journey rail — less “school checklist”
     return <JourneyStepper steps={steps} onStepPress={onStepPress} />
   }
   return (

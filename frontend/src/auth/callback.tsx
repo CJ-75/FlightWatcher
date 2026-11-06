@@ -3,7 +3,7 @@
  * - Web: session puis redirect /
  * - Mobile: si ?app_redirect=…, renvoie les tokens vers l’app (deep link)
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSupabaseClient } from '../lib/supabase'
 import { apiUrl } from '../utils/apiBase'
@@ -22,12 +22,28 @@ function buildAppDeepLink(
   return `${base}#${hash}`
 }
 
+function isBenignExchangeError(message: string): boolean {
+  const m = message.toLowerCase()
+  return (
+    m.includes('already') ||
+    m.includes('flow state') ||
+    m.includes('code verifier') ||
+    m.includes('invalid request') ||
+    m.includes('expired')
+  )
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate()
   const [mobileLink, setMobileLink] = useState<string | null>(null)
   const [status, setStatus] = useState('Connexion en cours…')
+  const ran = useRef(false)
 
   useEffect(() => {
+    // React Strict Mode remounts effects — PKCE code is one-shot.
+    if (ran.current) return
+    ran.current = true
+
     const handleAuthCallback = async () => {
       const supabase = await getSupabaseClient()
       if (!supabase) {
@@ -39,19 +55,44 @@ export default function AuthCallback() {
       const appRedirect = search.get('app_redirect')
 
       try {
-        // Implicit (mobile): tokens in URL hash — detectSessionInUrl / getSession
-        // PKCE (web): ?code=…
+        // Implicit (mobile): tokens in URL hash
+        // PKCE (web): ?code=… — detectSessionInUrl may already exchange; only
+        // call exchangeCodeForSession if we still have no session.
         const code = search.get('code')
         if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-          if (exchangeError) {
-            console.error('Erreur exchangeCodeForSession:', exchangeError)
-            navigate('/login')
-            return
+          const {
+            data: { session: existing },
+          } = await supabase.auth.getSession()
+          if (!existing) {
+            const { error: exchangeError } =
+              await supabase.auth.exchangeCodeForSession(code)
+            if (exchangeError) {
+              // Race with detectSessionInUrl / double effect — retry getSession
+              const {
+                data: { session: after },
+              } = await supabase.auth.getSession()
+              if (!after) {
+                console.error('Erreur exchangeCodeForSession:', exchangeError)
+                if (!isBenignExchangeError(exchangeError.message)) {
+                  navigate('/login')
+                  return
+                }
+                // Brief wait then one more session check
+                await new Promise((r) => setTimeout(r, 400))
+                const {
+                  data: { session: late },
+                } = await supabase.auth.getSession()
+                if (!late) {
+                  navigate('/login')
+                  return
+                }
+              }
+            }
           }
         } else if (window.location.hash.includes('access_token')) {
-          // Ensure hash tokens are applied (some loads race detectSessionInUrl)
-          const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+          const hash = new URLSearchParams(
+            window.location.hash.replace(/^#/, ''),
+          )
           const access_token = hash.get('access_token')
           const refresh_token = hash.get('refresh_token')
           if (access_token && refresh_token) {
@@ -85,7 +126,6 @@ export default function AuthCallback() {
 
         console.log('✅ Connexion réussie:', session.user.email)
 
-        // Retour app mobile (même flow web + deep link)
         if (appRedirect) {
           const deepLink = buildAppDeepLink(appRedirect, session)
           setMobileLink(deepLink)
@@ -107,7 +147,9 @@ export default function AuthCallback() {
               if (response.ok) {
                 const data = await response.json()
                 if (data.is_admin_email || data.requires_password) {
-                  const passwordVerified = document.cookie.includes('admin_password_verified=true')
+                  const passwordVerified = document.cookie.includes(
+                    'admin_password_verified=true',
+                  )
                   if (passwordVerified) {
                     navigate('/admin/users')
                   } else {
@@ -129,7 +171,9 @@ export default function AuthCallback() {
           sessionStorage.removeItem('fw_post_login_redirect')
           const tripMatch = postLogin.match(/^\/trip\/([^/?#]+)/)
           const draftMatch = postLogin.match(/[?&]draft=([^&]+)/)
-          const claimToken = tripMatch?.[1] || (draftMatch ? decodeURIComponent(draftMatch[1]) : null)
+          const claimToken =
+            tripMatch?.[1] ||
+            (draftMatch ? decodeURIComponent(draftMatch[1]) : null)
           if (claimToken) {
             try {
               await getApiClient().claimMyTrip(claimToken)
