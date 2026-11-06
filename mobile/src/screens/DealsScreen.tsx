@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, DealOccasionChip, TravelDeal } from '@flightwatcher/shared'
 import {
   airportSelectionLabel,
+  dealStartStillUpcoming,
   dedupeDealsByHotelTitle,
   encodeAirportCodes,
   findCityGroupByCodes,
@@ -186,12 +187,9 @@ export function DealsScreen() {
             setOccasionChips([])
           })
         const list = await listPromise
-        const today = new Date()
-        const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
         const withHotelPhoto = (Array.isArray(list) ? list : []).filter((d) => {
           if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim())) return false
-          const out = String(d.dates?.outbound || '').slice(0, 10)
-          return out.length >= 10 && out >= todayIso
+          return dealStartStillUpcoming(d)
         })
         setDeals(withHotelPhoto)
         lastFetchAtRef.current = Date.now()

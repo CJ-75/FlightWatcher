@@ -6,8 +6,10 @@ from __future__ import annotations
 import re
 import threading
 import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+from deals.stay_time import deal_start_still_upcoming, paris_today_iso
 
 _list_cache_lock = threading.Lock()
 _list_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
@@ -23,21 +25,18 @@ WALL_MIN_DEALS = 30
 
 
 def _today_iso() -> str:
-    return date.today().isoformat()
+    """Calendar day in Europe/Paris (wall clock for Séjours)."""
+    return paris_today_iso()
 
 
 def _row_out_date_ok(row: Dict[str, Any], today: Optional[str] = None) -> bool:
-    """True if check-in / outbound is today or later (ISO YYYY-MM-DD)."""
-    t = today or _today_iso()
-    out = str(row.get("out_date") or "")[:10]
-    return len(out) >= 10 and out >= t
+    """True if outbound start (Paris datetime) is still upcoming."""
+    return deal_start_still_upcoming(row, today)
 
 
 def _deal_out_date_ok(deal: Dict[str, Any], today: Optional[str] = None) -> bool:
-    """TravelDeal-shaped: dates.outbound not before today."""
-    t = today or _today_iso()
-    out = str((deal.get("dates") or {}).get("outbound") or "")[:10]
-    return len(out) >= 10 and out >= t
+    """TravelDeal-shaped: outbound start still upcoming (Paris)."""
+    return deal_start_still_upcoming(deal, today)
 
 
 def _flight_duration_minutes(
