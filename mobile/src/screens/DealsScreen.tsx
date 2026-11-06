@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  InteractionManager,
 } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -38,7 +39,7 @@ import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const STALE_MS = 90_000
-const ORIGIN_STORAGE_KEY = 'fw_deals_origin'
+const ORIGIN_LS_KEY = 'fw_deals_origin'
 const DEALS_PAGE = 36
 const DEALS_MAX = 96
 type DurationTab = 'weekend' | 'short' | 'week'
@@ -233,12 +234,21 @@ export function DealsScreen() {
     [refreshLikes, queryOrigin, queryAdults, occasion, durationTab, uiEnabled],
   )
 
-  // Filter changes → always refetch (after origin hydrate)
+  // Paint header + skeleton first, then fetch (after origin hydrate + interactions)
   useEffect(() => {
     if (!originReady) return
     setFetchLimit(DEALS_PAGE)
     setHasMore(false)
-    void load({ force: true, limit: DEALS_PAGE })
+    let cancelled = false
+    const handle = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) void load({ force: true, limit: DEALS_PAGE })
+      })
+    })
+    return () => {
+      cancelled = true
+      handle.cancel?.()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
   }, [originReady, queryOrigin, queryAdults, occasion, durationTab])
 
@@ -304,8 +314,15 @@ export function DealsScreen() {
     return dedupeDealsByHotelTitle(raw, occupied)
   }, [deals, queryOrigin, hasWallFilter, gridDeals])
 
-  const listData =
-    fillerDeals.length > 0
+  const showSkeleton =
+    (loading || !originReady) && deals.length === 0 && !error && !refreshing
+
+  const listData = showSkeleton
+    ? Array.from({ length: 4 }, (_, i) => ({
+        kind: 'skeleton' as const,
+        id: `sk-${i}`,
+      }))
+    : fillerDeals.length > 0
       ? [
           ...gridDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
           { kind: 'filler_header' as const },
@@ -346,16 +363,14 @@ export function DealsScreen() {
     <View style={styles.root}>
       <ScreenBackground />
 
-      {loading && !refreshing ? (
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Chargement des séjours…</Text>
-        </View>
-      ) : (
-        <FlatList
+      <FlatList
           data={listData}
           keyExtractor={(item, i) =>
-            item.kind === 'filler_header' ? 'filler-header' : item.deal.id || String(i)
+            item.kind === 'skeleton'
+              ? item.id
+              : item.kind === 'filler_header'
+                ? 'filler-header'
+                : item.deal.id || String(i)
           }
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
@@ -576,41 +591,59 @@ export function DealsScreen() {
             </View>
           }
           ListEmptyComponent={
-            <View style={[styles.emptyCard, shadow.soft]}>
-              {error ? (
-                <>
-                  <Text style={styles.emptyTitle}>Oups</Text>
-                  <Text style={styles.emptyBody} numberOfLines={3}>
-                    {error}
-                  </Text>
-                  <Pressable
-                    onPress={() => void load({ force: true })}
-                    style={styles.retryBtn}
-                  >
-                    <Text style={styles.retryText}>Réessayer</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.emptyTitle}>Pas encore de bon plan ici</Text>
-                  <Text style={styles.emptyBody}>
-                    {origin
-                      ? `Aucun séjour vol + hôtel pour ces filtres. Change d’aéroport, d’envie, ou lance une recherche.`
-                      : 'Aucun séjour pour l’instant. Choisis un départ dans Affiner, ou lance une recherche.'}
-                  </Text>
-                  <Pressable
-                    onPress={() =>
-                      (navigation as { navigate: (a: string) => void }).navigate('Search')
-                    }
-                    style={styles.retryBtn}
-                  >
-                    <Text style={styles.retryText}>Lancer une recherche</Text>
-                  </Pressable>
-                </>
-              )}
-            </View>
+            showSkeleton ? null : (
+              <View style={[styles.emptyCard, shadow.soft]}>
+                {error ? (
+                  <>
+                    <Text style={styles.emptyTitle}>Oups</Text>
+                    <Text style={styles.emptyBody} numberOfLines={3}>
+                      {error}
+                    </Text>
+                    <Pressable
+                      onPress={() => void load({ force: true, limit: DEALS_PAGE })}
+                      style={styles.retryBtn}
+                    >
+                      <Text style={styles.retryText}>Réessayer</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.emptyTitle}>Pas encore de bon plan ici</Text>
+                    <Text style={styles.emptyBody}>
+                      {origin
+                        ? `Aucun séjour vol + hôtel pour ces filtres. Change d’aéroport, d’envie, ou lance une recherche.`
+                        : 'Aucun séjour pour l’instant. Choisis un départ dans Affiner, ou lance une recherche.'}
+                    </Text>
+                    <Pressable
+                      onPress={() =>
+                        (navigation as { navigate: (a: string) => void }).navigate(
+                          'Search',
+                        )
+                      }
+                      style={styles.retryBtn}
+                    >
+                      <Text style={styles.retryText}>Lancer une recherche</Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            )
           }
           renderItem={({ item }) => {
+            if (item.kind === 'skeleton') {
+              return (
+                <View style={[styles.skeletonCard, shadow.soft]}>
+                  <View style={styles.skeletonImage} />
+                  <View style={styles.skeletonBody}>
+                    <View style={[styles.skeletonLine, { width: '70%' }]} />
+                    <View style={[styles.skeletonLine, { width: '45%' }]} />
+                    <View
+                      style={[styles.skeletonLine, { width: '30%', height: 22 }]}
+                    />
+                  </View>
+                </View>
+              )
+            }
             if (item.kind === 'filler_header') {
               return (
                 <View style={styles.fillerHeader}>
@@ -637,7 +670,7 @@ export function DealsScreen() {
           }}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
-            if (hasMore) loadMore()
+            if (!showSkeleton && hasMore) loadMore()
           }}
           ListFooterComponent={
             loadingMore ? (
@@ -650,7 +683,6 @@ export function DealsScreen() {
           }
           showsVerticalScrollIndicator={false}
         />
-      )}
 
     </View>
   )
@@ -964,6 +996,28 @@ const styles = StyleSheet.create({
   },
   moreFooterSpacer: {
     height: 12,
+  },
+  skeletonCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  skeletonImage: {
+    width: '100%',
+    aspectRatio: 16 / 10,
+    backgroundColor: colors.primarySoft,
+  },
+  skeletonBody: {
+    padding: spacing.md,
+    gap: 10,
+  },
+  skeletonLine: {
+    height: 14,
+    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
   },
   fillerHeader: {
     marginTop: 8,

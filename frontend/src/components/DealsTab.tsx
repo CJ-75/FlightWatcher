@@ -91,6 +91,7 @@ export function DealsTab() {
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [shellReady, setShellReady] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [fetchLimit, setFetchLimit] = useState(DEALS_PAGE)
   const [hasMore, setHasMore] = useState(false)
@@ -315,11 +316,18 @@ export function DealsTab() {
     ],
   )
 
+  // First paint: header + skeleton, then kick off API
   useEffect(() => {
+    const id = requestAnimationFrame(() => setShellReady(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  useEffect(() => {
+    if (!shellReady) return
     setFetchLimit(DEALS_PAGE)
     setHasMore(false)
     void load({ limit: DEALS_PAGE })
-  }, [load])
+  }, [shellReady, load])
 
   const loadMore = useCallback(() => {
     if (loadingMore || loading || !hasMore) return
