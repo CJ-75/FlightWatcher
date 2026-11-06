@@ -45,7 +45,24 @@ def fast_search_path(enabled: bool = True) -> Iterator[None]:
 
 def _min_interval_s(provider: str = "") -> float:
     name = (provider or "").lower()
-    # Per-provider override wins
+    # Organic Search must stay fast: do NOT let seed-oriented PROVIDER_*_MIN_INTERVAL_S
+    # starve concurrent users (Ryanair was stuck at 2.5s process-wide).
+    if is_fast_search_path():
+        search_specific = (
+            f"SEARCH_PROVIDER_{name.upper()}_MIN_INTERVAL_S" if name else ""
+        )
+        if search_specific:
+            raw = os.getenv(search_specific)
+            if raw not in (None, ""):
+                try:
+                    return max(0.0, float(raw))
+                except (TypeError, ValueError):
+                    pass
+        try:
+            return max(0.0, float(os.getenv("SEARCH_PROVIDER_MIN_INTERVAL_S", "0.15")))
+        except (TypeError, ValueError):
+            return 0.15
+    # Seed / revalidate / background: per-provider override then global
     specific_key = f"PROVIDER_{name.upper()}_MIN_INTERVAL_S" if name else ""
     if specific_key:
         raw = os.getenv(specific_key)
@@ -54,11 +71,6 @@ def _min_interval_s(provider: str = "") -> float:
                 return max(0.0, float(raw))
             except (TypeError, ValueError):
                 pass
-    if is_fast_search_path():
-        try:
-            return max(0.0, float(os.getenv("SEARCH_PROVIDER_MIN_INTERVAL_S", "0.15")))
-        except (TypeError, ValueError):
-            return 0.15
     try:
         return max(0.0, float(os.getenv("PROVIDER_MIN_INTERVAL_S", "1.0")))
     except (TypeError, ValueError):

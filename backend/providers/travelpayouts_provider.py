@@ -396,11 +396,19 @@ class TravelpayoutsProvider:
         destinations_exclues = params.destinations_exclues or []
         destinations_incluses = params.destinations_incluses
         direct = bool(params.direct)
-        # None / <=0 = unlimited (Search world). Positive = seed/deals caps only.
+        # None / <=0 = unlimited (Search world). Soft-cap under concurrent load.
         try:
             raw_lim = int(params.limite_allers) if params.limite_allers is not None else 0
         except (TypeError, ValueError):
             raw_lim = 0
+        try:
+            from providers.throttle import is_fast_search_path
+            from search_scale import effective_limite_allers
+
+            if is_fast_search_path():
+                raw_lim = effective_limite_allers(raw_lim)
+        except Exception:
+            pass
         hard_cap: Optional[int] = raw_lim if raw_lim > 0 else None
 
         dates_depart_by_day = {d.date[:10]: d for d in params.dates_depart}

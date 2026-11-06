@@ -219,19 +219,38 @@ class RyanairProvider:
             if dest not in vols_aller_optimises or vol.price < vols_aller_optimises[dest].price:
                 vols_aller_optimises[dest] = vol
 
-        # Search (organic / unlimited): all destinations. Seed/deals may pass a cap.
+        # Cap destinations: seed/deals use limite_allers; organic Search soft-caps under load.
         try:
             raw_lim = int(limite_allers) if limite_allers is not None else 0
         except (TypeError, ValueError):
             raw_lim = 0
+        if is_fast_search_path():
+            try:
+                from search_scale import effective_limite_allers
+
+                raw_lim = effective_limite_allers(raw_lim)
+            except Exception:
+                pass
         ranked = sorted(vols_aller_optimises.values(), key=lambda v: v.price)
-        if raw_lim > 0 and not is_fast_search_path():
+        if raw_lim > 0:
             vols_aller_filtres = ranked[:raw_lim]
         else:
             vols_aller_filtres = ranked
 
-        # Parallel return legs on fast Search path (seed stays serial / gentler)
+        # Parallel return legs on fast Search path (seed stays serial / gentler).
+        # Under concurrency, shrink fan-out so 100 users don't spawn 600 Ryanair workers.
         workers_hint = 6 if is_fast_search_path() else 1
+        if is_fast_search_path():
+            try:
+                from search_priority import searches_in_flight
+
+                inflight = searches_in_flight()
+                if inflight >= 8:
+                    workers_hint = 2
+                elif inflight >= 4:
+                    workers_hint = 3
+            except Exception:
+                pass
         workers = min(workers_hint, max(1, len(vols_aller_filtres)))
 
         def _best_return(vol_aller) -> Optional[TripResponse]:

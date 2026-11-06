@@ -24,12 +24,21 @@ from flight_scanner import (
     enrich_trip_results_fast,
 )
 from scan_log import slog, slog_banner, slog_dates, slog_provider_results
+from search_scale import (
+    cache_get,
+    cache_put,
+    coalesce,
+    inspire_cache_key,
+    scan_pool_workers,
+)
 from supabase_deps import SUPABASE_AVAILABLE, get_supabase_service_client, optional_auth
 
 router = APIRouter()
 
 # Dedicated pool so inspire/scan never stall the asyncio loop (hotels/other routes stay responsive)
-_SCAN_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fw-scan")
+_SCAN_POOL = ThreadPoolExecutor(
+    max_workers=scan_pool_workers(), thread_name_prefix="fw-scan"
+)
 
 
 def _print_provider_breakdown(origin: str, merged_n: int) -> None:
@@ -128,13 +137,24 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
                 message=f"Scan terminé (cache): {len(cached_result)} voyage(s) trouvé(s)",
             )
 
+        # L1/L2 process cache (before provider fan-out)
+        local_hit = cache_get(f"scan:{cache_key}")
+        if isinstance(local_hit, dict) and local_hit.get("results") is not None:
+            rows = local_hit.get("results") or []
+            slog(f"✅ L1/L2 cache HIT — {len(rows)} voyage(s)")
+            return ScanResponse(
+                resultats=[TripResponse(**r) for r in rows],
+                nombre_requetes=0,
+                message=f"Scan terminé (cache local): {len(rows)} voyage(s) trouvé(s)",
+            )
+
         slog("⏳ Scan live (Ryanair + Travelpayouts)…")
 
-        def _run_scan():
+        def _run_scan_payload():
             from search_priority import search_active
 
             with search_active():
-                return scanner_vols_api(
+                trips, nq = scanner_vols_api(
                     aeroport_depart=request.aeroport_depart or "BVA",
                     dates_depart=request.dates_depart,
                     dates_retour=request.dates_retour,
@@ -146,9 +166,22 @@ async def scan_flights(request: ScanRequest, http_request: Request = None):
                     passengers=request.passengers or 1,
                     direct=bool(request.direct),
                 )
+                return {
+                    "results": [
+                        r.model_dump() if hasattr(r, "model_dump") else r
+                        for r in (trips or [])
+                    ],
+                    "nq": int(nq or 0),
+                }
+
+        def _coalesced_scan():
+            return coalesce(f"scan:{cache_key}", _run_scan_payload)
 
         loop = asyncio.get_running_loop()
-        resultats, num_requetes = await loop.run_in_executor(_SCAN_POOL, _run_scan)
+        payload = await loop.run_in_executor(_SCAN_POOL, _coalesced_scan)
+        rows = payload.get("results") or []
+        num_requetes = int(payload.get("nq") or 0)
+        resultats = [TripResponse(**r) if isinstance(r, dict) else r for r in rows]
         _print_provider_breakdown(request.aeroport_depart or "BVA", len(resultats or []))
 
         # Cache write off the critical path — vols d’abord
@@ -237,9 +270,18 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
         if not dates_depart or not dates_retour:
             raise HTTPException(status_code=400, detail="Impossible de générer les dates pour ce preset")
 
-        slog("⏳ Scan live (Ryanair + Travelpayouts)…")
+        ikey = inspire_cache_key(
+            departure=request.departure,
+            budget=request.budget,
+            passengers=request.passengers or 1,
+            direct=bool(request.direct),
+            date_preset=None if request.flexible_dates else request.date_preset,
+            dates_depart=dates_depart,
+            dates_retour=dates_retour,
+            destinations_exclues=request.destinations_exclues or [],
+        )
 
-        def _inspire_scan_and_enrich():
+        def _inspire_payload():
             from search_priority import search_active
 
             # Vols first — no hotel / LiteAPI on this path; hotel workers yield
@@ -258,12 +300,24 @@ async def inspire_trip(request: InspireRequest, http_request: Request = None):
                 )
                 enriched = enrich_trip_results(trips, request.departure)
                 enriched.sort(key=lambda t: t.prix_total)
-                return enriched, nq
+                return {
+                    "resultats": [
+                        t.model_dump() if hasattr(t, "model_dump") else t
+                        for t in (enriched or [])
+                    ],
+                    "nq": int(nq or 0),
+                }
 
+        slog("⏳ Scan live (Ryanair + Travelpayouts)…")
         loop = asyncio.get_running_loop()
-        enriched_results, num_requetes = await loop.run_in_executor(
-            _SCAN_POOL, _inspire_scan_and_enrich
+        payload = await loop.run_in_executor(
+            _SCAN_POOL, lambda: coalesce(f"inspire:{ikey}", _inspire_payload)
         )
+        rows = payload.get("resultats") or []
+        num_requetes = int(payload.get("nq") or 0)
+        enriched_results = [
+            TripResponse(**r) if isinstance(r, dict) else r for r in rows
+        ]
 
         _print_provider_breakdown(request.departure or "?", len(enriched_results or []))
 
@@ -340,11 +394,54 @@ async def inspire_trip_stream(request: InspireRequest, http_request: Request = N
 
     chunk_size = 3
     event_q: queue.Queue = queue.Queue()
+    ikey = inspire_cache_key(
+        departure=request.departure,
+        budget=request.budget,
+        passengers=request.passengers or 1,
+        direct=bool(request.direct),
+        date_preset=None if request.flexible_dates else request.date_preset,
+        dates_depart=dates_depart,
+        dates_retour=dates_retour,
+        destinations_exclues=request.destinations_exclues or [],
+    )
+    stream_cache_key = f"inspire:{ikey}"
 
     def _worker() -> None:
         total_nq = 0
         painted = 0
         try:
+            # Serve warm inspire cache as progressive batches (no provider fan-out).
+            cached = cache_get(stream_cache_key)
+            if isinstance(cached, dict) and cached.get("resultats") is not None:
+                rows = cached.get("resultats") or []
+                slog(f"✅ Inspire stream cache HIT — {len(rows)} voyage(s)")
+                for i in range(0, len(rows), chunk_size):
+                    chunk = rows[i : i + chunk_size]
+                    painted += len(chunk)
+                    event_q.put(
+                        {
+                            "type": "batch",
+                            "provider": "cache",
+                            "origin": request.departure,
+                            "resultats": chunk,
+                            "done": False,
+                        }
+                    )
+                event_q.put(
+                    {
+                        "type": "done",
+                        "nombre_requetes": 0,
+                        "total": painted,
+                        "message": (
+                            f"{painted} destination(s) trouvée(s) "
+                            f"pour {request.budget}€/pers"
+                        ),
+                        "done": True,
+                    }
+                )
+                return
+
+            collected: list = []
             with search_active():
                 for ev in search_roundtrips_stream(
                     aeroport_depart=request.departure,
@@ -373,18 +470,25 @@ async def inspire_trip_stream(request: InspireRequest, http_request: Request = N
                     for i in range(0, len(enriched), chunk_size):
                         chunk = enriched[i : i + chunk_size]
                         painted += len(chunk)
+                        dumped = [
+                            t.model_dump() if hasattr(t, "model_dump") else t.dict()
+                            for t in chunk
+                        ]
+                        collected.extend(dumped)
                         event_q.put(
                             {
                                 "type": "batch",
                                 "provider": provider,
                                 "origin": origin,
-                                "resultats": [
-                                    t.model_dump() if hasattr(t, "model_dump") else t.dict()
-                                    for t in chunk
-                                ],
+                                "resultats": dumped,
                                 "done": False,
                             }
                         )
+            if collected:
+                cache_put(
+                    stream_cache_key,
+                    {"resultats": collected, "nq": int(total_nq or 0)},
+                )
             event_q.put(
                 {
                     "type": "done",
