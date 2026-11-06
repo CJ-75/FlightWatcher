@@ -13,6 +13,10 @@ import type {
   UpdatePlannedTripRequest,
 } from '../types'
 import { getApiClient } from '../utils/apiClient'
+import {
+  InvoiceBusyLabel,
+  openHotelInvoicePdf,
+} from '../utils/hotelInvoice'
 import { getAppConfig } from '../utils/configCache'
 import { listTripItemsCached } from '../utils/tripItemsCache'
 import {
@@ -1302,6 +1306,8 @@ function TripDetailView({
   const [skippingFlight, setSkippingFlight] = useState(false)
   const [skippingHotel, setSkippingHotel] = useState(false)
   const [hotelBusy, setHotelBusy] = useState(false)
+  const [invoiceBusy, setInvoiceBusy] = useState(false)
+  const [invoiceDone, setInvoiceDone] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -1473,6 +1479,25 @@ function TripDetailView({
       workspace?.pipeline.hotel === 'booked',
   )
   const hasHotel = Boolean(draftHotel || workspace?.hotel_booking_id)
+  const hotelBookingId = String(
+    workspace?.hotel_booking_id ||
+      draftPayload.hotel_booking_id ||
+      (flightDraft?.payload as Record<string, unknown> | undefined)
+        ?.hotel_booking_id ||
+      '',
+  ).trim()
+  const hotelInvoiceReady = Boolean(
+    hotelBooked &&
+      !externalHotel &&
+      hotelBookingId &&
+      ['confirmed', 'payment_succeeded', 'booking_pending'].includes(
+        String(
+          workspace?.hotel_booking_status ||
+            draftPayload.hotel_booking_status ||
+            'confirmed',
+        ).toLowerCase(),
+      ),
+  )
   const stayParty = useMemo(() => {
     const flightPp = externalFlight
       ? 0
@@ -1795,6 +1820,25 @@ function TripDetailView({
     if (!reservationToken) return
     navigate(`/trip/${encodeURIComponent(reservationToken)}`)
   }
+
+  const downloadHotelInvoice = useCallback(() => {
+    if (!hotelBookingId || invoiceBusy) return
+    setInvoiceBusy(true)
+    setInvoiceDone(false)
+    void openHotelInvoicePdf({
+      filename: `facture-hotel-${hotelBookingId}.pdf`,
+      fetchBlob: () =>
+        getApiClient().downloadHotelBookingInvoice(hotelBookingId, {
+          draft_token: reservationToken,
+        }),
+    })
+      .then(() => {
+        setInvoiceDone(true)
+        window.setTimeout(() => setInvoiceDone(false), 2500)
+      })
+      .catch(() => onToast('Facture indisponible pour le moment'))
+      .finally(() => setInvoiceBusy(false))
+  }, [hotelBookingId, invoiceBusy, onToast, reservationToken])
 
   const openReservation = (compose = false) => {
     if (hotelBusy) return
@@ -2796,6 +2840,23 @@ function TripDetailView({
                                 : HOTEL_CTA_FR.choose}
                             <span aria-hidden>›</span>
                           </button>
+                          {hotelInvoiceReady ? (
+                            <button
+                              type="button"
+                              disabled={invoiceBusy}
+                              aria-busy={invoiceBusy}
+                              onClick={() => downloadHotelInvoice()}
+                              className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                            >
+                              {invoiceBusy ? (
+                                <InvoiceBusyLabel label="Préparation…" />
+                              ) : invoiceDone ? (
+                                'Facture ✓'
+                              ) : (
+                                'Facture'
+                              )}
+                            </button>
+                          ) : null}
                           {canSkipHotel ? (
                             <button
                               type="button"
@@ -2851,6 +2912,23 @@ function TripDetailView({
                               : HOTEL_CTA_FR.choose}
                           <span aria-hidden>›</span>
                         </button>
+                        {hotelInvoiceReady ? (
+                          <button
+                            type="button"
+                            disabled={invoiceBusy}
+                            aria-busy={invoiceBusy}
+                            onClick={() => downloadHotelInvoice()}
+                            className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                          >
+                            {invoiceBusy ? (
+                              <InvoiceBusyLabel label="Préparation…" />
+                            ) : invoiceDone ? (
+                              'Facture ✓'
+                            ) : (
+                              'Facture'
+                            )}
+                          </button>
+                        ) : null}
                         {canSkipHotel ? (
                           <button
                             type="button"

@@ -158,11 +158,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           : user ?? (__DEV__ && isGuest ? DEV_GUEST_USER : null),
       signInWithGoogle: () => auth.signInWithGoogle(),
       signOut: async () => {
-        await auth.signOut()
-        setUser(null)
-        setSession(null)
-        setIsGuest(false)
-        setAppearLoggedOutState(false)
+        try {
+          await auth.signOut()
+        } catch (e) {
+          if (__DEV__) console.warn('[auth] signOut error', e)
+        } finally {
+          setUser(null)
+          setSession(null)
+          setIsGuest(false)
+          setAppearLoggedOutState(false)
+        }
       },
     }),
     [user, session, loading, isGuest, appearLoggedOut],

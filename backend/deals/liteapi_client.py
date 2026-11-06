@@ -318,6 +318,22 @@ class LiteApiClient:
             retry=False,
         )
 
+    def get_booking(self, liteapi_booking_id: str, *, timeout: Optional[float] = None) -> Any:
+        """GET /bookings/{bookingId} — status, confirmation, cancel policies."""
+        bid = (liteapi_booking_id or "").strip()
+        if not bid:
+            raise LiteApiError("bookingId manquant pour retrieve")
+        params: Optional[Dict[str, Any]] = None
+        if timeout is not None:
+            params = {"timeout": float(timeout)}
+        return self._request(
+            "GET",
+            self.cfg.book_base,
+            f"/bookings/{bid}",
+            params=params,
+            retry=True,
+        )
+
     def cancel_booking(self, liteapi_booking_id: str) -> Any:
         """PUT /bookings/{bookingId} — cancel a confirmed LiteAPI booking."""
         bid = (liteapi_booking_id or "").strip()
@@ -329,6 +345,59 @@ class LiteApiClient:
             f"/bookings/{bid}",
             retry=False,
         )
+
+    def get_invoice_pdf(self, liteapi_booking_id: str) -> bytes:
+        """
+        Guest invoice PDF (Nuitee MoR / Payment SDK).
+        GET https://api.wlbl.cloud/v1/invoices/{bookingId}?attachment&key=…
+        """
+        bid = (liteapi_booking_id or "").strip()
+        if not bid:
+            raise LiteApiError("bookingId manquant pour facture")
+        key = (self.cfg.api_key or "").strip()
+        if not key:
+            raise LiteApiError("LiteAPI key manquante pour facture")
+        url = f"https://api.wlbl.cloud/v1/invoices/{bid}"
+        t0 = time.monotonic()
+        try:
+            resp = self._client.get(
+                url,
+                params={"attachment": "", "key": key},
+                headers={"Accept": "application/pdf,*/*"},
+                timeout=max(15.0, float(self.cfg.timeout_s or 8.0)),
+            )
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            if resp.status_code >= 400:
+                body_preview = (resp.text or "")[:300]
+                logger.warning(
+                    "liteapi_invoice_error booking=%s status=%s duration_ms=%s body=%s",
+                    bid[:12],
+                    resp.status_code,
+                    elapsed_ms,
+                    body_preview,
+                )
+                raise LiteApiError(
+                    f"LiteAPI invoice HTTP {resp.status_code}",
+                    status_code=resp.status_code,
+                    body=body_preview,
+                )
+            content = resp.content or b""
+            if not content:
+                raise LiteApiError("Facture vide", status_code=resp.status_code)
+            logger.info(
+                "liteapi_invoice_ok booking=%s status=%s duration_ms=%s bytes=%s",
+                bid[:12],
+                resp.status_code,
+                elapsed_ms,
+                len(content),
+            )
+            return content
+        except LiteApiError:
+            raise
+        except httpx.TimeoutException as e:
+            raise LiteApiError("LiteAPI invoice timeout", status_code=None) from e
+        except Exception as e:
+            raise LiteApiError(f"LiteAPI invoice error: {e}") from e
 
 
 def get_liteapi_client(cfg: Optional[DealsConfig] = None) -> LiteApiClient:

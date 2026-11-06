@@ -157,16 +157,16 @@ export default function Auth() {
 
   const handleSignOut = async () => {
     setLoading(true)
-    const { error } = await signOut()
-    
-    if (error) {
-      console.error('Erreur déconnexion:', error)
-      alert(`Erreur de déconnexion: ${error.message}`)
-    } else {
+    try {
+      const { error } = await signOut()
+      if (error) console.error('Erreur déconnexion:', error)
+    } catch (e) {
+      console.error('Erreur déconnexion:', e)
+    } finally {
       setUser(null)
-      navigate('/login')
+      setLoading(false)
+      navigate('/login', { replace: true })
     }
-    setLoading(false)
   }
 
   // Vérifier si Supabase est configuré côté frontend

@@ -274,7 +274,13 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
     signOut: async () => {
       const c = await getClient()
       if (!c) return { error: new Error('Supabase is not configured') }
-      const { error } = await c.auth.signOut()
+      // Always clear local session first so logout works offline / if revoke fails.
+      const { error } = await c.auth.signOut({ scope: 'local' })
+      try {
+        await c.auth.signOut({ scope: 'global' })
+      } catch {
+        /* ignore */
+      }
       return { error: error ? new Error(error.message) : null }
     },
     onAuthStateChange: (callback) => {

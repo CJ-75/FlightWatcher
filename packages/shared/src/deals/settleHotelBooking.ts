@@ -29,3 +29,21 @@ export async function settleHotelBooking(
 export function hotelBookingIsConfirmed(booking: HotelBooking | null | undefined): boolean {
   return String(booking?.status || '') === 'confirmed'
 }
+
+const INVOICE_STATUSES = new Set([
+  'confirmed',
+  'payment_succeeded',
+  'booking_pending',
+])
+
+/** True when Nuitee guest invoice can be fetched for this booking. */
+export function hotelBookingHasInvoice(
+  booking: HotelBooking | null | undefined,
+): boolean {
+  if (!booking) return false
+  if (booking.invoice_available === true) return true
+  if (booking.invoice_available === false) return false
+  const status = String(booking.status || '')
+  if (!INVOICE_STATUSES.has(status)) return false
+  return Boolean(String(booking.liteapi_booking_id || '').trim())
+}

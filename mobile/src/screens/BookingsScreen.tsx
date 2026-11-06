@@ -16,11 +16,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   boardLabelFr,
+  hotelBookingHasInvoice,
   hotelCancelLabel,
   hotelStarsLabel,
   type HotelBooking,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { openInAppBrowser } from '../lib/openInApp'
 import { useAuth } from '../context/AuthContext'
 import {
   latestTripDraft,
@@ -186,6 +188,7 @@ export function BookingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { user, isGuest } = useAuth()
   const [bookings, setBookings] = useState<HotelBooking[]>([])
+  const [invoiceBusyId, setInvoiceBusyId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -309,6 +312,20 @@ export function BookingsScreen() {
     navigation.navigate('TripSummary', { draftToken: token })
   }
 
+  const openInvoice = async (b: HotelBooking) => {
+    if (invoiceBusyId) return
+    setInvoiceBusyId(b.id)
+    try {
+      const url = await getApi().hotelBookingInvoiceUrl(b.id, {
+        draft_token: b.draft_token || null,
+      })
+      setInvoiceBusyId(null)
+      await openInAppBrowser(navigation, url, 'Facture')
+    } catch {
+      setInvoiceBusyId(null)
+    }
+  }
+
   const renderStay = (item: HotelBooking) => {
     const meta = statusMeta(String(item.status))
     const photo = bookingPhoto(item)
@@ -387,6 +404,20 @@ export function BookingsScreen() {
                   color={sharedId === item.id ? colors.success : colors.muted}
                 />
               </Pressable>
+              {hotelBookingHasInvoice(item) ? (
+                <Pressable
+                  onPress={() => void openInvoice(item)}
+                  style={styles.linkBtn}
+                  disabled={invoiceBusyId === item.id}
+                  accessibilityState={{ busy: invoiceBusyId === item.id }}
+                >
+                  {invoiceBusyId === item.id ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <Text style={styles.linkBtnText}>Facture</Text>
+                  )}
+                </Pressable>
+              ) : null}
               {item.draft_token ? (
                 <Pressable
                   onPress={() => openTrip(item.draft_token!)}

@@ -51,7 +51,7 @@ export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
 export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {
   planning: 'Continuer',
   flight_selected: 'Choisir mon hôtel',
-  composing: 'Reprendre le séjour',
+  composing: 'Reprendre',
   booked: 'Ouvrir le voyage',
   past: 'Revoir le voyage',
 }

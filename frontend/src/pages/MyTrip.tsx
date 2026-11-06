@@ -24,6 +24,7 @@ import {
   hotelCancelConfirmBodyFr,
   hotelCancelLabel,
   hotelCancelSuccessBodyFr,
+  resolveHotelCancelGate,
   resolveCarrierBooking,
   resolveDraftPartyPrice,
   resolveFlightStepStatus,
@@ -36,6 +37,10 @@ import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { getApiClient } from '../utils/apiClient'
+import {
+  InvoiceBusyLabel,
+  openHotelInvoicePdf,
+} from '../utils/hotelInvoice'
 import { getAppConfig } from '../utils/configCache'
 import { listTripItemsCached } from '../utils/tripItemsCache'
 import { getCurrentSession } from '../lib/supabase'
@@ -130,8 +135,16 @@ export default function MyTrip() {
   const [hotelUnavailable, setHotelUnavailable] = useState(false)
   const [switchingHotel, setSwitchingHotel] = useState(false)
   const [cancellingHotel, setCancellingHotel] = useState(false)
+  const [invoiceBusy, setInvoiceBusy] = useState(false)
+  const [invoiceDone, setInvoiceDone] = useState(false)
+  const [invoiceError, setInvoiceError] = useState<string | null>(null)
   const [cancelHotelError, setCancelHotelError] = useState<string | null>(null)
   const [hotelCancelNotice, setHotelCancelNotice] = useState<string | null>(null)
+  /** Live cancel policy from LiteAPI retrieve (overrides draft hotel snapshot). */
+  const [liveCancelPolicy, setLiveCancelPolicy] = useState<{
+    refundable?: boolean | null
+    cancel_deadline?: string | null
+  } | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [hotelBookingEnabled, setHotelBookingEnabled] = useState(true)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
@@ -1461,29 +1474,24 @@ export default function MyTrip() {
     )
   }
 
-  const cancelLabel = hotelCancelLabel(
-    hotelObj
-      ? {
-          refundable: hotelObj.refundable as boolean | null | undefined,
-          cancel_deadline:
-            hotelObj.cancel_deadline != null
-              ? String(hotelObj.cancel_deadline)
-              : null,
-        }
-      : null,
-  )
-  const cancelPolicyForAction = hotelCancelLabel(
-    hotelObj
-      ? {
-          refundable: hotelObj.refundable as boolean | null | undefined,
-          cancel_deadline:
-            hotelObj.cancel_deadline != null
-              ? String(hotelObj.cancel_deadline)
-              : null,
-        }
-      : null,
-    { includeNonRefundable: true },
-  )
+  const cancelFields = {
+    refundable:
+      liveCancelPolicy?.refundable ??
+      (hotelObj?.refundable as boolean | null | undefined),
+    cancel_deadline:
+      liveCancelPolicy?.cancel_deadline ??
+      (hotelObj?.cancel_deadline != null
+        ? String(hotelObj.cancel_deadline)
+        : null),
+  }
+  const cancelLabel = hotelCancelLabel(cancelFields)
+  const cancelPolicyForAction = hotelCancelLabel(cancelFields, {
+    includeNonRefundable: true,
+  })
+  const cancelGate = resolveHotelCancelGate(cancelFields, {
+    checkIn: outDate ? String(outDate).slice(0, 10) : null,
+    awaitingPolicy: Boolean(hotelBooked && liveCancelPolicy === null),
+  })
 
   const hotelBookingId = String(
     payload.hotel_booking_id || draft?.payload?.hotel_booking_id || '',
@@ -1494,36 +1502,129 @@ export default function MyTrip() {
       : party.hotelTotal > 0
         ? party.hotelTotal
         : null
+  const hotelInvoiceReady = Boolean(hotelBooked && hotelBookingId)
+
+  useEffect(() => {
+    if (!hotelBooked || !token) {
+      setLiveCancelPolicy(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const api = getApiClient()
+        let bookingId = hotelBookingId
+        if (!bookingId) {
+          const list = await api.listHotelBookings({ draft_token: token })
+          const hit = (list || []).find((b) =>
+            ['confirmed', 'booking_pending', 'payment_succeeded'].includes(
+              String(b.status || '').toLowerCase(),
+            ),
+          )
+          bookingId = hit?.id ? String(hit.id) : ''
+        }
+        if (!bookingId || cancelled) return
+        const b = await api.getHotelBooking(bookingId, {
+          draft_token: token,
+          sync: true,
+        })
+        if (cancelled) return
+        setLiveCancelPolicy({
+          refundable: b.refundable ?? null,
+          cancel_deadline:
+            b.cancel_deadline != null ? String(b.cancel_deadline) : null,
+        })
+      } catch {
+        /* keep snapshot */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [hotelBooked, hotelBookingId, token])
+
+  const onDownloadHotelInvoice = useCallback(async () => {
+    if (!hotelBookingId || invoiceBusy) return
+    setInvoiceError(null)
+    setInvoiceDone(false)
+    setInvoiceBusy(true)
+    try {
+      await openHotelInvoicePdf({
+        filename: `facture-hotel-${hotelConfirmation || hotelBookingId}.pdf`,
+        fetchBlob: () =>
+          getApiClient().downloadHotelBookingInvoice(hotelBookingId, {
+            draft_token: token || null,
+          }),
+      })
+      setInvoiceDone(true)
+      window.setTimeout(() => setInvoiceDone(false), 2500)
+    } catch (e) {
+      setInvoiceError(
+        e instanceof Error ? e.message : 'Facture indisponible',
+      )
+    } finally {
+      setInvoiceBusy(false)
+    }
+  }, [hotelBookingId, hotelConfirmation, invoiceBusy, token])
 
   const onCancelHotelBooking = useCallback(async () => {
     if (!token || cancellingHotel) return
     setCancelHotelError(null)
     setHotelCancelNotice(null)
     let bookingId = hotelBookingId
-    if (!bookingId) {
-      try {
-        const list = await getApiClient().listHotelBookings({
-          draft_token: token,
-        })
+    let policy = cancelFields
+    try {
+      const api = getApiClient()
+      if (!bookingId) {
+        const list = await api.listHotelBookings({ draft_token: token })
         const hit = (list || []).find((b) =>
           ['confirmed', 'booking_pending'].includes(
             String(b.status || '').toLowerCase(),
           ),
         )
         bookingId = hit?.id ? String(hit.id) : ''
-      } catch {
-        bookingId = ''
       }
+      if (bookingId) {
+        const b = await api.getHotelBooking(bookingId, {
+          draft_token: token,
+          sync: true,
+        })
+        policy = {
+          refundable: b.refundable ?? policy.refundable,
+          cancel_deadline:
+            b.cancel_deadline != null
+              ? String(b.cancel_deadline)
+              : policy.cancel_deadline,
+        }
+        setLiveCancelPolicy({
+          refundable: policy.refundable,
+          cancel_deadline: policy.cancel_deadline,
+        })
+      }
+    } catch {
+      /* use snapshot */
     }
     if (!bookingId) {
       setCancelHotelError('Réservation introuvable pour ce voyage.')
       return
     }
+    const gate = resolveHotelCancelGate(policy, {
+      checkIn: outDate ? String(outDate).slice(0, 10) : null,
+    })
+    if (!gate.canCancelFree) {
+      setCancelHotelError(
+        gate.blockedLabelFr || 'Annulation gratuite indisponible.',
+      )
+      return
+    }
+    const policyLabel =
+      hotelCancelLabel(policy, { includeNonRefundable: true }) ||
+      cancelPolicyForAction
     if (
       !window.confirm(
         `Annuler la réservation d’hôtel ?\n\n${hotelCancelConfirmBodyFr({
           paidTotal: hotelPaidTotal,
-          policyLabel: cancelPolicyForAction,
+          policyLabel,
         })}`,
       )
     ) {
@@ -1557,11 +1658,14 @@ export default function MyTrip() {
       setCancellingHotel(false)
     }
   }, [
+    cancelFields.cancel_deadline,
+    cancelFields.refundable,
     cancelPolicyForAction,
     cancellingHotel,
     hotelBookingId,
     hotelPaidTotal,
     load,
+    outDate,
     token,
     track,
   ])
@@ -2032,17 +2136,46 @@ export default function MyTrip() {
                         {cancelLabel || cancelPolicyForAction}
                       </p>
                     ) : null}
+                    {!cancelGate.canCancelFree && cancelGate.blockedLabelFr ? (
+                      <p className="text-slate-600 text-xs">
+                        {cancelGate.blockedLabelFr}
+                      </p>
+                    ) : null}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void onCancelHotelBooking()}
-                    disabled={cancellingHotel}
-                    className="w-full text-center border border-rose-200 bg-white hover:bg-rose-50 text-rose-800 font-bold py-3 rounded-xl min-h-[44px] disabled:opacity-60"
-                  >
-                    {cancellingHotel
-                      ? 'Annulation…'
-                      : 'Annuler la réservation'}
-                  </button>
+                  {hotelInvoiceReady ? (
+                    <button
+                      type="button"
+                      onClick={() => void onDownloadHotelInvoice()}
+                      disabled={invoiceBusy}
+                      aria-busy={invoiceBusy}
+                      className="w-full inline-flex items-center justify-center gap-2 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-900 font-bold py-3 rounded-xl min-h-[44px] disabled:opacity-60"
+                    >
+                      {invoiceBusy ? (
+                        <InvoiceBusyLabel label="Préparation de la facture…" />
+                      ) : invoiceDone ? (
+                        'Facture ouverte ✓'
+                      ) : (
+                        'Voir la facture'
+                      )}
+                    </button>
+                  ) : null}
+                  {invoiceError ? (
+                    <p className="text-xs font-semibold text-rose-700">
+                      {invoiceError}
+                    </p>
+                  ) : null}
+                  {cancelGate.canCancelFree ? (
+                    <button
+                      type="button"
+                      onClick={() => void onCancelHotelBooking()}
+                      disabled={cancellingHotel}
+                      className="w-full text-center border border-rose-200 bg-white hover:bg-rose-50 text-rose-800 font-bold py-3 rounded-xl min-h-[44px] disabled:opacity-60"
+                    >
+                      {cancellingHotel
+                        ? 'Annulation…'
+                        : 'Annuler la réservation'}
+                    </button>
+                  ) : null}
                   {cancelHotelError ? (
                     <p className="text-xs font-semibold text-rose-700">
                       {cancelHotelError}

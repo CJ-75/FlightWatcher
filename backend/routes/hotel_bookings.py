@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from deals.liteapi_client import LiteApiClient, LiteApiError
@@ -139,9 +140,29 @@ class CancelRequest(BaseModel):
     draft_token: Optional[str] = None
 
 
-def _resolve_booking_actor(request: Request, draft_token: Optional[str]) -> Dict[str, Optional[str]]:
+def _user_id_from_access_token(access_token: Optional[str]) -> Optional[str]:
+    """Decode Supabase JWT from query (mobile / in-browser PDF open)."""
+    raw = (access_token or "").strip()
+    if not raw:
+        return None
+    try:
+        import jwt as pyjwt
+
+        decoded = pyjwt.decode(raw, options={"verify_signature": False})
+        sub = decoded.get("sub")
+        return str(sub) if sub else None
+    except Exception:
+        return None
+
+
+def _resolve_booking_actor(
+    request: Request,
+    draft_token: Optional[str],
+    *,
+    access_token: Optional[str] = None,
+) -> Dict[str, Optional[str]]:
     """JWT user and/or valid my_trip draft_token. At least one required."""
-    user_id = get_user_id_from_token(request)
+    user_id = get_user_id_from_token(request) or _user_id_from_access_token(access_token)
     token = (draft_token or "").strip() or None
     if user_id:
         return {"user_id": user_id, "draft_token": token}
@@ -153,6 +174,252 @@ def _resolve_booking_actor(request: Request, draft_token: Optional[str]) -> Dict
     if not row:
         raise HTTPException(status_code=401, detail="Voyage introuvable ou expiré")
     return {"user_id": None, "draft_token": token}
+
+
+_INVOICE_STATUSES = frozenset({"confirmed", "payment_succeeded", "booking_pending"})
+
+
+def _invoice_available(row: dict) -> bool:
+    status = str(row.get("status") or "").strip().lower()
+    if status not in _INVOICE_STATUSES:
+        return False
+    return bool(str(row.get("liteapi_booking_id") or "").strip())
+
+
+def _unwrap_liteapi_data(raw: Any) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    data = raw.get("data")
+    return data if isinstance(data, dict) else raw
+
+
+def _map_liteapi_booking_status(status_raw: str) -> Optional[str]:
+    s = (status_raw or "").strip().upper()
+    if not s:
+        return None
+    if s in ("CONFIRMED", "BOOKED", "SUCCESS"):
+        return "confirmed"
+    if s in ("CANCELLED", "CANCELED"):
+        return "cancelled"
+    if "PENDING" in s or "PROCESS" in s:
+        return "booking_pending"
+    if "FAIL" in s or "ERROR" in s:
+        return "failed"
+    return None
+
+
+def _parse_liteapi_cancel_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract refundable + free-cancel deadline from retrieve booking payload."""
+    out: Dict[str, Any] = {"refundable": None, "cancel_deadline": None}
+    try:
+        from deals.hotel_scoring import _cancel_deadline
+    except Exception:
+        _cancel_deadline = None  # type: ignore
+
+    nodes: List[Any] = [data]
+    rooms = data.get("bookedRooms") or data.get("booked_rooms") or []
+    if isinstance(rooms, list):
+        for room in rooms:
+            if isinstance(room, dict):
+                nodes.append(room)
+                rate = room.get("rate")
+                if isinstance(rate, dict):
+                    nodes.append(rate)
+
+    refundable: Optional[bool] = None
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        policies = node.get("cancellationPolicies") or node.get("cancellation_policies")
+        if not isinstance(policies, dict):
+            continue
+        tag = str(policies.get("refundableTag") or policies.get("refundable_tag") or "").upper()
+        if tag == "RFN":
+            refundable = True
+            break
+        if tag == "NRFN":
+            refundable = False
+            break
+    out["refundable"] = refundable
+
+    if _cancel_deadline is not None:
+        deadline = _cancel_deadline(data)
+        if not deadline:
+            for node in nodes[1:]:
+                if isinstance(node, dict):
+                    deadline = _cancel_deadline(node)
+                    if deadline:
+                        break
+        out["cancel_deadline"] = deadline
+    return out
+
+
+def _parse_liteapi_booking(raw: Any) -> Dict[str, Any]:
+    data = _unwrap_liteapi_data(raw)
+    status = _map_liteapi_booking_status(str(data.get("status") or data.get("bookingStatus") or ""))
+    confirmation = (
+        data.get("hotelConfirmationCode")
+        or data.get("confirmationCode")
+        or data.get("confirmation_code")
+        or data.get("supplierBookingId")
+    )
+    lite_id = (
+        data.get("bookingId")
+        or data.get("booking_id")
+        or data.get("id")
+    )
+    cancel = _parse_liteapi_cancel_fields(data)
+    return {
+        "status": status,
+        "confirmation_code": str(confirmation).strip() if confirmation else None,
+        "liteapi_booking_id": str(lite_id).strip() if lite_id else None,
+        "refundable": cancel.get("refundable"),
+        "cancel_deadline": cancel.get("cancel_deadline"),
+        "raw": raw if isinstance(raw, dict) else {"data": data},
+        "data": data,
+    }
+
+
+def _merge_cancel_into_snapshot(
+    snap: Any,
+    *,
+    refundable: Optional[bool],
+    cancel_deadline: Optional[str],
+) -> Optional[dict]:
+    if refundable is None and not cancel_deadline:
+        return None
+    base = dict(snap) if isinstance(snap, dict) else {}
+    hotel = (
+        dict(base["hotel"])
+        if isinstance(base.get("hotel"), dict)
+        else {}
+    )
+    if refundable is not None:
+        hotel["refundable"] = refundable
+        base["refundable"] = refundable
+    if cancel_deadline:
+        hotel["cancel_deadline"] = cancel_deadline
+        base["cancel_deadline"] = cancel_deadline
+    base["hotel"] = hotel
+    return base
+
+
+def _resync_booking_from_liteapi(
+    supabase,
+    booking: dict,
+    *,
+    force: bool = False,
+) -> dict:
+    """
+    Poll LiteAPI GET /bookings/{id} while pending (or when force=True).
+    Persists status / confirmation / cancel policy; marks draft booked on confirm.
+    """
+    status_now = str(booking.get("status") or "").strip().lower()
+    if status_now in ("cancelled", "failed") and not force:
+        return booking
+    if status_now not in ("booking_pending",) and not force:
+        return booking
+
+    lite_id = str(booking.get("liteapi_booking_id") or "").strip()
+    if not lite_id:
+        return booking
+
+    client = LiteApiClient()
+    try:
+        raw = client.get_booking(lite_id)
+    except LiteApiError:
+        return booking
+    finally:
+        client.close()
+
+    parsed = _parse_liteapi_booking(raw)
+    new_status = parsed.get("status")
+    # Never regress a confirmed booking back to pending
+    if status_now == "confirmed" and new_status == "booking_pending":
+        new_status = "confirmed"
+    if not new_status and not force:
+        return booking
+
+    conf = parsed.get("confirmation_code")
+    status_changed = bool(new_status and new_status != status_now)
+    conf_changed = bool(
+        conf and conf != str(booking.get("confirmation_code") or "").strip()
+    )
+    lite_changed = bool(
+        parsed.get("liteapi_booking_id")
+        and parsed["liteapi_booking_id"]
+        != str(booking.get("liteapi_booking_id") or "").strip()
+    )
+    snap = _merge_cancel_into_snapshot(
+        booking.get("deal_snapshot"),
+        refundable=parsed.get("refundable"),
+        cancel_deadline=parsed.get("cancel_deadline"),
+    )
+    snap_changed = snap is not None and snap != booking.get("deal_snapshot")
+
+    if not (
+        force or status_changed or conf_changed or lite_changed or snap_changed
+    ):
+        return booking
+
+    patch: Dict[str, Any] = {"updated_at": _now()}
+    if new_status:
+        patch["status"] = new_status
+    if conf:
+        patch["confirmation_code"] = conf
+    if parsed.get("liteapi_booking_id"):
+        patch["liteapi_booking_id"] = parsed["liteapi_booking_id"]
+    if snap is not None:
+        patch["deal_snapshot"] = snap
+
+    raw_book = booking.get("raw_book")
+    if isinstance(raw_book, dict):
+        patch["raw_book"] = {**raw_book, "_retrieve": parsed.get("raw")}
+    else:
+        patch["raw_book"] = parsed.get("raw")
+
+    booking_id = str(booking.get("id") or "")
+    if not booking_id:
+        return booking
+    updated = (
+        supabase.table("hotel_bookings")
+        .update(patch)
+        .eq("id", booking_id)
+        .execute()
+    )
+    row = (updated.data or [{**booking, **patch}])[0]
+
+    became_confirmed = (
+        new_status == "confirmed"
+        and status_now != "confirmed"
+    )
+    draft_token = str(booking.get("draft_token") or "").strip()
+    if became_confirmed and draft_token:
+        try:
+            from deals.my_trips import mark_hotel_booked, record_trip_event
+
+            holder = _holder_from_raw(row.get("raw_book") or parsed.get("raw"))
+            mark_hotel_booked(
+                supabase,
+                draft_token,
+                booking_id=booking_id,
+                confirmation_code=str(
+                    row.get("confirmation_code") or conf or ""
+                )
+                or None,
+                holder_email=(holder or {}).get("email"),
+                charged_price=booking.get("charged_price"),
+            )
+            record_trip_event(
+                supabase,
+                draft_token,
+                "hotel_booked",
+                meta={"booking_id": booking_id, "source": "liteapi_resync"},
+            )
+        except Exception:
+            pass
+
+    return row
 
 
 def _fetch_booking_for_actor(
@@ -687,6 +954,10 @@ async def get_booking(
     booking_id: str,
     request: Request,
     draft_token: Optional[str] = None,
+    sync: Optional[bool] = Query(
+        None,
+        description="Force LiteAPI retrieve (cancel policy / confirmation refresh)",
+    ),
 ):
     actor = _resolve_booking_actor(request, draft_token)
     supabase = _svc()
@@ -696,7 +967,59 @@ async def get_booking(
         user_id=actor["user_id"],
         draft_token=actor["draft_token"],
     )
+    # Auto-poll LiteAPI while booking_pending (settleHotelBooking); sync=1 forces refresh.
+    booking = _resync_booking_from_liteapi(
+        supabase, booking, force=bool(sync)
+    )
     return _public_booking(booking)
+
+
+@router.get("/api/hotel-bookings/{booking_id}/invoice")
+@optional_auth
+async def get_booking_invoice(
+    booking_id: str,
+    request: Request,
+    draft_token: Optional[str] = Query(None),
+    access_token: Optional[str] = Query(None),
+):
+    """Proxy LiteAPI guest invoice PDF (paid / reserved bookings only)."""
+    actor = _resolve_booking_actor(
+        request, draft_token, access_token=access_token
+    )
+    supabase = _svc()
+    booking = _fetch_booking_for_actor(
+        supabase,
+        booking_id,
+        user_id=actor["user_id"],
+        draft_token=actor["draft_token"],
+    )
+    if not _invoice_available(booking):
+        raise HTTPException(
+            status_code=404,
+            detail="Facture indisponible pour cette réservation",
+        )
+    lite_id = str(booking.get("liteapi_booking_id") or "").strip()
+    try:
+        client = LiteApiClient()
+        pdf = client.get_invoice_pdf(lite_id)
+    except LiteApiError as e:
+        status = e.status_code if isinstance(e.status_code, int) else 502
+        if status < 400 or status >= 600:
+            status = 502
+        raise HTTPException(
+            status_code=status if status != 401 else 502,
+            detail="Impossible de récupérer la facture",
+        ) from e
+    conf = str(booking.get("confirmation_code") or lite_id or booking_id)[:40]
+    filename = f"facture-hotel-{conf}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 def _nights_from_dates(dates: Any) -> Optional[int]:
@@ -764,6 +1087,7 @@ def _public_booking(row: dict) -> dict:
         "prebook_id": row.get("prebook_id"),
         "draft_token": row.get("draft_token"),
         "draft_id": row.get("draft_id"),
+        "invoice_available": _invoice_available(row),
         "city": snap.get("city"),
         "hotel_name": hotel.get("name") or snap.get("hotel_name"),
         "hotel_photo": hotel.get("photo"),

@@ -26,6 +26,7 @@ import {
   hotelCancelConfirmBodyFr,
   hotelCancelLabel,
   hotelCancelSuccessBodyFr,
+  resolveHotelCancelGate,
   hotelStarsLabel,
   primaryAirportCode,
   resolveCarrierBooking,
@@ -112,6 +113,11 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const [flightPriceHint, setFlightPriceHint] = useState<string | null>(null)
   const [chargedHotelTotal, setChargedHotelTotal] = useState<number | null>(null)
   const [cancellingHotel, setCancellingHotel] = useState(false)
+  const [invoiceBusy, setInvoiceBusy] = useState(false)
+  const [liveCancelPolicy, setLiveCancelPolicy] = useState<{
+    refundable?: boolean | null
+    cancel_deadline?: string | null
+  } | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
   const [showActivities, setShowActivities] = useState(false)
@@ -330,17 +336,19 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     : ''
   const hotelName = hotelOpt ? String(hotelOpt.name || 'Hôtel') : ''
   const boardFr = boardLabelFr(hotelOpt?.board)
-  const cancelFr = hotelCancelLabel({
-    refundable: hotelOpt?.refundable,
-    cancel_deadline: hotelOpt?.cancel_deadline,
+  const cancelFields = {
+    refundable:
+      liveCancelPolicy?.refundable ?? hotelOpt?.refundable ?? null,
+    cancel_deadline:
+      liveCancelPolicy?.cancel_deadline ??
+      (hotelOpt?.cancel_deadline != null
+        ? String(hotelOpt.cancel_deadline)
+        : null),
+  }
+  const cancelFr = hotelCancelLabel(cancelFields)
+  const cancelPolicyForAction = hotelCancelLabel(cancelFields, {
+    includeNonRefundable: true,
   })
-  const cancelPolicyForAction = hotelCancelLabel(
-    {
-      refundable: hotelOpt?.refundable,
-      cancel_deadline: hotelOpt?.cancel_deadline,
-    },
-    { includeNonRefundable: true },
-  )
   const distFr = formatDistance(hotelOpt?.distance_m ?? null)
 
   const flightBookingStatus = String(
@@ -358,6 +366,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const hotelBooked = Boolean(
     draft?.hotel_booked_at || pl.hotel_booked || pl.hotel_booked_at,
   )
+  const cancelGate = resolveHotelCancelGate(cancelFields, {
+    checkIn: out ? String(out).slice(0, 10) : null,
+    awaitingPolicy: Boolean(hotelBooked && liveCancelPolicy === null),
+  })
 
   const party = useMemo(
     () =>
@@ -375,11 +387,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   const hotelPp =
     party.hotelTotal > 0 ? Math.round(party.hotelTotal / adults) : null
 
-  /** Hydrate paid hotel total for older drafts missing hotel_charged_total. */
+  /** Hydrate paid hotel total + live cancel policy for booked stays. */
   useEffect(() => {
-    if (!hotelBooked || !draftToken) return
-    if (pl.hotel_charged_total != null && Number(pl.hotel_charged_total) > 0) {
-      setChargedHotelTotal(Number(pl.hotel_charged_total))
+    if (!hotelBooked || !draftToken) {
+      setLiveCancelPolicy(null)
       return
     }
     let cancelled = false
@@ -387,19 +398,40 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       try {
         const list = await getApi().listHotelBookings({ draft_token: draftToken })
         if (cancelled || !Array.isArray(list) || !list.length) return
-        const paid = list.find(
-          (b) =>
-            b.status === 'confirmed' ||
-            b.status === 'booking_pending' ||
-            b.status === 'payment_succeeded',
-        ) || list[0]
-        const n =
-          paid?.charged_price != null
-            ? Number(paid.charged_price)
-            : paid?.displayed_price != null
-              ? Number(paid.displayed_price)
-              : null
-        if (n != null && n > 0) setChargedHotelTotal(n)
+        const paid =
+          list.find(
+            (b) =>
+              b.status === 'confirmed' ||
+              b.status === 'booking_pending' ||
+              b.status === 'payment_succeeded',
+          ) || list[0]
+        if (
+          (pl.hotel_charged_total == null ||
+            Number(pl.hotel_charged_total) <= 0) &&
+          paid
+        ) {
+          const n =
+            paid.charged_price != null
+              ? Number(paid.charged_price)
+              : paid.displayed_price != null
+                ? Number(paid.displayed_price)
+                : null
+          if (n != null && n > 0) setChargedHotelTotal(n)
+        }
+        const bookingId = String(
+          pl.hotel_booking_id || paid?.id || '',
+        ).trim()
+        if (!bookingId) return
+        const b = await getApi().getHotelBooking(bookingId, {
+          draft_token: draftToken,
+          sync: true,
+        })
+        if (cancelled) return
+        setLiveCancelPolicy({
+          refundable: b.refundable ?? null,
+          cancel_deadline:
+            b.cancel_deadline != null ? String(b.cancel_deadline) : null,
+        })
       } catch {
         /* soft */
       }
@@ -407,7 +439,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     return () => {
       cancelled = true
     }
-  }, [draftToken, hotelBooked, pl.hotel_charged_total])
+  }, [draftToken, hotelBooked, pl.hotel_booking_id, pl.hotel_charged_total])
 
   /** Soft live flight price refresh (Bookings → TripSummary). */
   useEffect(() => {
@@ -705,79 +737,157 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           ? Number(pl.hotel_charged_total)
           : null
 
+  const onDownloadHotelInvoice = useCallback(() => {
+    if (invoiceBusy) return
+    void (async () => {
+      setInvoiceBusy(true)
+      try {
+        let bookingId = String(pl.hotel_booking_id || '').trim()
+        if (!bookingId) {
+          const list = await getApi().listHotelBookings({
+            draft_token: draftToken,
+          })
+          const hit = (list || []).find((b) =>
+            ['confirmed', 'booking_pending', 'payment_succeeded'].includes(
+              String(b.status || '').toLowerCase(),
+            ),
+          )
+          bookingId = hit?.id ? String(hit.id) : ''
+        }
+        if (!bookingId) {
+          Alert.alert('Facture', 'Réservation introuvable pour ce voyage.')
+          return
+        }
+        const url = await getApi().hotelBookingInvoiceUrl(bookingId, {
+          draft_token: draftToken,
+        })
+        // Hand off ASAP — PDF may still stream in the in-app browser.
+        setInvoiceBusy(false)
+        await openInAppBrowser(navigation, url, 'Facture')
+      } catch {
+        Alert.alert(
+          'Facture',
+          'Impossible d’ouvrir la facture pour le moment. Réessaie dans quelques secondes.',
+        )
+        setInvoiceBusy(false)
+      }
+    })()
+  }, [draftToken, invoiceBusy, navigation, pl.hotel_booking_id])
+
   const onCancelHotelBooking = useCallback(() => {
     if (cancellingHotel) return
-    Alert.alert(
-      'Annuler la réservation ?',
-      hotelCancelConfirmBodyFr({
-        paidTotal: hotelPaidTotal,
-        policyLabel: cancelPolicyForAction,
-      }),
-      [
-        { text: 'Garder', style: 'cancel' },
-        {
-          text: 'Annuler la résa',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              setCancellingHotel(true)
-              try {
-                let bookingId = String(pl.hotel_booking_id || '').trim()
-                if (!bookingId) {
-                  const list = await getApi().listHotelBookings({
+    void (async () => {
+      let bookingId = String(pl.hotel_booking_id || '').trim()
+      let policy = cancelFields
+      try {
+        if (!bookingId) {
+          const list = await getApi().listHotelBookings({
+            draft_token: draftToken,
+          })
+          const hit = (list || []).find((b) =>
+            ['confirmed', 'booking_pending'].includes(
+              String(b.status || '').toLowerCase(),
+            ),
+          )
+          bookingId = hit?.id ? String(hit.id) : ''
+        }
+        if (bookingId) {
+          const b = await getApi().getHotelBooking(bookingId, {
+            draft_token: draftToken,
+            sync: true,
+          })
+          policy = {
+            refundable: b.refundable ?? policy.refundable,
+            cancel_deadline:
+              b.cancel_deadline != null
+                ? String(b.cancel_deadline)
+                : policy.cancel_deadline,
+          }
+          setLiveCancelPolicy({
+            refundable: policy.refundable,
+            cancel_deadline: policy.cancel_deadline,
+          })
+        }
+      } catch {
+        /* snapshot */
+      }
+      if (!bookingId) {
+        Alert.alert('Annulation', 'Réservation introuvable pour ce voyage.')
+        return
+      }
+      const gate = resolveHotelCancelGate(policy, {
+        checkIn: out ? String(out).slice(0, 10) : null,
+      })
+      if (!gate.canCancelFree) {
+        Alert.alert(
+          'Annulation',
+          gate.blockedLabelFr || 'Annulation gratuite indisponible.',
+        )
+        return
+      }
+      const policyLabel =
+        hotelCancelLabel(policy, { includeNonRefundable: true }) ||
+        cancelPolicyForAction
+      Alert.alert(
+        'Annuler la réservation ?',
+        hotelCancelConfirmBodyFr({
+          paidTotal: hotelPaidTotal,
+          policyLabel,
+        }),
+        [
+          { text: 'Garder', style: 'cancel' },
+          {
+            text: 'Annuler la résa',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setCancellingHotel(true)
+                try {
+                  const res = await getApi().cancelHotelBooking(bookingId, {
                     draft_token: draftToken,
                   })
-                  const hit = (list || []).find((b) =>
-                    ['confirmed', 'booking_pending'].includes(
-                      String(b.status || '').toLowerCase(),
-                    ),
+                  if (res.draft) {
+                    setDraft(res.draft as MyTripDraft)
+                  } else {
+                    const row = await getApi().getMyTrip(draftToken)
+                    setDraft(row)
+                  }
+                  void getApi().trackMyTripEvent(
+                    draftToken,
+                    'hotel_cancelled',
+                    {
+                      booking_id: bookingId,
+                      refund_amount: res.refund_amount ?? null,
+                      cancellation_fee: res.cancellation_fee ?? null,
+                    },
                   )
-                  bookingId = hit?.id ? String(hit.id) : ''
-                }
-                if (!bookingId) {
+                  Alert.alert(
+                    'C’est fait',
+                    hotelCancelSuccessBodyFr({
+                      refundAmount: res.refund_amount,
+                      cancellationFee: res.cancellation_fee,
+                    }),
+                  )
+                } catch (e) {
                   Alert.alert(
                     'Annulation',
-                    'Réservation introuvable pour ce voyage.',
+                    e instanceof Error
+                      ? e.message
+                      : 'Annulation impossible — réessaie',
                   )
-                  return
+                } finally {
+                  setCancellingHotel(false)
                 }
-                const res = await getApi().cancelHotelBooking(bookingId, {
-                  draft_token: draftToken,
-                })
-                if (res.draft) {
-                  setDraft(res.draft as MyTripDraft)
-                } else {
-                  const row = await getApi().getMyTrip(draftToken)
-                  setDraft(row)
-                }
-                void getApi().trackMyTripEvent(draftToken, 'hotel_cancelled', {
-                  booking_id: bookingId,
-                  refund_amount: res.refund_amount ?? null,
-                  cancellation_fee: res.cancellation_fee ?? null,
-                })
-                Alert.alert(
-                  'C’est fait',
-                  hotelCancelSuccessBodyFr({
-                    refundAmount: res.refund_amount,
-                    cancellationFee: res.cancellation_fee,
-                  }),
-                )
-              } catch (e) {
-                Alert.alert(
-                  'Annulation',
-                  e instanceof Error
-                    ? e.message
-                    : 'Annulation impossible — réessaie',
-                )
-              } finally {
-                setCancellingHotel(false)
-              }
-            })()
+              })()
+            },
           },
-        },
-      ],
-    )
+        ],
+      )
+    })()
   }, [
+    cancelFields.cancel_deadline,
+    cancelFields.refundable,
+    out,
     cancelPolicyForAction,
     cancellingHotel,
     draftToken,
@@ -1092,19 +1202,47 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                 </Text>
               </Pressable>
             ) : (
-              <Pressable
-                style={[styles.cancelHotelBtn, cancellingHotel && { opacity: 0.6 }]}
-                disabled={cancellingHotel}
-                onPress={onCancelHotelBooking}
-              >
-                {cancellingHotel ? (
-                  <ActivityIndicator color="#9F1239" />
-                ) : (
-                  <Text style={styles.cancelHotelText}>
-                    Annuler la réservation
+              <>
+                <Pressable
+                  style={[styles.invoiceBtn, invoiceBusy && { opacity: 0.6 }]}
+                  disabled={invoiceBusy}
+                  onPress={onDownloadHotelInvoice}
+                  accessibilityState={{ busy: invoiceBusy }}
+                >
+                  {invoiceBusy ? (
+                    <View style={styles.invoiceBusyRow}>
+                      <ActivityIndicator color="#065F46" />
+                      <Text style={styles.invoiceBtnText}>
+                        Préparation…
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.invoiceBtnText}>Voir la facture</Text>
+                  )}
+                </Pressable>
+                {cancelGate.canCancelFree ? (
+                  <Pressable
+                    style={[
+                      styles.cancelHotelBtn,
+                      cancellingHotel && { opacity: 0.6 },
+                    ]}
+                    disabled={cancellingHotel}
+                    onPress={onCancelHotelBooking}
+                  >
+                    {cancellingHotel ? (
+                      <ActivityIndicator color="#9F1239" />
+                    ) : (
+                      <Text style={styles.cancelHotelText}>
+                        Annuler la réservation
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : cancelGate.blockedLabelFr ? (
+                  <Text style={styles.cancelBlockedText}>
+                    {cancelGate.blockedLabelFr}
                   </Text>
-                )}
-              </Pressable>
+                ) : null}
+              </>
             )}
           </View>
         </View>
@@ -1406,6 +1544,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
   },
   hotelActions: { gap: 8, marginTop: 4 },
+  invoiceBtn: {
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    backgroundColor: '#ECFDF5',
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  invoiceBusyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  invoiceBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: '#065F46',
+  },
   cancelHotelBtn: {
     borderWidth: 1,
     borderColor: '#FECDD3',
@@ -1420,6 +1578,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 14,
     color: '#9F1239',
+  },
+  cancelBlockedText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingVertical: 4,
   },
   primaryBtn: {
     marginTop: 4,

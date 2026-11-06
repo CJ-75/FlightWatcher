@@ -143,17 +143,20 @@ export function UserMenu() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
-    const { error } = await signOut();
-    
-    if (error) {
-      console.error('Erreur déconnexion:', error);
-      alert(`${t('auth.error.disconnection')}: ${error.message}`);
-    } else {
+    try {
+      const { error } = await signOut();
+      if (error) console.error('Erreur déconnexion:', error);
+    } catch (e) {
+      console.error('Erreur déconnexion:', e);
+    } finally {
+      // Always leave the session in the UI — local storage is already cleared.
       setUser(null);
+      setUserProfile(null);
+      setMigrationStatus(null);
       setIsOpen(false);
-      navigate('/login');
+      setSigningOut(false);
+      navigate('/login', { replace: true });
     }
-    setSigningOut(false);
   };
 
   const handleSignIn = async () => {

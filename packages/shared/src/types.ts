@@ -913,6 +913,8 @@ export interface HotelBooking {
   /** Linked Mon voyage draft when booked from /trip/:token */
   draft_token?: string | null
   draft_id?: string | null
+  /** LiteAPI guest invoice PDF available (paid / reserved) */
+  invoice_available?: boolean
   city?: string
   hotel_name?: string
   hotel_photo?: string | null

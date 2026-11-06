@@ -72,7 +72,18 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
   const [loginLoading, setLoginLoading] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
   const [avatarFailed, setAvatarFailed] = useState(false)
+
+  const onSignOut = async () => {
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await signOut()
+    } finally {
+      setSigningOut(false)
+    }
+  }
 
   const openSecurity = () => {
     navigation.dispatch(CommonActions.navigate({ name: 'Security' }))
@@ -313,13 +324,19 @@ export function ProfileScreen() {
         ) : null}
 
         <Pressable
-          onPress={() => void signOut()}
+          onPress={() => void onSignOut()}
+          disabled={signingOut}
           style={({ pressed }) => [
             styles.signOutBtn,
             pressed && { opacity: 0.9 },
+            signingOut && { opacity: 0.6 },
           ]}
         >
-          <Text style={styles.signOutText}>{translate('fr', 'auth.signOut')}</Text>
+          <Text style={styles.signOutText}>
+            {signingOut
+              ? translate('fr', 'auth.signOutProgress')
+              : translate('fr', 'auth.signOut')}
+          </Text>
         </Pressable>
       </ScrollView>
     </View>

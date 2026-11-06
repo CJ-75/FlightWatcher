@@ -53,6 +53,105 @@ export type HotelCancelFields = {
   cancel_deadline?: string | null
 }
 
+/** Parse LiteAPI cancel deadline (often GMT / space-separated) to Date. */
+export function parseCancelDeadline(iso?: string | null): Date | null {
+  if (!iso) return null
+  try {
+    let raw = String(iso).trim()
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw)) {
+      raw = raw.replace(' ', 'T')
+    }
+    const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(raw)
+    const d = new Date(hasTz ? raw : `${raw}Z`)
+    return Number.isNaN(d.getTime()) ? null : d
+  } catch {
+    return null
+  }
+}
+
+export type HotelCancelGateReason =
+  | 'ok'
+  | 'non_refundable'
+  | 'deadline_passed'
+  | 'checked_in'
+  | 'unknown_policy'
+
+export type HotelCancelGate = {
+  /** Free-cancel window still open → show Annuler CTA */
+  canCancelFree: boolean
+  reason: HotelCancelGateReason
+  /** Short FR explanation under / instead of the CTA */
+  blockedLabelFr: string | null
+}
+
+/**
+ * Gate « Annuler la réservation » from hotel policy.
+ * CTA only while free cancel is still available (before cancel_deadline).
+ * NRFN / past deadline / check-in started → block CTA.
+ */
+export function resolveHotelCancelGate(
+  hotel: HotelCancelFields | null | undefined,
+  opts?: {
+    checkIn?: string | null
+    now?: Date | number
+    /** True while LiteAPI retrieve is in flight */
+    awaitingPolicy?: boolean
+  },
+): HotelCancelGate {
+  const nowMs = opts?.now != null ? new Date(opts.now).getTime() : Date.now()
+  const checkIn = String(opts?.checkIn || '').slice(0, 10)
+  if (checkIn && /^\d{4}-\d{2}-\d{2}$/.test(checkIn)) {
+    const today = new Date(nowMs).toISOString().slice(0, 10)
+    if (checkIn <= today) {
+      return {
+        canCancelFree: false,
+        reason: 'checked_in',
+        blockedLabelFr: 'Séjour commencé — annulation via l’hôtel si besoin.',
+      }
+    }
+  }
+
+  if (!hotel) {
+    return {
+      canCancelFree: false,
+      reason: 'unknown_policy',
+      blockedLabelFr: opts?.awaitingPolicy
+        ? 'Politique d’annulation en cours de récupération…'
+        : 'Politique d’annulation indisponible pour le moment.',
+    }
+  }
+
+  if (hotel.refundable === false) {
+    return {
+      canCancelFree: false,
+      reason: 'non_refundable',
+      blockedLabelFr: 'Tarif non remboursable — annulation sans remboursement.',
+    }
+  }
+
+  if (hotel.refundable !== true) {
+    return {
+      canCancelFree: false,
+      reason: 'unknown_policy',
+      blockedLabelFr: opts?.awaitingPolicy
+        ? 'Politique d’annulation en cours de récupération…'
+        : 'Politique d’annulation indisponible pour le moment.',
+    }
+  }
+
+  const deadline = parseCancelDeadline(hotel.cancel_deadline)
+  if (deadline && deadline.getTime() <= nowMs) {
+    return {
+      canCancelFree: false,
+      reason: 'deadline_passed',
+      blockedLabelFr:
+        'Annulation gratuite terminée — des frais s’appliqueraient.',
+    }
+  }
+
+  return { canCancelFree: true, reason: 'ok', blockedLabelFr: null }
+}
+
 /**
  * Single source of truth for cancel copy (fiche, trip, checkout, bookings).
  * Prefer deadline when refundable; never invent a date.

@@ -765,13 +765,68 @@ export function createApiClient(options: ApiClientOptions = {}) {
       return request<HotelBooking[]>(`/api/hotel-bookings${q}`)
     },
 
-    getHotelBooking: (id: string, opts?: { draft_token?: string | null }) => {
-      const q =
-        opts?.draft_token != null && opts.draft_token !== ''
-          ? `?draft_token=${encodeURIComponent(opts.draft_token)}`
-          : ''
+    getHotelBooking: (
+      id: string,
+      opts?: { draft_token?: string | null; sync?: boolean },
+    ) => {
+      const params = new URLSearchParams()
+      if (opts?.draft_token != null && opts.draft_token !== '') {
+        params.set('draft_token', opts.draft_token)
+      }
+      if (opts?.sync) params.set('sync', 'true')
+      const q = params.toString() ? `?${params}` : ''
       return request<HotelBooking>(
         `/api/hotel-bookings/${encodeURIComponent(id)}${q}`,
+      )
+    },
+
+    /**
+     * Download LiteAPI guest invoice PDF (paid / reserved).
+     * Prefer this over opening a raw URL so Authorization is applied.
+     */
+    downloadHotelBookingInvoice: async (
+      id: string,
+      opts?: { draft_token?: string | null },
+    ): Promise<Blob> => {
+      const params = new URLSearchParams()
+      if (opts?.draft_token) params.set('draft_token', opts.draft_token)
+      const q = params.toString() ? `?${params}` : ''
+      const path = `/api/hotel-bookings/${encodeURIComponent(id)}/invoice${q}`
+      const headers = new Headers()
+      if (options.getToken) {
+        const token = await options.getToken()
+        if (token) headers.set('Authorization', `Bearer ${token}`)
+      }
+      const response = await fetchFn(joinUrl(baseUrl, path), { headers })
+      if (!response.ok) {
+        const raw = await response.text().catch(() => response.statusText)
+        let message = raw || response.statusText
+        try {
+          const parsed = JSON.parse(raw) as { detail?: unknown }
+          if (typeof parsed?.detail === 'string') message = parsed.detail
+        } catch {
+          /* keep raw */
+        }
+        throw new Error(message || 'Facture indisponible')
+      }
+      return response.blob()
+    },
+
+    /** Build invoice URL for in-browser / WebBrowser open (token in query). */
+    hotelBookingInvoiceUrl: async (
+      id: string,
+      opts?: { draft_token?: string | null },
+    ): Promise<string> => {
+      const params = new URLSearchParams()
+      if (opts?.draft_token) params.set('draft_token', opts.draft_token)
+      if (options.getToken) {
+        const token = await options.getToken()
+        if (token) params.set('access_token', token)
+      }
+      const q = params.toString() ? `?${params}` : ''
+      return joinUrl(
+        baseUrl,
+        `/api/hotel-bookings/${encodeURIComponent(id)}/invoice${q}`,
       )
     },
 

@@ -9,6 +9,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   boardLabelFr,
   cityImageUrl,
+  hotelBookingHasInvoice,
   hotelCancelLabel,
   type HotelBooking,
   type HotelBookingStatus,
@@ -26,6 +27,10 @@ import {
   rememberTrip,
 } from '../utils/tripRecovery'
 import { SiteFooter } from '../components/SiteFooter'
+import {
+  InvoiceBusyLabel,
+  openHotelInvoicePdf,
+} from '../utils/hotelInvoice'
 
 type FilterTab = 'upcoming' | 'past' | 'all'
 
@@ -236,6 +241,17 @@ async function copyText(text: string) {
   }
 }
 
+async function openBookingInvoice(booking: HotelBooking) {
+  const api = getApiClient()
+  await openHotelInvoicePdf({
+    filename: `facture-hotel-${booking.confirmation_code || booking.id}.pdf`,
+    fetchBlob: () =>
+      api.downloadHotelBookingInvoice(booking.id, {
+        draft_token: booking.draft_token || null,
+      }),
+  })
+}
+
 function BookingCard({
   booking,
   expanded,
@@ -245,7 +261,11 @@ function BookingCard({
   expanded: boolean
   onToggle: () => void
 }) {
+  const [invoiceBusy, setInvoiceBusy] = useState(false)
+  const [invoiceDone, setInvoiceDone] = useState(false)
+  const [invoiceError, setInvoiceError] = useState<string | null>(null)
   const meta = statusMeta(booking.status)
+  const canInvoice = hotelBookingHasInvoice(booking)
   const board = boardLabelFr(booking.board)
   const cancelLabel =
     hotelCancelLabel(
@@ -570,6 +590,40 @@ function BookingCard({
             >
               {expanded ? 'Masquer les détails' : 'Voir les détails'}
             </button>
+            {canInvoice ? (
+              <button
+                type="button"
+                disabled={invoiceBusy}
+                aria-busy={invoiceBusy}
+                onClick={() => {
+                  setInvoiceError(null)
+                  setInvoiceDone(false)
+                  setInvoiceBusy(true)
+                  void openBookingInvoice(booking)
+                    .then(() => {
+                      setInvoiceDone(true)
+                      window.setTimeout(() => setInvoiceDone(false), 2500)
+                    })
+                    .catch((e) =>
+                      setInvoiceError(
+                        e instanceof Error
+                          ? e.message
+                          : 'Facture indisponible',
+                      ),
+                    )
+                    .finally(() => setInvoiceBusy(false))
+                }}
+                className="inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-900 hover:bg-emerald-100 min-h-[40px] disabled:opacity-60"
+              >
+                {invoiceBusy ? (
+                  <InvoiceBusyLabel label="Préparation…" />
+                ) : invoiceDone ? (
+                  'Facture ouverte ✓'
+                ) : (
+                  'Voir la facture'
+                )}
+              </button>
+            ) : null}
             {booking.draft_token ? (
               <Link
                 to={`/trip/${booking.draft_token}`}
@@ -586,6 +640,9 @@ function BookingCard({
               {copied === 'summary' ? 'Récap copié ✓' : 'Copier le récap'}
             </button>
           </div>
+          {invoiceError ? (
+            <p className="mt-2 text-xs font-semibold text-rose-700">{invoiceError}</p>
+          ) : null}
     </StayCardShell>
   )
 }
