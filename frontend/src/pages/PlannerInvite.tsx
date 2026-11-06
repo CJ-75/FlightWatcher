@@ -212,12 +212,66 @@ export default function PlannerInvite() {
                 {joining ? '…' : t('planner.invite.join')}
               </button>
             ) : (
-              <Link
-                to={`/login?redirect=${encodeURIComponent(`/planner/invite/${token}`)}`}
-                className="block w-full text-center bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-500/25"
-              >
-                {t('planner.invite.login')}
-              </Link>
+              <div className="rounded-3xl border border-orange-100 bg-white p-5 sm:p-6 shadow-lg shadow-orange-900/5 space-y-4">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#E85A28]">
+                    {t('planner.invite.signupKicker')}
+                  </p>
+                  <h3 className="mt-1 text-xl font-black text-slate-900 tracking-tight">
+                    {t('planner.invite.signupTitle')}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                    {preview.name
+                      ? t('planner.invite.signupLeadNamed').replace(
+                          '{name}',
+                          preview.name,
+                        )
+                      : t('planner.invite.signupLead')}
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-amber-900/80 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                    {t('planner.invite.previewNote')}
+                  </p>
+                </div>
+                <ol className="space-y-2">
+                  {[
+                    {
+                      title: t('planner.invite.step1'),
+                      detail: t('planner.invite.step1.detail'),
+                    },
+                    {
+                      title: t('planner.invite.step2'),
+                      detail: t('planner.invite.step2.detail'),
+                    },
+                    {
+                      title: t('planner.invite.step3'),
+                      detail: t('planner.invite.step3.detail'),
+                    },
+                  ].map((step, i) => (
+                    <li
+                      key={step.title}
+                      className="flex gap-3 rounded-2xl bg-[#FFF5EF] px-3 py-2.5"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#FF6B35] text-sm font-black text-white">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold text-slate-900">
+                          {step.title}
+                        </span>
+                        <span className="block text-xs text-slate-500 leading-snug">
+                          {step.detail}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <Link
+                  to={`/login?redirect=${encodeURIComponent(`/planner/invite/${token}`)}`}
+                  className="block w-full text-center bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-orange-500/25"
+                >
+                  {t('planner.invite.signupCta')}
+                </Link>
+              </div>
             )}
 
             {error ? (

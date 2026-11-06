@@ -327,4 +327,24 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
   }
 }
 
+/** True if the user can sign in with email/password (not Google-only). */
+export function userHasPasswordLogin(user: User | null | undefined): boolean {
+  if (!user) return false
+  const metaProviders = Array.isArray(user.app_metadata?.providers)
+    ? (user.app_metadata.providers as unknown[]).map((p) =>
+        String(p || '').toLowerCase(),
+      )
+    : []
+  if (metaProviders.includes('email')) return true
+  const identities = user.identities || []
+  return identities.some(
+    (id) => String(id.provider || '').toLowerCase() === 'email',
+  )
+}
+
+/** Google (or other OAuth) account with no email/password yet. */
+export function userNeedsPasswordSetup(user: User | null | undefined): boolean {
+  return Boolean(user) && !userHasPasswordLogin(user)
+}
+
 export type { User, Session, SupabaseClient }

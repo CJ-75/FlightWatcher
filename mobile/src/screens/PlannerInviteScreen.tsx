@@ -59,8 +59,8 @@ const SIGNUP_STEPS = [
     detail: 'Tu es ajouté au planner partagé automatiquement.',
   },
   {
-    title: 'Suis le séjour',
-    detail: 'Vol, hôtel et activités — tout le parcours ensemble.',
+    title: 'Compose ton séjour',
+    detail: 'Vol / hôtel / activités pour toi — l’orga garde le vol du groupe.',
   },
 ] as const
 
@@ -70,10 +70,8 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
   const { user, isGuest, signInWithGoogle, continueAsGuest, setAppearLoggedOut } =
     useAuth()
   const loggedIn = Boolean(user) && !isGuest
-  // Bypass Google uniquement en __DEV__ sur tokens / parcours de test Expo.
-  const expoTest =
-    __DEV__ &&
-    (String(token || '').startsWith('dev-invite-') || isGuest || !loggedIn)
+  // Bypass Google uniquement sur tokens de test Expo (pas les vrais liens d’invite).
+  const expoTest = __DEV__ && String(token || '').startsWith('dev-invite-')
   const [preview, setPreview] = useState<InvitePreview | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -280,11 +278,15 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
               <View style={[styles.signupCard, shadow.soft]}>
                 <Text style={styles.signupKicker}>Inscription</Text>
                 <Text style={styles.signupTitle}>
-                  Crée ton compte pour rejoindre {tripLabel}
+                  Rejoins {tripLabel}
                 </Text>
                 <Text style={styles.signupLead}>
-                  Un parcours dédié aux invités — tu retrouves le voyage juste
-                  après la connexion.
+                  Sans compte tu ne fais que prévisualiser. Inscris-toi pour
+                  rejoindre le groupe — pas seulement regarder.
+                </Text>
+                <Text style={styles.previewNote}>
+                  Aperçu sans compte — le bouton ci-dessous lance l’inscription
+                  puis le join automatique.
                 </Text>
 
                 <View style={styles.steps}>
@@ -304,25 +306,19 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
                 {error ? <Text style={styles.error}>{error}</Text> : null}
 
                 <Pressable
-                  style={[
-                    styles.googleBtn,
-                    shadow.soft,
-                    signingIn && { opacity: 0.7 },
-                  ]}
+                  style={[styles.btn, signingIn && styles.btnDisabled]}
                   disabled={signingIn}
                   onPress={() => void onSignUp()}
                 >
                   {signingIn ? (
-                    <ActivityIndicator color={colors.ink} />
+                    <ActivityIndicator color={colors.white} />
                   ) : (
-                    <>
-                      <View style={styles.googleIconWrap}>
-                        <GoogleGIcon size={18} />
+                    <View style={styles.ctaRow}>
+                      <View style={styles.googleIconOnPrimary}>
+                        <GoogleGIcon size={16} />
                       </View>
-                      <Text style={styles.googleBtnText}>
-                        Continuer avec Google
-                      </Text>
-                    </>
+                      <Text style={styles.btnText}>S’inscrire / Rejoindre</Text>
+                    </View>
                   )}
                 </Pressable>
               </View>
@@ -425,6 +421,18 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
   },
+  previewNote: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 17,
+    backgroundColor: '#FFFBEB',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
   steps: { gap: 10, marginTop: 4 },
   stepRow: {
     flexDirection: 'row',
@@ -459,32 +467,18 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 16,
   },
-  googleBtn: {
-    marginTop: 8,
-    minHeight: 52,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    borderWidth: 2,
-    borderColor: colors.line,
+  ctaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    paddingHorizontal: 16,
   },
-  googleIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  googleIconOnPrimary: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  googleBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.ink,
   },
 })

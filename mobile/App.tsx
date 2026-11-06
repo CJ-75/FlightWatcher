@@ -5,7 +5,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { ActivityIndicator, Text, View, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { clearPendingInvite } from './src/lib/pendingInvite'
+import { readPendingInvite } from './src/lib/pendingInvite'
+import { navigationRef } from './src/navigation/navigationRef'
 import {
   useFonts,
   Sora_400Regular,
@@ -245,6 +246,29 @@ function MainTabs() {
 
 function RootNavigator() {
   const { user, loading, isGuest } = useAuth()
+  const pendingInviteHandled = React.useRef(false)
+
+  // Après Google OAuth : reprendre le lien d’invite → join auto.
+  useEffect(() => {
+    if (loading || !user || isGuest || pendingInviteHandled.current) return
+    let cancelled = false
+    void (async () => {
+      const token = await readPendingInvite()
+      if (cancelled || !token || token.startsWith('dev-invite-')) return
+      pendingInviteHandled.current = true
+      const go = () => {
+        if (!navigationRef.isReady()) {
+          requestAnimationFrame(go)
+          return
+        }
+        navigationRef.navigate('PlannerInvite', { token })
+      }
+      go()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, isGuest])
 
   // Auth boot: branded carousel — 1100ms hold if session, then Main → Search
   if (loading) {
@@ -391,11 +415,6 @@ export default function App() {
   const onLayoutRoot = useCallback(() => undefined, [])
   const ready = fontsLoaded || fontsTimedOut
 
-  // Ne jamais auto-ouvrir une invitation au boot (test Expo = clic Compte uniquement).
-  useEffect(() => {
-    void clearPendingInvite()
-  }, [])
-
   if (!ready) {
     return <AppSplash />
   }
@@ -403,7 +422,11 @@ export default function App() {
   return (
     <SafeAreaProvider onLayout={onLayoutRoot}>
       <AuthProvider>
-        <NavigationContainer theme={navTheme} linking={linking as any}>
+        <NavigationContainer
+          ref={navigationRef}
+          theme={navTheme}
+          linking={linking as any}
+        >
           <StatusBar style="dark" />
           <RootNavigator />
         </NavigationContainer>

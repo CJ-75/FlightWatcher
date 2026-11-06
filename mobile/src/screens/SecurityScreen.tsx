@@ -10,7 +10,7 @@ import {
   Platform,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { translate } from '@flightwatcher/shared'
+import { translate, userNeedsPasswordSetup } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import { Button } from '../components/ui/Button'
@@ -19,7 +19,8 @@ import { colors, fonts, shadow, spacing, type } from '../theme'
 
 export function SecurityScreen() {
   const insets = useSafeAreaInsets()
-  const { viewUser, isGuest, signOut } = useAuth()
+  const { user, viewUser, isGuest, signOut } = useAuth()
+  const needsPasswordSetup = userNeedsPasswordSetup(user)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -92,7 +93,7 @@ export function SecurityScreen() {
     setBusy(true)
     try {
       await getApi().changePassword({
-        current_password: currentPassword,
+        current_password: needsPasswordSetup ? '' : currentPassword,
         new_password: newPassword,
       })
       const message = translate('fr', 'auth.security.passwordUpdated')
@@ -134,28 +135,44 @@ export function SecurityScreen() {
 
           <View style={[styles.card, shadow.soft]}>
             <Text style={styles.cardTitle}>
-              {translate('fr', 'auth.security.changePassword')}
+              {translate(
+                'fr',
+                needsPasswordSetup
+                  ? 'auth.security.setPassword'
+                  : 'auth.security.changePassword',
+              )}
             </Text>
             <Text style={styles.cardHint}>
-              {translate('fr', 'auth.security.changePasswordHint')}
+              {translate(
+                'fr',
+                needsPasswordSetup
+                  ? 'auth.security.setPasswordHint'
+                  : 'auth.security.changePasswordHint',
+              )}
             </Text>
-            <Text style={styles.oauthHint}>
-              {translate('fr', 'auth.security.oauthHint')}
-            </Text>
+            {needsPasswordSetup ? (
+              <Text style={styles.oauthBanner}>
+                {translate('fr', 'auth.security.oauthNoPassword')}
+              </Text>
+            ) : null}
 
-            <Text style={styles.label}>
-              {translate('fr', 'auth.security.currentPassword')}
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              placeholderTextColor={colors.faint}
-            />
+            {!needsPasswordSetup ? (
+              <>
+                <Text style={styles.label}>
+                  {translate('fr', 'auth.security.currentPassword')}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="password"
+                  placeholderTextColor={colors.faint}
+                />
+              </>
+            ) : null}
 
             <Text style={styles.label}>
               {translate('fr', 'auth.security.newPassword')}
@@ -255,11 +272,17 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 18,
   },
-  oauthHint: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.faint,
-    lineHeight: 16,
+  oauthBanner: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 18,
+    backgroundColor: '#FFFBEB',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FDE68A',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: spacing.sm,
   },
   label: {

@@ -3,6 +3,8 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import type { User } from '@flightwatcher/shared'
+import { userNeedsPasswordSetup } from '@flightwatcher/shared'
 import { getCurrentUser, signOut } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { useI18n } from '../contexts/I18nContext'
@@ -11,6 +13,7 @@ import { LanguageSwitcher } from '../components/LanguageSwitcher'
 export default function Security() {
   const { t, language } = useI18n()
   const navigate = useNavigate()
+  const [user, setUser] = useState<User | null>(null)
   const [email, setEmail] = useState<string | null>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -22,6 +25,7 @@ export default function Security() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null)
 
   const deleteWord = language === 'en' ? 'DELETE' : 'SUPPRIMER'
+  const needsPasswordSetup = userNeedsPasswordSetup(user)
 
   useEffect(() => {
     void getCurrentUser().then((u) => {
@@ -29,6 +33,7 @@ export default function Security() {
         navigate('/login?redirect=/security')
         return
       }
+      setUser(u)
       setEmail(u.email ?? null)
     })
   }, [navigate])
@@ -48,13 +53,30 @@ export default function Security() {
     setBusy(true)
     try {
       await getApiClient().changePassword({
-        current_password: currentPassword,
+        current_password: needsPasswordSetup ? '' : currentPassword,
         new_password: newPassword,
       })
       setMsg(t('auth.security.passwordUpdated'))
       setCurrentPassword('')
       setNewPassword('')
       setConfirm('')
+      // After first password set, treat as password login for UI.
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              app_metadata: {
+                ...(prev.app_metadata || {}),
+                providers: Array.from(
+                  new Set([
+                    ...((prev.app_metadata?.providers as string[]) || []),
+                    'email',
+                  ]),
+                ),
+              },
+            }
+          : prev,
+      )
     } catch (e) {
       setErr(e instanceof Error ? e.message : t('auth.security.changeError'))
     } finally {
@@ -111,25 +133,35 @@ export default function Security() {
             className="rounded-2xl border border-orange-100 bg-[#FFF8F3] px-4 py-4 space-y-3"
           >
             <h2 className="font-bold text-slate-900">
-              {t('auth.security.changePassword')}
+              {needsPasswordSetup
+                ? t('auth.security.setPassword')
+                : t('auth.security.changePassword')}
             </h2>
             <p className="text-sm text-slate-600 leading-relaxed">
-              {t('auth.security.changePasswordHint')}
+              {needsPasswordSetup
+                ? t('auth.security.setPasswordHint')
+                : t('auth.security.changePasswordHint')}
             </p>
-            <p className="text-xs text-slate-500">{t('auth.security.oauthHint')}</p>
+            {needsPasswordSetup ? (
+              <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
+                {t('auth.security.oauthNoPassword')}
+              </p>
+            ) : null}
 
-            <label className="block space-y-1.5">
-              <span className="text-sm font-bold text-slate-800">
-                {t('auth.security.currentPassword')}
-              </span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm font-medium focus:border-[#FF6B35] focus:ring-2 focus:ring-orange-200"
-              />
-            </label>
+            {!needsPasswordSetup ? (
+              <label className="block space-y-1.5">
+                <span className="text-sm font-bold text-slate-800">
+                  {t('auth.security.currentPassword')}
+                </span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm font-medium focus:border-[#FF6B35] focus:ring-2 focus:ring-orange-200"
+                />
+              </label>
+            ) : null}
             <label className="block space-y-1.5">
               <span className="text-sm font-bold text-slate-800">
                 {t('auth.security.newPassword')}

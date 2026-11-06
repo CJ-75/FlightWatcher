@@ -310,21 +310,26 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.proposals.empty': 'Aucune proposition pour le moment.',
     'planner.invite.title': 'Tu es invité·e',
     'planner.invite.join': 'Rejoindre le voyage',
-    'planner.invite.login': 'Créer mon compte pour rejoindre',
+    'planner.invite.login': 'S’inscrire / Rejoindre',
     'planner.invite.joined': 'Tu as rejoint le voyage !',
     'planner.invite.back': '← Retour à l’invitation',
-    'planner.invite.signupKicker': 'Invitation',
+    'planner.invite.previewNote':
+      'Aperçu sans compte — inscris-toi pour rejoindre le voyage (pas seulement le regarder).',
+    'planner.invite.signupKicker': 'Inscription',
     'planner.invite.signupTitle': 'Rejoins le voyage',
     'planner.invite.signupLead':
-      'Crée ton compte en un tap — tu retrouves le séjour juste après.',
+      'Sans compte tu ne fais que prévisualiser. Inscris-toi pour rejoindre le groupe.',
     'planner.invite.signupLeadNamed':
-      'Crée ton compte pour rejoindre « {name} » — tu retrouves le séjour juste après.',
+      'Sans compte tu ne fais que prévisualiser « {name} ». Inscris-toi pour rejoindre.',
+    'planner.invite.signupCta': 'S’inscrire / Rejoindre',
+    'planner.invite.signupCtaGoogle': 'S’inscrire avec Google',
     'planner.invite.step1': 'Crée ton compte',
     'planner.invite.step1.detail': 'Connexion Google rapide et sécurisée.',
     'planner.invite.step2': 'Rejoins le voyage',
     'planner.invite.step2.detail': 'Tu es ajouté au planner automatiquement.',
-    'planner.invite.step3': 'Suis le séjour',
-    'planner.invite.step3.detail': 'Vol, hôtel et activités — ensemble.',
+    'planner.invite.step3': 'Compose ton séjour',
+    'planner.invite.step3.detail':
+      'Vol / hôtel / activités pour toi — l’orga garde le vol du groupe.',
     
     // Auth
     'auth.signIn': 'Se connecter',
@@ -356,8 +361,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.legalMentions': 'Mentions légales',
     'auth.security.changePassword': 'Changer le mot de passe',
     'auth.security.changePasswordHint': 'Saisis ton mot de passe actuel, puis le nouveau. Un email de confirmation t’est envoyé ensuite.',
+    'auth.security.setPassword': 'Créer un mot de passe',
+    'auth.security.setPasswordHint':
+      'Ajoute un mot de passe pour aussi te connecter par email.',
     'auth.security.currentPassword': 'Mot de passe actuel',
     'auth.security.oauthHint': 'Compte Google : laisse « actuel » vide si tu n’as pas encore de mot de passe.',
+    'auth.security.oauthNoPassword':
+      'Compte Google — pas encore de mot de passe. Choisis-en un ci-dessous (le champ actuel n’est pas demandé).',
     'auth.security.sendLink': 'Envoyer le lien par email',
     'auth.security.sending': 'Envoi de l’email…',
     'auth.security.saving': 'Enregistrement…',
@@ -851,21 +861,26 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.proposals.empty': 'No proposals yet.',
     'planner.invite.title': 'You’re invited',
     'planner.invite.join': 'Join the trip',
-    'planner.invite.login': 'Create an account to join',
+    'planner.invite.login': 'Sign up / Join',
     'planner.invite.joined': 'You joined the trip!',
     'planner.invite.back': '← Back to invite',
-    'planner.invite.signupKicker': 'Invite',
+    'planner.invite.previewNote':
+      'Preview only without an account — sign up to join the trip, not just look at it.',
+    'planner.invite.signupKicker': 'Sign up',
     'planner.invite.signupTitle': 'Join the trip',
     'planner.invite.signupLead':
-      'Create your account in one tap — you’ll land back on the trip right after.',
+      'Without an account you only get a preview. Sign up to join the group.',
     'planner.invite.signupLeadNamed':
-      'Create your account to join “{name}” — you’ll land back on the trip right after.',
+      'Without an account you only preview “{name}”. Sign up to join.',
+    'planner.invite.signupCta': 'Sign up / Join',
+    'planner.invite.signupCtaGoogle': 'Sign up with Google',
     'planner.invite.step1': 'Create your account',
     'planner.invite.step1.detail': 'Fast, secure Google sign-in.',
     'planner.invite.step2': 'Join the trip',
     'planner.invite.step2.detail': 'You’re added to the shared planner automatically.',
-    'planner.invite.step3': 'Follow the stay',
-    'planner.invite.step3.detail': 'Flight, hotel and activities — together.',
+    'planner.invite.step3': 'Build your stay',
+    'planner.invite.step3.detail':
+      'Flight / hotel / activities for you — the organizer keeps the group flight.',
     
     // Auth
     'auth.signIn': 'Sign in',
@@ -897,8 +912,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.legalMentions': 'Legal notice',
     'auth.security.changePassword': 'Change password',
     'auth.security.changePasswordHint': 'Enter your current password, then the new one. A confirmation email is sent afterwards.',
+    'auth.security.setPassword': 'Create a password',
+    'auth.security.setPasswordHint':
+      'Add a password so you can also sign in with email.',
     'auth.security.currentPassword': 'Current password',
     'auth.security.oauthHint': 'Google account: leave “current” empty if you don’t have a password yet.',
+    'auth.security.oauthNoPassword':
+      'Google account — no password yet. Choose one below (current password is not required).',
     'auth.security.sendLink': 'Send email link',
     'auth.security.sending': 'Sending email…',
     'auth.security.saving': 'Saving…',
