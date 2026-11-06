@@ -7,7 +7,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Pressable,
-  Image,
   Share,
 } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
@@ -30,6 +29,10 @@ import {
   rememberTrip,
 } from '../lib/tripRecovery'
 import { BedIcon, ShareIcon } from '../components/UiIcons'
+import {
+  StayBookingCard,
+  stayBookingLinkBtn,
+} from '../components/StayBookingCard'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, spacing } from '../theme'
 
@@ -342,94 +345,56 @@ export function BookingsScreen() {
       .join(' · ')
 
     return (
-      <Pressable
+      <StayBookingCard
         key={item.id}
-        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        photo={photo}
+        kicker={item.city || 'Séjour'}
+        title={item.hotel_name || 'Hôtel'}
+        subtitle={formatRange(item.dates?.outbound, item.dates?.inbound)}
+        details={[stars, details].filter(Boolean).join(' · ') || null}
+        confirmationCode={item.confirmation_code || null}
+        priceLabel={price != null ? `${price} €` : null}
+        badge={{ label: meta.label, tone: meta.tone, soft: meta.soft }}
+        style={{ marginBottom: 0 }}
         onPress={() => {
           if (item.draft_token) openTrip(item.draft_token)
         }}
-      >
-        <View style={styles.thumb}>
-          {photo ? (
-            <Image source={{ uri: String(photo) }} style={styles.thumbImage} />
-          ) : (
-            <View style={styles.thumbEmpty}>
-              <BedIcon size={22} color={colors.faint} />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.rowBody}>
-          <View style={styles.rowTop}>
-            <Text style={styles.city} numberOfLines={1}>
-              {item.city || 'Séjour'}
-            </Text>
-            <View style={[styles.badge, { backgroundColor: meta.soft }]}>
-              <Text style={[styles.badgeText, { color: meta.tone }]}>{meta.label}</Text>
-            </View>
-          </View>
-
-          {stars ? <Text style={styles.stars}>{stars}</Text> : null}
-          <Text style={styles.hotel} numberOfLines={1}>
-            {item.hotel_name || 'Hôtel'}
-          </Text>
-          <Text style={styles.dates} numberOfLines={1}>
-            {formatRange(item.dates?.outbound, item.dates?.inbound)}
-          </Text>
-          {details ? (
-            <Text style={styles.details} numberOfLines={1}>
-              {details}
-            </Text>
-          ) : null}
-
-          {item.confirmation_code ? (
-            <View style={styles.codeRow}>
-              <Text style={styles.codeLabel}>Réf.</Text>
-              <Text style={styles.codeValue} numberOfLines={1}>
-                {item.confirmation_code}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.rowFooter}>
-            {price != null ? <Text style={styles.price}>{price} €</Text> : <View />}
-            <View style={styles.rowActions}>
+        footer={
+          <>
+            <Pressable
+              hitSlop={8}
+              onPress={() => void shareBooking(item)}
+              style={styles.iconBtn}
+            >
+              <ShareIcon
+                size={15}
+                color={sharedId === item.id ? colors.success : colors.muted}
+              />
+            </Pressable>
+            {hotelBookingHasInvoice(item) ? (
               <Pressable
-                hitSlop={8}
-                onPress={() => void shareBooking(item)}
-                style={styles.iconBtn}
+                onPress={() => void openInvoice(item)}
+                style={stayBookingLinkBtn.btn}
+                disabled={invoiceBusyId === item.id}
               >
-                <ShareIcon
-                  size={15}
-                  color={sharedId === item.id ? colors.success : colors.muted}
-                />
+                {invoiceBusyId === item.id ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={stayBookingLinkBtn.text}>Facture</Text>
+                )}
               </Pressable>
-              {hotelBookingHasInvoice(item) ? (
-                <Pressable
-                  onPress={() => void openInvoice(item)}
-                  style={styles.linkBtn}
-                  disabled={invoiceBusyId === item.id}
-                  accessibilityState={{ busy: invoiceBusyId === item.id }}
-                >
-                  {invoiceBusyId === item.id ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <Text style={styles.linkBtnText}>Facture</Text>
-                  )}
-                </Pressable>
-              ) : null}
-              {item.draft_token ? (
-                <Pressable
-                  onPress={() => openTrip(item.draft_token!)}
-                  style={styles.linkBtn}
-                >
-                  <Text style={styles.linkBtnText}>Ouvrir</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          </View>
-        </View>
-      </Pressable>
+            ) : null}
+            {item.draft_token ? (
+              <Pressable
+                onPress={() => openTrip(item.draft_token!)}
+                style={stayBookingLinkBtn.btn}
+              >
+                <Text style={stayBookingLinkBtn.text}>Ouvrir</Text>
+              </Pressable>
+            ) : null}
+          </>
+        }
+      />
     )
   }
 

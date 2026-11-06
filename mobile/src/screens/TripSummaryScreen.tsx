@@ -5,11 +5,9 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Image,
   ActivityIndicator,
   Share,
   Modal,
-  FlatList,
   Alert,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -18,10 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   ACTIVITY_TRANSFER_CTA_FR,
-  activityStepProgress,
   resolveActivityCitySlug,
   boardLabelFr,
-  buildStayPipeline,
   distantAirportLine,
   hotelCancelConfirmBodyFr,
   hotelCancelLabel,
@@ -31,21 +27,20 @@ import {
   primaryAirportCode,
   resolveCarrierBooking,
   resolveDraftPartyPrice,
-  resolveFlightStepStatus,
-  resolveHotelStepStatus,
   resolveNextStayAction,
-  pickTripItemOwner,
   type HotelGalleryPhoto,
   type MyTripDraft,
-  type StayStepId,
 } from '@flightwatcher/shared'
 import {
   clearFlightReturnAsk,
   markFlightReturnAsk,
 } from '../lib/partnerBook'
-import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
+import {
+  StayBookingCard,
+  stayBookingLinkBtn,
+} from '../components/StayBookingCard'
 import { getApi, getWebOrigin } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -56,7 +51,6 @@ import {
   BedIcon,
   CalendarIcon,
   CardIcon,
-  CheckIcon,
   IconLabel,
   PlaneIcon,
   ShareIcon,
@@ -119,8 +113,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     cancel_deadline?: string | null
   } | null>(null)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
-  const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
-  const [showActivities, setShowActivities] = useState(false)
   const leftForFlight = useRef(false)
   const askFlightOnReturn = useRef(false)
   const seededRef = useRef(Boolean(seed))
@@ -136,34 +128,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       })
       .catch(() => undefined)
   }, [])
-
-  const refreshTripItems = useCallback(async () => {
-    if (!plannerActivitiesEnabled) return
-    try {
-      const owner = pickTripItemOwner({
-        draftToken,
-        plannedTripId: draft?.source_planned_trip_id || null,
-      })
-      if (!owner.draft_token && !owner.planned_trip_id) return
-      const res = await getApi().listTripItems({
-        draft_token: owner.draft_token,
-        planned_trip_id: owner.planned_trip_id,
-      })
-      const items = res.items || []
-      setActivityItems(items.filter((i) => i.item_type === 'activity'))
-    } catch {
-      /* keep previous progress */
-    }
-  }, [draftToken, plannerActivitiesEnabled, draft?.source_planned_trip_id])
-
-  useEffect(() => {
-    void refreshTripItems()
-  }, [
-    refreshTripItems,
-    showActivities,
-    draft?.hotel_booked_at,
-    draft?.flight_booked_at,
-  ])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setError(null)
@@ -213,12 +177,10 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       if (seededRef.current) {
         seededRef.current = false
         void load({ silent: true })
-        void refreshTripItems()
         return
       }
       void load({ silent: true })
-      void refreshTripItems()
-    }, [load, refreshTripItems]),
+    }, [load]),
   )
 
   const pl = (draft?.payload || {}) as Record<string, any>
@@ -503,45 +465,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     out,
   ])
 
-  const activityProgress = useMemo(
-    () => activityStepProgress(activityItems),
-    [activityItems],
-  )
-
-  const pipelineSteps = useMemo(
-    () =>
-      buildStayPipeline({
-        flight: resolveFlightStepStatus({
-          hasFlightPayload: Boolean(fl && (fl.airline || fl.origin_iata || fl.price_pp)),
-          flightBooked,
-          externalFlight,
-          bookingUrl: flightUrl,
-        }),
-        hotel: resolveHotelStepStatus({
-          hasHotel: Boolean(hotelId),
-          hotelBooked,
-        }),
-        focus:
-          showActivities && !activityProgress.done ? 'activities' : undefined,
-        activitiesEnabled: plannerActivitiesEnabled,
-        activitiesDone: activityProgress.done,
-        activitiesPartial: activityProgress.partial,
-        activitiesHint: activityProgress.hint,
-        restaurantsEnabled: false,
-      }).filter((s) => s.id !== 'restaurants'),
-    [
-      fl,
-      flightBooked,
-      externalFlight,
-      flightUrl,
-      hotelId,
-      hotelBooked,
-      showActivities,
-      plannerActivitiesEnabled,
-      activityProgress,
-    ],
-  )
-
   useEffect(() => {
     if (!hotelId) {
       setGallery([])
@@ -566,24 +489,18 @@ export function TripSummaryScreen({ route, navigation }: Props) {
   }, [hotelId, hotelPhoto])
 
   const sticky = useMemo(() => {
+    // Activities stay on-page; sticky CTA focuses booking actions + planner.
     const next = resolveNextStayAction({
       flightBooked,
       hotelBooked,
       hasHotelSelected: Boolean(hotelId),
-      activitiesEnabled: plannerActivitiesEnabled,
-      activitiesDone: activityProgress.done,
+      activitiesEnabled: false,
+      activitiesDone: true,
       restaurantsEnabled: false,
       hasPlanner: Boolean(draft?.source_planned_trip_id),
     })
     return { label: next.label, action: next.id }
-  }, [
-    activityProgress.done,
-    draft?.source_planned_trip_id,
-    flightBooked,
-    hotelBooked,
-    hotelId,
-    plannerActivitiesEnabled,
-  ])
+  }, [draft?.source_planned_trip_id, flightBooked, hotelBooked, hotelId])
 
   const markFlight = async (yes: boolean) => {
     if (!yes) {
@@ -617,7 +534,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       })
       setDraft(row)
       void getApi().trackMyTripEvent(draftToken, 'flight_booked_yes')
-      void refreshTripItems()
     } catch (e) {
       Alert.alert(
         'Erreur',
@@ -666,27 +582,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
     )
   }
 
-  const onPipelineStep = (id: StayStepId) => {
-    if (id === 'hotel') {
-      if (hotelId && !hotelBooked) {
-        navigation.navigate('DealCheckout', {
-          draftToken,
-          hotelId: hotelId || undefined,
-        })
-      } else if (!hotelId) {
-        navigation.navigate('HotelCompose', { draftToken })
-      }
-      return
-    }
-    if (id === 'activities' && plannerActivitiesEnabled) {
-      setShowActivities(true)
-      return
-    }
-    if (id === 'flight' && flightUrl && !flightBooked) {
-      openFlight()
-    }
-  }
-
   const onSticky = () => {
     if (sticky.action === 'hotel_pick') {
       navigation.navigate('HotelCompose', { draftToken })
@@ -697,8 +592,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
       })
     } else if (sticky.action === 'flight') {
       openFlight()
-    } else if (sticky.action === 'activities') {
-      setShowActivities(true)
     } else if (sticky.action === 'planner' && draft?.source_planned_trip_id) {
       navigation.navigate('TripDetail', {
         tripId: draft.source_planned_trip_id,
@@ -936,6 +829,19 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           paddingTop: 8,
         }}
       >
+        {draft?.source_planned_trip_id ? (
+          <Pressable
+            onPress={goPlanner}
+            style={({ pressed }) => [
+              styles.backPlannerBtn,
+              pressed && { opacity: 0.85 },
+            ]}
+            hitSlop={6}
+          >
+            <Text style={styles.backPlannerText}>← {ACTIVITY_BACK_TO_PLANNER_FR}</Text>
+          </Pressable>
+        ) : null}
+
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>{city}</Text>
@@ -958,28 +864,6 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
 
-        {draft.source_planned_trip_id ? (
-          <Pressable
-            onPress={() =>
-              navigation.navigate('TripDetail', {
-                tripId: draft.source_planned_trip_id!,
-              })
-            }
-            style={({ pressed }) => [
-              styles.plannerLink,
-              pressed && { opacity: 0.82 },
-            ]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.plannerLinkKicker}>VOYAGE DE GROUPE</Text>
-              <Text style={styles.plannerLinkTitle}>Voir le séjour et qui part</Text>
-            </View>
-            <Text style={styles.plannerLinkArrow}>›</Text>
-          </Pressable>
-        ) : null}
-
-        <StayPipelineStepper steps={pipelineSteps} onStepPress={onPipelineStep} />
-
         {out && out < new Date().toISOString().slice(0, 10) ? (
           <View style={styles.warnBanner}>
             <Text style={styles.warnTitle}>Dates passées</Text>
@@ -1000,252 +884,169 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
-        <Text style={styles.legalSoft}>
-          Vol et hôtel sont deux réservations distinctes. Les prix et dispo sont
-          revalidés avant paiement — si un tarif a bougé, on te le dira.
-        </Text>
-
-        <View style={[styles.card, shadow.soft]}>
-          <IconLabel
-            section
-            label="Vol"
-            icon={<PlaneIcon size={14} />}
-          />
-          <View style={styles.flightHead}>
-            <Text style={styles.cardBody} numberOfLines={1}>
-              {airlineName || 'Compagnie'}
-              {stopsLabel ? ` · ${stopsLabel}` : ''}
-            </Text>
-            <Text style={styles.flightRouteIata}>
-              {originIata || '—'} → {destIata || '—'}
-            </Text>
-          </View>
-
-          <View style={styles.flightLegs}>
-            <View style={styles.flightLeg}>
-              <Text style={styles.flightLegKicker}>Aller</Text>
-              <Text style={styles.flightLegDate}>{formatDate(out)}</Text>
-              <View style={styles.flightLegTimeRow}>
-                <Text style={styles.flightLegTime}>
-                  {outTime || '—'}
-                  {outArrTime ? (
-                    <Text style={styles.flightLegArr}> → {outArrTime}</Text>
-                  ) : null}
-                </Text>
-                {outFlightNo ? (
-                  <Text style={styles.flightNo}>{outFlightNo}</Text>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.flightLeg}>
-              <Text style={styles.flightLegKicker}>Retour</Text>
-              <Text style={styles.flightLegDate}>{formatDate(inn)}</Text>
-              <View style={styles.flightLegTimeRow}>
-                <Text style={styles.flightLegTime}>
-                  {retTime || '—'}
-                  {retArrTime ? (
-                    <Text style={styles.flightLegArr}> → {retArrTime}</Text>
-                  ) : null}
-                </Text>
-                {retFlightNo ? (
-                  <Text style={styles.flightNo}>{retFlightNo}</Text>
-                ) : null}
-              </View>
-            </View>
-          </View>
-
-          {flightPp != null ? (
-            <Text style={styles.cardMeta}>
-              {flightPp} €{adults > 1 ? ' / pers.' : ''}
-              {adults > 1 ? ` · ${party.flightTotal} €` : ''}
-              {flightRefreshing ? ' · actualisation…' : ''}
-            </Text>
-          ) : flightRefreshing ? (
-            <Text style={styles.cardMeta}>Actualisation du prix…</Text>
-          ) : null}
-          {flightPriceHint && !flightUnavailable ? (
-            <Text style={styles.priceHint}>{flightPriceHint}</Text>
-          ) : null}
-          {flightUnavailable && !flightBooked ? (
-            <View style={styles.warnBanner}>
-              <Text style={styles.warnTitle}>Tarif vol à vérifier</Text>
-              <Text style={styles.warnBody}>
-                Ce vol n’apparaît plus au même prix — confirme sur le site de la
-                compagnie.
-              </Text>
-            </View>
-          ) : null}
-          {flightBooked ? (
-            <View style={styles.badgeRow}>
-              <CheckIcon size={14} />
-              <Text style={styles.badgeOk}>Vol déjà réservé</Text>
-            </View>
-          ) : (
-            <View style={styles.badgeRow}>
-              <TicketIcon size={14} />
-              <Text style={styles.badge}>
-                À réserver sur le site de la compagnie
-              </Text>
-            </View>
-          )}
-          {flightUrl ? (
-            <Pressable style={styles.primaryBtn} onPress={openFlight}>
-              <PlaneIcon size={16} color={colors.white} />
-              <Text style={styles.primaryBtnText}>{flightCtaLabel}</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.cardMeta}>
-              Le lien vers la compagnie n’est pas dispo pour ce vol.
-            </Text>
-          )}
-        </View>
-
-        <View style={[styles.card, shadow.soft]}>
-          <IconLabel section label="Hôtel" icon={<BedIcon size={14} />} />
-          {hotelId && hotelOpt ? (
-            <>
-              {gallery.length > 0 ? (
-                <FlatList
-                  horizontal
-                  data={gallery.slice(0, 8)}
-                  keyExtractor={(p, i) => p.url || `p-${i}`}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8 }}
-                  style={{ marginBottom: 4 }}
-                  renderItem={({ item }) => (
-                    <Pressable onPress={() => setHotelSheet(true)}>
-                      <Image
-                        source={{ uri: item.thumb || item.url }}
-                        style={styles.galleryThumb}
-                      />
-                    </Pressable>
-                  )}
-                />
-              ) : hotelPhoto ? (
-                <Pressable onPress={() => setHotelSheet(true)}>
-                  <Image source={{ uri: hotelPhoto }} style={styles.heroThumb} />
-                </Pressable>
-              ) : null}
-
-              <Pressable onPress={() => setHotelSheet(true)}>
-                {hotelStarsLabel(hotelOpt.stars) ? (
-                  <Text style={styles.stars}>{hotelStarsLabel(hotelOpt.stars)}</Text>
-                ) : null}
-                <Text style={styles.cardBody} numberOfLines={2}>
-                  {hotelName}
-                </Text>
-                <Text style={styles.cardMeta} numberOfLines={2}>
-                  {[
-                    hotelOpt.rating != null
-                      ? `${Number(hotelOpt.rating).toFixed(1)}/10`
-                      : null,
-                    hotelOpt.review_count != null
-                      ? `${hotelOpt.review_count} avis`
-                      : null,
-                    boardFr,
-                    distFr,
-                    cancelFr,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-                {hotelPp != null ? (
-                  <Text style={styles.priceLine}>
-                    {hotelBooked
-                      ? `${party.hotelTotal} € payés`
-                      : `${hotelPp} €${adults > 1 ? ' / pers.' : ''}`}
-                    {!hotelBooked && adults > 1
-                      ? ` · ${party.hotelTotal} €`
-                      : ''}
-                  </Text>
-                ) : null}
-                <View style={styles.badgeRow}>
-                  {hotelBooked ? (
-                    <CheckIcon size={14} />
-                  ) : (
-                    <CardIcon size={14} />
-                  )}
-                  <Text style={hotelBooked ? styles.badgeOk : styles.badge}>
-                    {hotelBooked
-                      ? 'Réservé ✓'
-                      : 'Il reste à payer la chambre'}
-                  </Text>
-                </View>
-                {hotelBooked &&
-                (pl.hotel_confirmation_code || pl.hotel_booking_id) ? (
-                  <Text style={styles.cardMeta}>
-                    N°{' '}
-                    {String(
-                      pl.hotel_confirmation_code || pl.hotel_booking_id || '',
-                    )}
-                  </Text>
-                ) : null}
-                <Text style={styles.ficheLink}>Voir photos et détails →</Text>
-              </Pressable>
-            </>
-          ) : (
-            <Text style={styles.cardMeta}>
-              Pas encore d’hôtel — choisis-en un pour compléter ton séjour.
-            </Text>
-          )}
-          <View style={styles.hotelActions}>
-            {!hotelBooked ? (
-              <Pressable
-                style={styles.secondaryBtn}
-                onPress={() =>
-                  navigation.navigate('HotelCompose', { draftToken })
+        <StayBookingCard
+          kicker={`Vol · ${originIata || '—'} → ${destIata || '—'}`}
+          title={`${airlineName || 'Compagnie'}${stopsLabel ? ` · ${stopsLabel}` : ''}`}
+          subtitle={`${formatDate(out)} → ${formatDate(inn)}${
+            outTime ? ` · ${outTime}` : ''
+          }${retTime ? ` / ${retTime}` : ''}`}
+          details={
+            flightUnavailable && !flightBooked
+              ? 'Tarif à vérifier sur le site compagnie'
+              : flightBooked
+                ? 'Billet réservé chez la compagnie'
+                : 'À réserver sur le site de la compagnie'
+          }
+          priceLabel={
+            party.flightTotal > 0
+              ? `${party.flightTotal} €`
+              : flightPp != null
+                ? `${flightPp} €`
+                : null
+          }
+          badge={
+            flightBooked
+              ? {
+                  label: 'Vol réservé',
+                  tone: colors.success,
+                  soft: colors.successSoft,
                 }
-              >
-                <BedIcon size={15} />
-                <Text style={styles.secondaryBtnText}>
-                  {hotelId ? 'Changer d’hôtel' : 'Choisir mon hôtel'}
-                </Text>
+              : {
+                  label: 'À réserver',
+                  tone: colors.primaryDeep,
+                  soft: colors.primarySoft,
+                }
+          }
+          emptyIcon={<PlaneIcon size={22} color={colors.faint} />}
+          footer={
+            flightUrl ? (
+              <Pressable style={stayBookingLinkBtn.btn} onPress={openFlight}>
+                <Text style={stayBookingLinkBtn.text}>{flightCtaLabel}</Text>
               </Pressable>
-            ) : (
-              <>
-                <Pressable
-                  style={[styles.invoiceBtn, invoiceBusy && { opacity: 0.6 }]}
-                  disabled={invoiceBusy}
-                  onPress={onDownloadHotelInvoice}
-                  accessibilityState={{ busy: invoiceBusy }}
-                >
-                  {invoiceBusy ? (
-                    <View style={styles.invoiceBusyRow}>
-                      <ActivityIndicator color="#065F46" />
-                      <Text style={styles.invoiceBtnText}>
-                        Préparation…
-                      </Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.invoiceBtnText}>Voir la facture</Text>
-                  )}
-                </Pressable>
-                {cancelGate.canCancelFree ? (
+            ) : null
+          }
+        />
+
+        <StayBookingCard
+          photo={hotelPhoto || gallery[0]?.thumb || gallery[0]?.url || null}
+          kicker={city}
+          title={hotelId ? hotelName || 'Hôtel' : 'Pas encore d’hôtel'}
+          subtitle={`${formatDate(out)} → ${formatDate(inn)} · ${adults} pers.`}
+          details={
+            hotelId
+              ? [
+                  hotelStarsLabel(hotelOpt?.stars),
+                  hotelOpt?.rating != null
+                    ? `${Number(hotelOpt.rating).toFixed(1)}/10`
+                    : null,
+                  boardFr,
+                  distFr,
+                  cancelFr,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : 'Choisis un hôtel pour compléter ton séjour'
+          }
+          confirmationCode={
+            hotelBooked
+              ? String(pl.hotel_confirmation_code || pl.hotel_booking_id || '') ||
+                null
+              : null
+          }
+          priceLabel={
+            hotelBooked && hotelPaidTotal != null && hotelPaidTotal > 0
+              ? `${Math.round(hotelPaidTotal)} €`
+              : hotelPp != null
+                ? `${party.hotelTotal} €`
+                : null
+          }
+          badge={
+            hotelBooked
+              ? {
+                  label: 'Confirmée',
+                  tone: colors.success,
+                  soft: colors.successSoft,
+                }
+              : hotelId
+                ? {
+                    label: 'À payer',
+                    tone: colors.primaryDeep,
+                    soft: colors.primarySoft,
+                  }
+                : {
+                    label: 'À choisir',
+                    tone: colors.muted,
+                    soft: 'rgba(138,106,88,0.12)',
+                  }
+          }
+          onPress={
+            hotelId ? () => setHotelSheet(true) : undefined
+          }
+          footer={
+            <>
+              {!hotelBooked ? (
+                <>
+                  {hotelId ? (
+                    <Pressable
+                      style={stayBookingLinkBtn.btn}
+                      onPress={() =>
+                        navigation.navigate('DealCheckout', {
+                          draftToken,
+                          hotelId: hotelId || undefined,
+                        })
+                      }
+                    >
+                      <Text style={stayBookingLinkBtn.text}>Payer</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    style={stayBookingLinkBtn.btn}
+                    onPress={() =>
+                      navigation.navigate('HotelCompose', { draftToken })
+                    }
+                  >
+                    <Text style={stayBookingLinkBtn.text}>
+                      {hotelId ? 'Changer' : 'Choisir'}
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
                   <Pressable
                     style={[
-                      styles.cancelHotelBtn,
-                      cancellingHotel && { opacity: 0.6 },
+                      stayBookingLinkBtn.invoice,
+                      invoiceBusy && { opacity: 0.6 },
                     ]}
-                    disabled={cancellingHotel}
-                    onPress={onCancelHotelBooking}
+                    disabled={invoiceBusy}
+                    onPress={onDownloadHotelInvoice}
                   >
-                    {cancellingHotel ? (
-                      <ActivityIndicator color="#9F1239" />
+                    {invoiceBusy ? (
+                      <ActivityIndicator size="small" color="#065F46" />
                     ) : (
-                      <Text style={styles.cancelHotelText}>
-                        Annuler la réservation
-                      </Text>
+                      <Text style={stayBookingLinkBtn.invoiceText}>Facture</Text>
                     )}
                   </Pressable>
-                ) : cancelGate.blockedLabelFr ? (
-                  <Text style={styles.cancelBlockedText}>
-                    {cancelGate.blockedLabelFr}
-                  </Text>
-                ) : null}
-              </>
-            )}
-          </View>
-        </View>
+                  {cancelGate.canCancelFree ? (
+                    <Pressable
+                      style={[
+                        stayBookingLinkBtn.cancel,
+                        cancellingHotel && { opacity: 0.6 },
+                      ]}
+                      disabled={cancellingHotel}
+                      onPress={onCancelHotelBooking}
+                    >
+                      {cancellingHotel ? (
+                        <ActivityIndicator size="small" color="#9F1239" />
+                      ) : (
+                        <Text style={stayBookingLinkBtn.cancelText}>Annuler</Text>
+                      )}
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
+            </>
+          }
+        />
 
         {plannerActivitiesEnabled && distantAirportLine(destIata, city) ? (
           <ActivitySurfaceBanner
@@ -1269,25 +1070,15 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
-        {party.total > 0 ? (
-          <View style={[styles.card, shadow.soft]}>
-            <IconLabel section label="Total séjour" icon={<CardIcon size={14} />} />
-            <Text style={styles.priceLine}>
-              {party.total} €
-              {adults > 1 ? ` · ${party.perPerson} € / pers.` : ''}
-            </Text>
-            <Text style={styles.cardMeta}>
-              {[
-                party.flightTotal > 0 ? `Vol ${party.flightTotal} €` : null,
-                party.hotelTotal > 0
-                  ? `Hôtel ${party.hotelTotal} €${hotelBooked ? ' (payé)' : ''}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(' + ')}
-            </Text>
-          </View>
-        ) : null}
+        <Pressable
+          onPress={() => navigation.navigate('Bookings')}
+          style={({ pressed }) => [
+            styles.bookingsLink,
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={styles.bookingsLinkText}>Mes réservations →</Text>
+        </Pressable>
       </ScrollView>
 
       <View style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -1304,7 +1095,9 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           <Text style={styles.btnText}>
             {sticky.action === 'planner'
               ? ACTIVITY_BACK_TO_PLANNER_FR
-              : sticky.label}
+              : sticky.action === 'bookings'
+                ? 'Mes réservations'
+                : sticky.label}
           </Text>
         </Pressable>
         {draft?.source_planned_trip_id && sticky.action !== 'planner' ? (
@@ -1397,12 +1190,26 @@ const styles = StyleSheet.create({
   },
   infoTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.primaryInk },
   infoBody: { fontFamily: fonts.regular, fontSize: 13, color: colors.inkSoft, lineHeight: 18 },
-  legalSoft: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: colors.faint,
-    lineHeight: 17,
-    marginBottom: 14,
+  backPlannerBtn: {
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    paddingVertical: 4,
+  },
+  backPlannerText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.primaryDeep,
+  },
+  bookingsLink: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  bookingsLinkText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.primaryDeep,
   },
   shareBtn: {
     marginTop: 2,
@@ -1418,28 +1225,6 @@ const styles = StyleSheet.create({
   },
   sharePressed: { backgroundColor: colors.primaryMuted },
   share: { fontFamily: fonts.semibold, fontSize: 13, color: colors.primaryDeep },
-  plannerLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 18,
-    backgroundColor: '#1D1820',
-    padding: 15,
-    marginBottom: 14,
-  },
-  plannerLinkKicker: {
-    fontFamily: fonts.bold,
-    fontSize: 9,
-    letterSpacing: 1.1,
-    color: '#FDBA8C',
-  },
-  plannerLinkTitle: {
-    marginTop: 3,
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.white,
-  },
-  plannerLinkArrow: { fontFamily: fonts.regular, fontSize: 28, color: colors.white },
   card: {
     backgroundColor: colors.white,
     borderRadius: radius.lg,

@@ -121,11 +121,26 @@ export function resolveHotelCancelGate(
     }
   }
 
+  const deadline = parseCancelDeadline(hotel.cancel_deadline)
+  const deadlinePassed = Boolean(deadline && deadline.getTime() <= nowMs)
+  const when = formatCancelDeadlineLocal(hotel.cancel_deadline, 'fr-FR')
+
+  // Prefer deadline data: past free-cancel window → "date passée, non remboursable"
+  if (deadlinePassed) {
+    return {
+      canCancelFree: false,
+      reason: 'deadline_passed',
+      blockedLabelFr: when
+        ? `Date d’annulation passée (${when}) — non remboursable.`
+        : 'Date d’annulation passée — non remboursable.',
+    }
+  }
+
   if (hotel.refundable === false) {
     return {
       canCancelFree: false,
       reason: 'non_refundable',
-      blockedLabelFr: 'Tarif non remboursable — annulation sans remboursement.',
+      blockedLabelFr: 'Non remboursable.',
     }
   }
 
@@ -139,16 +154,6 @@ export function resolveHotelCancelGate(
     }
   }
 
-  const deadline = parseCancelDeadline(hotel.cancel_deadline)
-  if (deadline && deadline.getTime() <= nowMs) {
-    return {
-      canCancelFree: false,
-      reason: 'deadline_passed',
-      blockedLabelFr:
-        'Annulation gratuite terminée — des frais s’appliqueraient.',
-    }
-  }
-
   return { canCancelFree: true, reason: 'ok', blockedLabelFr: null }
 }
 
@@ -159,16 +164,36 @@ export function resolveHotelCancelGate(
  */
 export function hotelCancelLabel(
   hotel: HotelCancelFields | null | undefined,
-  opts?: { locale?: string; short?: boolean; includeNonRefundable?: boolean },
+  opts?: {
+    locale?: string
+    short?: boolean
+    includeNonRefundable?: boolean
+    now?: Date | number
+  },
 ): string | null {
   if (!hotel) return null
   const locale = opts?.locale || 'fr-FR'
   const short = Boolean(opts?.short)
+  const nowMs = opts?.now != null ? new Date(opts.now).getTime() : Date.now()
+  const deadline = parseCancelDeadline(hotel.cancel_deadline)
+  const deadlinePassed = Boolean(deadline && deadline.getTime() <= nowMs)
+  const when = formatCancelDeadlineLocal(hotel.cancel_deadline, locale)
+
+  if (deadlinePassed) {
+    if (short) {
+      return when
+        ? `Date d’annul. passée (${when})`
+        : 'Date d’annul. passée — non remboursable'
+    }
+    return when
+      ? `Date d’annulation passée (${when}) — non remboursable`
+      : 'Date d’annulation passée — non remboursable'
+  }
+
   if (hotel.refundable === false) {
     return opts?.includeNonRefundable ? 'Non remboursable' : null
   }
   if (hotel.refundable !== true) return null
-  const when = formatCancelDeadlineLocal(hotel.cancel_deadline, locale)
   if (when) {
     return short
       ? `Annul. gratuite jusqu’au ${when}`

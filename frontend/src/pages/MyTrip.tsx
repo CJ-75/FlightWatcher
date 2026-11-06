@@ -16,8 +16,8 @@ import {
   resolveActivityCitySlug,
   airportDisplayNameFr,
   ACTIVITY_BACK_TO_PLANNER_FR,
-  buildStayPipeline,
   cityDisplayNameFr,
+  cityImageUrl,
   HOTEL_CTA_FR,
   primaryAirportCode,
   distantAirportLine,
@@ -27,15 +27,12 @@ import {
   resolveHotelCancelGate,
   resolveCarrierBooking,
   resolveDraftPartyPrice,
-  resolveFlightStepStatus,
-  resolveHotelStepStatus,
   resolveNextStayAction,
   pickTripItemOwner,
-  type StayStepId,
 } from '@flightwatcher/shared'
-import { StayPipelineStepper } from '../components/StayPipelineStepper'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
+import { StayCardShell } from '../components/StayCardShell'
 import { getApiClient } from '../utils/apiClient'
 import {
   InvoiceBusyLabel,
@@ -51,7 +48,6 @@ import {
   markFlightReturnAsk,
 } from '../utils/partnerBook'
 import { PaymentCardMarks } from '../components/PaymentCardMarks'
-import { MyTripHotelPanel } from '../components/MyTripHotelPanel'
 
 const MyTripHotelCompose = lazy(() =>
   import('../components/MyTripHotelCompose').then((m) => ({
@@ -484,47 +480,6 @@ export default function MyTrip() {
     [activityItems],
   )
 
-  const pipelineSteps = useMemo(
-    () =>
-      buildStayPipeline({
-        flight: resolveFlightStepStatus({
-          hasFlightPayload: Boolean(
-            flight && (flight.airline || flight.origin_iata || flight.price_pp),
-          ),
-          flightBooked,
-          externalFlight,
-          bookingUrl: String(flight.booking_url || payload.booking_url || ''),
-        }),
-        hotel: resolveHotelStepStatus({
-          hasHotel: Boolean(hotelId),
-          hotelBooked,
-        }),
-        // Don't pin focus on Activités once chosen — keeps the chip green (done).
-        focus: wantsCompose
-          ? 'hotel'
-          : showActivities && !activityProgress.done
-            ? 'activities'
-            : undefined,
-        activitiesEnabled: plannerActivitiesEnabled,
-        activitiesDone: activityProgress.done,
-        activitiesPartial: activityProgress.partial,
-        activitiesHint: activityProgress.hint,
-        restaurantsEnabled: false,
-      }).filter((s) => s.id !== 'restaurants'),
-    [
-      flight,
-      flightBooked,
-      externalFlight,
-      payload.booking_url,
-      hotelId,
-      hotelBooked,
-      wantsCompose,
-      showActivities,
-      plannerActivitiesEnabled,
-      activityProgress,
-    ],
-  )
-
   useEffect(() => {
     void getAppConfig()
       .then((cfg) => {
@@ -566,11 +521,11 @@ export default function MyTrip() {
         ? '/planner'
         : '/sejours'
   const backLabel = plannerTripId
-    ? '← Planner'
+    ? `← ${ACTIVITY_BACK_TO_PLANNER_FR}`
     : from === 'recherche' || from === 'vols'
       ? '← Vols'
       : from === 'planner'
-        ? '← Planner'
+        ? `← ${ACTIVITY_BACK_TO_PLANNER_FR}`
         : '← Séjours'
 
   const closeCompose = useCallback(() => {
@@ -586,29 +541,6 @@ export default function MyTrip() {
     next.set('compose', '1')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
-
-  const onPipelineStep = (id: StayStepId) => {
-    if (id === 'hotel') {
-      if (hotelId && !hotelBooked) {
-        hotelSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      } else if (!hotelId) {
-        openCompose()
-      }
-      return
-    }
-    if (id === 'activities' && plannerActivitiesEnabled) {
-      setShowActivities(true)
-      setTimeout(() => {
-        activitiesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 50)
-      return
-    }
-    if (id === 'flight' && flightUrl && !flightBooked) {
-      leftForFlight.current = true
-      leftForFlightAt.current = Date.now()
-      window.open(flightUrl, '_blank', 'noopener,noreferrer')
-    }
-  }
 
   const dismissHotelCheckout = useCallback(() => {
     setCheckoutDeal(null)
@@ -1751,7 +1683,6 @@ export default function MyTrip() {
             {nights > 0 ? ` · ${nights} nuit${nights > 1 ? 's' : ''}` : ''}
             {` · ${travelersLabel}`}
           </p>
-          <StayPipelineStepper steps={pipelineSteps} onStepPress={onPipelineStep} />
           {outDate && outDate < new Date().toISOString().slice(0, 10) ? (
             <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               <p className="font-bold">Dates passées</p>
@@ -1799,485 +1730,349 @@ export default function MyTrip() {
           </Suspense>
         ) : (
         <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8 lg:items-start">
-          {/* Colonne gauche */}
-          <div className="space-y-6 min-w-0">
-            {/* ① Vol */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-bold text-slate-900">① Ton vol</h2>
-                {flightBooked ? (
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
-                    Réservé ✓
-                  </span>
-                ) : (
-                  <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
-                    À réserver
-                  </span>
-                )}
+          {/* Colonne gauche — même UI que Mes réservations */}
+          <div className="space-y-4 min-w-0">
+            <StayCardShell
+              as="section"
+              photo={cityImageUrl(String(city !== '—' ? city : '')) || null}
+              chipClass={
+                flightBooked
+                  ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                  : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+              }
+              chipLabel={flightBooked ? 'Vol réservé' : 'Vol à réserver'}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1 pr-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    Vol · {originIata || '—'} → {destIata || '—'}
+                  </p>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-ink tracking-tight mt-0.5">
+                    {airlineName || 'Compagnie'}
+                    {stopsLabel ? ` · ${stopsLabel}` : ''}
+                  </h2>
+                  <p className="text-sm text-ink-soft mt-1">
+                    {formatDate(outDate)} → {formatDate(retDate)}
+                    {outTime ? ` · ${outTime}` : ''}
+                    {retTime ? ` / ${retTime}` : ''}
+                  </p>
+                  <p className="text-xs text-muted mt-1.5">
+                    {flightBooked
+                      ? 'Billet réservé chez la compagnie — présente ta confirmation à l’aéroport.'
+                      : 'Réservation séparée sur le site de la compagnie.'}
+                  </p>
+                </div>
+                {party.flightTotal > 0 ? (
+                  <div className="text-right shrink-0 ml-auto">
+                    <p className="text-2xl font-extrabold text-ink tracking-tight tabular-nums leading-none">
+                      {party.flightTotal}&nbsp;€
+                    </p>
+                    <p className="text-[11px] text-muted font-medium mt-1">
+                      {adults > 1 ? 'Vol groupe' : 'Vol'}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               {flightUnavailable && !flightBooked ? (
-                <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-sm text-amber-950 space-y-2">
-                  <p className="font-semibold">Ce vol n’apparaît plus au même prix</p>
-                  <p className="text-xs text-amber-900/80">
-                    Vérifie sur le site de la compagnie — le lien ci-dessous reste
-                    disponible.
+                <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-950">
+                  <p className="font-bold">Tarif vol à vérifier</p>
+                  <p className="mt-1 text-amber-900/80 text-xs">
+                    Ce vol n’apparaît plus au même prix — confirme sur le site de la compagnie.
                   </p>
-                  <Link
-                    to="/sejours"
-                    className="inline-block text-xs font-bold text-primary-700 underline-offset-2 hover:underline"
-                  >
-                    Voir d’autres dates
-                  </Link>
                 </div>
               ) : null}
 
-              <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-sm text-slate-800 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-bold text-slate-900">
-                    {airlineName || 'Compagnie'}
-                    {stopsLabel ? (
-                      <span className="font-semibold text-slate-600">
-                        {' '}
-                        · {stopsLabel}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs font-bold tabular-nums text-slate-500 shrink-0">
-                    {originIata || '—'} → {destIata || '—'}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="rounded-xl border border-slate-200/80 bg-white px-3 py-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-primary-700">
-                      Aller
-                    </p>
-                    <p className="mt-1 font-extrabold text-slate-900">
-                      {formatDate(outDate)}
-                    </p>
-                    <div className="mt-1 flex items-baseline justify-between gap-2">
-                      <span className="text-lg font-black tabular-nums text-slate-950">
-                        {outTime || '—'}
-                        {outArrTime ? (
-                          <span className="text-sm font-bold text-slate-500">
-                            {' '}
-                            → {outArrTime}
-                          </span>
-                        ) : null}
-                      </span>
-                      {outFlightNo ? (
-                        <span className="font-mono text-[11px] font-bold text-slate-500">
-                          {outFlightNo}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-slate-600 truncate">
-                      {originLabel} → {arrivalLabel}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200/80 bg-white px-3 py-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-primary-700">
-                      Retour
-                    </p>
-                    <p className="mt-1 font-extrabold text-slate-900">
-                      {formatDate(retDate)}
-                    </p>
-                    <div className="mt-1 flex items-baseline justify-between gap-2">
-                      <span className="text-lg font-black tabular-nums text-slate-950">
-                        {retTime || '—'}
-                        {retArrTime ? (
-                          <span className="text-sm font-bold text-slate-500">
-                            {' '}
-                            → {retArrTime}
-                          </span>
-                        ) : null}
-                      </span>
-                      {retFlightNo ? (
-                        <span className="font-mono text-[11px] font-bold text-slate-500">
-                          {retFlightNo}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-slate-600 truncate">
-                      {arrivalLabel} → {originLabel}
-                    </p>
-                  </div>
-                </div>
-
-                {payload.baggage_line ? (
-                  <p className="text-xs text-slate-600 pt-1 border-t border-slate-200">
-                    {String(payload.baggage_line)}
-                  </p>
-                ) : null}
-                {distanceLine ? (
-                  <p className="text-xs text-slate-500">{distanceLine}</p>
-                ) : null}
-              </div>
-
-              {!flightBooked ? (
-                <>
-
-                  {distanceLine && plannerActivitiesEnabled ? (
-                    <div className="mt-3">
-                      <ActivitySurfaceBanner
-                        surface="transfer"
-                        citySlug={activityCitySlug}
-                        title={ACTIVITY_TRANSFER_CTA_FR}
-                        subtitle={distanceLine}
-                      />
-                    </div>
-                  ) : null}
-
+              <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                {flightUrl ? (
                   <a
                     href={flightUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => void onFlightClick()}
-                    className="block w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px] lg:bg-white lg:text-primary-700 lg:border lg:border-primary-200 lg:hover:bg-primary-50"
+                    className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
                   >
-                    {cta}
+                    {flightBooked
+                      ? 'Revoir mon billet'
+                      : carrier.siteLabel
+                        ? `Réserver sur ${carrier.siteLabel}`
+                        : 'Réserver mon vol'}
                   </a>
-
-                  {carrier.copyHint && carrier.kind !== 'deeplink' ? (
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
-                      <p className="text-xs text-slate-600 flex-1 leading-relaxed">
-                        {carrier.copyHint}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => void copyRouteHint()}
-                        className="shrink-0 text-xs font-bold text-primary-700 border border-primary-200 bg-white hover:bg-primary-50 px-3 py-2 rounded-lg min-h-[44px]"
-                      >
-                        {copyDone ? 'Copié ✓' : 'Copier'}
-                      </button>
-                    </div>
-                  ) : null}
-
-                  {isTravelpayouts && flightBookingStatus === 'pending_partner' ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3">
-                      <p className="text-sm font-bold text-amber-900">
-                        Confirmation du paiement en attente
-                      </p>
-                      <p className="mt-1 text-xs leading-relaxed text-amber-800">
-                        Travelpayouts mettra automatiquement ce voyage à jour après
-                        validation de la réservation.
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {askFlightBooked ? (
-                    <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 p-3 space-y-2">
-                      <p className="text-sm font-semibold text-slate-800">
-                        Ton vol est réservé ?
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void onFlightBooked()}
-                          disabled={markingBooked}
-                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold min-h-[44px] disabled:opacity-60"
-                        >
-                          {markingBooked ? '…' : 'Oui'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={onFlightNotYet}
-                          className="px-4 py-2 rounded-lg bg-white border border-slate-200 text-sm font-semibold text-slate-700 min-h-[44px]"
-                        >
-                          Pas encore
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                </>
-              )}
-
-              {showPriceAsk && isCached && !feedbackSent && flightBooked ? (
-                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-2">
-                  <p className="text-sm font-medium text-slate-800">
-                    Le prix était-il le même ?
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {(['same', 'higher', 'gone'] as const).map((fb) => (
-                      <button
-                        key={fb}
-                        type="button"
-                        onClick={() => void sendFeedback(fb)}
-                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-semibold min-h-[44px]"
-                      >
-                        {fb === 'same'
-                          ? 'Oui'
-                          : fb === 'higher'
-                            ? 'Plus cher'
-                            : 'Plus disponible'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </section>
-
-            {/* ② Hôtel */}
-            <section
-              ref={hotelSectionRef}
-              id="trip-hotel"
-              className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm scroll-mt-20"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="font-bold text-slate-900">② Ton hôtel</h2>
-                {hotelBooked ? (
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
-                    Réservé ✓
-                  </span>
-                ) : hotelId ? (
-                  <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
-                    À payer
-                  </span>
-                ) : (
-                  <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-1 rounded-lg">
-                    À choisir
-                  </span>
-                )}
+                ) : null}
+                {askFlightBooked ? (
+                  <button
+                    type="button"
+                    onClick={() => void onFlightBooked()}
+                    disabled={markingBooked}
+                    className="inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-900 hover:bg-emerald-100 min-h-[40px] disabled:opacity-60"
+                  >
+                    {markingBooked ? '…' : 'Oui, c’est réservé'}
+                  </button>
+                ) : null}
               </div>
-              {hotelObj?.name ? (
-                <MyTripHotelPanel
-                  hotel={hotelObj}
-                  hotelId={hotelId}
-                  cityLabel={String(city !== '—' ? city : '')}
-                  nights={nights}
-                  adults={adults}
-                  hotelTotal={party.hotelTotal}
-                  outLabel={formatDate(outDate)}
-                  retLabel={formatDate(retDate)}
-                  cancelLabel={cancelLabel}
-                  booked={hotelBooked}
-                  onChangeHotel={
-                    !wantsCompose && !hotelBooked ? () => openCompose() : undefined
-                  }
-                />
-              ) : (
-                <p className="text-sm text-slate-600">Aucun hôtel sélectionné pour l’instant.</p>
-              )}
+            </StayCardShell>
 
-              {hotelUnavailable && !hotelBooked ? (
-                <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-3 space-y-3">
-                  <p className="text-sm font-semibold text-amber-950">
-                    Cet hôtel n’est plus disponible à ces dates
-                  </p>
-                  {altHotels.length > 0 ? (
-                    <div className="space-y-2">
-                      {altHotels.map((h) => {
-                        const hid = String(h.id || h.hotel_id || '')
-                        const price =
-                          h.public_hotel_price != null
-                            ? Math.round(Number(h.public_hotel_price))
-                            : null
-                        return (
-                          <button
-                            key={hid}
-                            type="button"
-                            disabled={switchingHotel || !hid}
-                            onClick={() => void pickAltHotel(h)}
-                            className="w-full text-left rounded-xl border border-slate-200 bg-white px-3 py-2.5 hover:border-primary-300 disabled:opacity-60"
-                          >
-                            <p className="text-sm font-bold text-slate-900 truncate">
-                              {String(h.name || 'Hôtel')}
-                            </p>
-                            <p className="text-xs text-slate-600">
-                              {price != null ? `${price} €` : 'Prix à confirmer'}
-                              {h.stars != null ? ` · ${h.stars}★` : ''}
-                            </p>
-                          </button>
-                        )
-                      })}
+            <div ref={hotelSectionRef} id="trip-hotel" className="scroll-mt-20">
+              <StayCardShell
+                as="section"
+                photo={
+                  hotelPhoto
+                    ? String(hotelPhoto)
+                    : cityImageUrl(String(city !== '—' ? city : '')) || null
+                }
+                chipClass={
+                  hotelBooked
+                    ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                    : hotelId
+                      ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                      : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
+                }
+                chipLabel={
+                  hotelBooked ? 'Confirmée' : hotelId ? 'À payer' : 'À choisir'
+                }
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1 pr-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                      {city !== '—' ? city : 'Séjour'}
+                      {hotelObj?.stars ? ` · ${hotelObj.stars}★` : ''}
+                      {hotelObj?.rating != null
+                        ? ` · ${Number(hotelObj.rating).toFixed(1)}/10`
+                        : ''}
+                    </p>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-ink tracking-tight mt-0.5">
+                      {hotelObj?.name ? String(hotelObj.name) : 'Hôtel'}
+                    </h2>
+                    <p className="text-sm text-ink-soft mt-1">
+                      {formatDate(outDate)} → {formatDate(retDate)}
+                      {nights > 0
+                        ? ` · ${nights} nuit${nights > 1 ? 's' : ''}`
+                        : ''}
+                      {` · ${travelersLabel}`}
+                    </p>
+                    <p className="text-xs text-muted mt-1.5">
+                      {hotelBooked
+                        ? 'Ta chambre est réservée chez le fournisseur hôtel.'
+                        : hotelId
+                          ? 'Il reste à payer la chambre sur FlightWatcher.'
+                          : 'Choisis un hôtel pour compléter ton séjour.'}
+                      {cancelLabel ? ` · ${cancelLabel}` : ''}
+                    </p>
+                  </div>
+                  {(hotelBooked ? hotelPaidTotal : party.hotelTotal) != null &&
+                  Number(hotelBooked ? hotelPaidTotal : party.hotelTotal) > 0 ? (
+                    <div className="text-right shrink-0 ml-auto">
+                      <p className="text-2xl font-extrabold text-ink tracking-tight tabular-nums leading-none">
+                        {Math.round(
+                          Number(
+                            hotelBooked ? hotelPaidTotal : party.hotelTotal,
+                          ),
+                        )}
+                        &nbsp;€
+                      </p>
+                      <p className="text-[11px] text-muted font-medium mt-1">
+                        {hotelBooked ? 'Hôtel payé' : 'Hôtel'}
+                      </p>
                     </div>
+                  ) : null}
+                </div>
+
+                {hotelBooked && hotelConfirmation ? (
+                  <div className="mt-4 rounded-2xl bg-emerald-50/80 border border-emerald-100 px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-800/80">
+                      À présenter à l’hôtel
+                    </p>
+                    <p className="mt-1 font-mono text-lg sm:text-xl font-extrabold text-emerald-950 tracking-wide">
+                      {hotelConfirmation}
+                    </p>
+                    {hotelHolderEmail ? (
+                      <p className="text-xs text-emerald-900/70 mt-1">
+                        Confirmation envoyée à {hotelHolderEmail}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {hotelCancelNotice ? (
+                  <div className="mt-4 rounded-2xl bg-slate-900 text-white px-4 py-3 text-sm space-y-1">
+                    <p className="font-bold whitespace-pre-line">
+                      {hotelCancelNotice}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setHotelCancelNotice(null)}
+                      className="text-xs font-semibold text-white/70 underline-offset-2 hover:underline"
+                    >
+                      OK
+                    </button>
+                  </div>
+                ) : null}
+
+                {hotelUnavailable && !hotelBooked ? (
+                  <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-950">
+                    <p className="font-bold">Cet hôtel n’est plus disponible</p>
+                    <button
+                      type="button"
+                      onClick={() => openCompose()}
+                      className="mt-2 text-xs font-bold text-primary-700 underline-offset-2 hover:underline"
+                    >
+                      Choisir un autre hôtel
+                    </button>
+                  </div>
+                ) : null}
+
+                {invoiceError ? (
+                  <p className="mt-2 text-xs font-semibold text-rose-700">
+                    {invoiceError}
+                  </p>
+                ) : null}
+                {cancelHotelError ? (
+                  <p className="mt-2 text-xs font-semibold text-rose-700">
+                    {cancelHotelError}
+                  </p>
+                ) : null}
+                {!cancelGate.canCancelFree &&
+                cancelGate.blockedLabelFr &&
+                hotelBooked ? (
+                  <p className="mt-2 text-xs text-muted">
+                    {cancelGate.blockedLabelFr}
+                  </p>
+                ) : null}
+
+                <div className="mt-auto pt-4 flex flex-wrap gap-2">
+                  {hotelBooked ? (
+                    <>
+                      {hotelInvoiceReady ? (
+                        <button
+                          type="button"
+                          onClick={() => void onDownloadHotelInvoice()}
+                          disabled={invoiceBusy}
+                          aria-busy={invoiceBusy}
+                          className="inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-bold text-emerald-900 hover:bg-emerald-100 min-h-[40px] disabled:opacity-60"
+                        >
+                          {invoiceBusy ? (
+                            <InvoiceBusyLabel label="Préparation…" />
+                          ) : invoiceDone ? (
+                            'Facture ouverte ✓'
+                          ) : (
+                            'Voir la facture'
+                          )}
+                        </button>
+                      ) : null}
+                      {cancelGate.canCancelFree ? (
+                        <button
+                          type="button"
+                          onClick={() => void onCancelHotelBooking()}
+                          disabled={cancellingHotel}
+                          className="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3.5 py-2 text-sm font-bold text-rose-800 hover:bg-rose-50 min-h-[40px] disabled:opacity-60"
+                        >
+                          {cancellingHotel
+                            ? 'Annulation…'
+                            : 'Annuler la réservation'}
+                        </button>
+                      ) : null}
+                    </>
+                  ) : hotelId ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void openHotelCheckout()}
+                        className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
+                      >
+                        Payer ma chambre
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openCompose()}
+                        className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-bold text-ink hover:bg-slate-50 min-h-[40px]"
+                      >
+                        Changer d’hôtel
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
                       onClick={() => openCompose()}
-                      className="text-sm font-bold text-primary-700 underline-offset-2 hover:underline"
+                      className="inline-flex items-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold hover:bg-primary-600 min-h-[40px]"
                     >
-                      Choisir un autre hôtel
+                      Choisir mon hôtel
                     </button>
                   )}
-                </div>
-              ) : null}
-
-              {hotelCancelNotice && !hotelBooked ? (
-                <div className="rounded-xl bg-slate-900 text-white px-3 py-3 text-sm space-y-1">
-                  <p className="font-bold whitespace-pre-line">{hotelCancelNotice}</p>
-                  <button
-                    type="button"
-                    onClick={() => setHotelCancelNotice(null)}
-                    className="text-xs font-semibold text-white/70 underline-offset-2 hover:underline"
+                  <Link
+                    to="/bookings"
+                    className="inline-flex items-center rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-slate-50 min-h-[40px]"
                   >
-                    OK
-                  </button>
+                    Mes réservations
+                  </Link>
                 </div>
-              ) : null}
-
-              {hotelBooked ? (
-                <div className="rounded-xl bg-emerald-50/80 border border-emerald-100 px-3 py-3 text-sm space-y-3">
-                  <div className="space-y-1">
-                    <p className="font-bold text-emerald-900">Hôtel réservé ✓</p>
-                    {hotelConfirmation ? (
-                      <p className="text-slate-700">
-                        N° : <strong>{hotelConfirmation}</strong>
-                      </p>
-                    ) : null}
-                    {hotelHolderEmail ? (
-                      <p className="text-slate-600 text-xs">
-                        Confirmation envoyée à {hotelHolderEmail}
-                      </p>
-                    ) : null}
-                    {cancelLabel || cancelPolicyForAction ? (
-                      <p className="text-slate-600 text-xs">
-                        {cancelLabel || cancelPolicyForAction}
-                      </p>
-                    ) : null}
-                    {!cancelGate.canCancelFree && cancelGate.blockedLabelFr ? (
-                      <p className="text-slate-600 text-xs">
-                        {cancelGate.blockedLabelFr}
-                      </p>
-                    ) : null}
-                  </div>
-                  {hotelInvoiceReady ? (
-                    <button
-                      type="button"
-                      onClick={() => void onDownloadHotelInvoice()}
-                      disabled={invoiceBusy}
-                      aria-busy={invoiceBusy}
-                      className="w-full inline-flex items-center justify-center gap-2 border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-900 font-bold py-3 rounded-xl min-h-[44px] disabled:opacity-60"
-                    >
-                      {invoiceBusy ? (
-                        <InvoiceBusyLabel label="Préparation de la facture…" />
-                      ) : invoiceDone ? (
-                        'Facture ouverte ✓'
-                      ) : (
-                        'Voir la facture'
-                      )}
-                    </button>
-                  ) : null}
-                  {invoiceError ? (
-                    <p className="text-xs font-semibold text-rose-700">
-                      {invoiceError}
-                    </p>
-                  ) : null}
-                  {cancelGate.canCancelFree ? (
-                    <button
-                      type="button"
-                      onClick={() => void onCancelHotelBooking()}
-                      disabled={cancellingHotel}
-                      className="w-full text-center border border-rose-200 bg-white hover:bg-rose-50 text-rose-800 font-bold py-3 rounded-xl min-h-[44px] disabled:opacity-60"
-                    >
-                      {cancellingHotel
-                        ? 'Annulation…'
-                        : 'Annuler la réservation'}
-                    </button>
-                  ) : null}
-                  {cancelHotelError ? (
-                    <p className="text-xs font-semibold text-rose-700">
-                      {cancelHotelError}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!hotelObj?.name && !hotelBooked && !hotelUnavailable ? (
-                <button
-                  type="button"
-                  onClick={() => openCompose()}
-                  className="w-full text-center bg-primary-500 hover:bg-primary-600 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
-                >
-                  Choisir un hôtel
-                </button>
-              ) : null}
-            </section>
+              </StayCardShell>
+            </div>
 
             {plannerActivitiesEnabled ? (
-              <section
-                ref={activitiesSectionRef}
-                className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
+              <StayCardShell
+                as="section"
+                photo={
+                  cityImageUrl(
+                    activityCitySlug || String(city !== '—' ? city : ''),
+                  ) || null
+                }
+                chipClass="bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+                chipLabel="Activités"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="font-bold text-slate-900">③ Activités</h2>
-                  <div className="flex items-center gap-3">
-                    <Link
-                      to={activitiesCityPath(activityCitySlug, {
-                        draftToken: token,
-                      })}
-                      onClick={() => {
-                        if (token) {
-                          rememberTrip({
-                            draft_token: token,
-                            city: activityCitySlug,
-                          })
-                        }
-                      }}
-                      className="text-xs font-bold text-primary-700"
-                    >
-                      Catalogue
-                    </Link>
-                    <button
-                      type="button"
-                      className="text-xs font-bold text-slate-600"
-                      onClick={() => setShowActivities(true)}
-                    >
-                      Gérer
-                    </button>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                      Sur place
+                    </p>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-ink tracking-tight mt-0.5">
+                      Activités
+                    </h2>
+                    <p className="text-sm text-ink-soft mt-1">
+                      Complète ton séjour avec des idées à{' '}
+                      {city !== '—' ? city : 'destination'}.
+                    </p>
                   </div>
+                  <Link
+                    to={activitiesCityPath(activityCitySlug, {
+                      draftToken: token,
+                    })}
+                    onClick={() => {
+                      if (token) {
+                        rememberTrip({
+                          draft_token: token,
+                          city: activityCitySlug,
+                        })
+                      }
+                    }}
+                    className="text-xs font-bold text-primary-700 shrink-0"
+                  >
+                    Catalogue
+                  </Link>
                 </div>
-                <ActivityStepPanel
-                  draftToken={token}
-                  plannedTripId={plannerTripId}
-                  citySlug={activityCitySlug}
-                  enabled={plannerActivitiesEnabled}
-                  surface="my_trip"
-                  onItemsChange={setActivityItems}
-                />
-              </section>
+                <div className="mt-4" ref={activitiesSectionRef}>
+                  <ActivityStepPanel
+                    draftToken={token}
+                    plannedTripId={plannerTripId}
+                    citySlug={activityCitySlug}
+                    enabled={plannerActivitiesEnabled}
+                    surface="my_trip"
+                    onItemsChange={setActivityItems}
+                  />
+                </div>
+              </StayCardShell>
             ) : null}
 
-            <aside className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600 leading-relaxed shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500 mb-3">
-                Réservation en 2 étapes
-              </p>
-              <p className="text-[12px] text-slate-600 mb-3 leading-snug">
-                Pour le week-end complet, réserve les deux : le vol chez la compagnie, puis
-                l’hôtel ici. Tu peux aussi ne prendre que l’hôtel si ton vol est déjà réglé.
-              </p>
-              <ol className="space-y-3">
-                <li className="flex gap-3">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white text-[11px] font-black flex items-center justify-center">
-                    1
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-900 text-[13px]">Vol auprès de la compagnie</p>
-                    <p className="text-[12px] text-slate-600 mt-0.5 leading-snug">
-                      Réserve et paie ton billet sur le site officiel de la compagnie aérienne
-                      (conseillé en premier : les tarifs vols bougent plus vite).
-                    </p>
-                  </div>
-                </li>
-                <li className="flex gap-3">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white text-[11px] font-black flex items-center justify-center">
-                    2
-                  </span>
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-900 text-[13px]">Hôtel sur FlightWatcher</p>
-                    <p className="text-[12px] text-slate-600 mt-0.5 leading-snug">
-                      Confirme ta chambre ici en quelques minutes. Paiement sécurisé, confirmation
-                      immédiate.
-                    </p>
-                  </div>
-                </li>
-              </ol>
-              <p className="mt-3.5 pt-3 border-t border-slate-100 text-[11px] text-slate-500 leading-snug">
-                Vol et hôtel restent indépendants : une modification de vol par la compagnie
-                n’annule pas ton hôtel — les conditions de l’établissement s’appliquent.
-              </p>
-            </aside>
+            {plannerActivitiesEnabled &&
+            distantAirportLine(destIata, String(city)) ? (
+              <ActivitySurfaceBanner
+                surface="transfer"
+                citySlug={activityCitySlug}
+                title={ACTIVITY_TRANSFER_CTA_FR}
+                subtitle={
+                  distantAirportLine(destIata, String(city)) || undefined
+                }
+              />
+            ) : null}
           </div>
 
           {/* Récapitulatif — sticky desktop, flux mobile */}
