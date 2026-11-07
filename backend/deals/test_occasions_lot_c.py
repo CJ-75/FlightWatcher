@@ -63,14 +63,17 @@ def test_list_active_occasions_min_deals_and_main():
     main_slugs = [c["slug"] for c in out["main"]]
     assert "moins-200" in main_slugs
     assert "sans-conge" in main_slugs
-    assert "ambiance-noel" in main_slugs
+    # Noël / NYE chips masqués (chip: False)
+    assert "ambiance-noel" not in main_slugs
+    assert "pont-noel" not in main_slugs
+    assert "nouvel-an" not in main_slugs
     # hiver-soleil has 3 — can appear
     counts = {c["slug"]: c["count"] for c in out["main"] + out["more"]}
     assert counts.get("moins-200") == 3
     assert counts.get("sans-conge") == 3
-    # Single-tag occasion with only 1 deal stays out
+    assert "ambiance-noel" not in counts
     assert "nouvel-an" not in counts
-    assert all(c["count"] >= 3 for c in out["main"] + out["more"])
+    assert all(c["count"] > 0 for c in out["main"] + out["more"])
     assert len(out["main"]) <= 6
     all_slugs = [c["slug"] for c in out["main"] + out["more"]]
     assert len(all_slugs) == len(set(all_slugs))

@@ -40,14 +40,18 @@ type DurationTab = 'weekend' | 'short' | 'week'
 /** Inspire-toi rail — labels/icons immediately; counts merge from API. */
 const INSPIRE_SEED: DealOccasionChip[] = [
   { slug: 'sans-conge', label: 'Sans poser de congé', icon: 'briefcase-off' },
-  { slug: 'ambiance-noel', label: 'Marchés de Noël', icon: 'tree' },
-  { slug: 'pont-noel', label: 'Week-end de Noël', icon: 'bridge' },
-  { slug: 'nouvel-an', label: 'Nouvel An ailleurs', icon: 'champagne' },
   { slug: 'hiver-soleil', label: 'Fuyez l’hiver', icon: 'sun' },
   { slug: 'moins-200', label: 'Moins de 200 €', icon: 'euro' },
 ]
 
-const INSPIRE_HIDDEN = new Set(['max-sur-place', 'hors-vacances', 'pepites'])
+const INSPIRE_HIDDEN = new Set([
+  'max-sur-place',
+  'hors-vacances',
+  'pepites',
+  'ambiance-noel',
+  'pont-noel',
+  'nouvel-an',
+])
 
 function readStoredOrigin(): string {
   try {
@@ -118,9 +122,7 @@ export function DealsTab() {
       return null
     }
   })
-  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>(() => [
-    ...INSPIRE_SEED,
-  ])
+  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
   const [occasionCountsPending, setOccasionCountsPending] = useState(true)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>(() => peekAirports())
@@ -228,30 +230,26 @@ export function DealsTab() {
         seen.add(c.slug)
         all.push(c)
       }
-      // Keep seed order for launch chips, then API extras
-      if (all.length === 0) {
-        setOccasionChips(INSPIRE_SEED.map((c) => ({ ...c, count: 0 })))
-      } else {
-        const bySlug = new Map(all.map((c) => [c.slug, c]))
-        const ordered: DealOccasionChip[] = []
-        for (const seed of INSPIRE_SEED) {
-          ordered.push(bySlug.get(seed.slug) || { ...seed, count: 0 })
-          bySlug.delete(seed.slug)
-        }
-        for (const c of all) {
-          if (bySlug.has(c.slug)) ordered.push(c)
-        }
-        setOccasionChips(ordered)
+      // Keep seed order for launch chips that still have stays, then API extras
+      const bySlug = new Map(all.map((c) => [c.slug, c]))
+      const ordered: DealOccasionChip[] = []
+      for (const seed of INSPIRE_SEED) {
+        const hit = bySlug.get(seed.slug)
+        if (!hit) continue
+        ordered.push(hit)
+        bySlug.delete(seed.slug)
       }
+      for (const c of all) {
+        if (bySlug.has(c.slug)) ordered.push(c)
+      }
+      setOccasionChips(ordered)
       setOccasion((prev) => {
         if (!prev) return null
-        return all.some((c) => c.slug === prev) || INSPIRE_SEED.some((c) => c.slug === prev)
-          ? prev
-          : null
+        return ordered.some((c) => c.slug === prev) ? prev : null
       })
     } catch {
-      /* keep seed labels; mark counts as unknown */
-      setOccasionChips(INSPIRE_SEED)
+      /* no optimistic empty chips — wait for a successful load */
+      setOccasionChips([])
     } finally {
       setOccasionCountsPending(false)
     }

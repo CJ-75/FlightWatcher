@@ -19,6 +19,7 @@ import {
   useFocusEffect,
   useNavigation,
   useRoute,
+  useScrollToTop,
 } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -211,6 +212,8 @@ export function ActivitiesScreen() {
   const didAutoCity = useRef(false)
   /** Align city on trip once when planner boots (like web syncedOnOpen). */
   const syncedCityToTrip = useRef(false)
+  const listRef = useRef<FlatList<ActivityCardModel>>(null)
+  useScrollToTop(listRef)
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedActivities()
 
   useEffect(() => {
@@ -867,6 +870,7 @@ export function ActivitiesScreen() {
     <View style={styles.root}>
       <ScreenBackground />
       <FlatList
+        ref={listRef}
         data={cards}
         keyExtractor={(c) => c.productCode || c.title}
         contentContainerStyle={{

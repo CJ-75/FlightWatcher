@@ -15,6 +15,8 @@ import {
   ACTIVITY_SIGN_IN_TO_ADD_FR,
   ACTIVITY_STAY_KIND_INVITEE_FR,
   ACTIVITY_SWITCHER_SOFT_LIMIT,
+  activityStayCityToken,
+  activityWorkspaceStayLabel,
   cityDisplayNameFr,
   cityImageUrl,
   filterActivitySwitcherWorkspaces,
@@ -64,17 +66,12 @@ function formatDates(ws: TravelWorkspace): string | null {
 }
 
 function workspaceLabel(ws: TravelWorkspace): string {
-  const title = String(ws.title || '').trim()
-  const city = String(ws.city || '').trim()
-  if (title && city && !title.toLowerCase().includes(city.toLowerCase())) {
-    return `${title} · ${city}`
-  }
-  return title || city || 'Séjour'
+  return activityWorkspaceStayLabel(ws)
 }
 
 function workspaceCity(ws: TravelWorkspace): string {
   return (
-    String(ws.city || '').trim() ||
+    activityStayCityToken(ws.city) ||
     cityDisplayNameFr(String(ws.dest_iata || '').trim()) ||
     'Séjour'
   )
@@ -323,7 +320,7 @@ export function ActivityPlannerPicker({
                     plannedTripId: planned || undefined,
                     draftToken: planned ? undefined : draft || undefined,
                     label,
-                    city: String(ws.city || '').trim() || undefined,
+                    city: activityStayCityToken(ws.city) || undefined,
                     destIata: String(ws.dest_iata || '').trim() || undefined,
                     outDate: ws.out_date
                       ? String(ws.out_date).slice(0, 10)

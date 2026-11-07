@@ -6,6 +6,65 @@ import type { TravelWorkspace, TravelWorkspacePhase } from '../types'
 
 export const ACTIVITY_SWITCHER_SOFT_LIMIT = 10
 
+/** Auto titles: "Weekend Lisbonne", "Séjour à Rome", "Week-end à Porto"… */
+const GENERIC_STAY_TITLE_PREFIX =
+  /^(weekend|week[\s-]?end|voyage|séjour(?:\s+à)?)\s+/i
+
+function normalizeStayToken(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** City token only — collapses "Malte, Malte" / "Lisbonne, Portugal". */
+export function activityStayCityToken(raw?: string | null): string {
+  const parts = String(raw || '')
+    .split(',')
+    .map((p) => p.split('(')[0]?.trim() || '')
+    .filter(Boolean)
+  if (!parts.length) return ''
+  if (
+    parts.length >= 2 &&
+    normalizeStayToken(parts[0]) === normalizeStayToken(parts[1])
+  ) {
+    return parts[0]
+  }
+  return parts[0]
+}
+
+/**
+ * Label for « Choisir un séjour » rows: city only, unless a dedicated
+ * planner name (custom trip title) is set.
+ */
+export function activityWorkspaceStayLabel(ws: {
+  title?: string | null
+  city?: string | null
+}): string {
+  const city = activityStayCityToken(ws.city)
+  const titleRaw = String(ws.title || '').trim()
+  if (!titleRaw) return city || 'Séjour'
+
+  const hasGenericPrefix = GENERIC_STAY_TITLE_PREFIX.test(titleRaw)
+  const titleCore = activityStayCityToken(
+    hasGenericPrefix
+      ? titleRaw.replace(GENERIC_STAY_TITLE_PREFIX, '').trim()
+      : titleRaw,
+  )
+  const sameAsCity =
+    Boolean(city) &&
+    (normalizeStayToken(titleRaw) === normalizeStayToken(city) ||
+      normalizeStayToken(titleCore) === normalizeStayToken(city))
+
+  if (hasGenericPrefix || sameAsCity) {
+    return city || titleCore || 'Séjour'
+  }
+
+  return titleRaw
+}
+
 const ACTIVE_PHASES: ReadonlySet<TravelWorkspacePhase> = new Set([
   'planning',
   'flight_selected',

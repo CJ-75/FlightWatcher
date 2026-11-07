@@ -228,6 +228,7 @@ OCCASIONS: List[Dict[str, Any]] = [
         "verified": True,
         "priority": 12,
         "push": True,
+        "chip": False,  # masqué Inspire-toi (réactiver hors saison / stock)
     },
     {
         "slug": "pont-noel",
@@ -241,6 +242,7 @@ OCCASIONS: List[Dict[str, Any]] = [
         "verified": True,
         "priority": 11,
         "push": True,
+        "chip": False,
     },
     {
         "slug": "nouvel-an",
@@ -254,6 +256,7 @@ OCCASIONS: List[Dict[str, Any]] = [
         "verified": True,
         "priority": 12,
         "push": True,
+        "chip": False,
     },
     {
         "slug": "hiver-soleil",
@@ -292,12 +295,9 @@ def occasion_by_slug(slug: str) -> Optional[Dict[str, Any]]:
 
 
 def launch_chip_slugs() -> List[str]:
-    """Default main-row order for late Oct (max 6)."""
+    """Default main-row order (max 6). Noël / NYE chips masqués pour l’instant."""
     return [
         "sans-conge",
-        "ambiance-noel",
-        "pont-noel",
-        "nouvel-an",
         "hiver-soleil",
         "moins-200",
     ]

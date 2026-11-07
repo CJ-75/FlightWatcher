@@ -15,7 +15,11 @@ import {
   Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import {
+  useFocusEffect,
+  useNavigation,
+  useScrollToTop,
+} from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, PlannedTrip, TravelWorkspace } from '@flightwatcher/shared'
@@ -127,6 +131,8 @@ export function PlannerScreen() {
   const [showCreate, setShowCreate] = useState(false)
   const lastFetchAtRef = useRef(0)
   const workspacesLenRef = useRef(0)
+  const listRef = useRef<FlatList<TravelWorkspace>>(null)
+  useScrollToTop(listRef)
   workspacesLenRef.current = workspaces.length
 
   const applyWorkspaceList = useCallback((list: TravelWorkspace[]) => {
@@ -326,6 +332,7 @@ export function PlannerScreen() {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           key={`planner-${density}`}
           data={filteredWorkspaces}
           keyExtractor={(item) => item.workspace_id}

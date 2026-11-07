@@ -9,7 +9,11 @@ import {
   Pressable,
   ScrollView,
 } from 'react-native'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import {
+  useFocusEffect,
+  useNavigation,
+  useScrollToTop,
+} from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, DealOccasionChip, TravelDeal } from '@flightwatcher/shared'
@@ -78,6 +82,8 @@ export function DealsScreen() {
   const [originReady, setOriginReady] = useState(false)
   const configLoadedRef = useRef(false)
   const lastFetchAtRef = useRef(0)
+  const listRef = useRef<FlatList<DealsListItem>>(null)
+  useScrollToTop(listRef)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originHydratedRef = useRef(false)
 
@@ -195,10 +201,19 @@ export function DealsScreen() {
               duration: durationTab,
             })
             .then((res) => {
+              const hidden = new Set([
+                'ambiance-noel',
+                'pont-noel',
+                'nouvel-an',
+                'max-sur-place',
+                'hors-vacances',
+                'pepites',
+              ])
               const seen = new Set<string>()
               const all: DealOccasionChip[] = []
               for (const c of [...(res?.main || []), ...(res?.more || [])]) {
-                if (!c?.slug || seen.has(c.slug)) continue
+                if (!c?.slug || seen.has(c.slug) || hidden.has(c.slug)) continue
+                if (typeof c.count === 'number' && c.count <= 0) continue
                 seen.add(c.slug)
                 all.push(c)
               }
@@ -376,6 +391,7 @@ export function DealsScreen() {
       <ScreenBackground />
 
       <FlatList
+          ref={listRef}
           data={listData}
           keyExtractor={(item, i) => {
             if (item.kind === 'skeleton') return item.id

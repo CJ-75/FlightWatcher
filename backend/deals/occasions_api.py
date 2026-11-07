@@ -85,8 +85,8 @@ def list_active_occasions(
     launch = launch_chip_slugs()
     launch_set = set(launch)
 
-    # Always emit visible chips (incl. launch with count 0) — UI shows labels
-    # first; counts fill once this response arrives.
+    # Never emit empty chips (count 0). Launch set may show below min_deals
+    # so the rail stays useful when stock is thin — but not empty.
     items: List[Dict[str, Any]] = []
     for occ in OCCASIONS:
         if occ.get("chip") is False:
@@ -95,6 +95,8 @@ def list_active_occasions(
             continue
         slug = str(occ["slug"])
         n = int(counts.get(slug, 0))
+        if n <= 0:
+            continue
         if n < min_deals and slug not in launch_set:
             continue
         items.append(

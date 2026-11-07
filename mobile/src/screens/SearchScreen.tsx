@@ -11,7 +11,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native'
-import { useNavigation, useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute, useScrollToTop } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -97,6 +97,7 @@ export function SearchScreen() {
   const pendingOriginRef = useRef<string | null>(null)
   const autoSearchPendingRef = useRef(false)
   const scrollRef = useRef<ScrollView>(null)
+  useScrollToTop(scrollRef)
 
   // Lot E / Affiner — prefill origin · pax · dates (+ auto inspire)
   useEffect(() => {

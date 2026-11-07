@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -8,7 +8,11 @@ import {
   Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { CommonActions, useNavigation } from '@react-navigation/native'
+import {
+  CommonActions,
+  useNavigation,
+  useScrollToTop,
+} from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
@@ -71,6 +75,8 @@ export function ProfileScreen() {
   } = useAuth()
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
+  const scrollRef = useRef<ScrollView>(null)
+  useScrollToTop(scrollRef)
   const [loginLoading, setLoginLoading] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [avatarFailed, setAvatarFailed] = useState(false)
@@ -188,6 +194,7 @@ export function ProfileScreen() {
     <View style={styles.root}>
       <ScreenBackground />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{
           paddingTop: insets.top + spacing.md,
           paddingBottom: insets.bottom + 110,
