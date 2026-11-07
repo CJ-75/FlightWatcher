@@ -209,6 +209,8 @@ export function ActivitiesScreen() {
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
   const didAutoCity = useRef(false)
+  /** Align city on trip once when planner boots (like web syncedOnOpen). */
+  const syncedCityToTrip = useRef(false)
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedActivities()
 
   useEffect(() => {
@@ -219,6 +221,7 @@ export function ActivitiesScreen() {
     if (authLoading) return
     let cancelled = false
     didAutoCity.current = false
+    syncedCityToTrip.current = false
     setTripReady(false)
     const routeCity = route.params?.city?.trim().toLowerCase() || ''
     void (async () => {
@@ -582,42 +585,26 @@ export function ActivitiesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftFromRoute, plannedFromRoute, route.params?.city, authKey, authLoading])
 
-  // Champ ville = source de vérité affichée :
-  // - planner chargé → destination du séjour
-  // - 1ʳᵉ connexion / aucun séjour → Paris
+  // Une fois au bootstrap du séjour : aligner la ville. Ensuite le picker
+  // peut explorer d’autres villes (comme le web) ; « Sync » ramène au séjour.
   useEffect(() => {
-    if (activeTrip?.slug) {
-      setCitySlug((prev) =>
-        prev === activeTrip.slug ? prev : activeTrip.slug,
-      )
+    if (!activeTrip?.slug) {
+      syncedCityToTrip.current = false
+      if (draftFromRoute || plannedFromRoute || route.params?.city) return
+      setCitySlug((prev) => (prev ? prev : 'paris'))
       return
     }
-    if (draftFromRoute || plannedFromRoute || route.params?.city) return
-    setCitySlug((prev) => (prev ? prev : 'paris'))
+    if (syncedCityToTrip.current) return
+    syncedCityToTrip.current = true
+    setCitySlug((prev) =>
+      prev === activeTrip.slug ? prev : activeTrip.slug,
+    )
   }, [
     activeTrip?.slug,
     draftFromRoute,
     plannedFromRoute,
     route.params?.city,
   ])
-
-  useFocusEffect(
-    useCallback(() => {
-      if (activeTrip?.slug) {
-        setCitySlug((prev) =>
-          prev === activeTrip.slug ? prev : activeTrip.slug,
-        )
-        return
-      }
-      if (draftFromRoute || plannedFromRoute || route.params?.city) return
-      setCitySlug((prev) => (prev ? prev : 'paris'))
-    }, [
-      activeTrip?.slug,
-      draftFromRoute,
-      plannedFromRoute,
-      route.params?.city,
-    ]),
-  )
 
   useEffect(() => {
     setSearchQuery('')
@@ -907,7 +894,10 @@ export function ActivitiesScreen() {
                 plannerCount={plannerCount}
                 outDate={activeTrip.outDate}
                 retDate={activeTrip.retDate}
-                showSyncCity={false}
+                showSyncCity={
+                  Boolean(activeTrip.slug && citySlug && activeTrip.slug !== citySlug)
+                }
+                onSyncCity={() => setCitySlug(activeTrip.slug)}
                 onOpenPlanner={openPlanner}
                 onChangeTrip={() => {
                   setPendingAdd(null)
@@ -946,12 +936,6 @@ export function ActivitiesScreen() {
                     : activityDestinationLabelFr(citySlug || 'paris')
                 }
                 onChange={(city) => {
-                  // Sans planner : le champ pilote le filtre.
-                  // Avec planner : on garde la destination du séjour.
-                  if (activeTrip?.slug) {
-                    setCitySlug(activeTrip.slug)
-                    return
-                  }
                   setCitySlug(city.slug || 'paris')
                 }}
               />

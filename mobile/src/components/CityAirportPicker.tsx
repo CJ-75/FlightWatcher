@@ -1,20 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
   TextInput,
   Pressable,
+  TouchableOpacity,
   StyleSheet,
   Modal,
   FlatList,
-  Keyboard,
+  Platform,
   ActivityIndicator,
+  Animated,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport } from '@flightwatcher/shared'
 import {
   airportDisplayNameFr,
   airportSelectionLabel,
+  countryIsoFromIata,
+  countryToFlagIso,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -56,6 +61,8 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     airports.length >= MIN_FULL ? airports : SEED,
   )
   const [loadingFull, setLoadingFull] = useState(() => !hasFullAirportsCatalog())
+  const lockedRef = useRef(false)
+  const enterAnim = useRef(new Animated.Value(0)).current
 
   // Prefer parent list when full; otherwise keep local catalog (API / disk).
   useEffect(() => {
@@ -66,6 +73,17 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     setCatalog(list)
     setLoadingFull(list.length < MIN_FULL)
   }), [])
+
+  useEffect(() => {
+    if (hasFullAirportsCatalog()) {
+      setLoadingFull(false)
+      return
+    }
+    void getCachedAirports({ force: true }).then((list) => {
+      setCatalog(list)
+      setLoadingFull(list.length < MIN_FULL)
+    })
+  }, [])
 
   const effectiveAirports = catalog.length > 0 ? catalog : SEED
   const isFull = effectiveAirports.length >= MIN_FULL
@@ -128,30 +146,44 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
   useEffect(() => {
     if (!open) {
       setQuery('')
-      Keyboard.dismiss()
+      enterAnim.setValue(0)
       return
     }
-    if (hasFullAirportsCatalog()) {
-      setLoadingFull(false)
-      return
-    }
-    setLoadingFull(true)
-    void getCachedAirports({ force: true }).then((list) => {
-      setCatalog(list)
-      setLoadingFull(list.length < MIN_FULL)
-    })
-  }, [open])
+    Animated.spring(enterAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 80,
+      useNativeDriver: true,
+    }).start()
+  }, [open, enterAnim])
 
-  const selectCity = (group: CityAirportGroup) => {
-    const encoded = encodeAirportCodes(group.airports.map((a) => a.code))
-    if (encoded) onChange(encoded)
-    setOpen(false)
-  }
+  const selectCity = useCallback(
+    (group: CityAirportGroup) => {
+      if (lockedRef.current) return
+      const encoded = encodeAirportCodes(group.airports.map((a) => a.code))
+      if (!encoded) return
+      lockedRef.current = true
+      setOpen(false)
+      onChange(encoded)
+      setTimeout(() => {
+        lockedRef.current = false
+      }, 250)
+    },
+    [onChange],
+  )
 
-  const selectSingleAirport = (code: string) => {
-    onChange(code.toUpperCase())
-    setOpen(false)
-  }
+  const selectSingleAirport = useCallback(
+    (code: string) => {
+      if (lockedRef.current) return
+      lockedRef.current = true
+      setOpen(false)
+      onChange(code.toUpperCase())
+      setTimeout(() => {
+        lockedRef.current = false
+      }, 250)
+    },
+    [onChange],
+  )
 
   const toggleAirport = (code: string) => {
     const upper = code.toUpperCase()
@@ -186,19 +218,26 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
     return selectedCodes.join(' · ')
   })()
 
-  const renderCity = (group: CityAirportGroup) => {
-    const active = selectedGroup?.key === group.key
-    const n = group.airports.length
-    return (
-      <Pressable
-        onPress={() => selectCity(group)}
-        style={({ pressed }) => [
-          styles.row,
-          active && styles.rowActive,
-          pressed && { opacity: 0.9 },
-        ]}
-      >
-        <CountryFlag country={group.country} size={{ width: 22, height: 15 }} />
+  const renderCity = useCallback(
+    ({ item: group }: { item: CityAirportGroup }) => {
+      const active = selectedGroup?.key === group.key
+      const n = group.airports.length
+      return (
+        <TouchableOpacity
+          onPress={() => selectCity(group)}
+          activeOpacity={0.65}
+          delayPressIn={0}
+          style={[styles.row, active && styles.rowActive]}
+        >
+        <CountryFlag
+          country={group.country}
+          iso={
+            countryIsoFromIata(group.airports[0]?.code) ||
+            countryToFlagIso(group.country) ||
+            undefined
+          }
+          size={{ width: 22, height: 15 }}
+        />
         <View style={styles.rowBody}>
           <Text style={styles.rowCity} numberOfLines={1}>
             {group.city}
@@ -209,19 +248,28 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           </Text>
         </View>
         {active ? <Text style={styles.check}>✓</Text> : null}
-      </Pressable>
-    )
-  }
+      </TouchableOpacity>
+      )
+    },
+    [selectCity, selectedGroup?.key],
+  )
 
   return (
     <View>
-      <Pressable
+      <TouchableOpacity
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.trigger, pressed && styles.triggerPressed]}
+        activeOpacity={0.85}
+        delayPressIn={0}
+        style={styles.trigger}
       >
         {selectedGroup ? (
           <CountryFlag
             country={selectedGroup.country}
+            iso={
+              countryIsoFromIata(selectedGroup.airports[0]?.code) ||
+              countryToFlagIso(selectedGroup.country) ||
+              undefined
+            }
             size={{ width: 28, height: 20 }}
             style={styles.triggerFlag}
           />
@@ -258,7 +306,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           )}
         </View>
         <Text style={styles.chevron}>›</Text>
-      </Pressable>
+      </TouchableOpacity>
 
       {selectedGroup && selectedGroup.airports.length > 1 ? (
         <View style={styles.subBlock}>
@@ -302,15 +350,36 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
 
       <Modal
         visible={open}
-        animationType="slide"
-        presentationStyle="pageSheet"
+        animationType="fade"
+        transparent={false}
+        presentationStyle={
+          Platform.OS === 'ios' ? 'overFullScreen' : 'fullScreen'
+        }
         onRequestClose={() => setOpen(false)}
+        statusBarTranslucent
       >
-        <View style={[styles.sheet, { paddingTop: 12, paddingBottom: insets.bottom + 8 }]}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            {
+              paddingTop: Math.max(insets.top, 12),
+              paddingBottom: insets.bottom + 8,
+              opacity: enterAnim,
+              transform: [
+                {
+                  translateY: enterAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [18, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <View style={styles.sheetHandle} />
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>Ville de départ</Text>
-            <Pressable onPress={() => setOpen(false)} hitSlop={10}>
+            <Pressable onPress={() => setOpen(false)} hitSlop={12}>
               <Text style={styles.sheetClose}>Fermer</Text>
             </Pressable>
           </View>
@@ -318,7 +387,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             {query.trim()
               ? 'Résultats de recherche'
               : isFull
-                ? `${groups.length} villes · ${effectiveAirports.length} aéroports`
+                ? `${groups.length} villes · ${effectiveAirports.length} aéroports · glisse pour voir plus`
                 : loadingFull
                   ? 'Chargement du catalogue…'
                   : 'Catalogue incomplet. Réessaie.'}
@@ -330,7 +399,6 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             placeholderTextColor={colors.faint}
             autoCorrect={false}
             autoCapitalize="words"
-            autoFocus
             style={styles.search}
           />
           {loadingFull && !isFull ? (
@@ -354,8 +422,10 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
             </Pressable>
           ) : null}
           {exactAirport ? (
-            <Pressable
+            <TouchableOpacity
               onPress={() => selectSingleAirport(exactAirport.code)}
+              activeOpacity={0.65}
+              delayPressIn={0}
               style={[styles.row, styles.exactRow]}
             >
               <View style={styles.exactBadge}>
@@ -372,25 +442,47 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                   {exactAirport.city ? ` · ${exactAirport.city}` : ''}
                 </Text>
               </View>
-            </Pressable>
+            </TouchableOpacity>
           ) : null}
-          <FlatList
-            data={filtered}
-            keyExtractor={(g) => g.key}
-            keyboardShouldPersistTaps="handled"
-            initialNumToRender={16}
-            maxToRenderPerBatch={16}
-            windowSize={7}
-            renderItem={({ item }) => renderCity(item)}
-            ListEmptyComponent={
-              exactAirport ? null : (
-                <Text style={styles.empty}>
-                  {query.trim() ? 'Aucune ville trouvée' : 'Aucune ville disponible'}
-                </Text>
-              )
-            }
-          />
-        </View>
+          <View style={styles.listWrap}>
+            <FlatList
+              style={styles.list}
+              data={filtered}
+              keyExtractor={(g) => g.key}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              nestedScrollEnabled
+              bounces
+              alwaysBounceVertical
+              showsVerticalScrollIndicator
+              removeClippedSubviews={false}
+              initialNumToRender={24}
+              maxToRenderPerBatch={32}
+              windowSize={11}
+              renderItem={renderCity}
+              getItemLayout={(_data, index) => ({
+                length: 57,
+                offset: 57 * index,
+                index,
+              })}
+              contentContainerStyle={styles.listContent}
+              ListEmptyComponent={
+                exactAirport ? null : (
+                  <Text style={styles.empty}>
+                    {query.trim()
+                      ? 'Aucune ville trouvée'
+                      : 'Aucune ville disponible'}
+                  </Text>
+                )
+              }
+            />
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(255,249,245,0)', 'rgba(255,249,245,0.92)']}
+              style={styles.listFade}
+            />
+          </View>
+        </Animated.View>
       </Modal>
     </View>
   )
@@ -409,7 +501,6 @@ const styles = StyleSheet.create({
     gap: 12,
     ...shadow.soft,
   },
-  triggerPressed: { opacity: 0.92 },
   triggerFlag: {
     borderRadius: 4,
   },
@@ -495,6 +586,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
+  listWrap: { flex: 1, position: 'relative', minHeight: 0 },
+  list: { flex: 1 },
+  listContent: { paddingBottom: 28 },
+  listFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 36,
+  },
   sheetTitle: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.ink },
   sheetClose: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
   sheetHint: {
@@ -519,7 +620,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    height: 57,
     paddingHorizontal: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,

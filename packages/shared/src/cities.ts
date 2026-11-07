@@ -658,9 +658,32 @@ export function cityDisplayNameFr(
     beforeComma,
     ...beforeComma.split(/[\s\-–—/]+/).filter(Boolean),
   ]
+  // Ambiguous EN city names (London Ontario, Paris TX…) — only rename to FR
+  // when the IATA country matches the European hub we intend.
+  const EN_TO_FR_REQUIRE_ISO: Record<string, string> = {
+    london: 'gb',
+    paris: 'fr',
+    rome: 'it',
+    naples: 'it',
+    venice: 'it',
+    florence: 'it',
+    milan: 'it',
+    berlin: 'de',
+    munich: 'de',
+    moscow: 'ru',
+    birmingham: 'gb',
+    manchester: 'gb',
+    liverpool: 'gb',
+    athens: 'gr',
+  }
+  const iataIso = iata ? countryIsoFromIata(iata) : null
   for (const part of candidates) {
     const key = normalizeCityKey(part)
-    if (CITY_EN_TO_FR[key]) return CITY_EN_TO_FR[key]
+    const fr = CITY_EN_TO_FR[key]
+    if (!fr) continue
+    const needIso = EN_TO_FR_REQUIRE_ISO[key]
+    if (needIso && iataIso && iataIso !== needIso) continue
+    return fr
   }
 
   // Prefer a human label over a bare IATA trigram

@@ -39,15 +39,33 @@ type MenuPos = { top: number; left: number; width: number; maxHeight: number }
 
 function toOpt(g: CityAirportGroup): CityOpt {
   const country = g.country || undefined
-  const iso =
-    countryToFlagIso(country) ||
-    countryIsoFromIata(g.airports[0]?.code) ||
-    undefined
+  let iso: string | undefined
+  for (const a of g.airports) {
+    const fromIata = countryIsoFromIata(a.code)
+    if (fromIata) {
+      iso = fromIata
+      break
+    }
+  }
+  if (!iso) iso = countryToFlagIso(country) || undefined
   return {
     slug: activityCitySlugFromLabel(g.city),
     label: g.city,
     country,
     iso: iso || undefined,
+  }
+}
+
+function mergeCityOpt(
+  prev: CityOpt | undefined,
+  next: CityOpt,
+): CityOpt {
+  if (!prev) return next
+  return {
+    slug: next.slug || prev.slug,
+    label: prev.label || next.label,
+    country: prev.country || next.country,
+    iso: prev.iso || next.iso,
   }
 }
 
@@ -143,13 +161,7 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
       for (const g of groups) {
         const opt = toOpt(g)
         if (!opt.slug) continue
-        const prev = bySlug.get(opt.slug)
-        bySlug.set(opt.slug, {
-          slug: opt.slug,
-          label: opt.label || prev?.label || opt.slug,
-          country: opt.country || prev?.country,
-          iso: opt.iso || prev?.iso,
-        })
+        bySlug.set(opt.slug, mergeCityOpt(bySlug.get(opt.slug), opt))
       }
     }
     return [...bySlug.values()].sort((a, b) =>
@@ -302,6 +314,7 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
             width: menuPos.width,
             maxHeight: menuPos.maxHeight,
           }}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400 border-b border-slate-100 sticky top-0 bg-white flex items-center justify-between gap-2">
             <span>Villes</span>

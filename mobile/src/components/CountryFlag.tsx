@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Image, StyleSheet, View, type ImageStyle, type StyleProp } from 'react-native'
 import { countryToFlagIso } from '@flightwatcher/shared'
 
@@ -23,6 +23,11 @@ export function CountryFlag({
   )
   const [failed, setFailed] = useState(false)
 
+  // FlatList recycles rows — reset error + force Image remount on iso change.
+  useEffect(() => {
+    setFailed(false)
+  }, [iso])
+
   if (!iso || failed) {
     return (
       <View
@@ -33,6 +38,7 @@ export function CountryFlag({
 
   return (
     <Image
+      key={iso}
       source={{ uri: `https://flagcdn.com/w80/${iso}.png` }}
       style={[styles.flag, { width: size.width, height: size.height }, style]}
       resizeMode="cover"

@@ -36,6 +36,7 @@ export function CountryFlag({ country, iso: isoProp, className, title }: Props) 
 
   return (
     <img
+      key={iso}
       src={`https://flagcdn.com/w40/${iso}.png`}
       srcSet={`https://flagcdn.com/w80/${iso}.png 2x`}
       alt=""
