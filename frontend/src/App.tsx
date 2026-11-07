@@ -1522,12 +1522,7 @@ function Dashboard() {
                         <span className="font-bold text-primary-700">{t('results.returnDates')}</span>
                         <span className="text-slate-700">{lastSearchInfo.datesRetour.length} {t('results.date')}</span>
                       </div>
-                      {lastSearchInfo.excludedDestinations.length > 0 && (
-                        <div className="flex items-start gap-2">
-                          <span className="font-bold text-primary-700">{t('results.exclusions')}</span>
-                          <span className="text-slate-700">{lastSearchInfo.excludedDestinations.length} {t('results.destination')}</span>
-                        </div>
-                      )}
+                      {/* Exclusions masquées dans Search */}
                     </div>
                   </motion.div>
                 )}
@@ -2138,7 +2133,8 @@ function SearchTab({
           </div>
         </div>
 
-        {/* Sélection des destinations */}
+        {/* Exclusions masquées dans Search — bloc conservé désactivé */}
+        {false && (
         <div className="mb-6 border border-gray-300 rounded-lg p-4 bg-gray-50">
           <div className="flex items-center justify-between mb-3">
             <button
@@ -2274,6 +2270,7 @@ function SearchTab({
             </>
           )}
         </div>
+        )}
 
         {/* Budget et limite */}
         <div className="grid md:grid-cols-2 gap-6 mb-6">

@@ -557,12 +557,7 @@ export function SearchScreen() {
               <Text style={styles.datesChevron}>›</Text>
             </Pressable>
 
-            <Pressable onPress={() => setShowExclude(true)} style={styles.advRow}>
-              <Text style={styles.advLabel}>Exclusions</Text>
-              <Text style={[styles.advValue, excluded.length > 0 && styles.advValueActive]}>
-                {excluded.length > 0 ? `${excluded.length}` : 'Aucune'} ›
-              </Text>
-            </Pressable>
+            {/* Exclusions masquées dans Search — state/API conservés si réactivation */}
           </View>
         </ScrollView>
 
