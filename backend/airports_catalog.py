@@ -22,12 +22,13 @@ from city_names_fr import (
     localize_airport_dict,
 )
 
-# Europe + nearby leisure markets relevant to FR travelers
+# Europe + nearby leisure markets + long-haul / gulf curated dests
 FOCUS_COUNTRIES: Set[str] = {
     "FR", "BE", "LU", "NL", "DE", "CH", "AT", "IT", "ES", "PT", "GB", "IE",
     "GR", "HR", "SI", "SK", "CZ", "PL", "HU", "RO", "BG", "DK", "SE", "NO",
     "FI", "EE", "LV", "LT", "MT", "CY", "IS", "AL", "BA", "ME", "RS", "MK",
     "XK", "TR", "MA", "TN", "DZ", "EG", "JO", "IL", "GE", "UA", "MD",
+    "AE", "CV", "TH", "US", "CA", "JP",
 }
 
 # Always include these hubs even if dump misses flightable flag
@@ -46,7 +47,7 @@ PRIORITY_IATA: Set[str] = {
     "FLR", "TRN", "GOA", "PMO", "CTA", "CAG", "BRI", "BDS",
     "MAD", "BCN", "AGP", "ALC", "VLC", "SVQ", "PMI", "IBZ", "ACE", "FUE",
     "TFS", "TFN", "LPA", "BIO", "SCQ", "GRO", "REU",
-    "LIS", "OPO", "FAO",
+    "LIS", "OPO", "FAO", "FNC",
     "LHR", "LGW", "STN", "LTN", "SEN", "MAN", "EDI", "GLA", "BHX", "BRS",
     "DUB", "ORK", "SNN", "BFS",
     "ATH", "SKG", "HER", "CHQ", "RHO", "CFU", "JTR", "JMK",
@@ -54,9 +55,12 @@ PRIORITY_IATA: Set[str] = {
     "SPU", "DBV", "LJU", "BTS", "TIA",
     "CPH", "ARN", "GOT", "OSL", "HEL", "KEF",
     "IST", "SAW", "AYT", "ADB", "BJV",
-    "RAK", "CMN", "TNG", "AGA", "FEZ", "RBA",
+    "RAK", "CMN", "TNG", "AGA", "FEZ", "RBA", "ALG",
     "TUN", "DJE", "MIR", "CAI", "HRG", "SSH",
     "AMM", "TLV", "LCA", "PFO", "MLA",
+    # Golfe / Atlantique / long-courrier (catalogue mondial)
+    "DXB", "AUH", "RAI",
+    "BKK", "JFK", "EWR", "LGA", "YUL", "NRT", "HND",
 }
 
 _CACHE: Dict[str, Any] = {"at": 0.0, "airports": None, "cities": None}

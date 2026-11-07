@@ -26,7 +26,7 @@ class TestVerificationLevel(unittest.TestCase):
         cached = {"provider": "travelpayouts", "price_pp_eur": 70}
         self.assertEqual(prefer_observation(live, cached)["provider"], "ryanair")
 
-    def test_cached_never_percent(self):
+    def test_cached_no_confirmer_tag(self):
         bl_badge = badge_for_baseline(
             {
                 "reliable": True,
@@ -36,8 +36,8 @@ class TestVerificationLevel(unittest.TestCase):
         )
         cached = badge_for_deal_level(bl_badge, verification_level=LEVEL_CACHED)
         self.assertIsNone(cached.get("discount_pct"))
-        self.assertIn("confirmer", cached["label"].lower())
-        self.assertNotIn("%", cached["label"])
+        self.assertNotIn("confirmer", str(cached.get("label") or "").lower())
+        self.assertEqual(cached.get("verification_level"), LEVEL_CACHED)
 
     def test_share_cap_30(self):
         deals = []

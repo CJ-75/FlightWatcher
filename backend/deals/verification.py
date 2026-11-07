@@ -13,14 +13,14 @@ from typing import Any, Dict, List, Optional
 LEVEL_LIVE = "live"
 LEVEL_CACHED = "cached"
 
+# Legacy shape kept for tests / Mon voyage copy — wall cards no longer show this tag.
+# Cached TP prices are refreshed by revalidate_deals instead of a honesty chip.
 CACHED_BADGE = {
-    # Short tag for cards; full honesty stays in tooltip / Mon voyage copy
-    "label": "À confirmer",
+    "label": "",
     "discount_pct": None,
     "scope": "flight",
     "tooltip": (
-        "Prix repéré récemment via un agrégateur (pas une vérif. en direct). "
-        "Confirme le tarif chez le partenaire avant de réserver."
+        "Prix agrégateur — le job de revalidation met à jour le tarif affiché."
     ),
     "verification_level": LEVEL_CACHED,
 }
@@ -144,9 +144,20 @@ def badge_for_deal_level(
     *,
     verification_level: str,
 ) -> Dict[str, Any]:
+    """
+    Wall badges: never show « À confirmer ».
+    Cached aggregator prices hide the % chip until revalidate upgrades the deal;
+    the scheduler refreshes the tariff instead of tagging honesty on the card.
+    """
+    out = dict(baseline_badge or {})
     if verification_level == LEVEL_CACHED:
-        return dict(CACHED_BADGE)
-    out = dict(baseline_badge)
+        out["discount_pct"] = None
+        # Drop any leftover honesty label — UI shows price only
+        label = str(out.get("label") or "")
+        if not label or "confirmer" in label.lower():
+            out["label"] = ""
+            out["short_label"] = None
+        out["verification_level"] = LEVEL_CACHED
+        return out
     out["verification_level"] = LEVEL_LIVE
-    # Never keep a % on cached path (belt)
     return out

@@ -28,17 +28,31 @@ def revalidate_deals(
     now = datetime.now(timezone.utc)
 
     try:
+        # Oversample then prioritize cached (« à confirmer ») so tariffs get refreshed
         res = (
             supabase.table("deals_active")
             .select("*")
             .eq("status", "active")
             .order("view_count", desc=True)
-            .limit(budget)
+            .limit(max(int(budget) * 3, 30))
             .execute()
         )
         deals = res.data or []
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+    from deals.verification import LEVEL_CACHED, verification_level_for_provider
+
+    def _revalidate_priority(d: Dict[str, Any]) -> tuple:
+        vlevel = str(
+            d.get("verification_level")
+            or (d.get("flight_snapshot") or {}).get("verification_level")
+            or ""
+        ).lower()
+        cached_first = 0 if vlevel == LEVEL_CACHED else 1
+        return (cached_first, -int(d.get("view_count") or 0))
+
+    deals = sorted(deals, key=_revalidate_priority)[: max(1, int(budget))]
 
     from api_models import DateAvecHoraire
     from providers.orchestrator import search_roundtrips
@@ -147,8 +161,21 @@ def revalidate_deals(
             snap["booking_url"] = getattr(best, "booking_url", None) or snap.get(
                 "booking_url"
             )
+            provider = (
+                getattr(best, "provider", None)
+                or getattr(best, "source", None)
+                or snap.get("provider")
+            )
+            if provider:
+                snap["provider"] = provider
+            vlevel = verification_level_for_provider(
+                str(provider) if provider else None
+            )
+            # Fresh search result → treat Ryanair as live; TP stays cached but price is updated
+            snap["verification_level"] = vlevel
             patch: Dict[str, Any] = {
                 "flight_snapshot": snap,
+                "verification_level": vlevel,
                 "last_verified_at": now.isoformat(),
                 "updated_at": now.isoformat(),
                 "expires_at": (now + timedelta(hours=tau * 2)).isoformat(),

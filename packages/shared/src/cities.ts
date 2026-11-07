@@ -119,6 +119,11 @@ function normalizeCityKey(city: string): string {
     .trim()
 }
 
+/** Image-map key: same as normalizeCityKey, with spaces → hyphens (New York → new-york). */
+function cityImageKey(city: string): string {
+  return normalizeCityKey(city).replace(/[\s_/]+/g, '-')
+}
+
 /** IATA → French city (metro / common Ryanair destinations). */
 const CITY_FR_BY_IATA: Record<string, string> = {
   "ACE": "Lanzarote",
@@ -801,12 +806,12 @@ export function cityImageUrl(
 ): string {
   const code = (iata || '').trim().toUpperCase()
   if (code && CITY_FR_BY_IATA[code]) {
-    const fromIata = normalizeCityKey(CITY_FR_BY_IATA[code])
+    const fromIata = cityImageKey(CITY_FR_BY_IATA[code])
     if (CITY_IMAGES[fromIata]) return upscaleCityHeroUrl(CITY_IMAGES[fromIata])
   }
 
   if (city) {
-    const key = normalizeCityKey(city)
+    const key = cityImageKey(city)
     if (CITY_IMAGES[key]) return upscaleCityHeroUrl(CITY_IMAGES[key])
     const head = key.split(/[\s,\-–—/]+/)[0]
     if (head && CITY_IMAGES[head]) return upscaleCityHeroUrl(CITY_IMAGES[head])
@@ -892,6 +897,8 @@ export const PREFERRED_CITY_NAMES = [
   'Alger',
   'Le Caire',
   'Dubaï',
+  'Abou Dabi',
+  'Praia',
   'Bangkok',
   'New York',
   'Montréal',

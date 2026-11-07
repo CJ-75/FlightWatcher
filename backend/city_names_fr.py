@@ -242,6 +242,9 @@ CITY_FR_BY_IATA: Dict[str, str] = {
     "DOH": "Doha",
     "CAI": "Le Caire",
     "SSH": "Charm el-Cheikh",
+    "ALG": "Alger",
+    "FNC": "Funchal",
+    "RAI": "Praia",
     "TLV": "Tel Aviv",
     "BEY": "Beyrouth",
     "JFK": "New York",
@@ -314,6 +317,12 @@ COUNTRY_FR_BY_ISO: Dict[str, str] = {
     "EG": "Égypte",
     "TN": "Tunisie",
     "DZ": "Algérie",
+    "AE": "Émirats arabes unis",
+    "CV": "Cap-Vert",
+    "TH": "Thaïlande",
+    "US": "États-Unis",
+    "CA": "Canada",
+    "JP": "Japon",
 }
 
 # Fallback when we only have an English label (no IATA)
@@ -480,6 +489,15 @@ COUNTRY_EN_TO_FR: Dict[str, str] = {
     "egypt": "Égypte",
     "tunisia": "Tunisie",
     "algeria": "Algérie",
+    "united arab emirates": "Émirats arabes unis",
+    "uae": "Émirats arabes unis",
+    "cape verde": "Cap-Vert",
+    "cabo verde": "Cap-Vert",
+    "thailand": "Thaïlande",
+    "united states": "États-Unis",
+    "usa": "États-Unis",
+    "canada": "Canada",
+    "japan": "Japon",
 }
 
 _CACHE: Dict[str, Tuple[str, str, str]] = {}  # code -> (city, country, name)
