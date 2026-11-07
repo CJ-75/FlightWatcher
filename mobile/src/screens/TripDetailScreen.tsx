@@ -40,11 +40,21 @@ import {
   sanitizeTripAirports,
   resolveFlightStepStatus,
   resolveHotelStepStatus,
+  buildProgrammeTimeline,
+  buildTripDetailView,
   computeTripPartyPrice,
+  displayLegFlightNumber,
+  flightTicketBadgeFr,
+  flightTicketKickerFr,
+  partyPriceCaptionFr,
+  partyPriceSuffixFr,
+  trackTripDetailViewed,
+  TRIP_DETAIL_EVENTS,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type StayStepId,
 } from '@flightwatcher/shared'
+import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { getApi } from '../lib/client'
@@ -164,6 +174,7 @@ export function TripDetailScreen() {
   const [savingName, setSavingName] = useState(false)
   const [showModalities, setShowModalities] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [tripDetailV2, setTripDetailV2] = useState(false)
   const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
   const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
@@ -196,9 +207,35 @@ export function TripDetailScreen() {
       .getConfig()
       .then((cfg) => {
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
+        setTripDetailV2(cfg.trip_detail_v2_enabled === true)
       })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (!trip?.id) return
+    const phase =
+      workspace?.phase ||
+      (trip.status === 'locked' ? 'flight_selected' : 'planning')
+    const orga = trip.organizer_id === viewUser?.id
+    void trackTripDetailViewed(
+      (body) => getApi().trackActivityEvent(body),
+      {
+        tripId: trip.id,
+        variant: tripDetailV2 ? 'v2' : 'v1',
+        role: orga ? 'organizer' : 'member',
+        phase,
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+      },
+    )
+  }, [
+    trip?.id,
+    trip?.status,
+    trip?.organizer_id,
+    viewUser?.id,
+    workspace?.phase,
+    tripDetailV2,
+  ])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = Boolean(opts?.silent)
@@ -1541,6 +1578,187 @@ export function TripDetailScreen() {
     )
   }
 
+  const detailPhase =
+    workspace?.phase ||
+    (trip.status === 'locked' ? 'flight_selected' : 'planning')
+  const pathView = buildTripDetailView({
+    phase: detailPhase,
+    role: isOrganizer ? 'organizer' : 'member',
+    hasProposals: pending.length > 0,
+    flightBooked: reservationFlags.flightBooked,
+    hotelBooked: reservationFlags.hotelBooked,
+    hotelComposing: detailPhase === 'composing',
+    activitiesEnabled: plannerActivitiesEnabled,
+    organizerFirstName:
+      trip.organizer?.full_name || trip.member_names?.[0] || null,
+  })
+  const outDateMobile =
+    workspace?.out_date || trip.dates_depart?.[0]?.date || null
+  const retDateMobile =
+    workspace?.ret_date ||
+    trip.dates_retour?.[trip.dates_retour.length - 1]?.date ||
+    null
+  const dateLineMobile =
+    outDateMobile && retDateMobile
+      ? formatTripDateRangeFr(outDateMobile, retDateMobile)
+      : null
+  const programmeMobile = buildProgrammeTimeline({
+    outDate: outDateMobile,
+    retDate: retDateMobile,
+    hasFlight: Boolean(
+      accepted ||
+        reservationFlags.flightBooked ||
+        reservationFlags.externalFlight,
+    ),
+    hasHotel: reservationFlags.hasHotel || reservationFlags.hotelBooked,
+    flightLabel: accepted
+      ? formatAirlineLabel(accepted.trip_data as EnrichedTripResponse)
+      : null,
+  })
+
+  if (tripDetailV2) {
+    return (
+      <View style={styles.root}>
+        <TripDetailPathChrome
+          tripId={trip.id}
+          heroUrl={destinationImage}
+          title={trip.name}
+          metaLine={[dateLineMobile, cityLabel].filter(Boolean).join(' · ')}
+          phaseLabel={pathView.phaseLabel}
+          primary={pathView.primary}
+          onPrimary={() => {
+            void getApi()
+              .trackActivityEvent({
+                domain: 'planner',
+                event: TRIP_DETAIL_EVENTS.primaryClicked,
+                surface: 'trip_detail',
+                platform: Platform.OS === 'ios' ? 'ios' : 'android',
+                planned_trip_id: trip.id,
+                meta: {
+                  variant: 'v2',
+                  action: pathView.primary.id,
+                  phase: detailPhase,
+                },
+              })
+              .catch(() => undefined)
+            const id = pathView.primary.id
+            if (id === 'scan' || id === 'choose_flight') {
+              void scan()
+              return
+            }
+            if (
+              id === 'choose_hotel' ||
+              id === 'choose_my_hotel' ||
+              id === 'finalize_hotel' ||
+              id === 'finalize_my_hotel' ||
+              id === 'book_flight' ||
+              id === 'book_my_flight'
+            ) {
+              const token =
+                flightDraft?.draft_token || workspace?.draft_token || null
+              if (
+                id === 'book_flight' ||
+                id === 'book_my_flight'
+              ) {
+                void bookSelectedFlight()
+                return
+              }
+              if (token) {
+                navigation.navigate('HotelCompose', { draftToken: token })
+              }
+            }
+          }}
+          onBack={() => navigation.goBack()}
+          groupRow={
+            <Text style={{ fontFamily: fonts.semibold, marginBottom: 8 }}>
+              {pax} voyageur{pax > 1 ? 's' : ''}
+            </Text>
+          }
+          estimatedTotalLabel={
+            stayParty.perPerson > 0
+              ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)} estimé`
+              : null
+          }
+          apercu={
+            <View style={{ gap: 16 }}>
+              <StayPipelineStepper
+                steps={pipelineForUi}
+                onStepPress={onPipelineStep}
+              />
+              {accepted?.trip_data ? (
+                <MobileBoardingPass
+                  trip={sanitizeTripAirports(
+                    accepted.trip_data as EnrichedTripResponse,
+                  )}
+                  passengers={pax}
+                  pricePerPerson={stayParty.flightPp || stayParty.perPerson}
+                  priceCaption={partyPriceCaptionFr(pax, { kind: 'flight' })}
+                  flightBooked={reservationFlags.flightBooked}
+                  bookingBusy={flightBookingBusy}
+                  onBook={() => void bookSelectedFlight()}
+                />
+              ) : null}
+              <TravelersSection
+                members={trip.members || []}
+                seats={trip.passengers}
+                currentUserId={viewUser?.id}
+                isOrganizer={!!isOrganizer}
+                busy={membersBusy}
+                inviteToken={trip.invite_token}
+                tripName={trip.name}
+                onAdd={addMember}
+                onRemove={removeMember}
+              />
+            </View>
+          }
+          programme={
+            <View style={{ gap: 16 }}>
+              {programmeMobile.unplaced.length > 0 ? (
+                <Text style={{ fontFamily: fonts.bold }}>À placer</Text>
+              ) : null}
+              {programmeMobile.days.map((d) => (
+                <View key={d.dayOffset} style={{ gap: 6 }}>
+                  <Text style={{ fontFamily: fonts.extrabold, fontSize: 16 }}>
+                    {d.label}
+                  </Text>
+                  {d.slots.map((slot) =>
+                    slot.items.map((it) => (
+                      <Text
+                        key={it.id}
+                        style={{
+                          fontFamily: fonts.medium,
+                          color: colors.inkSoft,
+                        }}
+                      >
+                        {slot.label} · {it.title}
+                      </Text>
+                    )),
+                  )}
+                </View>
+              ))}
+              {plannerActivitiesEnabled ? (
+                <ActivityStepPanel
+                  plannedTripId={trip.id}
+                  draftToken={
+                    flightDraft?.draft_token || workspace?.draft_token || null
+                  }
+                  citySlug={citySlug}
+                  enabled={plannerActivitiesEnabled}
+                  onItemsChange={onActivityItemsChange}
+                />
+              ) : null}
+            </View>
+          }
+          carnet={
+            <Text style={{ fontFamily: fonts.medium, color: colors.inkSoft }}>
+              Notes du groupe, avis catalogue et facture hôtel.
+            </Text>
+          }
+        />
+      </View>
+    )
+  }
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -1616,7 +1834,8 @@ export function TripDetailScreen() {
           {plannerActivitiesEnabled ? '.' : '. Activités bientôt.'}
         </Text>
         <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
-        {reservationToken ? (
+        {reservationToken &&
+        (reservationFlags.hotelBooked || reservationFlags.flightBooked) ? (
           <Pressable
             onPress={openReservations}
             style={({ pressed }) => [
@@ -2050,7 +2269,7 @@ export function TripDetailScreen() {
                   : 'Prix du séjour'}
               </Text>
               <Text style={styles.stayTotalHint}>
-                Vol + hôtel · par personne
+                {pax > 1 ? 'Vol + hôtel · par personne' : 'Vol + hôtel'}
               </Text>
             </View>
 
@@ -2075,7 +2294,9 @@ export function TripDetailScreen() {
 
               <View style={styles.stayTotalFooter}>
                 <View style={styles.stayTotalFooterCopy}>
-                  <Text style={styles.stayTotalFooterLabel}>Par personne</Text>
+                  <Text style={styles.stayTotalFooterLabel}>
+                    {pax > 1 ? 'Par personne' : 'Total'}
+                  </Text>
                   {pax > 1 ? (
                     <Text style={styles.stayTotalParty}>
                       Soit {stayParty.total} € pour {pax} personnes
@@ -2495,11 +2716,15 @@ function MobileBoardingPass({
         />
         <View style={styles.ticketTop}>
           <View>
-            <Text style={styles.ticketKicker}>CARTE D’EMBARQUEMENT</Text>
+            <Text style={styles.ticketKicker}>
+              {flightTicketKickerFr(Boolean(flightBooked)).toUpperCase()}
+            </Text>
             <Text style={styles.ticketAirline}>{formatAirlineLabel(safe)}</Text>
           </View>
           <View style={styles.ticketChosen}>
-            <Text style={styles.ticketChosenText}>VOL CHOISI</Text>
+            <Text style={styles.ticketChosenText}>
+              {flightTicketBadgeFr(Boolean(flightBooked)).toUpperCase()}
+            </Text>
           </View>
         </View>
 
@@ -2528,9 +2753,9 @@ function MobileBoardingPass({
 
       <View style={styles.ticketDetails}>
         {[
-          { label: 'ALLER', flight: safe.aller },
-          { label: 'RETOUR', flight: safe.retour },
-        ].map(({ label, flight }) => (
+          { label: 'ALLER', flight: safe.aller, leg: 'aller' as const },
+          { label: 'RETOUR', flight: safe.retour, leg: 'retour' as const },
+        ].map(({ label, flight, leg }) => (
           <View key={label} style={styles.ticketLeg}>
             <Text style={styles.ticketLegLabel}>{label}</Text>
             <Text style={styles.ticketLegDate}>
@@ -2541,7 +2766,11 @@ function MobileBoardingPass({
                 {formatTicketTime(String(flight.departureTime || ''))}
               </Text>
               <Text style={styles.ticketFlightNumber}>
-                {String(flight.flightNumber || '—')}
+                {displayLegFlightNumber(
+                  leg,
+                  safe.aller.flightNumber,
+                  safe.retour.flightNumber,
+                )}
               </Text>
             </View>
           </View>
@@ -2551,7 +2780,10 @@ function MobileBoardingPass({
       <View style={styles.ticketStub}>
         <View style={styles.ticketPriceBlock}>
           <Text style={styles.ticketPriceLabel}>
-            {(priceCaption || 'Prix par personne').toUpperCase()}
+            {(
+              priceCaption ||
+              partyPriceCaptionFr(passengers, { kind: 'flight' })
+            ).toUpperCase()}
           </Text>
           <Text style={styles.ticketPrice}>
             {Math.round(
@@ -2560,7 +2792,11 @@ function MobileBoardingPass({
                 : Number(safe.prix_total) || 0,
             )}
             €
-            <Text style={styles.ticketPricePer}> /pers.</Text>
+            {partyPriceSuffixFr(passengers) ? (
+              <Text style={styles.ticketPricePer}>
+                {partyPriceSuffixFr(passengers)}
+              </Text>
+            ) : null}
           </Text>
           <Text style={styles.ticketPassengers}>
             {priceHint ||

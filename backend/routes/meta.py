@@ -175,6 +175,8 @@ def get_config():
         "available": bool(supabase_url and supabase_anon_key),
         # Product switches (safe for clients)
         "alerts_ui_enabled": _env_bool("ALERTS_UI_ENABLED", False),
+        # Path skin for trip detail (Aperçu · Programme · Carnet)
+        "trip_detail_v2_enabled": _env_bool("TRIP_DETAIL_V2", False),
     }
     try:
         from deals.liteapi_config import deals_config_public_dict

@@ -145,6 +145,28 @@ export function computeTripPartyPrice(input: {
   }
 }
 
+/** Price caption — never « / pers. » when adults === 1 (règle v5). */
+export function partyPriceCaptionFr(
+  adults: number,
+  opts?: { kind?: 'flight' | 'stay' | 'total' },
+): string {
+  const n = Math.max(1, Math.round(Number(adults) || 1))
+  const kind = opts?.kind || 'total'
+  if (n <= 1) {
+    if (kind === 'flight') return 'Prix du vol'
+    if (kind === 'stay') return 'Prix du séjour'
+    return 'Total'
+  }
+  if (kind === 'flight') return 'Prix du vol / pers.'
+  if (kind === 'stay') return 'Prix du séjour / pers.'
+  return 'Par personne'
+}
+
+/** Suffix after the € amount — empty for solo. */
+export function partyPriceSuffixFr(adults: number): string {
+  return Math.max(1, Math.round(Number(adults) || 1)) <= 1 ? '' : ' /pers.'
+}
+
 /** Board code → French words in full (never show RO / BI / HB raw). */
 export function boardLabelFr(board?: string | null): string | null {
   if (!board) return null

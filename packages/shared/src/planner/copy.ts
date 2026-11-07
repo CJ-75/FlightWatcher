@@ -72,10 +72,24 @@ export const PLANNER_SHARE_HINT_FR = 'Invite ceux qui voyagent avec toi'
 export const PLANNER_SHARE_ACTION_FR = 'Partager'
 export const PLANNER_SHARE_EYEBROW_FR = 'Ensemble'
 export const PLANNER_NEW_STAY_FR = 'Nouveau séjour'
-export const PLANNER_HUB_KICKER_FR = 'SÉJOURS'
-export const PLANNER_HUB_TITLE_FR = 'Tes séjours'
+export const PLANNER_HUB_KICKER_FR = 'VOYAGES'
+export const PLANNER_HUB_TITLE_FR = 'Tes voyages'
 export const PLANNER_HUB_SUBTITLE_FR =
-  'Crée un séjour, scanne les prix, invite tes proches.'
+  'Crée un voyage, scanne les prix, invite tes proches.'
+
+/** Sort hub cards by departure date ascending (missing dates last). */
+export function sortWorkspacesByDeparture<
+  T extends { out_date?: string | null; updated_at?: string | null },
+>(list: T[]): T[] {
+  return [...list].sort((a, b) => {
+    const da = String(a.out_date || '').slice(0, 10)
+    const db = String(b.out_date || '').slice(0, 10)
+    if (da && db && da !== db) return da.localeCompare(db)
+    if (da && !db) return -1
+    if (!da && db) return 1
+    return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
+  })
+}
 
 export function hubMatchesPhase(
   phase: TravelWorkspacePhase,

@@ -109,7 +109,8 @@ Hub « **Tes séjours** » avec filtres **À venir · En cours · Passés**.
 | `booked` | Réservé | Séjour réservé |
 | `past` | Terminé | Archivé ou date dépassée |
 
-**Pipeline UI « Ton parcours » :** Vol → Hôtel → Activités → Adresses (restos, flag).
+**Pipeline UI « Ton parcours » :** Vol → Hôtel → Activités.  
+*(Adresses / restos : flag existant, **hors plan Path pour le moment**.)*
 
 **Actions détail (orga) :** scanner, accepter/refuser propositions, « J’ai déjà un vol », modifier modalités + rescanner, composer/payer hôtel, « J’ai déjà un hôtel », activités, partager lien invite, ajouter/retirer membres (max 6), renommer, archiver, supprimer (bookings conservés).
 
@@ -135,9 +136,9 @@ Hub « **Tes séjours** » avec filtres **À venir · En cours · Passés**.
 - Champs `day_offset`, `moment`, `notes` **existent en data** mais **pas d’éditeur UI diary** aujourd’hui.
 - Flag `PLANNER_ACTIVITIES_ENABLED` pour l’étape pipeline.
 
-### 6) Restaurants / Adresses
-- Flag `PLANNER_RESTAURANTS_ENABLED` — panel préparé, **souvent non branché** sur le détail Planner.
-- Statuts to_try / loved / meh + notes.
+### 6) Restaurants / Adresses — hors plan actuel
+- Flag `PLANNER_RESTAURANTS_ENABLED` + panel partiellement prêts.
+- **Décision (nov 2026) :** ne pas livrer Adresses dans la refonte Path ni juste avant. Pas un prérequis des lots 0–5.
 
 ### 7) Favoris / Auth / Profil
 - Favoris vols / deals / activités / adresses.
@@ -205,29 +206,30 @@ La capture UI jointe montre une app travel premium type **Path** :
 
 **Ce qu’on retient pour FlightWatcher :**
 - l’**ambiance** et la structure du **détail séjour**
-- **3 onglets seulement :** Overview · Itinerary · Reviews
-- sticky CTA = **actions booking Planner** (continuer / scanner / hôtel / partager) — **jamais** un prix « Get this Path »
+- **3 onglets seulement :** Aperçu · Programme · Carnet (Path = code interne)
+- Flag `TRIP_DETAIL_V2` / `trip_detail_v2_enabled` (rollback sans redeploy)
+- sticky CTA = **actions booking Planner** — **jamais** un prix « Get this Path »
 
 **Ce qu’on exclut explicitement :**
 - Marketplace / Get this Path
 - PDF Guide
 - Onglet Inclusions
 - Map / globe globale / GPS tracks créateurs
+- **Adresses / restos** (pas dans les lots Path pour le moment)
 
 ## B3. Articulation Path ↔ Planner
 
 ```
-[Hub Planner — Tes séjours]
+[Hub Planner — Tes voyages]
         │
         ▼
 [Détail séjour = PAGE PATH]
-   ├── Overview
-   ├── Itinerary   ← « Ton parcours » rendu narratif
-   └── Reviews
+   ├── Aperçu
+   ├── Programme   ← timeline jour par jour
+   └── Carnet
         │
         ▼
 [CTAs / sheets] ──► mêmes actions Planner qu’aujourd’hui
-                    (scan, accept, book, skip, invite…)
 ```
 
 | Couche | Responsabilité |
@@ -237,21 +239,20 @@ La capture UI jointe montre une app travel premium type **Path** :
 
 ## B4. Contenu des 3 onglets (mapping data existante)
 
-### Overview
-- Pitch séjour : destination, dates, party, budget, directs
+### Aperçu
+- Pitch voyage : destination, dates, party, budget, directs
 - Organisateur + membres + partager
-- Chips type « photos / restos / clés » (sans map globe)
+- Pastilles Étapes + prochaine action
 - Meta + rename / danger zone (archive, delete) côté orga
 
-### Itinerary
-- Timeline narrative : vol → hôtel → jours / activités / restos
-- États Choisi / Réservé / skip « J’ai déjà un vol/hôtel »
-- Remplace le détail « formulaire-first » ; le stepper pipeline devient rail secondaire
-- S’appuie sur `StayPipeline` + `TripItem` (`day_offset`, `moment`, `notes`, photos)
+### Programme
+- Timeline narrative : vol → hôtel → jours / activités (pas d’Adresses pour l’instant)
+- Bloc À placer + éditeur day_offset / moment / notes
+- Stepper pipeline en rail secondaire
 
-### Reviews
+### Carnet
 - Avis catalogue (hôtel LiteAPI, activités Viator)
-- Notes du groupe sur le séjour
+- Notes du groupe ; facture PDF hôtel si dispo
 - **Pas** de ratings créateurs marketplace
 
 ## B5. Ce qui est déjà prêt vs à construire
@@ -270,9 +271,14 @@ La capture UI jointe montre une app travel premium type **Path** :
 
 ## B6. Roadmap ambition (ordre)
 
-1. **Shell détail Path** — hero + meta + 3 tabs + sticky CTA booking  
-2. **Itinerary narrative** — timeline depuis TripItems + vol/hôtel  
-3. **Overview + Reviews** — about/chips + avis/notes groupe  
+0. **Corrections P0** (confiance) — pas de prérequis Adresses  
+1. **Logique partagée** + flag `TRIP_DETAIL_V2` + events  
+2. **Shell / habillage Path** — hero + Aperçu · Programme · Carnet + sticky CTA  
+3. **Programme** — timeline vol · hôtel · activités  
+4. **Aperçu + Carnet**  
+5. **Hub, noms (Voyages), jetons** → retire flag  
+
+**Hors plan pour le moment :** Adresses / restos (v8), Explorer, marketplace, PDF guide, globe, parcours partagés.
 
 Le funnel conversion (Ryanair → hôtel LiteAPI → invite) **ne change pas**.
 

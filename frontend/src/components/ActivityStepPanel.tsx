@@ -47,6 +47,9 @@ type ItemRow = {
   availability_state?: string
   sort_key?: string
   day_offset?: number
+  moment?: string | null
+  notes?: string | null
+  title?: string | null
   inherited?: boolean
   meta?: Record<string, unknown>
   places?: { name?: string; meta?: Record<string, unknown> | null } | null
@@ -257,7 +260,18 @@ export function ActivityStepPanel(props: {
   enabled?: boolean
   surface?: string
   /** Sync parcours pipeline when ideas are added / removed. */
-  onItemsChange?: (items: { status?: string | null }[]) => void
+  onItemsChange?: (
+    items: {
+      id?: string
+      item_type?: string
+      title?: string | null
+      name?: string | null
+      day_offset?: number | null
+      moment?: string | null
+      notes?: string | null
+      status?: string | null
+    }[],
+  ) => void
   /** Mon voyage: cartes type réservations (photo + prix). */
   layout?: 'default' | 'booking_cards'
 }) {
@@ -302,6 +316,13 @@ export function ActivityStepPanel(props: {
     parcoursReadyRef.current = true
     onItemsChangeRef.current?.(
       rows.filter(isActivityItem).map((i) => ({
+        id: i.id,
+        item_type: i.item_type,
+        title: i.title ?? placeOf(i)?.name ?? null,
+        name: placeOf(i)?.name ?? null,
+        day_offset: i.day_offset ?? null,
+        moment: i.moment ?? null,
+        notes: i.notes ?? null,
         status: i.status ?? null,
       })),
     )

@@ -6,6 +6,7 @@ import {
   airportSelectionLabel,
   encodeAirportCodes,
   findCityGroupByCodes,
+  defaultAirportCodesForCity,
   groupAirportsByCity,
   parseAirportCodes,
   resolvePopularCityGroups,
@@ -191,7 +192,9 @@ export function CityAirportSelect({ value, onChange }: Props) {
   }, [open])
 
   const selectCity = (group: CityAirportGroup) => {
-    const encoded = encodeAirportCodes(group.airports.map((a) => a.code))
+    const encoded = encodeAirportCodes(
+      defaultAirportCodesForCity(group.airports.map((a) => a.code)),
+    )
     if (encoded) onChange(encoded)
     setQuery('')
     setOpen(false)
@@ -212,7 +215,10 @@ export function CityAirportSelect({ value, onChange }: Props) {
 
   const selectAllInGroup = () => {
     if (!selectedGroup) return
-    const encoded = encodeAirportCodes(selectedGroup.airports.map((a) => a.code))
+    // « Tout sélectionner » = hubs proches ; aéroports lointains (ex. Vatry) restent opt-in.
+    const encoded = encodeAirportCodes(
+      defaultAirportCodesForCity(selectedGroup.airports.map((a) => a.code)),
+    )
     if (encoded) onChange(encoded)
   }
 

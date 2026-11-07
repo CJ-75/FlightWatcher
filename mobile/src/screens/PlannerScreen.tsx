@@ -44,6 +44,7 @@ import {
   PLANNER_HUB_KICKER_FR,
   PLANNER_HUB_SUBTITLE_FR,
   PLANNER_HUB_TITLE_FR,
+  sortWorkspacesByDeparture,
   PLANNER_NEW_STAY_FR,
   PLANNER_PROMOTE_TOAST_FR,
   type DatePresetId,
@@ -246,12 +247,14 @@ export function PlannerScreen() {
   )
   const filteredWorkspaces = useMemo(
     () =>
-      workspaces.filter((workspace) =>
-        filter === 'organize'
-          ? workspace.phase === 'planning'
-          : filter === 'upcoming'
-            ? workspace.phase !== 'planning' && workspace.phase !== 'past'
-            : workspace.phase === 'past',
+      sortWorkspacesByDeparture(
+        workspaces.filter((workspace) =>
+          filter === 'organize'
+            ? workspace.phase === 'planning'
+            : filter === 'upcoming'
+              ? workspace.phase !== 'planning' && workspace.phase !== 'past'
+              : workspace.phase === 'past',
+        ),
       ),
     [filter, workspaces],
   )

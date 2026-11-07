@@ -168,6 +168,8 @@ export interface ApiConfig {
   link_import_max_links?: number
   restaurants_local_dishes_enabled?: boolean
   itineraries_enabled?: boolean
+  /** Path trip-detail skin (Aperçu · Programme · Carnet) — TRIP_DETAIL_V2 */
+  trip_detail_v2_enabled?: boolean
   /** Admin-only via /api/admin/activities/migrations — not on public /api/config */
   migrations_ok?: boolean | null
 }

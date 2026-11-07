@@ -20,6 +20,7 @@ import {
   airportSelectionLabel,
   countryIsoFromIata,
   countryToFlagIso,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -160,7 +161,9 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
   const selectCity = useCallback(
     (group: CityAirportGroup) => {
       if (lockedRef.current) return
-      const encoded = encodeAirportCodes(group.airports.map((a) => a.code))
+      const encoded = encodeAirportCodes(
+        defaultAirportCodesForCity(group.airports.map((a) => a.code)),
+      )
       if (!encoded) return
       lockedRef.current = true
       setOpen(false)
@@ -200,7 +203,9 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
 
   const selectAllInGroup = () => {
     if (!selectedGroup) return
-    const encoded = encodeAirportCodes(selectedGroup.airports.map((a) => a.code))
+    const encoded = encodeAirportCodes(
+      defaultAirportCodesForCity(selectedGroup.airports.map((a) => a.code)),
+    )
     if (encoded) onChange(encoded)
   }
 
