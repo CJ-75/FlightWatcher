@@ -383,15 +383,24 @@ def _community_stats(supabase: Any) -> Dict[str, Any]:
         if rows:
             out["organic_share"] = round(organic / len(rows), 3)
         by_origin: Dict[str, int] = {}
+        photo_by_origin: Dict[str, int] = {}
         ages: List[float] = []
         hotel_miss = 0
         now = datetime.now(timezone.utc)
         for r in rows:
             oi = str(r.get("origin_iata") or "").upper()
+            hotels = r.get("hotel_top3") or []
+            has_photo = False
+            if isinstance(hotels, list) and hotels:
+                h0 = hotels[0] if isinstance(hotels[0], dict) else {}
+                has_photo = bool(
+                    h0.get("photo") or h0.get("thumbnail") or h0.get("main_photo")
+                )
             if oi:
                 by_origin[oi] = by_origin.get(oi, 0) + 1
-            hotels = r.get("hotel_top3") or []
-            if not hotels:
+                if has_photo:
+                    photo_by_origin[oi] = photo_by_origin.get(oi, 0) + 1
+            if not hotels or not has_photo:
                 hotel_miss += 1
             lv = r.get("last_verified_at")
             if lv:
@@ -403,6 +412,13 @@ def _community_stats(supabase: Any) -> Dict[str, Any]:
                 except ValueError:
                     pass
         out["deals_by_origin"] = by_origin
+        out["deals_photo_by_origin"] = photo_by_origin
+        paris = ("BVA", "ORY", "CDG")
+        out["paris_photo"] = {o: photo_by_origin.get(o, 0) for o in paris}
+        out["paris_photo_sum"] = sum(photo_by_origin.get(o, 0) for o in paris)
+        out["paris_thin_origins"] = [
+            o for o in paris if photo_by_origin.get(o, 0) < 8
+        ]
         # Origins configured but with 0 active deals
         try:
             import os

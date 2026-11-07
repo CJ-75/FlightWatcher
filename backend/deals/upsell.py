@@ -505,18 +505,33 @@ def ensure_destination_with_pool(
     return dest
 
 
-def find_window_by_dates(
+def find_windows_by_dates(
     supabase: Any, checkin: date, checkout: date
-) -> Optional[Dict[str, Any]]:
+) -> List[Dict[str, Any]]:
+    """All deal_windows for exact dates — FREE first (fresh deal rates), then canonical."""
     r = (
         supabase.table("deal_windows")
         .select("*")
         .eq("checkin", checkin.isoformat())
         .eq("checkout", checkout.isoformat())
-        .limit(1)
+        .limit(20)
         .execute()
     )
-    return (r.data or [None])[0]
+    rows = list(r.data or [])
+    rows.sort(
+        key=lambda w: (
+            0 if str(w.get("kind") or "").upper() == "FREE" else 1,
+            str(w.get("id") or ""),
+        )
+    )
+    return rows
+
+
+def find_window_by_dates(
+    supabase: Any, checkin: date, checkout: date
+) -> Optional[Dict[str, Any]]:
+    rows = find_windows_by_dates(supabase, checkin, checkout)
+    return rows[0] if rows else None
 
 
 def _top_public(top: Any) -> Optional[Dict[str, Any]]:
@@ -628,19 +643,21 @@ def read_rates_cache_by_dates(
     """Fallback when deal_windows row is missing for these exact dates."""
     r = (
         supabase.table("hotel_rates_cache")
-        .select("top,status,expires_at,fetched_at")
+        .select("top,status,expires_at,fetched_at,window_id")
         .eq("destination_id", destination_id)
         .eq("checkin", checkin.isoformat())
         .eq("checkout", checkout.isoformat())
         .eq("adults", adults)
         .eq("status", "ok")
-        .limit(1)
+        .order("fetched_at", desc=True)
+        .limit(8)
         .execute()
     )
-    rows = r.data or []
-    if not rows:
-        return None
-    return _rates_row_to_lookup(rows[0])
+    for row in r.data or []:
+        hit = _rates_row_to_lookup(row)
+        if hit:
+            return hit
+    return None
 
 
 def read_upsell_cache(
@@ -760,13 +777,15 @@ def lookup_upsell(
     base["served_city_id"] = served_city_id
 
     rooms, adults = rooms_for_participants(participants)
-    window = find_window_by_dates(supabase, cin, cout)
+    windows = find_windows_by_dates(supabase, cin, cout)
+    window = windows[0] if windows else None
 
-    if window:
+    # Prefer FREE window rates when coexisting with stale FRI_SUN same dates.
+    for w in windows:
         cached = read_rates_cache(
             supabase,
             destination_id=dest["id"],
-            window_id=window["id"],
+            window_id=w["id"],
             adults=adults,
         )
         if cached:
@@ -782,8 +801,8 @@ def lookup_upsell(
                     "destination_slug": dest.get("slug"),
                     "city": city_label,
                     "served_city_id": served_city_id,
-                    "window_id": window["id"],
-                    "window_kind": window.get("kind"),
+                    "window_id": w["id"],
+                    "window_kind": w.get("kind"),
                     "adults_lookup": adults,
                     "rooms": rooms,
                     "source": cached["source"],

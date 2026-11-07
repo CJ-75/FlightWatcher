@@ -26,7 +26,7 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _priority_origins() -> List[str]:
-    raw = os.getenv("SEED_PRIORITY_ORIGINS", "BVA,MRS,NTE,BOD,TLS,LYS") or ""
+    raw = os.getenv("SEED_PRIORITY_ORIGINS", "BVA,ORY,CDG,MRS,NTE,BOD,TLS,LYS") or ""
     return [x.strip().upper() for x in raw.split(",") if x.strip()]
 
 

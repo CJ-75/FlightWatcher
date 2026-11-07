@@ -257,12 +257,8 @@ def eligible_candidate_soft(
         return False
     if not arrival_hour_ok(obs.get("out_arr_local")):
         return False
-    if not weekend_product_hours_ok(
-        obs,
-        out_date=out_date,
-        ret_date=str(obs.get("ret_date") or "")[:10],
-    ):
-        return False
+    # Soft browse fill: do not enforce weekend hour slots — seed/TP often
+    # omit times; hard deals still use weekend_product_hours_ok.
     if not is_fresh_enough(
         obs.get("observed_at"),
         out_date,
@@ -487,10 +483,19 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             trip_type=str(obs.get("trip_type") or "OTHER"),
             horizon=hb,
         )
+        # Soft browse fill: allow missing baseline (price gate only) so ORY/CDG
+        # don't starve when route baselines are thin vs BVA.
         if not bl:
-            continue
+            bl = {
+                "median": None,
+                "p20": None,
+                "reliable": False,
+                "baseline_kind": "missing",
+            }
         key = (origin, city_id, bucket)
-        if eligible_candidate(obs, bl, cfg=cfg, now=now):
+        if bl.get("baseline_kind") != "missing" and eligible_candidate(
+            obs, bl, cfg=cfg, now=now
+        ):
             cand = {
                 **obs,
                 "_baseline": bl,
@@ -656,6 +661,11 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         except Exception:
             pass
 
+        # Wall / Séjours require hotel+photo — skip hotel-less soft fill so
+        # ORY/CDG slots aren't wasted on not_in_catalogue / rates-miss dests.
+        if not hotel_payload:
+            continue
+
         score = deal_score(
             price_pp=price,
             baseline=bl,
@@ -664,7 +674,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             distinct_searches_7d=pop,
             direct=bool(obs.get("direct", True)),
             arrival_ok=arrival_hour_ok(obs.get("out_arr_local")),
-            has_hotel=bool(hotel_payload),
+            has_hotel=True,
             weights=cfg.community_score_weights,
         )
         dest = obs.get("_dest") or obs.get("dest_iata")

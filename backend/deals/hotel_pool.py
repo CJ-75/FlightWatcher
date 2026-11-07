@@ -7,7 +7,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from deals.destinations_seed import DESTINATIONS_SEED, destination_upsert_rows
+from deals.destinations_seed import (
+    DESTINATIONS_SEED,
+    POOL_BOOTSTRAP_WAVES,
+    destination_upsert_rows,
+)
 from deals.liteapi_client import LiteApiClient, LiteApiError
 from deals.liteapi_config import DealsConfig, load_deals_config
 
@@ -520,8 +524,6 @@ def bootstrap_hotel_pools(
 
         # Prefer wave order (eu_gap → maghreb → gulf → longhaul) then remaining.
         try:
-            from deals.destinations_seed import DESTINATIONS_SEED, POOL_BOOTSTRAP_WAVES
-
             wave_of = {
                 str(d.get("slug") or ""): str(d.get("wave") or "")
                 for d in DESTINATIONS_SEED

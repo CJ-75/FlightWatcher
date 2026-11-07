@@ -40,7 +40,8 @@ def _priority_origins() -> List[str]:
     import os
 
     raw = (
-        os.getenv("SEED_PRIORITY_ORIGINS") or "BVA,MRS,NTE,BOD,TLS,LYS"
+        os.getenv("SEED_PRIORITY_ORIGINS")
+        or "BVA,ORY,CDG,MRS,NTE,BOD,TLS,LYS"
     ).strip()
     return _parse_iata_list(raw)
 
@@ -189,9 +190,69 @@ def pin_trend_catalog_cities(supabase) -> Dict[str, Any]:
     found_iatas = {
         str(c.get("primary_iata") or "").upper() for c in (cities.data or [])
     }
-    for code in pins:
-        if code not in found_iatas:
-            missing.append(code)
+    # Ensure curated seed IATAs exist on served_cities (TP map can lag / miss hubs).
+    try:
+        from deals.destinations_seed import DESTINATIONS_SEED
+
+        seed_by_iata = {
+            str(d.get("iata_arrival") or "").upper(): d
+            for d in DESTINATIONS_SEED
+            if d.get("iata_arrival")
+        }
+        for code in pins:
+            if code in found_iatas:
+                continue
+            d = seed_by_iata.get(code)
+            if not d:
+                missing.append(code)
+                continue
+            try:
+                from deals.city_mapping import _slugify
+
+                slug = _slugify(str(d.get("city_name") or code))
+                existing = (
+                    supabase.table("served_cities")
+                    .select("id")
+                    .eq("slug", slug)
+                    .limit(1)
+                    .execute()
+                )
+                row = {
+                    "slug": slug,
+                    "city_name": d.get("city_name") or code,
+                    "country_code": d.get("country_code"),
+                    "primary_iata": code,
+                    "timezone": d.get("timezone") or "Europe/Paris",
+                    "verified": True,
+                    "updated_at": now,
+                }
+                if d.get("center_lat") is not None:
+                    row["center_lat"] = d.get("center_lat")
+                    row["center_lng"] = d.get("center_lng")
+                if existing.data:
+                    supabase.table("served_cities").update(row).eq(
+                        "id", existing.data[0]["id"]
+                    ).execute()
+                else:
+                    supabase.table("served_cities").insert(row).execute()
+                found_iatas.add(code)
+            except Exception as e:
+                logger.warning("ensure served_city %s: %s", code, e)
+                missing.append(code)
+        if found_iatas - {
+            str(c.get("primary_iata") or "").upper() for c in (cities.data or [])
+        }:
+            cities = (
+                supabase.table("served_cities")
+                .select("id, primary_iata, city_name, verified")
+                .in_("primary_iata", pins)
+                .execute()
+            )
+    except Exception as e:
+        logger.warning("pin ensure served_cities: %s", e)
+        for code in pins:
+            if code not in found_iatas and code not in missing:
+                missing.append(code)
 
     for c in cities.data or []:
         cid = c.get("id")

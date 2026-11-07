@@ -227,17 +227,17 @@ def load_deals_config() -> DealsConfig:
         ui_enabled=_env_bool("DEALS_UI_ENABLED", True),
         booking_enabled=_env_bool("DEALS_BOOKING_ENABLED", True),
         deals_source=deals_source,
-        # Phase 1 knobs — slightly looser defaults to thicken the wall
-        max_flight_pp=_env_float("DEALS_MAX_FLIGHT_PP", 140.0),
+        # Phase 1 knobs — thicker wall; ORY/CDG need higher flight PP than BVA low-cost
+        max_flight_pp=_env_float("DEALS_MAX_FLIGHT_PP", 180.0),
         min_per_origin=max(1, _env_int("DEALS_MIN_PER_ORIGIN", 12)),
         nearby_origins_km=_env_float("DEALS_NEARBY_ORIGINS_KM", 100.0),
         fresh_tau_h=_env_float("DEALS_FRESH_TAU_H", 12.0),
         fresh_tau_short_h=_env_float("DEALS_FRESH_TAU_SHORT_H", 6.0),
         revalidate_budget_per_hour=max(1, _env_int("DEALS_REVALIDATE_BUDGET_PER_HOUR", 10)),
-        # Trend catalog P0–P2 (~43 curated + fillers)
-        seed_catalog_size=max(5, _env_int("SEED_CATALOG_SIZE", 80)),
-        # v3.2: TP bulk + Ryanair overlay — headroom for ~65 dest catalog
-        seed_scan_budget_per_day=max(1, _env_int("SEED_SCAN_BUDGET_PER_DAY", 250)),
+        # Headroom for curated seed (~85+) + fillers
+        seed_catalog_size=max(5, _env_int("SEED_CATALOG_SIZE", 100)),
+        # TP bulk + Ryanair overlay — budget shared across BVA/ORY/CDG priority
+        seed_scan_budget_per_day=max(1, _env_int("SEED_SCAN_BUDGET_PER_DAY", 500)),
         seed_min_budget_share=min(1.0, max(0.0, _env_float("SEED_MIN_BUDGET_SHARE", 0.2))),
         obs_retention_days=max(7, _env_int("OBS_RETENTION_DAYS", 90)),
         observations_enabled=_env_bool("DEALS_OBSERVATIONS_ENABLED", True),

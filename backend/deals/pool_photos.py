@@ -187,17 +187,40 @@ def backfill_pool_photos(
     """
     if not supabase:
         return {"ok": False, "error": "no_supabase"}
-    q = (
-        supabase.table("hotel_pool")
-        .select("id,hotel_id,destination_id,main_photo,thumbnail,raw")
-        .limit(max(1, min(int(limit), 2000)))
-    )
-    if destination_id:
-        q = q.eq("destination_id", destination_id)
+    lim = max(1, min(int(limit), 2000))
+
+    def _base():
+        qq = (
+            supabase.table("hotel_pool")
+            .select("id,hotel_id,destination_id,main_photo,thumbnail,raw")
+            .limit(lim)
+        )
+        if destination_id:
+            qq = qq.eq("destination_id", destination_id)
+        return qq
+
+    # Prefer rows still missing a photo (otherwise first pages are already filled).
+    # Build a fresh query each time — supabase builders mutate in place.
     try:
-        res = q.execute()
+        res = _base().is_("main_photo", "null").execute()
+        if not (res.data or []):
+            res = _base().eq("main_photo", "").execute()
+        if not (res.data or []):
+            # Nothing missing — scanned 0 is correct (idempotent no-op)
+            return {
+                "ok": True,
+                "scanned": 0,
+                "missing_before": 0,
+                "updated": 0,
+                "still_missing": 0,
+                "share_with_photo": 1.0,
+                "dry_run": dry_run,
+            }
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        try:
+            res = _base().execute()
+        except Exception as e2:
+            return {"ok": False, "error": str(e2) or str(e)}
 
     scanned = 0
     missing = 0
