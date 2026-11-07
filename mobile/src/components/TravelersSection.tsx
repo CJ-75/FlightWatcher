@@ -284,25 +284,30 @@ export function TravelersSection({
                     <Text style={styles.name} numberOfLines={1}>
                       {label}
                     </Text>
-                    {isOrg ? (
-                      <View style={styles.badgeOrg}>
-                        <Text style={styles.badgeOrgText}>Organisateur</Text>
-                      </View>
-                    ) : null}
                   </View>
                   <View
-                    style={[styles.pill, onApp ? styles.pillOn : styles.pillOff]}
+                    style={[
+                      styles.pill,
+                      isOrg || onApp ? styles.pillOn : styles.pillOff,
+                    ]}
                   >
                     <View
-                      style={[styles.dot, onApp ? styles.dotOn : styles.dotOff]}
+                      style={[
+                        styles.dot,
+                        isOrg || onApp ? styles.dotOn : styles.dotOff,
+                      ]}
                     />
                     <Text
                       style={[
                         styles.pillText,
-                        onApp ? styles.pillTextOn : styles.pillTextOff,
+                        isOrg || onApp ? styles.pillTextOn : styles.pillTextOff,
                       ]}
                     >
-                      {onApp ? 'Compte FlightWatcher' : 'Invité'}
+                      {isOrg
+                        ? 'Organisateur'
+                        : onApp
+                          ? 'Compte FlightWatcher'
+                          : 'Invité'}
                     </Text>
                   </View>
                 </View>
@@ -497,13 +502,6 @@ const styles = StyleSheet.create({
   meta: { flex: 1, gap: 4, minWidth: 0 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink, flexShrink: 1 },
-  badgeOrg: {
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  badgeOrgText: { fontFamily: fonts.bold, fontSize: 10, color: colors.primaryInk },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',

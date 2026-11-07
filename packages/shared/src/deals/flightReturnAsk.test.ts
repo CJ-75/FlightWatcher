@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  flightReturnAskMatchesOwner,
   parseFlightReturnAsk,
   serializeFlightReturnAsk,
   shouldShowFlightReturnAsk,
@@ -18,6 +19,28 @@ describe('flightReturnAsk', () => {
     expect(parseFlightReturnAsk(raw)).toEqual(base)
     expect(parseFlightReturnAsk(null)).toBeNull()
     expect(parseFlightReturnAsk('{')).toBeNull()
+  })
+
+  it('accepts plannedTripId without draftToken', () => {
+    const ask: FlightReturnAsk = {
+      draftToken: '',
+      plannedTripId: 'trip-1',
+      at: 1_000_000,
+      promptOnReturn: true,
+    }
+    expect(parseFlightReturnAsk(serializeFlightReturnAsk(ask))).toEqual(ask)
+    expect(
+      shouldShowFlightReturnAsk(ask, {
+        now: 1_002_000,
+        plannedTripId: 'trip-1',
+      }),
+    ).toBe(true)
+    expect(
+      shouldShowFlightReturnAsk(ask, {
+        now: 1_002_000,
+        plannedTripId: 'other',
+      }),
+    ).toBe(false)
   })
 
   it('prompts after min elapsed, not before', () => {
@@ -50,5 +73,19 @@ describe('flightReturnAsk', () => {
         now: 1_000_000 + 3 * 60 * 60 * 1000,
       }),
     ).toBe(false)
+  })
+
+  it('matches owner by draft or planned trip', () => {
+    const ask: FlightReturnAsk = {
+      draftToken: 'tok-1',
+      plannedTripId: 'trip-1',
+      at: 1,
+      promptOnReturn: true,
+    }
+    expect(flightReturnAskMatchesOwner(ask, { draftToken: 'tok-1' })).toBe(true)
+    expect(flightReturnAskMatchesOwner(ask, { plannedTripId: 'trip-1' })).toBe(
+      true,
+    )
+    expect(flightReturnAskMatchesOwner(ask, { draftToken: 'x' })).toBe(false)
   })
 })

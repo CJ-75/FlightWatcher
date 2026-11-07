@@ -100,14 +100,23 @@ export async function clearPendingHotelUpsell(): Promise<void> {
 }
 
 export async function markFlightReturnAsk(opts: {
-  draftToken: string
+  draftToken?: string | null
+  plannedTripId?: string | null
   promptOnReturn?: boolean
+  at?: number
 }): Promise<void> {
   const draftToken = String(opts.draftToken || '').trim()
-  if (!draftToken) return
+  const plannedTripId = String(opts.plannedTripId || '').trim() || undefined
+  if (!draftToken && !plannedTripId) return
+  const prev = await readFlightReturnAsk()
+  const sameOwner =
+    prev &&
+    ((draftToken && prev.draftToken === draftToken) ||
+      (plannedTripId && prev.plannedTripId === plannedTripId))
   const payload: FlightReturnAsk = {
     draftToken,
-    at: Date.now(),
+    plannedTripId: plannedTripId || prev?.plannedTripId,
+    at: opts.at ?? (sameOwner ? prev!.at : Date.now()),
     promptOnReturn: opts.promptOnReturn !== false,
   }
   try {
@@ -130,11 +139,20 @@ export async function readFlightReturnAsk(): Promise<FlightReturnAsk | null> {
 
 export async function clearFlightReturnAsk(
   draftToken?: string | null,
+  plannedTripId?: string | null,
 ): Promise<void> {
   try {
-    if (draftToken) {
+    if (draftToken || plannedTripId) {
       const cur = await readFlightReturnAsk()
-      if (cur && cur.draftToken !== draftToken) return
+      if (cur) {
+        const draftOk =
+          draftToken && cur.draftToken && cur.draftToken === draftToken
+        const plannedOk =
+          plannedTripId &&
+          cur.plannedTripId &&
+          cur.plannedTripId === plannedTripId
+        if (!draftOk && !plannedOk) return
+      }
     }
     await AsyncStorage.removeItem(FLIGHT_RETURN_ASK_KEY)
   } catch {
@@ -144,19 +162,21 @@ export async function clearFlightReturnAsk(
 
 export async function consumeFlightReturnAsk(opts?: {
   draftToken?: string | null
+  plannedTripId?: string | null
   alreadyBooked?: boolean
 }): Promise<FlightReturnAsk | null> {
   const ask = await readFlightReturnAsk()
   if (
     !shouldShowFlightReturnAsk(ask, {
       draftToken: opts?.draftToken,
+      plannedTripId: opts?.plannedTripId,
       alreadyBooked: opts?.alreadyBooked,
     })
   ) {
     return null
   }
   // One-shot — avoid re-Alert on every focus while the prompt is open.
-  await clearFlightReturnAsk(ask.draftToken)
+  await clearFlightReturnAsk(ask!.draftToken, ask!.plannedTripId)
   return ask
 }
 

@@ -1773,14 +1773,14 @@ function TripDetailView({
       if (!isTravelpayouts) {
         leftForFlight.current = true
         leftForFlightAt.current = Date.now()
-        if (token) {
-          markFlightReturnAsk({
-            draftToken: token,
-            promptOnReturn: true,
-          })
-        }
-      } else if (token) {
-        clearFlightReturnAsk(token)
+        // Persist immediately (planned trip id) so closing FW still restores ask.
+        markFlightReturnAsk({
+          draftToken: token,
+          plannedTripId: tripId,
+          promptOnReturn: true,
+        })
+      } else {
+        clearFlightReturnAsk(token, tripId)
       }
       // Draft + status off the critical path (partner tab already open).
       void (async () => {
@@ -1792,6 +1792,7 @@ function TripDetailView({
             if (!isTravelpayouts) {
               markFlightReturnAsk({
                 draftToken: d.draft_token,
+                plannedTripId: tripId,
                 promptOnReturn: true,
               })
             }
@@ -1804,6 +1805,13 @@ function TripDetailView({
             { status, provider: source.partnerId },
           )
           setFlightDraft(updated)
+          if (!isTravelpayouts) {
+            markFlightReturnAsk({
+              draftToken: updated.draft_token || d.draft_token,
+              plannedTripId: tripId,
+              promptOnReturn: true,
+            })
+          }
         } catch {
           /* non-blocking — confirm can recreate draft */
         }
@@ -1840,7 +1848,7 @@ function TripDetailView({
         onToast('Impossible de rattacher la réservation — réessaie')
         return
       }
-      clearFlightReturnAsk(token)
+      clearFlightReturnAsk(token, tripId)
       clearPendingHotelUpsell()
       const nowIso = new Date().toISOString()
       // Optimistic UI — load() must not wipe a successful confirm.
@@ -1890,6 +1898,7 @@ function TripDetailView({
     leftForFlight.current = false
     clearFlightReturnAsk(
       flightDraft?.draft_token || workspace?.draft_token || null,
+      tripId,
     )
     clearPendingHotelUpsell()
   }
@@ -1898,12 +1907,15 @@ function TripDetailView({
     const token = flightDraft?.draft_token || workspace?.draft_token || null
     if (flightBooked) {
       setAskFlightBooked(false)
-      clearFlightReturnAsk(token)
+      clearFlightReturnAsk(token, tripId)
       return
     }
     const maybeAsk = () => {
+      // Only when the planner tab is visible — never while the airline tab is focused.
+      if (document.visibilityState !== 'visible') return
       const persisted = consumeFlightReturnAsk({
         draftToken: token,
+        plannedTripId: tripId,
         alreadyBooked: flightBooked,
       })
       if (persisted) {
@@ -1929,7 +1941,7 @@ function TripDetailView({
       document.removeEventListener('visibilitychange', onReturn)
       window.removeEventListener('focus', onReturn)
     }
-  }, [flightBooked, flightDraft?.draft_token, workspace?.draft_token])
+  }, [flightBooked, flightDraft?.draft_token, workspace?.draft_token, tripId])
 
   const reservationToken =
     flightDraft?.draft_token || workspace?.draft_token || null
@@ -1992,13 +2004,26 @@ function TripDetailView({
       .finally(() => setHotelBusy(false))
   }
 
+  const onHotelBlockCta = () => {
+    if (hotelBooked || externalHotel) {
+      openReservations()
+      return
+    }
+    // Selected but unpaid → compose / payer ; sinon choisir.
+    openReservation(true)
+  }
+
+  const hotelBlockCtaLabel = hotelBusy
+    ? 'Ouverture…'
+    : hotelBooked || externalHotel
+      ? HOTEL_CTA_FR.view
+      : hasHotel
+        ? HOTEL_CTA_FR.pay
+        : HOTEL_CTA_FR.choose
+
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
-      if (hotelBooked || externalHotel || hasHotel) {
-        openReservations()
-        return
-      }
-      openReservation(true)
+      onHotelBlockCta()
       return
     }
     if (id === 'flight') {
@@ -2213,6 +2238,7 @@ function TripDetailView({
       setWorkspace(null)
       clearFlightReturnAsk(
         flightDraft?.draft_token || workspace?.draft_token || null,
+        tripId,
       )
       clearPendingHotelUpsell()
       invalidateTravelWorkspacesCache()
@@ -2969,18 +2995,10 @@ function TripDetailView({
                           <button
                             type="button"
                             disabled={hotelBusy || skippingHotel}
-                            onClick={() =>
-                              hotelBooked || hasHotel
-                                ? openReservations()
-                                : onPipelineStep('hotel')
-                            }
+                            onClick={onHotelBlockCta}
                             className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
                           >
-                            {hotelBusy
-                              ? 'Ouverture…'
-                              : hotelBooked || hasHotel
-                                ? HOTEL_CTA_FR.view
-                                : HOTEL_CTA_FR.choose}
+                            {hotelBlockCtaLabel}
                             <span aria-hidden>›</span>
                           </button>
                           {hotelInvoiceReady ? (
@@ -3041,18 +3059,10 @@ function TripDetailView({
                         <button
                           type="button"
                           disabled={hotelBusy || skippingHotel}
-                          onClick={() =>
-                            hotelBooked || hasHotel
-                              ? openReservations()
-                              : onPipelineStep('hotel')
-                          }
+                          onClick={onHotelBlockCta}
                           className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
                         >
-                          {hotelBusy
-                            ? 'Ouverture…'
-                            : hotelBooked || hasHotel
-                              ? HOTEL_CTA_FR.view
-                              : HOTEL_CTA_FR.choose}
+                          {hotelBlockCtaLabel}
                           <span aria-hidden>›</span>
                         </button>
                         {hotelInvoiceReady ? (
@@ -4336,11 +4346,6 @@ function TravelersPanel({
                       ) : null}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                      {isOrg ? (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-primary-700 bg-orange-50 px-2 py-0.5 rounded-md">
-                          {t('planner.members.organizer')}
-                        </span>
-                      ) : null}
                       {!isOrg && m.email ? (
                         <span className="text-[11px] font-medium text-slate-500 truncate max-w-full">
                           {m.email}
@@ -4348,10 +4353,16 @@ function TravelersPanel({
                       ) : (
                         <span
                           className={`text-[11px] font-semibold ${
-                            onApp ? 'text-emerald-700' : 'text-slate-400'
+                            isOrg || onApp
+                              ? 'text-emerald-700'
+                              : 'text-slate-400'
                           }`}
                         >
-                          {onApp ? t('planner.members.onApp') : t('planner.members.offApp')}
+                          {isOrg
+                            ? t('planner.members.organizer')
+                            : onApp
+                              ? t('planner.members.onApp')
+                              : t('planner.members.offApp')}
                         </span>
                       )}
                     </div>

@@ -975,7 +975,7 @@ export function TripDetailScreen() {
                 setShowModalities(false)
                 setFlightDraft(null)
                 setWorkspace(null)
-                void clearFlightReturnAsk(token)
+                void clearFlightReturnAsk(token, tripId)
                 void clearPendingHotelUpsell()
                 invalidateTravelWorkspacesCache()
                 await load({ silent: true })
@@ -1115,7 +1115,7 @@ export function TripDetailScreen() {
         )
         return
       }
-      void clearFlightReturnAsk(token)
+      void clearFlightReturnAsk(token, tripId)
       void clearPendingHotelUpsell()
 
       const nowIso = new Date().toISOString()
@@ -1239,11 +1239,14 @@ export function TripDetailScreen() {
 
       leftForFlight.current = true
       leftForFlightNeedsAsk.current = !isTravelpayouts
-      if (askToken) {
+      if (!isTravelpayouts) {
         void markFlightReturnAsk({
           draftToken: askToken,
-          promptOnReturn: !isTravelpayouts,
+          plannedTripId: tripId,
+          promptOnReturn: true,
         })
+      } else {
+        void clearFlightReturnAsk(askToken, tripId)
       }
       setFlightBookingBusy(false)
 
@@ -1252,9 +1255,10 @@ export function TripDetailScreen() {
         draftWork,
       ])
       const token = resolvedToken || askToken
-      if (token && !isTravelpayouts && token !== askToken) {
+      if (!isTravelpayouts) {
         void markFlightReturnAsk({
           draftToken: token,
+          plannedTripId: tripId,
           promptOnReturn: true,
         })
       }
@@ -1268,7 +1272,7 @@ export function TripDetailScreen() {
         leftForFlight.current = false
         leftForFlightNeedsAsk.current = false
         flightAskShownRef.current = true
-        void clearFlightReturnAsk(token)
+        void clearFlightReturnAsk(token, tripId)
         void clearPendingHotelUpsell()
         Alert.alert(
           'Ton vol est réservé ?',
@@ -1278,7 +1282,7 @@ export function TripDetailScreen() {
               text: 'Pas encore',
               style: 'cancel',
               onPress: () => {
-                void clearFlightReturnAsk(token)
+                void clearFlightReturnAsk(token, tripId)
                 void clearPendingHotelUpsell()
               },
             },
@@ -1316,12 +1320,13 @@ export function TripDetailScreen() {
       leftForFlight.current = false
       leftForFlightNeedsAsk.current = false
       if (reservationFlags.flightBooked) {
-        void clearFlightReturnAsk(token)
+        void clearFlightReturnAsk(token, tripId)
         return
       }
       void (async () => {
         const persisted = await consumeFlightReturnAsk({
           draftToken: token,
+          plannedTripId: tripId,
           alreadyBooked: reservationFlags.flightBooked,
         })
         if (!askFromMemory && !persisted) return
@@ -1336,7 +1341,7 @@ export function TripDetailScreen() {
               text: 'Pas encore',
               style: 'cancel',
               onPress: () => {
-                void clearFlightReturnAsk(token)
+                void clearFlightReturnAsk(token, tripId)
                 void clearPendingHotelUpsell()
               },
             },
@@ -1350,6 +1355,7 @@ export function TripDetailScreen() {
     }, [
       flightDraft?.draft_token,
       reservationFlags.flightBooked,
+      tripId,
       workspace?.draft_token,
     ]),
   )
@@ -1854,9 +1860,11 @@ export function TripDetailScreen() {
                           {hotelBusy
                             ? 'Ouverture…'
                             : reservationFlags.hotelBooked ||
-                                reservationFlags.hasHotel
+                                reservationFlags.externalHotel
                               ? 'Voir mon hôtel →'
-                              : 'Choisir mon hôtel →'}
+                              : reservationFlags.hasHotel
+                                ? 'Payer ma chambre →'
+                                : 'Choisir mon hôtel →'}
                         </Text>
                       </Pressable>
                       {reservationFlags.canSkipHotel ? (
@@ -1919,9 +1927,11 @@ export function TripDetailScreen() {
                         {hotelBusy
                           ? 'Ouverture…'
                           : reservationFlags.hotelBooked ||
-                              reservationFlags.hasHotel
+                              reservationFlags.externalHotel
                             ? 'Voir mon hôtel →'
-                            : 'Choisir mon hôtel →'}
+                            : reservationFlags.hasHotel
+                              ? 'Payer ma chambre →'
+                              : 'Choisir mon hôtel →'}
                       </Text>
                     </Pressable>
                     {reservationFlags.canSkipHotel ? (

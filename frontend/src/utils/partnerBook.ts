@@ -5,6 +5,7 @@ import {
   cityDisplayNameFr,
   dateFromFlightIso,
   FLIGHT_RETURN_ASK_KEY,
+  flightReturnAskMatchesOwner,
   parseFlightReturnAsk,
   primaryAirportCode,
   resolvePriceSourceBooking,
@@ -49,19 +50,40 @@ export type PendingHotelUpsell = {
   source?: 'search' | 'planner'
 }
 
+function flightAskStorage(): Storage | null {
+  try {
+    // localStorage survives tab/page close — sessionStorage did not.
+    return localStorage
+  } catch {
+    return null
+  }
+}
+
 export function markFlightReturnAsk(opts: {
-  draftToken: string
+  draftToken?: string | null
+  plannedTripId?: string | null
   promptOnReturn?: boolean
+  /** Keep original `at` when upgrading planned → draft token. */
+  at?: number
 }): void {
   const draftToken = String(opts.draftToken || '').trim()
-  if (!draftToken) return
+  const plannedTripId = String(opts.plannedTripId || '').trim() || undefined
+  if (!draftToken && !plannedTripId) return
+  const prev = readFlightReturnAsk()
+  const sameOwner =
+    prev &&
+    flightReturnAskMatchesOwner(prev, { draftToken, plannedTripId })
   const payload: FlightReturnAsk = {
     draftToken,
-    at: Date.now(),
+    plannedTripId: plannedTripId || prev?.plannedTripId,
+    at: opts.at ?? (sameOwner ? prev!.at : Date.now()),
     promptOnReturn: opts.promptOnReturn !== false,
   }
   try {
-    sessionStorage.setItem(FLIGHT_RETURN_ASK_KEY, serializeFlightReturnAsk(payload))
+    flightAskStorage()?.setItem(
+      FLIGHT_RETURN_ASK_KEY,
+      serializeFlightReturnAsk(payload),
+    )
   } catch {
     /* ignore quota */
   }
@@ -69,18 +91,39 @@ export function markFlightReturnAsk(opts: {
 
 export function readFlightReturnAsk(): FlightReturnAsk | null {
   try {
-    return parseFlightReturnAsk(sessionStorage.getItem(FLIGHT_RETURN_ASK_KEY))
+    const store = flightAskStorage()
+    if (!store) return null
+    const fromLocal = parseFlightReturnAsk(store.getItem(FLIGHT_RETURN_ASK_KEY))
+    if (fromLocal) return fromLocal
+    // One-time migrate leftover sessionStorage asks.
+    const legacy = parseFlightReturnAsk(
+      sessionStorage.getItem(FLIGHT_RETURN_ASK_KEY),
+    )
+    if (legacy) {
+      store.setItem(FLIGHT_RETURN_ASK_KEY, serializeFlightReturnAsk(legacy))
+      sessionStorage.removeItem(FLIGHT_RETURN_ASK_KEY)
+    }
+    return legacy
   } catch {
     return null
   }
 }
 
-export function clearFlightReturnAsk(draftToken?: string | null): void {
+export function clearFlightReturnAsk(
+  draftToken?: string | null,
+  plannedTripId?: string | null,
+): void {
   try {
-    if (draftToken) {
+    if (draftToken || plannedTripId) {
       const cur = readFlightReturnAsk()
-      if (cur && cur.draftToken !== draftToken) return
+      if (
+        cur &&
+        !flightReturnAskMatchesOwner(cur, { draftToken, plannedTripId })
+      ) {
+        return
+      }
     }
+    flightAskStorage()?.removeItem(FLIGHT_RETURN_ASK_KEY)
     sessionStorage.removeItem(FLIGHT_RETURN_ASK_KEY)
   } catch {
     /* ignore */
@@ -89,19 +132,21 @@ export function clearFlightReturnAsk(draftToken?: string | null): void {
 
 export function consumeFlightReturnAsk(opts?: {
   draftToken?: string | null
+  plannedTripId?: string | null
   alreadyBooked?: boolean
 }): FlightReturnAsk | null {
   const ask = readFlightReturnAsk()
   if (
     !shouldShowFlightReturnAsk(ask, {
       draftToken: opts?.draftToken,
+      plannedTripId: opts?.plannedTripId,
       alreadyBooked: opts?.alreadyBooked,
     })
   ) {
     return null
   }
   // One-shot — avoid re-prompting on every focus/visibility while ask UI is open.
-  clearFlightReturnAsk(ask.draftToken)
+  clearFlightReturnAsk(ask!.draftToken, ask!.plannedTripId)
   return ask
 }
 

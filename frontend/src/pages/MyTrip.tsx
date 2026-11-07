@@ -647,6 +647,7 @@ export default function MyTrip() {
 
   useEffect(() => {
     const maybeAsk = () => {
+      if (document.visibilityState !== 'visible') return
       if (flightBooked) {
         setAskFlightBooked(false)
         clearFlightReturnAsk(token)
@@ -664,6 +665,7 @@ export default function MyTrip() {
         ) {
           return
         }
+        leftForFlight.current = false
         if (!isTravelpayouts) setAskFlightBooked(true)
       }
     }
