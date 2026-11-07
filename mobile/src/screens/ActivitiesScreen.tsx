@@ -13,7 +13,9 @@ import {
   RefreshControl,
   ScrollView,
   TextInput,
+  ImageBackground,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   useFocusEffect,
@@ -30,6 +32,15 @@ import {
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_EMPTY_BODY_FR,
+  ACTIVITY_EMPTY_CHANGE_CITY_FR,
+  ACTIVITY_EMPTY_CLEAR_FILTERS_FR,
+  ACTIVITY_EMPTY_FILTERS_BODY_FR,
+  ACTIVITY_EMPTY_FILTERS_TITLE_FR,
+  ACTIVITY_EMPTY_KICKER_FR,
+  ACTIVITY_EMPTY_RETRY_FR,
+  ACTIVITY_EMPTY_SEE_SEJOURS_FR,
+  ACTIVITY_EMPTY_TITLE_FR,
   ACTIVITY_PAGE_KICKER_FR,
   ACTIVITY_PAGE_SUBTITLE_FR,
   ACTIVITY_PAGE_TITLE_FR,
@@ -41,6 +52,7 @@ import {
   ACTIVITY_SWITCH_TRIP_HINT_FR,
   canonicalViatorProductUrl,
   cityDisplayNameFr,
+  cityImageUrl,
   filterActivitySwitcherWorkspaces,
   parseAirportCodes,
   resolveActivityCitySlug,
@@ -1088,28 +1100,103 @@ export function ActivitiesScreen() {
             />
         )}
         ListEmptyComponent={
-          loading ? null : (
+          loading ? null : error ? (
             <View style={[styles.emptyCard, shadow.soft]}>
-              {error ? (
-                <>
-                  <Text style={styles.emptyTitle}>Oups</Text>
-                  <Text style={styles.emptyBody}>{error}</Text>
-                  <Pressable
-                    onPress={() => void loadCity(citySlug || 'paris')}
-                    style={styles.retryBtn}
-                  >
-                    <Text style={styles.retryText}>Réessayer</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.emptyTitle}>Aucune activité</Text>
-                  <Text style={styles.emptyBody}>
-                    Choisis une ville d’arrivée dans Affiner.
-                  </Text>
-                </>
-              )}
+              <Text style={styles.emptyTitle}>Oups</Text>
+              <Text style={styles.emptyBody}>{error}</Text>
+              <Pressable
+                onPress={() => void loadCity(citySlug || 'paris')}
+                style={styles.retryBtn}
+              >
+                <Text style={styles.retryText}>{ACTIVITY_EMPTY_RETRY_FR}</Text>
+              </Pressable>
             </View>
+          ) : (
+            (() => {
+              const filtered = items.length > 0
+              const cityLabel = activityDestinationLabelFr(citySlug)
+              return (
+                <ImageBackground
+                  source={{
+                    uri: cityImageUrl(cityLabel || citySlug || null),
+                  }}
+                  style={[styles.emptyHero, shadow.soft]}
+                  imageStyle={styles.emptyHeroImage}
+                >
+                  <LinearGradient
+                    colors={[
+                      'rgba(20,12,8,0.28)',
+                      'rgba(20,12,8,0.55)',
+                      'rgba(20,12,8,0.92)',
+                    ]}
+                    locations={[0, 0.4, 1]}
+                    style={styles.emptyHeroOverlay}
+                  >
+                    <Text style={styles.emptyKicker}>
+                      {ACTIVITY_EMPTY_KICKER_FR}
+                    </Text>
+                    <Text style={styles.emptyHeroTitle}>
+                      {filtered
+                        ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
+                        : ACTIVITY_EMPTY_TITLE_FR(cityLabel)}
+                    </Text>
+                    <Text style={styles.emptyHeroBody}>
+                      {filtered
+                        ? ACTIVITY_EMPTY_FILTERS_BODY_FR
+                        : ACTIVITY_EMPTY_BODY_FR}
+                    </Text>
+                    <View style={styles.emptyActions}>
+                      {filtered ? (
+                        <Pressable
+                          onPress={() => {
+                            setCategories([])
+                            setSearchQuery('')
+                          }}
+                          style={({ pressed }) => [
+                            styles.emptyBtnPrimary,
+                            pressed && { opacity: 0.92 },
+                          ]}
+                        >
+                          <Text style={styles.emptyBtnPrimaryText}>
+                            {ACTIVITY_EMPTY_CLEAR_FILTERS_FR}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <>
+                          <Pressable
+                            onPress={() =>
+                              listRef.current?.scrollToOffset({
+                                offset: 0,
+                                animated: true,
+                              })
+                            }
+                            style={({ pressed }) => [
+                              styles.emptyBtnPrimary,
+                              pressed && { opacity: 0.92 },
+                            ]}
+                          >
+                            <Text style={styles.emptyBtnPrimaryText}>
+                              {ACTIVITY_EMPTY_CHANGE_CITY_FR}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => navigation.navigate('Deals')}
+                            style={({ pressed }) => [
+                              styles.emptyBtnGhost,
+                              pressed && { opacity: 0.9 },
+                            ]}
+                          >
+                            <Text style={styles.emptyBtnGhostText}>
+                              {ACTIVITY_EMPTY_SEE_SEJOURS_FR}
+                            </Text>
+                          </Pressable>
+                        </>
+                      )}
+                    </View>
+                  </LinearGradient>
+                </ImageBackground>
+              )
+            })()
           )
         }
         showsVerticalScrollIndicator={false}
@@ -1444,6 +1531,79 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     alignItems: 'center',
     gap: 8,
+  },
+  emptyHero: {
+    minHeight: 220,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  emptyHeroImage: {
+    borderRadius: radius.lg,
+  },
+  emptyHeroOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: spacing.lg,
+    minHeight: 220,
+    gap: 6,
+  },
+  emptyKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 2,
+  },
+  emptyHeroTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.white,
+    letterSpacing: -0.3,
+    lineHeight: 26,
+  },
+  emptyHeroBody: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.82)',
+    lineHeight: 20,
+    marginTop: 2,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  emptyBtnPrimary: {
+    backgroundColor: colors.white,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  emptyBtnPrimaryText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.ink,
+  },
+  emptyBtnGhost: {
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 40,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+  },
+  emptyBtnGhostText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.white,
   },
   emptyTitle: {
     fontFamily: fonts.bold,

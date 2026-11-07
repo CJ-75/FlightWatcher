@@ -13,6 +13,14 @@ import {
   ACTIVITY_CATEGORY_TAGS_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
+  ACTIVITY_EMPTY_BODY_FR,
+  ACTIVITY_EMPTY_CHANGE_CITY_FR,
+  ACTIVITY_EMPTY_CLEAR_FILTERS_FR,
+  ACTIVITY_EMPTY_FILTERS_BODY_FR,
+  ACTIVITY_EMPTY_FILTERS_TITLE_FR,
+  ACTIVITY_EMPTY_KICKER_FR,
+  ACTIVITY_EMPTY_SEE_SEJOURS_FR,
+  ACTIVITY_EMPTY_TITLE_FR,
   ACTIVITY_PAGE_KICKER_FR,
   ACTIVITY_PAGE_SUBTITLE_FR,
   ACTIVITY_PAGE_TITLE_FR,
@@ -27,6 +35,7 @@ import {
   activityCategoriesSummaryFr,
   canonicalViatorProductUrl,
   cityDisplayNameFr,
+  cityImageUrl,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
@@ -872,7 +881,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         />
       )}
 
-      <div className="mb-3 sm:mb-4 space-y-1.5">
+      <div id="activity-city" className="mb-3 sm:mb-4 space-y-1.5 scroll-mt-24">
         <label className="text-xs font-bold text-ink">Ville</label>
         <ActivityCitySelect
           valueSlug={citySlug}
@@ -1098,10 +1107,78 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
           ))}
         </div>
       ) : !error && !loading ? (
-        <div className="app-card p-8 text-center max-w-md mx-auto">
-          <p className="font-bold text-ink">Aucune activité</p>
-          <p className="text-sm text-muted mt-1">Choisis une ville ci-dessus.</p>
-        </div>
+        (() => {
+          const filtered = items.length > 0
+          const cityLabel = activityDestinationLabelFr(citySlug)
+          const imageUrl = cityImageUrl(cityLabel || citySlug || null)
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={springConfig}
+              className="relative overflow-hidden rounded-2xl border border-line shadow-soft min-h-[200px] sm:min-h-[220px] max-w-xl mx-auto"
+            >
+              <img
+                src={imageUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover object-center scale-105"
+                loading="lazy"
+                decoding="async"
+                aria-hidden
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-ink/55 to-ink/25" />
+              <div className="relative z-[1] flex h-full min-h-[200px] sm:min-h-[220px] flex-col justify-end p-5 sm:p-6">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/70 mb-1.5">
+                  {ACTIVITY_EMPTY_KICKER_FR}
+                </p>
+                <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight leading-tight">
+                  {filtered
+                    ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
+                    : ACTIVITY_EMPTY_TITLE_FR(cityLabel)}
+                </h3>
+                <p className="mt-1.5 text-sm text-white/80 leading-snug max-w-md">
+                  {filtered
+                    ? ACTIVITY_EMPTY_FILTERS_BODY_FR
+                    : ACTIVITY_EMPTY_BODY_FR}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {filtered ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategories([])
+                        setSearchQuery('')
+                      }}
+                      className="inline-flex items-center justify-center rounded-xl bg-white text-ink px-4 py-2.5 text-xs font-extrabold shadow-lg hover:bg-white/95 min-h-[40px]"
+                    >
+                      {ACTIVITY_EMPTY_CLEAR_FILTERS_FR}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById('activity-city')
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                          ;(el as HTMLElement | null)?.focus?.()
+                        }}
+                        className="inline-flex items-center justify-center rounded-xl bg-white text-ink px-4 py-2.5 text-xs font-extrabold shadow-lg hover:bg-white/95 min-h-[40px]"
+                      >
+                        {ACTIVITY_EMPTY_CHANGE_CITY_FR}
+                      </button>
+                      <Link
+                        to="/sejours"
+                        className="inline-flex items-center justify-center rounded-xl bg-white/12 backdrop-blur-md border border-white/25 text-white px-3.5 py-2.5 text-xs font-bold hover:bg-white/20 min-h-[40px]"
+                      >
+                        {ACTIVITY_EMPTY_SEE_SEJOURS_FR}
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )
+        })()
       ) : null}
 
       {detail ? (

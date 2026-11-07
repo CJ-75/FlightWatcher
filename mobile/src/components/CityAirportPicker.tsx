@@ -383,19 +383,19 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
               <Text style={styles.sheetClose}>Fermer</Text>
             </Pressable>
           </View>
-          <Text style={styles.sheetHint}>
-            {query.trim()
-              ? 'Résultats de recherche'
-              : isFull
-                ? `${groups.length} villes · ${effectiveAirports.length} aéroports · glisse pour voir plus`
+          {query.trim() || !isFull ? (
+            <Text style={styles.sheetHint}>
+              {query.trim()
+                ? 'Résultats de recherche'
                 : loadingFull
                   ? 'Chargement du catalogue…'
                   : 'Catalogue incomplet. Réessaie.'}
-          </Text>
+            </Text>
+          ) : null}
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Rechercher une ville ou un code IATA…"
+            placeholder="Rechercher une ville…"
             placeholderTextColor={colors.faint}
             autoCorrect={false}
             autoCapitalize="words"

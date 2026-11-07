@@ -16,6 +16,22 @@ export const ACTIVITY_PAGE_KICKER_FR = 'Activités'
 export const ACTIVITY_PAGE_TITLE_FR = 'Sur place'
 export const ACTIVITY_PAGE_SUBTITLE_FR = 'Visites, sorties et expériences.'
 
+/** Empty catalog / filtered grid — Activités. */
+export const ACTIVITY_EMPTY_KICKER_FR = 'Sur place'
+export const ACTIVITY_EMPTY_TITLE_FR = (city?: string | null) => {
+  const c = String(city || '').trim()
+  return c ? `Pas encore d’idées à ${c}` : 'Pas encore d’activités'
+}
+export const ACTIVITY_EMPTY_BODY_FR =
+  'Le catalogue est encore vide pour cette destination. Change de ville ou reviens un peu plus tard — on enrichit au fil des séjours.'
+export const ACTIVITY_EMPTY_FILTERS_TITLE_FR = 'Rien ne correspond'
+export const ACTIVITY_EMPTY_FILTERS_BODY_FR =
+  'Aucun résultat avec ces filtres. Élargis ta recherche ou retire une catégorie.'
+export const ACTIVITY_EMPTY_CLEAR_FILTERS_FR = 'Effacer les filtres'
+export const ACTIVITY_EMPTY_CHANGE_CITY_FR = 'Changer de ville'
+export const ACTIVITY_EMPTY_RETRY_FR = 'Réessayer'
+export const ACTIVITY_EMPTY_SEE_SEJOURS_FR = 'Voir les séjours'
+
 /** Label long (fiche détail) — jamais « Au planner ». */
 export const ACTIVITY_ADD_TO_PLANNER_FR = 'Ajouter'
 /** Bouton compact carte — le « + » est rendu en UI. */

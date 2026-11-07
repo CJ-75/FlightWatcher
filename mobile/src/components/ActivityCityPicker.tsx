@@ -366,15 +366,15 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
               <Text style={styles.sheetClose}>Fermer</Text>
             </Pressable>
           </View>
-          <Text style={styles.sheetHint}>
-            {query.trim()
-              ? 'Résultats de recherche'
-              : isFull
-                ? `${groups.length} villes · glisse pour voir plus`
+          {query.trim() || !isFull ? (
+            <Text style={styles.sheetHint}>
+              {query.trim()
+                ? 'Résultats de recherche'
                 : loadingFull
                   ? 'Chargement du catalogue…'
                   : 'Catalogue incomplet. Réessaie.'}
-          </Text>
+            </Text>
+          ) : null}
           <TextInput
             value={query}
             onChangeText={setQuery}
