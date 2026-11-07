@@ -26,7 +26,7 @@ const PLACEHOLDER_CITIES = [
   { city: 'Marseille', country: 'France' },
 ] as const
 
-const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[14px]'
+const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[13px]'
 const SEED = seedPopularAirports()
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number }
@@ -272,7 +272,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
                   <div className="flex items-center gap-2.5">
                     <CountryFlag
                       country={g.country}
-                      className="w-5 h-[14px]"
+                      className="w-5 h-[13px]"
                       title={g.country}
                     />
                     <div className="min-w-0 flex-1">

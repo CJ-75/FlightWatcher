@@ -17,7 +17,7 @@ import {
   ACTIVITY_CITY_OPTIONS_FR,
   activityCitySlugFromLabel,
   groupAirportsByCity,
-  resolvePopularCityGroups,
+  pickPopularCityGroups,
   seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
@@ -107,22 +107,44 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
   const catalogReady = groups.length >= 20
 
   const allCities = useMemo(() => {
-    if (!catalogReady) return seedFallbackCities()
-    return groups
-      .map(toOpt)
-      .filter((c) => c.slug)
-      .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+    const bySlug = new Map<string, CityOpt>()
+    for (const c of seedFallbackCities()) {
+      if (c.slug) bySlug.set(c.slug, c)
+    }
+    if (catalogReady) {
+      for (const g of groups) {
+        const opt = toOpt(g)
+        if (!opt.slug) continue
+        const prev = bySlug.get(opt.slug)
+        bySlug.set(opt.slug, {
+          slug: opt.slug,
+          label: opt.label || prev?.label || opt.slug,
+          country: opt.country || prev?.country,
+        })
+      }
+    }
+    return [...bySlug.values()].sort((a, b) =>
+      a.label.localeCompare(b.label, 'fr'),
+    )
   }, [groups, catalogReady])
 
   const allOrdered = useMemo(() => {
-    if (!catalogReady) return seedFallbackCities()
-    const popular = resolvePopularCityGroups(groups, effective)
+    // Full curated list first (Dubaï etc.), then rest of airport catalogue
+    const curated = seedFallbackCities()
+    if (!catalogReady) return curated
+    const popular = pickPopularCityGroups(groups, 24)
       .map(toOpt)
       .filter((c) => c.slug)
-    const seen = new Set(popular.map((c) => c.slug))
+    const merged: CityOpt[] = []
+    const seen = new Set<string>()
+    for (const c of [...curated, ...popular]) {
+      if (!c.slug || seen.has(c.slug)) continue
+      seen.add(c.slug)
+      merged.push(c)
+    }
     const rest = allCities.filter((c) => !seen.has(c.slug))
-    return popular.length ? [...popular, ...rest] : rest
-  }, [groups, effective, allCities, catalogReady])
+    return [...merged, ...rest]
+  }, [groups, allCities, catalogReady])
 
   const selected =
     allCities.find((c) => c.slug === valueSlug) ||
@@ -142,14 +164,17 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
   }, [showPlaceholder])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = activityCitySlugFromLabel(query)
     if (!q) return allOrdered
-    return allCities.filter(
-      (c) =>
-        c.label.toLowerCase().includes(q) ||
-        c.slug.includes(q.replace(/\s+/g, '-')) ||
-        (c.country || '').toLowerCase().includes(q),
-    )
+    return allCities.filter((c) => {
+      const labelSlug = activityCitySlugFromLabel(c.label)
+      const countrySlug = activityCitySlugFromLabel(c.country || '')
+      return (
+        labelSlug.includes(q) ||
+        c.slug.includes(q) ||
+        countrySlug.includes(q)
+      )
+    })
   }, [query, allCities, allOrdered])
 
   const placeholder = PLACEHOLDER_CITIES[placeholderIndex]

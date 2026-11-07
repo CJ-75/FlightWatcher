@@ -913,12 +913,13 @@ export function pickPopularCityGroups(
   preferred: string[] = PREFERRED_CITY_NAMES,
 ): CityAirportGroup[] {
   if (!groups.length) return []
-  const byCity = new Map(groups.map((g) => [g.city.toLowerCase(), g]))
+  // Accent-insensitive keys so « Dubaï » matches airport city « Dubai »
+  const byCity = new Map(groups.map((g) => [normalizeCityKey(g.city), g]))
   const out: CityAirportGroup[] = []
   const seen = new Set<string>()
 
   for (const name of preferred) {
-    const g = byCity.get(name.toLowerCase())
+    const g = byCity.get(normalizeCityKey(name))
     if (g && !seen.has(g.key)) {
       out.push(g)
       seen.add(g.key)

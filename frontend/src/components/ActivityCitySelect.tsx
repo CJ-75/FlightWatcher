@@ -8,15 +8,17 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ACTIVITY_CITY_OPTIONS_FR,
   activityCitySlugFromLabel,
+  countryIsoFromIata,
+  countryToFlagIso,
   groupAirportsByCity,
-  resolvePopularCityGroups,
+  pickPopularCityGroups,
   seedPopularAirports,
   type CityAirportGroup,
 } from '@flightwatcher/shared'
 import { loadAirportsOnce, peekAirports } from '../hooks/useAirports'
 import { CountryFlag } from './CountryFlag'
 
-type CityOpt = { slug: string; label: string; country?: string }
+type CityOpt = { slug: string; label: string; country?: string; iso?: string }
 
 type Props = {
   valueSlug: string
@@ -30,16 +32,22 @@ const PLACEHOLDER_CITIES = [
   { city: 'Marseille', country: 'France' },
 ] as const
 
-const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[14px]'
+const FLAG_CLASS = 'w-[18px] h-3 sm:w-5 sm:h-[13px]'
 const SEED = seedPopularAirports()
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number }
 
 function toOpt(g: CityAirportGroup): CityOpt {
+  const country = g.country || undefined
+  const iso =
+    countryToFlagIso(country) ||
+    countryIsoFromIata(g.airports[0]?.code) ||
+    undefined
   return {
     slug: activityCitySlugFromLabel(g.city),
     label: g.city,
-    country: g.country || undefined,
+    country,
+    iso: iso || undefined,
   }
 }
 
@@ -125,19 +133,62 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
   const catalogReady = groups.length >= 20
 
   const allCities = useMemo(() => {
-    if (!catalogReady) return seedFallbackCities()
-    return groups
-      .map(toOpt)
-      .filter((c) => c.slug)
-      .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+    // Always keep curated activité destinations clickable (ex. Dubaï), even if
+    // the airport catalog is incomplete or still loading.
+    const bySlug = new Map<string, CityOpt>()
+    for (const c of seedFallbackCities()) {
+      if (c.slug) bySlug.set(c.slug, c)
+    }
+    if (catalogReady) {
+      for (const g of groups) {
+        const opt = toOpt(g)
+        if (!opt.slug) continue
+        const prev = bySlug.get(opt.slug)
+        bySlug.set(opt.slug, {
+          slug: opt.slug,
+          label: opt.label || prev?.label || opt.slug,
+          country: opt.country || prev?.country,
+          iso: opt.iso || prev?.iso,
+        })
+      }
+    }
+    return [...bySlug.values()].sort((a, b) =>
+      a.label.localeCompare(b.label, 'fr'),
+    )
   }, [groups, catalogReady])
 
+  // Curated destinations (incl. Dubaï / long-haul) — always shown when query empty
+  const curated = useMemo(() => seedFallbackCities(), [])
+
   const popular = useMemo(() => {
-    if (!catalogReady) return seedFallbackCities().slice(0, 12)
-    return resolvePopularCityGroups(groups, airports)
-      .map(toOpt)
-      .filter((c) => c.slug)
-  }, [groups, airports, catalogReady])
+    const bySlug = new Map<string, CityOpt>()
+    for (const c of curated) {
+      if (c.slug) bySlug.set(c.slug, c)
+    }
+    if (catalogReady) {
+      // Enrich curated rows with country/iso (flags) + append extra popular cities
+      for (const g of groups) {
+        const opt = toOpt(g)
+        if (!opt.slug) continue
+        const prev = bySlug.get(opt.slug)
+        if (prev) {
+          if ((!prev.country && opt.country) || (!prev.iso && opt.iso)) {
+            bySlug.set(opt.slug, {
+              ...prev,
+              country: prev.country || opt.country,
+              iso: prev.iso || opt.iso,
+            })
+          }
+        }
+      }
+      for (const g of pickPopularCityGroups(groups, 24)) {
+        const opt = toOpt(g)
+        if (!opt.slug || bySlug.has(opt.slug)) continue
+        bySlug.set(opt.slug, opt)
+      }
+    }
+    return [...bySlug.values()]
+  }, [groups, catalogReady, curated])
 
   const selected = useMemo(() => {
     const hit = allCities.find((c) => c.slug === valueSlug)
@@ -153,15 +204,18 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
   }, [allCities, valueSlug, valueLabel, groups])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = activityCitySlugFromLabel(query)
     if (!q) return popular
     return allCities
-      .filter(
-        (c) =>
-          c.label.toLowerCase().includes(q) ||
-          c.slug.includes(q.replace(/\s+/g, '-')) ||
-          (c.country || '').toLowerCase().includes(q),
-      )
+      .filter((c) => {
+        const labelSlug = activityCitySlugFromLabel(c.label)
+        const countrySlug = activityCitySlugFromLabel(c.country || '')
+        return (
+          labelSlug.includes(q) ||
+          c.slug.includes(q) ||
+          countrySlug.includes(q)
+        )
+      })
       .slice(0, 40)
   }, [query, allCities, popular])
 
@@ -291,7 +345,8 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
                   <div className="flex items-center gap-2.5">
                     <CountryFlag
                       country={c.country}
-                      className="w-5 h-[14px]"
+                      iso={c.iso}
+                      className="w-5 h-[13px]"
                       title={c.country}
                     />
                     <div className="min-w-0 flex-1">
@@ -344,6 +399,7 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
           >
             <CountryFlag
               country={selected.country}
+              iso={selected.iso}
               className={FLAG_CLASS}
               title={selected.country}
             />
