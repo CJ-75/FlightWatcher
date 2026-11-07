@@ -1173,28 +1173,24 @@ export default function MyTrip() {
     nextAction.id === 'hotel_pick' ||
     Boolean(checkoutDeal)
   const hotelRecapTotal = Math.round(Number(party.hotelTotal) || 0)
-  const hotelRecapPp =
-    adults > 1 && hotelRecapTotal > 0
-      ? Math.round(hotelRecapTotal / adults)
-      : hotelRecapTotal
+  const hotelRecapNight =
+    nights > 0 && hotelRecapTotal > 0
+      ? Math.round(hotelRecapTotal / nights)
+      : null
 
   const priceBreakdown = hotelPaymentFocus ? (
     <>
-      {adults === 1 ? (
-        <p className="text-3xl font-black text-primary-600 tracking-tight">
-          Hôtel {hotelRecapTotal} €
+      <p className="text-3xl font-black text-primary-600 tracking-tight">
+        Hôtel {hotelRecapTotal} €
+        {adults > 1 ? (
+          <span className="text-lg font-bold text-slate-600"> pour {adults}</span>
+        ) : null}
+      </p>
+      {hotelRecapNight != null ? (
+        <p className="text-sm font-semibold text-slate-700 mt-1">
+          {hotelRecapNight} € / nuit
         </p>
-      ) : (
-        <>
-          <p className="text-3xl font-black text-primary-600 tracking-tight">
-            Hôtel {hotelRecapTotal} €{' '}
-            <span className="text-lg font-bold text-slate-600">pour {adults}</span>
-          </p>
-          <p className="text-sm font-semibold text-slate-700 mt-1">
-            {hotelRecapPp} € / pers.
-          </p>
-        </>
-      )}
+      ) : null}
       <dl className="mt-3 space-y-1.5 text-sm text-slate-700">
         <div className="flex justify-between gap-3">
           <dt>

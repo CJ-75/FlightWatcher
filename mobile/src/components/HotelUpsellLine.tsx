@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { Text, StyleSheet } from 'react-native'
-import { dateFromFlightIso, type HotelUpsellResult } from '@flightwatcher/shared'
+import {
+  dateFromFlightIso,
+  hotelPricePerNightFr,
+  type HotelUpsellResult,
+} from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import { colors, fonts } from '../theme'
 
@@ -103,9 +107,17 @@ export function HotelUpsellLine({
   }
   if (result.status !== 'ready' || result.hotel_pp == null) return null
 
+  const perNight = hotelPricePerNightFr({
+    hotelPp: result.hotel_pp,
+    adults: participants,
+    checkin,
+    checkout,
+  })
+  if (!perNight) return null
+
   return (
     <Text style={styles.ready}>
-      + hôtel dès {Math.round(result.hotel_pp)} € / pers.
+      + hôtel dès {perNight.amount} € {perNight.label}
       {result.hotel_name ? ` · ${result.hotel_name}` : ''}
     </Text>
   )

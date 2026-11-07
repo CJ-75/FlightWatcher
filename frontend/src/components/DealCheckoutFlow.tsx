@@ -6,6 +6,10 @@ import {
   activityStepProgress,
   hotelBookingIsConfirmed,
   hotelCancelLabel,
+  hotelPriceConfirmBodyFr,
+  HOTEL_PRICE_CHECKING_FR,
+  HOTEL_PRICE_CONFIRM_TITLE_FR,
+  HOTEL_PRICE_CONTINUE_FR,
   resolveNextStayAction,
   restaurantStepProgress,
   settleHotelBooking,
@@ -74,7 +78,7 @@ function loadPaymentScript(): Promise<void> {
     s.onerror = () => {
       window.clearTimeout(timer)
       s.remove()
-      reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+      reject(new Error('Paiement indisponible pour le moment. Réessaie.'))
     }
     document.body.appendChild(s)
   })
@@ -773,9 +777,11 @@ export function DealCheckoutFlow({
                 >
                   <span className="w-9 h-9 rounded-full border-2 border-slate-200 border-t-slate-900 animate-spin" />
                   <div>
-                    <p className="text-sm font-bold text-slate-900">Vérification de la disponibilité</p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {HOTEL_PRICE_CHECKING_FR}
+                    </p>
                     <p className="text-xs text-slate-500 mt-1">
-                      Prix et conditions confirmés en direct auprès de l’hôtel.
+                      On confirme le prix et la dispo auprès de l’hôtel.
                     </p>
                   </div>
                 </motion.div>
@@ -790,16 +796,13 @@ export function DealCheckoutFlow({
                   className="space-y-4"
                 >
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3.5">
-                    <p className="text-sm font-bold text-amber-950">Le tarif a été mis à jour</p>
+                    <p className="text-sm font-bold text-amber-950">
+                      {HOTEL_PRICE_CONFIRM_TITLE_FR}
+                    </p>
                     <p className="text-sm text-amber-900/80 mt-1 leading-relaxed">
-                      Nouveau total hôtel :{' '}
-                      <strong className="tabular-nums">
-                        {Math.round(
-                          Number(reval.public_hotel_price ?? hotelTotal ?? 0),
-                        )}{' '}
-                        €
-                      </strong>
-                      . Confirme pour continuer avec ce prix.
+                      {hotelPriceConfirmBodyFr(
+                        Number(reval.public_hotel_price ?? hotelTotal ?? 0),
+                      )}
                     </p>
                     {reval.hotel_switched ? (
                       <p className="text-sm text-amber-900 mt-2 font-medium">
@@ -820,7 +823,7 @@ export function DealCheckoutFlow({
                       onClick={() => setStep('guests')}
                       className="sm:flex-[1.4] bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl min-h-[48px]"
                     >
-                      Continuer avec ce prix
+                      {HOTEL_PRICE_CONTINUE_FR}
                     </button>
                   </div>
                 </motion.div>

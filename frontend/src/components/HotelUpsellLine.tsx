@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { HotelUpsellResult } from '../types'
 import { getApiClient } from '../utils/apiClient'
-import { dateFromFlightIso } from '@flightwatcher/shared'
+import { dateFromFlightIso, hotelPricePerNightFr } from '@flightwatcher/shared'
 
 interface Props {
   iata?: string | null
@@ -62,9 +62,17 @@ export function HotelUpsellLine({
   }
   if (result.status !== 'ready' || result.hotel_pp == null) return null
 
+  const perNight = hotelPricePerNightFr({
+    hotelPp: result.hotel_pp,
+    adults: participants,
+    checkin,
+    checkout,
+  })
+  if (!perNight) return null
+
   return (
     <p className="text-xs sm:text-sm font-bold text-emerald-800 mt-2 bg-emerald-50 rounded-xl px-2.5 py-1.5 inline-block">
-      + hôtel dès {Math.round(result.hotel_pp)} € / pers.
+      + hôtel dès {perNight.amount} € {perNight.label}
       {result.hotel_name ? (
         <span className="font-medium text-emerald-700/80"> · {result.hotel_name}</span>
       ) : null}

@@ -19,6 +19,9 @@ import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   activityStepProgress,
   hotelBookingIsConfirmed,
+  hotelPricePpJumpBodyFr,
+  HOTEL_PRICE_CONFIRM_TITLE_FR,
+  HOTEL_PRICE_CONTINUE_FR,
   resolveCarrierBooking,
   resolveNextStayAction,
   restaurantStepProgress,
@@ -511,13 +514,15 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
 
         {step === 'confirm' && reval ? (
           <View style={styles.card}>
-            <Text style={styles.title}>Nouveau prix</Text>
+            <Text style={styles.title}>{HOTEL_PRICE_CONFIRM_TITLE_FR}</Text>
             <Text style={styles.body}>
-              Le tarif vient de bouger : {Math.round(reval.displayed_price_pp || 0)} € →{' '}
-              {Math.round(reval.revalidated_price_pp || 0)} € par personne.
+              {hotelPricePpJumpBodyFr(
+                Number(reval.displayed_price_pp || 0),
+                Number(reval.revalidated_price_pp || 0),
+              )}
             </Text>
             <Pressable style={styles.btn} onPress={() => setStep('guests')}>
-              <Text style={styles.btnText}>Continuer</Text>
+              <Text style={styles.btnText}>{HOTEL_PRICE_CONTINUE_FR}</Text>
             </Pressable>
           </View>
         ) : null}

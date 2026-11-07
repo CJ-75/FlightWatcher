@@ -7,6 +7,9 @@ import {
   hotelCancelLabel,
   hotelMapsEmbedUrl,
   hotelMapsSearchUrl,
+  hotelPriceJumpBodyFr,
+  hotelPricePerNightFr,
+  HOTEL_PRICE_UPDATED_TITLE_FR,
   resolveCarrierBooking,
   type HotelGalleryPhoto,
   type HotelGuestReview,
@@ -497,27 +500,20 @@ function hotelAdvantages(h: HotelUpsellOption): string[] {
   return out
 }
 
-/** Hotel-only price (never pack with flight). */
-function hotelOnlyPrice(h: HotelUpsellOption): {
+/** Hotel-only price — always / nuit when nights known. */
+function hotelOnlyPrice(
+  h: HotelUpsellOption,
+  opts: { nights?: number | null; adults?: number },
+): {
   amount: number
   label: string
 } | null {
-  if (h.hotel_pp != null && !Number.isNaN(Number(h.hotel_pp))) {
-    return {
-      amount: Math.round(Number(h.hotel_pp)),
-      label: '/ pers. · hôtel',
-    }
-  }
-  if (
-    h.public_hotel_price != null &&
-    !Number.isNaN(Number(h.public_hotel_price))
-  ) {
-    return {
-      amount: Math.round(Number(h.public_hotel_price)),
-      label: 'hôtel · séjour',
-    }
-  }
-  return null
+  return hotelPricePerNightFr({
+    publicHotelPrice: h.public_hotel_price,
+    hotelPp: h.hotel_pp,
+    adults: opts.adults,
+    nights: opts.nights,
+  })
 }
 
 function formatShortDate(dateStr?: string | null) {
@@ -1244,7 +1240,7 @@ export function MyTripHotelCompose({
         jumped &&
         typeof window !== 'undefined' &&
         !window.confirm(
-          `Tarif LiteAPI mis à jour : ${Math.round(publicTotal)} € au lieu de ${Math.round(listedTotal)} €. Continuer ?`,
+          `${HOTEL_PRICE_UPDATED_TITLE_FR}\n\n${hotelPriceJumpBodyFr(publicTotal, listedTotal)}`,
         )
       ) {
         setSaving(false)
@@ -1314,7 +1310,6 @@ export function MyTripHotelCompose({
 
   const advantages = selected ? hotelAdvantages(selected) : []
   const rLabel = selected ? ratingLabel(selected.rating) : null
-  const selectedPrice = selected ? hotelOnlyPrice(selected) : null
   const nights = useMemo(() => {
     if (!checkin || !checkout) return null
     try {
@@ -1326,6 +1321,9 @@ export function MyTripHotelCompose({
       return null
     }
   }, [checkin, checkout])
+  const selectedPrice = selected
+    ? hotelOnlyPrice(selected, { nights, adults })
+    : null
   const offerChips = useMemo(
     () => (selected ? stayOfferChips(selected, facilities) : []),
     [selected, facilities],
@@ -1499,7 +1497,7 @@ export function MyTripHotelCompose({
                   {selectedPrice.amount}€
                 </p>
                 <p className="text-[10px] font-semibold text-slate-400 mt-1">
-                  / pers. hôtel
+                  {selectedPrice.label}
                 </p>
               </div>
             ) : null}
@@ -1842,7 +1840,10 @@ export function MyTripHotelCompose({
                   ? `${nights} nuit${nights > 1 ? 's' : ''}`
                   : null,
                 selectedPrice
-                  ? `hôtel ${selectedPrice.amount} €/pers.`
+                  ? `hôtel ${selectedPrice.amount} € ${selectedPrice.label}`.replace(
+                      '  ',
+                      ' ',
+                    )
                   : null,
               ]
                 .filter(Boolean)
@@ -1858,7 +1859,7 @@ export function MyTripHotelCompose({
             {saving
               ? '…'
               : selectedPrice
-                ? `Réserver · ${selectedPrice.amount} € / pers.`
+                ? `Réserver · ${selectedPrice.amount} € ${selectedPrice.label}`
                 : 'Réserver cet hôtel'}
           </button>
           <PaymentCardMarks className="mt-2.5" />
@@ -2071,7 +2072,7 @@ export function MyTripHotelCompose({
                 const dist = formatDistance(h.distance_m)
                 const station = formatStationDistance(h)
                 const board = boardLabelFr(h.board)
-                const price = hotelOnlyPrice(h)
+                const price = hotelOnlyPrice(h, { nights, adults })
                 const photo = h.photo || h.thumbnail
 
                 return (

@@ -12,6 +12,12 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  hotelPriceJumpBodyFr,
+  hotelPricePerNightFr,
+  HOTEL_PRICE_CANCEL_FR,
+  HOTEL_PRICE_CHECKING_FR,
+  HOTEL_PRICE_CONTINUE_FR,
+  HOTEL_PRICE_UPDATED_TITLE_FR,
   resolveCarrierBooking,
   type HotelUpsellOption,
   type MyTripDraft,
@@ -611,11 +617,18 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       if (jumped) {
         const accept = await new Promise<boolean>((resolve) => {
           Alert.alert(
-            'Tarif mis à jour',
-            `LiteAPI : ${Math.round(publicTotal!)} € au lieu de ${Math.round(listedTotal)} € pour le séjour. Continuer ?`,
+            HOTEL_PRICE_UPDATED_TITLE_FR,
+            hotelPriceJumpBodyFr(publicTotal!, listedTotal),
             [
-              { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
-              { text: 'Continuer', onPress: () => resolve(true) },
+              {
+                text: HOTEL_PRICE_CANCEL_FR,
+                style: 'cancel',
+                onPress: () => resolve(false),
+              },
+              {
+                text: HOTEL_PRICE_CONTINUE_FR,
+                onPress: () => resolve(true),
+              },
             ],
           )
         })
@@ -772,7 +785,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
           {revalidating ? (
             <View style={styles.revalBar}>
               <ActivityIndicator color={colors.primary} size="small" />
-              <Text style={styles.revalText}>On actualise les tarifs…</Text>
+              <Text style={styles.revalText}>{HOTEL_PRICE_CHECKING_FR}</Text>
             </View>
           ) : null}
 
@@ -825,8 +838,23 @@ export function HotelComposeScreen({ route, navigation }: Props) {
                     </Text>
                   </View>
                   <Text style={styles.price}>
-                    {item.hotel_pp != null ? `${Math.round(Number(item.hotel_pp))} €` : '—'}
-                    <Text style={styles.priceUnit}> /pers</Text>
+                    {(() => {
+                      const pn = hotelPricePerNightFr({
+                        publicHotelPrice: item.public_hotel_price,
+                        hotelPp: item.hotel_pp,
+                        adults,
+                        checkin,
+                        checkout,
+                      })
+                      return pn ? (
+                        <>
+                          {pn.amount} €
+                          <Text style={styles.priceUnit}> {pn.label}</Text>
+                        </>
+                      ) : (
+                        '—'
+                      )
+                    })()}
                   </Text>
                 </Pressable>
               )

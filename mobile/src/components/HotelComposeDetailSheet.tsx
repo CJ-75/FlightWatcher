@@ -15,6 +15,7 @@ import {
   boardLabelFr,
   hotelCancelLabel,
   hotelMapsSearchUrl,
+  hotelPricePerNightFr,
   preferFrenchReviews,
   reviewExcerpt,
   reviewMetaLine,
@@ -338,12 +339,15 @@ export function HotelComposeDetailSheet({
   const rLabel = hotel ? ratingLabel(hotel.rating) : null
   const outLabel = formatShortDate(checkin)
   const retLabel = formatShortDate(checkout)
-  const price =
-    hotel?.hotel_pp != null
-      ? Math.round(Number(hotel.hotel_pp))
-      : hotel?.public_hotel_price != null
-        ? Math.round(Number(hotel.public_hotel_price))
-        : null
+  const price = hotel
+    ? hotelPricePerNightFr({
+        publicHotelPrice: hotel.public_hotel_price,
+        hotelPp: hotel.hotel_pp,
+        adults,
+        checkin,
+        checkout,
+      })
+    : null
 
   if (!hotel) return null
 
@@ -418,8 +422,8 @@ export function HotelComposeDetailSheet({
               </View>
               {price != null ? (
                 <View style={styles.priceBlock}>
-                  <Text style={styles.price}>{price}€</Text>
-                  <Text style={styles.priceUnit}>/ pers. hôtel</Text>
+                  <Text style={styles.price}>{price.amount}€</Text>
+                  <Text style={styles.priceUnit}>{price.label}</Text>
                 </View>
               ) : null}
             </View>

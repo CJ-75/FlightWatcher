@@ -45,7 +45,7 @@ function loadPaymentScript(): Promise<void> {
     s.onerror = () => {
       window.clearTimeout(timer)
       s.remove()
-      reject(new Error('Impossible de charger le SDK paiement LiteAPI'))
+      reject(new Error('Paiement indisponible pour le moment. Réessaie.'))
     }
     document.body.appendChild(s)
   })
