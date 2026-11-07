@@ -165,6 +165,35 @@ def make_community_deal_key(
     return f"{origin.upper()}-{dest.upper()}-{out_date}-{ret_date}-a{adults}"
 
 
+def _nights_ok(obs: Dict[str, Any]) -> bool:
+    from deals.destinations_seed import LONGHAUL_IATAS
+    from deals.duration_bucket import duration_bucket
+
+    try:
+        nights = int(obs.get("nights") or 0)
+    except (TypeError, ValueError):
+        return False
+    dest = str(obs.get("dest_iata") or obs.get("_dest") or "").upper()
+    return duration_bucket(nights, dest_iata=dest, longhaul_iatas=LONGHAUL_IATAS) is not None
+
+
+def _max_flight_for_obs(obs: Dict[str, Any], cfg: DealsConfig) -> float:
+    import os
+
+    from deals.destinations_seed import LONGHAUL_IATAS
+
+    dest = str(obs.get("dest_iata") or obs.get("_dest") or "").upper()
+    if dest in LONGHAUL_IATAS:
+        try:
+            lh = float(os.getenv("DEALS_MAX_FLIGHT_PP_LONGHAUL", "0") or 0)
+        except (TypeError, ValueError):
+            lh = 0.0
+        if lh > 0:
+            return lh
+        return max(float(cfg.max_flight_pp), 650.0)
+    return float(cfg.max_flight_pp)
+
+
 def eligible_candidate(
     obs: Dict[str, Any],
     baseline: Dict[str, Any],
@@ -177,8 +206,7 @@ def eligible_candidate(
     dtd = days_to_departure(out_date, now=now)
     if dtd is None or dtd < 3 or dtd > 120:
         return False
-    nights = int(obs.get("nights") or 0)
-    if nights < 1 or nights > 9:
+    if not _nights_ok(obs):
         return False
     if not arrival_hour_ok(obs.get("out_arr_local")):
         return False
@@ -203,7 +231,7 @@ def eligible_candidate(
     return is_good_price(
         price,
         baseline,
-        max_flight_pp=cfg.max_flight_pp,
+        max_flight_pp=_max_flight_for_obs(obs, cfg),
         min_discount=cfg.min_discount,
     )
 
@@ -225,8 +253,7 @@ def eligible_candidate_soft(
     dtd = days_to_departure(out_date, now=now)
     if dtd is None or dtd < 3 or dtd > 120:
         return False
-    nights = int(obs.get("nights") or 0)
-    if nights < 1 or nights > 9:
+    if not _nights_ok(obs):
         return False
     if not arrival_hour_ok(obs.get("out_arr_local")):
         return False
@@ -250,11 +277,19 @@ def eligible_candidate_soft(
         return False
     import os
 
+    from deals.destinations_seed import LONGHAUL_IATAS
+
+    dest = str(obs.get("dest_iata") or obs.get("_dest") or "").upper()
     try:
-        soft_max = float(os.getenv("DEALS_SOFT_MAX_FLIGHT_PP", "0") or 0)
+        if dest in LONGHAUL_IATAS:
+            soft_max = float(os.getenv("DEALS_SOFT_MAX_FLIGHT_PP_LONGHAUL", "0") or 0)
+            if soft_max <= 0:
+                soft_max = max(float(cfg.max_flight_pp) * 5.0, 750.0)
+        else:
+            soft_max = float(os.getenv("DEALS_SOFT_MAX_FLIGHT_PP", "0") or 0)
+            if soft_max <= 0:
+                soft_max = max(float(cfg.max_flight_pp) * 1.5, 210.0)
     except (TypeError, ValueError):
-        soft_max = 0.0
-    if soft_max <= 0:
         soft_max = max(float(cfg.max_flight_pp) * 1.5, 210.0)
     if price <= 0 or price > soft_max:
         return False
@@ -418,17 +453,32 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
     except Exception:
         pass
 
-    # Best obs per (origin, city, out, ret) — hard deals first, then soft fill
-    best: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
-    soft_pool: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+    # Best obs per (origin, city, duration_bucket) — organic can beat seed on same bucket
+    from deals.destinations_seed import LONGHAUL_IATAS
+    from deals.duration_bucket import duration_bucket
+
+    best: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    soft_pool: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     for obs in observations:
         origin = str(obs.get("origin_iata") or "").upper()
         city_id = str(obs.get("served_city_id") or "")
         out_d = str(obs.get("out_date") or "")[:10]
         ret_d = str(obs.get("ret_date") or "")[:10]
         dest = str(obs.get("dest_iata") or "").upper()
+        try:
+            nights_n = int(obs.get("nights") or 0)
+        except (TypeError, ValueError):
+            nights_n = 0
+        if nights_n < 1 and out_d and ret_d:
+            try:
+                nights_n = (date.fromisoformat(ret_d) - date.fromisoformat(out_d)).days
+            except ValueError:
+                nights_n = 0
+        bucket = duration_bucket(
+            nights_n, dest_iata=dest, longhaul_iatas=LONGHAUL_IATAS
+        )
         hb = horizon_bucket(out_d, now=now)
-        if not hb or not city_id:
+        if not hb or not city_id or not bucket:
             continue
         bl = _lookup_baseline(
             baselines,
@@ -439,15 +489,29 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         )
         if not bl:
             continue
-        key = (origin, city_id, out_d, ret_d)
+        key = (origin, city_id, bucket)
         if eligible_candidate(obs, bl, cfg=cfg, now=now):
-            cand = {**obs, "_baseline": bl, "_dest": dest, "_soft": False}
+            cand = {
+                **obs,
+                "_baseline": bl,
+                "_dest": dest,
+                "_soft": False,
+                "_bucket": bucket,
+                "nights": nights_n or obs.get("nights"),
+            }
             prev = best.get(key)
             best[key] = cand if prev is None else prefer_observation(prev, cand)
         elif eligible_candidate_soft(
             obs, bl, cfg=cfg, now=now, fresh_tau_h=soft_hours
         ):
-            cand = {**obs, "_baseline": bl, "_dest": dest, "_soft": True}
+            cand = {
+                **obs,
+                "_baseline": bl,
+                "_dest": dest,
+                "_soft": True,
+                "_bucket": bucket,
+                "nights": nights_n or obs.get("nights"),
+            }
             prev = soft_pool.get(key)
             soft_pool[key] = cand if prev is None else prefer_observation(prev, cand)
 
@@ -464,7 +528,9 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 break
 
     scored: List[Dict[str, Any]] = []
-    for (origin, city_id, out_d, ret_d), obs in best.items():
+    for (origin, city_id, _bucket), obs in best.items():
+        out_d = str(obs.get("out_date") or "")[:10]
+        ret_d = str(obs.get("ret_date") or "")[:10]
         bl = obs["_baseline"]
         price = float(obs.get("price_pp_eur") or 0)
         obs_dt = _parse_dt(obs.get("observed_at")) or now
@@ -604,7 +670,36 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
         dest = obs.get("_dest") or obs.get("dest_iata")
         source = obs.get("source") or "organic_search"
         source_mix = "seed" if source == "seed_batch" else "organic"
+        beat_catalog = bool(obs.get("_beat_catalog"))
+        # Organic wall offers: shorter TTL (6–24 h) so seed can reclaim if stale
+        import os as _os
+
+        try:
+            organic_ttl_h = float(_os.getenv("DEALS_ORGANIC_TTL_H", "12") or 12)
+        except (TypeError, ValueError):
+            organic_ttl_h = 12.0
+        organic_ttl_h = max(6.0, min(24.0, organic_ttl_h))
+        if source_mix == "organic":
+            expires = now + timedelta(hours=organic_ttl_h)
+        else:
+            expires = now + timedelta(hours=tau * 2)
         deal_key = make_community_deal_key(origin, str(dest), out_d, ret_d)
+        flight_snap = {
+            "price_pp_eur": price,
+            "provider": obs.get("provider"),
+            "carrier": obs.get("carrier"),
+            "booking_url": obs.get("booking_url"),
+            "direct": obs.get("direct", True),
+            "out_dep_local": obs.get("out_dep_local"),
+            "out_arr_local": obs.get("out_arr_local"),
+            "ret_dep_local": obs.get("ret_dep_local"),
+            "arrival_local": obs.get("out_arr_local"),
+            "return_departure_local": obs.get("ret_dep_local"),
+            "city_name": city_name,
+            "verification_level": vlevel,
+            "beat_catalog": beat_catalog,
+            "obs_source": source,
+        }
         scored.append(
             {
                 "deal_key": deal_key,
@@ -616,20 +711,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 "nights": int(obs.get("nights") or 1),
                 "trip_type": obs.get("trip_type") or "WEEKEND",
                 "verification_level": vlevel,
-                "flight_snapshot": {
-                    "price_pp_eur": price,
-                    "provider": obs.get("provider"),
-                    "carrier": obs.get("carrier"),
-                    "booking_url": obs.get("booking_url"),
-                    "direct": obs.get("direct", True),
-                    "out_dep_local": obs.get("out_dep_local"),
-                    "out_arr_local": obs.get("out_arr_local"),
-                    "ret_dep_local": obs.get("ret_dep_local"),
-                    "arrival_local": obs.get("out_arr_local"),
-                    "return_departure_local": obs.get("ret_dep_local"),
-                    "city_name": city_name,
-                    "verification_level": vlevel,
-                },
+                "flight_snapshot": flight_snap,
                 "baseline_snapshot": {
                     "median": bl.get("median"),
                     "p20": bl.get("p20"),
@@ -637,6 +719,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                     "baseline_kind": "estimated" if soft else bl.get("baseline_kind"),
                     "discount_pct": disc,
                     "soft_fill": soft,
+                    "beat_catalog": beat_catalog,
                 },
                 "hotel_top3": hotel_payload,
                 "deal_score": round(score, 4),
@@ -644,7 +727,7 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
                 "source_mix": source_mix,
                 "status": "active",
                 "last_verified_at": now.isoformat(),
-                "expires_at": (now + timedelta(hours=tau * 2)).isoformat(),
+                "expires_at": expires.isoformat(),
                 "country_code": country,
                 "updated_at": now.isoformat(),
             }
@@ -669,12 +752,16 @@ def promote_deals(supabase, *, cfg: Optional[DealsConfig] = None) -> Dict[str, A
             try:
                 existing = (
                     supabase.table("deals_active")
-                    .select("deal_key, first_seen_at")
+                    .select("deal_key, first_seen_at, status, verification_level")
                     .eq("deal_key", row["deal_key"])
                     .limit(1)
                     .execute()
                 )
                 if existing.data:
+                    prev_st = str(existing.data[0].get("status") or "").lower()
+                    # Never overwrite booked / locked / verified wall deals
+                    if prev_st in ("booked", "locked", "verified"):
+                        continue
                     supabase.table("deals_active").update(payload).eq(
                         "deal_key", row["deal_key"]
                     ).execute()

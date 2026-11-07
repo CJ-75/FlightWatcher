@@ -594,6 +594,28 @@ CITY_SLUG_ALIASES: Dict[str, Tuple[str, ...]] = {
     "copenhagen": ("copenhague",),
     "cracovie": ("krakow", "cracow"),
     "krakow": ("cracovie", "cracow"),
+    "glasgow": ("glasgow",),
+    "oslo": ("oslo",),
+    "helsinki": ("helsinki",),
+    "amsterdam": ("amsterdam",),
+    "crete-heraklion": ("heraklion", "iraklio", "crete"),
+    "heraklion": ("crete-heraklion", "iraklio"),
+    "ibiza": ("eivissa", "ibiza"),
+    "madere": ("funchal", "madeira"),
+    "funchal": ("madere", "madeira"),
+    "agadir": ("agadir",),
+    "casablanca": ("casablanca",),
+    "alger": ("algiers", "alger"),
+    "algiers": ("alger",),
+    "le-caire": ("cairo", "le-caire"),
+    "cairo": ("le-caire",),
+    "dubai": ("dubai", "dubay"),
+    "abu-dhabi": ("abu-dhabi", "abou-dabi"),
+    "praia": ("praia", "cape-verde"),
+    "bangkok": ("bangkok", "krung-thep"),
+    "new-york": ("new-york", "nyc", "new-york-city"),
+    "montreal": ("montreal", "montréal"),
+    "tokyo": ("tokyo", "tokio"),
 }
 
 
@@ -654,6 +676,19 @@ FALLBACK_CITY_DESTINATIONS: Dict[str, str] = {
     "stockholm": "907",
     "cracovie": "529",
     "krakow": "529",
+    # High-confidence Viator city IDs (sync_destinations_map fills the rest)
+    "berlin": "488",
+    "vienne": "454",
+    "vienna": "454",
+    "venise": "522",
+    "venice": "522",
+    "le-caire": "557",
+    "cairo": "557",
+    "dubai": "828",
+    "bangkok": "366",
+    "new-york": "687",
+    "montreal": "632",
+    "tokyo": "373",
 }
 
 

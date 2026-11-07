@@ -236,6 +236,23 @@ def row_to_travel_deal(
     else:
         badge = soften_badge_if_stale(raw_badge, baselines_fresh=baselines_fresh)
         badge = badge_for_deal_level(badge, verification_level=LEVEL_LIVE)
+    beat = bool(
+        (baseline.get("beat_catalog") if isinstance(baseline, dict) else False)
+        or (flight.get("beat_catalog") if isinstance(flight, dict) else False)
+    )
+    if beat or row.get("source_mix") == "organic":
+        badge = {
+            **(badge or {}),
+            "label": "Mieux que le catalogue" if beat else "Prix frais",
+            "short_label": "Prix frais",
+            "discount_pct": (badge or {}).get("discount_pct"),
+            "scope": (badge or {}).get("scope") or "flight",
+            "tooltip": (
+                "Prix issu d’une recherche récente, meilleur que le vol catalogue."
+                if beat
+                else "Prix issu d’une recherche utilisateur récente."
+            ),
+        }
 
     import os
 
@@ -382,6 +399,14 @@ def row_to_travel_deal(
             "verified_label": verified if vlevel != LEVEL_CACHED else None,
             "verification_level": vlevel,
             "price_pax_note": price_pax_note,
+            "beat_catalog": bool(
+                (baseline.get("beat_catalog") if isinstance(baseline, dict) else False)
+                or (flight.get("beat_catalog") if isinstance(flight, dict) else False)
+            ),
+            "fresh_price": bool(
+                row.get("source_mix") == "organic"
+                or (flight.get("beat_catalog") if isinstance(flight, dict) else False)
+            ),
         },
         "verification_level": vlevel,
         "deal_score": row.get("deal_score"),
@@ -597,9 +622,10 @@ def _deal_matches_duration(
             return True
         return _is_weekend_outbound(out, wk if isinstance(wk, str) else None)
     if tab == "short":
-        return 4 <= nights <= 5
+        return 4 <= nights <= 6
     if tab == "week":
-        return 6 <= nights <= 9
+        # Includes long-haul 7–15 night stays
+        return 6 <= nights <= 15
     return True
 
 
@@ -871,7 +897,7 @@ def _enrich_rows_to_deals(
 
     # Re-rank / drop hotels over 2.5× flight_pp (CPU only — no I/O)
     from deals.hotel_budget import filter_hotels_for_flight
-    from deals.pack_budget import pack_budget_pp
+    from deals.pack_budget import pack_budget_pp, pack_budget_pp_for_dest
 
     try:
         pack_cap = float(pack_budget_pp() or 0)
@@ -961,12 +987,13 @@ def _enrich_rows_to_deals(
             pass
 
         d = row_to_travel_deal(enriched, adults=adults_n, baselines_fresh=fresh)
-        # Client max_pp OR product pack budget (DEALS_BUDGET_PACK_PP, défaut 350 €)
-        effective_max = float(pack_cap or 0)
+        # Client max_pp OR product pack budget (higher for long-haul)
+        dest_cap = pack_budget_pp_for_dest(dest_iata) or pack_cap
+        effective_max = float(dest_cap or 0)
         if max_pp is not None:
             effective_max = (
-                min(float(max_pp), float(pack_cap))
-                if pack_cap > 0
+                min(float(max_pp), float(dest_cap))
+                if dest_cap > 0
                 else float(max_pp)
             )
         try:
@@ -1593,6 +1620,23 @@ def list_community_deals(
     except Exception:
         pass
     sliced = [dict(d) for d in snap[:target]]
+    # Cold-start: if user picked an origin with 0 matched deals, lean TP fill in background
+    if origin_set:
+        matched_n = sum(
+            1
+            for d in sliced
+            if (d.get("flags") or {}).get("match_origin", True)
+        )
+        if matched_n == 0:
+            try:
+                from deals.origin_ondemand import maybe_schedule_if_empty
+
+                primary = next(iter(origin_set))
+                maybe_schedule_if_empty(
+                    supabase, origin=primary, matched_count=0
+                )
+            except Exception as e:
+                log.debug("origin_ondemand skip: %s", e)
     elapsed_ms = (time.monotonic() - t0) * 1000
     log.info(
         "list_community_deals origin=%s dest=%s n=%s ms=%.0f",

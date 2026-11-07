@@ -445,7 +445,7 @@ export function DealsTab() {
     return list
   }, [deals, queryOrigin, queryDestination, hasWallFilter])
 
-  const gridDeals = useMemo(() => {
+  const matchedGrid = useMemo(() => {
     const sorted =
       sort === 'recommended'
         ? matchedDeals
@@ -453,9 +453,12 @@ export function DealsTab() {
             const dir = sort === 'price_asc' ? 1 : -1
             return dir * ((a.price_per_person || 0) - (b.price_per_person || 0))
           })
-    // One hotel title per page — same hotel / different flight → keep best first
     return dedupeDealsByHotelTitle(sorted)
   }, [sort, matchedDeals])
+
+  /** Soft-fallback: when no deal from selected origin, surface other airports as primary. */
+  const originSoftFallback =
+    Boolean(queryOrigin) && matchedGrid.length === 0 && deals.length > 0
 
   /** Always separate — never mix into price sort (credibility). */
   const fillerDeals = useMemo(() => {
@@ -466,9 +469,12 @@ export function DealsTab() {
       return false
     })
     const occupied = new Set<string>()
-    dedupeDealsByHotelTitle(gridDeals, occupied)
+    dedupeDealsByHotelTitle(matchedGrid, occupied)
     return dedupeDealsByHotelTitle(raw, occupied)
-  }, [deals, queryOrigin, queryDestination, hasWallFilter, gridDeals])
+  }, [deals, queryOrigin, queryDestination, hasWallFilter, matchedGrid])
+
+  const gridDeals = originSoftFallback ? fillerDeals : matchedGrid
+  const secondaryFillers = originSoftFallback ? [] : fillerDeals
 
   const durationTabs: { id: DurationTab; label: string }[] = [
     { id: 'weekend', label: t('deals.durationWeekend') },
@@ -690,7 +696,7 @@ export function DealsTab() {
             {t('deals.retry')}
           </button>
         </div>
-      ) : deals.length === 0 || (gridDeals.length === 0 && fillerDeals.length === 0) ? (
+      ) : deals.length === 0 || (gridDeals.length === 0 && secondaryFillers.length === 0) ? (
         <div className="app-card p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.emptyTitle')}</p>
           <p className="text-sm text-muted mb-4">
@@ -712,6 +718,24 @@ export function DealsTab() {
         </div>
       ) : (
         <div className="space-y-8">
+          {originSoftFallback ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-bold text-amber-950">
+                Pas encore d’offre depuis {originCityLabel || origin}
+              </p>
+              <p className="text-xs text-amber-900/80 mt-1">
+                Voici les meilleurs séjours depuis d’autres aéroports. Tu peux aussi
+                lancer une recherche live depuis ton départ.
+              </p>
+              <button
+                type="button"
+                onClick={() => goSearch()}
+                className="mt-2 text-xs font-bold text-[#FF385C] underline-offset-2 hover:underline"
+              >
+                Chercher des vols depuis {originCityLabel || origin}
+              </button>
+            </div>
+          ) : null}
           <motion.div
             layout
             className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
@@ -739,7 +763,7 @@ export function DealsTab() {
               return [card]
             })}
           </motion.div>
-          {fillerDeals.length > 0 ? (
+          {secondaryFillers.length > 0 ? (
             <div>
               <p className="text-sm font-bold text-ink mb-1">
                 {queryDestination && !queryOrigin
@@ -755,7 +779,7 @@ export function DealsTab() {
                 layout
                 className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
               >
-                {fillerDeals.map((deal) => (
+                {secondaryFillers.map((deal) => (
                   <DealCard
                     key={deal.id}
                     deal={deal}

@@ -4,11 +4,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-WindowKind = str  # FRI_SUN | SAT_MON
+WindowKind = str  # FRI_SUN | SAT_MON | LONG_STAY
 
 
-def _iso_week_id(d: date, kind: WindowKind) -> str:
+def _iso_week_id(d: date, kind: WindowKind, *, nights: Optional[int] = None) -> str:
     iso = d.isocalendar()
+    if kind == "LONG_STAY" and nights:
+        return f"{iso.year}-W{iso.week:02d}-LH{int(nights)}"
     return f"{iso.year}-W{iso.week:02d}-{kind}"
 
 
@@ -23,21 +25,51 @@ def saturday_on_or_after(d: date) -> date:
     return d + timedelta(days=delta)
 
 
-def build_window(kind: WindowKind, checkin: date) -> Dict[str, Any]:
+def build_window(
+    kind: WindowKind, checkin: date, *, nights: Optional[int] = None
+) -> Dict[str, Any]:
     if kind == "FRI_SUN":
         checkout = checkin + timedelta(days=2)
     elif kind == "SAT_MON":
         checkout = checkin + timedelta(days=2)
+    elif kind == "LONG_STAY":
+        n = max(7, min(15, int(nights or 10)))
+        checkout = checkin + timedelta(days=n)
     else:
         raise ValueError(f"Unknown window kind: {kind}")
-    nights = (checkout - checkin).days
+    n_nights = (checkout - checkin).days
     return {
-        "id": _iso_week_id(checkin, kind),
+        "id": _iso_week_id(checkin, kind, nights=n_nights if kind == "LONG_STAY" else None),
         "kind": kind,
         "checkin": checkin.isoformat(),
         "checkout": checkout.isoformat(),
-        "nights": nights,
+        "nights": n_nights,
     }
+
+
+def longhaul_windows(
+    n: int = 3,
+    *,
+    today: Optional[date] = None,
+) -> List[Dict[str, Any]]:
+    """7–15 night Sat→… stays for long-haul hotel rates."""
+    today = today or date.today()
+    n = max(1, int(n))
+    configs = [(3, 10), (5, 14), (7, 10), (4, 7), (6, 12)][:n]
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+    for weeks, nights in configs:
+        start = today + timedelta(weeks=weeks)
+        delta = (5 - start.weekday()) % 7  # Saturday
+        sat = start + timedelta(days=delta)
+        if sat < today:
+            sat += timedelta(days=7)
+        w = build_window("LONG_STAY", sat, nights=nights)
+        if w["id"] not in seen:
+            seen.add(w["id"])
+            out.append(w)
+    out.sort(key=lambda w: w["checkin"])
+    return out
 
 
 def canonical_windows(

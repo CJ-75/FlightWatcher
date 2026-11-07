@@ -622,6 +622,29 @@ async def job_seed_scan(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/deals/warm-origin")
+async def warm_origin_ondemand(
+    origin: str = Query(..., min_length=3, max_length=3, description="IATA départ"),
+    sync: bool = Query(False, description="Si true, attend la fin du lean scan"),
+):
+    """
+    Cold-fill Travelpayouts for an empty/non-FR origin (lean ~15–20 dest × 2 fenêtres).
+    Default async; persists observations then promote. UI soft-fallback covers wait.
+    """
+    try:
+        from deals.origin_ondemand import schedule_origin_warm, warm_origin_flights
+
+        sb = _svc()
+        o = origin.strip().upper()
+        if sync:
+            return warm_origin_flights(sb, o, promote=True)
+        return schedule_origin_warm(sb, o, promote=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/deals/jobs/refresh-baselines")
 async def job_refresh_baselines(authorization: Optional[str] = Header(None)):
     """D3: recompute route_price_baselines (30d)."""

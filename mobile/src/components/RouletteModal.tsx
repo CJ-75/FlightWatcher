@@ -43,7 +43,13 @@ export function RouletteModal({
   isFavorite,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const affordable = trips.filter((t) => t.prix_total <= budget)
+  // All-in: do not hard-exclude long-haul / expensive packs when none fit budget
+  const affordable =
+    trips.length === 0
+      ? []
+      : trips.some((t) => t.prix_total <= budget)
+        ? trips.filter((t) => t.prix_total <= Math.max(budget, 1))
+        : trips
   const [selected, setSelected] = useState<EnrichedTripResponse | null>(null)
   const [relances, setRelances] = useState(0)
   const [spinning, setSpinning] = useState(false)

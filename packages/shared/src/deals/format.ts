@@ -301,6 +301,16 @@ export type DealCornerBadgeParts = {
 
 /** Structured corner badge: text first, % when baseline math is ready. */
 export function dealCornerBadgeParts(deal: TravelDeal): DealCornerBadgeParts | null {
+  const flags = deal.flags
+  if (flags?.beat_catalog || flags?.fresh_price) {
+    const text = flags.beat_catalog ? 'Mieux que le catalogue' : 'Prix frais'
+    return {
+      discountPct: null,
+      text,
+      fullText: text,
+      kind: 'occasion',
+    }
+  }
   const meta = deal.badge_meta
   const discRaw = meta?.discount_pct
   let pct: number | null = null

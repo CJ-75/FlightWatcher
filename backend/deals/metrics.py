@@ -286,6 +286,13 @@ def _ryanair_ops_snapshot() -> Dict[str, Any]:
         from providers.ryanair_budget import status_snapshot
 
         out["budget"] = status_snapshot()
+        bud = out["budget"] if isinstance(out["budget"], dict) else {}
+        calls = float(bud.get("calls_1h") or bud.get("used") or 0)
+        n403 = float(bud.get("status_403") or bud.get("forbidden_1h") or 0)
+        if calls > 0:
+            out["share_403_1h"] = round(n403 / calls, 4)
+        else:
+            out["share_403_1h"] = 0.0 if n403 <= 0 else 1.0
     except Exception as e:
         out["budget"] = {"error": str(e)}
     try:
@@ -342,12 +349,16 @@ def _baseline_guard_stats(supabase: Any, cfg: Any) -> Dict[str, Any]:
 
 
 def _community_stats(supabase: Any) -> Dict[str, Any]:
-    """D7: organic_share + active deals coverage + Lot F outbound clicks."""
+    """D7: organic_share + empty-by-origin + hotel misses + Lot F outbound clicks."""
     out: Dict[str, Any] = {
         "active": 0,
         "organic": 0,
         "seed": 0,
         "organic_share": None,
+        "empty_origins": {},
+        "avg_wall_price_age_h": None,
+        "hotel_pool_misses": None,
+        "hotel_rates_misses": None,
         "outbound_clicks_7d": 0,
         "outbound_by_partner": {},
         "affiliate_note": (
@@ -358,7 +369,7 @@ def _community_stats(supabase: Any) -> Dict[str, Any]:
     try:
         res = (
             supabase.table("deals_active")
-            .select("source_mix")
+            .select("source_mix,origin_iata,last_verified_at,hotel_top3")
             .eq("status", "active")
             .limit(5000)
             .execute()
@@ -371,6 +382,63 @@ def _community_stats(supabase: Any) -> Dict[str, Any]:
         out["seed"] = seed
         if rows:
             out["organic_share"] = round(organic / len(rows), 3)
+        by_origin: Dict[str, int] = {}
+        ages: List[float] = []
+        hotel_miss = 0
+        now = datetime.now(timezone.utc)
+        for r in rows:
+            oi = str(r.get("origin_iata") or "").upper()
+            if oi:
+                by_origin[oi] = by_origin.get(oi, 0) + 1
+            hotels = r.get("hotel_top3") or []
+            if not hotels:
+                hotel_miss += 1
+            lv = r.get("last_verified_at")
+            if lv:
+                try:
+                    dt = datetime.fromisoformat(str(lv).replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    ages.append((now - dt).total_seconds() / 3600.0)
+                except ValueError:
+                    pass
+        out["deals_by_origin"] = by_origin
+        # Origins configured but with 0 active deals
+        try:
+            import os
+
+            configured = [
+                x.strip().upper()
+                for x in (os.getenv("DEALS_ORIGINS") or "").split(",")
+                if x.strip()
+            ]
+            out["empty_origins"] = {
+                o: 0 for o in configured if by_origin.get(o, 0) == 0
+            }
+        except Exception:
+            pass
+        if ages:
+            out["avg_wall_price_age_h"] = round(sum(ages) / len(ages), 2)
+        out["hotel_rates_misses"] = hotel_miss
+    except Exception:
+        pass
+    try:
+        pool = (
+            supabase.table("deal_destinations")
+            .select("slug,active")
+            .eq("active", True)
+            .limit(500)
+            .execute()
+        )
+        dest_n = len(pool.data or [])
+        pools = (
+            supabase.table("hotel_pool")
+            .select("destination_id")
+            .limit(5000)
+            .execute()
+        )
+        with_pool = len({str(r.get("destination_id")) for r in (pools.data or [])})
+        out["hotel_pool_misses"] = max(0, dest_n - with_pool)
     except Exception:
         pass
     try:

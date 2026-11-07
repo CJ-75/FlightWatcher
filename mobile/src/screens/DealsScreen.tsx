@@ -295,7 +295,7 @@ export function DealsScreen() {
     }
     return list
   }, [deals, queryOrigin, hasWallFilter])
-  const gridDeals = useMemo(() => {
+  const matchedGrid = useMemo(() => {
     const sorted =
       sort === 'recommended'
         ? matchedDeals
@@ -312,9 +312,14 @@ export function DealsScreen() {
       return false
     })
     const occupied = new Set<string>()
-    dedupeDealsByHotelTitle(gridDeals, occupied)
+    dedupeDealsByHotelTitle(matchedGrid, occupied)
     return dedupeDealsByHotelTitle(raw, occupied)
-  }, [deals, queryOrigin, hasWallFilter, gridDeals])
+  }, [deals, queryOrigin, hasWallFilter, matchedGrid])
+
+  const originSoftFallback =
+    Boolean(queryOrigin) && matchedGrid.length === 0 && deals.length > 0
+  const gridDeals = originSoftFallback ? fillerDeals : matchedGrid
+  const secondaryFillers = originSoftFallback ? [] : fillerDeals
 
   const showSkeleton =
     (loading || !originReady) && deals.length === 0 && !error && !refreshing
@@ -324,13 +329,18 @@ export function DealsScreen() {
         kind: 'skeleton' as const,
         id: `sk-${i}`,
       }))
-    : fillerDeals.length > 0
+    : originSoftFallback
       ? [
-          ...gridDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
           { kind: 'filler_header' as const },
-          ...fillerDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
+          ...gridDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
         ]
-      : gridDeals.map((d) => ({ kind: 'deal' as const, deal: d }))
+      : secondaryFillers.length > 0
+        ? [
+            ...gridDeals.map((d) => ({ kind: 'deal' as const, deal: d })),
+            { kind: 'filler_header' as const },
+            ...secondaryFillers.map((d) => ({ kind: 'deal' as const, deal: d })),
+          ]
+        : gridDeals.map((d) => ({ kind: 'deal' as const, deal: d }))
 
   if (!viewUser) {
     const t = (key: string) => translate('fr', key as never)
@@ -647,10 +657,30 @@ export function DealsScreen() {
             if (item.kind === 'filler_header') {
               return (
                 <View style={styles.fillerHeader}>
-                  <Text style={styles.fillerTitle}>Depuis d’autres aéroports</Text>
-                  <Text style={styles.fillerSub}>
-                    Autres départs pour compléter ta sélection
+                  <Text style={styles.fillerTitle}>
+                    {originSoftFallback
+                      ? `Pas encore d’offre depuis ${originCityLabel || origin}`
+                      : 'Depuis d’autres aéroports'}
                   </Text>
+                  <Text style={styles.fillerSub}>
+                    {originSoftFallback
+                      ? 'Meilleurs séjours depuis d’autres aéroports — lance une recherche pour ton départ'
+                      : 'Autres départs pour compléter ta sélection'}
+                  </Text>
+                  {originSoftFallback ? (
+                    <Pressable
+                      onPress={() =>
+                        (navigation as { navigate: (a: string) => void }).navigate(
+                          'Search',
+                        )
+                      }
+                      style={styles.retryBtn}
+                    >
+                      <Text style={styles.retryText}>
+                        Chercher depuis {originCityLabel || origin}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               )
             }

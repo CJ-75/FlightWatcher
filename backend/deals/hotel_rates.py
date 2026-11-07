@@ -449,7 +449,14 @@ def refresh_hotel_rates(
 
     try:
         windows = canonical_windows(cfg.weekends_ahead, kinds=cfg.window_kinds)
-        upsert_windows(supabase, windows)
+        from deals.windows import longhaul_windows
+
+        try:
+            lh_n = int(__import__("os").getenv("DEALS_LONGHAUL_RATE_WINDOWS", "3") or 3)
+        except (TypeError, ValueError):
+            lh_n = 3
+        lh_windows = longhaul_windows(max(1, lh_n))
+        upsert_windows(supabase, list(windows) + list(lh_windows))
 
         dest_q = (
             supabase.table("deal_destinations")
@@ -465,9 +472,29 @@ def refresh_hotel_rates(
                 d for d in destinations if (d.get("slug") or "").lower() in want
             ]
 
+        longhaul_slugs: set = set()
+        longhaul_iatas: set = set()
+        try:
+            from deals.destinations_seed import DESTINATIONS_SEED, LONGHAUL_IATAS
+
+            longhaul_iatas = set(LONGHAUL_IATAS)
+            longhaul_slugs = {
+                str(d.get("slug") or "").lower()
+                for d in DESTINATIONS_SEED
+                if str(d.get("iata_arrival") or "").upper() in longhaul_iatas
+            }
+        except Exception:
+            pass
+
         combos: List[Tuple[Dict[str, Any], Dict[str, Any], int]] = []
         for dest in destinations:
-            for w in windows:
+            slug = str(dest.get("slug") or "").lower()
+            iata = str(
+                dest.get("iata_arrival") or dest.get("primary_iata") or ""
+            ).upper()
+            use_lh = slug in longhaul_slugs or iata in longhaul_iatas
+            dest_windows = lh_windows if use_lh else windows
+            for w in dest_windows:
                 for adults in cfg.occupancies:
                     combos.append((dest, w, int(adults)))
 

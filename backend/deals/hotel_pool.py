@@ -504,7 +504,34 @@ def bootstrap_hotel_pools(
 
         excluded, reception = _load_ref_maps(client)
         results = []
-        for slug in target_slugs:
+        import os
+        import time as _time
+
+        try:
+            pause_s = float(os.getenv("HOTEL_POOL_BOOTSTRAP_PAUSE_S", "3") or 3)
+        except (TypeError, ValueError):
+            pause_s = 3.0
+        pause_s = max(0.0, pause_s)
+
+        # Prefer wave order (eu_gap → maghreb → gulf → longhaul) then remaining.
+        try:
+            from deals.destinations_seed import DESTINATIONS_SEED, POOL_BOOTSTRAP_WAVES
+
+            wave_of = {
+                str(d.get("slug") or ""): str(d.get("wave") or "")
+                for d in DESTINATIONS_SEED
+            }
+            wave_rank = {w: i for i, w in enumerate(POOL_BOOTSTRAP_WAVES)}
+            target_slugs = sorted(
+                target_slugs,
+                key=lambda s: (wave_rank.get(wave_of.get(s, ""), 99), s),
+            )
+        except Exception:
+            pass
+
+        for idx, slug in enumerate(target_slugs):
+            if idx > 0 and pause_s > 0:
+                _time.sleep(pause_s)
             dest = by_slug.get(slug)
             if not dest:
                 # merge seed coords if select missed fields

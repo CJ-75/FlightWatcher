@@ -24,6 +24,34 @@ def pack_budget_pp(cfg: Optional[DealsConfig] = None) -> float:
         return 350.0
 
 
+def pack_budget_pp_for_dest(
+    dest_iata: Optional[str],
+    *,
+    cfg: Optional[DealsConfig] = None,
+) -> float:
+    """Higher pack cap for long-haul so BKK/JFK packs aren't expired at 350 €."""
+    import os
+
+    base = pack_budget_pp(cfg)
+    code = (dest_iata or "").strip().upper()
+    if not code:
+        return base
+    try:
+        from deals.destinations_seed import LONGHAUL_IATAS
+
+        if code not in LONGHAUL_IATAS:
+            return base
+    except Exception:
+        return base
+    try:
+        lh = float(os.getenv("DEALS_BUDGET_PACK_PP_LONGHAUL", "0") or 0)
+    except (TypeError, ValueError):
+        lh = 0.0
+    if lh <= 0:
+        lh = max(base, 1200.0)
+    return lh
+
+
 def flight_pp_of_row(row: Dict[str, Any]) -> float:
     flight = row.get("flight_snapshot") or {}
     try:
@@ -57,8 +85,14 @@ def is_over_pack_budget(
     *,
     cfg: Optional[DealsConfig] = None,
     cap: Optional[float] = None,
+    dest_iata: Optional[str] = None,
 ) -> bool:
-    limit = float(cap) if cap is not None else pack_budget_pp(cfg)
+    if cap is not None:
+        limit = float(cap)
+    elif dest_iata:
+        limit = pack_budget_pp_for_dest(dest_iata, cfg=cfg)
+    else:
+        limit = pack_budget_pp(cfg)
     if limit <= 0 or pack_pp is None:
         return False
     try:
@@ -104,10 +138,12 @@ def expire_over_budget_deals(
     samples: list = []
 
     for row in rows:
+        dest = str(row.get("dest_iata") or "").upper()
+        row_cap = pack_budget_pp_for_dest(dest, cfg=cfg)
         pack = estimate_pack_pp(row, adults=adults)
         fpp = flight_pp_of_row(row)
-        over = is_over_pack_budget(pack, cap=cap) or (
-            fpp > 0 and is_over_pack_budget(fpp, cap=cap)
+        over = is_over_pack_budget(pack, cap=row_cap) or (
+            fpp > 0 and is_over_pack_budget(fpp, cap=row_cap)
         )
         if not over:
             kept += 1

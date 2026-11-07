@@ -43,7 +43,14 @@ export function RouletteMode({
   const started = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const affordableTrips = trips.filter((t) => t.prix_total <= budget);
+  // All-in: include every trip (long-haul packs too). Budget is a soft preference
+  // for spin weighting, not a hard exclude.
+  const affordableTrips =
+    trips.length === 0
+      ? []
+      : trips.some((t) => t.prix_total <= budget)
+        ? trips.filter((t) => t.prix_total <= Math.max(budget, 1))
+        : trips;
 
   const spin = () => {
     if (relances >= maxRelances || isSpinning || affordableTrips.length === 0) return;

@@ -33,17 +33,75 @@ def verification_level_for_provider(provider: Optional[str]) -> str:
     return LEVEL_LIVE
 
 
+def _obs_price(obs: Dict[str, Any]) -> float:
+    try:
+        return float(obs.get("price_pp_eur") or 9999)
+    except (TypeError, ValueError):
+        return 9999.0
+
+
+def _is_organic(obs: Dict[str, Any]) -> bool:
+    src = str(obs.get("source") or "").strip().lower()
+    return src in ("organic_search", "user_search", "organic", "search")
+
+
+def _is_seed(obs: Dict[str, Any]) -> bool:
+    src = str(obs.get("source") or "").strip().lower()
+    return src in ("seed_batch", "seed", "seed_scan")
+
+
+def organic_beats_seed(
+    organic: Dict[str, Any],
+    seed: Dict[str, Any],
+    *,
+    min_save_eur: float = 8.0,
+    min_save_pct: float = 0.05,
+) -> bool:
+    """
+    User search beats catalog when clearly cheaper (avoid ±2 € yo-yo).
+    Threshold: −min_save_eur OR −min_save_pct vs seed price.
+    """
+    import os
+
+    try:
+        min_eur = float(os.getenv("DEALS_ORGANIC_BEAT_EUR", str(min_save_eur)) or min_save_eur)
+    except (TypeError, ValueError):
+        min_eur = min_save_eur
+    try:
+        min_pct = float(os.getenv("DEALS_ORGANIC_BEAT_PCT", str(min_save_pct)) or min_save_pct)
+    except (TypeError, ValueError):
+        min_pct = min_save_pct
+    po = _obs_price(organic)
+    ps = _obs_price(seed)
+    if po <= 0 or ps <= 0 or po >= ps:
+        return False
+    save = ps - po
+    return save >= min_eur or (save / ps) >= min_pct
+
+
 def prefer_observation(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-    """Prefer live over cached; else cheaper."""
+    """
+    Prefer organic over seed when clearly cheaper; else live over cached; else cheaper.
+    Never demote a verified/booked flag if present on either side.
+    """
+    for locked in (a, b):
+        st = str(locked.get("status") or locked.get("_deal_status") or "").lower()
+        if st in ("booked", "verified", "locked"):
+            return locked
+
+    a_org, b_org = _is_organic(a), _is_organic(b)
+    a_seed, b_seed = _is_seed(a), _is_seed(b)
+    if a_org and b_seed and organic_beats_seed(a, b):
+        return {**a, "_beat_catalog": True}
+    if b_org and a_seed and organic_beats_seed(b, a):
+        return {**b, "_beat_catalog": True}
+    # Organic without clear win: keep seed (stable wall) unless organic is live+cheaper tiny? no.
+
     la = verification_level_for_provider(a.get("provider"))
     lb = verification_level_for_provider(b.get("provider"))
     if la != lb:
         return a if la == LEVEL_LIVE else b
-    try:
-        pa = float(a.get("price_pp_eur") or 9999)
-        pb = float(b.get("price_pp_eur") or 9999)
-    except (TypeError, ValueError):
-        return a
+    pa, pb = _obs_price(a), _obs_price(b)
     return a if pa <= pb else b
 
 

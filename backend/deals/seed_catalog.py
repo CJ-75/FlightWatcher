@@ -60,7 +60,7 @@ def ordered_seed_origins(cfg: DealsConfig) -> List[str]:
 
 def date_pairs_from_sets(raw: Optional[str] = None) -> List[Tuple[str, str]]:
     """
-    SEED_DATE_SETS tokens e.g. WEEKEND3,SHORT1,WEEK1
+    SEED_DATE_SETS tokens e.g. WEEKEND3,SHORT1,WEEK1,LONGHAUL3
     Default Lot E: 3 weekends + 1 short midweek.
     """
     import os
@@ -71,7 +71,10 @@ def date_pairs_from_sets(raw: Optional[str] = None) -> List[Tuple[str, str]]:
         t = token.strip().upper()
         if not t:
             continue
-        if t.startswith("WEEKEND"):
+        if t.startswith("LONGHAUL"):
+            n = int("".join(c for c in t[8:] if c.isdigit()) or "3")
+            pairs.extend(_longhaul_stays(max(1, n)))
+        elif t.startswith("WEEKEND"):
             n = int("".join(c for c in t[7:] if c.isdigit()) or "3")
             pairs.extend(_weekend_dates(max(1, n)))
         elif t.startswith("SHORT"):
@@ -88,6 +91,19 @@ def date_pairs_from_sets(raw: Optional[str] = None) -> List[Tuple[str, str]]:
             seen.add(p)
             uniq.append(p)
     return uniq or _weekend_dates(3)
+
+
+def date_pairs_for_destination(dest_iata: str) -> List[Tuple[str, str]]:
+    """Long-haul cities use 7–15 night windows; others use SEED_DATE_SETS."""
+    import os
+
+    from deals.destinations_seed import LONGHAUL_IATAS
+
+    code = (dest_iata or "").strip().upper()
+    if code in LONGHAUL_IATAS:
+        raw = (os.getenv("SEED_DATE_SETS_LONGHAUL") or "LONGHAUL3").strip()
+        return date_pairs_from_sets(raw) or _longhaul_stays(3)
+    return date_pairs_from_sets()
 
 
 def _norm(values: Sequence[float]) -> List[float]:
@@ -415,6 +431,22 @@ def _week_stays(n: int = 2) -> List[Tuple[str, str]]:
     return out
 
 
+def _longhaul_stays(n: int = 3) -> List[Tuple[str, str]]:
+    """7–15 night stays for long-haul destinations (Sat departures)."""
+    today = date.today()
+    # (weeks_ahead, nights) within 7–15
+    configs = [(3, 10), (5, 14), (7, 10), (4, 7), (6, 12)][: max(1, n)]
+    out: List[Tuple[str, str]] = []
+    for weeks, nights in configs:
+        nights = max(7, min(15, int(nights)))
+        start = today + timedelta(weeks=weeks)
+        delta = (5 - start.weekday()) % 7  # Saturday
+        sat = start + timedelta(days=delta)
+        end = sat + timedelta(days=nights)
+        out.append((sat.isoformat(), end.isoformat()))
+    return out
+
+
 def _env_bool(name: str, default: bool) -> bool:
     import os
 
@@ -497,9 +529,15 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
         }
 
     ryanair_on = _env_bool("SEED_RYANAIR_ENABLED", True)
-    ryanair_max_cells = max(0, _env_int("SEED_RYANAIR_MAX_CELLS_PER_RUN", 8))
+    ryanair_max_cells = max(0, _env_int("SEED_RYANAIR_MAX_CELLS_PER_RUN", 18))
     ryanair_pause_s = max(0.0, _env_float("SEED_RYANAIR_PAUSE_S", 4.0))
     ryanair_origins = set(_seed_ryanair_origins())
+    import os as _os_ra
+
+    _ra_allow_raw = (_os_ra.getenv("SEED_RYANAIR_DEST_ALLOWLIST") or "").strip()
+    ryanair_dest_allow = (
+        set(_parse_iata_list(_ra_allow_raw)) if _ra_allow_raw else None
+    )
     ryanair_cells = 0
     ryanair_hits = 0
     ryanair_skips = 0
@@ -519,17 +557,32 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
-    # Prefer classics with supply first (rank>0), then new pins
+    # Prefer classics + EU/Maghreb waves before long-haul / gulf
+    _wave_rank = {"eu_gap": 0, "maghreb": 1, "gulf": 2, "longhaul": 3}
+    _iata_wave: Dict[str, int] = {}
+    try:
+        from deals.destinations_seed import DESTINATIONS_SEED
+
+        for _d in DESTINATIONS_SEED:
+            _code = str(_d.get("iata_arrival") or "").upper()
+            if _code:
+                _iata_wave[_code] = _wave_rank.get(str(_d.get("wave") or ""), 1)
+    except Exception:
+        pass
+
+    def _entry_dest(r: Dict[str, Any]) -> str:
+        city = r.get("served_cities") or {}
+        if isinstance(city, list):
+            city = city[0] if city else {}
+        return str(city.get("primary_iata") or "").upper()
+
     entries.sort(
         key=lambda r: (
             0 if r.get("pinned") else 1,
+            _iata_wave.get(_entry_dest(r), 1),
             -(float(r.get("seed_rank") or 0)),
         )
     )
-
-    date_pairs = date_pairs_from_sets()
-    # Ryanair only on nearest pair (usually first weekend) — fewer HTTP calls
-    ryanair_date_pair: Optional[Tuple[str, str]] = date_pairs[0] if date_pairs else None
 
     scans_done = 0
     skipped_organic = 0
@@ -564,6 +617,11 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
         if len(dest_iata) != 3:
             continue
         city_id = entry.get("served_city_id")
+        date_pairs = date_pairs_for_destination(dest_iata)
+        # Ryanair only on nearest short-haul pair — fewer HTTP calls
+        ryanair_date_pair: Optional[Tuple[str, str]] = (
+            date_pairs[0] if date_pairs else None
+        )
 
         for origin in origins:
             if scans_done >= remaining:
@@ -651,12 +709,16 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
                                 == dest_iata
                             ]
 
-                    # Ryanair overlay — sparse, slow, priority hubs only
+                    # Ryanair overlay — sparse, slow, allowlisted dests only
+                    dest_ok = (
+                        ryanair_dest_allow is None or dest_iata in ryanair_dest_allow
+                    )
                     want_ryanair = (
                         ryanair_on
                         and ryanair_max_cells > 0
                         and ryanair_cells < ryanair_max_cells
                         and origin in ryanair_origins
+                        and dest_ok
                         and ryanair_date_pair is not None
                         and (out_d, ret_d) == ryanair_date_pair
                         and not is_circuit_open("ryanair")
@@ -767,10 +829,12 @@ def seed_scan(supabase, *, cfg: Optional[DealsConfig] = None, dry_run: bool = Fa
             "max_cells": ryanair_max_cells,
             "origins": sorted(ryanair_origins),
             "pause_s": ryanair_pause_s,
-            "date_pair": list(ryanair_date_pair) if ryanair_date_pair else None,
+            "allowlist_n": (
+                len(ryanair_dest_allow) if ryanair_dest_allow is not None else None
+            ),
         },
         "origins_order": origins,
-        "date_pairs": len(date_pairs),
+        "date_pairs_default": len(date_pairs_from_sets()),
         "avg_cell_gap_h": avg_gap,
         "dry_run": dry_run,
     }
