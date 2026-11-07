@@ -2635,6 +2635,8 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
         "budget_max",
     }
     modalities_changed = bool(modality_keys.intersection(patch.keys()))
+    # Rename-only: skip route checks — keep PATCH snappy for the rename UI.
+    name_only = set(patch.keys()) <= {"name", "updated_at"}
     if modalities_changed and current.get("status") == "locked":
         blocked = _trip_has_active_reservation(supabase, trip_id)
         if blocked:
@@ -2643,27 +2645,56 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
         patch["status"] = "planning"
         patch["auto_scan_enabled"] = False
 
-    dep = patch.get("departure_airport") or current.get("departure_airport")
-    arr = (
-        patch["arrival_airport"]
-        if "arrival_airport" in patch
-        else current.get("arrival_airport")
-    )
-    bad = invalid_arrival_codes(dep, arr)
-    if bad:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Route indisponible depuis {dep} : {', '.join(bad)}. "
-                "Choisis une destination encore desservie, ou retire l’arrivée."
-            ),
+    if not name_only:
+        dep = patch.get("departure_airport") or current.get("departure_airport")
+        arr = (
+            patch["arrival_airport"]
+            if "arrival_airport" in patch
+            else current.get("arrival_airport")
         )
+        bad = invalid_arrival_codes(dep, arr)
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Route indisponible depuis {dep} : {', '.join(bad)}. "
+                    "Choisis une destination encore desservie, ou retire l’arrivée."
+                ),
+            )
 
     result = (
         supabase.table("planned_trips").update(patch).eq("id", trip_id).execute()
     )
     if not result.data:
         raise HTTPException(status_code=500, detail="Mise à jour échouée")
+    if name_only:
+        # Lightweight response — avoid re-validating routes on a rename.
+        row = result.data[0]
+        return {
+            "id": row["id"],
+            "organizer_id": row["organizer_id"],
+            "name": row["name"],
+            "departure_airport": row.get("departure_airport"),
+            "arrival_airport": row.get("arrival_airport"),
+            "passengers": row.get("passengers") or 1,
+            "direct": bool(row.get("direct")),
+            "dates_depart": row.get("dates_depart") or [],
+            "dates_retour": row.get("dates_retour") or [],
+            "budget_max": row.get("budget_max") or 200,
+            "invite_token": row["invite_token"],
+            "status": row.get("status") or "planning",
+            "auto_scan_enabled": bool(row.get("auto_scan_enabled")),
+            "auto_scan_interval_seconds": int(
+                row.get("auto_scan_interval_seconds") or 3600
+            ),
+            "last_scan_at": row.get("last_scan_at"),
+            "last_notified_at": row.get("last_notified_at"),
+            "last_notified_cheapest": row.get("last_notified_cheapest"),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+            "route_ok": True,
+            "invalid_arrival_codes": [],
+        }
     return _row_to_trip(result.data[0])
 
 

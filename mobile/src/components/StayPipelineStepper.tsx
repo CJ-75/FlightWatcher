@@ -66,7 +66,8 @@ const RAIL_TEAL = '#0F766E'
 const RAIL_TEAL_INK = '#115E59'
 
 function iconColor(state: StayPipelineStep['state'], _id: StayStepId): string {
-  if (state === 'done' || state === 'current') return colors.white
+  if (state === 'done') return '#1F6B4A'
+  if (state === 'current') return colors.white
   if (state === 'off') return colors.faint
   return colors.inkSoft
 }
@@ -208,8 +209,8 @@ const styles = StyleSheet.create({
     borderColor: colors.lineStrong,
   },
   dotDone: {
-    backgroundColor: '#1FA971',
-    borderColor: '#168A5B',
+    backgroundColor: '#A8D5BA',
+    borderColor: '#7FBF9A',
   },
   dotCurrent: {
     backgroundColor: RAIL_TEAL,
@@ -237,7 +238,7 @@ const styles = StyleSheet.create({
     color: RAIL_TEAL_INK,
   },
   labelDone: {
-    color: colors.inkSoft,
+    color: '#1F6B4A',
   },
   labelOff: {
     color: colors.faint,
@@ -254,7 +255,7 @@ const styles = StyleSheet.create({
     color: RAIL_TEAL,
   },
   hintDone: {
-    color: '#168A5B',
+    color: '#1F6B4A',
   },
   hintOff: {
     color: colors.faint,

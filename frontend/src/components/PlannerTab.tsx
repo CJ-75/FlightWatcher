@@ -2273,14 +2273,20 @@ function TripDetailView({
       setEditingName(false)
       return
     }
+    const prevName = trip.name
+    setTrip((prev) => (prev ? { ...prev, name: next } : prev))
+    setEditingName(false)
     setSavingName(true)
     setError(null)
     try {
       const updated = await getApiClient().updatePlannedTrip(tripId, { name: next })
-      setTrip((prev) => (prev ? { ...prev, name: updated.name } : prev))
-      setEditingName(false)
-      onToast('Nom mis à jour')
+      setTrip((prev) =>
+        prev ? { ...prev, name: updated.name || next } : prev,
+      )
+      invalidateTravelWorkspacesCache()
     } catch (e) {
+      setTrip((prev) => (prev ? { ...prev, name: prevName } : prev))
+      setNameDraft(prevName)
       onToast(e instanceof Error ? e.message : 'Impossible de renommer')
     } finally {
       setSavingName(false)
@@ -2978,7 +2984,13 @@ function TripDetailView({
                     cityLabel={destinationName}
                     overlay={
                       <div className="flex flex-col text-left">
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+                        <p
+                          className={`text-[11px] font-black uppercase tracking-[0.18em] ${
+                            hotelBooked || hasHotel
+                              ? 'text-emerald-200'
+                              : 'text-orange-300'
+                          }`}
+                        >
                           {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
                         </p>
                         <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
@@ -3042,7 +3054,13 @@ function TripDetailView({
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
                     <div className="relative z-[1] flex flex-col">
-                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">
+                      <p
+                        className={`text-[11px] font-black uppercase tracking-[0.18em] ${
+                          hotelBooked || hasHotel
+                            ? 'text-emerald-200'
+                            : 'text-orange-300'
+                        }`}
+                      >
                         {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
                       </p>
                       <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">

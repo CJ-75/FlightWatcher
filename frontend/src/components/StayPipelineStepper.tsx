@@ -13,7 +13,7 @@ const RAIL = {
   track: 'bg-slate-200/90',
   fill: 'bg-gradient-to-r from-teal-700 via-teal-600 to-cyan-500',
   current: 'bg-teal-700 text-white shadow-md shadow-teal-900/20 ring-2 ring-teal-200',
-  done: 'bg-emerald-500 text-white ring-2 ring-emerald-100',
+  done: 'bg-[#A8D5BA] text-[#1F6B4A] ring-2 ring-[#D8EEE2]',
   upcoming: 'bg-white text-slate-600 border border-slate-200 shadow-sm',
   off: 'bg-slate-50 text-slate-400 border border-dashed border-slate-200',
 }
@@ -298,7 +298,7 @@ function ClassicStepper({
                       dark ? 'ring-[#1A2030]' : 'ring-white'
                     }`,
                     isDone
-                      ? 'bg-emerald-500 text-white shadow-[0_0_0_1px_rgba(16,185,129,0.35)]'
+                      ? 'bg-[#A8D5BA] text-[#1F6B4A] shadow-[0_0_0_1px_rgba(127,191,154,0.45)]'
                       : isCurrent
                         ? dark
                           ? 'bg-teal-500 text-white shadow-[0_8px_20px_rgba(13,148,136,0.35)]'

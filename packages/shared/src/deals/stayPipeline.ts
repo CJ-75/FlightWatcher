@@ -66,8 +66,12 @@ export function buildStayPipeline(opts: {
     opts.flight === 'external' ||
     opts.flight === 'selected_fw'
   const flightPartial = false
-  const hotelDone = opts.hotel === 'booked' || opts.hotel === 'external'
-  const hotelPartial = opts.hotel === 'selected'
+  // Hôtel choisi (pas encore payé) = étape verte, comme le vol « Choisi ».
+  const hotelDone =
+    opts.hotel === 'booked' ||
+    opts.hotel === 'external' ||
+    opts.hotel === 'selected'
+  const hotelPartial = false
   const activitiesOn = Boolean(opts.activitiesEnabled)
   const restaurantsOn = Boolean(opts.restaurantsEnabled)
   // Selected activities complete the step (green), same as Vol « Choisi ».
@@ -93,7 +97,7 @@ export function buildStayPipeline(opts: {
       : opts.hotel === 'external'
         ? 'Hôtel ailleurs'
         : opts.hotel === 'selected'
-          ? 'À payer'
+          ? 'Choisi'
           : 'Choisir'
 
   // Current = first incomplete active step, unless focus overrides

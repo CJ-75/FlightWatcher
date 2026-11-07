@@ -682,6 +682,9 @@ export function TripDetailScreen() {
       setEditingName(false)
       return
     }
+    const prevName = trip.name
+    setTrip((prev) => (prev ? { ...prev, name: next } : prev))
+    setEditingName(false)
     setSavingName(true)
     try {
       if (useGuestPreview) {
@@ -690,10 +693,14 @@ export function TripDetailScreen() {
         setTrip(updated)
       } else {
         const updated = await getApi().updatePlannedTrip(tripId, { name: next })
-        setTrip((prev) => (prev ? { ...prev, name: updated.name } : prev))
+        setTrip((prev) =>
+          prev ? { ...prev, name: updated.name || next } : prev,
+        )
+        invalidateTravelWorkspacesCache()
       }
-      setEditingName(false)
     } catch (e) {
+      setTrip((prev) => (prev ? { ...prev, name: prevName } : prev))
+      setNameDraft(prevName)
       Alert.alert(
         'Nom',
         e instanceof Error ? e.message : 'Impossible de renommer le voyage',
@@ -1828,8 +1835,22 @@ export function TripDetailScreen() {
                   onHorizontalGesture={setGallerySwipeActive}
                   overlay={
                     <View style={styles.nextStepContent}>
-                      <View style={styles.nextStepBadge}>
-                        <Text style={styles.nextStepBadgeText}>
+                      <View
+                        style={[
+                          styles.nextStepBadge,
+                          (reservationFlags.hotelBooked ||
+                            reservationFlags.hasHotel) &&
+                            styles.nextStepBadgeChosen,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.nextStepBadgeText,
+                            (reservationFlags.hotelBooked ||
+                              reservationFlags.hasHotel) &&
+                              styles.nextStepBadgeTextChosen,
+                          ]}
+                        >
                           {reservationFlags.hotelBooked ||
                           reservationFlags.hasHotel
                             ? 'HÔTEL'
@@ -1897,8 +1918,22 @@ export function TripDetailScreen() {
                     style={StyleSheet.absoluteFill}
                   />
                   <View style={styles.nextStepContent}>
-                    <View style={styles.nextStepBadge}>
-                      <Text style={styles.nextStepBadgeText}>
+                    <View
+                      style={[
+                        styles.nextStepBadge,
+                        (reservationFlags.hotelBooked ||
+                          reservationFlags.hasHotel) &&
+                          styles.nextStepBadgeChosen,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.nextStepBadgeText,
+                          (reservationFlags.hotelBooked ||
+                            reservationFlags.hasHotel) &&
+                            styles.nextStepBadgeTextChosen,
+                        ]}
+                      >
                         {reservationFlags.hotelBooked ||
                         reservationFlags.hasHotel
                           ? 'HÔTEL'
@@ -3045,12 +3080,18 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginBottom: 2,
   },
+  nextStepBadgeChosen: {
+    backgroundColor: '#E7F6EE',
+  },
   nextStepBadgeMuted: { backgroundColor: colors.primarySoft },
   nextStepBadgeText: {
     fontFamily: fonts.bold,
     fontSize: 10,
     letterSpacing: 0.8,
     color: colors.white,
+  },
+  nextStepBadgeTextChosen: {
+    color: '#1F6B4A',
   },
   nextStepBadgeTextMuted: { color: colors.primaryInk },
   nextStepTitle: {

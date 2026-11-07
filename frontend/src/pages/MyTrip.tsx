@@ -1776,11 +1776,11 @@ export default function MyTrip() {
                   hotelBooked
                     ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
                     : hotelId
-                      ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                      ? 'bg-[#E7F6EE] text-[#1F6B4A] ring-1 ring-[#B7E0C8]'
                       : 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
                 }
                 chipLabel={
-                  hotelBooked ? 'Confirmée' : hotelId ? 'À payer' : 'À choisir'
+                  hotelBooked ? 'Confirmée' : hotelId ? 'Choisi' : 'À choisir'
                 }
               >
                 <div className="flex items-start justify-between gap-4">

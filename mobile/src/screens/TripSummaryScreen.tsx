@@ -976,9 +976,9 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                 }
               : hotelId
                 ? {
-                    label: 'À payer',
-                    tone: colors.primaryDeep,
-                    soft: colors.primarySoft,
+                    label: 'Choisi',
+                    tone: '#1F6B4A',
+                    soft: '#E7F6EE',
                   }
                 : {
                     label: 'À choisir',
