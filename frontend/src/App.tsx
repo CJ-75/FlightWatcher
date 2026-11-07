@@ -1541,29 +1541,42 @@ function Dashboard() {
                       </span>
                     ) : null}
                   </h2>
-                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                  {visibleSimpleResults.length > 0 ? (
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                      <motion.button
+                        onClick={handleSaveSearch}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="bg-indigo-600 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-indigo-700 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none flex items-center justify-center gap-2 active:scale-95"
+                      >
+                        {t('results.saveSearch')}
+                      </motion.button>
+                      <motion.button
+                        onClick={() => {
+                          const budgetToUse = lastSearchInfo?.budget || budgetMax || 100
+                          setRouletteBudget(budgetToUse)
+                          setShowRoulette(true)
+                        }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="bg-accent-500 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-accent-600 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none active:scale-95"
+                      >
+                        {t('results.roulette')}
+                      </motion.button>
+                    </div>
+                  ) : (
                     <motion.button
-                      onClick={handleSaveSearch}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="bg-indigo-600 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-indigo-700 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none flex items-center justify-center gap-2 active:scale-95"
-                    >
-                      {t('results.saveSearch')}
-                    </motion.button>
-                    <motion.button
+                      type="button"
                       onClick={() => {
-                        // Utiliser le budget de la recherche si disponible, sinon le budget max actuel
-                        const budgetToUse = lastSearchInfo?.budget || budgetMax || 100
-                        setRouletteBudget(budgetToUse)
-                        setShowRoulette(true)
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
                       }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      className="bg-accent-500 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-accent-600 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none active:scale-95"
+                      className="bg-primary-600 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-primary-700 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base w-full sm:w-auto active:scale-95"
                     >
-                      {t('results.roulette')}
+                      {t('results.editBudget')}
                     </motion.button>
-                  </div>
+                  )}
                 </div>
                 {availableOrigins.length > 1 ? (
                   <div className="mb-4 sm:mb-5">

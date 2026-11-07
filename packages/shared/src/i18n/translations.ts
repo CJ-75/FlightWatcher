@@ -437,6 +437,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'results.saveSearch': '💾 Sauvegarder cette recherche',
     'results.noResults': 'Pas de résultats',
     'results.noResultsHint': 'Essaie d’augmenter le budget ou de changer les dates.',
+    'results.editBudget': 'Modifier le budget',
     'results.roulette': '🎰 Mode Roulette',
     
     // Destination Card
@@ -995,6 +996,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'results.saveSearch': '💾 Save this search',
     'results.noResults': 'No results',
     'results.noResultsHint': 'Try raising the budget or changing the dates.',
+    'results.editBudget': 'Edit budget',
     'results.roulette': '🎰 Roulette Mode',
     
     // Destination Card

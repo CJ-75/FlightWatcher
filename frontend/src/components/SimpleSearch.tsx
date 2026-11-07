@@ -206,6 +206,7 @@ export function SimpleSearch({
   const [showEmpty, setShowEmpty] = useState(false);
   const airportSectionRef = useRef<HTMLDivElement>(null);
   const datesSectionRef = useRef<HTMLDivElement>(null);
+  const budgetSectionRef = useRef<HTMLDivElement>(null);
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const syncedSeedRef = useRef(false);
   const autoSearchRanRef = useRef(false);
@@ -620,7 +621,9 @@ export function SimpleSearch({
           </button>
         </div>
       ) : null}
-      <BudgetSlider value={budget} onChange={handleBudgetChange} />
+      <div ref={budgetSectionRef}>
+        <BudgetSlider value={budget} onChange={handleBudgetChange} />
+      </div>
 
       <PassengerStepper value={passengers} onChange={setPassengers} />
 
@@ -760,6 +763,21 @@ export function SimpleSearch({
         >
           <p className="text-base sm:text-lg font-extrabold text-ink">{t('results.noResults')}</p>
           <p className="mt-1.5 text-sm text-muted">{t('results.noResultsHint')}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setFormOpen(true)
+              requestAnimationFrame(() => {
+                budgetSectionRef.current?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'center',
+                })
+              })
+            }}
+            className="mt-4 inline-flex items-center justify-center rounded-full bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm sm:text-base px-5 py-2.5 min-h-[44px]"
+          >
+            {t('results.editBudget')}
+          </button>
         </motion.div>
       )}
 

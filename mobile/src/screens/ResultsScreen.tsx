@@ -506,38 +506,59 @@ export function ResultsScreen({ route, navigation }: Props) {
               </View>
             ) : null}
 
-            <View style={styles.actions}>
-              <Pressable
-                onPress={() => {
-                  if (!user) {
-                    Alert.alert('Connexion requise', 'Connecte-toi pour sauvegarder une recherche.')
-                    return
-                  }
-                  if (!searchInfo) {
-                    Alert.alert('Erreur', 'Impossible de sauvegarder cette recherche.')
-                    return
-                  }
-                  setShowSave(true)
-                }}
-                style={styles.actionBtn}
-              >
-                <Text style={styles.actionText}>Sauvegarder</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setShowRoulette(true)}
-                style={[styles.actionBtn, styles.actionPrimary]}
-              >
-                <Text style={[styles.actionText, styles.actionTextPrimary]}>Roulette</Text>
-              </Pressable>
-            </View>
+            {trips.length > 0 ? (
+              <View style={styles.actions}>
+                <Pressable
+                  onPress={() => {
+                    if (!user) {
+                      Alert.alert(
+                        'Connexion requise',
+                        'Connecte-toi pour sauvegarder une recherche.',
+                      )
+                      return
+                    }
+                    if (!searchInfo) {
+                      Alert.alert('Erreur', 'Impossible de sauvegarder cette recherche.')
+                      return
+                    }
+                    setShowSave(true)
+                  }}
+                  style={styles.actionBtn}
+                >
+                  <Text style={styles.actionText}>Sauvegarder</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setShowRoulette(true)}
+                  style={[styles.actionBtn, styles.actionPrimary]}
+                >
+                  <Text style={[styles.actionText, styles.actionTextPrimary]}>
+                    Roulette
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Text style={styles.empty}>{translate('fr', 'results.noResults')}</Text>
             <Text style={styles.emptyHint}>
-              Essaie d’augmenter le budget ou de changer de dates.
+              {translate('fr', 'results.noResultsHint')}
             </Text>
+            <Pressable
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack()
+                  return
+                }
+                navigation.navigate('Main', { screen: 'Search' })
+              }}
+              style={[styles.actionBtn, styles.actionPrimary, styles.emptyCta]}
+            >
+              <Text style={[styles.actionText, styles.actionTextPrimary]}>
+                {translate('fr', 'results.editBudget')}
+              </Text>
+            </Pressable>
           </View>
         }
         renderItem={({ item }) => (
@@ -685,9 +706,10 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   actionTextPrimary: { color: colors.white },
-  emptyWrap: { marginTop: 56, alignItems: 'center', paddingHorizontal: spacing.xl },
+  emptyWrap: { marginTop: 40, alignItems: 'center', paddingHorizontal: spacing.xl },
   empty: { ...type.section, textAlign: 'center', color: colors.ink },
   emptyHint: { ...type.caption, textAlign: 'center', marginTop: spacing.sm },
+  emptyCta: { marginTop: 20, alignSelf: 'stretch', maxWidth: 320 },
   toast: {
     position: 'absolute',
     left: 20,
