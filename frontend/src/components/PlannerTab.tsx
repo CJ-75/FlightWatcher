@@ -774,11 +774,6 @@ function TripListCard({
             Route à mettre à jour
           </span>
         ) : null}
-        {trip?.budget_max != null ? (
-          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#8B2E0E]">
-            max {trip.budget_max}€
-          </span>
-        ) : null}
         {(trip?.proposals_count ?? 0) > 0 ? (
           <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFE8DC] text-[#E85A28]">
             {trip?.proposals_count} prop.
@@ -827,8 +822,6 @@ function TripListCard({
         Hôtel
         {workspace.pipeline.hotel === 'booked' ? (
           <span className="text-emerald-700">réservé</span>
-        ) : workspace.pipeline.hotel === 'selected' ? (
-          <span className="text-primary-700">choisi</span>
         ) : null}
       </div>
       {travelersBlock}
