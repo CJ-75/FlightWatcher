@@ -1,17 +1,13 @@
 import React from 'react'
 import { View, Text, StyleSheet, Pressable } from 'react-native'
-import { CommonActions, useNavigation, useRoute } from '@react-navigation/native'
-import type { RouteProp } from '@react-navigation/native'
+import { CommonActions, useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { colors, fonts, radius, shadow, spacing } from '../theme'
-import type { RootStackParamList } from '../navigation/types'
+import { colors, fonts, radius, spacing } from '../theme'
 
 export function NotFoundScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
-  const route = useRoute<RouteProp<RootStackParamList, 'NotFound'>>()
-  const hint = route.params?.path
 
   const goHome = () => {
     const root = navigation.getParent() ?? navigation
@@ -46,14 +42,6 @@ export function NotFoundScreen() {
         <Text style={styles.body}>
           Ce lien ne mène nulle part — peut‑être un séjour déjà parti, ou une URL un peu perdue.
         </Text>
-        {hint ? (
-          <View style={[styles.pathChip, shadow.soft]}>
-            <Text style={styles.pathLabel}>Chemin</Text>
-            <Text style={styles.pathValue} numberOfLines={2}>
-              {hint}
-            </Text>
-          </View>
-        ) : null}
 
         <Pressable
           onPress={goHome}
@@ -118,28 +106,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: colors.inkSoft,
     marginBottom: spacing.xl,
-  },
-  pathChip: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: spacing.xl,
-  },
-  pathLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: colors.faint,
-    marginBottom: 4,
-  },
-  pathValue: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.muted,
   },
   primaryBtn: {
     backgroundColor: colors.primary,

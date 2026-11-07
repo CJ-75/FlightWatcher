@@ -372,9 +372,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.setPasswordHint':
       'Ajoute un mot de passe pour aussi te connecter par email.',
     'auth.security.currentPassword': 'Mot de passe actuel',
-    'auth.security.oauthHint': 'Compte Google : laisse « actuel » vide si tu n’as pas encore de mot de passe.',
+    'auth.security.oauthHint':
+      'Compte {provider} : laisse « actuel » vide si tu n’as pas encore de mot de passe.',
     'auth.security.oauthNoPassword':
-      'Compte Google — pas encore de mot de passe. Choisis-en un ci-dessous (le champ actuel n’est pas demandé).',
+      'Compte connecté à {provider}, ajoute un mot de passe.',
     'auth.security.sendLink': 'Envoyer le lien par email',
     'auth.security.sending': 'Envoi de l’email…',
     'auth.security.saving': 'Enregistrement…',
@@ -929,9 +930,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.setPasswordHint':
       'Add a password so you can also sign in with email.',
     'auth.security.currentPassword': 'Current password',
-    'auth.security.oauthHint': 'Google account: leave “current” empty if you don’t have a password yet.',
+    'auth.security.oauthHint':
+      '{provider} account: leave “current” empty if you don’t have a password yet.',
     'auth.security.oauthNoPassword':
-      'Google account — no password yet. Choose one below (current password is not required).',
+      'Account linked to {provider} — add a password.',
     'auth.security.sendLink': 'Send email link',
     'auth.security.sending': 'Sending email…',
     'auth.security.saving': 'Saving…',

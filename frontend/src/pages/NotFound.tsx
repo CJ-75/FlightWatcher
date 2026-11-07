@@ -1,9 +1,6 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 export default function NotFound() {
-  const location = useLocation()
-  const path = location.pathname + location.search
-
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#FFF9F5]">
       <div
@@ -29,15 +26,6 @@ export default function NotFound() {
           Ce lien ne mène nulle part — peut‑être un séjour déjà parti, ou une URL un peu
           perdue.
         </p>
-
-        {path && path !== '/' ? (
-          <div className="mt-6 rounded-2xl border border-line bg-white px-4 py-3 shadow-soft">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
-              Chemin
-            </p>
-            <p className="mt-1 break-all text-sm font-medium text-ink-soft">{path}</p>
-          </div>
-        ) : null}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
           <Link

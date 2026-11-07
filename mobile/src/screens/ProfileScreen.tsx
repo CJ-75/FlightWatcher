@@ -263,7 +263,8 @@ export function ProfileScreen() {
             <Text style={styles.sectionLabel}>Compte</Text>
             <View style={[styles.menuGroup, shadow.soft]}>
               <MenuRow
-                glyph="⛨"
+                glyph="🔒"
+                tone="warm"
                 title={translate('fr', 'auth.security.title')}
                 subtitle="Mot de passe et sécurité"
                 onPress={openSecurity}
@@ -326,7 +327,6 @@ export function ProfileScreen() {
                 root.dispatch(
                   CommonActions.navigate({
                     name: 'NotFound',
-                    params: { path: '/dev/preview-404' },
                   }),
                 )
               }}

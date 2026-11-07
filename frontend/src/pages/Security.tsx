@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { User } from '@flightwatcher/shared'
-import { userNeedsPasswordSetup } from '@flightwatcher/shared'
+import { userNeedsPasswordSetup, userOauthProviderLabel } from '@flightwatcher/shared'
 import { getCurrentUser, signOut } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { useI18n } from '../contexts/I18nContext'
@@ -29,6 +29,7 @@ export default function Security() {
 
   const deleteWord = language === 'en' ? 'DELETE' : 'SUPPRIMER'
   const needsPasswordSetup = userNeedsPasswordSetup(user)
+  const oauthProvider = userOauthProviderLabel(user)
 
   useEffect(() => {
     if (!shellReady) return
@@ -159,8 +160,8 @@ export default function Security() {
                 : t('auth.security.changePasswordHint')}
             </p>
             {needsPasswordSetup ? (
-              <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 leading-relaxed">
-                {t('auth.security.oauthNoPassword')}
+              <p className="rounded-xl border border-orange-100 bg-white/70 px-3 py-2.5 text-sm font-medium leading-snug text-slate-700">
+                {t('auth.security.oauthNoPassword', { provider: oauthProvider })}
               </p>
             ) : null}
 
@@ -224,19 +225,19 @@ export default function Security() {
           )}
 
           {bootLoading || !shellReady ? null : (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-4">
+          <div className="pt-1">
             <button
               type="button"
               disabled={deleting}
               onClick={onDelete}
-              className="w-full rounded-2xl border border-rose-300 bg-white px-5 py-3 text-sm font-bold text-rose-800 hover:bg-rose-100 disabled:opacity-50 min-h-[44px]"
+              className="rounded-xl border border-rose-200 bg-rose-50/70 px-3.5 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
             >
               {deleting
                 ? t('auth.security.deleteBusy')
                 : t('auth.security.deleteButton')}
             </button>
             {deleteErr ? (
-              <p className="mt-3 text-sm font-medium text-red-600">{deleteErr}</p>
+              <p className="mt-2 text-sm font-medium text-red-600">{deleteErr}</p>
             ) : null}
           </div>
           )}

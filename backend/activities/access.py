@@ -34,11 +34,15 @@ def user_id_from_request(request: Request) -> Optional[str]:
 def user_can_access_planned_trip(supabase, trip_id: str, user_id: str) -> bool:
     if not supabase or not trip_id or not user_id:
         return False
+    # Expo local ids (`dev-trip-*`) are not Postgres uuids.
+    tid = str(trip_id).strip()
+    if tid.startswith("dev-trip-"):
+        return False
     try:
         trip = (
             supabase.table("planned_trips")
             .select("id,organizer_id")
-            .eq("id", trip_id)
+            .eq("id", tid)
             .limit(1)
             .execute()
         )
@@ -50,13 +54,14 @@ def user_can_access_planned_trip(supabase, trip_id: str, user_id: str) -> bool:
         mem = (
             supabase.table("trip_members")
             .select("id")
-            .eq("trip_id", trip_id)
+            .eq("trip_id", tid)
             .eq("user_id", user_id)
             .limit(1)
             .execute()
         )
         return bool(mem.data)
     except Exception:
+        # Invalid uuid (22P02) etc.
         return False
 
 
@@ -64,7 +69,10 @@ def require_planned_trip_member(supabase, request: Request, planned_trip_id: str
     uid = user_id_from_request(request)
     if not uid:
         raise HTTPException(status_code=401, detail="auth_required")
-    if not user_can_access_planned_trip(supabase, planned_trip_id, uid):
+    tid = str(planned_trip_id or "").strip()
+    if tid.startswith("dev-trip-"):
+        raise HTTPException(status_code=404, detail="trip_not_found")
+    if not user_can_access_planned_trip(supabase, tid, uid):
         raise HTTPException(status_code=403, detail="not_a_member")
     return uid
 

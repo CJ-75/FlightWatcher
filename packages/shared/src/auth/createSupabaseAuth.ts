@@ -342,9 +342,45 @@ export function userHasPasswordLogin(user: User | null | undefined): boolean {
   )
 }
 
-/** Google (or other OAuth) account with no email/password yet. */
+/** OAuth account with no email/password yet. */
 export function userNeedsPasswordSetup(user: User | null | undefined): boolean {
   return Boolean(user) && !userHasPasswordLogin(user)
+}
+
+const OAUTH_PROVIDER_LABELS: Record<string, string> = {
+  google: 'Google',
+  apple: 'Apple',
+  facebook: 'Facebook',
+  github: 'GitHub',
+  azure: 'Microsoft',
+  twitter: 'X',
+}
+
+/** Display label for the primary non-email auth provider (Google, Apple, …). */
+export function userOauthProviderLabel(
+  user: User | null | undefined,
+  fallback = 'OAuth',
+): string {
+  if (!user) return fallback
+  const fromIdentity = (user.identities || [])
+    .map((id) => String(id.provider || '').toLowerCase())
+    .find((p) => p && p !== 'email')
+  const metaProviders = Array.isArray(user.app_metadata?.providers)
+    ? (user.app_metadata.providers as unknown[]).map((p) =>
+        String(p || '').toLowerCase(),
+      )
+    : []
+  const fromMeta = metaProviders.find((p) => p && p !== 'email')
+  const provider =
+    fromIdentity ||
+    fromMeta ||
+    String(user.app_metadata?.provider || '').toLowerCase() ||
+    ''
+  if (!provider || provider === 'email') return fallback
+  return (
+    OAUTH_PROVIDER_LABELS[provider] ||
+    provider.charAt(0).toUpperCase() + provider.slice(1)
+  )
 }
 
 export type { User, Session, SupabaseClient }

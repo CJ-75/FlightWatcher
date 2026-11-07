@@ -671,40 +671,52 @@ def _run_trip_scan(supabase, trip: dict) -> dict:
 
 
 def _user_can_access(supabase, trip_id: str, user_id: str) -> Optional[dict]:
-    trip = (
-        supabase.table("planned_trips")
-        .select("*")
-        .eq("id", trip_id)
-        .limit(1)
-        .execute()
-    )
-    if not trip.data:
+    """None if missing, unauthorized, or non-UUID id (e.g. Expo `dev-trip-*`)."""
+    tid = str(trip_id or "").strip()
+    if not tid or not user_id or tid.startswith("dev-trip-"):
         return None
-    row = trip.data[0]
-    if row["organizer_id"] == user_id:
-        return row
-    mem = (
-        supabase.table("trip_members")
-        .select("id")
-        .eq("trip_id", trip_id)
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    if mem.data:
-        return row
-    return None
+    try:
+        trip = (
+            supabase.table("planned_trips")
+            .select("*")
+            .eq("id", tid)
+            .limit(1)
+            .execute()
+        )
+        if not trip.data:
+            return None
+        row = trip.data[0]
+        if row["organizer_id"] == user_id:
+            return row
+        mem = (
+            supabase.table("trip_members")
+            .select("id")
+            .eq("trip_id", tid)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if mem.data:
+            return row
+        return None
+    except Exception:
+        # Invalid uuid (22P02) or transient PostgREST errors → treat as missing.
+        return None
 
 
 def _require_organizer(supabase, trip_id: str, user_id: str) -> dict:
-    trip = (
-        supabase.table("planned_trips")
-        .select("*")
-        .eq("id", trip_id)
-        .eq("organizer_id", user_id)
-        .limit(1)
-        .execute()
-    )
+    tid = str(trip_id or "").strip()
+    try:
+        trip = (
+            supabase.table("planned_trips")
+            .select("*")
+            .eq("id", tid)
+            .eq("organizer_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
     if not trip.data:
         raise HTTPException(status_code=404, detail="Voyage introuvable")
     return trip.data[0]

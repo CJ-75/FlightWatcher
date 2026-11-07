@@ -8,9 +8,14 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { translate, userNeedsPasswordSetup } from '@flightwatcher/shared'
+import {
+  translate,
+  userNeedsPasswordSetup,
+  userOauthProviderLabel,
+} from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import { Button } from '../components/ui/Button'
@@ -21,6 +26,7 @@ export function SecurityScreen() {
   const insets = useSafeAreaInsets()
   const { user, viewUser, isGuest, signOut } = useAuth()
   const needsPasswordSetup = userNeedsPasswordSetup(user)
+  const oauthProvider = userOauthProviderLabel(user)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -151,9 +157,13 @@ export function SecurityScreen() {
               )}
             </Text>
             {needsPasswordSetup ? (
-              <Text style={styles.oauthBanner}>
-                {translate('fr', 'auth.security.oauthNoPassword')}
-              </Text>
+              <View style={styles.oauthBanner}>
+                <Text style={styles.oauthBannerText}>
+                  {translate('fr', 'auth.security.oauthNoPassword', {
+                    provider: oauthProvider,
+                  })}
+                </Text>
+              </View>
             ) : null}
 
             {!needsPasswordSetup ? (
@@ -217,19 +227,23 @@ export function SecurityScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
 
-          <View style={[styles.dangerCard, shadow.soft, { marginTop: spacing.lg }]}>
-            <Button
-              variant="ghost"
-              label={
-                deleting
-                  ? translate('fr', 'auth.security.deleteBusy')
-                  : translate('fr', 'auth.security.deleteButton')
-              }
-              onPress={onDeleteAccount}
-              loading={deleting}
-              disabled={deleting}
-            />
-          </View>
+          <Pressable
+            onPress={onDeleteAccount}
+            disabled={deleting}
+            style={({ pressed }) => [
+              styles.deleteBtn,
+              pressed && { opacity: 0.85 },
+              deleting && { opacity: 0.5 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={translate('fr', 'auth.security.deleteButton')}
+          >
+            <Text style={styles.deleteBtnText}>
+              {deleting
+                ? translate('fr', 'auth.security.deleteBusy')
+                : translate('fr', 'auth.security.deleteButton')}
+            </Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -273,17 +287,20 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   oauthBanner: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: '#92400E',
-    lineHeight: 18,
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.canvas,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#FDE68A',
+    borderColor: colors.line,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    marginTop: 4,
     marginBottom: spacing.sm,
+  },
+  oauthBannerText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.inkSoft,
+    lineHeight: 18,
   },
   label: {
     fontFamily: fonts.bold,
@@ -316,11 +333,19 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     lineHeight: 18,
   },
-  dangerCard: {
+  deleteBtn: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.lg,
     backgroundColor: '#FFF1F2',
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#FECDD3',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  deleteBtnText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: '#BE123C',
   },
 })

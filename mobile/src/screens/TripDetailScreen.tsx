@@ -131,6 +131,10 @@ export function TripDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { viewUser, isGuest } = useAuth()
   const tripId = route.params.tripId
+  /** Expo preview trips stay local even when the user is signed in. */
+  const isLocalDevTrip =
+    __DEV__ && String(tripId || '').startsWith('dev-trip-')
+  const useGuestPreview = isLocalDevTrip || (__DEV__ && isGuest)
   const autoScan = Boolean(route.params.autoScan)
   const autoScanStarted = useRef(false)
 
@@ -185,13 +189,15 @@ export function TripDetailScreen() {
     const silent = Boolean(opts?.silent)
     if (!silent) setError(null)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const detail = getGuestTrip(tripId)
         if (!detail) throw new Error('Voyage introuvable')
         setTrip(detail)
         setEditBudget(detail.budget_max || 150)
         setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
         navigation.setOptions({ title: detail.name || 'Voyage' })
+        setWorkspace(null)
+        setFlightDraft(null)
       } else {
         const [detail, workspaces] = await Promise.all([
           getApi().getPlannedTrip(tripId),
@@ -243,7 +249,7 @@ export function TripDetailScreen() {
     } finally {
       setLoading(false)
     }
-  }, [tripId, navigation, isGuest])
+  }, [tripId, navigation, useGuestPreview])
 
   const hasTripRef = useRef(false)
   hasTripRef.current = Boolean(trip)
@@ -263,6 +269,10 @@ export function TripDetailScreen() {
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
     if ((!tripId && !token) || !plannerActivitiesEnabled) {
+      setActivityItems([])
+      return
+    }
+    if (__DEV__ && tripId && String(tripId).startsWith('dev-trip-')) {
       setActivityItems([])
       return
     }
@@ -292,7 +302,10 @@ export function TripDetailScreen() {
     [activityItems],
   )
 
-  const isOrganizer = !!viewUser && trip?.organizer_id === viewUser.id
+  // Local Expo trips: always act as organizer so scan / edit stay available.
+  const isOrganizer =
+    isLocalDevTrip ||
+    (!!viewUser && trip?.organizer_id === viewUser.id)
 
   const scan = useCallback(async () => {
     setScanning(true)
@@ -309,7 +322,7 @@ export function TripDetailScreen() {
         : prev,
     )
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const updated = await scanGuestTrip(tripId)
         if (!updated) throw new Error('Voyage introuvable')
         setTrip(updated)
@@ -360,14 +373,14 @@ export function TripDetailScreen() {
     } finally {
       setScanning(false)
     }
-  }, [tripId, isGuest, load, navigation])
+  }, [tripId, useGuestPreview, load, navigation])
 
   const bumpBudgetAndScan = async () => {
     if (!trip) return
     const next = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
     setSavingCriteria(true)
     try {
-      if (!(__DEV__ && isGuest)) {
+      if (!useGuestPreview) {
         await getApi().updatePlannedTrip(tripId, { budget_max: next })
       }
       setTrip((prev) => (prev ? { ...prev, budget_max: next } : prev))
@@ -392,7 +405,7 @@ export function TripDetailScreen() {
   const accept = async (id: string) => {
     setActing(id)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const updated = acceptGuestProposal(id)
         if (updated) setTrip(updated)
         else await load()
@@ -486,7 +499,7 @@ export function TripDetailScreen() {
   const reject = async (id: string) => {
     setActing(id)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const updated = rejectGuestProposal(id)
         if (updated) setTrip(updated)
         else await load()
@@ -504,7 +517,7 @@ export function TripDetailScreen() {
   const addMember = async (body: AddTripMemberRequest) => {
     setMembersBusy(true)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const label =
           [body.first_name, body.last_name].filter(Boolean).join(' ').trim() ||
           body.display_name ||
@@ -531,7 +544,7 @@ export function TripDetailScreen() {
     try {
       const pax = Math.max(trip.passengers || 1, (trip.members || []).length || 1)
       const draft =
-        proposalId && !(__DEV__ && isGuest)
+        proposalId && !useGuestPreview
           ? await getApi().getOrCreateExecutionDraft(proposalId)
           : await createMyTripComposeFromTrip({
               trip: tripData,
@@ -564,7 +577,7 @@ export function TripDetailScreen() {
   const removeMember = async (member: TripMember) => {
     setMembersBusy(true)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const updated = removeGuestTripMember(tripId, member.id)
         if (!updated) throw new Error('Voyage introuvable')
         setTrip(updated)
@@ -579,7 +592,7 @@ export function TripDetailScreen() {
 
   const clearStaleArrival = async () => {
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const updated = updateGuestTripArrival(tripId, null)
         if (!updated) throw new Error('Voyage introuvable')
         setTrip(updated)
@@ -611,7 +624,7 @@ export function TripDetailScreen() {
     }
     setSavingName(true)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         const updated = updateGuestTripName(tripId, next)
         if (!updated) throw new Error('Impossible de renommer')
         setTrip(updated)
@@ -631,7 +644,7 @@ export function TripDetailScreen() {
   }
 
   const setPriceWatch = async (enabled: boolean) => {
-    if (__DEV__ && isGuest) {
+    if (useGuestPreview) {
       Alert.alert('Surveillance', 'Disponible avec un compte connecté.')
       return
     }
@@ -663,7 +676,7 @@ export function TripDetailScreen() {
   const doComplete = async () => {
     setDeleting(true)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         if (!completeGuestTrip(tripId)) throw new Error('Voyage introuvable')
       } else {
         await getApi().completePlannedTrip(tripId)
@@ -680,7 +693,7 @@ export function TripDetailScreen() {
   const doDelete = async () => {
     setDeleting(true)
     try {
-      if (__DEV__ && isGuest) {
+      if (useGuestPreview) {
         if (!deleteGuestTrip(tripId)) throw new Error('Voyage introuvable')
       } else {
         await getApi().deletePlannedTrip(tripId)
@@ -849,7 +862,7 @@ export function TripDetailScreen() {
   ])
 
   const changeFlightChoice = async () => {
-    if (!trip || reopeningFlight || (__DEV__ && isGuest)) return
+    if (!trip || reopeningFlight || useGuestPreview) return
     Alert.alert(
       'Changer de vol',
       'Les propositions actuelles seront remplacées par un nouveau scan. Continuer ?',
@@ -883,7 +896,7 @@ export function TripDetailScreen() {
   }
 
   const removeSelectedFlight = async () => {
-    if (!trip || reopeningFlight || (__DEV__ && isGuest)) return
+    if (!trip || reopeningFlight || useGuestPreview) return
     Alert.alert(
       'Supprimer le vol',
       'Le voyage repasse en planification — tu pourras en choisir un autre. Continuer ?',
@@ -926,7 +939,7 @@ export function TripDetailScreen() {
     const next = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
     setSavingCriteria(true)
     try {
-      if (!(__DEV__ && isGuest)) {
+      if (!useGuestPreview) {
         await getApi().updatePlannedTrip(tripId, { budget_max: next })
       }
       setTrip((prev) =>
@@ -946,7 +959,7 @@ export function TripDetailScreen() {
   }
 
   const skipFlight = async () => {
-    if (!trip || skippingFlight || (__DEV__ && isGuest)) return
+    if (!trip || skippingFlight || useGuestPreview) return
     if (!trip.arrival_airport) {
       Alert.alert('Destination', 'Choisis d’abord une destination.')
       return
@@ -974,7 +987,7 @@ export function TripDetailScreen() {
 
   const skipHotel = async () => {
     if (!trip || skippingHotel) return
-    if (__DEV__ && isGuest) {
+    if (useGuestPreview) {
       Alert.alert(
         'Connexion requise',
         'Connecte-toi pour indiquer que tu as déjà un hôtel.',
@@ -1030,7 +1043,7 @@ export function TripDetailScreen() {
     try {
       let token = flightDraft?.draft_token || workspace?.draft_token || null
       // Draft may still be missing if user confirmed right after returning.
-      if (!token && accepted && !(__DEV__ && isGuest)) {
+      if (!token && accepted && !useGuestPreview) {
         const draft = await getApi().getOrCreateExecutionDraft(accepted.id)
         token = draft.draft_token
         setFlightDraft(draft)
@@ -1142,7 +1155,7 @@ export function TripDetailScreen() {
         flightDraft?.draft_token || workspace?.draft_token || null
       // Kick draft/status in parallel — do not block the in-app browser.
       const draftWork =
-        __DEV__ && isGuest
+        useGuestPreview
           ? Promise.resolve(null)
           : (async () => {
               try {
@@ -1556,7 +1569,7 @@ export function TripDetailScreen() {
               ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
               : 'L’organisateur scanne et choisit le vol pour tout le monde.'}
           </Text>
-          {reservationFlags.canSkipFlight && !(__DEV__ && isGuest) ? (
+          {reservationFlags.canSkipFlight && !useGuestPreview ? (
             <Pressable
               onPress={() => void skipFlight()}
               disabled={skippingFlight}
@@ -1903,7 +1916,7 @@ export function TripDetailScreen() {
             <View style={styles.extrasBody}>
               <ActivityStepPanel
                 draftToken={
-                  __DEV__ && isGuest
+                  useGuestPreview
                     ? null
                     : flightDraft?.draft_token || workspace?.draft_token
                 }
@@ -2007,7 +2020,7 @@ export function TripDetailScreen() {
               onReject={() => void reject(p.id)}
             />
           ))}
-          {reservationFlags.canSkipFlight && !(__DEV__ && isGuest) ? (
+          {reservationFlags.canSkipFlight && !useGuestPreview ? (
             <Pressable
               onPress={() => void skipFlight()}
               disabled={skippingFlight}
@@ -2089,7 +2102,7 @@ export function TripDetailScreen() {
             ) : isOrganizer ? (
               <Button label="Relancer le scan" onPress={() => void scan()} />
             ) : null}
-            {reservationFlags.canSkipFlight && !(__DEV__ && isGuest) ? (
+            {reservationFlags.canSkipFlight && !useGuestPreview ? (
               <Pressable
                 onPress={() => void skipFlight()}
                 disabled={skippingFlight}

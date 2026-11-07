@@ -263,15 +263,16 @@ export function ActivitiesScreen() {
           let retDate: string | null = null
 
           if (plannedFromRoute) {
-            const guest =
+            const isDevTrip =
               __DEV__ && String(plannedFromRoute).startsWith('dev-trip-')
-                ? getGuestTrip(plannedFromRoute)
-                : null
+            const guest = isDevTrip ? getGuestTrip(plannedFromRoute) : null
             const trip =
               guest ||
-              (await getApi()
-                .getPlannedTrip(plannedFromRoute)
-                .catch(() => null))
+              (isDevTrip
+                ? null
+                : await getApi()
+                    .getPlannedTrip(plannedFromRoute)
+                    .catch(() => null))
             if (trip) {
               const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
               destIata = arrival || null
@@ -492,13 +493,16 @@ export function ActivitiesScreen() {
           let outDate: string | null = null
           let retDate: string | null = null
           if (plannedTripId) {
-            const guest =
+            const isDevTrip =
               __DEV__ && String(plannedTripId).startsWith('dev-trip-')
-                ? getGuestTrip(plannedTripId)
-                : null
+            const guest = isDevTrip ? getGuestTrip(plannedTripId) : null
             const trip =
               guest ||
-              (await getApi().getPlannedTrip(plannedTripId).catch(() => null))
+              (isDevTrip
+                ? null
+                : await getApi()
+                    .getPlannedTrip(plannedTripId)
+                    .catch(() => null))
             if (cancelled) return
             if (trip) {
               const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
