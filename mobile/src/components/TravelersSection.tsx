@@ -302,7 +302,7 @@ export function TravelersSection({
                         onApp ? styles.pillTextOn : styles.pillTextOff,
                       ]}
                     >
-                      {onApp ? 'Sur l’app' : 'Hors app'}
+                      {onApp ? 'Compte FlightWatcher' : 'Invité'}
                     </Text>
                   </View>
                 </View>
