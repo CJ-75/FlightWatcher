@@ -151,8 +151,12 @@ def _fallback_geo_rates(
     """
     from deals.hotel_pool import extract_hotels_list
 
-    lat = float(dest["center_lat"])
-    lng = float(dest["center_lng"])
+    try:
+        lat = float(dest["center_lat"])
+        lng = float(dest["center_lng"])
+    except (TypeError, ValueError, KeyError):
+        # Organic dest not yet bootstrapped — caller must use hotelIds / city path
+        return None
     radius = max(1000, int(dest.get("pool_radius_m") or 2000) + 500)
     listing = client.list_hotels(
         latitude=lat,

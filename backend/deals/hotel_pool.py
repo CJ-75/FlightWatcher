@@ -302,8 +302,13 @@ def build_pool_for_destination(
     reception_facility_ids: Set[int],
 ) -> Dict[str, Any]:
     base_radius = max(1000, int(dest.get("pool_radius_m") or 2000))
-    center_lat = float(dest["center_lat"])
-    center_lng = float(dest["center_lng"])
+    try:
+        center_lat = float(dest["center_lat"])
+        center_lng = float(dest["center_lng"])
+    except (TypeError, ValueError, KeyError) as e:
+        raise ValueError(
+            f"destination {dest.get('slug') or dest.get('id')} missing center coords"
+        ) from e
     radius = base_radius
     selected: List[Dict[str, Any]] = []
     raw_count = 0

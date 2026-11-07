@@ -216,18 +216,26 @@ def _insert_destination_for_iata(
     primary = ((served or {}).get("primary_iata") or code).upper()
     served_id = (served or {}).get("served_city_id")
 
+    # Phase 1: create destination without requiring tourist-centre GPS.
+    # Seeded/top dests already have coords; organic ones get center_lat/lng
+    # filled in phase 2 by _bootstrap_pool_for_dest (hotel centroid).
     row: Dict[str, Any] = {
         "slug": slug,
         "city_name": city_name,
         "country_code": country or "",
         "iata_arrival": primary,
-        "center_lat": lat,
-        "center_lng": lng,
         "pool_radius_m": 2500,
         "timezone": tz,
         "priority": 900,
         "active": True,
+        "source": "organic",
     }
+    try:
+        if lat is not None and lng is not None:
+            row["center_lat"] = float(lat)
+            row["center_lng"] = float(lng)
+    except (TypeError, ValueError):
+        pass
     if served_id:
         row["served_city_id"] = served_id
 
@@ -253,7 +261,15 @@ def _insert_destination_for_iata(
         if exact.data:
             return exact.data[0]
 
-        ins = supabase.table("deal_destinations").insert(row).execute()
+        try:
+            ins = supabase.table("deal_destinations").insert(row).execute()
+        except Exception as insert_err:
+            # source column may be missing until organic migration is applied
+            if "source" in row:
+                row.pop("source", None)
+                ins = supabase.table("deal_destinations").insert(row).execute()
+            else:
+                raise insert_err
         if ins.data:
             return ins.data[0]
         # re-select
@@ -270,8 +286,28 @@ def _insert_destination_for_iata(
         return None
 
 
+def _dest_has_center(dest: Dict[str, Any]) -> bool:
+    """True when destination already has usable tourist-centre GPS."""
+    try:
+        lat = dest.get("center_lat")
+        lng = dest.get("center_lng")
+        if lat is None or lng is None or lat == "" or lng == "":
+            return False
+        float(lat)
+        float(lng)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
-    """LiteAPI list → hotel_pool for one destination (quick, upsell path)."""
+    """LiteAPI list → hotel_pool for one destination (quick, upsell path).
+
+    Two-phase organic destinations:
+      1) deal_destinations row may exist without center_lat/lng
+      2) city-name hotel list → infer centroid → persist coords + pool
+    Seeded/top destinations already have center and use geo radius search.
+    """
     _yield_to_search()
     cfg = load_deals_config()
     if not cfg.api_key:
@@ -289,11 +325,9 @@ def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
             select_pool,
         )
 
-        lat = dest.get("center_lat")
-        lng = dest.get("center_lng")
         excluded, reception = _load_ref_maps(client)
 
-        if lat is not None and lng is not None:
+        if _dest_has_center(dest):
             built = build_pool_for_destination(
                 client,
                 dest,
@@ -302,10 +336,14 @@ def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
             )
             return replace_pool_rows(supabase, dest["id"], built["hotels"])
 
-        # No coords — list by city name, infer center from hotels
+        # Phase 2 — no coords yet: list by city name, infer centre from hotels
         city = (dest.get("city_name") or "").strip()
         country = (dest.get("country_code") or "").strip() or None
         if not city:
+            logger.warning(
+                "bootstrap pool skipped: no city_name dest=%s",
+                dest.get("slug") or dest.get("id"),
+            )
             return 0
         payload = client.list_hotels(
             city_name=city,
@@ -317,13 +355,22 @@ def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
         )
         raw = extract_hotels_list(payload)
         if not raw:
+            logger.warning(
+                "bootstrap pool empty city=%s country=%s",
+                city,
+                country,
+            )
             return 0
-        # Median-ish center from first hotels with coords
+        # Mean centre from hotels that expose coords
         coords: List[Tuple[float, float]] = []
         for h in raw:
             try:
-                hlat = float(h.get("latitude") if h.get("latitude") is not None else h.get("lat"))
-                hlng = float(h.get("longitude") if h.get("longitude") is not None else h.get("lng"))
+                hlat = float(
+                    h.get("latitude") if h.get("latitude") is not None else h.get("lat")
+                )
+                hlng = float(
+                    h.get("longitude") if h.get("longitude") is not None else h.get("lng")
+                )
                 coords.append((hlat, hlng))
             except (TypeError, ValueError):
                 continue
@@ -345,13 +392,37 @@ def _bootstrap_pool_for_dest(supabase: Any, dest: Dict[str, Any]) -> int:
                 candidates.append(c)
         mark_24h_reception(candidates, reception)
         selected = select_pool(candidates, radius_m=radius * 2, target=30, max_n=40)
-        # Persist inferred center for next time
+        # Persist inferred centre so next lookups use geo radius path
         try:
             supabase.table("deal_destinations").update(
                 {"center_lat": center_lat, "center_lng": center_lng}
             ).eq("id", dest["id"]).execute()
-        except Exception:
-            pass
+            dest["center_lat"] = center_lat
+            dest["center_lng"] = center_lng
+            logger.info(
+                "bootstrap inferred center slug=%s lat=%.4f lng=%.4f hotels=%s",
+                dest.get("slug"),
+                center_lat,
+                center_lng,
+                len(selected),
+            )
+            try:
+                from deals.organic_destinations import sync_center_to_served_city
+
+                sync_center_to_served_city(
+                    supabase,
+                    served_city_id=dest.get("served_city_id"),
+                    center_lat=center_lat,
+                    center_lng=center_lng,
+                )
+            except Exception:
+                pass
+        except Exception as e:
+            logger.warning(
+                "persist inferred center failed dest=%s: %s",
+                dest.get("slug") or dest.get("id"),
+                e,
+            )
         return replace_pool_rows(supabase, dest["id"], selected)
     except Exception as e:
         logger.warning("bootstrap pool dest=%s: %s", dest.get("slug") or dest.get("id"), e)
@@ -372,31 +443,66 @@ def ensure_destination_with_pool(
     """
     Resolve or create deal_destinations for arrival IATA, ensure hotel_pool
     has at least one hotel. Used when Search destination is outside seed catalogue.
+
+    Organic (non-seed) IATAs are recorded in organic_destinations: each user
+    search increments search_hits and retries 2-phase completion (create →
+    city bootstrap → inferred centre + pool).
     """
     from deals.city_mapping import resolve_hotel_destination
+    from deals.organic_destinations import is_seed_iata, touch_organic_search
 
     code = (iata or "").strip().upper()
     if len(code) != 3 or not supabase:
         return None
+
+    organic = not is_seed_iata(code)
 
     resolved = resolve_hotel_destination(supabase, iata=code, city=city)
     dest = resolved.get("destination") if resolved else None
     if not dest:
         dest = _insert_destination_for_iata(supabase, iata=code, city=city)
     if not dest or not dest.get("id"):
+        if organic:
+            # One search hit even when insert fails — drives retry priority
+            touch_organic_search(
+                supabase,
+                iata=code,
+                city_name=city,
+                error="destination missing after insert",
+            )
         return None
 
-    if _pool_size(supabase, str(dest["id"])) > 0:
-        return dest
+    pool_n = _pool_size(supabase, str(dest["id"]))
+    needs_bootstrap = pool_n <= 0 or not _dest_has_center(dest)
+    bootstrapped = False
+    if needs_bootstrap:
+        n = _bootstrap_pool_for_dest(supabase, dest)
+        bootstrapped = True
+        pool_n = n if n > 0 else _pool_size(supabase, str(dest["id"]))
+        logger.info(
+            "ensure_destination_with_pool iata=%s slug=%s pool=%s",
+            code,
+            dest.get("slug"),
+            pool_n,
+        )
 
-    n = _bootstrap_pool_for_dest(supabase, dest)
-    logger.info(
-        "ensure_destination_with_pool iata=%s slug=%s pool=%s",
-        code,
-        dest.get("slug"),
-        n,
-    )
-    return dest if n > 0 else dest
+    if organic:
+        # Ledger + search_hits: each user call completes / retries 2-phase dest
+        touch_organic_search(
+            supabase,
+            iata=code,
+            city_name=dest.get("city_name") or city,
+            country_code=dest.get("country_code"),
+            slug=dest.get("slug"),
+            destination_id=str(dest["id"]),
+            served_city_id=dest.get("served_city_id"),
+            has_center=_dest_has_center(dest),
+            pool_size=pool_n,
+            error=None if pool_n > 0 else "bootstrap empty pool",
+            bootstrapped=bootstrapped,
+        )
+
+    return dest
 
 
 def find_window_by_dates(
@@ -804,7 +910,7 @@ def check_rate_limit(bucket: str) -> bool:
 def _mark_upsell_row(
     supabase: Any,
     *,
-    destination_id: str,
+    destination_id: Optional[str],
     checkin: date,
     checkout: date,
     adults: int,
@@ -817,7 +923,7 @@ def _mark_upsell_row(
     v3.3: persist on-demand rates into hotel_rates_cache via FREE windows
     (hotel_upsell_cache was dropped).
     """
-    if not supabase:
+    if not supabase or not destination_id:
         return
     try:
         from deals.refresh_deal_rates import free_window
