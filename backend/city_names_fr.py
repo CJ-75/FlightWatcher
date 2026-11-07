@@ -230,6 +230,7 @@ CITY_FR_BY_IATA: Dict[str, str] = {
     "SVO": "Moscou",
     "DME": "Moscou",
     "LED": "Saint-Pétersbourg",
+    "PUL": "Saint-Pétersbourg",
     "EVN": "Erevan",
     "TBS": "Tbilissi",
     "BUS": "Batoumi",
@@ -238,35 +239,141 @@ CITY_FR_BY_IATA: Dict[str, str] = {
     "SAW": "Istanbul",
     "AYT": "Antalya",
     "DXB": "Dubaï",
+    "DWC": "Dubaï",
+    "SHJ": "Charjah",
     "AUH": "Abou Dabi",
     "DOH": "Doha",
+    "CMB": "Colombo",
+    "MCT": "Mascate",
+    "BAH": "Manama",
+    "RUH": "Riyad",
+    "JED": "Djeddah",
+    "MED": "Médine",
+    "KWI": "Koweït",
+    "SLL": "Salalah",
     "CAI": "Le Caire",
     "SSH": "Charm el-Cheikh",
+    "HRG": "Hurghada",
+    "LXR": "Louxor",
     "ALG": "Alger",
+    "ORN": "Oran",
+    "AAE": "Annaba",
     "FNC": "Funchal",
     "RAI": "Praia",
+    "SID": "Sal",
     "TLV": "Tel Aviv",
     "BEY": "Beyrouth",
+    "AMM": "Amman",
+    "AQJ": "Aqaba",
+    "MRV": "Mineralnye Vody",
+    "AER": "Sotchi",
+    "KRR": "Krasnodar",
+    "ROV": "Rostov-sur-le-Don",
+    "KZN": "Kazan",
+    "OVB": "Novossibirsk",
+    "SVX": "Iekaterinbourg",
+    "UFA": "Oufa",
+    "ASF": "Astrakhan",
     "JFK": "New York",
     "EWR": "New York",
     "LGA": "New York",
     "LAX": "Los Angeles",
+    "SFO": "San Francisco",
+    "ORD": "Chicago",
     "MIA": "Miami",
+    "BOS": "Boston",
+    "IAD": "Washington",
+    "DCA": "Washington",
+    "ATL": "Atlanta",
+    "DFW": "Dallas",
+    "SEA": "Seattle",
     "YUL": "Montréal",
     "YYZ": "Toronto",
+    "YVR": "Vancouver",
     "BKK": "Bangkok",
+    "DMK": "Bangkok",
+    "HKT": "Phuket",
+    "CNX": "Chiang Mai",
     "SIN": "Singapour",
+    "KUL": "Kuala Lumpur",
+    "MLE": "Malé",
+    "CGK": "Jakarta",
+    "DPS": "Denpasar",
+    "MNL": "Manille",
+    "HKG": "Hong Kong",
+    "TPE": "Taipei",
     "NRT": "Tokyo",
     "HND": "Tokyo",
+    "KIX": "Osaka",
+    "ITM": "Osaka",
     "ICN": "Séoul",
+    "GMP": "Séoul",
+    "PEK": "Pékin",
+    "PKX": "Pékin",
+    "PVG": "Shanghai",
+    "SHA": "Shanghai",
+    "CAN": "Canton",
     "DEL": "Delhi",
     "BOM": "Mumbai",
+    "BLR": "Bangalore",
+    "MAA": "Chennai",
+    "HYD": "Hyderabad",
+    "GOI": "Goa",
     "SYD": "Sydney",
+    "MEL": "Melbourne",
+    "BNE": "Brisbane",
+    "PER": "Perth",
+    "AKL": "Auckland",
     "CPT": "Le Cap",
     "JNB": "Johannesbourg",
+    "DUR": "Durban",
+    "NBO": "Nairobi",
+    "ADD": "Addis-Abeba",
+    "CMN": "Casablanca",
+    "RAK": "Marrakech",
+    "AGA": "Agadir",
+    "FEZ": "Fès",
+    "TNG": "Tanger",
+    "TUN": "Tunis",
+    "DJE": "Djerba",
+    "MIR": "Monastir",
     "KBP": "Kiev",
     "IEV": "Kiev",
+    "ODS": "Odessa",
+    "LWO": "Lviv",
     "MSQ": "Minsk",
+    "ALA": "Almaty",
+    "NQZ": "Astana",
+    "TAS": "Tachkent",
+    "FRU": "Bichkek",
+    "SKG": "Thessalonique",
+    "RHO": "Rhodes",
+    "CFU": "Corfou",
+    "JMK": "Mykonos",
+    "KGS": "Kos",
+    "ZAG": "Zagreb",
+    "SPU": "Split",
+    "DBV": "Dubrovnik",
+    "TIA": "Tirana",
+    "SKP": "Skopje",
+    "PRN": "Pristina",
+    "SJJ": "Sarajevo",
+    "TGD": "Podgorica",
+    "TIV": "Tivat",
+    "BUD": "Budapest",
+    "PRG": "Prague",
+    "WAW": "Varsovie",
+    "KRK": "Cracovie",
+    "GDN": "Gdansk",
+    "OTP": "Bucarest",
+    "SOF": "Sofia",
+    "BEG": "Belgrade",
+    "ATH": "Athènes",
+    "LCA": "Larnaca",
+    "PFO": "Paphos",
+    "MLA": "Malte",
+    "KEF": "Reykjavik",
+    "REK": "Reykjavik",
 }
 
 COUNTRY_FR_BY_ISO: Dict[str, str] = {
@@ -318,8 +425,38 @@ COUNTRY_FR_BY_ISO: Dict[str, str] = {
     "TN": "Tunisie",
     "DZ": "Algérie",
     "AE": "Émirats arabes unis",
+    "OM": "Oman",
+    "QA": "Qatar",
+    "BH": "Bahreïn",
+    "SA": "Arabie saoudite",
+    "KW": "Koweït",
+    "LB": "Liban",
+    "AM": "Arménie",
+    "AZ": "Azerbaïdjan",
+    "RU": "Russie",
+    "CN": "Chine",
+    "KR": "Corée du Sud",
+    "HK": "Hong Kong",
+    "TW": "Taïwan",
+    "IN": "Inde",
+    "ID": "Indonésie",
+    "MY": "Malaisie",
+    "PH": "Philippines",
+    "SG": "Singapour",
+    "AU": "Australie",
+    "NZ": "Nouvelle-Zélande",
+    "ZA": "Afrique du Sud",
+    "KE": "Kenya",
+    "ET": "Éthiopie",
+    "KZ": "Kazakhstan",
+    "UZ": "Ouzbékistan",
+    "KG": "Kirghizistan",
     "CV": "Cap-Vert",
     "TH": "Thaïlande",
+    "LK": "Sri Lanka",
+    "MV": "Maldives",
+    "MY": "Malaisie",
+    "SG": "Singapour",
     "US": "États-Unis",
     "CA": "Canada",
     "JP": "Japon",
@@ -352,6 +489,11 @@ CITY_EN_TO_FR: Dict[str, str] = {
     "zurich": "Zurich",
     "basel": "Bâle",
     "edinburgh": "Édimbourg",
+    "saint petersburg": "Saint-Pétersbourg",
+    "saint-petersburg": "Saint-Pétersbourg",
+    "st petersburg": "Saint-Pétersbourg",
+    "st. petersburg": "Saint-Pétersbourg",
+    "petersburg": "Saint-Pétersbourg",
     "barcelona": "Barcelone",
     "malaga": "Malaga",
     "palermo": "Palerme",
@@ -504,6 +646,102 @@ _CACHE: Dict[str, Tuple[str, str, str]] = {}  # code -> (city, country, name)
 _CACHE_AT = 0.0
 _CACHE_TTL = 60 * 60 * 6  # 6h
 
+# Travelpayouts IATA → (city_fr, country_fr) — covers hubs Ryanair n’a pas (MCT, MRV…).
+_TP_CITY: Dict[str, Tuple[str, str]] = {}
+_TP_AT = 0.0
+_TP_TTL = 60 * 60 * 24
+
+
+def _http_json(url: str, timeout: float = 45.0) -> object:
+    import os
+    import urllib.parse
+
+    headers = {
+        "User-Agent": "FlightWatcher/1.0",
+        "Accept": "application/json",
+    }
+    token = (os.getenv("TRAVELPAYOUTS_API_TOKEN") or "").strip()
+    if token:
+        headers["X-Access-Token"] = token
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}token={urllib.parse.quote(token)}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _load_travelpayouts_cities() -> None:
+    """Warm IATA→ville FR from Travelpayouts airports + cities dumps."""
+    global _TP_CITY, _TP_AT
+    now = time.time()
+    if _TP_CITY and now - _TP_AT < _TP_TTL:
+        return
+    try:
+        airports: list = []
+        cities_raw: list = []
+        for loc in ("fr", "en"):
+            try:
+                data = _http_json(
+                    f"https://api.travelpayouts.com/data/{loc}/airports.json",
+                    timeout=20,
+                )
+                if isinstance(data, list) and data:
+                    airports = data
+                    break
+            except Exception:
+                continue
+        for loc in ("fr", "en"):
+            try:
+                data = _http_json(
+                    f"https://api.travelpayouts.com/data/{loc}/cities.json",
+                    timeout=20,
+                )
+                if isinstance(data, list) and data:
+                    cities_raw = data
+                    break
+            except Exception:
+                continue
+        cities: Dict[str, dict] = {}
+        for c in cities_raw:
+            if not isinstance(c, dict):
+                continue
+            code = (c.get("code") or "").strip().upper()
+            if len(code) == 3:
+                cities[code] = c
+        next_map: Dict[str, Tuple[str, str]] = {}
+        for item in airports:
+            if not isinstance(item, dict):
+                continue
+            code = (item.get("code") or "").strip().upper()
+            if len(code) != 3:
+                continue
+            city_code = (item.get("city_code") or code).strip().upper()
+            city_row = cities.get(city_code) or {}
+            tr = city_row.get("name_translations") or {}
+            city = (
+                (tr.get("fr") or "").strip()
+                or (city_row.get("name") or "").strip()
+                or (item.get("name") or "").strip()
+                or code
+            )
+            city = translate_city_label(city) or city
+            if _looks_like_iata(city):
+                continue
+            iso = (item.get("country_code") or "").strip().upper()
+            if not iso and isinstance(city_row.get("country_code"), str):
+                iso = city_row.get("country_code", "").strip().upper()
+            country = COUNTRY_FR_BY_ISO.get(iso) or iso
+            next_map[code] = (city, country)
+            # Also index metro city code when different (e.g. PAR → Paris)
+            if city_code != code and city_code not in next_map:
+                next_map[city_code] = (city, country)
+        if next_map:
+            _TP_CITY = next_map
+            _TP_AT = now
+            print(f"  OK Travelpayouts city map: {len(next_map)} IATA")
+    except Exception as e:
+        print(f"⚠️ city_names_fr TP cache: {e}")
+
 
 def _load_ryanair_fr() -> None:
     global _CACHE, _CACHE_AT
@@ -535,6 +773,11 @@ def _load_ryanair_fr() -> None:
             _CACHE_AT = now
     except Exception as e:
         print(f"⚠️ city_names_fr cache: {e}")
+    # Always try to warm TP map (non-blocking failure) for non-Ryanair hubs
+    try:
+        _load_travelpayouts_cities()
+    except Exception:
+        pass
 
 
 def _normalize_key(s: str) -> str:
@@ -598,7 +841,14 @@ def city_for_code(code: Optional[str], fallback: Optional[str] = None) -> str:
     if c in _CACHE:
         city = _CACHE[c][0]
         # Still English from Ryanair? try label translate
-        return translate_city_label(city) or city
+        translated = translate_city_label(city) or city
+        if translated and not _looks_like_iata(translated):
+            return translated
+    _load_travelpayouts_cities()
+    if c in _TP_CITY:
+        city = _TP_CITY[c][0]
+        if city and not _looks_like_iata(city):
+            return city
     if fallback:
         cleaned = _strip_airport_noise(str(fallback))
         translated = translate_city_label(cleaned or fallback)
@@ -615,6 +865,9 @@ def country_for_code(code: Optional[str], fallback: Optional[str] = None) -> str
     _load_ryanair_fr()
     if c in _CACHE:
         return _CACHE[c][1] or translate_country_label(fallback) or ""
+    _load_travelpayouts_cities()
+    if c in _TP_CITY:
+        return _TP_CITY[c][1] or translate_country_label(fallback) or ""
     return translate_country_label(fallback) or ""
 
 

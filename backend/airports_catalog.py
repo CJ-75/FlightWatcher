@@ -59,8 +59,14 @@ PRIORITY_IATA: Set[str] = {
     "TUN", "DJE", "MIR", "CAI", "HRG", "SSH",
     "AMM", "TLV", "LCA", "PFO", "MLA",
     # Golfe / Atlantique / long-courrier (catalogue mondial)
-    "DXB", "AUH", "RAI",
-    "BKK", "JFK", "EWR", "LGA", "YUL", "NRT", "HND",
+    "DXB", "DWC", "SHJ", "AUH", "DOH", "CMB", "MCT", "BAH", "RUH", "JED", "KWI",
+    "RAI", "SID",
+    "BKK", "DMK", "HKT", "SIN", "KUL",
+    "JFK", "EWR", "LGA", "LAX", "SFO", "MIA", "ORD",
+    "YUL", "YYZ", "YVR",
+    "NRT", "HND", "ICN", "HKG",
+    "MRV", "AER", "EVN", "TBS", "GYD",
+    "VKO", "SVO", "DME", "LED",
 }
 
 _CACHE: Dict[str, Any] = {"at": 0.0, "airports": None, "cities": None}
