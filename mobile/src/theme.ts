@@ -56,6 +56,9 @@ export const fonts = {
   semibold: 'Sora_600SemiBold',
   bold: 'Sora_700Bold',
   extrabold: 'Sora_800ExtraBold',
+  /** Path editorial title */
+  serif: 'InstrumentSerif_400Regular',
+  serifItalic: 'InstrumentSerif_400Regular_Italic',
 } as const
 
 export const type = {

@@ -13,6 +13,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Share,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useRoute, useNavigation } from '@react-navigation/native'
@@ -57,7 +58,7 @@ import {
 import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
-import { getApi } from '../lib/client'
+import { getApi, plannerInviteUrl } from '../lib/client'
 import {
   invalidateTravelWorkspacesCache,
   listTravelWorkspacesCached,
@@ -1624,7 +1625,27 @@ export function TripDetailScreen() {
           heroUrl={destinationImage}
           title={trip.name}
           metaLine={[dateLineMobile, cityLabel].filter(Boolean).join(' · ')}
+          metaChips={[
+            cityLabel !== 'ta ville' ? cityLabel : null,
+            dateLineMobile || pathView.phaseLabel,
+            `${pax} voyageur${pax > 1 ? 's' : ''}`,
+          ].filter(Boolean) as string[]}
           phaseLabel={pathView.phaseLabel}
+          guideName={
+            trip.organizer?.full_name || trip.member_names?.[0] || null
+          }
+          guideAvatarUrl={trip.organizer?.avatar_url || null}
+          guideSubtitle={
+            isOrganizer
+              ? 'Organisateur · toi'
+              : 'Organisateur du voyage'
+          }
+          insideChips={[
+            { label: 'Vol', icon: '✈', tab: 'apercu' },
+            { label: 'Hôtel', icon: '⌂', tab: 'apercu' },
+            { label: 'Programme', icon: '☰', tab: 'programme' },
+            { label: 'Carnet', icon: '✎', tab: 'carnet' },
+          ]}
           primary={pathView.primary}
           onPrimary={() => {
             void getApi()
@@ -1669,22 +1690,61 @@ export function TripDetailScreen() {
             }
           }}
           onBack={() => navigation.goBack()}
-          groupRow={
-            <Text style={{ fontFamily: fonts.semibold, marginBottom: 8 }}>
-              {pax} voyageur{pax > 1 ? 's' : ''}
-            </Text>
-          }
-          estimatedTotalLabel={
-            stayParty.perPerson > 0
-              ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)} estimé`
-              : null
+          onShare={
+            isOrganizer && trip.invite_token
+              ? () => {
+                  const url = plannerInviteUrl(trip.invite_token)
+                  void Share.share({
+                    message: `Rejoins mon voyage « ${trip.name} » sur FlightWatcher : ${url}`,
+                    url,
+                  }).catch(() => undefined)
+                }
+              : undefined
           }
           apercu={
-            <View style={{ gap: 16 }}>
-              <StayPipelineStepper
-                steps={pipelineForUi}
-                onStepPress={onPipelineStep}
-              />
+            <View style={{ gap: 20 }}>
+              <View>
+                <Text
+                  style={{
+                    fontFamily: fonts.serifItalic,
+                    fontSize: 22,
+                    color: colors.ink,
+                    marginBottom: 6,
+                  }}
+                >
+                  À propos
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: fonts.medium,
+                    fontSize: 14,
+                    lineHeight: 21,
+                    color: '#6B5C50',
+                    marginBottom: 14,
+                  }}
+                >
+                  {dateLineMobile
+                    ? `${cityLabel} · ${dateLineMobile}. `
+                    : `${cityLabel}. `}
+                  Phase actuelle : {pathView.phaseLabel.toLowerCase()}.
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: fonts.semibold,
+                    fontSize: 11,
+                    letterSpacing: 1,
+                    textTransform: 'uppercase',
+                    color: '#A3988C',
+                    marginBottom: 8,
+                  }}
+                >
+                  Étapes
+                </Text>
+                <StayPipelineStepper
+                  steps={pipelineForUi}
+                  onStepPress={onPipelineStep}
+                />
+              </View>
               {accepted?.trip_data ? (
                 <MobileBoardingPass
                   trip={sanitizeTripAirports(
@@ -1712,47 +1772,233 @@ export function TripDetailScreen() {
             </View>
           }
           programme={
-            <View style={{ gap: 16 }}>
+            <View style={{ gap: 22 }}>
+              <View style={{ gap: 6 }}>
+                <Text
+                  style={{
+                    fontFamily: fonts.serifItalic,
+                    fontSize: 24,
+                    color: colors.ink,
+                  }}
+                >
+                  Programme
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: fonts.medium,
+                    fontSize: 14,
+                    lineHeight: 20,
+                    color: '#6B5C50',
+                  }}
+                >
+                  {programmeMobile.days.length} jour
+                  {programmeMobile.days.length > 1 ? 's' : ''} · vol, hôtel et
+                  activités jour par jour.
+                </Text>
+              </View>
               {programmeMobile.unplaced.length > 0 ? (
-                <Text style={{ fontFamily: fonts.bold }}>À placer</Text>
-              ) : null}
-              {programmeMobile.days.map((d) => (
-                <View key={d.dayOffset} style={{ gap: 6 }}>
-                  <Text style={{ fontFamily: fonts.extrabold, fontSize: 16 }}>
-                    {d.label}
+                <View
+                  style={{
+                    backgroundColor: '#F7F4EF',
+                    borderRadius: 20,
+                    padding: 14,
+                    gap: 10,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.serifItalic,
+                      fontSize: 20,
+                      color: colors.ink,
+                    }}
+                  >
+                    À placer
                   </Text>
-                  {d.slots.map((slot) =>
-                    slot.items.map((it) => (
+                  {programmeMobile.unplaced.map((it) => (
+                    <View
+                      key={it.id}
+                      style={{
+                        backgroundColor: '#fff',
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                      }}
+                    >
                       <Text
-                        key={it.id}
                         style={{
-                          fontFamily: fonts.medium,
-                          color: colors.inkSoft,
+                          fontFamily: fonts.semibold,
+                          fontSize: 11,
+                          color: '#C2410C',
+                          textTransform: 'uppercase',
+                          marginBottom: 4,
                         }}
                       >
-                        {slot.label} · {it.title}
+                        Activité
                       </Text>
-                    )),
-                  )}
+                      <Text
+                        style={{
+                          fontFamily: fonts.medium,
+                          fontSize: 14,
+                          color: colors.ink,
+                        }}
+                      >
+                        {it.title}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {programmeMobile.days.map((d) => (
+                <View key={d.dayOffset} style={{ gap: 12, paddingLeft: 4 }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.serifItalic,
+                      fontSize: 22,
+                      color: colors.ink,
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {d.label}
+                  </Text>
+                  {d.slots.map((slot) => (
+                    <View key={slot.moment} style={{ gap: 6 }}>
+                      <Text
+                        style={{
+                          fontFamily: fonts.semibold,
+                          fontSize: 11,
+                          letterSpacing: 1.2,
+                          textTransform: 'uppercase',
+                          color: '#A3988C',
+                        }}
+                      >
+                        {slot.label}
+                      </Text>
+                      {slot.items.length === 0 ? (
+                        <View
+                          style={{
+                            borderWidth: 1,
+                            borderStyle: 'dashed',
+                            borderColor: '#E4DCD3',
+                            borderRadius: 16,
+                            paddingHorizontal: 14,
+                            paddingVertical: 12,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: fonts.medium,
+                              fontSize: 13,
+                              color: '#C4B8AC',
+                            }}
+                          >
+                            Moment libre
+                          </Text>
+                        </View>
+                      ) : (
+                        slot.items.map((it) => (
+                          <View
+                            key={it.id}
+                            style={{
+                              backgroundColor: '#F7F4EF',
+                              borderRadius: 16,
+                              paddingHorizontal: 14,
+                              paddingVertical: 12,
+                              gap: 4,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontFamily: fonts.semibold,
+                                fontSize: 10,
+                                letterSpacing: 0.8,
+                                textTransform: 'uppercase',
+                                color:
+                                  it.kind === 'activity'
+                                    ? '#C2410C'
+                                    : it.kind === 'hotel'
+                                      ? '#5C4F44'
+                                      : colors.ink,
+                              }}
+                            >
+                              {it.kind === 'hotel'
+                                ? 'Hôtel'
+                                : it.kind === 'activity'
+                                  ? 'Activité'
+                                  : 'Vol'}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: fonts.semibold,
+                                fontSize: 14,
+                                color: colors.ink,
+                              }}
+                            >
+                              {it.title}
+                            </Text>
+                            {it.subtitle ? (
+                              <Text
+                                style={{
+                                  fontFamily: fonts.medium,
+                                  fontSize: 12,
+                                  color: '#8A7B6E',
+                                }}
+                              >
+                                {it.subtitle}
+                              </Text>
+                            ) : null}
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  ))}
                 </View>
               ))}
               {plannerActivitiesEnabled ? (
-                <ActivityStepPanel
-                  plannedTripId={trip.id}
-                  draftToken={
-                    flightDraft?.draft_token || workspace?.draft_token || null
-                  }
-                  citySlug={citySlug}
-                  enabled={plannerActivitiesEnabled}
-                  onItemsChange={onActivityItemsChange}
-                />
+                <View style={{ gap: 8, paddingTop: 8 }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.serifItalic,
+                      fontSize: 20,
+                      color: colors.ink,
+                    }}
+                  >
+                    Idées & activités
+                  </Text>
+                  <ActivityStepPanel
+                    plannedTripId={trip.id}
+                    draftToken={
+                      flightDraft?.draft_token || workspace?.draft_token || null
+                    }
+                    citySlug={citySlug}
+                    enabled={plannerActivitiesEnabled}
+                    onItemsChange={onActivityItemsChange}
+                  />
+                </View>
               ) : null}
             </View>
           }
           carnet={
-            <Text style={{ fontFamily: fonts.medium, color: colors.inkSoft }}>
-              Notes du groupe, avis catalogue et facture hôtel.
-            </Text>
+            <View style={{ gap: 8 }}>
+              <Text
+                style={{
+                  fontFamily: fonts.serifItalic,
+                  fontSize: 22,
+                  color: colors.ink,
+                }}
+              >
+                Carnet
+              </Text>
+              <Text
+                style={{
+                  fontFamily: fonts.medium,
+                  fontSize: 14,
+                  lineHeight: 21,
+                  color: '#6B5C50',
+                }}
+              >
+                Notes du groupe, avis catalogue et documents de réservation.
+              </Text>
+            </View>
           }
         />
       </View>
@@ -1952,7 +2198,7 @@ export function TripDetailScreen() {
             trip={sanitizeTripAirports(accepted.trip_data)}
             passengers={pax}
             pricePerPerson={stayParty.flightPp || stayParty.perPerson}
-            priceCaption="Prix du vol"
+            priceCaption={partyPriceCaptionFr(pax, { kind: 'flight' })}
             bookingBusy={flightBookingBusy}
             flightBooked={reservationFlags.flightBooked}
             canEditModalities={

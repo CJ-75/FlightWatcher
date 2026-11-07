@@ -412,12 +412,16 @@ const linking = {
 const FONT_GATE_MS = 1500
 
 export default function App() {
+  // Instrument Serif is vendored under assets/fonts — Metro cannot reliably
+  // resolve @expo-google-fonts/instrument-serif from the monorepo root hoist.
   const [fontsLoaded] = useFonts({
     Sora_400Regular,
     Sora_500Medium,
     Sora_600SemiBold,
     Sora_700Bold,
     Sora_800ExtraBold,
+    InstrumentSerif_400Regular: require('./assets/fonts/InstrumentSerif_400Regular.ttf'),
+    InstrumentSerif_400Regular_Italic: require('./assets/fonts/InstrumentSerif_400Regular_Italic.ttf'),
   })
   const [fontsTimedOut, setFontsTimedOut] = useState(false)
 

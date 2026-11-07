@@ -42,8 +42,13 @@ const MOMENT_LABEL: Record<ProgrammeMoment, string> = {
 
 const MOMENTS: ProgrammeMoment[] = ['morning', 'afternoon', 'evening']
 
-function dayLabelFr(dayOffset: number, outDate?: string | null): string {
+function dayLabelFr(
+  dayOffset: number,
+  outDate?: string | null,
+  lastDay?: number,
+): string {
   if (dayOffset === 0) return 'Arrivée'
+  if (lastDay != null && dayOffset === lastDay && lastDay > 0) return 'Départ'
   if (outDate && outDate.length >= 10) {
     const d = new Date(`${outDate.slice(0, 10)}T12:00:00`)
     d.setDate(d.getDate() + dayOffset)
@@ -144,10 +149,20 @@ export function buildProgrammeTimeline(input: {
       id: 'hotel-checkin',
       kind: 'hotel',
       title: input.hotelLabel || 'Hôtel',
-      subtitle: 'Arrivée',
+      subtitle: 'Check-in',
       dayOffset: 0,
       moment: 'afternoon',
     })
+    if (lastDay > 0) {
+      push({
+        id: 'hotel-checkout',
+        kind: 'hotel',
+        title: input.hotelLabel || 'Hôtel',
+        subtitle: 'Check-out',
+        dayOffset: lastDay,
+        moment: 'morning',
+      })
+    }
   }
 
   for (const raw of input.items || []) {
@@ -176,7 +191,7 @@ export function buildProgrammeTimeline(input: {
     const items = byDay.get(d) || []
     days.push({
       dayOffset: d,
-      label: dayLabelFr(d, out),
+      label: dayLabelFr(d, out, lastDay),
       slots: MOMENTS.map((moment) => ({
         moment,
         label: MOMENT_LABEL[moment],

@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ImageBackground,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,21 +20,32 @@ import {
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
 
+type InsideChip = {
+  label: string
+  icon?: string
+  tab?: TripDetailTabId
+  onClick?: () => void
+}
+
 type Props = {
   tripId: string
   heroUrl: string
   title: string
   metaLine: string
+  metaChips?: string[]
   phaseLabel: string
   primary: TripPrimaryAction
   onPrimary: () => void
   onBack: () => void
   onShare?: () => void
+  guideAvatarUrl?: string | null
+  guideName?: string | null
+  guideSubtitle?: string | null
   groupRow?: ReactNode
   apercu: ReactNode
   programme: ReactNode
   carnet: ReactNode
-  estimatedTotalLabel?: string | null
+  insideChips?: InsideChip[]
 }
 
 export function TripDetailPathChrome({
@@ -41,16 +53,20 @@ export function TripDetailPathChrome({
   heroUrl,
   title,
   metaLine,
+  metaChips,
   phaseLabel,
   primary,
   onPrimary,
   onBack,
   onShare,
+  guideAvatarUrl,
+  guideName,
+  guideSubtitle,
   groupRow,
   apercu,
   programme,
   carnet,
-  estimatedTotalLabel,
+  insideChips,
 }: Props) {
   const insets = useSafeAreaInsets()
   const [tab, setTab] = useState<TripDetailTabId>('apercu')
@@ -67,40 +83,85 @@ export function TripDetailPathChrome({
   const body =
     tab === 'apercu' ? apercu : tab === 'programme' ? programme : carnet
 
+  const chips =
+    metaChips && metaChips.length > 0 ? metaChips : [phaseLabel].filter(Boolean)
+
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
-        stickyHeaderIndices={[]}
+        contentContainerStyle={{ paddingBottom: 32 + insets.bottom }}
+        showsVerticalScrollIndicator={false}
       >
         <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
           <LinearGradient
-            colors={['rgba(20,12,8,0.35)', 'rgba(20,12,8,0.92)']}
+            colors={['rgba(0,0,0,0.38)', 'transparent', 'rgba(0,0,0,0.72)']}
+            locations={[0, 0.35, 1]}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.heroTop, { paddingTop: insets.top + 8 }]}>
+          <View style={[styles.heroTop, { paddingTop: insets.top + 6 }]}>
             <Pressable onPress={onBack} style={styles.glassBtn}>
-              <Text style={styles.glassBtnText}>←</Text>
+              <Text style={styles.glassIcon}>←</Text>
             </Pressable>
             {onShare ? (
-              <Pressable onPress={onShare} style={styles.glassPill}>
-                <Text style={styles.glassBtnText}>Partager</Text>
+              <Pressable onPress={onShare} style={styles.glassBtn}>
+                <Text style={styles.glassIcon}>↗</Text>
               </Pressable>
             ) : (
-              <View />
+              <View style={{ width: 40 }} />
             )}
           </View>
           <View style={styles.heroCopy}>
-            <View style={styles.phasePill}>
-              <Text style={styles.phaseText}>{phaseLabel}</Text>
+            <Text style={styles.title} numberOfLines={3}>
+              {title}
+            </Text>
+            <View style={styles.chipRow}>
+              {chips.map((c, i) => (
+                <View key={`${c}-${i}`} style={styles.chipItem}>
+                  {i > 0 ? <Text style={styles.chipDot}> · </Text> : null}
+                  <Text style={styles.chipText}>{c}</Text>
+                </View>
+              ))}
             </View>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.meta}>{metaLine}</Text>
+            {metaLine && chips.join(' · ') !== metaLine ? (
+              <Text style={styles.meta}>{metaLine}</Text>
+            ) : null}
           </View>
         </ImageBackground>
 
         <View style={styles.sheet}>
-          {groupRow}
+          {(guideName || groupRow) && (
+            <View style={styles.guideRow}>
+              <View style={styles.guideLeft}>
+                <View style={styles.avatar}>
+                  {guideAvatarUrl ? (
+                    <Image
+                      source={{ uri: guideAvatarUrl }}
+                      style={styles.avatarImg}
+                    />
+                  ) : (
+                    <Text style={styles.avatarLetter}>
+                      {(guideName || '?').slice(0, 1).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.guideName} numberOfLines={1}>
+                    {guideName || 'Organisateur'}
+                  </Text>
+                  <Text style={styles.guideSub} numberOfLines={1}>
+                    {guideSubtitle || 'Organisateur du voyage'}
+                  </Text>
+                </View>
+              </View>
+              {onShare ? (
+                <Pressable onPress={onShare} style={styles.inviteBtn}>
+                  <Text style={styles.inviteText}>Inviter</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
+          {groupRow && !guideName ? groupRow : null}
+
           <View style={styles.tabs}>
             {TRIP_DETAIL_TABS.map((t) => {
               const active = tab === t.id
@@ -120,147 +181,231 @@ export function TripDetailPathChrome({
               )
             })}
           </View>
+
+          {tab === 'apercu' && insideChips && insideChips.length > 0 ? (
+            <View style={styles.insideGrid}>
+              {insideChips.map((chip) => (
+                <Pressable
+                  key={chip.label}
+                  onPress={() => {
+                    if (chip.tab) setTab(chip.tab)
+                    chip.onClick?.()
+                  }}
+                  style={styles.insideChip}
+                >
+                  <View style={styles.insideIcon}>
+                    <Text style={styles.insideIconText}>
+                      {chip.icon || chip.label.slice(0, 1)}
+                    </Text>
+                  </View>
+                  <Text style={styles.insideLabel}>{chip.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.panel}>{body}</View>
+
+          {!primary.informational ? (
+            <Pressable onPress={onPrimary} style={styles.inlineCta}>
+              <Text style={styles.inlineCtaText}>{primary.label}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </ScrollView>
-
-      <View
-        style={[
-          styles.sticky,
-          { paddingBottom: Math.max(insets.bottom, 12) },
-        ]}
-      >
-        {estimatedTotalLabel ? (
-          <Text style={styles.stickyPrice} numberOfLines={1}>
-            {estimatedTotalLabel}
-          </Text>
-        ) : (
-          <View style={{ flex: 1 }} />
-        )}
-        {primary.informational ? (
-          <Text style={styles.stickyInfo}>{primary.label}</Text>
-        ) : (
-          <Pressable onPress={onPrimary} style={styles.stickyCta}>
-            <Text style={styles.stickyCtaText}>{primary.label}</Text>
-          </Pressable>
-        )}
-      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFF9F5' },
-  hero: { minHeight: 280, justifyContent: 'space-between' },
+  root: { flex: 1, backgroundColor: '#F7F4EF' },
+  hero: {
+    minHeight: 420,
+    justifyContent: 'space-between',
+  },
   heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
   },
   glassBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
-  glassPill: {
-    height: 44,
-    paddingHorizontal: 16,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  glassBtnText: { color: '#fff', fontFamily: fonts.bold, fontSize: 15 },
-  heroCopy: { paddingHorizontal: 20, paddingBottom: 36, gap: 8 },
-  phasePill: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  phaseText: {
+  glassIcon: {
     color: '#fff',
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    textTransform: 'uppercase',
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+  },
+  heroCopy: {
+    paddingHorizontal: 20,
+    paddingBottom: 44,
+    gap: 8,
   },
   title: {
     color: '#fff',
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    fontStyle: 'italic',
+    fontFamily: fonts.serifItalic,
+    fontSize: 40,
+    lineHeight: 44,
+    letterSpacing: -0.6,
   },
-  meta: { color: 'rgba(255,255,255,0.78)', fontFamily: fonts.medium, fontSize: 14 },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  chipItem: { flexDirection: 'row', alignItems: 'center' },
+  chipDot: {
+    color: 'rgba(255,255,255,0.4)',
+    fontFamily: fonts.medium,
+    fontSize: 13,
+  },
+  chipText: {
+    color: 'rgba(255,255,255,0.88)',
+    fontFamily: fonts.medium,
+    fontSize: 13,
+  },
+  meta: {
+    color: 'rgba(255,255,255,0.55)',
+    fontFamily: fonts.medium,
+    fontSize: 12,
+  },
   sheet: {
-    marginTop: -24,
-    backgroundColor: '#FFF9F5',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    minHeight: 400,
+    marginTop: -28,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    minHeight: 420,
+    shadowColor: '#140C08',
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 8,
+  },
+  guideRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+    gap: 12,
+  },
+  guideLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EDE8E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: { width: 44, height: 44 },
+  avatarLetter: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: '#6B5C50',
+  },
+  guideName: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  guideSub: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: '#8A7B6E',
+    marginTop: 1,
+  },
+  inviteBtn: {
+    backgroundColor: colors.ink,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  inviteText: {
+    color: '#fff',
+    fontFamily: fonts.bold,
+    fontSize: 12,
   },
   tabs: {
     flexDirection: 'row',
+    gap: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#FFDCC8',
-    marginBottom: 16,
+    borderBottomColor: '#EDE8E1',
+    marginBottom: 18,
   },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
+  tab: { paddingBottom: 12 },
   tabLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: '#94A3B8',
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: '#A3988C',
   },
   tabLabelActive: { color: colors.ink },
   tabUnderline: {
-    marginTop: 8,
-    height: 2,
-    width: '40%',
-    borderRadius: 2,
-    backgroundColor: colors.primary,
-  },
-  panel: { paddingBottom: 24 },
-  sticky: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: colors.ink,
+  },
+  insideGrid: {
     flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  insideChip: {
+    flex: 1,
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    backgroundColor: 'rgba(255,249,245,0.96)',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#FFDCC8',
+    gap: 8,
+    backgroundColor: '#F7F4EF',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-  stickyPrice: {
-    flex: 1,
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.ink,
+  insideIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  stickyInfo: {
-    flex: 1,
-    textAlign: 'right',
+  insideIconText: { fontSize: 15 },
+  insideLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: '#64748B',
+    fontSize: 10,
+    color: '#5C4F44',
+    textAlign: 'center',
   },
-  stickyCta: {
-    backgroundColor: '#1A120E',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+  panel: { paddingBottom: 16 },
+  inlineCta: {
+    marginTop: 8,
+    marginBottom: 8,
+    alignSelf: 'stretch',
+    backgroundColor: colors.ink,
+    paddingVertical: 15,
     borderRadius: 999,
+    alignItems: 'center',
   },
-  stickyCtaText: {
+  inlineCtaText: {
     color: '#fff',
-    fontFamily: fonts.extrabold,
-    fontSize: 14,
+    fontFamily: fonts.semibold,
+    fontSize: 15,
   },
 })

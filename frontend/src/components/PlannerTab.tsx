@@ -2851,10 +2851,26 @@ function TripDetailView({
         heroUrl={destinationImage}
         title={trip.name}
         metaLine={[dateLine, routeLine].filter(Boolean).join(' · ')}
+        metaChips={[
+          destinationName,
+          dateLine || pathView.phaseLabel,
+          `${pax} voyageur${pax > 1 ? 's' : ''}`,
+        ].filter(Boolean) as string[]}
         phaseLabel={pathView.phaseLabel}
         primary={pathView.primary}
         onPrimary={runPathPrimary}
         onBack={onBack}
+        guideName={
+          trip.organizer?.full_name?.trim() ||
+          trip.member_names?.[0] ||
+          null
+        }
+        guideAvatarUrl={trip.organizer?.avatar_url?.trim() || null}
+        guideSubtitle={
+          isOrganizer
+            ? 'Organisateur · toi'
+            : 'Organisateur du voyage'
+        }
         onShare={
           isOrganizer
             ? () => {
@@ -2864,33 +2880,33 @@ function TripDetailView({
               }
             : undefined
         }
-        groupRow={
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-slate-600">
-              {pax} voyageur{pax > 1 ? 's' : ''}
-            </p>
-            {isOrganizer ? (
-              <button
-                type="button"
-                onClick={() => setAddOpen(true)}
-                className="rounded-full bg-[#FF6B35]/15 px-3 py-1.5 text-xs font-bold text-[#E85A28]"
-              >
-                Inviter
-              </button>
-            ) : null}
-          </div>
-        }
-        estimatedTotalLabel={
-          stayParty.perPerson > 0
-            ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)} estimé`
-            : null
-        }
+        insideChips={[
+          { label: 'Vol', icon: '✈', tab: 'apercu' },
+          { label: 'Hôtel', icon: '⌂', tab: 'apercu' },
+          { label: 'Programme', icon: '☰', tab: 'programme' },
+          { label: 'Carnet', icon: '✎', tab: 'carnet' },
+        ]}
         apercu={
-          <div className="space-y-5" ref={stayExtrasRef}>
+          <div className="space-y-7" ref={stayExtrasRef}>
             <div>
-              <h3 className="mb-2 text-sm font-extrabold text-[#1A120E]">
-                Étapes
+              <h3
+                className="mb-1 text-xl font-normal italic text-[#1A120E]"
+                style={{ fontFamily: '"Instrument Serif", Georgia, serif' }}
+              >
+                À propos
               </h3>
+              <p className="mb-4 text-sm leading-relaxed text-[#6B5C50]">
+                {dateLine
+                  ? `${destinationName} · ${dateLine}. `
+                  : `${destinationName}. `}
+                Phase actuelle : {pathView.phaseLabel.toLowerCase()}.
+                {isOrganizer
+                  ? ' Tu pilotes les prochaines étapes du groupe.'
+                  : ' Suis les étapes et réserve ta part.'}
+              </p>
+              <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#A3988C]">
+                Étapes
+              </h4>
               <StayPipelineStepper steps={pipelineSteps} />
             </div>
             {accepted?.trip_data ? (
@@ -2968,37 +2984,42 @@ function TripDetailView({
             onItemsChange={() => void load({ silent: true })}
             activitiesSlot={
               plannerActivitiesEnabled ? (
-                <div className="mt-6">
-                  <ActivityStepPanel
-                    plannedTripId={trip.id}
-                    draftToken={
-                      flightDraft?.draft_token ||
-                      workspace?.draft_token ||
-                      null
-                    }
-                    citySlug={resolveActivityCitySlug({
-                      city: destinationName,
-                      iata: destinationCode,
-                    })}
-                    onItemsChange={onActivityItemsChange}
-                  />
-                </div>
+                <ActivityStepPanel
+                  plannedTripId={trip.id}
+                  draftToken={
+                    flightDraft?.draft_token ||
+                    workspace?.draft_token ||
+                    null
+                  }
+                  citySlug={resolveActivityCitySlug({
+                    city: destinationName,
+                    iata: destinationCode,
+                  })}
+                  onItemsChange={onActivityItemsChange}
+                />
               ) : null
             }
           />
         }
         carnet={
-          <div className="space-y-4">
-            <p className="text-sm text-slate-600">
-              Notes du groupe et avis catalogue. Facture hôtel dès qu’elle est
-              disponible.
-            </p>
+          <div className="space-y-5">
+            <div>
+              <h3
+                className="text-xl font-normal italic text-[#1A120E]"
+                style={{ fontFamily: '"Instrument Serif", Georgia, serif' }}
+              >
+                Carnet
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
+                Notes du groupe, avis catalogue et documents de réservation.
+              </p>
+            </div>
             {hotelInvoiceReady ? (
               <button
                 type="button"
                 disabled={invoiceBusy}
                 onClick={downloadHotelInvoice}
-                className="rounded-full bg-[#1A120E] px-5 py-3 text-sm font-extrabold text-white"
+                className="rounded-full bg-[#1A120E] px-5 py-3 text-sm font-semibold text-white"
               >
                 {invoiceBusy
                   ? '…'
@@ -3011,7 +3032,7 @@ function TripDetailView({
               <button
                 type="button"
                 onClick={openReservations}
-                className="block text-sm font-bold text-[#FF6B35]"
+                className="block text-sm font-semibold text-[#1A120E] underline decoration-[#EDE8E1] underline-offset-4"
               >
                 Voir les réservations
               </button>
@@ -3256,7 +3277,7 @@ function TripDetailView({
                   trip={sanitizeTripAirports(accepted.trip_data)}
                   passengers={pax}
                   pricePerPerson={stayParty.flightPp || stayParty.perPerson}
-                  priceCaption="Prix du vol"
+                  priceCaption={partyPriceCaptionFr(pax, { kind: 'flight' })}
                   bookingStatus={flightBookingStatus || undefined}
                   flightBooked={flightBooked}
                   bookingBusy={flightBookingBusy}
