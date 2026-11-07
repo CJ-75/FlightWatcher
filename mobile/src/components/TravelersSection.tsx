@@ -239,7 +239,7 @@ export function TravelersSection({
 
       {!isOrganizer ? (
         <Text style={styles.roleNote}>
-          Lecture seule — seul l’organisateur gère la liste.
+          Lecture seule. Seul l’organisateur gère la liste.
         </Text>
       ) : null}
 

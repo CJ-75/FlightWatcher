@@ -198,7 +198,7 @@ export function ProfileScreen() {
         <Text style={styles.kicker}>COMPTE</Text>
         <Text style={styles.title}>{translate('fr', 'profile.title')}</Text>
         <Text style={styles.subtitle}>
-          Réservations, favoris et réglages — tout ton voyage au même endroit.
+          Réservations, favoris et réglages : tout ton voyage au même endroit.
         </Text>
 
         <View style={[styles.identity, shadow.soft]}>
@@ -320,7 +320,7 @@ export function ProfileScreen() {
                 Tester onboarding invitation
               </Text>
               <Text style={styles.devPreviewSub}>
-                Sans Google — mode test Expo, ouvre le voyage local
+                Sans Google. Mode test Expo, ouvre le voyage local.
               </Text>
             </Pressable>
             <Pressable

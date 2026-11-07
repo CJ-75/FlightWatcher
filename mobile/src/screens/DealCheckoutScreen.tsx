@@ -439,7 +439,7 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
       } else if (pb.liteapi_env === 'sandbox') {
         await sandboxBook(pb.booking_id)
       } else {
-        throw new Error('Paiement indisponible — réessaie')
+        throw new Error('Paiement indisponible. Réessaie.')
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
@@ -468,7 +468,7 @@ export function DealCheckoutScreen({ route, navigation }: Props) {
         throw new Error(
           booked.status === 'failed'
             ? 'La réservation hôtel a échoué'
-            : 'Confirmation en cours — réessaie dans quelques secondes',
+            : 'Confirmation en cours. Réessaie dans quelques secondes.',
         )
       }
       if (draftToken) {

@@ -209,7 +209,7 @@ const sampleDeal: TravelDeal = {
   hotel_stars: 3,
   board: 'Petit-déjeuner',
   highlights: ['Vol A/R inclus', 'Hôtel centre-ville'],
-  description: 'Aperçu Expo — deal liké sans compte.',
+  description: 'Aperçu Expo. Deal liké sans compte.',
   provider: 'mock',
   booking_url: 'https://www.expedia.fr/Lisbon.d178307.Destination-Travel-Guides',
   badge: 'Week-end',

@@ -809,7 +809,7 @@ export function ActivitiesScreen() {
         setAddedCodes((prev) => new Set(prev).add(card.productCode))
       }
       setAddNotice(
-        `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
+        `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)}. ${ACTIVITY_KEEP_ADDING_FR}`,
       )
       setPendingAdd(null)
       setDetail(null)

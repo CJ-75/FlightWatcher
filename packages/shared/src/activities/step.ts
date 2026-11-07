@@ -20,9 +20,12 @@ export const ACTIVITY_PAGE_SUBTITLE_FR = 'Visites, sorties et expériences.'
 export const ACTIVITY_ADD_TO_PLANNER_FR = 'Ajouter'
 /** Bouton compact carte — le « + » est rendu en UI. */
 export const ACTIVITY_ADD_SHORT_FR = 'Ajouter'
-export const ACTIVITY_PICK_PLANNER_TITLE_FR = 'Ajouter à quel séjour ?'
+export const ACTIVITY_PICK_PLANNER_TITLE_FR = 'Où l’ajouter ?'
 export const ACTIVITY_PICK_PLANNER_HINT_FR =
-  'Choisis le séjour qui recevra cette idée.'
+  'Choisis le séjour pour cette activité. Tu pourras en ajouter plusieurs au même voyage.'
+export const ACTIVITY_PICK_PLANNER_KICKER_FR = 'Séjour'
+export const ACTIVITY_PICK_PLANNER_CURRENT_FR = 'Actuel'
+export const ACTIVITY_PICK_PLANNER_ADD_FR = 'Sélectionné'
 /** Hint when the picker switches the active séjour (not add-flow). */
 export const ACTIVITY_SWITCH_TRIP_HINT_FR =
   'Ce séjour devient le séjour actif pour Activités.'
@@ -36,12 +39,14 @@ export const ACTIVITY_CHOOSE_TRIP_FR = 'Choisir un séjour'
 export const ACTIVITY_TRIP_IN_PROGRESS_FR = (city: string) =>
   `Séjour · ${city}`
 export const ACTIVITY_TRIP_IN_PROGRESS_HINT_FR =
-  'Ajoute des idées ici — elles rejoignent ce séjour.'
+  'Ajoute des idées ici, elles rejoignent ce séjour.'
 export const ACTIVITY_TRIP_PLANNER_COUNT_FR = (n: number) =>
   n <= 0 ? '0 activité' : n === 1 ? '1 activité' : `${n} activités`
 /** Row badge: collaborative planned trip vs personal draft. */
 export const ACTIVITY_STAY_KIND_SHARED_FR = 'Partagé'
 export const ACTIVITY_STAY_KIND_SOLO_FR = 'Perso'
+/** Member joined via invite (not organizer) — stay picker. */
+export const ACTIVITY_STAY_KIND_INVITEE_FR = 'Invité'
 
 /** Statut séjour pour le hero Activités, calé sur la date du jour. */
 export type ActivityTripTimingStatus =
@@ -91,10 +96,10 @@ export const ACTIVITY_TRIP_TIMING_HINT_FR: Record<
   ActivityTripTimingStatus,
   string
 > = {
-  upcoming: 'Prépare ton séjour — les idées s’y ajoutent au fur et à mesure.',
+  upcoming: 'Prépare ton séjour : les idées s’y ajoutent au fil de l’eau.',
   ongoing: ACTIVITY_TRIP_IN_PROGRESS_HINT_FR,
-  past: 'Séjour passé — tu peux encore noter des idées pour la prochaine fois.',
-  undated: 'Prépare ton séjour — les idées s’y ajoutent au fur et à mesure.',
+  past: 'Séjour passé. Tu peux encore noter des idées pour la prochaine fois.',
+  undated: 'Prépare ton séjour : les idées s’y ajoutent au fil de l’eau.',
 }
 export const ACTIVITY_SYNC_CITY_FR = (city: string) => `Activités à ${city}`
 export const ACTIVITY_NO_TRIP_CTA_TITLE_FR = 'Ton prochain séjour commence ici'

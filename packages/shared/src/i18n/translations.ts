@@ -23,7 +23,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'alerts.count': '{count} alerte{s}',
     'alerts.guest.title': 'Les bons prix te trouvent',
     'alerts.guest.lead':
-      'Surveille un séjour ou un vol : on te prévient dès qu’un meilleur prix apparaît — pour réserver au bon moment.',
+      'Surveille un séjour ou un vol : on te prévient dès qu’un meilleur prix apparaît, pour réserver au bon moment.',
     'alerts.guest.step1': 'Choisis ta recherche',
     'alerts.guest.step1.detail': 'Sauvegarde le séjour ou le trajet qui t’intéresse',
     'alerts.guest.step2': 'Active la surveillance',
@@ -49,7 +49,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.otherDates': 'Voir d’autres dates',
     'deals.like': 'Ajouter aux favoris',
     'deals.unlike': 'Retirer des favoris',
-    'deals.liked': 'Deal ajouté aux favoris — alerte prix −8 % activée',
+    'deals.liked': 'Deal ajouté aux favoris. Alerte prix −8 % activée.',
     'deals.alertHint': 'Alerte email si le prix baisse d’au moins 8 % (1× / 24 h)',
     'deals.unliked': 'Deal retiré des favoris',
     'deals.loginRequired': 'Connecte-toi pour liker un deal.',
@@ -64,7 +64,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.legal.cgvNote': 'Hôtel réservé via LiteAPI / Nuitee. Vol réservé séparément auprès de la compagnie ou du partenaire. Mentions légales et CGV à consulter avant paiement.',
     'deals.legal.cancelLocal': 'Annulation hôtel (heure locale) : {when}',
     'deals.bookingDisabled': 'Réservation hôtel temporairement fermée (phase calibration).',
-    'deals.readonlyBanner': 'Deals en lecture seule — les prix prod sont en calibration.',
+    'deals.readonlyBanner': 'Deals en lecture seule. Les prix prod sont en calibration.',
     'deals.changeHotel': 'Changer d’hôtel',
     'deals.selectedHotel': 'Hôtel sélectionné',
     'deals.flight': 'Vol',
@@ -84,7 +84,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.titleSell': 'Séjours pas chers',
     'deals.guest.title': 'Trouve le séjour qui te fait partir',
     'deals.guest.lead':
-      'Vol + hôtel au meilleur prix, likés et prêts à réserver — connecte-toi pour explorer et garder tes coups de cœur.',
+      'Vol + hôtel au meilleur prix, likés et prêts à réserver. Connecte-toi pour explorer et garder tes coups de cœur.',
     'deals.guest.step1': 'Choisis ton départ',
     'deals.guest.step1.detail': 'Week-end, court séjour ou semaine',
     'deals.guest.step2': 'Compare les deals',
@@ -107,7 +107,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.alertTitle': 'Les bons plans depuis {city}, chaque jeudi',
     'deals.originAlertHint': 'Un email, sans compte. Tu te désinscris quand tu veux.',
     'deals.alertCta': 'Recevoir les bons plans',
-    'deals.alertDone': 'C’est noté — check ta boîte mail.',
+    'deals.alertDone': 'C’est noté. Check ta boîte mail.',
     'deals.alertEmail': 'Ton email',
     'deals.quickUnder150': 'Moins de 150 €',
     'deals.quickBreakfast': 'Petit-déj inclus',
@@ -140,7 +140,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'favorites.switch.addresses': 'Mes adresses',
     'favorites.archivedSection': 'Archivés',
     'favorites.archivedSectionCount': 'Archivés ({n})',
-    'favorites.archivedHint': 'Dates passées — toujours accessibles ici.',
+    'favorites.archivedHint': 'Dates passées, toujours accessibles ici.',
     'favorites.flightsEmpty': 'Aucun vol en favori',
     'favorites.flightsEmptyBody': 'Ajoute un voyage depuis les résultats de recherche.',
     'favorites.dealsEmptyTitle': 'Aucun deal liké',
@@ -176,11 +176,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.phase.booked': 'Réservé',
     'planner.phase.past': 'Terminé',
     'planner.phase.planning.hint': 'Choisis un vol et invite qui part avec toi.',
-    'planner.phase.flight_selected.hint': 'Vol choisi — compose ton hôtel.',
+    'planner.phase.flight_selected.hint': 'Vol choisi. Compose ton hôtel.',
     'planner.phase.composing.hint': 'Finalise la réservation de ton séjour.',
     'planner.phase.booked.hint': 'Réservation rattachée à ce séjour.',
     'planner.phase.past.hint':
-      'Séjour terminé — tu peux encore y ajouter des activités.',
+      'Séjour terminé. Tu peux encore y ajouter des activités.',
     'planner.phase.planning.action': 'Continuer',
     'planner.phase.flight_selected.action': 'Choisir mon hôtel',
     'planner.phase.composing.action': 'Reprendre',
@@ -211,7 +211,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'destination.fallback': 'Destination',
     'planner.guest.title': 'Ton séjour, du vol aux activités',
     'planner.guest.lead':
-      'Crée un voyage, compose vol + hôtel + activités, invite tes proches — tout le monde suit le même séjour.',
+      'Crée un voyage, compose vol + hôtel + activités, invite tes proches. Tout le monde suit le même séjour.',
     'planner.guest.step1': 'Crée ton séjour',
     'planner.guest.step1.detail': 'Dates, budget, qui part avec toi',
     'planner.guest.step2': 'Compose le voyage',
@@ -234,10 +234,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.scan.status1': 'On interroge les compagnies…',
     'planner.scan.status2': 'On compare les prix en direct…',
     'planner.scan.status3': 'On filtre selon ton budget…',
-    'planner.scan.status4': 'Presque là — on assemble les options…',
-    'planner.scan.hint': 'Ça prend quelques secondes — on reste dans ton thème week-end.',
+    'planner.scan.status4': 'Presque là, on assemble les options…',
+    'planner.scan.hint': 'Ça prend quelques secondes. On reste dans ton thème week-end.',
     'planner.scan.emptyBudget': 'Aucun vol sous {budget}€/pers pour ces dates.',
-    'planner.scan.emptyBudgetHint': 'Le moins cher trouvé est à environ {price}€/pers — augmente le budget ou change les dates.',
+    'planner.scan.emptyBudgetHint': 'Le moins cher trouvé est à environ {price}€/pers. Augmente le budget ou change les dates.',
     'planner.scan.emptyBudgetNoPrice': 'Augmente le budget ou élargis les dates, puis relance le scan.',
     'planner.scan.emptyNone': 'Aucun vol trouvé pour ces dates / cette destination.',
     'planner.scan.emptyPrompt': 'Lance un scan pour trouver des vols.',
@@ -253,7 +253,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.watch.interval': 'Fréquence',
     'planner.watch.every': 'Vérification toutes les {minutes} min',
     'planner.watch.banner.kicker': 'Astuce voyage',
-    'planner.watch.banner.title': 'Les prix baissent — on vous prévient',
+    'planner.watch.banner.title': 'Les prix baissent, on vous prévient',
     'planner.watch.banner.body':
       'Activez la surveillance : on scanne vos dates en continu et on prévient tout le monde dès qu’un vol passe sous {budget}€/pers.',
     'planner.watch.banner.b1': 'Scan automatique, même quand l’app est fermée',
@@ -270,7 +270,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.archive': 'Archiver le séjour',
     'planner.archiveConfirm':
       'Archiver « {name} » ?\n\nLe séjour passe en Terminé.',
-    'planner.archiveDone': 'Séjour archivé — Terminé',
+    'planner.archiveDone': 'Séjour archivé · Terminé',
     'planner.delete': 'Supprimer le séjour',
     'planner.deleteConfirm':
       'Supprimer « {name} » ?\n\nLe séjour disparaît de ta liste (tes réservations restent).',
@@ -321,7 +321,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.invite.joined': 'Tu as rejoint le voyage !',
     'planner.invite.back': '← Retour à l’invitation',
     'planner.invite.previewNote':
-      'Aperçu sans compte — inscris-toi pour rejoindre le voyage (pas seulement le regarder).',
+      'Aperçu sans compte. Inscris-toi pour rejoindre le voyage, pas seulement le regarder.',
     'planner.invite.signupKicker': 'Inscription',
     'planner.invite.signupTitle': 'Rejoins le voyage',
     'planner.invite.signupLead':
@@ -336,7 +336,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.invite.step2.detail': 'Tu es ajouté au planner automatiquement.',
     'planner.invite.step3': 'Compose ton séjour',
     'planner.invite.step3.detail':
-      'Vol / hôtel / activités pour toi — l’orga garde le vol du groupe.',
+      'Vol, hôtel et activités pour toi. L’orga garde le vol du groupe.',
     
     // Auth
     'auth.signIn': 'Se connecter',
@@ -357,12 +357,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.deleteHint':
       'Compte, profil et favoris sont effacés. Les réservations et leurs dates restent en base.',
     'auth.security.deletePopup':
-      'On supprime ton compte, ton profil et tes favoris.\n\nOn conserve en base tes réservations (vol / hôtel) et leurs dates.\n\nIrréversible — continuer ?',
+      'On supprime ton compte, ton profil et tes favoris.\n\nOn conserve en base tes réservations (vol / hôtel) et leurs dates.\n\nIrréversible. Continuer ?',
     'auth.security.deleteConfirm': 'Confirme pour supprimer définitivement.',
     'auth.security.deleteButton': 'Supprimer',
     'auth.security.deleteBusy': 'Suppression…',
     'auth.security.deleteDone': 'Compte supprimé',
-    'auth.security.deleteError': 'Suppression impossible — réessaie',
+    'auth.security.deleteError': 'Suppression impossible. Réessaie.',
     'auth.security.legalPrivacy': 'Confidentialité',
     'auth.security.legalTerms': 'CGU',
     'auth.security.legalMentions': 'Mentions légales',
@@ -488,7 +488,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'favorites.archived': 'Archivés',
     'favorites.guest.title': 'Garde ce qui te donne envie de partir',
     'favorites.guest.lead':
-      'Like séjours, vols et activités — retrouve tout ici pour comparer, partager et réserver plus vite.',
+      'Like séjours, vols et activités. Retrouve tout ici pour comparer, partager et réserver plus vite.',
     'favorites.guest.step1': 'Explore',
     'favorites.guest.step1.detail': 'Séjours, vols ou activités sur place',
     'favorites.guest.step2': 'Like en un tap',
@@ -534,7 +534,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.error': 'Erreur lors de l\'enregistrement',
     'profile.guest.title': 'Tout ton voyage, dans une app',
     'profile.guest.lead':
-      'Connecte-toi pour garder séjours, activités, favoris et planners — et reprendre exactement où tu t’es arrêté.',
+      'Connecte-toi pour garder séjours, activités, favoris et planners, et reprendre exactement où tu t’es arrêté.',
     'profile.guest.step1': 'Séjours & deals',
     'profile.guest.step1.detail': 'Inspire-toi et compare les prix',
     'profile.guest.step2': 'Planner + activités',
@@ -548,7 +548,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     'activities.guest.title': 'Prépare ce que tu feras sur place',
     'activities.guest.lead':
-      'Visites, musées, sorties — ajoute-les à ton séjour et synchronise avec ton planner.',
+      'Visites, musées, sorties : ajoute-les à ton séjour et synchronise avec ton planner.',
     'activities.guest.step1': 'Choisis la ville',
     'activities.guest.step1.detail': 'Alignée sur ton voyage en cours',
     'activities.guest.step2': 'Explore et like',
@@ -933,7 +933,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.oauthHint':
       '{provider} account: leave “current” empty if you don’t have a password yet.',
     'auth.security.oauthNoPassword':
-      'Account linked to {provider} — add a password.',
+      'Account linked to {provider}. Add a password.',
     'auth.security.sendLink': 'Send email link',
     'auth.security.sending': 'Sending email…',
     'auth.security.saving': 'Saving…',

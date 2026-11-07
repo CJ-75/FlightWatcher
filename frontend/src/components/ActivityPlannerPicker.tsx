@@ -7,13 +7,16 @@ import { Link } from 'react-router-dom'
 import {
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
   ACTIVITY_OPEN_PLANNER_FR,
+  ACTIVITY_PICK_PLANNER_ADD_FR,
+  ACTIVITY_PICK_PLANNER_CURRENT_FR,
   ACTIVITY_PICK_PLANNER_HINT_FR,
+  ACTIVITY_PICK_PLANNER_KICKER_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
-  ACTIVITY_STAY_KIND_SHARED_FR,
-  ACTIVITY_STAY_KIND_SOLO_FR,
+  ACTIVITY_STAY_KIND_INVITEE_FR,
   ACTIVITY_SWITCHER_SOFT_LIMIT,
   cityDisplayNameFr,
+  cityImageUrl,
   filterActivitySwitcherWorkspaces,
   parseAirportCodes,
   type PlannedTrip,
@@ -45,11 +48,18 @@ type Props = {
   onPick: (target: ActivityPlannerTarget) => void
 }
 
+function formatDay(raw?: string | null): string | null {
+  const s = String(raw || '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  const [, m, d] = s.split('-')
+  return `${d}/${m}`
+}
+
 function formatDates(ws: TravelWorkspace): string | null {
-  const out = ws.out_date ? String(ws.out_date).slice(0, 10) : ''
-  const ret = ws.ret_date ? String(ws.ret_date).slice(0, 10) : ''
+  const out = formatDay(ws.out_date)
+  const ret = formatDay(ws.ret_date)
   if (out && ret) return `${out} → ${ret}`
-  if (out) return out
+  if (out) return `Départ ${out}`
   return null
 }
 
@@ -60,6 +70,14 @@ function workspaceLabel(ws: TravelWorkspace): string {
     return `${title} · ${city}`
   }
   return title || city || 'Séjour'
+}
+
+function workspaceCity(ws: TravelWorkspace): string {
+  return (
+    String(ws.city || '').trim() ||
+    cityDisplayNameFr(String(ws.dest_iata || '').trim()) ||
+    'Séjour'
+  )
 }
 
 function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
@@ -157,7 +175,6 @@ export function ActivityPlannerPicker({
         } catch (e) {
           const msg = e instanceof Error ? e.message : ''
           if (/401|403|auth|connect|auth_required/i.test(msg)) {
-            // Already logged in? refresh JWT and retry before asking to sign in.
             const session = await getCurrentSession().catch(() => null)
             if (session?.user) {
               await refreshAccessToken()
@@ -177,7 +194,7 @@ export function ActivityPlannerPicker({
                   if (!merged.length) {
                     setAuthNeeded(true)
                     setError(
-                      'Tu es connecté — impossible de charger tes séjours. Réessaie.',
+                      'Tu es connecté, impossible de charger tes séjours. Réessaie.',
                     )
                   }
                   return
@@ -239,24 +256,29 @@ export function ActivityPlannerPicker({
         onClick={onClose}
       />
       <div
-        className="app-dialog-panel app-dialog-md p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-hidden flex flex-col"
+        className="app-dialog-panel app-dialog-md p-0 max-h-[85vh] overflow-hidden flex flex-col"
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <div>
-          <h2 className="text-lg font-extrabold text-ink tracking-tight">
+        <div className="relative shrink-0 overflow-hidden px-5 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-orange-100/80 bg-gradient-to-br from-[#FFF8F3] via-white to-[#FFF1E8]">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary-700">
+            {ACTIVITY_PICK_PLANNER_KICKER_FR}
+          </p>
+          <h2 className="mt-1.5 text-xl sm:text-2xl font-black text-ink tracking-tight">
             {title}
           </h2>
-          <p className="mt-1 text-sm text-muted">{hint}</p>
+          <p className="mt-1.5 text-sm text-ink-soft leading-relaxed max-w-md">
+            {hint}
+          </p>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-2.5">
           {loading ? (
-            <p className="text-sm text-muted py-6 text-center">Chargement…</p>
+            <p className="text-sm text-muted py-8 text-center">Chargement…</p>
           ) : null}
           {error && !items.length ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 space-y-2">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm text-amber-900 space-y-2">
               <p>{error}</p>
               {authNeeded ? (
                 <Link to="/compte" className="font-bold underline">
@@ -266,9 +288,12 @@ export function ActivityPlannerPicker({
             </div>
           ) : null}
           {!loading && !items.length && !error ? (
-            <div className="rounded-xl border border-line bg-canvas px-3 py-4 text-sm text-muted space-y-2 text-center">
-              <p>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</p>
-              <Link to="/planner" className="font-bold text-primary-700 underline">
+            <div className="rounded-2xl border border-dashed border-line bg-canvas px-4 py-6 text-sm text-muted space-y-3 text-center">
+              <p className="font-semibold text-ink">{ACTIVITY_NO_PLANNER_TO_ADD_FR}</p>
+              <Link
+                to="/planner"
+                className="inline-flex items-center justify-center rounded-xl bg-primary-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-primary-600"
+              >
                 {ACTIVITY_OPEN_PLANNER_FR}
               </Link>
             </div>
@@ -281,6 +306,13 @@ export function ActivityPlannerPicker({
               (preferredDraftToken && draft === preferredDraftToken)
             const dates = formatDates(ws)
             const label = workspaceLabel(ws)
+            const city = workspaceCity(ws)
+            const thumb = cityImageUrl(city, String(ws.dest_iata || '') || undefined)
+            const invitee = Boolean(
+              ws.is_invitee ||
+                (planned && ws.is_organizer === false) ||
+                ws.membership_joined_via === 'invite',
+            )
             return (
               <button
                 key={ws.workspace_id}
@@ -301,29 +333,51 @@ export function ActivityPlannerPicker({
                       : null,
                   })
                 }
-                className={`w-full text-left rounded-xl border px-3.5 py-3 transition-colors disabled:opacity-50 ${
+                className={`group w-full text-left rounded-2xl border px-3 py-3 transition-all disabled:opacity-50 ${
                   preferred
-                    ? 'border-primary-300 bg-primary-50/70'
-                    : 'border-line bg-white hover:border-primary-200 hover:bg-primary-50/40'
+                    ? 'border-primary-300 bg-primary-50/80 shadow-sm shadow-orange-950/5'
+                    : 'border-line bg-white hover:border-primary-200 hover:bg-[#FFF8F3] hover:shadow-sm'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-bold text-ink text-sm truncate">{label}</p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      {[
-                        planned
-                          ? ACTIVITY_STAY_KIND_SHARED_FR
-                          : ACTIVITY_STAY_KIND_SOLO_FR,
-                        dates,
-                        ws.dest_iata ? String(ws.dest_iata) : null,
-                      ]
+                <div className="flex items-center gap-3">
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100 ring-1 ring-black/5">
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    {invitee || preferred ? (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {invitee ? (
+                          <span className="inline-flex items-center rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-800 ring-1 ring-sky-100">
+                            {ACTIVITY_STAY_KIND_INVITEE_FR}
+                          </span>
+                        ) : null}
+                        {preferred ? (
+                          <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100">
+                            {ACTIVITY_PICK_PLANNER_CURRENT_FR}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <p
+                      className={`font-extrabold text-ink text-[15px] tracking-tight truncate ${
+                        invitee || preferred ? 'mt-1' : ''
+                      }`}
+                    >
+                      {label}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted truncate">
+                      {[dates, ws.dest_iata ? String(ws.dest_iata) : null]
                         .filter(Boolean)
-                        .join(' · ')}
+                        .join(' · ') || 'Dates à préciser'}
                     </p>
                   </div>
-                  <span className="shrink-0 text-primary-600 font-extrabold text-lg leading-none">
-                    +
+                  <span className="shrink-0 inline-flex items-center rounded-xl bg-primary-500 px-3 py-2 text-xs font-extrabold text-white shadow-sm group-hover:bg-primary-600">
+                    {ACTIVITY_PICK_PLANNER_ADD_FR}
                   </span>
                 </div>
               </button>
@@ -333,20 +387,22 @@ export function ActivityPlannerPicker({
             <button
               type="button"
               onClick={() => setExpanded(true)}
-              className="w-full rounded-xl border border-dashed border-line px-3 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-50/50"
+              className="w-full rounded-2xl border border-dashed border-line px-3 py-3 text-sm font-semibold text-primary-700 hover:bg-primary-50/50"
             >
               Voir plus ({items.length - ACTIVITY_SWITCHER_SOFT_LIMIT})
             </button>
           ) : null}
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-xl border border-line font-semibold py-2.5 text-sm"
-        >
-          Annuler
-        </button>
+        <div className="shrink-0 border-t border-line px-4 sm:px-5 py-3 bg-white">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full rounded-xl border border-line font-semibold py-2.5 text-sm text-ink hover:bg-slate-50"
+          >
+            Annuler
+          </button>
+        </div>
       </div>
     </div>
   )

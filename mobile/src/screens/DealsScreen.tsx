@@ -397,7 +397,7 @@ export function DealsScreen() {
               ) : null}
               {readonlyBanner && uiEnabled ? (
                 <Text style={[styles.subtitle, { color: colors.primary }]}>
-                  Lecture seule — réservation hôtel fermée.
+                  Lecture seule. Réservation hôtel fermée.
                 </Text>
               ) : null}
 

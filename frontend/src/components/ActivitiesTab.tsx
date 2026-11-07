@@ -408,7 +408,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         if (!res.ok) {
           const hint =
             res.error === 'unknown_city'
-              ? 'Ville non reconnue — essaie Paris, Rome, Barcelone…'
+              ? 'Ville non reconnue. Essaie Paris, Rome, Barcelone…'
               : res.error === 'viator_disabled'
                 ? 'Catalogue activités indisponible'
                 : String(res.error || '').includes('401') ||
@@ -823,7 +823,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       }
       await bindActiveTrip(target)
       setAddNotice(
-        `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)} — ${ACTIVITY_KEEP_ADDING_FR}`,
+        `${ACTIVITY_ADDED_TO_PLANNER_FR(target.label)}. ${ACTIVITY_KEEP_ADDING_FR}`,
       )
       setPendingAdd(null)
       setDetail(null)

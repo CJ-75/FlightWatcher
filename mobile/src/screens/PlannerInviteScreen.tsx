@@ -52,7 +52,7 @@ function routeLabel(value?: string | null): string {
 const SIGNUP_STEPS = [
   {
     title: 'Crée ton compte',
-    detail: 'Connexion Google en un tap — rapide et sécurisé.',
+    detail: 'Connexion Google en un tap, rapide et sécurisé.',
   },
   {
     title: 'Rejoins le voyage',
@@ -60,7 +60,7 @@ const SIGNUP_STEPS = [
   },
   {
     title: 'Compose ton séjour',
-    detail: 'Vol / hôtel / activités pour toi — l’orga garde le vol du groupe.',
+    detail: 'Vol, hôtel et activités pour toi. L’orga garde le vol du groupe.',
   },
 ] as const
 
@@ -237,7 +237,7 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
               <View style={[styles.signupCard, shadow.soft]}>
                 <Text style={styles.signupKicker}>Test Expo</Text>
                 <Text style={styles.signupTitle}>
-                  Onboarding invitation — {tripLabel}
+                  Onboarding invitation · {tripLabel}
                 </Text>
                 <Text style={styles.signupLead}>
                   Mode test non officiel : on saute Google et on ouvre le voyage
@@ -282,10 +282,10 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
                 </Text>
                 <Text style={styles.signupLead}>
                   Sans compte tu ne fais que prévisualiser. Inscris-toi pour
-                  rejoindre le groupe — pas seulement regarder.
+                  rejoindre le groupe, pas seulement regarder.
                 </Text>
                 <Text style={styles.previewNote}>
-                  Aperçu sans compte — le bouton ci-dessous lance l’inscription
+                  Aperçu sans compte. Le bouton ci-dessous lance l’inscription
                   puis le join automatique.
                 </Text>
 
@@ -338,7 +338,7 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
                 </Pressable>
                 {joining ? (
                   <Text style={styles.joiningHint}>
-                    Inscription OK — on t’ajoute au voyage…
+                    Inscription OK. On t’ajoute au voyage…
                   </Text>
                 ) : null}
               </View>

@@ -1551,7 +1551,7 @@ export default function MyTrip() {
       })
     } catch (e) {
       setCancelHotelError(
-        e instanceof Error ? e.message : 'Annulation impossible — réessaie',
+        e instanceof Error ? e.message : 'Annulation impossible. Réessaie.',
       )
     } finally {
       setCancellingHotel(false)
@@ -1692,7 +1692,7 @@ export default function MyTrip() {
                   </p>
                   <p className="text-xs text-muted mt-1.5">
                     {flightBooked
-                      ? 'Billet réservé chez la compagnie — présente ta confirmation à l’aéroport.'
+                      ? 'Billet réservé chez la compagnie. Présente ta confirmation à l’aéroport.'
                       : 'Réservation séparée sur le site de la compagnie.'}
                   </p>
                 </div>
@@ -1712,7 +1712,7 @@ export default function MyTrip() {
                 <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-950">
                   <p className="font-bold">Tarif vol à vérifier</p>
                   <p className="mt-1 text-amber-900/80 text-xs">
-                    Ce vol n’apparaît plus au même prix — confirme sur le site de la compagnie.
+                    Ce vol n’apparaît plus au même prix. Confirme sur le site de la compagnie.
                   </p>
                 </div>
               ) : null}

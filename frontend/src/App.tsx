@@ -653,7 +653,7 @@ function Dashboard() {
         setToastMessage(
           prefill.autoSearch
             ? `Recherche live ${labelOut} → ${labelRet}…`
-            : `Dates ${labelOut} → ${labelRet} prêtes — lance le scan.`,
+            : `Dates ${labelOut} → ${labelRet} prêtes. Lance le scan.`,
         )
       } else {
         if (pax) setSearchLoadToken((n) => n + 1)
@@ -661,7 +661,7 @@ function Dashboard() {
         if (destLabel) {
           setToastType('info')
           setToastMessage(
-            `Recherche pour ${destLabel} — choisis tes dates puis lance le scan.`,
+            `Recherche pour ${destLabel}. Choisis tes dates puis lance le scan.`,
           )
         }
       }
@@ -1153,7 +1153,7 @@ function Dashboard() {
       })
       .catch(() => {
         popup.close()
-        setToastMessage('Impossible d’ouvrir la réservation — réessaie')
+        setToastMessage('Impossible d’ouvrir la réservation. Réessaie.')
         setToastType('error')
       })
       .finally(() => setHotelUpsellBusy(false))
@@ -1205,7 +1205,7 @@ function Dashboard() {
       })
       navigate(`/planner/${encodeURIComponent(created.id)}`)
     } catch {
-      setToastMessage('Impossible d’ajouter au planner — réessaie')
+      setToastMessage('Impossible d’ajouter au planner. Réessaie.')
       setToastType('error')
     } finally {
       setHotelUpsellBusy(false)
@@ -1265,7 +1265,7 @@ function Dashboard() {
         navigate(path)
       }
     } catch {
-      setToastMessage('Impossible de créer le voyage — réessaie')
+      setToastMessage('Impossible de créer le voyage. Réessaie.')
       setToastType('error')
     } finally {
       setHotelUpsellBusy(false)
@@ -1302,7 +1302,7 @@ function Dashboard() {
               to="/vols"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-              aria-label="FlightWatcher — retour à la recherche"
+              aria-label="FlightWatcher, retour à la recherche"
             >
               <p className="app-kicker mb-0.5">FlightWatcher</p>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">

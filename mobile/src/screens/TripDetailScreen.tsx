@@ -613,7 +613,7 @@ export function TripDetailScreen() {
             })
       const token = String(draft?.draft_token || '').trim()
       if (!token) {
-        throw new Error('Brouillon hôtel introuvable — réessaie')
+        throw new Error('Brouillon hôtel introuvable. Réessaie.')
       }
       await rememberTrip({
         draft_token: token,
@@ -959,7 +959,7 @@ export function TripDetailScreen() {
     if (!trip || reopeningFlight || useGuestPreview) return
     Alert.alert(
       'Supprimer le vol',
-      'Le voyage repasse en planification — tu pourras en choisir un autre. Continuer ?',
+      'Le voyage repasse en planification. Tu pourras en choisir un autre. Continuer ?',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -1082,7 +1082,7 @@ export function TripDetailScreen() {
     try {
       const draft = await getApi().skipPlannedTripHotel(tripId)
       setFlightDraft(draft)
-      Alert.alert('Hôtel ailleurs', 'Étape hôtel passée — séjour à jour.')
+      Alert.alert('Hôtel ailleurs', 'Étape hôtel passée. Séjour à jour.')
       await load({ silent: true })
     } catch (e) {
       Alert.alert(
@@ -1111,7 +1111,7 @@ export function TripDetailScreen() {
       if (!token) {
         Alert.alert(
           'Erreur',
-          'Impossible de rattacher la réservation à ce voyage — réessaie.',
+          'Impossible de rattacher la réservation à ce voyage. Réessaie.',
         )
         return
       }
@@ -2334,7 +2334,7 @@ function PriceWatchBanner({
       style={[styles.watchSell, shadow.soft]}
     >
       <Text style={styles.watchKicker}>Astuce voyage</Text>
-      <Text style={styles.watchTitle}>Les prix baissent — on vous prévient</Text>
+      <Text style={styles.watchTitle}>Les prix baissent, on vous prévient</Text>
       <Text style={styles.watchHint}>
         Activez la surveillance : on scanne vos dates en continu et on prévient tout le
         monde dès qu’un vol passe sous {budget}€/pers.

@@ -369,7 +369,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
       })
       navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      Alert.alert('Erreur', 'Impossible d’ouvrir le planner — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ouvrir le planner. Réessaie.')
     } finally {
       setStartingTrip(false)
     }
@@ -395,7 +395,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
         seed: draft,
       })
     } catch {
-      Alert.alert('Erreur', 'Impossible d’ouvrir la composition hôtel — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ouvrir la composition hôtel. Réessaie.')
     } finally {
       setComposingHotel(false)
     }
@@ -559,7 +559,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
           <View style={styles.notice}>
             <TipIcon size={16} />
             <Text style={styles.noticeText}>
-              Tu réserves le vol et l’hôtel en deux étapes simples — chacun de son côté.
+              Tu réserves le vol et l’hôtel en deux étapes simples, chacun de son côté.
             </Text>
           </View>
 

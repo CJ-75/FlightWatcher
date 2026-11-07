@@ -10,18 +10,22 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Image,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   ACTIVITY_NO_PLANNER_TO_ADD_FR,
   ACTIVITY_OPEN_PLANNER_FR,
+  ACTIVITY_PICK_PLANNER_ADD_FR,
+  ACTIVITY_PICK_PLANNER_CURRENT_FR,
   ACTIVITY_PICK_PLANNER_HINT_FR,
+  ACTIVITY_PICK_PLANNER_KICKER_FR,
   ACTIVITY_PICK_PLANNER_TITLE_FR,
   ACTIVITY_SIGN_IN_TO_ADD_FR,
-  ACTIVITY_STAY_KIND_SHARED_FR,
-  ACTIVITY_STAY_KIND_SOLO_FR,
+  ACTIVITY_STAY_KIND_INVITEE_FR,
   ACTIVITY_SWITCHER_SOFT_LIMIT,
   cityDisplayNameFr,
+  cityImageUrl,
   filterActivitySwitcherWorkspaces,
   parseAirportCodes,
   type PlannedTrip,
@@ -112,11 +116,18 @@ type Props = {
   onSignIn?: () => void
 }
 
+function formatDay(raw?: string | null): string | null {
+  const s = String(raw || '').trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  const [, m, d] = s.split('-')
+  return `${d}/${m}`
+}
+
 function formatDates(ws: TravelWorkspace): string | null {
-  const out = ws.out_date ? String(ws.out_date).slice(0, 10) : ''
-  const ret = ws.ret_date ? String(ws.ret_date).slice(0, 10) : ''
+  const out = formatDay(ws.out_date)
+  const ret = formatDay(ws.ret_date)
   if (out && ret) return `${out} → ${ret}`
-  if (out) return out
+  if (out) return `Départ ${out}`
   return null
 }
 
@@ -127,6 +138,14 @@ function workspaceLabel(ws: TravelWorkspace): string {
     return `${title} · ${city}`
   }
   return title || city || 'Séjour'
+}
+
+function workspaceCity(ws: TravelWorkspace): string {
+  return (
+    String(ws.city || '').trim() ||
+    cityDisplayNameFr(String(ws.dest_iata || '').trim()) ||
+    'Séjour'
+  )
 }
 
 export function ActivityPlannerPicker({
@@ -206,7 +225,7 @@ export function ActivityPlannerPicker({
                   if (!merged.length) {
                     setAuthNeeded(true)
                     setError(
-                      'Tu es connecté — impossible de charger tes séjours. Réessaie.',
+                      'Tu es connecté, impossible de charger tes séjours. Réessaie.',
                     )
                   }
                   return
@@ -268,8 +287,15 @@ export function ActivityPlannerPicker({
             { paddingBottom: Math.max(insets.bottom, 16) },
           ]}
         >
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.hint}>{hint}</Text>
+          <View style={styles.handleWrap}>
+            <View style={styles.handle} />
+          </View>
+
+          <View style={styles.header}>
+            <Text style={styles.kicker}>{ACTIVITY_PICK_PLANNER_KICKER_FR}</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.hint}>{hint}</Text>
+          </View>
 
           {loading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
@@ -288,16 +314,20 @@ export function ActivityPlannerPicker({
 
           {!loading && !items.length && !error ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</Text>
+              <Text style={styles.emptyTitle}>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</Text>
               {onOpenPlanner ? (
-                <Pressable onPress={onOpenPlanner} style={styles.linkBtn}>
-                  <Text style={styles.linkText}>{ACTIVITY_OPEN_PLANNER_FR}</Text>
+                <Pressable onPress={onOpenPlanner} style={styles.emptyCta}>
+                  <Text style={styles.emptyCtaText}>{ACTIVITY_OPEN_PLANNER_FR}</Text>
                 </Pressable>
               ) : null}
             </View>
           ) : null}
 
-          <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ gap: 8 }}>
+          <ScrollView
+            style={{ maxHeight: 420 }}
+            contentContainerStyle={{ gap: 10, paddingHorizontal: spacing.lg }}
+            showsVerticalScrollIndicator={false}
+          >
             {visibleItems.map((ws) => {
               const planned = String(ws.planned_trip_id || '').trim()
               const draft = String(ws.draft_token || '').trim()
@@ -306,6 +336,16 @@ export function ActivityPlannerPicker({
                 (preferredDraftToken && draft === preferredDraftToken)
               const dates = formatDates(ws)
               const label = workspaceLabel(ws)
+              const city = workspaceCity(ws)
+              const thumb = cityImageUrl(
+                city,
+                String(ws.dest_iata || '') || undefined,
+              )
+              const invitee = Boolean(
+                ws.is_invitee ||
+                  (planned && ws.is_organizer === false) ||
+                  ws.membership_joined_via === 'invite',
+              )
               return (
                 <Pressable
                   key={ws.workspace_id}
@@ -328,27 +368,44 @@ export function ActivityPlannerPicker({
                   style={({ pressed }) => [
                     styles.row,
                     preferred && styles.rowPreferred,
-                    pressed && { opacity: 0.9 },
+                    pressed && { opacity: 0.92 },
                     busy && { opacity: 0.5 },
                   ]}
                 >
+                  <Image source={{ uri: thumb }} style={styles.thumb} />
                   <View style={{ flex: 1, minWidth: 0 }}>
+                    {invitee || preferred ? (
+                      <View style={styles.badgeRow}>
+                        {invitee ? (
+                          <View style={[styles.kindBadge, styles.kindShared]}>
+                            <Text style={[styles.kindText, styles.kindTextShared]}>
+                              {ACTIVITY_STAY_KIND_INVITEE_FR}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {preferred ? (
+                          <View style={styles.currentBadge}>
+                            <Text style={styles.currentText}>
+                              {ACTIVITY_PICK_PLANNER_CURRENT_FR}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
                     <Text style={styles.rowTitle} numberOfLines={1}>
                       {label}
                     </Text>
                     <Text style={styles.rowMeta} numberOfLines={1}>
-                      {[
-                        planned
-                          ? ACTIVITY_STAY_KIND_SHARED_FR
-                          : ACTIVITY_STAY_KIND_SOLO_FR,
-                        dates,
-                        ws.dest_iata ? String(ws.dest_iata) : null,
-                      ]
+                      {[dates, ws.dest_iata ? String(ws.dest_iata) : null]
                         .filter(Boolean)
-                        .join(' · ')}
+                        .join(' · ') || 'Dates à préciser'}
                     </Text>
                   </View>
-                  <Text style={styles.plus}>+</Text>
+                  <View style={styles.addChip}>
+                    <Text style={styles.addChipText}>
+                      {ACTIVITY_PICK_PLANNER_ADD_FR}
+                    </Text>
+                  </View>
                 </Pressable>
               )
             })}
@@ -384,32 +441,56 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 8,
+    maxHeight: '92%',
+  },
+  handleWrap: { alignItems: 'center', paddingBottom: 6 },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.line,
+  },
+  header: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    gap: 10,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#FED7AA',
+    backgroundColor: '#FFF8F3',
+    marginBottom: 12,
+  },
+  kicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: colors.primary,
+    marginBottom: 4,
   },
   title: {
     fontFamily: fonts.extrabold,
-    fontSize: 18,
+    fontSize: 22,
     color: colors.ink,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   hint: {
+    marginTop: 6,
     fontFamily: fonts.medium,
     fontSize: 13,
-    color: colors.muted,
-    lineHeight: 18,
-    marginBottom: 4,
+    color: colors.inkSoft,
+    lineHeight: 19,
   },
   errorBox: {
+    marginHorizontal: spacing.lg,
     backgroundColor: '#FFFBEB',
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#FDE68A',
-    padding: 12,
+    padding: 14,
     gap: 8,
+    marginBottom: 8,
   },
   errorText: {
     fontFamily: fonts.medium,
@@ -417,19 +498,34 @@ const styles = StyleSheet.create({
     color: '#92400E',
   },
   emptyBox: {
+    marginHorizontal: spacing.lg,
     backgroundColor: colors.canvas,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    padding: 14,
+    borderStyle: 'dashed',
+    padding: 18,
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    marginBottom: 8,
   },
-  emptyText: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.muted,
+  emptyTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyCta: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  emptyCtaText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.white,
   },
   linkBtn: { paddingVertical: 4 },
   linkText: {
@@ -441,11 +537,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
+    borderRadius: 18,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     backgroundColor: colors.white,
   },
@@ -453,10 +549,51 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryMuted,
     backgroundColor: colors.primarySoft,
   },
-  rowTitle: {
+  thumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: colors.canvas,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 4,
+  },
+  kindBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  kindShared: { backgroundColor: '#F0F9FF' },
+  kindSolo: { backgroundColor: colors.canvas },
+  kindText: {
     fontFamily: fonts.bold,
-    fontSize: 14,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  kindTextShared: { color: '#075985' },
+  kindTextSolo: { color: colors.muted },
+  currentBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#ECFDF5',
+  },
+  currentText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: '#065F46',
+  },
+  rowTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 15,
     color: colors.ink,
+    letterSpacing: -0.2,
   },
   rowMeta: {
     marginTop: 2,
@@ -464,17 +601,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
   },
-  plus: {
+  addChip: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  addChipText: {
     fontFamily: fonts.extrabold,
-    fontSize: 20,
-    color: colors.primary,
+    fontSize: 12,
+    color: colors.white,
   },
   moreBtn: {
     borderWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
     borderColor: colors.line,
-    borderRadius: radius.md,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   moreText: {
@@ -483,11 +626,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   cancel: {
-    marginTop: 4,
+    marginTop: 12,
+    marginHorizontal: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
     borderRadius: radius.md,
-    minHeight: 44,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
   },

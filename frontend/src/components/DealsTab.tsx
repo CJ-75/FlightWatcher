@@ -749,7 +749,7 @@ export function DealsTab() {
                     : 'Autres correspondances'}
               </p>
               <p className="text-xs text-muted mb-4">
-                Hors de ton filtre — triés à part
+                Hors de ton filtre, triés à part
               </p>
               <motion.div
                 layout

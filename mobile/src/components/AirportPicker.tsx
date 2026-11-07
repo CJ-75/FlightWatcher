@@ -148,7 +148,7 @@ export function AirportPicker({
               {selected
                 ? `${selected.name} · ${selected.country}`
                 : allowEmpty && !value
-                  ? 'Optionnel — inspire toutes destinations'
+                  ? 'Optionnel. Inspire toutes destinations'
                   : 'Rechercher par ville ou code IATA'}
             </Text>
           ) : selected ? (

@@ -205,13 +205,13 @@ export function tripItemsErrorLabelFr(message?: string | null): string {
   const raw = String(message || '').trim()
   const key = raw.toLowerCase()
   if (key === 'auth_required') {
-    return 'Tes activités de voyage sont liées à ton compte — on reprend ta session.'
+    return 'Tes activités de voyage sont liées à ton compte. On reprend ta session.'
   }
   if (key === 'not_a_member') {
     return 'Tu dois faire partie du voyage pour gérer les activités.'
   }
   if (key === 'draft_token_invalid' || key === 'draft_token_mismatch') {
-    return 'Séjour introuvable — rouvre-le depuis tes réservations.'
+    return 'Séjour introuvable. Rouvre-le depuis tes réservations.'
   }
   if (key === 'exactly_one_owner' || key === 'orphan_item') {
     return 'Impossible de lier les activités à ce voyage.'

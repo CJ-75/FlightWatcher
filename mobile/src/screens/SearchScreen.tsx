@@ -461,7 +461,7 @@ export function SearchScreen() {
             }}
             style={[styles.brandRow, compact && { marginBottom: 4 }]}
             accessibilityRole="button"
-            accessibilityLabel="FlightWatcher — haut de page"
+            accessibilityLabel="FlightWatcher, haut de page"
           >
             <View style={[styles.logoMark, compact && { width: 30, height: 30, borderRadius: 9 }]}>
               <Text style={[styles.logoLetter, compact && { fontSize: 15 }]}>F</Text>

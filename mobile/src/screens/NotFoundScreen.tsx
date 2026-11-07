@@ -40,7 +40,7 @@ export function NotFoundScreen() {
         <Text style={styles.code}>404</Text>
         <Text style={styles.title}>Page introuvable</Text>
         <Text style={styles.body}>
-          Ce lien ne mène nulle part — peut‑être un séjour déjà parti, ou une URL un peu perdue.
+          Ce lien ne mène nulle part. Peut‑être un séjour déjà parti, ou une URL un peu perdue.
         </Text>
 
         <Pressable

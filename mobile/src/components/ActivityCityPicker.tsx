@@ -220,7 +220,7 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
                 ? `${groups.length} villes`
                 : loadingFull
                   ? 'Chargement du catalogue…'
-                  : 'Catalogue incomplet — réessaie'}
+                  : 'Catalogue incomplet. Réessaie.'}
           </Text>
           <TextInput
             value={query}

@@ -581,7 +581,7 @@ export function ActivityStepPanel(props: {
           </p>
           <p className="mt-1 text-xs text-muted leading-snug">
             {hasAccount
-              ? 'Tu es déjà connecté — on recharge tes activités avec ta session.'
+              ? 'Tu es déjà connecté. On recharge tes activités avec ta session.'
               : tripItemsErrorLabelFr(error)}
           </p>
         </div>

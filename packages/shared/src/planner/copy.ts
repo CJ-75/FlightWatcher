@@ -42,10 +42,10 @@ export const PLANNER_PHASE_LABEL_FR: Record<TravelWorkspacePhase, string> = {
 
 export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
   planning: 'Choisis un vol et invite qui part avec toi.',
-  flight_selected: 'Vol choisi — compose ton hôtel.',
+  flight_selected: 'Vol choisi. Compose ton hôtel.',
   composing: 'Finalise la réservation de ton séjour.',
   booked: 'Réservation rattachée à ce séjour.',
-  past: 'Séjour terminé — tu peux encore y ajouter des activités.',
+  past: 'Séjour terminé. Tu peux encore y ajouter des activités.',
 }
 
 export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {

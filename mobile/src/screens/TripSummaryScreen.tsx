@@ -750,7 +750,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                     'Annulation',
                     e instanceof Error
                       ? e.message
-                      : 'Annulation impossible — réessaie',
+                      : 'Annulation impossible. Réessaie.',
                   )
                 } finally {
                   setCancellingHotel(false)
@@ -913,7 +913,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
                 accessibilityRole="link"
                 accessibilityLabel={
                   flightBooked
-                    ? 'Réservé — ouvrir le site de la compagnie'
+                    ? 'Réservé. Ouvrir le site de la compagnie'
                     : flightCtaLabel
                 }
               >

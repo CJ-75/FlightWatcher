@@ -467,7 +467,7 @@ export function ActivityStepPanel(props: {
         </Text>
         <Text style={styles.authBody}>
           {hasAccount
-            ? 'Tu es déjà connecté — on recharge tes activités avec ta session.'
+            ? 'Tu es déjà connecté. On recharge tes activités avec ta session.'
             : tripItemsErrorLabelFr(error)}
         </Text>
         {hasAccount ? (
@@ -511,7 +511,7 @@ export function ActivityStepPanel(props: {
           },
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`${ACTIVITY_ADD_LABEL_FR} — ${cityLabel}`}
+        accessibilityLabel={`${ACTIVITY_ADD_LABEL_FR} · ${cityLabel}`}
       >
         <View style={styles.catalogIcon}>
           <Text style={styles.catalogIconPlus}>+</Text>

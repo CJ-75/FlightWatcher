@@ -35,7 +35,7 @@ function loadPaymentScript(): Promise<void> {
     s.dataset.liteapiPayment = '1'
     const timer = window.setTimeout(() => {
       s.remove()
-      reject(new Error('Module de paiement trop lent — réessaie'))
+      reject(new Error('Module de paiement trop lent. Réessaie.'))
     }, 12000)
     s.onload = () => {
       window.clearTimeout(timer)

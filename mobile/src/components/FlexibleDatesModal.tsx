@@ -164,8 +164,8 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
             <Text style={styles.title}>Dates flexibles</Text>
             <Text style={styles.subtitle}>
               {tab === 'depart'
-                ? 'Étape 1 — sélectionne un ou plusieurs allers'
-                : 'Étape 2 — sélectionne un ou plusieurs retours'}
+                ? 'Étape 1 : sélectionne un ou plusieurs allers'
+                : 'Étape 2 : sélectionne un ou plusieurs retours'}
             </Text>
           </View>
           <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>

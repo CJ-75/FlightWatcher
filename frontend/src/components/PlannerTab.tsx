@@ -1825,7 +1825,7 @@ function TripDetailView({
       onToast(
         e instanceof Error && e.message
           ? e.message
-          : 'Impossible d’ouvrir la réservation — réessaie',
+          : 'Impossible d’ouvrir la réservation. Réessaie.',
       )
     } finally {
       setFlightBookingBusy(false)
@@ -1845,7 +1845,7 @@ function TripDetailView({
         setFlightDraft(draft)
       }
       if (!token) {
-        onToast('Impossible de rattacher la réservation — réessaie')
+        onToast('Impossible de rattacher la réservation. Réessaie.')
         return
       }
       clearFlightReturnAsk(token, tripId)
@@ -1883,10 +1883,10 @@ function TripDetailView({
         { status: 'user_confirmed', provider: 'ryanair' },
       )
       setFlightDraft(updated)
-      onToast('Vol confirmé — ton voyage est à jour')
+      onToast('Vol confirmé. Ton voyage est à jour.')
       void load({ silent: true })
     } catch {
-      onToast('Impossible de confirmer le vol — réessaie')
+      onToast('Impossible de confirmer le vol. Réessaie.')
       void load({ silent: true })
     } finally {
       setFlightBookingBusy(false)
@@ -1986,7 +1986,7 @@ function TripDetailView({
       }
       onToast(
         externalFlight
-          ? 'Impossible d’ouvrir le séjour — réessaie'
+          ? 'Impossible d’ouvrir le séjour. Réessaie.'
           : 'Choisis d’abord un vol, ou indique que tu as déjà un avion',
       )
       return
@@ -2000,7 +2000,7 @@ function TripDetailView({
           `/trip/${draft.draft_token}${compose && !hotelBooked ? '?compose=1' : ''}`,
         )
       })
-      .catch(() => onToast('Impossible d’ouvrir la réservation — réessaie'))
+      .catch(() => onToast('Impossible d’ouvrir la réservation. Réessaie.'))
       .finally(() => setHotelBusy(false))
   }
 
@@ -2211,7 +2211,7 @@ function TripDetailView({
       setFlightDraft(null)
       setWorkspace(null)
       await scan()
-      onToast('Vol réouvert — nouveau scan lancé')
+      onToast('Vol réouvert. Nouveau scan lancé.')
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     } finally {
@@ -2223,7 +2223,7 @@ function TripDetailView({
     if (!trip || reopeningFlight) return
     if (
       !window.confirm(
-        'Supprimer ce vol ? Le voyage repasse en planification — tu pourras en choisir un autre.',
+        'Supprimer ce vol ? Le voyage repasse en planification. Tu pourras en choisir un autre.',
       )
     ) {
       return
@@ -2302,7 +2302,7 @@ function TripDetailView({
     try {
       const draft = await getApiClient().skipPlannedTripFlight(tripId)
       setFlightDraft(draft)
-      onToast('Vol ailleurs — compose ton hôtel')
+      onToast('Vol ailleurs. Compose ton hôtel.')
       navigate(`/trip/${draft.draft_token}?compose=1`)
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -2342,7 +2342,7 @@ function TripDetailView({
     try {
       const draft = await getApiClient().skipPlannedTripHotel(tripId)
       setFlightDraft(draft)
-      onToast('Hôtel ailleurs — séjour à jour')
+      onToast('Hôtel ailleurs. Séjour à jour.')
       void load()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
@@ -2562,7 +2562,7 @@ function TripDetailView({
     try {
       await getApiClient().updatePlannedTrip(tripId, { arrival_airport: null })
       await load()
-      onToast('Destination retirée — mode inspire')
+      onToast('Destination retirée. Mode inspire.')
     } catch (e) {
       setError(e instanceof Error ? e.message : t('app.error'))
     }
@@ -2902,10 +2902,10 @@ function TripDetailView({
             </p>
             <h3 className="font-extrabold text-2xl text-ink tracking-tight">
               {externalFlight
-                ? 'Vol ailleurs — place à l’hôtel'
+                ? 'Vol ailleurs. Place à l’hôtel.'
                 : flightBooked
-                  ? 'Vol réservé — complète ton séjour'
-                  : 'Vol choisi — compose ton hôtel'}
+                  ? 'Vol réservé. Complète ton séjour.'
+                  : 'Vol choisi. Compose ton hôtel.'}
             </h3>
           </div>
           {externalFlight ? (

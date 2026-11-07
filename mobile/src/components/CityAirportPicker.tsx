@@ -321,7 +321,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
                 ? `${groups.length} villes · ${effectiveAirports.length} aéroports`
                 : loadingFull
                   ? 'Chargement du catalogue…'
-                  : 'Catalogue incomplet — réessaie'}
+                  : 'Catalogue incomplet. Réessaie.'}
           </Text>
           <TextInput
             value={query}

@@ -47,9 +47,9 @@ export function partyModeSubtitleFr(mode: PartyMode): string {
 }
 
 export function partyModeCreateHintFr(mode: PartyMode): string {
-  if (mode === 'solo') return '1 place — pour toi'
-  if (mode === 'duo') return '2 places — toi + 1'
-  return '3 à 6 places — amis ou famille'
+  if (mode === 'solo') return '1 place, pour toi'
+  if (mode === 'duo') return '2 places, toi + 1'
+  return '3 à 6 places, amis ou famille'
 }
 
 export function partyModeCreateLeadFr(mode: PartyMode): string {

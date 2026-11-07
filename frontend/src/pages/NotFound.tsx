@@ -23,7 +23,7 @@ export default function NotFound() {
           Page introuvable
         </h1>
         <p className="mt-3 max-w-md text-base leading-relaxed text-muted">
-          Ce lien ne mène nulle part — peut‑être un séjour déjà parti, ou une URL un peu
+          Ce lien ne mène nulle part. Peut‑être un séjour déjà parti, ou une URL un peu
           perdue.
         </p>
 

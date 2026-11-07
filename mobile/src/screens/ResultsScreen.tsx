@@ -198,7 +198,7 @@ export function ResultsScreen({ route, navigation }: Props) {
       })
       navigation.navigate('TripDetail', { tripId: created.id })
     } catch {
-      Alert.alert('Erreur', 'Impossible d’ajouter au planner — réessaie')
+      Alert.alert('Erreur', 'Impossible d’ajouter au planner. Réessaie.')
     } finally {
       setHotelUpsellBusy(false)
     }
@@ -262,7 +262,7 @@ export function ResultsScreen({ route, navigation }: Props) {
       setPostBookTrip(null)
       navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
     } catch {
-      Alert.alert('Erreur', 'Impossible de créer le voyage — réessaie')
+      Alert.alert('Erreur', 'Impossible de créer le voyage. Réessaie.')
     } finally {
       setHotelUpsellBusy(false)
     }

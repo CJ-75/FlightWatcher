@@ -1159,7 +1159,7 @@ export function MyTripHotelCompose({
     if (!pick) return
     const hid = String(pick.id || pick.hotel_id || '').trim()
     if (!hid) {
-      setError('Cet hôtel n’a pas d’identifiant — choisis-en un autre.')
+      setError('Cet hôtel n’a pas d’identifiant. Choisis-en un autre.')
       return
     }
     const pax = Math.max(1, Number(adults) || 2)
@@ -1194,7 +1194,7 @@ export function MyTripHotelCompose({
         draft_token: token,
       })
       if (!res?.ok) {
-        setError('Cet hôtel n’est plus dispo à ce tarif — choisis-en un autre.')
+        setError('Cet hôtel n’est plus dispo à ce tarif. Choisis-en un autre.')
         setSaving(false)
         return
       }
@@ -1284,7 +1284,7 @@ export function MyTripHotelCompose({
       setError(
         msg && msg.length < 180
           ? msg
-          : 'Impossible d’enregistrer l’hôtel — réessaie',
+          : 'Impossible d’enregistrer l’hôtel. Réessaie.',
       )
     } finally {
       setSaving(false)

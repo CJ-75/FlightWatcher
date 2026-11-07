@@ -60,7 +60,7 @@ export function PostBookLightbox({
           <Text style={styles.hint}>
             {automaticConfirmation
               ? `Travelpayouts confirmera automatiquement le paiement pour ${city}.`
-              : 'Super — trouve maintenant un hôtel pour compléter ton séjour.'}
+              : 'Super. Trouve maintenant un hôtel pour compléter ton séjour.'}
           </Text>
 
           <Pressable

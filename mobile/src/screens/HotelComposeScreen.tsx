@@ -110,7 +110,7 @@ function emptyCopy(kind: EmptyKind, city?: string | null) {
     case 'rate_limit':
       return {
         title: 'Un peu trop de recherches',
-        body: 'Attends quelques secondes puis réessaie — ou continue sans hôtel pour l’instant.',
+        body: 'Attends quelques secondes puis réessaie, ou continue sans hôtel pour l’instant.',
       }
     case 'load':
       return {
@@ -519,7 +519,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     }
     const hid = hotelIdOf(hotel)
     if (!hid) {
-      Alert.alert('Hôtel', 'Cet hôtel n’a pas d’identifiant — choisis-en un autre.')
+      Alert.alert('Hôtel', 'Cet hôtel n’a pas d’identifiant. Choisis-en un autre.')
       return
     }
     const pax = Math.max(1, Number(adults) || 2)
@@ -533,7 +533,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
     if (publicTotal == null || publicTotal <= 0) {
       Alert.alert(
         'Hôtel',
-        'Tarif manquant — relance la recherche puis réessaie.',
+        'Tarif manquant. Relance la recherche puis réessaie.',
       )
       return
     }
@@ -563,7 +563,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       if (!res?.ok) {
         Alert.alert(
           'Tarif indisponible',
-          'Cet hôtel n’est plus dispo à ce tarif — choisis-en un autre.',
+          'Cet hôtel n’est plus dispo à ce tarif. Choisis-en un autre.',
         )
         setSaving(false)
         return
@@ -665,7 +665,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
         'Erreur',
         msg && msg.length < 180
           ? msg
-          : 'Impossible d’enregistrer l’hôtel — réessaie',
+          : 'Impossible d’enregistrer l’hôtel. Réessaie.',
       )
     } finally {
       setSaving(false)

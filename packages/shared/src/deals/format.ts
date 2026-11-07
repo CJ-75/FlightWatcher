@@ -106,7 +106,7 @@ export function resolveHotelCancelGate(
       return {
         canCancelFree: false,
         reason: 'checked_in',
-        blockedLabelFr: 'Séjour commencé — annulation via l’hôtel si besoin.',
+        blockedLabelFr: 'Séjour commencé. Annulation via l’hôtel si besoin.',
       }
     }
   }
@@ -131,8 +131,8 @@ export function resolveHotelCancelGate(
       canCancelFree: false,
       reason: 'deadline_passed',
       blockedLabelFr: when
-        ? `Date d’annulation passée (${when}) — non remboursable.`
-        : 'Date d’annulation passée — non remboursable.',
+        ? `Date d’annulation passée (${when}), non remboursable.`
+        : 'Date d’annulation passée, non remboursable.',
     }
   }
 
@@ -183,11 +183,11 @@ export function hotelCancelLabel(
     if (short) {
       return when
         ? `Date d’annul. passée (${when})`
-        : 'Date d’annul. passée — non remboursable'
+        : 'Date d’annul. passée, non remboursable'
     }
     return when
-      ? `Date d’annulation passée (${when}) — non remboursable`
-      : 'Date d’annulation passée — non remboursable'
+      ? `Date d’annulation passée (${when}), non remboursable`
+      : 'Date d’annulation passée, non remboursable'
   }
 
   if (hotel.refundable === false) {

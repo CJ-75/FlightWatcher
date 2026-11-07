@@ -67,7 +67,7 @@ function OpenTripsSection({
           Brouillons
         </p>
         <p className="text-sm text-muted mt-0.5">
-          Trips générés sur cet appareil — continue la réservation hôtel.
+          Trips générés sur cet appareil. Continue la réservation hôtel.
         </p>
       </div>
       <ul className="space-y-3">
@@ -144,7 +144,7 @@ function statusMeta(status: HotelBookingStatus | string): StatusMeta {
     case 'payment_succeeded':
       return {
         label: 'Confirmation en cours',
-        hint: 'Paiement reçu — le fournisseur finalise la réservation.',
+        hint: 'Paiement reçu. Le fournisseur finalise la réservation.',
         chip: 'bg-amber-50 text-amber-900 ring-1 ring-amber-200',
         tone: 'warn',
       }
@@ -159,7 +159,7 @@ function statusMeta(status: HotelBookingStatus | string): StatusMeta {
     case 'failed':
       return {
         label: 'Échouée',
-        hint: 'Aucune réservation active — aucun débit hôtel confirmé.',
+        hint: 'Aucune réservation active. Aucun débit hôtel confirmé.',
         chip: 'bg-red-50 text-red-800 ring-1 ring-red-200',
         tone: 'bad',
       }
@@ -266,7 +266,7 @@ function BookingCard({
   }
 
   const summaryText = [
-    `FlightWatcher — réservation hôtel`,
+    `FlightWatcher · réservation hôtel`,
     meta.label,
     booking.hotel_name || 'Hôtel',
     booking.city ? `à ${booking.city}` : '',
@@ -499,7 +499,7 @@ function BookingCard({
                   <p className="mt-1 text-amber-900/80">
                     Recharge cette page dans quelques minutes. Si le statut ne passe
                     pas à « Confirmée », contacte-nous avec la référence interne
-                    ci-dessous — on vérifiera côté fournisseur.
+                    ci-dessous. On vérifiera côté fournisseur.
                   </p>
                 </section>
               ) : null}
@@ -735,7 +735,7 @@ export default function MyBookings() {
               Mes réservations
             </h1>
             <p className="text-sm text-muted mt-1 max-w-md">
-              Preuves d’hôtel, codes de confirmation et prochaines étapes — pour
+              Preuves d’hôtel, codes de confirmation et prochaines étapes, pour
               arriver serein à la réception.
             </p>
             {refreshing ? (
@@ -758,7 +758,7 @@ export default function MyBookings() {
               <p className="font-bold text-ink mb-2">Connexion requise</p>
               <p className="text-sm text-muted mb-4">
                 Connecte-toi pour retrouver tes confirmations hôtel sur tous tes
-                appareils — ou ouvre le lien Mon voyage reçu après réservation.
+                appareils, ou ouvre le lien Mon voyage reçu après réservation.
               </p>
               <Link
                 to={`/login?redirect=${encodeURIComponent(

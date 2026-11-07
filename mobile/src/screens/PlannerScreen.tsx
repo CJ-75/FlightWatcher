@@ -775,7 +775,7 @@ function CreateTripModal({
               <View>
                 <Text style={styles.fieldLabel}>Avec qui tu voyages ?</Text>
                 <Text style={styles.partyIntro}>
-                  Solo, duo ou groupe — ça fixe les places.
+                  Solo, duo ou groupe : ça fixe les places.
                 </Text>
               </View>
               <View style={styles.partyGrid}>

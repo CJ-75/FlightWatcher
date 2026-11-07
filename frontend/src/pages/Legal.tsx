@@ -28,7 +28,7 @@ const DOCS: Record<
           'Compte : adresse e-mail, identifiant technique, éventuellement nom affiché via Google.',
           'Usage : recherches, favoris, voyages / planner, brouillons « Mon voyage », réservations d’hôtel initiées dans l’app.',
           'Technique : logs serveur, événements analytiques internes (parcours de réservation), données de session.',
-          'Paiement hôtel : traité par LiteAPI / partenaires de paiement — nous ne stockons pas le numéro de carte.',
+          'Paiement hôtel : traité par LiteAPI / partenaires de paiement. Nous ne stockons pas le numéro de carte.',
         ],
       },
       {
@@ -58,7 +58,7 @@ const DOCS: Record<
       {
         h: 'Tes droits',
         p: [
-          'Accès, rectification, suppression, opposition, portabilité — selon la réglementation applicable (ex. RGPD).',
+          'Accès, rectification, suppression, opposition, portabilité, selon la réglementation applicable (ex. RGPD).',
           'Pour exercer un droit : hello@flightwatcher.app, ou suppression de compte dans l’app (Sécurité).',
         ],
       },
@@ -116,7 +116,7 @@ const DOCS: Record<
       {
         h: 'Éditeur',
         p: [
-          'FlightWatcher — application et site de recherche / organisation de voyages.',
+          'FlightWatcher : application et site de recherche / organisation de voyages.',
           'Contact : hello@flightwatcher.app',
           'Les informations d’éditeur / siège seront complétées dès formalisation de la structure juridique.',
         ],
