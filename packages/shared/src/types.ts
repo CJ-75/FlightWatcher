@@ -296,10 +296,6 @@ export interface TravelDealFlags {
   /** True when deal arrival IATA is in the selected destination city */
   match_destination?: boolean
   price_pax_note?: string | null
-  /** User search beat catalog flight on same duration bucket */
-  beat_catalog?: boolean
-  /** Organic / recent user-search price on the wall */
-  fresh_price?: boolean
 }
 
 export interface TravelDealBadgeMeta {

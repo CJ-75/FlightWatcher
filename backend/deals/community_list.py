@@ -236,24 +236,6 @@ def row_to_travel_deal(
     else:
         badge = soften_badge_if_stale(raw_badge, baselines_fresh=baselines_fresh)
         badge = badge_for_deal_level(badge, verification_level=LEVEL_LIVE)
-    beat = bool(
-        (baseline.get("beat_catalog") if isinstance(baseline, dict) else False)
-        or (flight.get("beat_catalog") if isinstance(flight, dict) else False)
-    )
-    if beat or row.get("source_mix") == "organic":
-        badge = {
-            **(badge or {}),
-            "label": "Mieux que le catalogue" if beat else "Prix frais",
-            "short_label": "Prix frais",
-            "discount_pct": (badge or {}).get("discount_pct"),
-            "scope": (badge or {}).get("scope") or "flight",
-            "tooltip": (
-                "Prix issu d’une recherche récente, meilleur que le vol catalogue."
-                if beat
-                else "Prix issu d’une recherche utilisateur récente."
-            ),
-        }
-
     import os
 
     soft_fill_mode = (os.getenv("DEALS_SOFT_FILL_MODE", "flight_only") or "flight_only").lower()
@@ -399,14 +381,6 @@ def row_to_travel_deal(
             "verified_label": verified if vlevel != LEVEL_CACHED else None,
             "verification_level": vlevel,
             "price_pax_note": price_pax_note,
-            "beat_catalog": bool(
-                (baseline.get("beat_catalog") if isinstance(baseline, dict) else False)
-                or (flight.get("beat_catalog") if isinstance(flight, dict) else False)
-            ),
-            "fresh_price": bool(
-                row.get("source_mix") == "organic"
-                or (flight.get("beat_catalog") if isinstance(flight, dict) else False)
-            ),
         },
         "verification_level": vlevel,
         "deal_score": row.get("deal_score"),
