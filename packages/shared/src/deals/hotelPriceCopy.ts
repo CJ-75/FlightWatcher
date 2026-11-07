@@ -28,7 +28,11 @@ export function hotelNightsBetween(
   }
 }
 
-/** Stay total € from public total or hotel_pp × adults. */
+/**
+ * Stay total € = room / occupancy total (LiteAPI), not a solo rate × pax.
+ * Prefer `publicHotelPrice`. `hotelPp` is only a pack split (total ÷ adults):
+ * reconstruct total with × adults — never treat hotelPp as a room rate.
+ */
 export function hotelStayTotalFr(opts: {
   publicHotelPrice?: number | null
   hotelPp?: number | null
@@ -87,32 +91,32 @@ export function hotelPriceJumpBodyFr(live: number, listed: number): string {
   const next = Math.round(live)
   const prev = Math.round(listed)
   if (next > prev) {
-    return `Le prix vient de monter à ${next} € pour le séjour (affiché ${prev} €). Tu confirmes ce tarif pour réserver ta chambre ?`
+    return `Les tarifs hôtels évoluent selon la dispo. Nouveau prix : ${next} € (affiché ${prev} €).`
   }
   if (next < prev) {
-    return `Bonne nouvelle : le prix est passé à ${next} € (affiché ${prev} €). Tu confirmes pour réserver ta chambre ?`
+    return `Bonne nouvelle : le prix a baissé à ${next} € (affiché ${prev} €).`
   }
-  return `Prix du séjour : ${next} €. Tu confirmes pour réserver ta chambre ?`
+  return `Tarif du séjour : ${next} €.`
 }
 
 /** Short confirm banner under checkout when price moved. */
 export function hotelPriceConfirmBodyFr(liveTotal: number): string {
   const n = Math.round(liveTotal)
-  return `Total hôtel : ${n} €. C’est le prix actuel. Confirme pour réserver ta chambre.`
+  return `Total hôtel confirmé : ${n} €.`
 }
 
 /**
  * Pack / stay price jump (deal checkout). Prefer stay totals via
- * `hotelPriceJumpBodyFr` when hotel-only; this keeps € amounts without « / pers. ».
+ * `hotelPriceJumpBodyFr` when hotel-only.
  */
 export function hotelPricePpJumpBodyFr(fromPp: number, toPp: number): string {
   const a = Math.round(fromPp)
   const b = Math.round(toPp)
   if (b > a) {
-    return `Le prix est passé de ${a} € à ${b} €. Tu confirmes pour continuer ?`
+    return `Les tarifs hôtels évoluent selon la dispo. Nouveau prix : ${b} € (affiché ${a} €).`
   }
   if (b < a) {
-    return `Le prix est passé de ${a} € à ${b} €. Tu confirmes pour continuer ?`
+    return `Bonne nouvelle : le prix a baissé à ${b} € (affiché ${a} €).`
   }
-  return `Prix : ${b} €. Tu confirmes pour continuer ?`
+  return `Tarif : ${b} €.`
 }

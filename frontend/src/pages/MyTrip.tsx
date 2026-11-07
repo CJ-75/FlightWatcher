@@ -1182,15 +1182,13 @@ export default function MyTrip() {
     <>
       <p className="text-3xl font-black text-primary-600 tracking-tight">
         Hôtel {hotelRecapTotal} €
-        {adults > 1 ? (
-          <span className="text-lg font-bold text-slate-600"> pour {adults}</span>
-        ) : null}
       </p>
-      {hotelRecapNight != null ? (
-        <p className="text-sm font-semibold text-slate-700 mt-1">
-          {hotelRecapNight} € / nuit
-        </p>
-      ) : null}
+      <p className="text-sm font-semibold text-slate-700 mt-1">
+        {hotelRecapNight != null
+          ? `${hotelRecapNight} € / nuit · chambre`
+          : 'Prix chambre pour le séjour'}
+        {adults > 1 ? ` · ${adults} voy.` : ''}
+      </p>
       <dl className="mt-3 space-y-1.5 text-sm text-slate-700">
         <div className="flex justify-between gap-3">
           <dt>
