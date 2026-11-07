@@ -178,9 +178,11 @@ export function ProfileScreen() {
     viewUser.user_metadata?.full_name || viewUser.email?.split('@')[0] || 'Compte'
   const initial = (displayName[0] || viewUser.email?.[0] || 'U').toUpperCase()
   const avatarUrl =
-    typeof viewUser.user_metadata?.avatar_url === 'string'
-      ? viewUser.user_metadata.avatar_url
-      : null
+    (typeof viewUser.user_metadata?.avatar_url === 'string' &&
+      viewUser.user_metadata.avatar_url) ||
+    (typeof viewUser.user_metadata?.picture === 'string' &&
+      viewUser.user_metadata.picture) ||
+    null
 
   return (
     <View style={styles.root}>

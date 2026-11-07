@@ -168,6 +168,21 @@ export function TripDetailScreen() {
   const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const onActivityItemsChange = useCallback(
+    (items: { status?: string | null }[]) => {
+      setActivityItems((prev) => {
+        if (items.length === 0 && prev.length > 0) return prev
+        if (
+          prev.length === items.length &&
+          prev.every((p, i) => p.status === items[i]?.status)
+        ) {
+          return prev
+        }
+        return items
+      })
+    },
+    [],
+  )
   const extrasRef = useRef<View>(null)
   const scrollRef = useRef<ScrollView>(null)
   const extrasOffsetY = useRef(0)
@@ -216,13 +231,39 @@ export function TripDetailScreen() {
             detail.accepted_proposal?.id ||
             (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
             null
+          const withWorkspaceBooked = (draft: MyTripDraft): MyTripDraft => {
+            if (matched?.pipeline?.flight !== 'booked') return draft
+            const payload = (draft.payload || {}) as Record<string, unknown>
+            if (
+              draft.flight_booked_at ||
+              payload.flight_booked ||
+              draft.flight_booking_status === 'user_confirmed' ||
+              draft.flight_booking_status === 'partner_confirmed'
+            ) {
+              return draft
+            }
+            const now = new Date().toISOString()
+            return {
+              ...draft,
+              flight_booked_at: now,
+              flight_booking_status: 'user_confirmed',
+              payload: {
+                ...payload,
+                flight_booked: true,
+                flight_booked_at: now,
+                flight_booking_status: 'user_confirmed',
+              },
+            }
+          }
           if (matched?.draft_token) {
-            setFlightDraft(await getApi().getMyTrip(matched.draft_token))
+            setFlightDraft(
+              withWorkspaceBooked(await getApi().getMyTrip(matched.draft_token)),
+            )
           } else if (acceptedId) {
             // Chosen flight is in DB — ensure séjour draft exists and keep it.
             try {
               const draft = await getApi().getOrCreateExecutionDraft(acceptedId)
-              setFlightDraft(draft)
+              setFlightDraft(withWorkspaceBooked(draft))
             } catch {
               setFlightDraft((prev) => prev)
             }
@@ -267,27 +308,45 @@ export function TripDetailScreen() {
   )
 
   useEffect(() => {
+    setActivityItems([])
+  }, [tripId])
+
+  useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
-    if ((!tripId && !token) || !plannerActivitiesEnabled) {
-      setActivityItems([])
-      return
+    if ((!tripId && !token) || !plannerActivitiesEnabled) return
+    if (__DEV__ && tripId && String(tripId).startsWith('dev-trip-')) return
+    let cancelled = false
+    const asActivityRows = (
+      items: { item_type?: string; status?: string | null }[],
+    ) =>
+      items
+        .filter((i) => String(i.item_type || 'activity') === 'activity')
+        .map((i) => ({ status: i.status ?? null }))
+
+    void (async () => {
+      try {
+        let items: { item_type?: string; status?: string | null }[] = []
+        if (tripId) {
+          const res = await getApi().listTripItems({ planned_trip_id: tripId })
+          if (cancelled) return
+          items = res.items || []
+        }
+        if (!items.length && token) {
+          const res = await getApi().listTripItems({ draft_token: token })
+          if (cancelled) return
+          items = res.items || []
+        }
+        if (cancelled) return
+        const rows = asActivityRows(items)
+        if (rows.length === 0) return
+        onActivityItemsChange(rows)
+      } catch {
+        // Keep previous parcours state on transient errors.
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-    if (__DEV__ && tripId && String(tripId).startsWith('dev-trip-')) {
-      setActivityItems([])
-      return
-    }
-    const owner = tripId
-      ? { planned_trip_id: tripId }
-      : { draft_token: token! }
-    void getApi()
-      .listTripItems(owner)
-      .then((res) => {
-        const items = res.items || []
-        setActivityItems(items.filter((i) => i.item_type === 'activity'))
-      })
-      .catch(() => {
-        setActivityItems([])
-      })
   }, [
     tripId,
     flightDraft?.draft_token,
@@ -295,6 +354,7 @@ export function TripDetailScreen() {
     plannerActivitiesEnabled,
     flightDraft?.hotel_booked_at,
     flightDraft?.flight_booked_at,
+    onActivityItemsChange,
   ])
 
   const activityProgress = useMemo(
@@ -1662,6 +1722,7 @@ export function TripDetailScreen() {
             pricePerPerson={stayParty.flightPp || stayParty.perPerson}
             priceCaption="Prix du vol"
             bookingBusy={flightBookingBusy}
+            flightBooked={reservationFlags.flightBooked}
             canEditModalities={
               isOrganizer &&
               !reservationFlags.flightBooked &&
@@ -1924,7 +1985,7 @@ export function TripDetailScreen() {
                 citySlug={citySlug}
                 enabled={plannerActivitiesEnabled}
                 surface="planner"
-                onItemsChange={setActivityItems}
+                onItemsChange={onActivityItemsChange}
               />
             </View>
           </View>
@@ -1951,7 +2012,10 @@ export function TripDetailScreen() {
             <View style={styles.stayTotalBody}>
               <View style={styles.stayTotalRows}>
                 <View style={styles.stayTotalRow}>
-                  <Text style={styles.stayTotalRowLabel}>Vol</Text>
+                  <Text style={styles.stayTotalRowLabel}>
+                    Vol{' '}
+                    <Text style={styles.stayTotalRowHint}>(hors options)</Text>
+                  </Text>
                   <Text style={styles.stayTotalRowValue}>
                     {stayParty.flightPp} €
                   </Text>
@@ -2328,6 +2392,7 @@ function MobileBoardingPass({
   priceCaption,
   priceHint,
   bookingBusy,
+  flightBooked,
   canEditModalities,
   showModalities,
   modalitiesBusy,
@@ -2340,6 +2405,7 @@ function MobileBoardingPass({
   priceCaption?: string
   priceHint?: string
   bookingBusy?: boolean
+  flightBooked?: boolean
   canEditModalities?: boolean
   showModalities?: boolean
   modalitiesBusy?: boolean
@@ -2459,17 +2525,24 @@ function MobileBoardingPass({
         <View style={styles.ticketActions}>
           <Pressable
             onPress={onBook}
-            disabled={bookingBusy}
+            disabled={bookingBusy || flightBooked}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="Réserver le vol"
+            accessibilityLabel={
+              flightBooked ? 'Vol confirmé' : 'Réserver le vol'
+            }
             style={({ pressed }) => [
               styles.ticketBook,
+              flightBooked && styles.ticketBookConfirmed,
               (bookingBusy || pressed) && { opacity: 0.6 },
             ]}
           >
             <Text style={styles.ticketBookText}>
-              {bookingBusy ? 'Ouverture…' : 'Réserver'}
+              {flightBooked
+                ? 'Vol confirmé ✓'
+                : bookingBusy
+                  ? 'Ouverture…'
+                  : 'Réserver'}
             </Text>
           </Pressable>
           {canEditModalities ? (
@@ -2829,6 +2902,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
   },
+  stayTotalRowHint: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.faint,
+  },
   stayTotalRowValue: {
     fontFamily: fonts.bold,
     fontSize: 14,
@@ -3123,6 +3201,9 @@ const styles = StyleSheet.create({
     zIndex: 3,
     elevation: 3,
   },
+  ticketBookConfirmed: {
+    backgroundColor: '#059669',
+  },
   ticketBookText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
   ticketModifyBtn: {
     width: 44,
@@ -3226,9 +3307,9 @@ const styles = StyleSheet.create({
   },
   routeWarnBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.white },
   tripDangerZone: {
-    marginTop: 48,
-    marginBottom: 16,
-    gap: 10,
+    marginTop: 0,
+    marginBottom: 8,
+    gap: 8,
   },
   archiveBtn: {
     paddingVertical: 16,

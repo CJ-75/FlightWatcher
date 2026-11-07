@@ -70,7 +70,9 @@ export function buildStayPipeline(opts: {
   const hotelPartial = opts.hotel === 'selected'
   const activitiesOn = Boolean(opts.activitiesEnabled)
   const restaurantsOn = Boolean(opts.restaurantsEnabled)
-  const activitiesDone = Boolean(opts.activitiesDone)
+  // Selected activities complete the step (green), same as Vol « Choisi ».
+  const activitiesDone =
+    Boolean(opts.activitiesDone) || Boolean(opts.activitiesPartial)
   const activitiesPartial = Boolean(opts.activitiesPartial)
   const restaurantsDone =
     Boolean(opts.restaurantsDone) || Boolean(opts.restaurantsSkipped)
@@ -148,7 +150,10 @@ export function buildStayPipeline(opts: {
       activitiesDone,
       activitiesPartial,
       !activitiesOn,
-      activitiesOn ? opts.activitiesHint || 'Choisir' : 'Bientôt',
+      activitiesOn
+        ? opts.activitiesHint ||
+            (activitiesDone ? 'Choisies' : 'Choisir')
+        : 'Bientôt',
     ),
     step(
       'restaurants',

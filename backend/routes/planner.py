@@ -3667,16 +3667,29 @@ async def get_or_create_execution_draft(proposal_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Voyage introuvable")
 
     def _execution_draft_response(row: dict, *, reused: bool) -> dict:
+        payload = row.get("payload") or {}
         return {
             "id": row["id"],
             "draft_token": row["draft_token"],
             "status": row.get("status") or "draft",
-            "payload": row.get("payload") or {},
+            "payload": payload,
             "expires_at": row.get("expires_at"),
             "reused": reused,
             "source_planned_trip_id": row.get("source_planned_trip_id")
             or proposal["trip_id"],
             "source_proposal_id": row.get("source_proposal_id") or proposal_id,
+            # Keep booking lifecycle on the client (boarding pass "Vol confirmé").
+            "flight_booked_at": row.get("flight_booked_at")
+            or payload.get("flight_booked_at"),
+            "flight_booking_status": row.get("flight_booking_status")
+            or payload.get("flight_booking_status"),
+            "flight_booking_provider": row.get("flight_booking_provider")
+            or payload.get("flight_booking_provider"),
+            "flight_booking_reference": row.get("flight_booking_reference")
+            or payload.get("flight_booking_reference"),
+            "hotel_booked_at": row.get("hotel_booked_at")
+            or payload.get("hotel_booked_at"),
+            "hotel": row.get("hotel") or payload.get("hotel"),
         }
 
     existing = (

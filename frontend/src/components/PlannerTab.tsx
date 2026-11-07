@@ -515,8 +515,9 @@ function TripsGallery({
     }
     const apiName = trip.organizer?.full_name?.trim()
     const apiAvatar = trip.organizer?.avatar_url?.trim()
-    const fullName = apiName || selfProfile.name
-    const avatarUrl = apiAvatar || selfProfile.avatarUrl || null
+    const fullName = selfProfile.name || apiName || 'User'
+    // Prefer live auth photo (Google) over a stale profile row.
+    const avatarUrl = selfProfile.avatarUrl || apiAvatar || null
     const names = [...(trip.member_names || [])]
     if (names.length > 0) {
       const first = names[0]
@@ -1371,6 +1372,21 @@ function TripDetailView({
   const [askFlightBooked, setAskFlightBooked] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
   const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
+  const onActivityItemsChange = useCallback(
+    (items: { status?: string | null }[]) => {
+      setActivityItems((prev) => {
+        if (items.length === 0 && prev.length > 0) return prev
+        if (
+          prev.length === items.length &&
+          prev.every((p, i) => p.status === items[i]?.status)
+        ) {
+          return prev
+        }
+        return items
+      })
+    },
+    [],
+  )
   const autoScanStarted = useRef(false)
   const leftForFlight = useRef(false)
   const leftForFlightAt = useRef(0)
@@ -1413,14 +1429,42 @@ function TripDetailView({
           detail.accepted_proposal?.id ||
           (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
           null
+        const withWorkspaceBooked = (draft: MyTripDraft): MyTripDraft => {
+          if (matched?.pipeline?.flight !== 'booked') return draft
+          const payload = (draft.payload || {}) as Record<string, unknown>
+          if (
+            draft.flight_booked_at ||
+            payload.flight_booked ||
+            draft.flight_booking_status === 'user_confirmed' ||
+            draft.flight_booking_status === 'partner_confirmed'
+          ) {
+            return draft
+          }
+          const now = new Date().toISOString()
+          return {
+            ...draft,
+            flight_booked_at: now,
+            flight_booking_status: 'user_confirmed',
+            payload: {
+              ...payload,
+              flight_booked: true,
+              flight_booked_at: now,
+              flight_booking_status: 'user_confirmed',
+            },
+          }
+        }
         if (matched?.draft_token) {
-          setFlightDraft(await getApiClient().getMyTrip(matched.draft_token))
+          setFlightDraft(
+            withWorkspaceBooked(
+              await getApiClient().getMyTrip(matched.draft_token),
+            ),
+          )
         } else if (acceptedId) {
           // Chosen flight is in DB — ensure séjour draft exists and keep it.
           try {
             const draft =
               await getApiClient().getOrCreateExecutionDraft(acceptedId)
-            setFlightDraft(draft)
+            setFlightDraft(withWorkspaceBooked(draft))
           } catch {
             setFlightDraft((prev) => prev)
           }
@@ -1461,26 +1505,46 @@ function TripDetailView({
   }, [load])
 
   useEffect(() => {
+    setActivityItems([])
+  }, [tripId])
+
+  useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
-    if ((!tripId && !token) || !plannerActivitiesEnabled) {
-      setActivityItems([])
-      return
+    if ((!tripId && !token) || !plannerActivitiesEnabled) return
+    let cancelled = false
+    const asActivityRows = (items: Record<string, unknown>[]) =>
+      items
+        .filter((i) => {
+          const t = String(i.item_type || 'activity')
+          return t === 'activity'
+        })
+        .map((i) => ({ status: (i.status as string | null | undefined) ?? null }))
+
+    void (async () => {
+      try {
+        let items: Record<string, unknown>[] = []
+        if (tripId) {
+          const res = await listTripItemsCached({ planned_trip_id: tripId })
+          if (cancelled) return
+          items = res.items || []
+        }
+        // Fallback: ideas still attached to the exécution draft.
+        if (!items.length && token) {
+          const res = await listTripItemsCached({ draft_token: token })
+          if (cancelled) return
+          items = res.items || []
+        }
+        if (cancelled) return
+        const rows = asActivityRows(items)
+        if (rows.length === 0) return
+        onActivityItemsChange(rows)
+      } catch {
+        // Keep previous parcours state on transient errors.
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-    const owner = tripId
-      ? { planned_trip_id: tripId }
-      : { draft_token: token! }
-    void listTripItemsCached(owner)
-      .then((res) => {
-        const items = res.items || []
-        setActivityItems(
-          items.filter((i) => i.item_type === 'activity') as {
-            status?: string | null
-          }[],
-        )
-      })
-      .catch(() => {
-        setActivityItems([])
-      })
   }, [
     tripId,
     flightDraft?.draft_token,
@@ -1488,6 +1552,7 @@ function TripDetailView({
     plannerActivitiesEnabled,
     flightDraft?.hotel_booked_at,
     flightDraft?.flight_booked_at,
+    onActivityItemsChange,
   ])
 
   const isOrganizer = trip?.organizer_id === userId
@@ -2840,6 +2905,7 @@ function TripDetailView({
                   pricePerPerson={stayParty.flightPp || stayParty.perPerson}
                   priceCaption="Prix du vol"
                   bookingStatus={flightBookingStatus || undefined}
+                  flightBooked={flightBooked}
                   bookingBusy={flightBookingBusy}
                   askBooked={askFlightBooked}
                   canEditModalities={isOrganizer && !flightBooked && !hotelBooked}
@@ -3332,7 +3398,7 @@ function TripDetailView({
             trip={trip}
             draftToken={flightDraft?.draft_token || workspace?.draft_token || null}
             activitiesEnabled={plannerActivitiesEnabled}
-            onActivityItemsChange={setActivityItems}
+            onActivityItemsChange={onActivityItemsChange}
           />
         </div>
       ) : null}
@@ -3361,7 +3427,12 @@ function TripDetailView({
           <div className="px-5 py-4 sm:px-6 sm:py-5">
             <dl className="space-y-3">
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-sm font-semibold text-slate-500">Vol</dt>
+                <dt className="text-sm font-semibold text-slate-500">
+                  Vol{' '}
+                  <span className="font-medium text-slate-400">
+                    (hors options)
+                  </span>
+                </dt>
                 <dd className="text-sm font-bold tabular-nums text-ink">
                   {stayParty.flightPp}&nbsp;€
                 </dd>
@@ -3423,54 +3494,55 @@ function TripDetailView({
           onRemove={(m) => void removeMember(m)}
           t={t}
         />
-        {isOrganizer && !scanning ? (
-          <button
-            type="button"
-            onClick={() => void doShare()}
-            className="w-full text-left bg-white rounded-3xl border border-line shadow-soft p-5 sm:p-6 hover:bg-slate-50/80 transition-colors"
-          >
-            <span className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <span className="min-w-0">
-                <span className="block text-xs font-semibold uppercase tracking-wide text-muted">
-                  {PLANNER_SHARE_EYEBROW_FR}
+        {isOrganizer ? (
+          <div className="space-y-2">
+            {!scanning ? (
+              <button
+                type="button"
+                onClick={() => void doShare()}
+                className="w-full text-left bg-white rounded-3xl border border-line shadow-soft p-5 sm:p-6 hover:bg-slate-50/80 transition-colors"
+              >
+                <span className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold uppercase tracking-wide text-muted">
+                      {PLANNER_SHARE_EYEBROW_FR}
+                    </span>
+                    <span className="mt-0.5 block text-lg font-extrabold tracking-tight text-ink">
+                      {PLANNER_SHARE_TITLE_FR}
+                    </span>
+                    <span className="mt-1 block text-sm text-ink-soft">
+                      {PLANNER_SHARE_HINT_FR}.
+                    </span>
+                  </span>
+                  <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold min-h-[40px]">
+                    {PLANNER_SHARE_ACTION_FR}
+                  </span>
                 </span>
-                <span className="mt-0.5 block text-lg font-extrabold tracking-tight text-ink">
-                  {PLANNER_SHARE_TITLE_FR}
-                </span>
-                <span className="mt-1 block text-sm text-ink-soft">
-                  {PLANNER_SHARE_HINT_FR}.
-                </span>
-              </span>
-              <span className="inline-flex shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white px-3.5 py-2 text-sm font-bold min-h-[40px]">
-                {PLANNER_SHARE_ACTION_FR}
-              </span>
-            </span>
-          </button>
+              </button>
+            ) : null}
+            <div className="flex flex-col items-start gap-0.5">
+              {trip.status !== 'completed' ? (
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={() => void doComplete()}
+                  className="text-sm font-bold text-ink-soft hover:text-ink px-1 py-1.5 disabled:opacity-50"
+                >
+                  {deleting ? '…' : t('planner.archive')}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => void doDelete()}
+                className="text-sm font-bold text-red-600 hover:text-red-700 px-1 py-1.5 disabled:opacity-50"
+              >
+                {deleting ? '…' : t('planner.delete')}
+              </button>
+            </div>
+          </div>
         ) : null}
       </section>
-
-      {isOrganizer ? (
-        <div className="pt-2 border-t border-slate-100 flex flex-col items-start gap-1">
-          {trip.status !== 'completed' ? (
-            <button
-              type="button"
-              disabled={deleting}
-              onClick={() => void doComplete()}
-              className="text-sm font-bold text-ink-soft hover:text-ink px-1 py-2 disabled:opacity-50"
-            >
-              {deleting ? '…' : t('planner.archive')}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={() => void doDelete()}
-            className="text-sm font-bold text-red-600 hover:text-red-700 px-1 py-2 disabled:opacity-50"
-          >
-            {deleting ? '…' : t('planner.delete')}
-          </button>
-        </div>
-      ) : null}
 
       {showEditFlexible ? (
         <div className="app-dialog-root z-[60]">
@@ -3636,6 +3708,7 @@ function SelectedFlightBoardingPass({
   priceCaption,
   priceHint,
   bookingStatus,
+  flightBooked,
   bookingBusy,
   askBooked,
   canEditModalities,
@@ -3653,6 +3726,7 @@ function SelectedFlightBoardingPass({
   priceCaption?: string
   priceHint?: string
   bookingStatus?: FlightBookingStatus
+  flightBooked?: boolean
   bookingBusy: boolean
   askBooked?: boolean
   canEditModalities?: boolean
@@ -3697,7 +3771,9 @@ function SelectedFlightBoardingPass({
     `${safe.provider || ''} ${safe.booking_url || ''}`,
   )
   const isConfirmed =
-    bookingStatus === 'user_confirmed' || bookingStatus === 'partner_confirmed'
+    Boolean(flightBooked) ||
+    bookingStatus === 'user_confirmed' ||
+    bookingStatus === 'partner_confirmed'
 
   return (
     <motion.article
@@ -4022,9 +4098,9 @@ async function loadAccountHolderInfo(userId: string): Promise<{
         .select('avatar_url, full_name')
         .eq('id', userId)
         .maybeSingle()
-      if (data?.full_name?.trim()) name = data.full_name.trim()
-      if (data?.avatar_url) avatarUrl = data.avatar_url
-      // Prefer live Google metadata avatar when it's the current user
+      if (data?.full_name?.trim() && !name) name = data.full_name.trim()
+      if (data?.avatar_url && !avatarUrl) avatarUrl = data.avatar_url
+      // Always prefer live Google / auth metadata for the signed-in user.
       if (current?.id === userId) {
         const metaAvatar =
           (current.user_metadata?.avatar_url as string | undefined) ||

@@ -12,6 +12,7 @@ import {
   Alert,
   ScrollView,
   Share,
+  Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
@@ -24,9 +25,40 @@ import {
   partyModeTitleFr,
 } from '@flightwatcher/shared'
 import { plannerInviteUrl } from '../lib/client'
+import { useAuth } from '../context/AuthContext'
 import { colors, fonts, shadow } from '../theme'
 
-function memberLabel(m: TripMember, currentUserId?: string | null): string {
+function authAvatarUrl(user: {
+  user_metadata?: Record<string, unknown> | null
+} | null): string | null {
+  const meta = user?.user_metadata
+  if (!meta) return null
+  const url =
+    (typeof meta.avatar_url === 'string' && meta.avatar_url) ||
+    (typeof meta.picture === 'string' && meta.picture) ||
+    null
+  return url?.trim() || null
+}
+
+function authDisplayName(user: {
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
+} | null): string | null {
+  const meta = user?.user_metadata
+  const name =
+    (typeof meta?.full_name === 'string' && meta.full_name.trim()) ||
+    (typeof meta?.name === 'string' && meta.name.trim()) ||
+    user?.email?.split('@')[0] ||
+    null
+  return name || null
+}
+
+function memberLabel(
+  m: TripMember,
+  currentUserId?: string | null,
+  organizerName?: string | null,
+): string {
+  if (m.role === 'organizer' && organizerName?.trim()) return organizerName.trim()
   if (m.display_name?.trim()) return m.display_name.trim()
   if (m.user_id && currentUserId && m.user_id === currentUserId) return 'Toi'
   if (m.role === 'organizer') return 'Organisateur'
@@ -76,12 +108,14 @@ export function TravelersSection({
   onAdd,
   onRemove,
 }: Props) {
+  const { viewUser } = useAuth()
   const [addOpen, setAddOpen] = useState(false)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [orgAvatarBroken, setOrgAvatarBroken] = useState(false)
 
   const sorted = useMemo(() => sortMembers(members || []), [members])
   const count = sorted.length
@@ -93,6 +127,16 @@ export function TravelersSection({
   const partyKicker = partyModeKickerFr(partyMode)
   const inviteUrl = inviteToken ? plannerInviteUrl(inviteToken) : null
   const [inviteBusy, setInviteBusy] = useState(false)
+
+  const organizer = sorted.find((m) => m.role === 'organizer')
+  const organizerIsSelf =
+    !!viewUser?.id &&
+    (!!organizer?.user_id
+      ? organizer.user_id === viewUser.id
+      : isOrganizer && currentUserId === viewUser.id)
+  const organizerAuthAvatar = organizerIsSelf ? authAvatarUrl(viewUser) : null
+  const organizerAuthName = organizerIsSelf ? authDisplayName(viewUser) : null
+  const showOrgPhoto = !!organizerAuthAvatar && !orgAvatarBroken
 
   const shareInvite = async () => {
     if (!inviteUrl) return
@@ -204,9 +248,13 @@ export function TravelersSection({
       ) : (
         <View style={styles.list}>
           {sorted.map((m) => {
-            const label = memberLabel(m, currentUserId)
-            const onApp = m.status === 'joined' && !!m.user_id
             const isOrg = m.role === 'organizer'
+            const label = memberLabel(
+              m,
+              currentUserId,
+              isOrg ? organizerAuthName : null,
+            )
+            const onApp = m.status === 'joined' && !!m.user_id
             const canRemove = isOrganizer && !isOrg
             return (
               <View key={m.id} style={styles.row}>
@@ -218,9 +266,18 @@ export function TravelersSection({
                       : onApp
                         ? styles.avatarOn
                         : styles.avatarOff,
+                    isOrg && showOrgPhoto && styles.avatarPhotoWrap,
                   ]}
                 >
-                  <Text style={styles.avatarText}>{initialOf(label)}</Text>
+                  {isOrg && showOrgPhoto ? (
+                    <Image
+                      source={{ uri: organizerAuthAvatar! }}
+                      style={styles.avatarPhoto}
+                      onError={() => setOrgAvatarBroken(true)}
+                    />
+                  ) : (
+                    <Text style={styles.avatarText}>{initialOf(label)}</Text>
+                  )}
                 </View>
                 <View style={styles.meta}>
                   <View style={styles.nameRow}>
@@ -423,6 +480,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: colors.primarySoft,
+    overflow: 'hidden',
+  },
+  avatarPhotoWrap: {
+    backgroundColor: colors.canvas,
+    padding: 0,
+  },
+  avatarPhoto: {
+    width: '100%',
+    height: '100%',
   },
   avatarOrg: { backgroundColor: colors.primarySoft },
   avatarOn: { backgroundColor: colors.successSoft },

@@ -36,13 +36,13 @@ import { getApiClient } from '../utils/apiClient'
 import {
   invalidateTripItemsCache,
   listTripItemsCached,
-  setTripItemsCache,
 } from '../utils/tripItemsCache'
 import { rememberTrip } from '../utils/tripRecovery'
 import { ActivityDetailSheet } from './ActivityDetailSheet'
 
 type ItemRow = {
   id: string
+  item_type?: string
   status?: string
   availability_state?: string
   sort_key?: string
@@ -50,6 +50,11 @@ type ItemRow = {
   inherited?: boolean
   meta?: Record<string, unknown>
   places?: { name?: string; meta?: Record<string, unknown> | null } | null
+}
+
+/** trip-items merge can include hotel/resto rows — keep them out of Activités. */
+function isActivityItem(it: ItemRow): boolean {
+  return String(it.item_type || 'activity') === 'activity'
 }
 
 function placeOf(it: ItemRow): {
@@ -287,22 +292,41 @@ export function ActivityStepPanel(props: {
   const [hasAccount, setHasAccount] = useState(false)
   const [resuming, setResuming] = useState(false)
   const authRetryRef = useRef(false)
+  /** Avoid pushing [] to parcours before the first successful list. */
+  const parcoursReadyRef = useRef(false)
+  const loadGenRef = useRef(0)
+  const onItemsChangeRef = useRef(onItemsChange)
+  onItemsChangeRef.current = onItemsChange
+
+  const publishParcours = useCallback((rows: ItemRow[]) => {
+    parcoursReadyRef.current = true
+    onItemsChangeRef.current?.(
+      rows.filter(isActivityItem).map((i) => ({
+        status: i.status ?? null,
+      })),
+    )
+  }, [])
 
   const load = useCallback(async (opts?: { force?: boolean }) => {
     if (!owner.draft_token && !owner.planned_trip_id) return
+    const gen = ++loadGenRef.current
     setLoading(true)
     setError(null)
     try {
       const res = await listTripItemsCached(owner, { force: opts?.force })
-      const rows = (res.items || []) as ItemRow[]
+      const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+      if (gen !== loadGenRef.current) return
       setItems(rows)
+      // Sync parcours immediately — don't wait for photo enrich.
+      publishParcours(rows)
       const enriched = await enrichActivityPhotos(rows, props.citySlug, {
         listCity: (slug, adults) =>
           getApiClient().listCityActivities(slug, adults),
         getProduct: (code) => getApiClient().getActivityProduct(code),
       })
+      if (gen !== loadGenRef.current) return
       setItems(enriched)
-      setTripItemsCache(owner, enriched as Record<string, unknown>[])
+      publishParcours(enriched)
       authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
@@ -312,20 +336,23 @@ export function ActivityStepPanel(props: {
         if (token) {
           try {
             const res = await listTripItemsCached(owner, { force: true })
-            const rows = (res.items || []) as ItemRow[]
+            const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+            if (gen !== loadGenRef.current) return
             setItems(rows)
+            publishParcours(rows)
             const enriched = await enrichActivityPhotos(rows, props.citySlug, {
               listCity: (slug, adults) =>
                 getApiClient().listCityActivities(slug, adults),
               getProduct: (code) => getApiClient().getActivityProduct(code),
             })
+            if (gen !== loadGenRef.current) return
             setItems(enriched)
-            setTripItemsCache(owner, enriched as Record<string, unknown>[])
+            publishParcours(enriched)
             setError(null)
             return
           } catch (e2) {
             setError(e2 instanceof Error ? e2.message : msg)
-            setItems([])
+            // Keep previous items so parcours stays green.
             return
           } finally {
             setLoading(false)
@@ -333,11 +360,11 @@ export function ActivityStepPanel(props: {
         }
       }
       setError(msg)
-      setItems([])
+      // Keep previous items — empty would reset parcours to « Choisir ».
     } finally {
       setLoading(false)
     }
-  }, [owner, props.citySlug])
+  }, [owner, props.citySlug, publishParcours])
 
   const needsAuth = isTripItemsAuthError(error)
 
@@ -362,16 +389,19 @@ export function ActivityStepPanel(props: {
   }
 
   useEffect(() => {
+    parcoursReadyRef.current = false
+    loadGenRef.current += 1
+  }, [owner.draft_token, owner.planned_trip_id])
+
+  useEffect(() => {
     if (enabled) void load()
   }, [enabled, load])
 
   useEffect(() => {
-    onItemsChange?.(
-      items.map((i) => ({
-        status: i.status ?? null,
-      })),
-    )
-  }, [items, onItemsChange])
+    // Status patches (Réservée, etc.) — skip until first successful list.
+    if (!parcoursReadyRef.current) return
+    publishParcours(items)
+  }, [items, publishParcours])
 
   useEffect(() => {
     let cancelled = false

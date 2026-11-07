@@ -179,18 +179,17 @@ export function activityStepProgress(items: { status?: string | null }[]): {
       hint: skipped ? 'Passé' : 'Choisir',
     }
   }
-  // ≥1 activité sur le séjour → étape verte (parcours).
+  // ≥1 activité sur le séjour → étape verte (parcours), comme Vol « Choisi ».
   const booked = active.some((i) => i.status === 'booked')
   const validated = active.some(
     (i) => i.status === 'validated' || i.status === 'booked',
   )
-  if (booked) return { done: true, partial: false, hint: 'Réservée' }
+  if (booked) return { done: true, partial: false, hint: 'Réservées' }
   if (validated) return { done: true, partial: false, hint: 'Validé' }
-  const n = active.length
   return {
     done: true,
     partial: false,
-    hint: n === 1 ? '1 idée' : `${n} idées`,
+    hint: 'Choisies',
   }
 }
 

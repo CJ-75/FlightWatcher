@@ -42,11 +42,17 @@ import { ActivityDetailSheet } from './ActivityDetailSheet'
 
 type ItemRow = {
   id: string
+  item_type?: string
   status?: string
   sort_key?: string
   inherited?: boolean
   meta?: Record<string, unknown>
   places?: { name?: string; meta?: Record<string, unknown> | null } | null
+}
+
+/** trip-items merge can include hotel/resto rows — keep them out of Activités. */
+function isActivityItem(it: ItemRow): boolean {
+  return String(it.item_type || 'activity') === 'activity'
 }
 
 function placeOf(it: ItemRow): {
@@ -252,11 +258,24 @@ export function ActivityStepPanel(props: {
   const [resuming, setResuming] = useState(false)
   const pendingRef = useRef<ItemRow | null>(null)
   const authRetryRef = useRef(false)
+  const parcoursReadyRef = useRef(false)
+  const loadGenRef = useRef(0)
+  const onItemsChangeRef = useRef(onItemsChange)
+  onItemsChangeRef.current = onItemsChange
   const hasAccount = Boolean(user || session?.user || viewUser)
 
   const platform = Platform.OS === 'ios' ? 'ios' : 'android'
   const needsAuth = isTripItemsAuthError(error)
   const city = (props.citySlug || 'paris').trim().toLowerCase() || 'paris'
+
+  const publishParcours = useCallback((rows: ItemRow[]) => {
+    parcoursReadyRef.current = true
+    onItemsChangeRef.current?.(
+      rows.filter(isActivityItem).map((i) => ({
+        status: i.status ?? null,
+      })),
+    )
+  }, [])
 
   const load = useCallback(async () => {
     if (!owner.draft_token && !owner.planned_trip_id) return
@@ -267,16 +286,22 @@ export function ActivityStepPanel(props: {
     ) {
       setItems([])
       setError(null)
+      publishParcours([])
       return
     }
+    const gen = ++loadGenRef.current
     setLoading(true)
     setError(null)
     try {
       const res = await getApi().listTripItems(owner)
-      const rows = (res.items || []) as ItemRow[]
+      const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+      if (gen !== loadGenRef.current) return
       setItems(rows)
+      publishParcours(rows)
       const enriched = await enrichActivityPhotos(rows, city)
+      if (gen !== loadGenRef.current) return
       setItems(enriched)
+      publishParcours(enriched)
       authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
@@ -286,14 +311,18 @@ export function ActivityStepPanel(props: {
         if (token) {
           try {
             const res = await getApi().listTripItems(owner)
-            const rows = (res.items || []) as ItemRow[]
+            const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+            if (gen !== loadGenRef.current) return
             setItems(rows)
-            setItems(await enrichActivityPhotos(rows, city))
+            publishParcours(rows)
+            const enriched = await enrichActivityPhotos(rows, city)
+            if (gen !== loadGenRef.current) return
+            setItems(enriched)
+            publishParcours(enriched)
             setError(null)
             return
           } catch (e2) {
             setError(e2 instanceof Error ? e2.message : msg)
-            setItems([])
             return
           } finally {
             setLoading(false)
@@ -301,11 +330,11 @@ export function ActivityStepPanel(props: {
         }
       }
       setError(msg)
-      setItems([])
+      // Keep previous items so parcours stays green.
     } finally {
       setLoading(false)
     }
-  }, [owner, city])
+  }, [owner, city, publishParcours])
 
   const onResumeSession = async () => {
     setResuming(true)
@@ -328,16 +357,18 @@ export function ActivityStepPanel(props: {
   }
 
   useEffect(() => {
+    parcoursReadyRef.current = false
+    loadGenRef.current += 1
+  }, [owner.draft_token, owner.planned_trip_id])
+
+  useEffect(() => {
     if (enabled) void load()
   }, [enabled, load])
 
   useEffect(() => {
-    onItemsChange?.(
-      items.map((i) => ({
-        status: i.status ?? null,
-      })),
-    )
-  }, [items, onItemsChange])
+    if (!parcoursReadyRef.current) return
+    publishParcours(items)
+  }, [items, publishParcours])
 
   useEffect(() => {
     if (!enabled) return
