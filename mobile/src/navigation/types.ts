@@ -61,6 +61,8 @@ export type RootStackParamList = {
     tripId: string
     /** Création → lancer le scan immédiatement */
     autoScan?: boolean
+    /** Ouvert depuis « En faire mon voyage » (retour → parcours) */
+    fromParcours?: boolean
   }
   Security: undefined
   Bookings: undefined

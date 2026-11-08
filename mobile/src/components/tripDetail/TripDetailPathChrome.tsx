@@ -28,6 +28,8 @@ type Props = {
   metaChips?: string[]
   phaseLabel: string
   onBack: () => void
+  /** e.g. « Retour au parcours » when opened from Make trip */
+  backAccessibilityLabel?: string
   onShare?: () => void
   onRename?: () => void
   titleEditing?: boolean
@@ -74,7 +76,8 @@ export function TripDetailPathChrome({
   city,
   metaChips,
   phaseLabel,
-  onBack: _onBack,
+  onBack,
+  backAccessibilityLabel = 'Retour',
   onShare,
   onRename,
   titleEditing,
@@ -185,6 +188,21 @@ export function TripDetailPathChrome({
 
   return (
     <View style={styles.root}>
+      {/* Same fixed back as Parcours detail — no native stack header */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
+      >
+        <Pressable
+          onPress={onBack}
+          style={styles.actionBtn}
+          hitSlop={8}
+          accessibilityLabel={backAccessibilityLabel}
+        >
+          <Text style={styles.backChevron}>‹</Text>
+        </Pressable>
+      </View>
+
       <ScrollView
         contentContainerStyle={{ paddingBottom: 28 + insets.bottom }}
         showsVerticalScrollIndicator={false}
@@ -197,7 +215,8 @@ export function TripDetailPathChrome({
             locations={[0, 0.4, 1]}
             style={StyleSheet.absoluteFill}
           />
-          <View style={{ height: insets.top + 8 }} />
+          {/* Spacer so title doesn’t sit under fixed back */}
+          <View style={{ height: insets.top + 56 }} />
           {heroCopy}
         </ImageBackground>
 
@@ -263,6 +282,37 @@ export function TripDetailPathChrome({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFBF8' },
+  fixedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  actionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  backChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    lineHeight: 32,
+    color: colors.inkSoft,
+    marginTop: -2,
+    marginLeft: -1,
+  },
   hero: { minHeight: 340, justifyContent: 'space-between' },
   heroCopy: { paddingHorizontal: 20, paddingBottom: 36, gap: 8 },
   titleRow: {

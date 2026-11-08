@@ -148,7 +148,17 @@ export function TripDetailScreen() {
     __DEV__ && String(tripId || '').startsWith('dev-trip-')
   const useGuestPreview = isLocalDevTrip || (__DEV__ && isGuest)
   const autoScan = Boolean(route.params.autoScan)
+  const fromParcours = Boolean(route.params.fromParcours)
   const autoScanStarted = useRef(false)
+
+  const goBackFromTrip = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack()
+      return
+    }
+    // Deep link / no history — land on planner hub
+    navigation.navigate('Main', { screen: 'Planner' })
+  }, [navigation])
 
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1765,7 +1775,10 @@ export function TripDetailScreen() {
           guideSubtitle={`${pax} voyageur${pax > 1 ? 's' : ''}`}
           activeTab={pathTab}
           onTabChange={setPathTab}
-          onBack={() => navigation.goBack()}
+          onBack={goBackFromTrip}
+          backAccessibilityLabel={
+            fromParcours ? 'Retour au parcours' : 'Retour'
+          }
           onShare={
             isOrganizer && trip.invite_token
               ? () => {
@@ -2185,12 +2198,29 @@ export function TripDetailScreen() {
   return (
     <View style={styles.root}>
       <ScreenBackground />
+      {/* v1: same parcours-style back (native header removed) */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.fixedBackHeader, { paddingTop: insets.top + 12 }]}
+      >
+        <Pressable
+          onPress={goBackFromTrip}
+          style={styles.fixedBackBtn}
+          hitSlop={8}
+          accessibilityLabel={
+            fromParcours ? 'Retour au parcours' : 'Retour'
+          }
+        >
+          <Text style={styles.fixedBackChevron}>‹</Text>
+        </Pressable>
+      </View>
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
         scrollEnabled={!gallerySwipeActive}
         contentContainerStyle={{
           padding: spacing.xl,
+          paddingTop: insets.top + 56,
           paddingBottom: insets.bottom + 40,
           gap: 16,
         }}
@@ -3326,6 +3356,37 @@ function ProposalBlock({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  fixedBackHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  fixedBackBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  fixedBackChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    lineHeight: 32,
+    color: colors.inkSoft,
+    marginTop: -2,
+    marginLeft: -1,
+  },
   scroll: { flex: 1, backgroundColor: 'transparent' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.canvas },
   hero: {

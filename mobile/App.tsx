@@ -304,7 +304,7 @@ function RootNavigator() {
           <Stack.Screen
             name="TripDetail"
             component={TripDetailScreen}
-            options={stackHeaderOptions('Voyage')}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Security"
