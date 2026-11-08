@@ -104,7 +104,7 @@ export function ItineraryCard({
             isLandscape ? 'text-[34px] leading-tight' : 'text-[26px] leading-snug'
           }`}
           style={{
-            fontFamily: '"Instrument Serif", Georgia, serif',
+            fontFamily: 'var(--fw-font-serif, "Instrument Serif", Georgia, serif)',
           }}
         >
           {itinerary.title || 'Sans titre'}

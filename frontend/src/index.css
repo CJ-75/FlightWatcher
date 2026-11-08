@@ -18,6 +18,8 @@
   --fw-space-screen-x: 20px;
   --fw-radius-card: 24px;
   --fw-radius-pill: 999px;
+  --fw-font-sans: 'Sora', system-ui, sans-serif;
+  --fw-font-serif: 'Instrument Serif', Georgia, serif;
 }
 
 .dark {

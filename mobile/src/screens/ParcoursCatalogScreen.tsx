@@ -22,6 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
 import { FwKicker } from '../components/FwKicker'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
+import { ItineraryOccasionIcon } from '../components/parcours/ItineraryOccasionIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, spacing } from '../theme'
@@ -205,9 +206,11 @@ export function ParcoursCatalogScreen({ headerExtra }: Props) {
                       style={styles.envie}
                     >
                       <View style={styles.envieIcon}>
-                        <Text style={styles.envieLetter}>
-                          {chip.label.slice(0, 1)}
-                        </Text>
+                        <ItineraryOccasionIcon
+                          occasion={chip.occasion}
+                          size={20}
+                          color="#FF6B35"
+                        />
                       </View>
                       <Text style={styles.envieLabel}>{chip.label}</Text>
                       <Text style={styles.envieCount}>
@@ -330,11 +333,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
-  },
-  envieLetter: {
-    fontFamily: fonts.bold,
-    fontSize: 18,
-    color: '#FF6B35',
   },
   envieLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.ink },
   envieCount: {

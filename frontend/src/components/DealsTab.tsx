@@ -506,8 +506,8 @@ export function DealsTab() {
             onClick={() => setDurationTab(tab.id)}
             className={`rounded-full px-3.5 py-2 text-sm font-bold border transition-colors ${
               durationTab === tab.id
-                ? 'bg-ink text-white border-ink'
-                : 'bg-white text-muted border-line hover:border-primary-200 hover:text-ink'
+                ? 'bg-[color:var(--fw-primary,#1D1B19)] text-[color:var(--fw-primary-fg,#F5EFEA)] border-[color:var(--fw-primary,#1D1B19)]'
+                : 'bg-white text-muted border-line hover:border-[color:var(--fw-accent,#FF6B35)]/40 hover:text-ink'
             }`}
           >
             {tab.label}

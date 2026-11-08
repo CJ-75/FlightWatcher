@@ -41,33 +41,53 @@ export function SearchTabIcon({ size = 22, color = colors.faint }: IconProps) {
   )
 }
 
-/** Full price-tag icon for Deals. */
+/** Parcours — pin + route (trait). Remplace l’étiquette prix Séjours. */
 export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
-  const w = size * 0.9
-  const h = size * 0.62
+  const stroke = Math.max(2, size * 0.1)
+  const pinR = size * 0.22
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* route curve */}
       <View
         style={{
-          width: w,
-          height: h,
-          backgroundColor: color,
-          borderTopRightRadius: h * 0.35,
-          borderBottomRightRadius: h * 0.35,
-          borderTopLeftRadius: h * 0.18,
-          borderBottomLeftRadius: h * 0.18,
-          transform: [{ rotate: '-20deg' }],
-          alignItems: 'flex-start',
-          justifyContent: 'center',
-          paddingLeft: w * 0.14,
+          position: 'absolute',
+          width: size * 0.55,
+          height: size * 0.55,
+          borderLeftWidth: stroke,
+          borderBottomWidth: stroke,
+          borderColor: color,
+          borderBottomLeftRadius: size * 0.45,
+          left: size * 0.18,
+          top: size * 0.22,
+        }}
+      />
+      {/* pin */}
+      <View
+        style={{
+          position: 'absolute',
+          top: size * 0.08,
+          right: size * 0.12,
+          width: pinR * 2,
+          height: pinR * 2.4,
+          alignItems: 'center',
         }}
       >
         <View
           style={{
-            width: h * 0.28,
-            height: h * 0.28,
-            borderRadius: h,
-            backgroundColor: colors.white,
+            width: pinR * 2,
+            height: pinR * 2,
+            borderRadius: pinR,
+            borderWidth: stroke,
+            borderColor: color,
+            backgroundColor: 'transparent',
+          }}
+        />
+        <View
+          style={{
+            width: stroke,
+            height: pinR * 0.7,
+            backgroundColor: color,
+            marginTop: -stroke * 0.3,
           }}
         />
       </View>

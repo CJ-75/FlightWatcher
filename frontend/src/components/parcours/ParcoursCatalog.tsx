@@ -11,6 +11,7 @@ import {
 import { getApiClient } from '../../utils/apiClient'
 import { FwKicker } from '../ui/FwKicker'
 import { ItineraryCard } from './ItineraryCard'
+import { ItineraryOccasionIcon } from './ItineraryOccasionIcon'
 
 const CITY_CHOICES = [
   'paris',
@@ -232,13 +233,13 @@ function FeedRow({
               className="min-w-[132px] shrink-0 rounded-2xl border border-line bg-white p-3 text-left shadow-sm"
             >
               <div
-                className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl text-lg font-bold"
+                className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl"
                 style={{
                   background: 'var(--fw-accent-soft)',
                   color: 'var(--fw-accent)',
                 }}
               >
-                {chip.label.slice(0, 1)}
+                <ItineraryOccasionIcon occasion={chip.occasion} size={20} />
               </div>
               <p className="text-sm font-bold text-ink leading-snug">
                 {chip.label}

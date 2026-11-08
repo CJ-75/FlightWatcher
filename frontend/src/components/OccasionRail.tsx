@@ -61,7 +61,7 @@ export function OccasionRail({
           <button
             type="button"
             onClick={onClear}
-            className="text-xs font-bold text-primary-600 hover:text-primary-700 shrink-0"
+            className="text-xs font-bold text-[color:var(--fw-accent,#FF6B35)] hover:opacity-80 shrink-0"
           >
             {t('deals.occasionsClear')}
           </button>
@@ -93,21 +93,29 @@ export function OccasionRail({
                 title={chip.explain || chip.label || undefined}
                 className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-3 py-1.5 text-left transition-all duration-150 ${
                   on
-                    ? 'bg-primary-500 border-primary-500 text-white shadow-soft'
-                    : 'bg-white text-ink border-line hover:border-primary-200'
+                    ? 'bg-[color:var(--fw-primary,#1D1B19)] border-[color:var(--fw-primary,#1D1B19)] text-[color:var(--fw-primary-fg,#F5EFEA)] shadow-soft'
+                    : 'bg-white text-ink border-line hover:border-[color:var(--fw-accent,#FF6B35)]/40'
                 }`}
               >
-                <OccasionIcon icon={chip.icon} slug={chip.slug} size={14} />
+                <span
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-lg ${
+                    on
+                      ? 'bg-white/15 text-inherit'
+                      : 'bg-[color:var(--fw-accent-soft,#FFE7DC)] text-[color:var(--fw-accent,#FF6B35)]'
+                  }`}
+                >
+                  <OccasionIcon icon={chip.icon} slug={chip.slug} size={13} />
+                </span>
                 <span
                   className={`text-[12px] font-bold whitespace-nowrap md:hidden ${
-                    on ? 'text-white' : 'text-ink'
+                    on ? 'text-inherit' : 'text-ink'
                   }`}
                 >
                   {chipLabel(chip, true)}
                 </span>
                 <span
                   className={`text-[12px] font-bold whitespace-nowrap hidden md:inline ${
-                    on ? 'text-white' : 'text-ink'
+                    on ? 'text-inherit' : 'text-ink'
                   }`}
                 >
                   {label}
@@ -116,8 +124,8 @@ export function OccasionRail({
                   <span
                     className={`inline-flex min-w-[1.25rem] justify-center text-[10px] font-bold tabular-nums rounded-full px-1.5 py-0.5 leading-none shrink-0 ${
                       on
-                        ? 'bg-white/20 text-white'
-                        : 'bg-primary-50 text-primary-700'
+                        ? 'bg-white/20 text-inherit'
+                        : 'bg-[color:var(--fw-accent-soft,#FFE7DC)] text-[color:var(--fw-accent,#FF6B35)]'
                     }`}
                   >
                     {count}
@@ -125,7 +133,7 @@ export function OccasionRail({
                 ) : countsPending && !hasCount ? (
                   <span
                     className={`inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 py-0.5 ${
-                      on ? 'bg-white/20' : 'bg-primary-50'
+                      on ? 'bg-white/20' : 'bg-[color:var(--fw-accent-soft,#FFE7DC)]'
                     }`}
                     aria-hidden
                   >

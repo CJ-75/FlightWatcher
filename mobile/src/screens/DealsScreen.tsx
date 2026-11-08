@@ -488,7 +488,7 @@ export function DealsScreen() {
                               icon={f.icon}
                               slug={f.slug}
                               size={16}
-                              color={on ? colors.white : colors.primaryDeep}
+                              color={on ? '#F5EFEA' : colors.primary}
                             />
                           </View>
                           <Text
@@ -811,8 +811,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   occasionCardOn: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
   occasionIcon: {
     width: 28,
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   occasionIconOn: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   occasionLabel: {
     fontFamily: fonts.extrabold,
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   occasionLabelOn: {
-    color: colors.white,
+    color: '#F5EFEA',
   },
   occasionCount: {
     fontFamily: fonts.semibold,
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   occasionCountOn: {
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(245,239,234,0.85)',
   },
   occasionExplain: {
     marginTop: 10,
