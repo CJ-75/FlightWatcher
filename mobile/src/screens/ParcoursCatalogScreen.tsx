@@ -40,9 +40,10 @@ const CITIES = [
 
 type Props = {
   headerExtra?: React.ReactNode
+  embedded?: boolean
 }
 
-export function ParcoursCatalogScreen({ headerExtra }: Props) {
+export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) {
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -125,7 +126,7 @@ export function ParcoursCatalogScreen({ headerExtra }: Props) {
       <ScreenBackground />
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + 12,
+          paddingTop: embedded ? 0 : insets.top + 12,
           paddingBottom: insets.bottom + 110,
           paddingHorizontal: spacing.xl,
         }}
@@ -138,15 +139,19 @@ export function ParcoursCatalogScreen({ headerExtra }: Props) {
         }
       >
         {headerExtra}
-        <FwKicker>PARCOURS</FwKicker>
-        <Text style={styles.title}>Où aller, quoi faire</Text>
-        <Text style={styles.subtitle}>
-          Des balades et des week-ends choisis pour toi.
-        </Text>
+        {!embedded ? (
+          <>
+            <FwKicker>PARCOURS</FwKicker>
+            <Text style={styles.title}>Où aller, quoi faire</Text>
+            <Text style={styles.subtitle}>
+              Des balades et des week-ends choisis pour toi.
+            </Text>
+          </>
+        ) : null}
 
         <Pressable
           onPress={() => setCityOpen((v) => !v)}
-          style={styles.cityChip}
+          style={[styles.cityChip, embedded && { marginTop: 12 }]}
         >
           <Text style={styles.cityChipText}>
             Près de toi · {cityLabel} ▾

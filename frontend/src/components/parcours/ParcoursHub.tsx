@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { DealsTab } from '../DealsTab'
+import { FwKicker } from '../ui/FwKicker'
 import { ParcoursCatalog } from './ParcoursCatalog'
 
 type Segment = 'parcours' | 'sejours'
 
 /**
- * Onglet Parcours — segments §5 : Parcours | Séjours pas chers.
+ * Titre statique + tabs style TikTok sous le titre, puis contenu.
  */
 export function ParcoursHub() {
   const [params, setParams] = useSearchParams()
@@ -31,32 +32,52 @@ export function ParcoursHub() {
 
   return (
     <div className="w-full">
-      <div className="mb-5 flex w-full max-w-md rounded-full bg-white/80 p-1 border border-line shadow-sm">
+      <div className="mb-1.5">
+        <FwKicker>Parcours</FwKicker>
+      </div>
+      <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+        Où aller, quoi faire
+      </h2>
+      <p className="app-subtitle mt-1 mb-4 max-w-xl">
+        Des balades et des week-ends choisis pour toi.
+      </p>
+
+      <div
+        role="tablist"
+        aria-label="Parcours ou séjours"
+        className="mb-5 flex w-full gap-5 border-b border-line"
+      >
         {(
           [
             { id: 'parcours' as const, label: 'Parcours' },
             { id: 'sejours' as const, label: 'Séjours pas chers' },
           ] as const
-        ).map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => select(s.id)}
-            className={`flex-1 rounded-full px-3 py-2.5 text-sm font-bold transition-colors ${
-              segment === s.id
-                ? 'bg-[color:var(--fw-primary)] text-[color:var(--fw-primary-fg)] shadow'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
+        ).map((s) => {
+          const on = segment === s.id
+          return (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => select(s.id)}
+              className={`relative pb-3 text-sm font-bold tracking-tight transition-colors ${
+                on ? 'text-ink' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {s.label}
+              {on ? (
+                <span className="absolute inset-x-0 -bottom-px h-[2.5px] rounded-full bg-ink" />
+              ) : null}
+            </button>
+          )
+        })}
       </div>
 
       {segment === 'parcours' ? (
-        <ParcoursCatalog active />
+        <ParcoursCatalog active embedded />
       ) : (
-        <DealsTab />
+        <DealsTab embedded />
       )}
     </div>
   )

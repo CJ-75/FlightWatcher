@@ -30,9 +30,11 @@ const CITY_LS = 'fw_parcours_city'
 
 type Props = {
   active: boolean
+  /** Hub fournit déjà titre + tabs */
+  embedded?: boolean
 }
 
-export function ParcoursCatalog({ active }: Props) {
+export function ParcoursCatalog({ active, embedded = false }: Props) {
   const navigate = useNavigate()
   const [city, setCity] = useState(() => {
     try {
@@ -126,45 +128,47 @@ export function ParcoursCatalog({ active }: Props) {
 
   return (
     <div className="w-full">
-      <div className="mb-5 sm:mb-6">
-        <FwKicker>Parcours</FwKicker>
-        <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-          Où aller, quoi faire
-        </h2>
-        <p className="app-subtitle mt-1 max-w-xl">
-          Des balades et des week-ends choisis pour toi.
-        </p>
-
-        <div className="relative mt-4 inline-block">
-          <button
-            type="button"
-            onClick={() => setCityOpen((v) => !v)}
-            className="rounded-full border border-line bg-white px-3.5 py-2 text-sm font-bold text-ink shadow-sm"
-          >
-            Près de toi · {cityLabel} ▾
-          </button>
-          {cityOpen ? (
-            <div className="absolute left-0 z-20 mt-2 max-h-64 w-56 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg">
-              {CITY_CHOICES.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => {
-                    setCity(c)
-                    setCityOpen(false)
-                  }}
-                  className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
-                    c === city
-                      ? 'bg-[color:var(--fw-accent-soft)] text-ink'
-                      : 'text-muted hover:bg-canvas'
-                  }`}
-                >
-                  {cityDisplayNameFr(null, c) || c}
-                </button>
-              ))}
-            </div>
-          ) : null}
+      {!embedded ? (
+        <div className="mb-5 sm:mb-6">
+          <FwKicker>Parcours</FwKicker>
+          <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+            Où aller, quoi faire
+          </h2>
+          <p className="app-subtitle mt-1 max-w-xl">
+            Des balades et des week-ends choisis pour toi.
+          </p>
         </div>
+      ) : null}
+
+      <div className={`relative inline-block ${embedded ? 'mb-5' : 'mb-5 -mt-1'}`}>
+        <button
+          type="button"
+          onClick={() => setCityOpen((v) => !v)}
+          className="rounded-full border border-line bg-white px-3.5 py-2 text-sm font-bold text-ink shadow-sm"
+        >
+          Près de toi · {cityLabel} ▾
+        </button>
+        {cityOpen ? (
+          <div className="absolute left-0 z-20 mt-2 max-h-64 w-56 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg">
+            {CITY_CHOICES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  setCity(c)
+                  setCityOpen(false)
+                }}
+                className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                  c === city
+                    ? 'bg-[color:var(--fw-accent-soft)] text-ink'
+                    : 'text-muted hover:bg-canvas'
+                }`}
+              >
+                {cityDisplayNameFr(null, c) || c}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {occasion ? (

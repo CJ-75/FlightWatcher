@@ -92,7 +92,7 @@ function expandOriginToCity(encoded: string, airports: Airport[]): string {
 const DEALS_PAGE = 36
 const DEALS_MAX = 96
 
-export function DealsTab() {
+export function DealsTab({ embedded = false }: { embedded?: boolean }) {
   const { t } = useI18n()
   const [deals, setDeals] = useState<TravelDeal[]>([])
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
@@ -483,20 +483,26 @@ export function DealsTab() {
 
   return (
     <div className="w-full">
-      <div className="mb-5 sm:mb-6">
-        <div className="mb-1.5">
-          <FwKicker>Séjours</FwKicker>
+      {!embedded ? (
+        <div className="mb-5 sm:mb-6">
+          <div className="mb-1.5">
+            <FwKicker>Séjours</FwKicker>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+            {t('deals.titleSell')}
+          </h2>
+          <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitleSell')}</p>
+          {readonlyBanner ? (
+            <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
+              {t('deals.readonlyBanner')}
+            </p>
+          ) : null}
         </div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-          {t('deals.titleSell')}
-        </h2>
-        <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitleSell')}</p>
-        {readonlyBanner ? (
-          <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
-            {t('deals.readonlyBanner')}
-          </p>
-        ) : null}
-      </div>
+      ) : readonlyBanner ? (
+        <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mb-4 max-w-xl">
+          {t('deals.readonlyBanner')}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {durationTabs.map((tab) => (

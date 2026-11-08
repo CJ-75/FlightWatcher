@@ -37,7 +37,11 @@ export function ItineraryCard({
     : ''
   const cover =
     itinerary.cover_image ||
-    (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : null)
+    (itinerary.city_slug
+      ? cityImageUrl(
+          cityDisplayNameFr(null, itinerary.city_slug) || itinerary.city_slug,
+        )
+      : null)
   const meta = itineraryMetaLine({
     cityLabel: city || null,
     durationKind: itinerary.duration_kind as ItineraryDurationKind | null,
@@ -130,26 +134,27 @@ const styles = StyleSheet.create({
     bottom: 14,
   },
   title: {
-    fontFamily: fonts.regular,
-    fontStyle: 'italic',
-    fontSize: 24,
+    fontFamily: fonts.extrabold,
+    fontStyle: 'normal',
+    fontSize: 16,
     color: '#fff',
-    lineHeight: 28,
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
   titleLg: {
-    fontSize: 32,
-    lineHeight: 36,
+    fontSize: 18,
+    lineHeight: 22,
   },
   subtitle: {
     marginTop: 4,
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.85)',
   },
   meta: {
     marginTop: 4,
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.8)',
   },
 })

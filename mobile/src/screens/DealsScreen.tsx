@@ -53,7 +53,7 @@ type DealsListItem =
   | { kind: 'filler_header' }
   | { kind: 'skeleton'; id: string }
 
-export function DealsScreen() {
+export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { viewUser, signInWithGoogle } = useAuth()
@@ -389,7 +389,7 @@ export function DealsScreen() {
 
   return (
     <View style={styles.root}>
-      <ScreenBackground />
+      {!embedded ? <ScreenBackground /> : null}
 
       <FlatList
           ref={listRef}
@@ -401,8 +401,8 @@ export function DealsScreen() {
           }}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
-            paddingHorizontal: spacing.xl,
-            paddingTop: insets.top + 12,
+            paddingHorizontal: embedded ? 0 : spacing.xl,
+            paddingTop: embedded ? 8 : insets.top + 12,
             paddingBottom: insets.bottom + 100,
           }}
           refreshControl={
@@ -414,11 +414,15 @@ export function DealsScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <FwKicker>SÉJOURS</FwKicker>
-              <Text style={styles.title}>Séjours pas chers</Text>
-              <Text style={styles.subtitle}>
-                Vol + hôtel, prix réels vérifiés. Inspire-toi, filtre, réserve.
-              </Text>
+              {!embedded ? (
+                <>
+                  <FwKicker>SÉJOURS</FwKicker>
+                  <Text style={styles.title}>Séjours pas chers</Text>
+                  <Text style={styles.subtitle}>
+                    Vol + hôtel, prix réels vérifiés. Inspire-toi, filtre, réserve.
+                  </Text>
+                </>
+              ) : null}
               {!uiEnabled ? (
                 <Text style={styles.subtitle}>Onglet deals désactivé (calibration).</Text>
               ) : null}
