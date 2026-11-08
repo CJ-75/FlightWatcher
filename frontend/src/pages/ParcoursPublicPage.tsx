@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  buildItineraryAppleMapsUrl,
   buildItineraryMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
@@ -142,7 +141,7 @@ export default function ParcoursPublicPage() {
     itineraryUnsplashUrl({
       slug: itin.slug,
       citySlug: itin.city_slug,
-      width: 1280,
+      width: 1920,
     }) ||
     itin.cover_image ||
     (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris'))
@@ -171,10 +170,8 @@ export default function ParcoursPublicPage() {
 
   const onSticky = async () => {
     if (sticky.ctaAction === 'launch_maps') {
-      const isApple = /Mac|iPhone|iPad/i.test(navigator.userAgent)
-      const url = isApple
-        ? buildItineraryAppleMapsUrl(items) || buildItineraryMapsUrl(items)
-        : buildItineraryMapsUrl(items)
+      // Toujours Google Maps multi-étapes (pas Apple Maps)
+      const url = buildItineraryMapsUrl(items)
       if (url) {
         void getApiClient()
           .trackActivityEvent({
@@ -233,16 +230,6 @@ export default function ParcoursPublicPage() {
     }
   }
 
-  const openPlaceMaps = (item: ItineraryItem) => {
-    const name = item.places?.name || item.title
-    if (!name) return
-    window.open(
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`,
-      '_blank',
-      'noopener,noreferrer',
-    )
-  }
-
   const openActivity = (item: ItineraryItem) => {
     const code = item.viator_product_code
     if (!code) return
@@ -291,7 +278,6 @@ export default function ParcoursPublicPage() {
             <h2 className="mb-4 text-lg font-bold text-[#1A120E]">Les étapes</h2>
             <ItineraryStepsTimeline
               items={items}
-              onOpenMaps={openPlaceMaps}
               onBookActivity={openActivity}
             />
           </section>

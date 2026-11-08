@@ -33,11 +33,12 @@ export function ItineraryCard({
   const city = itinerary.city_slug
     ? citySlugDisplayNameFr(itinerary.city_slug)
     : ''
+  const isLandscape = variant === 'landscape'
   const cover =
     itineraryUnsplashUrl({
       slug: itinerary.slug,
       citySlug: itinerary.city_slug,
-      width: 960,
+      width: isLandscape ? 1600 : 1200,
     }) ||
     (itinerary.cover_image || '').trim() ||
     (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : null)
@@ -45,7 +46,6 @@ export function ItineraryCard({
     cityLabel: city || null,
     durationKind: itinerary.duration_kind as ItineraryDurationKind | null,
   })
-  const isLandscape = variant === 'landscape'
 
   return (
     <button

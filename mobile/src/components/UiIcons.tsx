@@ -157,65 +157,45 @@ export function CardIcon({ size = 18, color = colors.primaryDeep }: IconProps) {
   )
 }
 
-/** Share / export. */
+/** Share — classic square + arrow up (Views only, no RNSVG). */
 export function ShareIcon({ size = 18, color = colors.primaryDeep }: IconProps) {
   const s = size
-  const r = s * 0.16
+  const stroke = Math.max(1.5, s * 0.1)
   return (
-    <View style={{ width: s, height: s }}>
+    <View style={{ width: s, height: s, alignItems: 'center' }}>
+      {/* Arrow up */}
       <View
         style={{
-          position: 'absolute',
-          width: r * 2,
-          height: r * 2,
-          borderRadius: r,
-          backgroundColor: color,
-          top: s * 0.08,
-          right: s * 0.12,
+          width: 0,
+          height: 0,
+          borderLeftWidth: s * 0.22,
+          borderRightWidth: s * 0.22,
+          borderBottomWidth: s * 0.2,
+          borderLeftColor: 'transparent',
+          borderRightColor: 'transparent',
+          borderBottomColor: color,
+          marginBottom: -s * 0.02,
         }}
       />
       <View
         style={{
-          position: 'absolute',
-          width: r * 2,
-          height: r * 2,
-          borderRadius: r,
+          width: stroke,
+          height: s * 0.32,
           backgroundColor: color,
-          bottom: s * 0.12,
-          left: s * 0.08,
+          borderRadius: stroke,
         }}
       />
+      {/* Tray / square open top */}
       <View
         style={{
-          position: 'absolute',
-          width: r * 2,
-          height: r * 2,
-          borderRadius: r,
-          backgroundColor: color,
-          bottom: s * 0.12,
-          right: s * 0.08,
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          width: s * 0.42,
-          height: Math.max(1.5, s * 0.08),
-          backgroundColor: color,
-          top: s * 0.28,
-          left: s * 0.22,
-          transform: [{ rotate: '-32deg' }],
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          width: s * 0.42,
-          height: Math.max(1.5, s * 0.08),
-          backgroundColor: color,
-          bottom: s * 0.32,
-          left: s * 0.22,
-          transform: [{ rotate: '32deg' }],
+          marginTop: s * 0.06,
+          width: s * 0.72,
+          height: s * 0.38,
+          borderWidth: stroke,
+          borderTopWidth: 0,
+          borderColor: color,
+          borderBottomLeftRadius: s * 0.12,
+          borderBottomRightRadius: s * 0.12,
         }}
       />
     </View>

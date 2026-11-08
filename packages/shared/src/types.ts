@@ -645,6 +645,22 @@ export interface LikedActivity {
   created_at: string
 }
 
+/** Persisted like of an editorial parcours (snapshot in itinerary_data). */
+export interface LikedItinerary {
+  id: string
+  itinerary_id: string
+  itinerary_data: {
+    id?: string
+    slug?: string
+    title?: string
+    subtitle?: string | null
+    city_slug?: string | null
+    cover_image?: string | null
+    duration_kind?: string | null
+  }
+  created_at: string
+}
+
 export interface DealsListParams {
   origin?: string
   /** Arrival city IATA(s); backend expands via served_city */

@@ -1,4 +1,5 @@
 import {
+  buildItineraryStepMapsUrl,
   formatDurationMinutes,
   groupItemsByDay,
   stepKindLabel,
@@ -7,7 +8,6 @@ import {
 
 type Props = {
   items: ItineraryItem[]
-  onOpenMaps?: (item: ItineraryItem) => void
   onBookActivity?: (item: ItineraryItem) => void
 }
 
@@ -47,11 +47,7 @@ function KindIcon({ kind }: { kind: string }) {
   )
 }
 
-export function ItineraryStepsTimeline({
-  items,
-  onOpenMaps,
-  onBookActivity,
-}: Props) {
+export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
   const days = groupItemsByDay(items)
   if (!days.length) {
     return <p className="text-sm text-[#A3988C]">Aucune étape pour l’instant.</p>
@@ -69,6 +65,51 @@ export function ItineraryStepsTimeline({
               const last = i === day.items.length - 1
               const title = it.title || it.places?.name || `Étape ${i + 1}`
               const dur = formatDurationMinutes(it.duration_minutes)
+              const mapsUrl = buildItineraryStepMapsUrl(it)
+              const openStep = () => {
+                if (!mapsUrl) return
+                window.open(mapsUrl, '_blank', 'noopener,noreferrer')
+              }
+              const body = (
+                <div className="flex gap-3">
+                  {it.photo ? (
+                    <img
+                      src={it.photo}
+                      alt=""
+                      className="h-[72px] w-[72px] shrink-0 rounded-2xl object-cover"
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#A3988C]">
+                      <KindIcon kind={it.kind} />
+                      {stepKindLabel(it.kind)}
+                      {dur ? ` · ${dur}` : ''}
+                    </p>
+                    <p className="mt-0.5 text-[15px] font-bold text-[#1A120E]">
+                      {title}
+                    </p>
+                    {it.note ? (
+                      <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
+                        {it.note}
+                      </p>
+                    ) : null}
+                    {it.kind === 'activity' && it.viator_product_code ? (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onBookActivity?.(it)
+                          }}
+                          className="text-xs font-bold text-[#FF6B35] hover:underline"
+                        >
+                          Réserver
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )
               return (
                 <li key={it.id || `${day.dayOffset}-${i}`} className="relative flex gap-4 pb-6">
                   {!last ? (
@@ -81,50 +122,18 @@ export function ItineraryStepsTimeline({
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex-1 pt-0.5">
-                    <div className="flex gap-3">
-                      {it.photo ? (
-                        <img
-                          src={it.photo}
-                          alt=""
-                          className="h-[72px] w-[72px] shrink-0 rounded-2xl object-cover"
-                        />
-                      ) : null}
-                      <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#A3988C]">
-                          <KindIcon kind={it.kind} />
-                          {stepKindLabel(it.kind)}
-                          {dur ? ` · ${dur}` : ''}
-                        </p>
-                        <p className="mt-0.5 text-[15px] font-bold text-[#1A120E]">
-                          {title}
-                        </p>
-                        {it.note ? (
-                          <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
-                            {it.note}
-                          </p>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {it.kind === 'place' && onOpenMaps ? (
-                            <button
-                              type="button"
-                              onClick={() => onOpenMaps(it)}
-                              className="text-xs font-bold text-[#FF6B35] hover:underline"
-                            >
-                              Ouvrir dans Maps
-                            </button>
-                          ) : null}
-                          {it.kind === 'activity' && it.viator_product_code ? (
-                            <button
-                              type="button"
-                              onClick={() => onBookActivity?.(it)}
-                              className="text-xs font-bold text-[#FF6B35] hover:underline"
-                            >
-                              Réserver
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
+                    {mapsUrl ? (
+                      <button
+                        type="button"
+                        onClick={openStep}
+                        className="w-full rounded-2xl text-left transition-colors hover:bg-[#FFF8F3] active:bg-[#FFF0E8] -m-2 p-2"
+                        aria-label={`Ouvrir ${title} dans Google Maps`}
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      body
+                    )}
                   </div>
                 </li>
               )

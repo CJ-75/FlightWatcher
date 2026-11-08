@@ -37,7 +37,8 @@ export function ItineraryCard({
   const city = itinerary.city_slug
     ? citySlugDisplayNameFr(itinerary.city_slug)
     : ''
-  const width = variant === 'landscape' ? 960 : 500
+  // Retina: portrait ~220pt → ≥1100px ; landscape ~320pt → ≥1280px
+  const width = variant === 'landscape' ? 1600 : 1200
   const rawCover =
     (itinerary.cover_image || '').trim() ||
     (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : '')

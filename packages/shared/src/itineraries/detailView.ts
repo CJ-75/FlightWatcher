@@ -49,6 +49,14 @@ function placeQuery(item: ItineraryItem): string | null {
   return name ? String(name) : null
 }
 
+/** Google Maps search for a single place/activity step. */
+export function buildItineraryStepMapsUrl(item: ItineraryItem): string | null {
+  if (item.kind !== 'place' && item.kind !== 'activity') return null
+  const q = placeQuery(item)
+  if (!q) return null
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+}
+
 /** Google Maps multi-stop directions from place/activity steps. */
 export function buildItineraryMapsUrl(items: ItineraryItem[]): string | null {
   const stops = items

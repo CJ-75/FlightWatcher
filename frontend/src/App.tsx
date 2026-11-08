@@ -37,8 +37,9 @@ const PlannerTab = lazy(() =>
 import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { AlertsGuestLanding } from './components/AlertsGuestLanding'
 import { PassengerStepper } from './components/PassengerStepper'
-import type { LikedActivity, LikedDeal, TravelDeal } from './types'
-import type { ActivityCardModel } from '@flightwatcher/shared'
+import type { LikedActivity, LikedDeal, LikedItinerary, TravelDeal } from './types'
+import type { ActivityCardModel, Itinerary } from '@flightwatcher/shared'
+import { ItineraryCard } from './components/parcours/ItineraryCard'
 import { DestinationCard } from './components/DestinationCard'
 import { FavoriteFlightCard } from './components/FavoriteFlightCard'
 import { RouletteMode } from './components/RouletteMode'
@@ -2512,6 +2513,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
   const [likedActivities, setLikedActivities] = useState<LikedActivity[]>([])
+  const [likedParcours, setLikedParcours] = useState<LikedItinerary[]>([])
   const [selectedLikedDeal, setSelectedLikedDeal] = useState<TravelDeal | null>(null)
   const [showAutoCheckConfig, setShowAutoCheckConfig] = useState<Record<string, boolean>>({})
   const [intervalSeconds, setIntervalSeconds] = useState<Record<string, number>>({})
@@ -2520,8 +2522,9 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
   const [lightboxResults, setLightboxResults] = useState<NewResult | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [favoritesKind, setFavoritesKind] = useState<
-    'flights' | 'deals' | 'activities'
+    'flights' | 'deals' | 'activities' | 'parcours'
   >('flights')
+  const navigate = useNavigate()
   const [pendingAddActivity, setPendingAddActivity] =
     useState<ActivityCardModel | null>(null)
   const [activityAddBusy, setActivityAddBusy] = useState(false)
@@ -2583,8 +2586,8 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         setSavedSearches(searches)
         return
       }
-      // Favoris: vols + deals + activités
-      const [favs, deals, acts] = await Promise.all([
+      // Favoris: vols + séjours + activités + parcours
+      const [favs, deals, acts, parcoursRes] = await Promise.all([
         getFavorites(force),
         getApiClient()
           .getLikedDeals()
@@ -2592,10 +2595,16 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         getApiClient()
           .getLikedActivities()
           .catch(() => [] as LikedActivity[]),
+        getApiClient()
+          .listLikedItineraries()
+          .catch(() => ({ ok: false, items: [] as LikedItinerary[] })),
       ])
       setFavorites(favs)
       setLikedDeals(Array.isArray(deals) ? deals : [])
       setLikedActivities(Array.isArray(acts) ? acts : [])
+      setLikedParcours(
+        Array.isArray(parcoursRes?.items) ? parcoursRes.items : [],
+      )
       if (opts?.resetFilter) setArchiveOpen(false)
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
@@ -2603,7 +2612,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         if (variant === 'alerts') {
           setSavedSearches(await getSavedSearches(true))
         } else {
-          const [favs, deals, acts] = await Promise.all([
+          const [favs, deals, acts, parcoursRes] = await Promise.all([
             getFavorites(true),
             getApiClient()
               .getLikedDeals()
@@ -2611,10 +2620,16 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
             getApiClient()
               .getLikedActivities()
               .catch(() => [] as LikedActivity[]),
+            getApiClient()
+              .listLikedItineraries()
+              .catch(() => ({ ok: false, items: [] as LikedItinerary[] })),
           ])
           setFavorites(favs)
           setLikedDeals(Array.isArray(deals) ? deals : [])
           setLikedActivities(Array.isArray(acts) ? acts : [])
+          setLikedParcours(
+            Array.isArray(parcoursRes?.items) ? parcoursRes.items : [],
+          )
           if (opts?.resetFilter) setArchiveOpen(false)
         }
       } catch (fallbackError) {
@@ -2641,6 +2656,32 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       )
     } catch {
       /* ignore */
+    }
+  }
+
+  const unlikeParcours = async (itineraryId: string) => {
+    try {
+      await getApiClient().unlikeItinerary(itineraryId)
+      setLikedParcours((prev) =>
+        prev.filter((p) => p.itinerary_id !== itineraryId),
+      )
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const likedParcoursToCard = (
+    item: LikedItinerary,
+  ): Partial<Itinerary> => {
+    const d = item.itinerary_data || {}
+    return {
+      id: item.itinerary_id,
+      slug: d.slug || undefined,
+      title: d.title || 'Parcours',
+      subtitle: d.subtitle || null,
+      city_slug: d.city_slug || null,
+      cover_image: d.cover_image || null,
+      duration_kind: (d.duration_kind as Itinerary['duration_kind']) || null,
     }
   }
 
@@ -3384,7 +3425,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
           <div>
             <p className="app-kicker mb-1.5">{t('nav.favorites')}</p>
             <h2 className="app-title">{t('favorites.title')}</h2>
-            <p className="app-subtitle mt-1.5">{t('favorites.subtitle')}</p>
+            <p className="app-subtitle mt-1.5">{t('favorites.collectionsHint')}</p>
           </div>
           <Link
             to="/bookings"
@@ -3396,13 +3437,14 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
       </div>
 
       <div className="relative">
-        <div className="mb-5 sm:mb-6">
-          <div className="flex p-1.5 rounded-2xl bg-white/80 border border-orange-100/80 shadow-sm gap-1">
+        <div className="mb-5 sm:mb-6 -mx-1 overflow-x-auto">
+          <div className="flex gap-2 px-1 min-w-min">
             {(
               [
                 ['flights', 'favorites.switch.flights'],
                 ['deals', 'favorites.switch.deals'],
                 ['activities', 'favorites.switch.activities'],
+                ['parcours', 'favorites.switch.parcours'],
               ] as const
             ).map(([id, key]) => (
               <button
@@ -3412,10 +3454,10 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   setFavoritesKind(id)
                   setArchiveOpen(false)
                 }}
-                className={`flex-1 py-2.5 rounded-xl text-[12px] sm:text-[14px] font-semibold tracking-tight transition-all min-h-[44px] ${
+                className={`shrink-0 rounded-full px-4 py-2.5 text-[13px] sm:text-[14px] font-semibold tracking-tight transition-all min-h-[44px] ${
                   favoritesKind === id
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
+                    ? 'bg-[#1A120E] text-white shadow-sm'
+                    : 'bg-white/80 text-slate-600 border border-orange-100/80 hover:text-slate-800'
                 }`}
               >
                 {t(key)}
@@ -3425,7 +3467,45 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         </div>
         
         <div className="pt-2">
-          {favoritesKind === 'activities' ? (
+          {favoritesKind === 'parcours' ? (
+            likedParcours.length === 0 ? (
+              <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
+                <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />
+                <div className="relative">
+                  <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF6B35] to-[#E85A28] text-white flex items-center justify-center shadow-lg shadow-orange-500/30 text-2xl">
+                    ♥
+                  </div>
+                  <p className="font-black text-2xl text-slate-900 mb-2 tracking-tight">
+                    {t('favorites.parcoursEmptyTitle')}
+                  </p>
+                  <p className="text-sm text-slate-500 max-w-md mx-auto">
+                    {t('favorites.parcoursEmpty')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                {likedParcours.map((item) => {
+                  const card = likedParcoursToCard(item)
+                  return (
+                    <div key={item.id} className="relative">
+                      <ItineraryCard
+                        itinerary={card}
+                        variant="landscape"
+                        liked
+                        onToggleLike={() => void unlikeParcours(item.itinerary_id)}
+                        onOpen={() =>
+                          navigate(
+                            `/parcours/${encodeURIComponent(card.slug || item.itinerary_id)}`,
+                          )
+                        }
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          ) : favoritesKind === 'activities' ? (
             likedActivities.length === 0 ? (
               <div className="relative overflow-hidden bg-white rounded-[28px] border border-orange-100 shadow-lg p-8 sm:p-10 text-center">
                 <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-orange-50/80 to-transparent" />

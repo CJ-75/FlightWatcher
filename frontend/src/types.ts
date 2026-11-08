@@ -20,6 +20,7 @@ export type {
   TravelDealHotel,
   LikedDeal,
   LikedActivity,
+  LikedItinerary,
   DealProviderId,
   DealsListParams,
   DealOccasionChip,

@@ -12,6 +12,7 @@ import type {
   InvitePreview,
   LikedActivity,
   LikedDeal,
+  LikedItinerary,
   PlannedTrip,
   PlannedTripDetail,
   ScanRequest,
@@ -807,7 +808,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       request<{ ok: boolean; ids: string[] }>('/api/liked-itineraries/ids'),
 
     listLikedItineraries: () =>
-      request<{ ok: boolean; items: Record<string, unknown>[] }>(
+      request<{ ok: boolean; items: LikedItinerary[] }>(
         '/api/liked-itineraries',
       ),
 
@@ -815,7 +816,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       itinerary_id: string
       itinerary_data?: Record<string, unknown>
     }) =>
-      request<{ ok: boolean; item?: Record<string, unknown> }>(
+      request<{ ok: boolean; item?: LikedItinerary }>(
         '/api/liked-itineraries',
         { method: 'POST', body: JSON.stringify(body) },
       ),

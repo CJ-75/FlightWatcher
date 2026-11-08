@@ -42,7 +42,7 @@ export function coverUri(
     preferUnsplash?: boolean
   },
 ): string | null {
-  const width = opts?.width ?? 960
+  const width = opts?.width ?? 1280
   const raw = (url || '').trim()
   const unsplash = itineraryUnsplashUrl({
     slug: opts?.slug,
@@ -51,6 +51,8 @@ export function coverUri(
   })
 
   // Prefer curated Unsplash (known good) over DB/API covers that may 404.
+  // Always rebuild Unsplash URLs with the requested width (API often ships w=1280
+  // which is fine; card callers pass retina widths).
   if (opts?.preferUnsplash !== false && unsplash) {
     if (!raw || isWikimedia(raw) || /images\.unsplash\.com/i.test(raw)) {
       return unsplash
@@ -58,7 +60,20 @@ export function coverUri(
   }
 
   if (!raw) return unsplash
-  if (/images\.unsplash\.com/i.test(raw)) return raw
+  if (/images\.unsplash\.com/i.test(raw)) {
+    // Upgrade soft/low-w Unsplash query params to requested size + q=90
+    try {
+      const u = new URL(raw)
+      u.searchParams.set('w', String(Math.max(640, Math.min(2400, Math.round(width)))))
+      u.searchParams.set('q', '90')
+      u.searchParams.set('auto', 'format')
+      u.searchParams.set('fit', 'crop')
+      u.searchParams.set('fm', 'jpg')
+      return u.toString()
+    } catch {
+      return raw
+    }
+  }
 
   const next = withWikiWidth(raw, width)
   if (isWikimedia(next)) {

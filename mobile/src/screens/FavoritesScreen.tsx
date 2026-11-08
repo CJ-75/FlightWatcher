@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Text,
   FlatList,
@@ -6,7 +6,6 @@ import {
   RefreshControl,
   Pressable,
   View,
-  ActivityIndicator,
   ScrollView,
   Alert,
   Platform,
@@ -18,8 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type {
   ActivityCardModel,
   EnrichedTripResponse,
+  Itinerary,
   LikedActivity,
   LikedDeal,
+  LikedItinerary,
   SavedFavorite,
 } from '@flightwatcher/shared'
 import {
@@ -48,6 +49,34 @@ import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { FavoriteFlightCard } from '../components/FavoriteFlightCard'
 import { DealCard } from '../components/DealCard'
 import { ActivityCard } from '../components/ActivityCard'
+import { ItineraryCard } from '../components/parcours/ItineraryCard'
+
+type FavCollection = 'flights' | 'deals' | 'activities' | 'parcours'
+
+type FavListItem =
+  | SavedFavorite
+  | LikedDeal
+  | LikedActivity
+  | LikedItinerary
+  | { id: string; __skeleton: true }
+
+const COLLECTIONS: { id: FavCollection; labelKey: string }[] = [
+  { id: 'flights', labelKey: 'favorites.switch.flights' },
+  { id: 'deals', labelKey: 'favorites.switch.deals' },
+  { id: 'activities', labelKey: 'favorites.switch.activities' },
+  { id: 'parcours', labelKey: 'favorites.switch.parcours' },
+]
+
+const SKELETON_ITEMS: FavListItem[] = Array.from({ length: 3 }, (_, i) => ({
+  id: `fav-sk-${i}`,
+  __skeleton: true as const,
+}))
+
+function isSkeletonItem(
+  item: FavListItem,
+): item is { id: string; __skeleton: true } {
+  return '__skeleton' in item && item.__skeleton === true
+}
 import {
   ActivityPlannerPicker,
   type ActivityPlannerTarget,
@@ -67,54 +96,80 @@ export function FavoritesScreen() {
   const [favorites, setFavorites] = useState<SavedFavorite[]>([])
   const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
   const [likedActivities, setLikedActivities] = useState<LikedActivity[]>([])
+  const [likedParcours, setLikedParcours] = useState<LikedItinerary[]>([])
+  /** Pull-to-refresh only — never toggled on focus (évite le bounce). */
   const [refreshing, setRefreshing] = useState(false)
+  /** First paint ready — skeleton until then, no spinner. */
+  const [hydrated, setHydrated] = useState(false)
+  const hydratedRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
-  const [tab, setTab] = useState<'flights' | 'deals' | 'activities'>('flights')
+  const [tab, setTab] = useState<FavCollection>('flights')
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [addBusy, setAddBusy] = useState(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { pull?: boolean }) => {
     if (!viewUser) {
       setFavorites([])
       setLikedDeals([])
       setLikedActivities([])
+      setLikedParcours([])
+      hydratedRef.current = true
+      setHydrated(true)
       setRefreshing(false)
       return
     }
-    setRefreshing(true)
+    if (opts?.pull) setRefreshing(true)
     setError(null)
     try {
       if (__DEV__ && isGuest) {
         setFavorites(listGuestFlightFavorites())
         setLikedDeals(listGuestLikedDeals())
         setLikedActivities(listGuestLikedActivities())
+        setLikedParcours([])
       } else {
-        const [list, deals, acts] = await Promise.all([
+        const [list, deals, acts, parcoursRes] = await Promise.all([
           getApi().getFavorites(),
           getApi().getLikedDeals(),
           getApi().getLikedActivities().catch(() => [] as LikedActivity[]),
+          getApi()
+            .listLikedItineraries()
+            .catch(() => ({ ok: false, items: [] as LikedItinerary[] })),
         ])
         setFavorites(Array.isArray(list) ? list : [])
         setLikedDeals(Array.isArray(deals) ? deals : [])
         setLikedActivities(Array.isArray(acts) ? acts : [])
+        setLikedParcours(
+          Array.isArray(parcoursRes?.items) ? parcoursRes.items : [],
+        )
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
-      setFavorites([])
-      setLikedDeals([])
-      setLikedActivities([])
+      // Keep previous data if already hydrated (no empty flash)
+      if (!hydratedRef.current) {
+        setFavorites([])
+        setLikedDeals([])
+        setLikedActivities([])
+        setLikedParcours([])
+      }
     } finally {
+      hydratedRef.current = true
+      setHydrated(true)
       setRefreshing(false)
     }
   }, [viewUser, isGuest])
 
   useFocusEffect(
     useCallback(() => {
+      // Silent refresh — header + skeleton déjà peints, pas de RefreshControl
       void load()
     }, [load]),
   )
+
+  const onPullRefresh = useCallback(() => {
+    void load({ pull: true })
+  }, [load])
 
   const onLogin = async () => {
     setLoginLoading(true)
@@ -163,6 +218,30 @@ export function FavoritesScreen() {
       )
     } catch {
       /* ignore */
+    }
+  }
+
+  const unlikeParcours = async (itineraryId: string) => {
+    try {
+      await getApi().unlikeItinerary(itineraryId)
+      setLikedParcours((prev) =>
+        prev.filter((p) => p.itinerary_id !== itineraryId),
+      )
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const toParcoursCard = (item: LikedItinerary): Partial<Itinerary> => {
+    const d = item.itinerary_data || {}
+    return {
+      id: item.itinerary_id,
+      slug: d.slug || undefined,
+      title: d.title || 'Parcours',
+      subtitle: d.subtitle || null,
+      city_slug: d.city_slug || null,
+      cover_image: d.cover_image || null,
+      duration_kind: (d.duration_kind as Itinerary['duration_kind']) || null,
     }
   }
 
@@ -227,15 +306,29 @@ export function FavoritesScreen() {
     if (tab === 'deals') {
       return partitionFavoritesByPast(likedDeals, isPastFavoriteDeal)
     }
-    return partitionFavoritesByPast(likedActivities, isPastFavoriteActivity)
-  }, [tab, favorites, likedDeals, likedActivities])
+    if (tab === 'activities') {
+      return partitionFavoritesByPast(likedActivities, isPastFavoriteActivity)
+    }
+    return { active: likedParcours, archived: [] as LikedItinerary[] }
+  }, [tab, favorites, likedDeals, likedActivities, likedParcours])
 
-  const listData = activeItems
+  const showSkeleton = !hydrated
+  const listData: FavListItem[] = showSkeleton ? SKELETON_ITEMS : activeItems
 
-  const renderFavoriteItem = (
-    item: SavedFavorite | LikedDeal | LikedActivity,
-    faded: boolean,
-  ) => {
+  const renderFavoriteItem = (item: FavListItem, faded: boolean) => {
+    if (isSkeletonItem(item)) {
+      return (
+        <View style={[styles.skeletonCard, shadow.soft]}>
+          <View style={styles.skeletonImage} />
+          <View style={styles.skeletonBody}>
+            <View style={[styles.skeletonLine, { width: '72%' }]} />
+            <View style={[styles.skeletonLine, { width: '48%' }]} />
+            <View style={[styles.skeletonLine, { width: '32%', height: 18 }]} />
+          </View>
+        </View>
+      )
+    }
+
     const wrap = (node: React.ReactNode) =>
       faded ? <View style={styles.archivedItem}>{node}</View> : node
 
@@ -272,6 +365,32 @@ export function FavoritesScreen() {
         />,
       )
     }
+    if (tab === 'parcours') {
+      const liked = item as LikedItinerary
+      const card = toParcoursCard(liked)
+      return wrap(
+        <View style={styles.parcoursRow}>
+          <ItineraryCard
+            itinerary={card}
+            variant="landscape"
+            onPress={() =>
+              navigation.navigate('ItineraryDetail', {
+                itineraryId: liked.itinerary_id,
+              })
+            }
+            style={styles.parcoursCard}
+          />
+          <Pressable
+            onPress={() => void unlikeParcours(liked.itinerary_id)}
+            style={styles.parcoursUnlike}
+            hitSlop={8}
+            accessibilityLabel="Retirer des favoris"
+          >
+            <HeartIcon size={20} filled color={colors.primary} />
+          </Pressable>
+        </View>,
+      )
+    }
     return (
       <FavoriteFlightCard
         favorite={item as SavedFavorite}
@@ -297,7 +416,7 @@ export function FavoritesScreen() {
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      <FlatList<SavedFavorite | LikedDeal | LikedActivity>
+      <FlatList<FavListItem>
         style={styles.list}
         contentContainerStyle={{
           paddingHorizontal: spacing.xl,
@@ -311,9 +430,14 @@ export function FavoritesScreen() {
           tab,
           archiveOpen,
           archivedCount: archivedItems.length,
+          showSkeleton,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onPullRefresh}
+            tintColor={colors.primary}
+          />
         }
         ListHeaderComponent={
           <View style={styles.header}>
@@ -325,39 +449,43 @@ export function FavoritesScreen() {
               <AccountAvatarButton />
             </View>
             <Text style={styles.subtitle}>
-              {translate('fr', 'favorites.subtitle')}
+              {translate('fr', 'favorites.collectionsHint')}
             </Text>
-            <View style={styles.switchTrack}>
-              {(
-                [
-                  ['flights', 'favorites.switch.flights'],
-                  ['deals', 'favorites.switch.deals'],
-                  ['activities', 'favorites.switch.activities'],
-                ] as const
-              ).map(([id, key]) => (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.collectionsRow}
+              style={styles.collectionsScroll}
+            >
+              {COLLECTIONS.map(({ id, labelKey }) => (
                 <Pressable
                   key={id}
                   onPress={() => {
                     setTab(id)
                     setArchiveOpen(false)
                   }}
-                  style={[styles.switchBtn, tab === id && styles.switchBtnOn]}
+                  style={[
+                    styles.collectionChip,
+                    tab === id && styles.collectionChipOn,
+                  ]}
                 >
                   <Text
-                    style={[styles.switchLabel, tab === id && styles.switchLabelOn]}
+                    style={[
+                      styles.collectionLabel,
+                      tab === id && styles.collectionLabelOn,
+                    ]}
                     numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.85}
                   >
-                    {translate('fr', key)}
+                    {translate('fr', labelKey)}
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
           </View>
         }
         ListEmptyComponent={
-          listData.length === 0 && archivedItems.length === 0 ? (
+          showSkeleton ? null : listData.length === 0 &&
+            archivedItems.length === 0 ? (
             <View style={[styles.emptyCard, shadow.soft]}>
               <View style={styles.emptyIcon}>
                 <HeartIcon size={28} filled={false} color={colors.primary} />
@@ -369,7 +497,9 @@ export function FavoritesScreen() {
                     ? translate('fr', 'favorites.dealsEmptyTitle')
                     : tab === 'activities'
                       ? translate('fr', 'favorites.activitiesEmptyTitle')
-                      : translate('fr', 'favorites.flightsEmpty')}
+                      : tab === 'parcours'
+                        ? translate('fr', 'favorites.parcoursEmptyTitle')
+                        : translate('fr', 'favorites.flightsEmpty')}
               </Text>
               <Text style={styles.emptyBody}>
                 {error
@@ -378,7 +508,9 @@ export function FavoritesScreen() {
                     ? translate('fr', 'favorites.dealsEmpty')
                     : tab === 'activities'
                       ? translate('fr', 'favorites.activitiesEmpty')
-                      : translate('fr', 'favorites.flightsEmptyBody')}
+                      : tab === 'parcours'
+                        ? translate('fr', 'favorites.parcoursEmpty')
+                        : translate('fr', 'favorites.flightsEmptyBody')}
               </Text>
             </View>
           ) : listData.length === 0 ? (
@@ -388,7 +520,7 @@ export function FavoritesScreen() {
           ) : null
         }
         ListFooterComponent={
-          archivedItems.length > 0 ? (
+          !showSkeleton && archivedItems.length > 0 ? (
             <View style={styles.archiveBlock}>
               <Pressable
                 onPress={() => setArchiveOpen((o) => !o)}
@@ -506,6 +638,25 @@ function FavoritesGuestLanding({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   list: { flex: 1, backgroundColor: 'transparent' },
+  skeletonCard: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  skeletonImage: {
+    height: 140,
+    backgroundColor: colors.primaryMuted,
+  },
+  skeletonBody: {
+    padding: 16,
+    gap: 10,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.primarySoft,
+  },
   header: { marginBottom: 22, gap: 4 },
   topRow: {
     flexDirection: 'row',
@@ -534,6 +685,55 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 22,
     marginTop: 2,
+  },
+  collectionsScroll: {
+    marginTop: spacing.lg,
+    marginHorizontal: -spacing.xl,
+  },
+  collectionsRow: {
+    paddingHorizontal: spacing.xl,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  collectionChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  collectionChipOn: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  collectionLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.inkSoft,
+  },
+  collectionLabelOn: {
+    color: colors.white,
+  },
+  parcoursRow: {
+    position: 'relative',
+    marginBottom: 14,
+  },
+  parcoursCard: {
+    width: '100%',
+  },
+  parcoursUnlike: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   switchTrack: {
     flexDirection: 'row',

@@ -7,13 +7,13 @@ import {
   ScrollView,
   StyleSheet,
   Share,
-  type NativeSyntheticEvent,
-  type NativeScrollEvent,
   type LayoutChangeEvent,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { fonts } from '../../theme'
+import { HeartIcon } from '../HeartIcon'
+import { ShareIcon } from '../UiIcons'
+import { colors, fonts } from '../../theme'
 
 type Props = {
   heroUrl: string
@@ -30,26 +30,6 @@ type Props = {
   stickyLeft?: string
   stickyCta?: string
   onStickyCta?: () => void
-}
-
-function GlassIconShare() {
-  return (
-    <View style={iconStyles.shareBox}>
-      <View style={iconStyles.shareArrow} />
-      <View style={iconStyles.shareBase} />
-    </View>
-  )
-}
-
-function GlassIconHeart({ filled }: { filled?: boolean }) {
-  return (
-    <View
-      style={[
-        iconStyles.heart,
-        filled && { backgroundColor: '#FF3D6B', borderColor: '#FF3D6B' },
-      ]}
-    />
-  )
 }
 
 export function ItineraryDetailChrome({
@@ -69,12 +49,7 @@ export function ItineraryDetailChrome({
 }: Props) {
   const insets = useSafeAreaInsets()
   const chips = (metaChips || []).filter(Boolean)
-  const [scrolled, setScrolled] = useState(false)
   const [stickyH, setStickyH] = useState(72)
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y
-    setScrolled(y > 220)
-  }
 
   const onStickyLayout = (e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height
@@ -83,23 +58,49 @@ export function ItineraryDetailChrome({
 
   return (
     <View style={styles.root}>
-      {scrolled ? (
-        <View
-          style={[
-            styles.scrollHeader,
-            { paddingTop: insets.top + 6, height: insets.top + 52 },
-          ]}
+      {/* Fixed header actions — stay while content scrolls */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
+      >
+        <Pressable
+          onPress={onBack}
+          style={styles.actionBtn}
+          hitSlop={8}
+          accessibilityLabel="Retour"
         >
-          <Pressable onPress={onBack} style={styles.scrollBack} hitSlop={8}>
-            <Text style={styles.scrollBackText}>‹</Text>
-            <Text style={styles.scrollBackLabel}>Parcours</Text>
+          <Text style={styles.backChevron}>‹</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        {shareUrl ? (
+          <Pressable
+            onPress={() =>
+              void Share.share({ message: shareUrl, url: shareUrl })
+            }
+            style={styles.actionBtn}
+            hitSlop={8}
+            accessibilityLabel="Partager"
+          >
+            <ShareIcon size={18} color={colors.inkSoft} />
           </Pressable>
-        </View>
-      ) : null}
+        ) : null}
+        {onLike ? (
+          <Pressable
+            onPress={onLike}
+            style={[styles.actionBtn, { marginLeft: 8 }]}
+            hitSlop={8}
+            accessibilityLabel={liked ? 'Retirer des favoris' : 'Favori'}
+          >
+            <HeartIcon
+              size={20}
+              filled={!!liked}
+              color={liked ? colors.primary : colors.inkSoft}
+            />
+          </Pressable>
+        ) : null}
+      </View>
 
       <ScrollView
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         contentContainerStyle={{
           paddingBottom: stickyCta ? stickyH + 16 : 40,
         }}
@@ -114,37 +115,8 @@ export function ItineraryDetailChrome({
             locations={[0, 0.4, 1]}
             style={StyleSheet.absoluteFill}
           />
-          {!scrolled ? (
-            <View
-              style={[
-                styles.topBar,
-                { paddingTop: insets.top + 12, justifyContent: 'flex-end' },
-              ]}
-            >
-              {shareUrl ? (
-                <Pressable
-                  onPress={() =>
-                    void Share.share({ message: shareUrl, url: shareUrl })
-                  }
-                  style={styles.glassBtn}
-                  hitSlop={8}
-                  accessibilityLabel="Partager"
-                >
-                  <GlassIconShare />
-                </Pressable>
-              ) : null}
-              {onLike ? (
-                <Pressable
-                  onPress={onLike}
-                  style={[styles.glassBtn, { marginLeft: 8 }]}
-                  hitSlop={8}
-                  accessibilityLabel={liked ? 'Retirer des favoris' : 'Favori'}
-                >
-                  <GlassIconHeart filled={liked} />
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
+          {/* Spacer so title doesn’t sit under fixed buttons */}
+          <View style={{ height: 56 }} />
           <View style={styles.heroCopy}>
             <View style={styles.phase}>
               <Text style={styles.phaseText}>{phaseLabel}</Text>
@@ -184,95 +156,42 @@ export function ItineraryDetailChrome({
   )
 }
 
-const iconStyles = StyleSheet.create({
-  shareBox: {
-    width: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  shareArrow: {
-    width: 8,
-    height: 8,
-    borderTopWidth: 2,
-    borderRightWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '-45deg' }],
-    marginBottom: -2,
-  },
-  shareBase: {
-    width: 14,
-    height: 10,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderColor: '#fff',
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
-  },
-  heart: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#fff',
-    backgroundColor: 'transparent',
-    transform: [{ rotate: '-45deg' }],
-  },
-})
-
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F7F4EF' },
-  scrollHeader: {
+  fixedHeader: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EDE8E1',
-    paddingHorizontal: 12,
-    justifyContent: 'flex-end',
-    paddingBottom: 8,
-  },
-  scrollBack: {
+    zIndex: 30,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-  },
-  scrollBackText: {
-    fontFamily: fonts.bold,
-    fontSize: 28,
-    lineHeight: 30,
-    color: '#1A120E',
-  },
-  scrollBackLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-    color: '#1A120E',
+    paddingHorizontal: 16,
   },
   hero: {
     minHeight: 460,
     justifyContent: 'flex-end',
   },
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    zIndex: 2,
-  },
-  glassBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  actionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  backChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    lineHeight: 32,
+    color: colors.inkSoft,
+    marginTop: -2,
+    marginLeft: -1,
   },
   heroCopy: { paddingHorizontal: 20, paddingBottom: 40, gap: 8 },
   phase: {

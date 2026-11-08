@@ -50,11 +50,12 @@ function normalizeKey(raw: string): string {
 
 export function unsplashPhotoUrl(
   photoId: string,
-  width = 960,
+  width = 1280,
 ): string {
   const id = photoId.replace(/^https?:\/\/images\.unsplash\.com\//i, '').split('?')[0]
-  const w = Math.max(320, Math.min(2000, Math.round(width)))
-  return `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=80&fm=jpg`
+  // Cap high enough for retina portrait cards (3× ~ 220pt → ~1200–1600px).
+  const w = Math.max(640, Math.min(2400, Math.round(width)))
+  return `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&q=90&fm=jpg`
 }
 
 export function cityUnsplashUrl(

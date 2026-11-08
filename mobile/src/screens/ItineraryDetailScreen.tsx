@@ -11,8 +11,8 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
-  buildItineraryAppleMapsUrl,
   buildItineraryMapsUrl,
+  buildItineraryStepMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
   citySlugDisplayNameFr,
@@ -143,7 +143,7 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
       itin.cover_image ||
         (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris')),
       {
-        width: 1280,
+        width: 1920,
         citySlug: itin.city_slug,
         slug: itin.slug,
       },
@@ -161,10 +161,8 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   const onSticky = async () => {
     if (!sticky) return
     if (sticky.ctaAction === 'launch_maps') {
-      const url =
-        Platform.OS === 'ios'
-          ? buildItineraryAppleMapsUrl(items) || buildItineraryMapsUrl(items)
-          : buildItineraryMapsUrl(items)
+      // Toujours Google Maps multi-étapes (pas Apple Maps)
+      const url = buildItineraryMapsUrl(items)
       if (url) {
         void getApi()
           .trackActivityEvent({
@@ -247,8 +245,9 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
               {day.items.map((it, i) => {
                 const title = it.title || it.places?.name || `Étape ${i + 1}`
                 const dur = formatDurationMinutes(it.duration_minutes)
-                return (
-                  <View key={it.id || `${day.dayOffset}-${i}`} style={styles.step}>
+                const mapsUrl = buildItineraryStepMapsUrl(it)
+                const content = (
+                  <>
                     <View style={styles.stepNum}>
                       <Text style={styles.stepNumText}>{i + 1}</Text>
                     </View>
@@ -261,20 +260,25 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
                       {it.note ? (
                         <Text style={styles.stepNote}>{it.note}</Text>
                       ) : null}
-                      {it.kind === 'place' && (it.places?.name || it.title) ? (
-                        <Pressable
-                          onPress={() => {
-                            const q = it.places?.name || it.title
-                            if (!q) return
-                            void Linking.openURL(
-                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
-                            )
-                          }}
-                        >
-                          <Text style={styles.stepAction}>Ouvrir dans Maps</Text>
-                        </Pressable>
-                      ) : null}
                     </View>
+                  </>
+                )
+                return mapsUrl ? (
+                  <Pressable
+                    key={it.id || `${day.dayOffset}-${i}`}
+                    style={({ pressed }) => [
+                      styles.step,
+                      pressed && styles.stepPressed,
+                    ]}
+                    onPress={() => void Linking.openURL(mapsUrl)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ouvrir ${title} dans Google Maps`}
+                  >
+                    {content}
+                  </Pressable>
+                ) : (
+                  <View key={it.id || `${day.dayOffset}-${i}`} style={styles.step}>
+                    {content}
                   </View>
                 )
               })}
@@ -355,6 +359,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   step: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  stepPressed: { opacity: 0.72 },
   stepNum: {
     width: 32,
     height: 32,
@@ -386,12 +391,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B5C50',
     lineHeight: 20,
-  },
-  stepAction: {
-    marginTop: 6,
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: '#FF6B35',
   },
   toast: {
     position: 'absolute',

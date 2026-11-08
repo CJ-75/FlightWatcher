@@ -102,9 +102,7 @@ SELECT s.id, v.kind, v.item_type, v.position, v.title, v.note, v.duration_minute
 FROM seeded s
 JOIN (
     VALUES
-        ('balade-romantique-paris', 'free', 'free', 0, 'Café près de l’eau', 'Prends une table au soleil.', 45, 0, 'afternoon', 'a0'),
-        ('balade-romantique-paris', 'free', 'free', 1, 'Balade sur les quais', 'Remonte sans but précis.', 60, 0, 'afternoon', 'a1'),
-        ('balade-romantique-paris', 'free', 'free', 2, 'Dîner pour deux', 'Réserve près de la fenêtre.', 90, 0, 'evening', 'a2'),
+        -- balade-romantique : étapes lieu via apply_balade_romantique_7_places.sql
         ('ferie-11-novembre-paris', 'free', 'free', 0, 'Matinée libre', 'Musée ou marché selon la météo.', 120, 0, 'morning', 'a0'),
         ('ferie-11-novembre-paris', 'free', 'free', 1, 'Déjeuner de férié', 'Quartier calme, pas touristique.', 75, 0, 'afternoon', 'a1'),
         ('ferie-11-novembre-paris', 'free', 'free', 2, 'Fin de journée', 'Parc ou terrasse.', 60, 0, 'evening', 'a2'),
@@ -133,3 +131,6 @@ WHERE slug = 'ferie-11-novembre-paris' AND is_demo = true;
 INSERT INTO schema_migrations (id)
 VALUES ('apply_itineraries_demo_seed.sql')
 ON CONFLICT (id) DO NOTHING;
+
+-- Après ce seed : appliquer apply_balade_romantique_7_places.sql
+-- (7 lieux Maps + « Lancer le parcours » multi-étapes).
