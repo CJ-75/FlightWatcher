@@ -47,6 +47,8 @@ type Props = {
   onTabChange?: (tab: TripDetailTabId) => void
 }
 
+const SERIF = '"Instrument Serif", "Times New Roman", Georgia, serif'
+
 function PencilIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
   return (
     <svg
@@ -66,7 +68,8 @@ function PencilIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
 }
 
 /**
- * Path chrome — hero = city + rename only; share lives in guide row.
+ * Path chrome — V0.2 visual language (serif hero, cream sheet) +
+ * hotel carousel, rename, voyageurs, sticky CTA.
  */
 export function TripDetailPathChrome({
   tripId,
@@ -122,8 +125,8 @@ export function TripDetailPathChrome({
   const chips = (metaChips || []).filter(Boolean)
 
   const heroCopy = (
-    <div className="max-w-2xl space-y-2.5">
-      <span className="inline-flex rounded-full bg-white/85 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#1A120E] shadow-sm shadow-black/20 ring-1 ring-black/10 backdrop-blur-md">
+    <div className="max-w-3xl space-y-3">
+      <span className="inline-flex rounded-full bg-white/18 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 backdrop-blur-md ring-1 ring-white/25">
         {phaseLabel}
       </span>
       {titleEditing ? (
@@ -146,14 +149,15 @@ export function TripDetailPathChrome({
             }}
             maxLength={80}
             disabled={titleSaving}
-            className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-xl font-semibold text-white tracking-tight placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 sm:text-2xl"
+            className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-2xl font-normal italic tracking-tight text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 sm:text-3xl"
+            style={{ fontFamily: SERIF }}
             placeholder="Nom du voyage"
             aria-label="Nom du voyage"
           />
           <button
             type="submit"
             disabled={titleSaving}
-            className="min-h-[40px] rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-[#C2410C] disabled:opacity-60"
+            className="min-h-[40px] rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-[#1A120E] disabled:opacity-60"
           >
             {titleSaving ? '…' : 'OK'}
           </button>
@@ -167,8 +171,11 @@ export function TripDetailPathChrome({
           </button>
         </form>
       ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-[1.75rem] font-semibold leading-[1.15] tracking-tight text-white sm:text-3xl lg:text-[2.25rem]">
+        <div className="flex flex-wrap items-end gap-3">
+          <h1
+            className="max-w-[90%] text-[2.35rem] font-normal leading-[1.05] tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl"
+            style={{ fontFamily: SERIF, fontStyle: 'italic' }}
+          >
             {city}
           </h1>
           {onRename ? (
@@ -177,7 +184,7 @@ export function TripDetailPathChrome({
               onClick={onRename}
               aria-label="Renommer"
               title="Renommer"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/90 ring-1 ring-white/20 hover:bg-white/20"
+              className="mb-1.5 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white ring-1 ring-white/30 backdrop-blur-xl hover:bg-white/30"
             >
               <PencilIcon />
             </button>
@@ -185,11 +192,11 @@ export function TripDetailPathChrome({
         </div>
       )}
       {chips.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] font-medium text-white/75 sm:text-[13px]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-white/85 lg:text-sm">
           {chips.map((c, i) => (
-            <span key={`${c}-${i}`} className="inline-flex items-center gap-1.5">
+            <span key={`${c}-${i}`} className="inline-flex items-center gap-2">
               {i > 0 ? (
-                <span className="text-white/35" aria-hidden>
+                <span className="text-white/40" aria-hidden>
                   ·
                 </span>
               ) : null}
@@ -202,28 +209,30 @@ export function TripDetailPathChrome({
   )
 
   return (
-    <div className="relative w-full bg-[#FFFBF8] pb-24 dark:bg-[#1A120E] lg:-mx-6 lg:w-[calc(100%+3rem)] xl:-mx-8 xl:w-[calc(100%+4rem)]">
-      <section className="relative isolate min-h-[min(42vh,360px)] overflow-hidden lg:min-h-[min(44vh,420px)]">
+    <div className="relative w-full bg-[#F7F4EF] pb-24 lg:-mx-6 lg:w-[calc(100%+3rem)] xl:-mx-8 xl:w-[calc(100%+4rem)]">
+      <section className="relative isolate min-h-[min(52vh,440px)] overflow-hidden lg:min-h-[min(48vh,520px)]">
         {hotelHero ? (
-          <HotelPhotoGallery
-            variant="hero"
-            className="min-h-[min(42vh,360px)] w-full lg:min-h-[min(44vh,420px)]"
-            hotelId={hotelHero.hotelId}
-            seedPhoto={hotelHero.seedPhoto || heroUrl}
-            seedPhotos={
-              hotelHero.seedPhotos?.length
-                ? hotelHero.seedPhotos
-                : [hotelHero.seedPhoto || heroUrl].filter(Boolean)
-            }
-            alt={hotelHero.hotelName}
-            hotelName={hotelHero.hotelName}
-            cityLabel={city}
-            overlay={
-              <div className="mx-auto w-full max-w-6xl px-5 pb-4 pt-4 sm:px-8 lg:px-10">
-                {heroCopy}
-              </div>
-            }
-          />
+          <div className="absolute inset-0">
+            <HotelPhotoGallery
+              variant="hero"
+              className="h-full min-h-full w-full"
+              hotelId={hotelHero.hotelId}
+              seedPhoto={hotelHero.seedPhoto || heroUrl}
+              seedPhotos={
+                hotelHero.seedPhotos?.length
+                  ? hotelHero.seedPhotos
+                  : [hotelHero.seedPhoto || heroUrl].filter(Boolean)
+              }
+              alt={hotelHero.hotelName}
+              hotelName={hotelHero.hotelName}
+              cityLabel={city}
+              overlay={
+                <div className="mx-auto w-full max-w-6xl px-5 pb-16 pt-4 sm:px-8 lg:px-10 lg:pb-20">
+                  {heroCopy}
+                </div>
+              }
+            />
+          </div>
         ) : (
           <>
             <img
@@ -232,24 +241,24 @@ export function TripDetailPathChrome({
               aria-hidden
               fetchPriority="high"
               decoding="async"
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full scale-[1.02] object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
-            <div className="relative mx-auto flex min-h-[min(42vh,360px)] w-full max-w-6xl flex-col justify-end px-5 pb-12 pt-4 sm:px-8 lg:min-h-[min(44vh,420px)] lg:px-10 lg:pb-14">
+            <div className="relative mx-auto flex min-h-[min(52vh,440px)] w-full max-w-6xl flex-col justify-end px-5 pb-16 pt-4 sm:px-8 lg:min-h-[min(48vh,520px)] lg:px-10 lg:pb-20">
               {heroCopy}
             </div>
           </>
         )}
       </section>
 
-      <div className="relative z-[1] -mt-7 rounded-t-[28px] bg-[#FFFBF8] px-5 pb-8 pt-5 dark:bg-[#241C18] sm:px-8 lg:-mt-9 lg:rounded-t-[32px] lg:px-10 lg:pb-10 lg:pt-7">
-        <div className="mx-auto mb-4 h-1 w-8 rounded-full bg-[#E8DDD4] lg:mb-5" aria-hidden />
+      <div className="relative z-[1] -mt-8 rounded-t-[32px] bg-white px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(20,12,8,0.12)] sm:px-8 lg:-mt-10 lg:rounded-t-[40px] lg:px-10 lg:pb-12 lg:pt-8">
+        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[#EDE8E1] lg:mb-5" aria-hidden />
         <div className="mx-auto w-full max-w-6xl">
           {(guideName || guideSubtitle) && (
-            <div className="mb-5 flex items-center justify-between gap-3 lg:mb-6">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-[#F0E8E0] ring-1 ring-[#E8DDD4]">
+            <div className="mb-5 flex items-center justify-between gap-3 lg:mb-7">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full bg-[#EDE8E1] ring-2 ring-white lg:h-12 lg:w-12">
                   {guideAvatarUrl ? (
                     <img
                       src={guideAvatarUrl}
@@ -257,16 +266,16 @@ export function TripDetailPathChrome({
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <span className="flex h-full w-full items-center justify-center text-xs font-semibold text-[#8A6A58]">
+                    <span className="flex h-full w-full items-center justify-center text-sm font-bold text-[#6B5C50]">
                       {(guideName || '?').slice(0, 1).toUpperCase()}
                     </span>
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-[13px] font-semibold text-[#1A120E] dark:text-[#FFF9F5]">
+                  <p className="truncate text-sm font-semibold text-[#1A120E] lg:text-base">
                     {guideName || 'Organisateur'}
                   </p>
-                  <p className="truncate text-[11px] font-medium text-[#8A6A58]">
+                  <p className="truncate text-xs text-[#8A7B6E] lg:text-sm">
                     {guideSubtitle || 'Organisateur du voyage'}
                   </p>
                 </div>
@@ -275,7 +284,7 @@ export function TripDetailPathChrome({
                 <button
                   type="button"
                   onClick={onShare}
-                  className="shrink-0 rounded-full bg-[#FF6B35] px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-[#E85A28]"
+                  className="shrink-0 rounded-full bg-[#1A120E] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-black lg:px-5 lg:py-2.5 lg:text-sm"
                 >
                   Inviter
                 </button>
@@ -286,7 +295,7 @@ export function TripDetailPathChrome({
           <div
             role="tablist"
             aria-label="Sections du voyage"
-            className="sticky top-0 z-10 mb-5 flex gap-5 border-b border-[#EDE4DC] bg-[#FFFBF8]/95 backdrop-blur-md dark:border-[#3A2F28] dark:bg-[#241C18]/95 lg:mb-6 lg:gap-8"
+            className="mb-5 flex gap-5 border-b border-[#EDE8E1] lg:mb-7 lg:gap-8"
           >
             {TRIP_DETAIL_TABS.map((t) => {
               const selected = tab === t.id
@@ -297,15 +306,15 @@ export function TripDetailPathChrome({
                   role="tab"
                   aria-selected={selected}
                   onClick={() => setTab(t.id)}
-                  className={`relative pb-3 text-[13px] font-semibold tracking-tight transition-colors lg:text-sm ${
+                  className={`relative pb-3 text-[13px] font-semibold tracking-tight transition-colors lg:pb-4 lg:text-sm ${
                     selected
-                      ? 'text-[#1A120E] dark:text-[#FFF9F5]'
-                      : 'text-[#A89888] hover:text-[#6B5C50]'
+                      ? 'text-[#1A120E]'
+                      : 'text-[#A3988C] hover:text-[#6B5C50]'
                   }`}
                 >
                   {t.label}
                   {selected ? (
-                    <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-[#FF6B35]" />
+                    <span className="absolute inset-x-0 -bottom-px h-[2px] rounded-full bg-[#1A120E]" />
                   ) : null}
                 </button>
               )
@@ -318,14 +327,14 @@ export function TripDetailPathChrome({
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE4DC]/90 bg-[#FFFBF8]/94 px-4 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-[#241C18]/95 sm:px-6">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE8E1]/90 bg-white/95 px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-1 sm:px-2 lg:px-4">
           {estimatedTotalLabel ? (
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A6A58]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A7B6E]">
                 Total
               </p>
-              <p className="truncate text-[15px] font-semibold tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+              <p className="truncate text-[15px] font-semibold tracking-tight text-[#1A120E]">
                 {estimatedTotalLabel}
               </p>
             </div>
@@ -333,14 +342,14 @@ export function TripDetailPathChrome({
             <span className="flex-1" />
           )}
           {primary.informational ? (
-            <p className="max-w-[55%] text-right text-[13px] font-medium text-[#8A6A58]">
+            <p className="max-w-[55%] text-right text-[13px] font-medium text-[#8A7B6E]">
               {primary.label}
             </p>
           ) : (
             <button
               type="button"
               onClick={onPrimary}
-              className="inline-flex min-h-[46px] shrink-0 items-center justify-center rounded-full bg-[#FF6B35] px-6 text-[14px] font-semibold text-white transition hover:bg-[#E85A28] active:scale-[0.98]"
+              className="inline-flex min-h-[48px] shrink-0 items-center justify-center rounded-full bg-[#1A120E] px-6 text-[14px] font-semibold text-white transition hover:bg-black active:scale-[0.98]"
             >
               {primary.label}
             </button>

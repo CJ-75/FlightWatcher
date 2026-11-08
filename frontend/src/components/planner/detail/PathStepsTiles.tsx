@@ -49,13 +49,13 @@ function StepIcon({ id }: { id: StayStepId }) {
 }
 
 /**
- * Path « Étapes » — compact line icons, quiet surfaces.
+ * Path « Étapes » — V0.2 cream chips + SVG icons.
  */
 export function PathStepsTiles({ steps, onStepPress }: Props) {
   if (!steps.length) return null
   return (
     <div
-      className={`grid gap-2 ${
+      className={`grid max-w-xl gap-2 lg:max-w-2xl lg:gap-3 ${
         steps.length >= 4
           ? 'grid-cols-4'
           : steps.length === 3
@@ -71,39 +71,33 @@ export function PathStepsTiles({ steps, onStepPress }: Props) {
             key={step.id}
             type="button"
             onClick={() => onStepPress?.(step.id)}
-            className={`flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center transition ${
+            className={`flex flex-col items-center gap-2 rounded-2xl px-1 py-3 text-center transition lg:py-4 ${
               live
-                ? 'bg-[#FFF7F2] ring-1 ring-[#FF6B35]/30'
+                ? 'bg-[#FFF0E8] ring-1 ring-[#FF6B35]/25'
                 : done
-                  ? 'bg-[#F3FAF6] ring-1 ring-[#0F8A5F]/12'
-                  : 'bg-white ring-1 ring-[#EDE4DC] hover:bg-[#FFFBF8]'
+                  ? 'bg-[#F7F4EF] ring-1 ring-[#0F8A5F]/15'
+                  : 'bg-[#F7F4EF] hover:bg-[#EFEAE3]'
             }`}
           >
             <span
-              className={`flex h-9 w-9 items-center justify-center rounded-full ${
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-base shadow-sm ring-1 ring-black/5 lg:h-11 lg:w-11 ${
                 live
                   ? 'bg-[#FF6B35] text-white'
                   : done
-                    ? 'bg-[#0F8A5F] text-white'
-                    : 'bg-[#F7F2ED] text-[#6B5C50]'
+                    ? 'bg-white text-[#0F8A5F]'
+                    : 'bg-white text-[#5C4F44]'
               }`}
             >
               <StepIcon id={step.id} />
             </span>
-            <span className="text-[11px] font-semibold text-[#1A120E]">
+            <span className="text-[10px] font-semibold leading-tight text-[#5C4F44] lg:text-xs">
               {step.label}
             </span>
-            <span
-              className={`text-[10px] font-medium ${
-                live
-                  ? 'text-[#E85A28]'
-                  : done
-                    ? 'text-[#0F8A5F]'
-                    : 'text-[#9A8778]'
-              }`}
-            >
-              {step.statusLabel}
-            </span>
+            {step.statusLabel ? (
+              <span className="max-w-full truncate px-1 text-[9px] font-medium text-[#A3988C]">
+                {step.statusLabel}
+              </span>
+            ) : null}
           </button>
         )
       })}

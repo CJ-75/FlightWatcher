@@ -99,6 +99,7 @@ import { ProgrammePanel } from './planner/detail/ProgrammePanel'
 import { PathStepsTiles } from './planner/detail/PathStepsTiles'
 import { StayPipelineStepper } from './StayPipelineStepper'
 import { ActivityStepPanel } from './ActivityStepPanel'
+import { HotelPhotoGallery } from './HotelPhotoGallery'
 
 function PencilIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
   return (
@@ -2807,14 +2808,29 @@ function TripDetailView({
     (draftHotel as { name?: string } | null)?.name || 'Mon hôtel',
   )
   const hotelId = String(
-    (draftHotel as { id?: string | number; hotel_id?: string | number } | null)
-      ?.id ||
+    (draftHotel as {
+      id?: string | number
+      hotel_id?: string | number
+      hotelId?: string | number
+    } | null)?.id ||
       (draftHotel as { hotel_id?: string | number } | null)?.hotel_id ||
+      (draftHotel as { hotelId?: string | number } | null)?.hotelId ||
       '',
   ).trim()
   const hotelSeedPhotos = (() => {
-    const raw = (draftHotel as { photos?: unknown } | null)?.photos
-    if (!Array.isArray(raw)) return hotelPhoto ? [hotelPhoto] : []
+    const h = draftHotel as {
+      photos?: unknown
+      images?: unknown
+      hotelImages?: unknown
+      hotel_images?: unknown
+    } | null
+    const raw =
+      (Array.isArray(h?.photos) && h.photos) ||
+      (Array.isArray(h?.images) && h.images) ||
+      (Array.isArray(h?.hotelImages) && h.hotelImages) ||
+      (Array.isArray(h?.hotel_images) && h.hotel_images) ||
+      null
+    if (!raw) return hotelPhoto ? [hotelPhoto] : []
     const urls = raw
       .map((p) =>
         typeof p === 'string'
@@ -2829,7 +2845,10 @@ function TripDetailView({
     return urls
   })()
   const showHotelGallery =
-    Boolean(hotelBooked || hasHotel) && Boolean(hotelId) && hotelId !== 'primary'
+    Boolean(hotelBooked || hasHotel) &&
+    !externalHotel &&
+    Boolean(hotelId) &&
+    hotelId !== 'primary'
 
   const detailPhase =
     workspace?.phase ||
@@ -2911,7 +2930,8 @@ function TripDetailView({
     }
   }
 
-  if (tripDetailV2) {
+  // Web keeps classic trip form (d7e7b28). Path chrome stays on mobile only.
+  if (false && tripDetailV2) {
     const programmeItems = activityItems
       .filter((i) => i.id)
       .map((i) => ({
@@ -2937,25 +2957,6 @@ function TripDetailView({
         tripId={trip.id}
         heroUrl={destinationImage}
         city={destinationName}
-        hotelHero={
-          showHotelGallery
-            ? {
-                hotelId,
-                hotelName,
-                seedPhoto: hotelPhoto || null,
-                seedPhotos: hotelSeedPhotos,
-              }
-            : (hotelBooked || hasHotel) && hotelPhoto
-              ? {
-                  hotelId: hotelId || 'seed',
-                  hotelName,
-                  seedPhoto: hotelPhoto,
-                  seedPhotos: hotelSeedPhotos.length
-                    ? hotelSeedPhotos
-                    : [hotelPhoto],
-                }
-              : null
-        }
         metaChips={[
           dateLine,
           `${pax} voyageur${pax > 1 ? 's' : ''}`,
@@ -2999,7 +3000,7 @@ function TripDetailView({
             : null
         }
         apercu={
-          <div className="space-y-5" ref={stayExtrasRef}>
+          <div className="space-y-7" ref={stayExtrasRef}>
             <PathStepsTiles
               steps={pathView.steps}
               onStepPress={(id) => {
@@ -3014,68 +3015,132 @@ function TripDetailView({
               }}
             />
             {accepted?.trip_data && !externalFlight ? (
-              <SelectedFlightBoardingPass
-                trip={accepted.trip_data as EnrichedTripResponse}
-                passengers={pax}
-                pricePerPerson={stayParty.flightPp || stayParty.perPerson}
-                priceCaption={partyPriceCaptionFr(pax, { kind: 'flight' })}
-                flightBooked={flightBooked}
-                bookingBusy={flightBookingBusy}
-                onBook={() => openReservation(false)}
-                onConfirm={() => undefined}
-                onDismissAsk={() => undefined}
-              />
+              <div className="space-y-3">
+                <h3
+                  className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
+                  style={{
+                    fontFamily: '"Instrument Serif", Georgia, serif',
+                  }}
+                >
+                  Vol
+                </h3>
+                <SelectedFlightBoardingPass
+                  trip={accepted.trip_data as EnrichedTripResponse}
+                  passengers={pax}
+                  pricePerPerson={stayParty.flightPp || stayParty.perPerson}
+                  priceCaption={partyPriceCaptionFr(pax, { kind: 'flight' })}
+                  flightBooked={flightBooked}
+                  bookingBusy={flightBookingBusy}
+                  onBook={() => openReservation(false)}
+                  onConfirm={() => undefined}
+                  onDismissAsk={() => undefined}
+                />
+              </div>
             ) : null}
             {!externalHotel ? (
-              <div className="relative flex min-h-[200px] w-full flex-col justify-end overflow-hidden rounded-2xl border border-[#EDE4DC] p-5 text-left">
-                <img
-                  src={hotelBlockImage}
-                  alt=""
-                  aria-hidden
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/15" />
-                <div className="relative z-[1] flex flex-col">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">
-                    Hôtel
-                  </p>
-                  <p className="mt-1.5 text-xl font-semibold tracking-tight text-white leading-tight">
-                    {hotelBooked || hasHotel ? hotelName : HOTEL_CTA_FR.choose}
-                  </p>
-                  <p className="mt-1.5 max-w-md text-[13px] text-white/75 leading-relaxed">
-                    {hotelBooked || hasHotel
-                      ? `Séjour à ${destinationName}.`
-                      : `Compare les chambres à ${destinationName}.`}
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={hotelBusy || skippingHotel}
-                      onClick={onHotelBlockCta}
-                      className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-white px-5 py-2.5 text-[13px] font-semibold text-[#C2410C] disabled:opacity-60"
-                    >
-                      {hotelBlockCtaLabel}
-                      <span aria-hidden>›</span>
-                    </button>
-                    {canSkipHotel ? (
-                      <button
-                        type="button"
-                        disabled={skippingHotel || hotelBusy}
-                        onClick={() => void skipHotel()}
-                        className="inline-flex min-h-[44px] items-center rounded-full border border-white/30 bg-white/10 px-4 py-2.5 text-[13px] font-semibold text-white backdrop-blur-md disabled:opacity-60"
+              <div className="space-y-3">
+                <h3
+                  className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
+                  style={{
+                    fontFamily: '"Instrument Serif", Georgia, serif',
+                  }}
+                >
+                  Hôtel
+                </h3>
+                <div className="group relative isolate flex min-h-[280px] w-full overflow-hidden rounded-[28px] shadow-xl shadow-orange-950/10">
+                  <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
+                    <img
+                      src={hotelBlockImage}
+                      alt=""
+                      aria-hidden
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+                    <div className="relative z-[1] flex flex-col">
+                      <p
+                        className={`text-[11px] font-black uppercase tracking-[0.18em] ${
+                          hotelBooked || hasHotel
+                            ? 'text-emerald-200'
+                            : 'text-orange-300'
+                        }`}
                       >
-                        {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
-                      </button>
-                    ) : null}
+                        {hotelBooked || hasHotel ? 'Séjour' : 'À choisir'}
+                      </p>
+                      <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                        {hotelBooked || hasHotel
+                          ? hotelName
+                          : HOTEL_CTA_FR.choose}
+                      </p>
+                      <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                        {hotelBooked || hasHotel
+                          ? `Séjour à ${destinationName}.`
+                          : `Compare les chambres à ${destinationName}.`}
+                      </p>
+                      <div className="mt-5 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={hotelBusy || skippingHotel}
+                          onClick={onHotelBlockCta}
+                          className="inline-flex min-h-[48px] items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg disabled:opacity-60"
+                        >
+                          {hotelBlockCtaLabel}
+                          <span aria-hidden>›</span>
+                        </button>
+                        {hotelInvoiceReady ? (
+                          <button
+                            type="button"
+                            disabled={invoiceBusy}
+                            aria-busy={invoiceBusy}
+                            onClick={() => downloadHotelInvoice()}
+                            className="inline-flex min-h-[48px] items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white backdrop-blur-md hover:bg-white/20 disabled:opacity-60"
+                          >
+                            {invoiceBusy ? (
+                              <InvoiceBusyLabel label="Préparation…" />
+                            ) : invoiceDone ? (
+                              'Facture ✓'
+                            ) : (
+                              'Facture'
+                            )}
+                          </button>
+                        ) : null}
+                        {canSkipHotel ? (
+                          <button
+                            type="button"
+                            disabled={skippingHotel || hotelBusy}
+                            onClick={() => void skipHotel()}
+                            className="inline-flex min-h-[48px] items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white backdrop-blur-md hover:bg-white/20 disabled:opacity-60"
+                          >
+                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-3xl border border-[#EDE8E1] bg-[#F7F4EF] p-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#8A7B6E]">
+                  Hôtel
+                </p>
+                <p className="mt-0.5 text-lg font-extrabold tracking-tight text-[#1A120E]">
+                  Déjà réservé ailleurs
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
+                  Tu as sauté l’étape hôtel FlightWatcher pour {destinationName}.
+                </p>
+              </div>
+            )}
             {plannerActivitiesEnabled && deferHeavyPanels ? (
               <div>
-                <h4 className="mb-2 text-[15px] font-semibold tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+                <h3
+                  className="mb-3 text-2xl font-normal italic tracking-tight text-[#1A120E]"
+                  style={{
+                    fontFamily: '"Instrument Serif", Georgia, serif',
+                  }}
+                >
                   Activités
-                </h4>
+                </h3>
                 <ActivityStepPanel
                   plannedTripId={trip.id}
                   draftToken={
@@ -3091,34 +3156,17 @@ function TripDetailView({
                 />
               </div>
             ) : null}
-            {(hotelInvoiceReady ||
-              (reservationToken && (hotelBooked || flightBooked))) && (
-              <div className="space-y-2 border-t border-[#EDE8E1] pt-5">
-                {hotelInvoiceReady ? (
-                  <button
-                    type="button"
-                    disabled={invoiceBusy}
-                    onClick={downloadHotelInvoice}
-                    className="rounded-full bg-[#1A120E] px-5 py-3 text-sm font-semibold text-white"
-                  >
-                    {invoiceBusy
-                      ? '…'
-                      : invoiceDone
-                        ? 'Facture ✓'
-                        : 'Télécharger la facture'}
-                  </button>
-                ) : null}
-                {reservationToken && (hotelBooked || flightBooked) ? (
-                  <button
-                    type="button"
-                    onClick={openReservations}
-                    className="block text-sm font-semibold text-[#1A120E] underline decoration-[#EDE8E1] underline-offset-4"
-                  >
-                    Voir les réservations
-                  </button>
-                ) : null}
+            {reservationToken && (hotelBooked || flightBooked) ? (
+              <div className="border-t border-[#EDE8E1] pt-5">
+                <button
+                  type="button"
+                  onClick={openReservations}
+                  className="text-sm font-semibold text-[#1A120E] underline decoration-[#EDE8E1] underline-offset-4"
+                >
+                  Voir les réservations
+                </button>
               </div>
-            )}
+            ) : null}
           </div>
         }
         voyageurs={
@@ -3440,78 +3488,152 @@ function TripDetailView({
               </div>
             ) : (
               <div
-                className={`group relative isolate flex h-full min-h-[220px] min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 ${
+                className={`group relative isolate flex h-full min-h-[280px] min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 ${
                   externalFlight && !accepted ? 'lg:col-span-2' : ''
                 }`}
               >
-                <div className="relative flex h-full w-full min-h-[220px] flex-col justify-end p-6 sm:p-7 text-left">
-                  <img
-                    src={hotelBlockImage}
-                    alt=""
-                    aria-hidden
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                {showHotelGallery ? (
+                  <HotelPhotoGallery
+                    variant="hero"
+                    className="h-full w-full"
+                    hotelId={hotelId}
+                    seedPhoto={hotelPhoto || null}
+                    seedPhotos={hotelSeedPhotos}
+                    alt={hotelName}
+                    hotelName={hotelName}
+                    cityLabel={destinationName}
+                    overlay={
+                      <div className="flex flex-col text-left">
+                        <p
+                          className={`text-[11px] font-black uppercase tracking-[0.18em] ${
+                            hotelBooked || hasHotel
+                              ? 'text-emerald-200'
+                              : 'text-orange-300'
+                          }`}
+                        >
+                          {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
+                        </p>
+                        <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                          {hotelBooked || hasHotel
+                            ? hotelName
+                            : HOTEL_CTA_FR.choose}
+                        </p>
+                        <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                          {hotelBooked || hasHotel
+                            ? `Séjour à ${destinationName}.`
+                            : `Compare les chambres à ${destinationName}.`}
+                        </p>
+                        <div className="mt-5 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={hotelBusy || skippingHotel}
+                            onClick={onHotelBlockCta}
+                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
+                          >
+                            {hotelBlockCtaLabel}
+                            <span aria-hidden>›</span>
+                          </button>
+                          {hotelInvoiceReady ? (
+                            <button
+                              type="button"
+                              disabled={invoiceBusy}
+                              aria-busy={invoiceBusy}
+                              onClick={() => downloadHotelInvoice()}
+                              className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                            >
+                              {invoiceBusy ? (
+                                <InvoiceBusyLabel label="Préparation…" />
+                              ) : invoiceDone ? (
+                                'Facture ✓'
+                              ) : (
+                                'Facture'
+                              )}
+                            </button>
+                          ) : null}
+                          {canSkipHotel ? (
+                            <button
+                              type="button"
+                              disabled={skippingHotel || hotelBusy}
+                              onClick={() => void skipHotel()}
+                              className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                            >
+                              {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    }
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
-                  <div className="relative z-[1] flex flex-col">
-                    <p
-                      className={`text-[11px] font-black uppercase tracking-[0.18em] ${
-                        hotelBooked || hasHotel
-                          ? 'text-emerald-200'
-                          : 'text-orange-300'
-                      }`}
-                    >
-                      Hôtel
-                    </p>
-                    <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                      {hotelBooked || hasHotel
-                        ? hotelName
-                        : HOTEL_CTA_FR.choose}
-                    </p>
-                    <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
-                      {hotelBooked || hasHotel
-                        ? `Séjour à ${destinationName}.`
-                        : `Compare les chambres à ${destinationName}.`}
-                    </p>
-                    <div className="mt-5 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={hotelBusy || skippingHotel}
-                        onClick={onHotelBlockCta}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
+                ) : (
+                  <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
+                    <img
+                      src={hotelBlockImage}
+                      alt=""
+                      aria-hidden
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+                    <div className="relative z-[1] flex flex-col">
+                      <p
+                        className={`text-[11px] font-black uppercase tracking-[0.18em] ${
+                          hotelBooked || hasHotel
+                            ? 'text-emerald-200'
+                            : 'text-orange-300'
+                        }`}
                       >
-                        {hotelBlockCtaLabel}
-                        <span aria-hidden>›</span>
-                      </button>
-                      {hotelInvoiceReady ? (
+                        {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
+                      </p>
+                      <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                        {hotelBooked || hasHotel
+                          ? hotelName
+                          : HOTEL_CTA_FR.choose}
+                      </p>
+                      <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                        {hotelBooked || hasHotel
+                          ? `Séjour à ${destinationName}.`
+                          : `Compare les chambres à ${destinationName}.`}
+                      </p>
+                      <div className="mt-5 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          disabled={invoiceBusy}
-                          aria-busy={invoiceBusy}
-                          onClick={() => downloadHotelInvoice()}
-                          className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                          disabled={hotelBusy || skippingHotel}
+                          onClick={onHotelBlockCta}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
                         >
-                          {invoiceBusy ? (
-                            <InvoiceBusyLabel label="Préparation…" />
-                          ) : invoiceDone ? (
-                            'Facture ✓'
-                          ) : (
-                            'Facture'
-                          )}
+                          {hotelBlockCtaLabel}
+                          <span aria-hidden>›</span>
                         </button>
-                      ) : null}
-                      {canSkipHotel ? (
-                        <button
-                          type="button"
-                          disabled={skippingHotel || hotelBusy}
-                          onClick={() => void skipHotel()}
-                          className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
-                        >
-                          {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
-                        </button>
-                      ) : null}
+                        {hotelInvoiceReady ? (
+                          <button
+                            type="button"
+                            disabled={invoiceBusy}
+                            aria-busy={invoiceBusy}
+                            onClick={() => downloadHotelInvoice()}
+                            className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                          >
+                            {invoiceBusy ? (
+                              <InvoiceBusyLabel label="Préparation…" />
+                            ) : invoiceDone ? (
+                              'Facture ✓'
+                            ) : (
+                              'Facture'
+                            )}
+                          </button>
+                        ) : null}
+                        {canSkipHotel ? (
+                          <button
+                            type="button"
+                            disabled={skippingHotel || hotelBusy}
+                            onClick={() => void skipHotel()}
+                            className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                          >
+                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>

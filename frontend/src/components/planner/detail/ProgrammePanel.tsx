@@ -32,6 +32,8 @@ type Props = {
   onOpenItem?: (item: ProgrammeSlotItem) => void
 }
 
+const SERIF = '"Instrument Serif", Georgia, serif'
+
 const KIND_LABEL: Record<ProgrammeItemKind, string> = {
   flight_out: 'Vol',
   flight_ret: 'Vol',
@@ -88,7 +90,7 @@ function ItemRow({
         <button
           type="button"
           onClick={onOpen}
-          className="w-full rounded-2xl border border-[#FFDCC8]/60 bg-[#FFF9F5] px-4 py-3.5 text-left shadow-sm shadow-orange-950/5 transition hover:border-[#FF6B35]/35 hover:bg-[#FFF3EC] dark:border-[#3A2F28] dark:bg-[#2A221E]"
+          className="w-full rounded-2xl bg-[#F7F4EF] px-4 py-3.5 text-left transition hover:bg-[#EFEAE3]"
         >
           {inner}
         </button>
@@ -96,7 +98,7 @@ function ItemRow({
     )
   }
   return (
-    <li className="rounded-2xl border border-[#FFDCC8]/60 bg-[#FFF9F5] px-4 py-3.5 shadow-sm shadow-orange-950/5 dark:border-[#3A2F28] dark:bg-[#2A221E]">
+    <li className="rounded-2xl bg-[#F7F4EF] px-4 py-3.5">
       {inner}
     </li>
   )
@@ -155,10 +157,13 @@ export function ProgrammePanel({
   if (timeline.needsDates) {
     return (
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+        <h3
+          className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
+          style={{ fontFamily: SERIF }}
+        >
           Programme
         </h3>
-        <p className="text-[13px] leading-relaxed text-[#6B5C50]">
+        <p className="text-[13px] leading-relaxed text-[#8A7B6E]">
           Les jours apparaîtront quand les dates seront fixées.
         </p>
         {timeline.unplaced.length > 0 ? (
@@ -175,10 +180,13 @@ export function ProgrammePanel({
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h3 className="text-lg font-semibold tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+        <h3
+          className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
+          style={{ fontFamily: SERIF }}
+        >
           Programme
         </h3>
-        <p className="text-[13px] text-[#6B5C50]">
+        <p className="text-[13px] text-[#8A7B6E]">
           Lecture du séjour tel qu’il est — toucher un élément ouvre sa fiche.
         </p>
       </header>
@@ -195,14 +203,17 @@ export function ProgrammePanel({
         {timeline.days.map((d) => (
           <section key={d.dayOffset} className="relative pl-5 sm:pl-6">
             <span
-              className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-[#FF6B35] ring-4 ring-[#FFFBF8] dark:ring-[#241C18]"
+              className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-[#1A120E] ring-4 ring-white"
               aria-hidden
             />
             <span
-              className="absolute bottom-0 left-[3px] top-4 w-px bg-[#E8DDD4] dark:bg-[#3A2F28]"
+              className="absolute bottom-0 left-[3px] top-4 w-px bg-[#EDE8E1]"
               aria-hidden
             />
-            <h4 className="text-[15px] font-semibold capitalize tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+            <h4
+              className="text-xl font-normal capitalize italic tracking-tight text-[#1A120E]"
+              style={{ fontFamily: SERIF }}
+            >
               {d.label}
             </h4>
             {d.empty ? (
@@ -248,11 +259,14 @@ function UnplacedBlock({
   onOpenItem?: (item: ProgrammeSlotItem) => void
 }) {
   return (
-    <section className="rounded-2xl border border-dashed border-[#E8DDD4] bg-white p-4 dark:border-[#3A2F28] dark:bg-[#2A221E]">
-      <h4 className="text-[15px] font-semibold tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+    <section className="rounded-2xl border border-dashed border-[#EDE8E1] bg-[#F7F4EF]/70 p-4">
+      <h4
+        className="text-lg font-normal italic tracking-tight text-[#1A120E]"
+        style={{ fontFamily: SERIF }}
+      >
         À placer
       </h4>
-      <p className="mt-1 text-[12px] font-medium text-[#8A6A58]">{hint}</p>
+      <p className="mt-1 text-[12px] font-medium text-[#8A7B6E]">{hint}</p>
       <ul className="mt-3 space-y-2">
         {items.map((it) => (
           <ItemRow

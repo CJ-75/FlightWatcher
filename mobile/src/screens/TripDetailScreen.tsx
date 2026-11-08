@@ -1508,14 +1508,28 @@ export function TripDetailScreen() {
   const stayPriceIncludesHotel = stayParty.hotelTotal > 0
 
   const hotelId = String(
-    draftHotel?.id || draftHotel?.hotel_id || '',
+    draftHotel?.id ||
+      draftHotel?.hotel_id ||
+      (draftHotel as { hotelId?: string | number } | null | undefined)?.hotelId ||
+      '',
   ).trim()
   const hotelName = String(draftHotel?.name || 'Mon hôtel')
   const hotelPhoto = String(
     draftHotel?.photo || draftHotel?.main_photo || draftHotel?.image || '',
   ).trim()
   const hotelSeedPhotos = useMemo(() => {
-    const raw = draftHotel?.photos
+    const h = draftHotel as {
+      photos?: unknown
+      images?: unknown
+      hotelImages?: unknown
+      hotel_images?: unknown
+    } | null | undefined
+    const raw =
+      (Array.isArray(h?.photos) && h.photos) ||
+      (Array.isArray(h?.images) && h.images) ||
+      (Array.isArray(h?.hotelImages) && h.hotelImages) ||
+      (Array.isArray(h?.hotel_images) && h.hotel_images) ||
+      null
     const urls: string[] = []
     if (Array.isArray(raw)) {
       for (const p of raw) {
@@ -1530,9 +1544,10 @@ export function TripDetailScreen() {
     }
     if (hotelPhoto && !urls.includes(hotelPhoto)) urls.unshift(hotelPhoto)
     return urls
-  }, [draftHotel?.photos, hotelPhoto])
+  }, [draftHotel, hotelPhoto])
   const showHotelGallery =
     Boolean(reservationFlags.hotelBooked || reservationFlags.hasHotel) &&
+    !reservationFlags.externalHotel &&
     Boolean(hotelId) &&
     hotelId !== 'primary'
 
@@ -1734,26 +1749,7 @@ export function TripDetailScreen() {
           tripId={trip.id}
           heroUrl={destinationImage}
           city={cityLabel || trip.name}
-          hotelHero={
-            showHotelGallery
-              ? {
-                  hotelId,
-                  hotelName,
-                  seedPhoto: hotelPhoto || null,
-                  seedPhotos: hotelSeedPhotos,
-                }
-              : (reservationFlags.hotelBooked || reservationFlags.hasHotel) &&
-                  hotelPhoto
-                ? {
-                    hotelId: hotelId || 'seed',
-                    hotelName,
-                    seedPhoto: hotelPhoto,
-                    seedPhotos: hotelSeedPhotos.length
-                      ? hotelSeedPhotos
-                      : [hotelPhoto],
-                  }
-                : null
-          }
+          scrollLocked={gallerySwipeActive}
           metaChips={[
             dateLineMobile,
             `${pax} voyageur${pax > 1 ? 's' : ''}`,
@@ -1863,71 +1859,153 @@ export function TripDetailScreen() {
               ) : null}
               {!reservationFlags.externalHotel ? (
                 <View style={[styles.nextStepCard, shadow.soft]}>
-                  <ImageBackground
-                    source={{
-                      uri: hotelPhoto || destinationImage,
-                    }}
-                    style={styles.nextStepImage}
-                    imageStyle={styles.nextStepImageRadius}
-                  >
-                    <LinearGradient
-                      colors={[
-                        'rgba(31,16,9,0.15)',
-                        'rgba(31,16,9,0.94)',
-                      ]}
-                      style={StyleSheet.absoluteFill}
+                  {showHotelGallery ? (
+                    <HotelPhotoGallery
+                      variant="hero"
+                      hotelId={hotelId}
+                      seedPhoto={hotelPhoto || null}
+                      seedPhotos={hotelSeedPhotos}
+                      alt={hotelName}
+                      hotelName={hotelName}
+                      cityLabel={cityLabel}
+                      height={240}
+                      onHorizontalGesture={setGallerySwipeActive}
+                      overlay={
+                        <View style={styles.nextStepContent}>
+                          <View
+                            style={[
+                              styles.nextStepBadge,
+                              (reservationFlags.hotelBooked ||
+                                reservationFlags.hasHotel) &&
+                                styles.nextStepBadgeChosen,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.nextStepBadgeText,
+                                (reservationFlags.hotelBooked ||
+                                  reservationFlags.hasHotel) &&
+                                  styles.nextStepBadgeTextChosen,
+                              ]}
+                            >
+                              HÔTEL
+                            </Text>
+                          </View>
+                          <Text style={styles.nextStepTitle}>
+                            {reservationFlags.hotelBooked ||
+                            reservationFlags.hasHotel
+                              ? hotelName
+                              : 'Choisir mon hôtel'}
+                          </Text>
+                          <Text style={styles.nextStepBody}>
+                            {reservationFlags.hotelBooked ||
+                            reservationFlags.hasHotel
+                              ? `Séjour à ${cityLabel}.`
+                              : `Photos, avis et prix pour ${cityLabel}.`}
+                          </Text>
+                          <Pressable
+                            onPress={() => openMyHotel()}
+                            disabled={hotelBusy || skippingHotel}
+                            style={({ pressed }) => [
+                              styles.nextStepButton,
+                              (pressed || hotelBusy) && { opacity: 0.88 },
+                            ]}
+                          >
+                            <Text style={styles.nextStepButtonText}>
+                              {hotelBusy
+                                ? 'Ouverture…'
+                                : reservationFlags.hotelBooked ||
+                                    reservationFlags.externalHotel
+                                  ? 'Voir mon hôtel →'
+                                  : reservationFlags.hasHotel
+                                    ? 'Payer ma chambre →'
+                                    : 'Choisir mon hôtel →'}
+                            </Text>
+                          </Pressable>
+                          {reservationFlags.canSkipHotel ? (
+                            <Pressable
+                              onPress={() => void skipHotel()}
+                              disabled={skippingHotel || hotelBusy}
+                              style={({ pressed }) => [
+                                styles.hotelSkipInCard,
+                                (skippingHotel || pressed) && { opacity: 0.7 },
+                              ]}
+                            >
+                              <Text style={styles.hotelSkipInCardText}>
+                                {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                              </Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      }
                     />
-                    <View style={styles.nextStepContent}>
-                      <View style={styles.nextStepBadge}>
-                        <Text style={styles.nextStepBadgeText}>HÔTEL</Text>
-                      </View>
-                      <Text style={styles.nextStepTitle}>
-                        {reservationFlags.hotelBooked ||
-                        reservationFlags.hasHotel
-                          ? hotelName
-                          : 'Choisir mon hôtel'}
-                      </Text>
-                      <Text style={styles.nextStepBody}>
-                        {reservationFlags.hotelBooked ||
-                        reservationFlags.hasHotel
-                          ? `Séjour à ${cityLabel}.`
-                          : `Photos, avis et prix pour ${cityLabel}.`}
-                      </Text>
-                      <Pressable
-                        onPress={() => openMyHotel()}
-                        disabled={hotelBusy || skippingHotel}
-                        style={({ pressed }) => [
-                          styles.nextStepButton,
-                          (pressed || hotelBusy) && { opacity: 0.88 },
+                  ) : (
+                    <ImageBackground
+                      source={{
+                        uri: hotelPhoto || destinationImage,
+                      }}
+                      style={styles.nextStepImage}
+                      imageStyle={styles.nextStepImageRadius}
+                    >
+                      <LinearGradient
+                        colors={[
+                          'rgba(31,16,9,0.15)',
+                          'rgba(31,16,9,0.94)',
                         ]}
-                      >
-                        <Text style={styles.nextStepButtonText}>
-                          {hotelBusy
-                            ? 'Ouverture…'
-                            : reservationFlags.hotelBooked ||
-                                reservationFlags.externalHotel
-                              ? 'Voir mon hôtel →'
-                              : reservationFlags.hasHotel
-                                ? 'Payer ma chambre →'
-                                : 'Choisir mon hôtel →'}
+                        style={StyleSheet.absoluteFill}
+                      />
+                      <View style={styles.nextStepContent}>
+                        <View style={styles.nextStepBadge}>
+                          <Text style={styles.nextStepBadgeText}>HÔTEL</Text>
+                        </View>
+                        <Text style={styles.nextStepTitle}>
+                          {reservationFlags.hotelBooked ||
+                          reservationFlags.hasHotel
+                            ? hotelName
+                            : 'Choisir mon hôtel'}
                         </Text>
-                      </Pressable>
-                      {reservationFlags.canSkipHotel ? (
+                        <Text style={styles.nextStepBody}>
+                          {reservationFlags.hotelBooked ||
+                          reservationFlags.hasHotel
+                            ? `Séjour à ${cityLabel}.`
+                            : `Photos, avis et prix pour ${cityLabel}.`}
+                        </Text>
                         <Pressable
-                          onPress={() => void skipHotel()}
-                          disabled={skippingHotel || hotelBusy}
+                          onPress={() => openMyHotel()}
+                          disabled={hotelBusy || skippingHotel}
                           style={({ pressed }) => [
-                            styles.hotelSkipInCard,
-                            (skippingHotel || pressed) && { opacity: 0.7 },
+                            styles.nextStepButton,
+                            (pressed || hotelBusy) && { opacity: 0.88 },
                           ]}
                         >
-                          <Text style={styles.hotelSkipInCardText}>
-                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          <Text style={styles.nextStepButtonText}>
+                            {hotelBusy
+                              ? 'Ouverture…'
+                              : reservationFlags.hotelBooked ||
+                                  reservationFlags.externalHotel
+                                ? 'Voir mon hôtel →'
+                                : reservationFlags.hasHotel
+                                  ? 'Payer ma chambre →'
+                                  : 'Choisir mon hôtel →'}
                           </Text>
                         </Pressable>
-                      ) : null}
-                    </View>
-                  </ImageBackground>
+                        {reservationFlags.canSkipHotel ? (
+                          <Pressable
+                            onPress={() => void skipHotel()}
+                            disabled={skippingHotel || hotelBusy}
+                            style={({ pressed }) => [
+                              styles.hotelSkipInCard,
+                              (skippingHotel || pressed) && { opacity: 0.7 },
+                            ]}
+                          >
+                            <Text style={styles.hotelSkipInCardText}>
+                              {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                            </Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </ImageBackground>
+                  )}
                 </View>
               ) : null}
               {plannerActivitiesEnabled ? (

@@ -21,21 +21,11 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
-import { HotelPhotoGallery } from '../HotelPhotoGallery'
-
-type HotelHero = {
-  hotelId: string
-  hotelName: string
-  seedPhoto?: string | null
-  seedPhotos?: string[]
-}
 
 type Props = {
   tripId: string
   heroUrl: string
   city: string
-  /** When set, hero becomes a sliding hotel photo gallery */
-  hotelHero?: HotelHero | null
   metaChips?: string[]
   phaseLabel: string
   primary: TripPrimaryAction
@@ -58,6 +48,8 @@ type Props = {
   estimatedTotalLabel?: string | null
   activeTab?: TripDetailTabId
   onTabChange?: (tab: TripDetailTabId) => void
+  /** Lock vertical scroll while hotel gallery is swiped */
+  scrollLocked?: boolean
 }
 
 function PencilIcon({ color = '#fff', size = 13 }: { color?: string; size?: number }) {
@@ -84,7 +76,6 @@ export function TripDetailPathChrome({
   tripId,
   heroUrl,
   city,
-  hotelHero,
   metaChips,
   phaseLabel,
   primary,
@@ -107,10 +98,10 @@ export function TripDetailPathChrome({
   estimatedTotalLabel,
   activeTab,
   onTabChange,
+  scrollLocked = false,
 }: Props) {
   const insets = useSafeAreaInsets()
   const [tabInternal, setTabInternal] = useState<TripDetailTabId>('apercu')
-  const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
   const tab = activeTab ?? tabInternal
   const setTab = (next: TripDetailTabId) => {
     onTabChange?.(next)
@@ -205,43 +196,17 @@ export function TripDetailPathChrome({
         contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={!gallerySwipeActive}
+        scrollEnabled={!scrollLocked}
       >
-        {hotelHero ? (
-          <View style={styles.heroGallery}>
-            <HotelPhotoGallery
-              variant="hero"
-              hotelId={hotelHero.hotelId}
-              seedPhoto={hotelHero.seedPhoto || heroUrl}
-              seedPhotos={
-                hotelHero.seedPhotos?.length
-                  ? hotelHero.seedPhotos
-                  : [hotelHero.seedPhoto || heroUrl].filter(Boolean)
-              }
-              alt={hotelHero.hotelName}
-              hotelName={hotelHero.hotelName}
-              cityLabel={city}
-              height={340}
-              onHorizontalGesture={setGallerySwipeActive}
-              overlay={
-                <View>
-                  <View style={{ height: insets.top + 8 }} />
-                  {heroCopy}
-                </View>
-              }
-            />
-          </View>
-        ) : (
-          <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
-            <LinearGradient
-              colors={['rgba(0,0,0,0.4)', 'transparent', 'rgba(0,0,0,0.72)']}
-              locations={[0, 0.4, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={{ height: insets.top + 8 }} />
-            {heroCopy}
-          </ImageBackground>
-        )}
+        <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
+          <LinearGradient
+            colors={['rgba(0,0,0,0.4)', 'transparent', 'rgba(0,0,0,0.72)']}
+            locations={[0, 0.4, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={{ height: insets.top + 8 }} />
+          {heroCopy}
+        </ImageBackground>
 
         <View style={styles.sheet}>
           {(guideName || guideSubtitle) && (
@@ -328,7 +293,6 @@ export function TripDetailPathChrome({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFBF8' },
   hero: { minHeight: 340, justifyContent: 'space-between' },
-  heroGallery: { minHeight: 340, overflow: 'hidden' },
   heroCopy: { paddingHorizontal: 20, paddingBottom: 36, gap: 8 },
   titleRow: {
     flexDirection: 'row',

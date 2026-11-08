@@ -204,6 +204,25 @@ export function HotelPhotoGallery({
   const isHero = variant === 'hero'
   const heroSlides = mobileSlides
 
+  const scrollHeroTo = useCallback((idx: number) => {
+    const el = mobileScrollerRef.current
+    if (!el || !heroSlides.length) return
+    const next = Math.max(0, Math.min(idx, heroSlides.length - 1))
+    const w = el.clientWidth || 1
+    el.scrollTo({ left: next * w, behavior: 'smooth' })
+    setMobileIdx(next)
+  }, [heroSlides.length])
+
+  const stepHero = useCallback(
+    (delta: number) => {
+      if (!heroSlides.length) return
+      const next =
+        (mobileIdx + delta + heroSlides.length) % heroSlides.length
+      scrollHeroTo(next)
+    },
+    [heroSlides.length, mobileIdx, scrollHeroTo],
+  )
+
   return (
     <>
       {isHero ? (
@@ -247,16 +266,47 @@ export function HotelPhotoGallery({
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
 
           {heroSlides.length > 1 ? (
-            <div className="pointer-events-none absolute left-0 right-0 top-3 z-10 flex justify-center gap-1.5">
-              {heroSlides.slice(0, 8).map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 rounded-full transition-all ${
-                    i === mobileIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/45'
-                  }`}
-                />
-              ))}
-            </div>
+            <>
+              <button
+                type="button"
+                aria-label="Photo précédente"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  stepHero(-1)
+                }}
+                className="absolute left-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white ring-1 ring-white/25 backdrop-blur-md transition hover:bg-black/55"
+              >
+                <Chevron dir="left" />
+              </button>
+              <button
+                type="button"
+                aria-label="Photo suivante"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  stepHero(1)
+                }}
+                className="absolute right-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white ring-1 ring-white/25 backdrop-blur-md transition hover:bg-black/55"
+              >
+                <Chevron dir="right" />
+              </button>
+              <div className="absolute left-0 right-0 top-3 z-10 flex justify-center gap-1.5">
+                {heroSlides.slice(0, 8).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Photo ${i + 1}`}
+                    aria-current={i === mobileIdx}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      scrollHeroTo(i)
+                    }}
+                    className={`h-1.5 rounded-full transition-all ${
+                      i === mobileIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/45 hover:bg-white/70'
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
           ) : null}
 
           <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-ink/45 px-2.5 py-1 text-[11px] font-bold tabular-nums text-white">
