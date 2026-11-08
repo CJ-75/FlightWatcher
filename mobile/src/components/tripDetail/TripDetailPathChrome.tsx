@@ -17,7 +17,6 @@ import {
   TRIP_DETAIL_TABS,
   trackTripTabViewed,
   type TripDetailTabId,
-  type TripPrimaryAction,
 } from '@flightwatcher/shared'
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
@@ -28,8 +27,6 @@ type Props = {
   city: string
   metaChips?: string[]
   phaseLabel: string
-  primary: TripPrimaryAction
-  onPrimary: () => void
   onBack: () => void
   onShare?: () => void
   onRename?: () => void
@@ -45,7 +42,6 @@ type Props = {
   apercu: ReactNode
   programme: ReactNode
   voyageurs: ReactNode
-  estimatedTotalLabel?: string | null
   activeTab?: TripDetailTabId
   onTabChange?: (tab: TripDetailTabId) => void
   /** Lock vertical scroll while hotel gallery is swiped */
@@ -78,8 +74,6 @@ export function TripDetailPathChrome({
   city,
   metaChips,
   phaseLabel,
-  primary,
-  onPrimary,
   onBack: _onBack,
   onShare,
   onRename,
@@ -95,7 +89,6 @@ export function TripDetailPathChrome({
   apercu,
   programme,
   voyageurs,
-  estimatedTotalLabel,
   activeTab,
   onTabChange,
   scrollLocked = false,
@@ -193,7 +186,7 @@ export function TripDetailPathChrome({
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 28 + insets.bottom }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         scrollEnabled={!scrollLocked}
@@ -264,28 +257,6 @@ export function TripDetailPathChrome({
           <View style={styles.panel}>{body}</View>
         </View>
       </ScrollView>
-
-      <View
-        style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}
-      >
-        {estimatedTotalLabel ? (
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.stickyPriceKicker}>Total</Text>
-            <Text style={styles.stickyPrice} numberOfLines={1}>
-              {estimatedTotalLabel}
-            </Text>
-          </View>
-        ) : (
-          <View style={{ flex: 1 }} />
-        )}
-        {primary.informational ? (
-          <Text style={styles.stickyInfo}>{primary.label}</Text>
-        ) : (
-          <Pressable onPress={onPrimary} style={styles.stickyCta}>
-            <Text style={styles.stickyCtaText}>{primary.label}</Text>
-          </Pressable>
-        )}
-      </View>
     </View>
   )
 }
@@ -470,49 +441,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   panel: { paddingBottom: 16 },
-  sticky: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    backgroundColor: 'rgba(255,251,248,0.96)',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#EDE4DC',
-  },
-  stickyPriceKicker: {
-    fontFamily: fonts.semibold,
-    fontSize: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: '#8A6A58',
-  },
-  stickyPrice: {
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    color: colors.ink,
-    marginTop: 1,
-  },
-  stickyInfo: {
-    flex: 1,
-    textAlign: 'right',
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.muted,
-  },
-  stickyCta: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 999,
-  },
-  stickyCtaText: {
-    color: '#fff',
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-  },
 })

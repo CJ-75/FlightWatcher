@@ -86,7 +86,6 @@ import {
   partyPriceCaptionFr,
   partyPriceSuffixFr,
   trackTripDetailViewed,
-  TRIP_DETAIL_EVENTS,
   type CityAirportGroup,
   type FlightBookingStatus,
   type MyTripDraft,
@@ -2891,45 +2890,6 @@ function TripDetailView({
     activitiesPartial: activityStepProgress(activityItems).partial,
   })
 
-  const runPathPrimary = () => {
-    const id = pathView.primary.id
-    void getApiClient()
-      .trackActivityEvent({
-        domain: 'planner',
-        event: TRIP_DETAIL_EVENTS.primaryClicked,
-        surface: 'trip_detail',
-        platform: 'web',
-        planned_trip_id: trip.id,
-        meta: {
-          variant: tripDetailV2 ? 'v2' : 'v1',
-          role: isOrganizer ? 'organizer' : 'member',
-          phase: detailPhase,
-          action: id,
-        },
-      })
-      .catch(() => undefined)
-    if (id === 'view_programme') {
-      setPathTab('programme')
-      return
-    }
-    if (id === 'scan' || id === 'choose_flight' || id === 'view_proposals') {
-      void scan()
-      return
-    }
-    if (id === 'book_flight' || id === 'book_my_flight') {
-      openReservation(false)
-      return
-    }
-    if (
-      id === 'choose_hotel' ||
-      id === 'choose_my_hotel' ||
-      id === 'finalize_hotel' ||
-      id === 'finalize_my_hotel'
-    ) {
-      openReservation(true)
-    }
-  }
-
   // Web keeps classic trip form (d7e7b28). Path chrome stays on mobile only.
   if (false && tripDetailV2) {
     const programmeItems = activityItems
@@ -2962,8 +2922,6 @@ function TripDetailView({
           `${pax} voyageur${pax > 1 ? 's' : ''}`,
         ].filter(Boolean) as string[]}
         phaseLabel={pathView.phaseLabel}
-        primary={pathView.primary}
-        onPrimary={runPathPrimary}
         onBack={onBack}
         activeTab={pathTab}
         onTabChange={setPathTab}
@@ -2992,13 +2950,6 @@ function TripDetailView({
         onTitleSave={() => void saveRename()}
         onTitleCancel={cancelRename}
         titleSaving={savingName}
-        estimatedTotalLabel={
-          stayParty.perPerson > 0
-            ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)}${
-                flightBooked && hotelBooked ? '' : ' estimé'
-              }`
-            : null
-        }
         apercu={
           <div className="space-y-7" ref={stayExtrasRef}>
             <PathStepsTiles

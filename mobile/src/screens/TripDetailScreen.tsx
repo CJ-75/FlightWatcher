@@ -50,7 +50,6 @@ import {
   partyPriceCaptionFr,
   partyPriceSuffixFr,
   trackTripDetailViewed,
-  TRIP_DETAIL_EVENTS,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type StayStepId,
@@ -1766,57 +1765,6 @@ export function TripDetailScreen() {
           guideSubtitle={`${pax} voyageur${pax > 1 ? 's' : ''}`}
           activeTab={pathTab}
           onTabChange={setPathTab}
-          estimatedTotalLabel={
-            stayParty.perPerson > 0
-              ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)}${
-                  reservationFlags.flightBooked && reservationFlags.hotelBooked
-                    ? ''
-                    : ' estimé'
-                }`
-              : null
-          }
-          primary={pathView.primary}
-          onPrimary={() => {
-            void getApi()
-              .trackActivityEvent({
-                domain: 'planner',
-                event: TRIP_DETAIL_EVENTS.primaryClicked,
-                surface: 'trip_detail',
-                platform: Platform.OS === 'ios' ? 'ios' : 'android',
-                planned_trip_id: trip.id,
-                meta: {
-                  variant: 'v2',
-                  action: pathView.primary.id,
-                  phase: detailPhase,
-                },
-              })
-              .catch(() => undefined)
-            const id = pathView.primary.id
-            if (id === 'view_programme') {
-              setPathTab('programme')
-              return
-            }
-            if (id === 'scan' || id === 'choose_flight' || id === 'view_proposals') {
-              void scan()
-              return
-            }
-            if (id === 'book_flight' || id === 'book_my_flight') {
-              void bookSelectedFlight()
-              return
-            }
-            if (
-              id === 'choose_hotel' ||
-              id === 'choose_my_hotel' ||
-              id === 'finalize_hotel' ||
-              id === 'finalize_my_hotel'
-            ) {
-              const token =
-                flightDraft?.draft_token || workspace?.draft_token || null
-              if (token) {
-                navigation.navigate('HotelCompose', { draftToken: token })
-              }
-            }
-          }}
           onBack={() => navigation.goBack()}
           onShare={
             isOrganizer && trip.invite_token

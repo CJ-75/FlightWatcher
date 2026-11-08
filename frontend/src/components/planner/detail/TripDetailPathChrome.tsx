@@ -3,7 +3,6 @@ import {
   TRIP_DETAIL_TABS,
   trackTripTabViewed,
   type TripDetailTabId,
-  type TripPrimaryAction,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../../../utils/apiClient'
 import { HotelPhotoGallery } from '../../HotelPhotoGallery'
@@ -24,8 +23,6 @@ type Props = {
   hotelHero?: HotelHero | null
   metaChips?: string[]
   phaseLabel: string
-  primary: TripPrimaryAction
-  onPrimary: () => void
   onBack: () => void
   onShare?: () => void
   onRename?: () => void
@@ -41,7 +38,6 @@ type Props = {
   apercu: ReactNode
   programme: ReactNode
   voyageurs: ReactNode
-  estimatedTotalLabel?: string | null
   initialTab?: TripDetailTabId
   activeTab?: TripDetailTabId
   onTabChange?: (tab: TripDetailTabId) => void
@@ -69,7 +65,7 @@ function PencilIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
 
 /**
  * Path chrome — V0.2 visual language (serif hero, cream sheet) +
- * hotel carousel, rename, voyageurs, sticky CTA.
+ * hotel carousel, rename, voyageurs.
  */
 export function TripDetailPathChrome({
   tripId,
@@ -78,8 +74,6 @@ export function TripDetailPathChrome({
   hotelHero,
   metaChips,
   phaseLabel,
-  primary,
-  onPrimary,
   onBack: _onBack,
   onShare,
   onRename,
@@ -95,7 +89,6 @@ export function TripDetailPathChrome({
   apercu,
   programme,
   voyageurs,
-  estimatedTotalLabel,
   initialTab = 'apercu',
   activeTab,
   onTabChange,
@@ -209,7 +202,7 @@ export function TripDetailPathChrome({
   )
 
   return (
-    <div className="relative w-full bg-[#F7F4EF] pb-24 lg:-mx-6 lg:w-[calc(100%+3rem)] xl:-mx-8 xl:w-[calc(100%+4rem)]">
+    <div className="relative w-full bg-[#F7F4EF] pb-10 lg:-mx-6 lg:w-[calc(100%+3rem)] xl:-mx-8 xl:w-[calc(100%+4rem)]">
       <section className="relative isolate min-h-[min(52vh,440px)] overflow-hidden lg:min-h-[min(48vh,520px)]">
         {hotelHero ? (
           <div className="absolute inset-0">
@@ -324,36 +317,6 @@ export function TripDetailPathChrome({
           <div role="tabpanel" className="min-h-[40vh]">
             {body}
           </div>
-        </div>
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE8E1]/90 bg-white/95 px-4 py-3 backdrop-blur-xl sm:px-6">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-1 sm:px-2 lg:px-4">
-          {estimatedTotalLabel ? (
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8A7B6E]">
-                Total
-              </p>
-              <p className="truncate text-[15px] font-semibold tracking-tight text-[#1A120E]">
-                {estimatedTotalLabel}
-              </p>
-            </div>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {primary.informational ? (
-            <p className="max-w-[55%] text-right text-[13px] font-medium text-[#8A7B6E]">
-              {primary.label}
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={onPrimary}
-              className="inline-flex min-h-[48px] shrink-0 items-center justify-center rounded-full bg-[#1A120E] px-6 text-[14px] font-semibold text-white transition hover:bg-black active:scale-[0.98]"
-            >
-              {primary.label}
-            </button>
-          )}
         </div>
       </div>
     </div>
