@@ -299,7 +299,7 @@ function RootNavigator() {
           <Stack.Screen
             name="DealDetail"
             component={DealDetailScreen}
-            options={stackHeaderOptions('Deal')}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="TripDetail"

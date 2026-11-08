@@ -81,7 +81,8 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
   // Large gallery (as before); shrink only on very short phones so 1er hôtel can peek.
   const ctaH = 64 + Math.max(insets.bottom, 12)
-  const headerH = 52 + insets.top
+  /** Floating chrome (same as parcours) — no native stack header. */
+  const headerH = 44 + insets.top + 12
   const foldBudget = Math.max(420, winH - ctaH - headerH)
   const preferredHero = Math.min(240, Math.round(winW * 0.52))
   const heroH = Math.round(
@@ -126,29 +127,14 @@ export function DealDetailScreen({ route, navigation }: Props) {
   }, [dealId, refreshLikes])
 
   const dealLiked = deal ? isLiked(deal.id) : false
-  useEffect(() => {
-    if (!deal) {
-      navigation.setOptions({ headerRight: undefined })
+
+  const goBackFromDeal = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack()
       return
     }
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => void toggleLike(deal)}
-          hitSlop={10}
-          style={styles.headerLike}
-          accessibilityRole="button"
-          accessibilityLabel={dealLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-        >
-          <HeartIcon
-            size={22}
-            filled={dealLiked}
-            color={dealLiked ? colors.primary : colors.ink}
-          />
-        </Pressable>
-      ),
-    })
-  }, [deal, dealLiked, navigation, toggleLike])
+    navigation.navigate('Main', { screen: 'Deals' })
+  }
 
   const hotelOptions = useMemo(() => {
     if (!deal) return [] as TravelDealHotel[]
@@ -247,6 +233,19 @@ export function DealDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ScreenBackground />
+        <View
+          pointerEvents="box-none"
+          style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
+        >
+          <Pressable
+            onPress={goBackFromDeal}
+            style={styles.actionBtn}
+            hitSlop={8}
+            accessibilityLabel="Retour"
+          >
+            <Text style={styles.backChevron}>‹</Text>
+          </Pressable>
+        </View>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
@@ -256,6 +255,19 @@ export function DealDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ScreenBackground />
+        <View
+          pointerEvents="box-none"
+          style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
+        >
+          <Pressable
+            onPress={goBackFromDeal}
+            style={styles.actionBtn}
+            hitSlop={8}
+            accessibilityLabel="Retour"
+          >
+            <Text style={styles.backChevron}>‹</Text>
+          </Pressable>
+        </View>
         <Text style={styles.errorText}>{error || 'Deal introuvable'}</Text>
       </View>
     )
@@ -409,6 +421,36 @@ export function DealDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <ScreenBackground />
+      {/* Same fixed chrome as Parcours / planner unique — no native header */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
+      >
+        <Pressable
+          onPress={goBackFromDeal}
+          style={styles.actionBtn}
+          hitSlop={8}
+          accessibilityLabel="Retour"
+        >
+          <Text style={styles.backChevron}>‹</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={() => void toggleLike(deal)}
+          style={styles.actionBtn}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            dealLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'
+          }
+        >
+          <HeartIcon
+            size={20}
+            filled={dealLiked}
+            color={dealLiked ? colors.primary : colors.inkSoft}
+          />
+        </Pressable>
+      </View>
       <ScrollView
         scrollEnabled={!gallerySwipeActive}
         showsVerticalScrollIndicator={false}
@@ -913,15 +955,36 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
-  headerLike: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primarySoft,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primaryMuted,
+  fixedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  actionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  backChevron: {
+    fontFamily: fonts.bold,
+    fontSize: 30,
+    lineHeight: 32,
+    color: colors.inkSoft,
+    marginTop: -2,
+    marginLeft: -1,
   },
   badge: {
     alignSelf: 'flex-start',
