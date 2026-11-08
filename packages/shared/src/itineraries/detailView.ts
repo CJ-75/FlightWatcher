@@ -201,4 +201,71 @@ export function stepKindLabel(kind: string): string {
   return 'À pied'
 }
 
+/** Rough city_slug → arrival airport codes for Planner create. */
+export const PARCOURS_CITY_ARRIVAL: Record<string, string> = {
+  paris: 'CDG,ORY',
+  marseille: 'MRS',
+  lyon: 'LYS',
+  nice: 'NCE',
+  bordeaux: 'BOD',
+  lisbon: 'LIS',
+  lisbonne: 'LIS',
+  porto: 'OPO',
+  barcelona: 'BCN',
+  barcelone: 'BCN',
+  rome: 'FCO,CIA',
+  madrid: 'MAD',
+}
+
+export function arrivalCodesForCitySlug(slug?: string | null): string | null {
+  if (!slug) return null
+  const key = slug.trim().toLowerCase()
+  return PARCOURS_CITY_ARRIVAL[key] || null
+}
+
+/** Next weekend ISO dates, or featured window start if present. */
+export function suggestedParcoursDates(it: Itinerary): {
+  outbound: string
+  inbound: string
+} {
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  if (it.featured_from && it.featured_to) {
+    return { outbound: it.featured_from, inbound: it.featured_to }
+  }
+  const day = today.getDay() // 0 Sun
+  const daysUntilFri = (5 - day + 7) % 7 || 7
+  const fri = new Date(today)
+  fri.setDate(today.getDate() + daysUntilFri)
+  const sun = new Date(fri)
+  sun.setDate(fri.getDate() + 2)
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  return { outbound: iso(fri), inbound: iso(sun) }
+}
+
+export function buildItineraryAppleMapsUrl(items: ItineraryItem[]): string | null {
+  const stops = items
+    .filter((it) => it.kind === 'place' || it.kind === 'activity')
+    .map((it) => {
+      const place = it.places as
+        | { lat?: number; lng?: number; name?: string; meta?: { lat?: number; lng?: number } }
+        | null
+        | undefined
+      const lat = place?.lat ?? place?.meta?.lat
+      const lng = place?.lng ?? place?.meta?.lng
+      if (typeof lat === 'number' && typeof lng === 'number') return `${lat},${lng}`
+      return place?.name || it.title || null
+    })
+    .filter((q): q is string => !!q)
+  if (!stops.length) return null
+  if (stops.length === 1) {
+    return `https://maps.apple.com/?q=${encodeURIComponent(stops[0])}`
+  }
+  const daddr = stops
+    .slice(1)
+    .map((s) => encodeURIComponent(s))
+    .join('+to:')
+  return `https://maps.apple.com/?saddr=${encodeURIComponent(stops[0])}&daddr=${daddr}&dirflg=w`
+}
+
 export { formatDurationMinutes }

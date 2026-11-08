@@ -32,7 +32,7 @@ import { DestinationCard } from './DestinationCard'
 import { PlannerScanPanel } from './PlannerScanPanel'
 import { BudgetSlider } from './BudgetSlider'
 import { PassengerStepper } from './PassengerStepper'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   clearFlightReturnAsk,
   clearPendingHotelUpsell,
@@ -1019,6 +1019,7 @@ export function PlannerTab() {
   const navigate = useNavigate()
   const { tripId: tripIdParam } = useParams<{ tripId?: string }>()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
   const [userId, setUserId] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
   const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
@@ -1060,6 +1061,15 @@ export function PlannerTab() {
     if (!tripQ) return
     navigate(`/planner/${encodeURIComponent(tripQ)}`, { replace: true })
   }, [searchParams, navigate])
+
+  // Parcours « En faire mon voyage » → auto-scan on open
+  useEffect(() => {
+    const st = location.state as { autoScan?: boolean } | null
+    if (st?.autoScan && tripIdParam) {
+      setAutoScanTripId(tripIdParam)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.state, location.pathname, tripIdParam, navigate])
 
   const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!userId) {

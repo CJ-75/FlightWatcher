@@ -56,6 +56,10 @@ ALLOWED_EVENTS: Set[str] = {
     "itinerary_list_viewed",
     "itinerary_card_clicked",
     "itinerary_occasion_filtered",
+    "itinerary_liked",
+    "itinerary_unliked",
+    "itinerary_make_trip",
+    "itinerary_launch_maps",
 }
 
 _lock = threading.Lock()

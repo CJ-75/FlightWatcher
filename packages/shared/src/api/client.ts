@@ -803,6 +803,29 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'DELETE' },
       ),
 
+    listLikedItineraryIds: () =>
+      request<{ ok: boolean; ids: string[] }>('/api/liked-itineraries/ids'),
+
+    listLikedItineraries: () =>
+      request<{ ok: boolean; items: Record<string, unknown>[] }>(
+        '/api/liked-itineraries',
+      ),
+
+    likeItinerary: (body: {
+      itinerary_id: string
+      itinerary_data?: Record<string, unknown>
+    }) =>
+      request<{ ok: boolean; item?: Record<string, unknown> }>(
+        '/api/liked-itineraries',
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+
+    unlikeItinerary: (itineraryId: string) =>
+      request<{ ok: boolean }>(
+        `/api/liked-itineraries/${encodeURIComponent(itineraryId)}`,
+        { method: 'DELETE' },
+      ),
+
     importRestaurantLinks: (body: {
       text: string
       draft_token?: string

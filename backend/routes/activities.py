@@ -366,6 +366,118 @@ async def unlike_activity(product_code: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Erreur liked_activities: {str(e)}")
 
 
+class LikeItineraryRequest(BaseModel):
+    itinerary_id: str
+    itinerary_data: Optional[Dict[str, Any]] = None
+
+
+@router.get("/api/liked-itineraries")
+@optional_auth
+async def list_liked_itineraries(request: Request):
+    user_id = _require_user(request)
+    sb = _svc()
+    if not sb:
+        raise HTTPException(status_code=503, detail="no_supabase")
+    try:
+        result = (
+            sb.table("liked_itineraries")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return {"ok": True, "items": result.data or []}
+    except Exception as e:
+        msg = str(e).lower()
+        if "liked_itineraries" in msg and (
+            "does not exist" in msg or "pgrst205" in msg or "42p01" in msg
+        ):
+            return {"ok": True, "items": [], "warning": "table_missing"}
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/liked-itineraries/ids")
+@optional_auth
+async def list_liked_itinerary_ids(request: Request):
+    user_id = _require_user(request)
+    sb = _svc()
+    if not sb:
+        raise HTTPException(status_code=503, detail="no_supabase")
+    try:
+        result = (
+            sb.table("liked_itineraries")
+            .select("itinerary_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return {
+            "ok": True,
+            "ids": [r["itinerary_id"] for r in (result.data or [])],
+        }
+    except Exception as e:
+        msg = str(e).lower()
+        if "liked_itineraries" in msg:
+            return {"ok": True, "ids": []}
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/liked-itineraries")
+@optional_auth
+async def like_itinerary(body: LikeItineraryRequest, request: Request):
+    user_id = _require_user(request)
+    iid = (body.itinerary_id or "").strip()
+    if not iid:
+        raise HTTPException(status_code=400, detail="itinerary_id requis")
+    sb = _svc()
+    if not sb:
+        raise HTTPException(status_code=503, detail="no_supabase")
+    try:
+        existing = (
+            sb.table("liked_itineraries")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("itinerary_id", iid)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return {"ok": True, "item": existing.data[0]}
+        result = (
+            sb.table("liked_itineraries")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "itinerary_id": iid,
+                    "itinerary_data": body.itinerary_data or {},
+                }
+            )
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=500, detail="like_failed")
+        return {"ok": True, "item": result.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/api/liked-itineraries/{itinerary_id}")
+@optional_auth
+async def unlike_itinerary(itinerary_id: str, request: Request):
+    user_id = _require_user(request)
+    sb = _svc()
+    if not sb:
+        raise HTTPException(status_code=503, detail="no_supabase")
+    try:
+        sb.table("liked_itineraries").delete().eq("user_id", user_id).eq(
+            "itinerary_id", itinerary_id
+        ).execute()
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/activities/events")
 async def post_activity_event(body: EventBody, request: Request):
     from activities.access import draft_id_from_token

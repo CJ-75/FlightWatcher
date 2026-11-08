@@ -20,6 +20,8 @@ type Props = {
   budgetLabel?: string | null
   onBack: () => void
   shareUrl?: string
+  onLike?: () => void
+  liked?: boolean
   children: ReactNode
   stickyLeft?: string
   stickyCta?: string
@@ -34,6 +36,8 @@ export function ItineraryDetailChrome({
   budgetLabel,
   onBack,
   shareUrl,
+  onLike,
+  liked,
   children,
   stickyLeft,
   stickyCta,
@@ -67,6 +71,15 @@ export function ItineraryDetailChrome({
                 hitSlop={8}
               >
                 <Text style={styles.roundBtnText}>↗</Text>
+              </Pressable>
+            ) : null}
+            {onLike ? (
+              <Pressable
+                onPress={onLike}
+                style={[styles.roundBtn, styles.likeBtn]}
+                hitSlop={8}
+              >
+                <Text style={styles.likeBtnText}>{liked ? '♥' : '♡'}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -137,6 +150,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
   },
   roundBtnText: { color: '#fff', fontSize: 18, fontFamily: fonts.bold },
+  likeBtn: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderColor: 'transparent',
+    marginLeft: 8,
+  },
+  likeBtnText: { fontSize: 16, color: '#1A120E' },
   heroCopy: { paddingHorizontal: 20, paddingBottom: 48, gap: 8 },
   phase: {
     alignSelf: 'flex-start',

@@ -1,11 +1,11 @@
-"""create_itinerary_from_trip / apply_itinerary_to_trip — Lot G."""
+"""create_itinerary_from_trip / apply_itinerary_to_trip — Lot G + Lot 5 kinds."""
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from activities.trip_items import add_activity_item, list_trip_items
+from activities.trip_items import list_trip_items
 
 logger = logging.getLogger("activities.itineraries")
 
@@ -30,7 +30,6 @@ def create_itinerary_from_trip(
     items = list_trip_items(
         supabase, draft_id=draft_id, planned_trip_id=planned_trip_id
     )
-    # Only place-backed items (activity/hotel/restaurant)
     usable = [i for i in items if i.get("place_id") and i.get("status") != "skipped"]
     if not usable:
         return {"ok": False, "error": "no_items"}
@@ -57,12 +56,15 @@ def create_itinerary_from_trip(
                     "itinerary_id": itin_id,
                     "place_id": it.get("place_id"),
                     "item_type": it.get("item_type"),
+                    "kind": "place"
+                    if it.get("item_type") in ("hotel", "restaurant")
+                    else "activity",
                     "day_offset": it.get("day_offset") or 0,
                     "moment": it.get("moment"),
                     "sort_key": it.get("sort_key") or "a0",
                     "notes": it.get("notes"),
+                    "note": it.get("notes"),
                     "meta": {
-                        # Explicitly no price / no absolute dates
                         "from_trip_item_id": it.get("id"),
                     },
                 }
@@ -71,6 +73,14 @@ def create_itinerary_from_trip(
     except Exception as e:
         logger.warning("create_itinerary_from_trip: %s", e)
         return {"ok": False, "error": str(e)}
+
+
+def _item_sort_key(it: Dict[str, Any]):
+    return (
+        int(it.get("day_offset") or 0),
+        int(it.get("position") or 0),
+        str(it.get("sort_key") or ""),
+    )
 
 
 def apply_itinerary_to_trip(
@@ -83,7 +93,7 @@ def apply_itinerary_to_trip(
 ) -> Dict[str, Any]:
     """
     Materialize itinerary_items onto a trip.
-    Availability recheck is best-effort (Lot G); missing places stay needs_check.
+    Supports place / activity / free (Lot 5). Free steps → trip_items notes.
     """
     if not supabase or not itinerary_id:
         return {"ok": False, "error": "missing"}
@@ -94,36 +104,101 @@ def apply_itinerary_to_trip(
             supabase.table("itinerary_items")
             .select("*")
             .eq("itinerary_id", itinerary_id)
-            .order("day_offset")
-            .order("sort_key")
             .execute()
         )
-        items = list(items_res.data or [])
+        items = sorted(list(items_res.data or []), key=_item_sort_key)
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
     created = 0
     skipped = 0
-    for it in items:
+    for idx, it in enumerate(items):
+        kind = str(it.get("kind") or it.get("item_type") or "place").lower()
         place_id = it.get("place_id")
-        if not place_id:
-            skipped += 1
-            continue
-        row = {
-            "draft_id": draft_id,
-            "planned_trip_id": planned_trip_id,
-            "item_type": it.get("item_type") or "activity",
-            "place_id": place_id,
-            "day_offset": it.get("day_offset") or 0,
-            "moment": it.get("moment"),
-            "sort_key": it.get("sort_key") or "a0",
-            "status": "idea",
-            "availability_state": "needs_check",
-            "added_by": user_id,
-            "meta": {"from_itinerary_item_id": it.get("id")},
-            "updated_at": _now_iso(),
+        title = (it.get("title") or "").strip() or None
+        note = (it.get("note") or it.get("notes") or "").strip() or None
+        day_offset = int(it.get("day_offset") or 0)
+        moment = it.get("moment")
+        sort_key = it.get("sort_key") or f"a{idx:02d}"
+        meta: Dict[str, Any] = {
+            "from_itinerary_item_id": it.get("id"),
+            "itinerary_kind": kind,
         }
+        if it.get("viator_product_code"):
+            meta["viator_product_code"] = it.get("viator_product_code")
+        if it.get("photo"):
+            meta["photo"] = it.get("photo")
+        if title:
+            meta["title"] = title
+
+        notes_parts = [p for p in (title, note) if p]
+        notes = " — ".join(notes_parts) if notes_parts else None
+
         try:
+            if kind == "free" or (not place_id and kind != "activity"):
+                # Free-text step (or unresolved) → note-like activity row
+                row = {
+                    "draft_id": draft_id,
+                    "planned_trip_id": planned_trip_id,
+                    "item_type": "activity",
+                    "place_id": None,
+                    "day_offset": day_offset,
+                    "moment": moment,
+                    "sort_key": sort_key,
+                    "status": "idea",
+                    "availability_state": "ok",
+                    "added_by": user_id,
+                    "notes": notes,
+                    "meta": {**meta, "kind": "free"},
+                    "updated_at": _now_iso(),
+                }
+                supabase.table("trip_items").insert(row).execute()
+                created += 1
+                continue
+
+            if place_id:
+                itype = "activity"
+                if kind == "place" or it.get("item_type") in ("hotel", "restaurant", "place"):
+                    itype = (
+                        it.get("item_type")
+                        if it.get("item_type") in ("activity", "hotel", "restaurant")
+                        else "restaurant"
+                    )
+                row = {
+                    "draft_id": draft_id,
+                    "planned_trip_id": planned_trip_id,
+                    "item_type": itype if itype in ("activity", "hotel", "restaurant") else "activity",
+                    "place_id": place_id,
+                    "day_offset": day_offset,
+                    "moment": moment,
+                    "sort_key": sort_key,
+                    "status": "idea",
+                    "availability_state": "needs_check",
+                    "added_by": user_id,
+                    "notes": notes,
+                    "meta": meta,
+                    "updated_at": _now_iso(),
+                }
+                supabase.table("trip_items").insert(row).execute()
+                created += 1
+                continue
+
+            # activity without place — keep as free note with viator code in meta
+            row = {
+                "draft_id": draft_id,
+                "planned_trip_id": planned_trip_id,
+                "item_type": "activity",
+                "place_id": None,
+                "day_offset": day_offset,
+                "moment": moment,
+                "sort_key": sort_key,
+                "status": "idea",
+                "availability_state": "needs_check",
+                "added_by": user_id,
+                "notes": notes,
+                "meta": meta,
+                "updated_at": _now_iso(),
+            }
             supabase.table("trip_items").insert(row).execute()
             created += 1
         except Exception as e:

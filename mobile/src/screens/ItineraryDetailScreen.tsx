@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
+  buildItineraryAppleMapsUrl,
   buildItineraryMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
@@ -25,7 +26,9 @@ import {
   type ItineraryItem,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { useAuth } from '../context/AuthContext'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
+import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, spacing } from '../theme'
 
@@ -35,11 +38,14 @@ const CITY_LS = 'fw_parcours_city'
 
 export function ItineraryDetailScreen({ route, navigation }: Props) {
   const { itineraryId } = route.params
+  const { user, signInWithGoogle } = useAuth()
   const [itin, setItin] = useState<Itinerary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [userCity, setUserCity] = useState('paris')
   const [toast, setToast] = useState<string | null>(null)
+  const [liked, setLiked] = useState(false)
+  const [makeTripOpen, setMakeTripOpen] = useState(false)
 
   useEffect(() => {
     void AsyncStorage.getItem(CITY_LS).then((v) => {
@@ -47,14 +53,32 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     })
   }, [])
 
+  const refreshLiked = useCallback(
+    async (id: string) => {
+      if (!user) {
+        setLiked(false)
+        return
+      }
+      try {
+        const res = await getApi().listLikedItineraryIds()
+        setLiked((res.ids || []).includes(id))
+      } catch {
+        setLiked(false)
+      }
+    },
+    [user],
+  )
+
   useEffect(() => {
     setLoading(true)
     void getApi()
       .getParcours(itineraryId)
       .then((r) => {
         if (!r.ok || !r.itinerary) throw new Error('not_found')
-        setItin(r.itinerary as unknown as Itinerary)
+        const row = r.itinerary as unknown as Itinerary
+        setItin(row)
         setError(null)
+        void refreshLiked(row.id)
         void getApi()
           .trackActivityEvent({
             domain: 'itinerary',
@@ -70,12 +94,28 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         setError('Parcours introuvable')
       })
       .finally(() => setLoading(false))
-  }, [itineraryId])
+  }, [itineraryId, refreshLiked])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2800)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const sticky = useMemo(() => {
     if (!itin) return null
     return buildItinerarySticky({ itinerary: itin, userCitySlug: userCity })
   }, [itin, userCity])
+
+  const requireAuth = async () => {
+    if (user) return true
+    const { error: authErr } = await signInWithGoogle()
+    if (authErr) {
+      setToast('Connexion requise')
+      return false
+    }
+    return true
+  }
 
   if (loading) {
     return (
@@ -108,16 +148,54 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   const days = groupItemsByDay(items)
   const shareUrl = `https://flightwatcher.app/parcours/${itin.slug || itin.id}`
 
-  const onSticky = () => {
+  const onSticky = async () => {
     if (!sticky) return
     if (sticky.ctaAction === 'launch_maps') {
-      const url = buildItineraryMapsUrl(items)
-      if (url) void Linking.openURL(url)
-      else setToast('Ajoute des lieux pour lancer le parcours.')
+      const url =
+        Platform.OS === 'ios'
+          ? buildItineraryAppleMapsUrl(items) || buildItineraryMapsUrl(items)
+          : buildItineraryMapsUrl(items)
+      if (url) {
+        void getApi()
+          .trackActivityEvent({
+            domain: 'itinerary',
+            event: 'itinerary_launch_maps',
+            surface: 'parcours',
+            platform: Platform.OS === 'ios' ? 'ios' : 'android',
+            meta: { id: itin.id },
+          })
+          .catch(() => {})
+        void Linking.openURL(url)
+      } else setToast('Ajoute des lieux pour lancer le parcours.')
       return
     }
-    setToast('Bientôt : créer un voyage depuis ce parcours.')
-    navigation.navigate('Main', { screen: 'Planner' })
+    if (!(await requireAuth())) return
+    setMakeTripOpen(true)
+  }
+
+  const toggleLike = async () => {
+    if (!(await requireAuth())) return
+    try {
+      const api = getApi()
+      if (liked) {
+        await api.unlikeItinerary(itin.id)
+        setLiked(false)
+      } else {
+        await api.likeItinerary({
+          itinerary_id: itin.id,
+          itinerary_data: {
+            id: itin.id,
+            slug: itin.slug,
+            title: itin.title,
+            city_slug: itin.city_slug,
+            cover_image: itin.cover_image,
+          },
+        })
+        setLiked(true)
+      }
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Favori impossible')
+    }
   }
 
   return (
@@ -129,9 +207,11 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         budgetLabel={budget}
         onBack={() => navigation.goBack()}
         shareUrl={shareUrl}
+        liked={liked}
+        onLike={() => void toggleLike()}
         stickyLeft={sticky?.leftLabel}
         stickyCta={sticky?.ctaLabel}
-        onStickyCta={onSticky}
+        onStickyCta={() => void onSticky()}
       >
         <View style={styles.body}>
           {itin.intro ? <Text style={styles.intro}>{itin.intro}</Text> : null}
@@ -195,6 +275,16 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
           </Text>
         </View>
       </ItineraryDetailChrome>
+
+      <MakeTripSheet
+        visible={makeTripOpen}
+        itinerary={itin}
+        onClose={() => setMakeTripOpen(false)}
+        onCreated={(tripId) => {
+          setMakeTripOpen(false)
+          navigation.navigate('TripDetail', { tripId, autoScan: true })
+        }}
+      />
 
       {toast ? (
         <View style={styles.toast}>
