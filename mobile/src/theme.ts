@@ -1,36 +1,42 @@
 import { TextStyle, ViewStyle } from 'react-native'
+import { fwColor, fwRadius, fwSpace } from '@flightwatcher/shared'
+
+const t = fwColor.light
 
 /**
  * FlightWatcher — warm, airy palette (no cool gray).
- * White + soft peach surfaces, deep warm ink, orange brand.
+ * Bridged from packages/shared design tokens (§8).
  */
 export const colors = {
-  primary: '#FF6B35',
-  primarySoft: '#FFF3EC',
+  primary: t.accent,
+  primarySoft: t.accentSoft,
   primaryMuted: '#FFDCC8',
   primaryDeep: '#E85A28',
   primaryInk: '#8B2E0E',
   accent: '#FF3D6B',
   white: '#FFFFFF',
   /** Soft peach wash — replaces gray canvas */
-  canvas: '#FFF9F5',
-  surface: '#FFFFFF',
+  canvas: t.bgFrom,
+  surface: t.surface,
   /** Warm near-black */
-  ink: '#1A120E',
+  ink: t.ink,
   inkSoft: '#4A3428',
   /** Warm brown muted (not slate) */
-  muted: '#8A6A58',
+  muted: t.inkMuted,
   faint: '#C4A794',
   /** Soft peach hairlines */
-  line: '#F0E0D4',
+  line: t.line,
   lineStrong: '#E5CBB8',
   danger: '#D93025',
   dangerSoft: '#FFF0EE',
-  success: '#0F8A5F',
+  success: t.success,
   successSoft: '#E8F8F1',
   overlay: 'rgba(26, 18, 14, 0.4)',
   shadow: '#5C2E18',
 } as const
+
+export const designSpace = fwSpace
+export const designRadius = fwRadius
 
 export const spacing = {
   xs: 4,

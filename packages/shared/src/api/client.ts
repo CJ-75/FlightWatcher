@@ -685,6 +685,44 @@ export function createApiClient(options: ApiClientOptions = {}) {
         `/api/activities/itineraries/${encodeURIComponent(itineraryId)}`,
       ),
 
+    /** Public catalogue — published admin parcours */
+    listParcours: (params?: {
+      city?: string
+      occasion?: string
+      featured?: boolean
+      include_demo?: boolean
+      limit?: number
+    }) => {
+      const q = new URLSearchParams()
+      if (params?.city) q.set('city', params.city)
+      if (params?.occasion) q.set('occasion', params.occasion)
+      if (params?.featured) q.set('featured', 'true')
+      if (params?.include_demo != null)
+        q.set('include_demo', params.include_demo ? 'true' : 'false')
+      if (params?.limit != null) q.set('limit', String(params.limit))
+      const qs = q.toString()
+      return request<{ ok: boolean; itineraries: Record<string, unknown>[] }>(
+        `/api/parcours${qs ? `?${qs}` : ''}`,
+      )
+    },
+
+    getParcours: (idOrSlug: string, opts?: { include_demo?: boolean }) => {
+      const q = new URLSearchParams()
+      if (opts?.include_demo != null)
+        q.set('include_demo', opts.include_demo ? 'true' : 'false')
+      const qs = q.toString()
+      const looksLikeUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          idOrSlug,
+        )
+      const path = looksLikeUuid
+        ? `/api/parcours/${encodeURIComponent(idOrSlug)}`
+        : `/api/parcours/by-slug/${encodeURIComponent(idOrSlug)}`
+      return request<{ ok: boolean; itinerary: Record<string, unknown> }>(
+        `${path}${qs ? `?${qs}` : ''}`,
+      )
+    },
+
     importRestaurantLinks: (body: {
       text: string
       draft_token?: string

@@ -9,6 +9,7 @@ logger = logging.getLogger("activities.migrations_check")
 # Required after Lot A (extend as lots land)
 REQUIRED_MIGRATIONS: List[str] = [
     "apply_activities_lot_a_migration.sql",
+    "apply_itineraries_editorial_migration.sql",
 ]
 
 _last_status: Dict[str, Any] = {

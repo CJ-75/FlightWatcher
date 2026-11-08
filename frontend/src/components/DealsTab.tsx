@@ -26,6 +26,7 @@ import { useI18n } from '../contexts/I18nContext'
 import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
 import { useShellReady } from '../hooks/useShellReady'
+import { FwKicker } from './ui/FwKicker'
 
 const springConfig = {
   type: 'spring' as const,
@@ -483,7 +484,9 @@ export function DealsTab() {
   return (
     <div className="w-full">
       <div className="mb-5 sm:mb-6">
-        <p className="app-kicker mb-1.5">Séjours</p>
+        <div className="mb-1.5">
+          <FwKicker>Séjours</FwKicker>
+        </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
           {t('deals.titleSell')}
         </h2>

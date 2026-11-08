@@ -38,6 +38,7 @@ import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { PassengerStepper } from '../components/PassengerStepper'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
+import { FwKicker } from '../components/FwKicker'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -413,7 +414,7 @@ export function DealsScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text style={styles.kicker}>SÉJOURS</Text>
+              <FwKicker>SÉJOURS</FwKicker>
               <Text style={styles.title}>Séjours pas chers</Text>
               <Text style={styles.subtitle}>
                 Vol + hôtel, prix réels vérifiés. Inspire-toi, filtre, réserve.
@@ -751,13 +752,6 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: spacing.lg,
     gap: 4,
-  },
-  kicker: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    color: colors.primary,
-    marginBottom: 2,
   },
   title: {
     fontFamily: fonts.extrabold,

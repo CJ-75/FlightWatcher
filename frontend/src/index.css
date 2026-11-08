@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Shared design tokens (packages/shared design/tokens) — Lot Parcours */
+:root {
+  --fw-accent: #ff6b35;
+  --fw-accent-soft: #ffe7dc;
+  --fw-bg-from: #fff9f5;
+  --fw-bg-to: #ffe9dd;
+  --fw-surface: #ffffff;
+  --fw-ink: #1d1b19;
+  --fw-ink-muted: #7a6f68;
+  --fw-primary: #1d1b19;
+  --fw-primary-fg: #f5efea;
+  --fw-success: #2e8b57;
+  --fw-line: #f0e0d4;
+  --fw-space-screen-x: 20px;
+  --fw-radius-card: 24px;
+  --fw-radius-pill: 999px;
+}
+
+.dark {
+  --fw-accent: #ff7a4a;
+  --fw-accent-soft: #3a2419;
+  --fw-bg-from: #14110f;
+  --fw-bg-to: #1a1512;
+  --fw-surface: #1f1a17;
+  --fw-ink: #f5efea;
+  --fw-ink-muted: #a89d95;
+  --fw-primary: #f5efea;
+  --fw-primary-fg: #1d1b19;
+  --fw-success: #4fb07a;
+  --fw-line: #3a2f28;
+}
+
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -121,7 +153,11 @@
   }
 
   .app-kicker {
-    @apply text-[11px] font-bold tracking-[0.14em] text-primary-500 uppercase;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fw-accent);
   }
 
   .app-title {

@@ -673,6 +673,7 @@ async def apply_itinerary(itinerary_id: str, body: ApplyItineraryBody, request: 
 
 @router.get("/api/activities/itineraries/{itinerary_id}")
 async def get_itinerary(itinerary_id: str):
+    """Legacy Lot G get-by-id (any visibility via service role)."""
     sb = _svc()
     try:
         res = (
@@ -689,6 +690,63 @@ async def get_itinerary(itinerary_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# —— Parcours catalogue (public read, Lot 1) ——
+
+
+@router.get("/api/parcours")
+async def list_parcours(
+    city: Optional[str] = Query(None),
+    occasion: Optional[str] = Query(None),
+    featured: bool = Query(False),
+    include_demo: Optional[bool] = Query(None),
+    limit: int = Query(40, ge=1, le=100),
+):
+    from activities.itineraries_catalog import list_published_itineraries
+
+    return list_published_itineraries(
+        _svc(),
+        city=city,
+        occasion=occasion,
+        featured=featured,
+        include_demo=include_demo,
+        limit=limit,
+    )
+
+
+@router.get("/api/parcours/by-slug/{slug}")
+async def get_parcours_by_slug(
+    slug: str,
+    include_demo: Optional[bool] = Query(None),
+):
+    from activities.itineraries_catalog import get_published_itinerary
+
+    out = get_published_itinerary(
+        _svc(), slug=slug, include_demo=include_demo
+    )
+    if not out.get("ok"):
+        detail = out.get("error") or "not_found"
+        code = 404 if detail == "not_found" else 500
+        raise HTTPException(status_code=code, detail=detail)
+    return out
+
+
+@router.get("/api/parcours/{itinerary_id}")
+async def get_parcours(
+    itinerary_id: str,
+    include_demo: Optional[bool] = Query(None),
+):
+    from activities.itineraries_catalog import get_published_itinerary
+
+    out = get_published_itinerary(
+        _svc(), itinerary_id=itinerary_id, include_demo=include_demo
+    )
+    if not out.get("ok"):
+        detail = out.get("error") or "not_found"
+        code = 404 if detail == "not_found" else 500
+        raise HTTPException(status_code=code, detail=detail)
+    return out
 
 
 # —— Cron jobs (Bearer CRON_SECRET) ——
