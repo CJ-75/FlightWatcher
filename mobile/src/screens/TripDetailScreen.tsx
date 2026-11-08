@@ -2009,15 +2009,39 @@ export function TripDetailScreen() {
                 </View>
               ) : null}
               {plannerActivitiesEnabled ? (
-                <ActivityStepPanel
-                  plannedTripId={trip.id}
-                  draftToken={
-                    flightDraft?.draft_token || workspace?.draft_token || null
-                  }
-                  citySlug={citySlug}
-                  enabled={plannerActivitiesEnabled}
-                  onItemsChange={onActivityItemsChange}
-                />
+                <View style={[styles.extrasCard, shadow.soft]}>
+                  <ImageBackground
+                    source={{ uri: destinationImage }}
+                    style={styles.extrasHero}
+                    imageStyle={styles.extrasHeroImage}
+                  >
+                    <LinearGradient
+                      colors={['rgba(14,24,40,0.2)', 'rgba(14,24,40,0.92)']}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <Text style={styles.extrasKicker}>À VIVRE SUR PLACE</Text>
+                    <Text style={styles.extrasTitle}>
+                      Activités à {cityLabel}
+                    </Text>
+                    <Text style={styles.extrasSubtitle}>
+                      Transforme le séjour en souvenirs.
+                    </Text>
+                  </ImageBackground>
+                  <View style={styles.extrasBody}>
+                    <ActivityStepPanel
+                      plannedTripId={trip.id}
+                      draftToken={
+                        flightDraft?.draft_token ||
+                        workspace?.draft_token ||
+                        null
+                      }
+                      citySlug={citySlug}
+                      enabled={plannerActivitiesEnabled}
+                      surface="planner"
+                      onItemsChange={onActivityItemsChange}
+                    />
+                  </View>
+                </View>
               ) : null}
             </View>
           }
@@ -2688,6 +2712,9 @@ export function TripDetailScreen() {
               <Text style={styles.extrasIcon}>🎟️</Text>
               <Text style={styles.extrasKicker}>À VIVRE SUR PLACE</Text>
               <Text style={styles.extrasTitle}>Activités à {cityLabel}</Text>
+              <Text style={styles.extrasSubtitle}>
+                Transforme le séjour en souvenirs.
+              </Text>
             </ImageBackground>
             <View style={styles.extrasBody}>
               <ActivityStepPanel
@@ -3850,6 +3877,12 @@ const styles = StyleSheet.create({
   },
   extrasKicker: { fontFamily: fonts.bold, fontSize: 9, letterSpacing: 1.2, color: '#FDBA8C' },
   extrasTitle: { marginTop: 3, fontFamily: fonts.extrabold, fontSize: 20, color: colors.white },
+  extrasSubtitle: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
   extrasBody: { padding: 16, gap: 10 },
   sectionTitle: { fontFamily: fonts.bold, fontSize: 17, color: colors.ink },
   sectionMuted: { fontFamily: fonts.medium, fontSize: 13, color: colors.faint },
