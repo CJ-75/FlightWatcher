@@ -20,6 +20,7 @@ const MyBookings = lazy(() => import('./pages/MyBookings'))
 const MyTrip = lazy(() => import('./pages/MyTrip'))
 const HotelPay = lazy(() => import('./pages/HotelPay'))
 const ItinerariesPage = lazy(() => import('./pages/ItinerariesPage'))
+const ParcoursPublicPage = lazy(() => import('./pages/ParcoursPublicPage'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const AdminLogin = lazy(() =>
   import('./admin/AdminLogin').then((m) => ({ default: m.AdminLogin })),
@@ -108,7 +109,10 @@ function App() {
         <Route path="/bookings" element={<MyBookings />} />
         <Route path="/trip/:token" element={<MyTrip />} />
         <Route path="/parcours" element={<ItinerariesPage />} />
-        <Route path="/parcours/:itineraryId" element={<ItinerariesPage />} />
+        <Route
+          path="/parcours/:itineraryId"
+          element={<ParcoursPublicPage />}
+        />
         <Route path="/pay/hotel" element={<HotelPay />} />
         
         {/* Routes admin */}

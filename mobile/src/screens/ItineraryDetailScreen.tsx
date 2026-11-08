@@ -24,20 +24,21 @@ export function ItineraryDetailScreen({ route }: Props) {
   }, [])
 
   useEffect(() => {
-    if (!enabled) return
     void getApi()
-      .getItinerary(itineraryId)
-      .then((r) => setDetail((r.itinerary || null) as Record<string, unknown> | null))
-      .catch(() => setDetail(null))
+      .getParcours(itineraryId)
+      .then((r) =>
+        setDetail((r.itinerary || null) as Record<string, unknown> | null),
+      )
+      .catch(() => {
+        if (!enabled) return
+        void getApi()
+          .getItinerary(itineraryId)
+          .then((r) =>
+            setDetail((r.itinerary || null) as Record<string, unknown> | null),
+          )
+          .catch(() => setDetail(null))
+      })
   }, [itineraryId, enabled])
-
-  if (!enabled) {
-    return (
-      <ScreenBackground>
-        <Text style={styles.muted}>Parcours désactivés.</Text>
-      </ScreenBackground>
-    )
-  }
 
   const items = Array.isArray(detail?.itinerary_items)
     ? (detail!.itinerary_items as Record<string, unknown>[])

@@ -10,7 +10,7 @@ export const translations: Record<Language, Record<string, string>> = {
     
     // Navigation
     'nav.search': 'Vols',
-    'nav.deals': 'Séjours',
+    'nav.deals': 'Parcours',
     'nav.planner': 'Planner',
     'nav.alerts': 'Alertes',
     'nav.saved': 'Favoris',
@@ -573,7 +573,7 @@ export const translations: Record<Language, Record<string, string>> = {
     
     // Navigation
     'nav.search': 'Flights',
-    'nav.deals': 'Stays',
+    'nav.deals': 'Paths',
     'nav.planner': 'Trips',
     'nav.alerts': 'Alerts',
     'nav.saved': 'Favorites',

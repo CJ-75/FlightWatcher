@@ -25,7 +25,7 @@ import type { SavedSearch, SavedFavorite } from './utils/storage'
 import { UserMenu } from './components/UserMenu'
 import { getCurrentUser, onAuthStateChange } from './lib/supabase'
 import { SimpleSearch } from './components/SimpleSearch'
-import { DealsTab } from './components/DealsTab'
+import { ParcoursHub } from './components/parcours/ParcoursHub'
 import { SiteFooter } from './components/SiteFooter'
 import { DealCard } from './components/DealCard'
 import { DealDetailModal } from './components/DealDetailModal'
@@ -1364,7 +1364,7 @@ function Dashboard() {
             className={activeTab === 'deals' ? undefined : 'hidden'}
             aria-hidden={activeTab !== 'deals'}
           >
-            <DealsTab />
+            <ParcoursHub />
           </div>
         ) : null}
         {activitiesUiEnabled ? (

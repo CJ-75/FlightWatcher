@@ -26,6 +26,7 @@ ALLOWED_SURFACES: Set[str] = {
     "scheduler",
     "admin",
     "trip_detail",
+    "parcours",
 }
 ALLOWED_EVENTS: Set[str] = {
     "view",
@@ -51,6 +52,10 @@ ALLOWED_EVENTS: Set[str] = {
     "trip_invite_joined",
     "trip_item_placed",
     "trip_shared",
+    # Catalogue Parcours (Lot 3)
+    "itinerary_list_viewed",
+    "itinerary_card_clicked",
+    "itinerary_occasion_filtered",
 }
 
 _lock = threading.Lock()

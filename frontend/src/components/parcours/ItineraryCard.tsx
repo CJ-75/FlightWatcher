@@ -103,7 +103,9 @@ export function ItineraryCard({
           className={`m-0 line-clamp-2 font-normal italic text-white ${
             isLandscape ? 'text-[34px] leading-tight' : 'text-[26px] leading-snug'
           }`}
-          style={{ fontFamily: 'var(--fw-font-serif, Georgia, serif)' }}
+          style={{
+            fontFamily: '"Instrument Serif", Georgia, serif',
+          }}
         >
           {itinerary.title || 'Sans titre'}
         </h3>

@@ -80,8 +80,10 @@ function lazyScreen<P extends object>(
   return Wrapped
 }
 
-const DealsScreen = lazyScreen(() =>
-  import('./src/screens/DealsScreen').then((m) => ({ default: m.DealsScreen })),
+const ParcoursHubScreen = lazyScreen(() =>
+  import('./src/screens/ParcoursHubScreen').then((m) => ({
+    default: m.ParcoursHubScreen,
+  })),
 )
 const PlannerScreen = lazyScreen(() =>
   import('./src/screens/PlannerScreen').then((m) => ({ default: m.PlannerScreen })),
@@ -210,8 +212,8 @@ function MainTabs() {
       />
       <Tab.Screen
         name="Deals"
-        component={DealsScreen}
-        options={{ title: 'Séjours', headerShown: false }}
+        component={ParcoursHubScreen}
+        options={{ title: 'Parcours', headerShown: false }}
       />
       <Tab.Screen
         name="Activities"
