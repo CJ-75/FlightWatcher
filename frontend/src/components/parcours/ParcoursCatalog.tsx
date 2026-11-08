@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   buildParcoursFeed,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   isFeaturedToday,
   itineraryOccasionEmoji,
   type Itinerary,
@@ -124,7 +124,7 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
     }
   }
 
-  const cityLabel = cityDisplayNameFr(null, city) || city
+  const cityLabel = citySlugDisplayNameFr(city) || city
 
   return (
     <div className="w-full">
@@ -168,7 +168,7 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
                     : 'text-muted hover:bg-canvas'
                 }`}
               >
-                {cityDisplayNameFr(null, c) || c}
+                {citySlugDisplayNameFr(c) || c}
               </button>
             ))}
           </div>
@@ -335,7 +335,7 @@ function nearbyCities(items: Itinerary[], city: string): string[] {
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
-    .map(([c]) => cityDisplayNameFr(null, c) || c)
+    .map(([c]) => citySlugDisplayNameFr(c) || c)
 }
 
 function EmptyCity({

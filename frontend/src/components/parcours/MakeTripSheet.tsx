@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   arrivalCodesForCitySlug,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   encodeAirportCodes,
   generateDatesFromPreset,
   parseAirportCodes,
@@ -50,7 +50,7 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
   }, [partyMode])
 
   const cityLabel =
-    cityDisplayNameFr(null, itinerary.city_slug || '') ||
+    citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
   const arrival =

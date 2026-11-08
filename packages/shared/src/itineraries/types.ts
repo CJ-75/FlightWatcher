@@ -45,6 +45,8 @@ export type Itinerary = {
   subtitle?: string | null
   intro?: string | null
   cover_image?: string | null
+  /** Optional cover focal 0–100 (x, y) for object-position */
+  cover_focal?: { x: number; y: number } | null
   city_slug?: string | null
   served_city_id?: string | null
   status: ItineraryStatus

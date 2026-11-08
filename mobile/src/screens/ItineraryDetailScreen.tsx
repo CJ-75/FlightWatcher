@@ -15,12 +15,13 @@ import {
   buildItineraryMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   cityImageUrl,
   formatDurationMinutes,
   groupItemsByDay,
-  itineraryBudgetLabel,
+  itineraryDatedLabelFr,
   itineraryInfoChips,
+  itineraryOccasionPhaseLabel,
   stepKindLabel,
   type Itinerary,
   type ItineraryItem,
@@ -148,9 +149,10 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
       },
     ) || cityImageUrl('paris')
   const cityLabel =
-    cityDisplayNameFr(null, itin.city_slug || '') || itin.city_slug || ''
+    citySlugDisplayNameFr(itin.city_slug) || itin.city_slug || ''
   const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]
-  const budget = itineraryBudgetLabel(itin)
+  const phaseLabel = itineraryOccasionPhaseLabel(itin)
+  const dateLabel = itineraryDatedLabelFr(itin)
   const markers = buildItineraryMarkerTiles(itin)
   const items = (itin.itinerary_items || []) as ItineraryItem[]
   const days = groupItemsByDay(items)
@@ -212,7 +214,8 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         heroUrl={cover}
         title={itin.title}
         metaChips={chips}
-        budgetLabel={budget}
+        phaseLabel={phaseLabel}
+        dateLabel={dateLabel}
         onBack={() => navigation.goBack()}
         shareUrl={shareUrl}
         liked={liked}

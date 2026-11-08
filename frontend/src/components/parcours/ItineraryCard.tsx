@@ -1,5 +1,5 @@
 import {
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   cityImageUrl,
   itineraryMetaLine,
   itineraryUnsplashUrl,
@@ -31,7 +31,7 @@ export function ItineraryCard({
   className = '',
 }: Props) {
   const city = itinerary.city_slug
-    ? cityDisplayNameFr(null, itinerary.city_slug)
+    ? citySlugDisplayNameFr(itinerary.city_slug)
     : ''
   const cover =
     itineraryUnsplashUrl({
@@ -74,7 +74,14 @@ export function ItineraryCard({
           }}
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+      {/* Scrim half-bottom, denser at base — contraste AA titres blancs */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.55) 28%, rgba(0,0,0,0.22) 48%, transparent 58%)',
+        }}
+      />
 
       {badge ? (
         <span className="absolute left-3 top-3 rounded-md bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
@@ -109,21 +116,23 @@ export function ItineraryCard({
           <FwKicker className="mb-1 text-white/80">{city}</FwKicker>
         ) : null}
         <h3
-          className={`m-0 line-clamp-2 font-extrabold tracking-tight text-white ${
+          className={`m-0 line-clamp-2 font-extrabold tracking-tight text-white drop-shadow ${
             isLandscape
-              ? 'text-xl lg:text-2xl leading-snug'
-              : 'text-[17px] lg:text-lg leading-snug'
+              ? 'text-[1.35rem] lg:text-[1.65rem] leading-snug'
+              : 'text-[1.15rem] lg:text-[1.25rem] leading-snug'
           }`}
         >
           {itinerary.title || 'Sans titre'}
         </h3>
         {isLandscape && itinerary.subtitle ? (
-          <p className="mt-1 line-clamp-1 text-[12px] font-medium text-white/85">
+          <p className="mt-1 line-clamp-1 text-[12px] font-medium text-white/92 drop-shadow">
             {itinerary.subtitle}
           </p>
         ) : null}
         {meta ? (
-          <p className="mt-1 text-[12px] font-medium text-white/80">{meta}</p>
+          <p className="mt-1 text-[12px] font-medium text-white/90 drop-shadow">
+            {meta}
+          </p>
         ) : null}
         {dealPriceLabel ? (
           <span className="mt-2 inline-block rounded-full bg-white/95 px-2.5 py-1 text-[12px] font-semibold text-[color:var(--fw-ink,#1D1B19)]">

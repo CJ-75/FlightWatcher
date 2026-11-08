@@ -149,10 +149,30 @@ def get_published_itinerary(
 
 
 def featured_row_label(itineraries: List[Dict[str, Any]]) -> Optional[str]:
-    """Simple FR label for À la une — refined in Lot 3."""
+    """FR label for À la une — weekday when férié daté."""
     if not itineraries:
         return None
-    occasions = itineraries[0].get("occasions") or []
+    first = itineraries[0]
+    occasions = first.get("occasions") or []
     if "ferie" in occasions:
-        return "Pour le férié"
+        iso = str(first.get("featured_to") or first.get("featured_from") or "")[
+            :10
+        ]
+        try:
+            from datetime import datetime
+
+            d = datetime.strptime(iso, "%Y-%m-%d")
+            # Monday=0 … Sunday=6
+            names = (
+                "lundi",
+                "mardi",
+                "mercredi",
+                "jeudi",
+                "vendredi",
+                "samedi",
+                "dimanche",
+            )
+            return f"Pour le férié de {names[d.weekday()]}"
+        except Exception:
+            return "Pour le férié"
     return "À la une"

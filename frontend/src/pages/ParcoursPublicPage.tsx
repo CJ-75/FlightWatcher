@@ -5,10 +5,11 @@ import {
   buildItineraryMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   cityImageUrl,
-  itineraryBudgetLabel,
+  itineraryDatedLabelFr,
   itineraryInfoChips,
+  itineraryOccasionPhaseLabel,
   itineraryUnsplashUrl,
   type Itinerary,
   type ItineraryItem,
@@ -145,9 +146,10 @@ export default function ParcoursPublicPage() {
     }) ||
     itin.cover_image ||
     (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris'))
-  const cityLabel = cityDisplayNameFr(null, itin.city_slug || '') || itin.city_slug
+  const cityLabel = citySlugDisplayNameFr(itin.city_slug) || itin.city_slug
   const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]
-  const budget = itineraryBudgetLabel(itin)
+  const phaseLabel = itineraryOccasionPhaseLabel(itin)
+  const dateLabel = itineraryDatedLabelFr(itin)
   const markers = buildItineraryMarkerTiles(itin)
   const items = (itin.itinerary_items || []) as ItineraryItem[]
   const sticky = buildItinerarySticky({
@@ -257,7 +259,8 @@ export default function ParcoursPublicPage() {
         heroUrl={cover}
         title={itin.title}
         metaChips={chips}
-        budgetLabel={budget}
+        phaseLabel={phaseLabel}
+        dateLabel={dateLabel}
         onBack={() => navigate('/sejours')}
         liked={liked}
         onLike={() => void toggleLike()}

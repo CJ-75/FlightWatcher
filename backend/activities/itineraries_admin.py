@@ -60,11 +60,21 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
         blockers.append({"code": "city", "message": "Ville requise."})
     if not str(itin.get("slug") or "").strip():
         blockers.append({"code": "slug", "message": "Slug requis."})
-    if len(items) < 3:
+    anchored = 0
+    for step in items:
+        kind = step.get("kind") or "free"
+        if kind == "place" and step.get("place_id"):
+            anchored += 1
+        elif kind == "activity" and str(step.get("viator_product_code") or "").strip():
+            anchored += 1
+    if anchored < 3:
         blockers.append(
             {
-                "code": "steps_min",
-                "message": f"Au moins 3 étapes (actuellement {len(items)}).",
+                "code": "steps_anchored_min",
+                "message": (
+                    f"Au moins 3 étapes lieu vérifié ou activité Viator "
+                    f"(actuellement {anchored}). Les étapes libres ne comptent pas."
+                ),
             }
         )
     for i, step in enumerate(items):
@@ -96,6 +106,14 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
 
 def _place_warnings(supabase, items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     warnings: List[Dict[str, str]] = []
+    for i, step in enumerate(items):
+        if (step.get("kind") or "free") == "free":
+            warnings.append(
+                {
+                    "code": f"free_no_place_{i+1}",
+                    "message": "Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.",
+                }
+            )
     place_ids = [str(it["place_id"]) for it in items if it.get("place_id")]
     if not place_ids or not supabase:
         return warnings

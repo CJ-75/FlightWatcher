@@ -124,10 +124,10 @@ JOIN (
 ) AS v(slug, kind, item_type, position, title, note, duration_minutes, day_offset, moment, sort_key)
   ON s.slug = v.slug;
 
--- Featured window for the Paris férié demo (next 14 days from apply time)
+-- Fenêtre À la une ouverte avant le férié ; featured_to = jour du férié (mercredi)
 UPDATE itineraries
-SET featured_from = CURRENT_DATE,
-    featured_to = CURRENT_DATE + 14
+SET featured_from = '2026-11-01',
+    featured_to = '2026-11-11'
 WHERE slug = 'ferie-11-novembre-paris' AND is_demo = true;
 
 INSERT INTO schema_migrations (id)

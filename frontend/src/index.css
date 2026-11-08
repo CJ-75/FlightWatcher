@@ -176,7 +176,8 @@
 
   .app-tabbar {
     @apply flex items-center gap-0 px-1.5 rounded-[28px]
-      bg-white/92 border border-black/[0.06] shadow-lift backdrop-blur-xl;
+      border border-black/[0.06] shadow-lift backdrop-blur-xl;
+    background-color: rgba(255, 255, 255, 0.92);
   }
 
   /* Mobile: dock flottant Apple-like */

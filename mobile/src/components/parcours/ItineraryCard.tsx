@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   cityImageUrl,
   itineraryMetaLine,
   type Itinerary,
@@ -35,7 +35,7 @@ export function ItineraryCard({
   style,
 }: Props) {
   const city = itinerary.city_slug
-    ? cityDisplayNameFr(null, itinerary.city_slug)
+    ? citySlugDisplayNameFr(itinerary.city_slug)
     : ''
   const width = variant === 'landscape' ? 960 : 500
   const rawCover =
@@ -92,10 +92,16 @@ export function ItineraryCard({
       ) : (
         <View style={[styles.image, styles.fallback]} />
       )}
+      {/* Scrim half-bottom, denser at base — AA for white text */}
       <LinearGradient
         pointerEvents="none"
-        colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.55)']}
-        locations={[0.45, 0.72, 1]}
+        colors={[
+          'transparent',
+          'rgba(0,0,0,0.22)',
+          'rgba(0,0,0,0.55)',
+          'rgba(0,0,0,0.82)',
+        ]}
+        locations={[0.42, 0.52, 0.72, 1]}
         style={styles.scrim}
       />
       {badge ? (
@@ -171,25 +177,34 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.extrabold,
     fontStyle: 'normal',
-    fontSize: 16,
+    fontSize: 18,
     color: '#fff',
-    lineHeight: 20,
+    lineHeight: 22,
     letterSpacing: -0.2,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   titleLg: {
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 22,
+    lineHeight: 26,
   },
   subtitle: {
     marginTop: 4,
     fontFamily: fonts.medium,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.92)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   meta: {
     marginTop: 4,
     fontFamily: fonts.medium,
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: 'rgba(255,255,255,0.9)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 })

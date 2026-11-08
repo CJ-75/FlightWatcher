@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   arrivalCodesForCitySlug,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   encodeAirportCodes,
   generateDatesFromPreset,
   parseAirportCodes,
@@ -64,7 +64,7 @@ export function MakeTripSheet({
   }, [suggested])
 
   const cityLabel =
-    cityDisplayNameFr(null, itinerary.city_slug || '') ||
+    citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
 
@@ -128,8 +128,7 @@ export function MakeTripSheet({
             { paddingBottom: Math.max(insets.bottom, 16) },
           ]}
         >
-          <View style={styles.handle} />
-          <Text style={styles.title}>En faire mon voyage</Text>
+          <Text style={[styles.title, { marginTop: 8 }]}>En faire mon voyage</Text>
           <Text style={styles.sub}>
             {itinerary.title}
             {cityLabel ? ` · ${cityLabel}` : ''}
@@ -252,14 +251,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: 10,
     gap: 10,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#EDE8E1',
-    marginBottom: 8,
   },
   title: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.ink },
   sub: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, marginBottom: 8 },

@@ -13,7 +13,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildParcoursFeed,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   isFeaturedToday,
   itineraryOccasionEmoji,
   type Itinerary,
@@ -121,7 +121,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
     })
   }
 
-  const cityLabel = cityDisplayNameFr(null, city) || city
+  const cityLabel = citySlugDisplayNameFr(city) || city
 
   return (
     <View style={styles.root}>
@@ -172,7 +172,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
                 style={styles.cityItem}
               >
                 <Text style={styles.cityItemText}>
-                  {cityDisplayNameFr(null, c) || c}
+                  {citySlugDisplayNameFr(c) || c}
                 </Text>
               </Pressable>
             ))}

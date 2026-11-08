@@ -1,4 +1,4 @@
-import React, { type ReactNode } from 'react'
+import React, { useState, type ReactNode } from 'react'
 import {
   View,
   Text,
@@ -7,6 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Share,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
+  type LayoutChangeEvent,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,7 +20,8 @@ type Props = {
   title: string
   metaChips?: string[]
   phaseLabel?: string
-  budgetLabel?: string | null
+  /** Dated parcours — e.g. « Mercredi 11 novembre » (replaces budget under title) */
+  dateLabel?: string | null
   onBack: () => void
   shareUrl?: string
   onLike?: () => void
@@ -28,12 +32,32 @@ type Props = {
   onStickyCta?: () => void
 }
 
+function GlassIconShare() {
+  return (
+    <View style={iconStyles.shareBox}>
+      <View style={iconStyles.shareArrow} />
+      <View style={iconStyles.shareBase} />
+    </View>
+  )
+}
+
+function GlassIconHeart({ filled }: { filled?: boolean }) {
+  return (
+    <View
+      style={[
+        iconStyles.heart,
+        filled && { backgroundColor: '#FF3D6B', borderColor: '#FF3D6B' },
+      ]}
+    />
+  )
+}
+
 export function ItineraryDetailChrome({
   heroUrl,
   title,
   metaChips,
   phaseLabel = 'Parcours',
-  budgetLabel,
+  dateLabel,
   onBack,
   shareUrl,
   onLike,
@@ -45,44 +69,82 @@ export function ItineraryDetailChrome({
 }: Props) {
   const insets = useSafeAreaInsets()
   const chips = (metaChips || []).filter(Boolean)
+  const [scrolled, setScrolled] = useState(false)
+  const [stickyH, setStickyH] = useState(72)
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y
+    setScrolled(y > 220)
+  }
+
+  const onStickyLayout = (e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height
+    if (h > 0) setStickyH(h)
+  }
 
   return (
     <View style={styles.root}>
+      {scrolled ? (
+        <View
+          style={[
+            styles.scrollHeader,
+            { paddingTop: insets.top + 6, height: insets.top + 52 },
+          ]}
+        >
+          <Pressable onPress={onBack} style={styles.scrollBack} hitSlop={8}>
+            <Text style={styles.scrollBackText}>‹</Text>
+            <Text style={styles.scrollBackLabel}>Parcours</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <ScrollView
-        contentContainerStyle={{ paddingBottom: stickyCta ? 120 + insets.bottom : 40 }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{
+          paddingBottom: stickyCta ? stickyH + 16 : 40,
+        }}
         showsVerticalScrollIndicator={false}
       >
-        <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
+        <ImageBackground
+          source={{ uri: heroUrl }}
+          style={[styles.hero, { paddingTop: insets.top }]}
+        >
           <LinearGradient
-            colors={['rgba(0,0,0,0.35)', 'transparent', 'rgba(0,0,0,0.75)']}
+            colors={['rgba(0,0,0,0.28)', 'transparent', 'rgba(0,0,0,0.78)']}
+            locations={[0, 0.4, 1]}
             style={StyleSheet.absoluteFill}
           />
-          <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
-            <Pressable onPress={onBack} style={styles.roundBtn} hitSlop={8}>
-              <Text style={styles.roundBtnText}>←</Text>
-            </Pressable>
-            <View style={{ flex: 1 }} />
-            {shareUrl ? (
-              <Pressable
-                onPress={() =>
-                  void Share.share({ message: shareUrl, url: shareUrl })
-                }
-                style={styles.roundBtn}
-                hitSlop={8}
-              >
-                <Text style={styles.roundBtnText}>↗</Text>
-              </Pressable>
-            ) : null}
-            {onLike ? (
-              <Pressable
-                onPress={onLike}
-                style={[styles.roundBtn, styles.likeBtn]}
-                hitSlop={8}
-              >
-                <Text style={styles.likeBtnText}>{liked ? '♥' : '♡'}</Text>
-              </Pressable>
-            ) : null}
-          </View>
+          {!scrolled ? (
+            <View
+              style={[
+                styles.topBar,
+                { paddingTop: insets.top + 12, justifyContent: 'flex-end' },
+              ]}
+            >
+              {shareUrl ? (
+                <Pressable
+                  onPress={() =>
+                    void Share.share({ message: shareUrl, url: shareUrl })
+                  }
+                  style={styles.glassBtn}
+                  hitSlop={8}
+                  accessibilityLabel="Partager"
+                >
+                  <GlassIconShare />
+                </Pressable>
+              ) : null}
+              {onLike ? (
+                <Pressable
+                  onPress={onLike}
+                  style={[styles.glassBtn, { marginLeft: 8 }]}
+                  hitSlop={8}
+                  accessibilityLabel={liked ? 'Retirer des favoris' : 'Favori'}
+                >
+                  <GlassIconHeart filled={liked} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
           <View style={styles.heroCopy}>
             <View style={styles.phase}>
               <Text style={styles.phaseText}>{phaseLabel}</Text>
@@ -91,20 +153,18 @@ export function ItineraryDetailChrome({
             {chips.length ? (
               <Text style={styles.chips}>{chips.join(' · ')}</Text>
             ) : null}
-            {budgetLabel ? (
-              <Text style={styles.budget}>{budgetLabel}</Text>
+            {dateLabel ? (
+              <Text style={styles.dateLabel}>{dateLabel}</Text>
             ) : null}
           </View>
         </ImageBackground>
 
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          {children}
-        </View>
+        <View style={styles.sheet}>{children}</View>
       </ScrollView>
 
       {stickyCta ? (
         <View
+          onLayout={onStickyLayout}
           style={[
             styles.sticky,
             { paddingBottom: Math.max(insets.bottom, 12) },
@@ -124,10 +184,75 @@ export function ItineraryDetailChrome({
   )
 }
 
+const iconStyles = StyleSheet.create({
+  shareBox: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  shareArrow: {
+    width: 8,
+    height: 8,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+    borderColor: '#fff',
+    transform: [{ rotate: '-45deg' }],
+    marginBottom: -2,
+  },
+  shareBase: {
+    width: 14,
+    height: 10,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: '#fff',
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  heart: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: 'transparent',
+    transform: [{ rotate: '-45deg' }],
+  },
+})
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F7F4EF' },
+  scrollHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EDE8E1',
+    paddingHorizontal: 12,
+    justifyContent: 'flex-end',
+    paddingBottom: 8,
+  },
+  scrollBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  scrollBackText: {
+    fontFamily: fonts.bold,
+    fontSize: 28,
+    lineHeight: 30,
+    color: '#1A120E',
+  },
+  scrollBackLabel: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: '#1A120E',
+  },
   hero: {
-    minHeight: 420,
+    minHeight: 460,
     justifyContent: 'flex-end',
   },
   topBar: {
@@ -139,24 +264,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     zIndex: 2,
   },
-  roundBtn: {
+  glassBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
-  roundBtnText: { color: '#fff', fontSize: 18, fontFamily: fonts.bold },
-  likeBtn: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderColor: 'transparent',
-    marginLeft: 8,
-  },
-  likeBtnText: { fontSize: 16, color: '#1A120E' },
-  heroCopy: { paddingHorizontal: 20, paddingBottom: 48, gap: 8 },
+  heroCopy: { paddingHorizontal: 20, paddingBottom: 40, gap: 8 },
   phase: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -167,29 +285,32 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   phaseText: {
-    color: 'rgba(255,255,255,0.92)',
+    color: 'rgba(255,255,255,0.95)',
     fontFamily: fonts.bold,
     fontSize: 11,
     letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
   title: {
-    fontFamily: fonts.regular,
-    fontStyle: 'italic',
+    fontFamily: fonts.extrabold,
+    fontStyle: 'normal',
     fontSize: 40,
     lineHeight: 44,
     color: '#fff',
     letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   chips: {
     fontFamily: fonts.medium,
     fontSize: 13,
-    color: 'rgba(255,255,255,0.88)',
+    color: 'rgba(255,255,255,0.9)',
   },
-  budget: {
+  dateLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.92)',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.95)',
   },
   sheet: {
     marginTop: -28,
@@ -197,17 +318,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 24,
     paddingBottom: 24,
     minHeight: 320,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#EDE8E1',
-    marginBottom: 16,
   },
   sticky: {
     position: 'absolute',
@@ -219,7 +332,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 16,
     paddingTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.97)',
+    backgroundColor: '#FFFFFF',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#EDE8E1',
   },

@@ -36,10 +36,11 @@ export function getPublishBlockers(
   if (!String(itinerary?.slug || '').trim()) {
     blockers.push({ code: 'slug', message: 'Slug URL requis.' })
   }
-  if (steps.length < 3) {
+  const anchored = steps.filter((step) => isAnchoredStep(step))
+  if (anchored.length < 3) {
     blockers.push({
-      code: 'steps_min',
-      message: `Au moins 3 étapes (actuellement ${steps.length}).`,
+      code: 'steps_anchored_min',
+      message: `Au moins 3 étapes lieu vérifié ou activité Viator (actuellement ${anchored.length}). Les étapes libres ne comptent pas.`,
     })
   }
 
@@ -66,6 +67,35 @@ export function getPublishBlockers(
   }
 
   return blockers
+}
+
+/** Lieu vérifié ou activité Viator — compte pour le seuil de publication. */
+export function isAnchoredStep(step: Partial<ItineraryItem> | null | undefined): boolean {
+  if (!step) return false
+  if (step.kind === 'place' && step.place_id) return true
+  if (step.kind === 'activity' && String(step.viator_product_code || '').trim()) {
+    return true
+  }
+  return false
+}
+
+/** Avertissements non bloquants (étapes libres, etc.). */
+export function getPublishWarnings(
+  itinerary: Partial<Itinerary> | null | undefined,
+  items?: ItineraryItem[] | null,
+): PublishWarning[] {
+  const steps = items ?? itinerary?.itinerary_items ?? []
+  const warnings: PublishWarning[] = []
+  for (const [i, step] of steps.entries()) {
+    if (step.kind === 'free') {
+      warnings.push({
+        code: `free_no_place_${i + 1}`,
+        message:
+          'Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.',
+      })
+    }
+  }
+  return warnings
 }
 
 export function canPublish(

@@ -357,7 +357,7 @@ function RootNavigator() {
           <Stack.Screen
             name="ItineraryDetail"
             component={ItineraryDetailScreen}
-            options={stackHeaderOptions('Parcours')}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="NotFound"

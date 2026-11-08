@@ -639,6 +639,48 @@ function cityFromAirportBundle(iata: string): string | null {
 }
 
 /** French display name for a city, preferring IATA then EN→FR / label. */
+/** Slug catalogue → libellé FR capitalisé (référentiel parcours). */
+const CITY_SLUG_FR: Record<string, string> = {
+  paris: 'Paris',
+  marseille: 'Marseille',
+  lyon: 'Lyon',
+  nice: 'Nice',
+  bordeaux: 'Bordeaux',
+  toulouse: 'Toulouse',
+  nantes: 'Nantes',
+  lille: 'Lille',
+  strasbourg: 'Strasbourg',
+  montpellier: 'Montpellier',
+  lisbon: 'Lisbonne',
+  lisbonne: 'Lisbonne',
+  porto: 'Porto',
+  barcelona: 'Barcelone',
+  barcelone: 'Barcelone',
+  madrid: 'Madrid',
+  rome: 'Rome',
+  milan: 'Milan',
+  florence: 'Florence',
+  venice: 'Venise',
+  berlin: 'Berlin',
+  amsterdam: 'Amsterdam',
+  brussels: 'Bruxelles',
+  bruxelles: 'Bruxelles',
+  london: 'Londres',
+  londres: 'Londres',
+}
+
+/** Display name for a parcours city_slug — always capitalised FR. */
+export function citySlugDisplayNameFr(slug?: string | null): string {
+  const key = String(slug || '')
+    .trim()
+    .toLowerCase()
+  if (!key) return ''
+  if (CITY_SLUG_FR[key]) return CITY_SLUG_FR[key]
+  const fromEn = CITY_EN_TO_FR[key]
+  if (fromEn) return fromEn
+  return key.charAt(0).toUpperCase() + key.slice(1)
+}
+
 export function cityDisplayNameFr(
   code?: string | null,
   label?: string | null,
@@ -654,6 +696,12 @@ export function cityDisplayNameFr(
   if (!raw) {
     // Last resort: never invent a fake city — keep IATA only if nothing else
     return iata || ''
+  }
+
+  // city_slug passed as label (e.g. "paris") → référentiel capitalisé
+  if (!raw.includes(',')) {
+    const slugKey = normalizeCityKey(raw)
+    if (CITY_SLUG_FR[slugKey]) return CITY_SLUG_FR[slugKey]
   }
 
   // destinationFull is often "Airport, Country"

@@ -6,9 +6,10 @@ import {
   ITINERARY_OCCASIONS,
   ITINERARY_OCCASION_LABELS,
   canPublish,
-  cityDisplayNameFr,
+  citySlugDisplayNameFr,
   cityImageUrl,
   getPublishBlockers,
+  getPublishWarnings,
   type Itinerary,
   type ItineraryDurationKind,
   type ItineraryItem,
@@ -136,6 +137,17 @@ export function ParcoursEditorPage() {
     () => (previewItinerary ? getPublishBlockers(previewItinerary) : []),
     [previewItinerary],
   )
+  const localWarnings = useMemo(
+    () => (previewItinerary ? getPublishWarnings(previewItinerary) : []),
+    [previewItinerary],
+  )
+  const allWarnings = useMemo(() => {
+    const seen = new Set(localWarnings.map((w) => w.code))
+    return [
+      ...localWarnings,
+      ...warnings.filter((w) => !seen.has(w.code)),
+    ]
+  }, [localWarnings, warnings])
 
   const patchField = <K extends keyof Itinerary>(key: K, value: Itinerary[K]) => {
     setItin((prev) => (prev ? { ...prev, [key]: value } : prev))
@@ -402,14 +414,14 @@ export function ParcoursEditorPage() {
       {error ? <p className="text-red-400 text-sm">{error}</p> : null}
       {info ? <p className="text-emerald-400 text-sm">{info}</p> : null}
 
-      {(localBlockers.length > 0 || warnings.length > 0) && (
+      {(localBlockers.length > 0 || allWarnings.length > 0) && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm space-y-1">
           {localBlockers.map((b) => (
             <p key={b.code} className="text-amber-100">
               ⛔ {b.message}
             </p>
           ))}
-          {warnings.map((w) => (
+          {allWarnings.map((w) => (
             <p key={w.code} className="text-amber-200/80">
               ⚠ {w.message}
             </p>
@@ -444,7 +456,7 @@ export function ParcoursEditorPage() {
                 <option value="">—</option>
                 {CITY_OPTIONS.map((c) => (
                   <option key={c} value={c}>
-                    {cityDisplayNameFr(null, c)} ({c})
+                    {citySlugDisplayNameFr(c)} ({c})
                   </option>
                 ))}
               </select>
@@ -713,6 +725,11 @@ export function ParcoursEditorPage() {
                     ✕
                   </button>
                 </div>
+                {it.kind === 'free' ? (
+                  <p className="text-xs text-amber-300/90 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+                    Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.
+                  </p>
+                ) : null}
                 <input
                   value={it.title}
                   onChange={(e) => updateItem(index, { title: e.target.value })}
@@ -835,7 +852,7 @@ export function ParcoursEditorPage() {
                   {itin.title}
                 </h2>
                 <p className="text-[13px] opacity-70 m-0">
-                  {cityDisplayNameFr(null, itin.city_slug || '')}
+                  {citySlugDisplayNameFr(itin.city_slug)}
                   {itin.duration_kind
                     ? ` · ${ITINERARY_DURATION_LABELS[itin.duration_kind as ItineraryDurationKind] || itin.duration_kind}`
                     : ''}
