@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -72,10 +73,42 @@ const SKELETON_ITEMS: FavListItem[] = Array.from({ length: 3 }, (_, i) => ({
   __skeleton: true as const,
 }))
 
+const FAV_CACHE_KEY = 'fw_favorites_cache_v1'
+
+type FavCachePayload = {
+  favorites: SavedFavorite[]
+  likedDeals: LikedDeal[]
+  likedActivities: LikedActivity[]
+  likedParcours: LikedItinerary[]
+}
+
+type FavReady = Record<FavCollection, boolean>
+
+const READY_NONE: FavReady = {
+  flights: false,
+  deals: false,
+  activities: false,
+  parcours: false,
+}
+const READY_ALL: FavReady = {
+  flights: true,
+  deals: true,
+  activities: true,
+  parcours: true,
+}
+
+/** Instant paint across remounts / tab revisits. */
+let favMemoryCache: FavCachePayload | null = null
+
 function isSkeletonItem(
   item: FavListItem,
 ): item is { id: string; __skeleton: true } {
   return '__skeleton' in item && item.__skeleton === true
+}
+
+function persistFavCache(next: FavCachePayload) {
+  favMemoryCache = next
+  void AsyncStorage.setItem(FAV_CACHE_KEY, JSON.stringify(next)).catch(() => {})
 }
 import {
   ActivityPlannerPicker,
@@ -93,77 +126,185 @@ export function FavoritesScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { viewUser, signInWithGoogle, isGuest } = useAuth()
-  const [favorites, setFavorites] = useState<SavedFavorite[]>([])
-  const [likedDeals, setLikedDeals] = useState<LikedDeal[]>([])
-  const [likedActivities, setLikedActivities] = useState<LikedActivity[]>([])
-  const [likedParcours, setLikedParcours] = useState<LikedItinerary[]>([])
+  const [favorites, setFavorites] = useState<SavedFavorite[]>(
+    () => favMemoryCache?.favorites ?? [],
+  )
+  const [likedDeals, setLikedDeals] = useState<LikedDeal[]>(
+    () => favMemoryCache?.likedDeals ?? [],
+  )
+  const [likedActivities, setLikedActivities] = useState<LikedActivity[]>(
+    () => favMemoryCache?.likedActivities ?? [],
+  )
+  const [likedParcours, setLikedParcours] = useState<LikedItinerary[]>(
+    () => favMemoryCache?.likedParcours ?? [],
+  )
   /** Pull-to-refresh only — never toggled on focus (évite le bounce). */
   const [refreshing, setRefreshing] = useState(false)
-  /** First paint ready — skeleton until then, no spinner. */
-  const [hydrated, setHydrated] = useState(false)
-  const hydratedRef = useRef(false)
+  /** Per-collection ready — skeleton only on the active tab until its fetch lands. */
+  const [ready, setReady] = useState<FavReady>(() =>
+    favMemoryCache ? READY_ALL : READY_NONE,
+  )
+  const readyRef = useRef<FavReady>(favMemoryCache ? READY_ALL : READY_NONE)
+  const cacheRef = useRef<FavCachePayload>(
+    favMemoryCache ?? {
+      favorites: [],
+      likedDeals: [],
+      likedActivities: [],
+      likedParcours: [],
+    },
+  )
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
   const [tab, setTab] = useState<FavCollection>('flights')
+  const tabRef = useRef<FavCollection>('flights')
+  tabRef.current = tab
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [addBusy, setAddBusy] = useState(false)
 
-  const load = useCallback(async (opts?: { pull?: boolean }) => {
-    if (!viewUser) {
-      setFavorites([])
-      setLikedDeals([])
-      setLikedActivities([])
-      setLikedParcours([])
-      hydratedRef.current = true
-      setHydrated(true)
-      setRefreshing(false)
-      return
-    }
-    if (opts?.pull) setRefreshing(true)
-    setError(null)
-    try {
-      if (__DEV__ && isGuest) {
-        setFavorites(listGuestFlightFavorites())
-        setLikedDeals(listGuestLikedDeals())
-        setLikedActivities(listGuestLikedActivities())
-        setLikedParcours([])
-      } else {
-        const [list, deals, acts, parcoursRes] = await Promise.all([
-          getApi().getFavorites(),
-          getApi().getLikedDeals(),
-          getApi().getLikedActivities().catch(() => [] as LikedActivity[]),
-          getApi()
+  const markReady = useCallback((id: FavCollection) => {
+    if (readyRef.current[id]) return
+    const next = { ...readyRef.current, [id]: true }
+    readyRef.current = next
+    setReady(next)
+  }, [])
+
+  const patchCache = useCallback((partial: Partial<FavCachePayload>) => {
+    const next = { ...cacheRef.current, ...partial }
+    cacheRef.current = next
+    persistFavCache(next)
+  }, [])
+
+  const fetchCollection = useCallback(
+    async (id: FavCollection) => {
+      const api = getApi()
+      try {
+        if (id === 'flights') {
+          const list = await api.getFavorites()
+          const next = Array.isArray(list) ? list : []
+          setFavorites(next)
+          patchCache({ favorites: next })
+        } else if (id === 'deals') {
+          const deals = await api.getLikedDeals()
+          const next = Array.isArray(deals) ? deals : []
+          setLikedDeals(next)
+          patchCache({ likedDeals: next })
+        } else if (id === 'activities') {
+          const acts = await api
+            .getLikedActivities()
+            .catch(() => [] as LikedActivity[])
+          const next = Array.isArray(acts) ? acts : []
+          setLikedActivities(next)
+          patchCache({ likedActivities: next })
+        } else {
+          const parcoursRes = await api
             .listLikedItineraries()
-            .catch(() => ({ ok: false, items: [] as LikedItinerary[] })),
-        ])
-        setFavorites(Array.isArray(list) ? list : [])
-        setLikedDeals(Array.isArray(deals) ? deals : [])
-        setLikedActivities(Array.isArray(acts) ? acts : [])
-        setLikedParcours(
-          Array.isArray(parcoursRes?.items) ? parcoursRes.items : [],
-        )
+            .catch(() => ({ ok: false, items: [] as LikedItinerary[] }))
+          const next = Array.isArray(parcoursRes?.items) ? parcoursRes.items : []
+          setLikedParcours(next)
+          patchCache({ likedParcours: next })
+        }
+      } catch (e) {
+        if (id === tabRef.current) {
+          setError(
+            e instanceof Error ? e.message : translate('fr', 'favorites.empty'),
+          )
+        }
+      } finally {
+        markReady(id)
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : translate('fr', 'favorites.empty'))
-      // Keep previous data if already hydrated (no empty flash)
-      if (!hydratedRef.current) {
+    },
+    [markReady, patchCache],
+  )
+
+  const load = useCallback(
+    async (opts?: { pull?: boolean }) => {
+      if (!viewUser) {
         setFavorites([])
         setLikedDeals([])
         setLikedActivities([])
         setLikedParcours([])
+        readyRef.current = READY_ALL
+        setReady(READY_ALL)
+        setRefreshing(false)
+        return
       }
-    } finally {
-      hydratedRef.current = true
-      setHydrated(true)
+      if (opts?.pull) setRefreshing(true)
+      setError(null)
+
+      if (__DEV__ && isGuest) {
+        const next: FavCachePayload = {
+          favorites: listGuestFlightFavorites(),
+          likedDeals: listGuestLikedDeals(),
+          likedActivities: listGuestLikedActivities(),
+          likedParcours: [],
+        }
+        setFavorites(next.favorites)
+        setLikedDeals(next.likedDeals)
+        setLikedActivities(next.likedActivities)
+        setLikedParcours([])
+        patchCache(next)
+        readyRef.current = READY_ALL
+        setReady(READY_ALL)
+        setRefreshing(false)
+        return
+      }
+
+      // Progressive: each collection paints as soon as it returns (no Promise.all gate).
+      const prefer = tabRef.current
+      const rest = COLLECTIONS.map((c) => c.id).filter((id) => id !== prefer)
+      const preferP = fetchCollection(prefer)
+      const restP = rest.map((id) => fetchCollection(id))
+      await preferP
+      await Promise.all(restP)
       setRefreshing(false)
-    }
-  }, [viewUser, isGuest])
+    },
+    [viewUser, isGuest, fetchCollection, patchCache],
+  )
 
   useFocusEffect(
     useCallback(() => {
-      // Silent refresh — header + skeleton déjà peints, pas de RefreshControl
-      void load()
+      let cancelled = false
+      ;(async () => {
+        // Disk cache → paint before network if memory was cold
+        if (!favMemoryCache) {
+          try {
+            const raw = await AsyncStorage.getItem(FAV_CACHE_KEY)
+            if (raw && !cancelled) {
+              const parsed = JSON.parse(raw) as FavCachePayload
+              if (parsed && typeof parsed === 'object') {
+                favMemoryCache = {
+                  favorites: Array.isArray(parsed.favorites)
+                    ? parsed.favorites
+                    : [],
+                  likedDeals: Array.isArray(parsed.likedDeals)
+                    ? parsed.likedDeals
+                    : [],
+                  likedActivities: Array.isArray(parsed.likedActivities)
+                    ? parsed.likedActivities
+                    : [],
+                  likedParcours: Array.isArray(parsed.likedParcours)
+                    ? parsed.likedParcours
+                    : [],
+                }
+                cacheRef.current = favMemoryCache
+                setFavorites(favMemoryCache.favorites)
+                setLikedDeals(favMemoryCache.likedDeals)
+                setLikedActivities(favMemoryCache.likedActivities)
+                setLikedParcours(favMemoryCache.likedParcours)
+                readyRef.current = READY_ALL
+                setReady(READY_ALL)
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+        if (!cancelled) void load()
+      })()
+      return () => {
+        cancelled = true
+      }
     }, [load]),
   )
 
@@ -179,12 +320,16 @@ export function FavoritesScreen() {
   }
 
   const remove = async (id: string) => {
+    const prev = favorites
+    const next = prev.filter((f) => f.id !== id)
+    setFavorites(next)
+    patchCache({ favorites: next })
     try {
       if (__DEV__ && isGuest) removeGuestFlightFavorite(id)
       else await getApi().deleteFavorite(id)
-      await load()
     } catch {
-      /* ignore */
+      setFavorites(prev)
+      patchCache({ favorites: prev })
     }
   }
 
@@ -203,7 +348,11 @@ export function FavoritesScreen() {
     try {
       if (__DEV__ && isGuest) unlikeGuestDeal(dealId)
       else await getApi().unlikeDeal(dealId)
-      setLikedDeals((prev) => prev.filter((d) => d.deal_id !== dealId))
+      setLikedDeals((prev) => {
+        const next = prev.filter((d) => d.deal_id !== dealId)
+        patchCache({ likedDeals: next })
+        return next
+      })
     } catch {
       /* ignore */
     }
@@ -213,9 +362,11 @@ export function FavoritesScreen() {
     try {
       if (__DEV__ && isGuest) unlikeGuestActivity(productCode)
       else await getApi().unlikeActivity(productCode)
-      setLikedActivities((prev) =>
-        prev.filter((a) => a.product_code !== productCode),
-      )
+      setLikedActivities((prev) => {
+        const next = prev.filter((a) => a.product_code !== productCode)
+        patchCache({ likedActivities: next })
+        return next
+      })
     } catch {
       /* ignore */
     }
@@ -224,9 +375,11 @@ export function FavoritesScreen() {
   const unlikeParcours = async (itineraryId: string) => {
     try {
       await getApi().unlikeItinerary(itineraryId)
-      setLikedParcours((prev) =>
-        prev.filter((p) => p.itinerary_id !== itineraryId),
-      )
+      setLikedParcours((prev) => {
+        const next = prev.filter((p) => p.itinerary_id !== itineraryId)
+        patchCache({ likedParcours: next })
+        return next
+      })
     } catch {
       /* ignore */
     }
@@ -312,7 +465,7 @@ export function FavoritesScreen() {
     return { active: likedParcours, archived: [] as LikedItinerary[] }
   }, [tab, favorites, likedDeals, likedActivities, likedParcours])
 
-  const showSkeleton = !hydrated
+  const showSkeleton = !ready[tab]
   const listData: FavListItem[] = showSkeleton ? SKELETON_ITEMS : activeItems
 
   const renderFavoriteItem = (item: FavListItem, faded: boolean) => {
