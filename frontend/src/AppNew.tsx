@@ -61,6 +61,16 @@ const ActivitiesAdminPage = lazy(() =>
     default: m.ActivitiesAdminPage,
   })),
 )
+const ParcoursAdminPage = lazy(() =>
+  import('./admin/pages/ParcoursAdminPage').then((m) => ({
+    default: m.ParcoursAdminPage,
+  })),
+)
+const ParcoursEditorPage = lazy(() =>
+  import('./admin/pages/ParcoursEditorPage').then((m) => ({
+    default: m.ParcoursEditorPage,
+  })),
+)
 
 function RouteFallback() {
   return (
@@ -119,6 +129,8 @@ function App() {
           <Route path="deals" element={<DealsMetricsPage />} />
           <Route path="occasions" element={<OccasionsPage />} />
           <Route path="activities" element={<ActivitiesAdminPage />} />
+          <Route path="parcours" element={<ParcoursAdminPage />} />
+          <Route path="parcours/:itineraryId" element={<ParcoursEditorPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="tests" element={<TestsPage />} />
         </Route>

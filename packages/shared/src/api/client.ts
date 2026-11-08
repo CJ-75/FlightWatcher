@@ -723,6 +723,86 @@ export function createApiClient(options: ApiClientOptions = {}) {
       )
     },
 
+    /** Admin catalogue éditorial */
+    adminListParcours: (params?: {
+      city?: string
+      status?: string
+      occasion?: string
+      limit?: number
+    }) => {
+      const q = new URLSearchParams()
+      if (params?.city) q.set('city', params.city)
+      if (params?.status) q.set('status', params.status)
+      if (params?.occasion) q.set('occasion', params.occasion)
+      if (params?.limit != null) q.set('limit', String(params.limit))
+      const qs = q.toString()
+      return request<{
+        ok: boolean
+        itineraries: Record<string, unknown>[]
+        error?: string
+      }>(`/api/admin/parcours${qs ? `?${qs}` : ''}`)
+    },
+
+    adminGetParcours: (id: string) =>
+      request<{
+        ok: boolean
+        itinerary: Record<string, unknown>
+        blockers?: { code: string; message: string }[]
+        warnings?: { code: string; message: string }[]
+        error?: string
+      }>(`/api/admin/parcours/${encodeURIComponent(id)}`),
+
+    adminCreateParcours: (body?: {
+      title?: string
+      city_slug?: string
+      cover_image?: string
+    }) =>
+      request<{ ok: boolean; itinerary: Record<string, unknown>; error?: string }>(
+        '/api/admin/parcours',
+        { method: 'POST', body: JSON.stringify(body || {}) },
+      ),
+
+    adminUpdateParcours: (id: string, body: Record<string, unknown>) =>
+      request<{
+        ok: boolean
+        itinerary?: Record<string, unknown>
+        blockers?: { code: string; message: string }[]
+        warnings?: { code: string; message: string }[]
+        error?: string
+      }>(`/api/admin/parcours/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    adminPublishParcours: (id: string) =>
+      request<{
+        ok: boolean
+        itinerary?: Record<string, unknown>
+        blockers?: { code: string; message: string }[]
+        warnings?: { code: string; message: string }[]
+        error?: string
+      }>(`/api/admin/parcours/${encodeURIComponent(id)}/publish`, {
+        method: 'POST',
+        body: '{}',
+      }),
+
+    adminSetParcoursStatus: (id: string, status: string) =>
+      request<{
+        ok: boolean
+        itinerary?: Record<string, unknown>
+        blockers?: { code: string; message: string }[]
+        error?: string
+      }>(`/api/admin/parcours/${encodeURIComponent(id)}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      }),
+
+    adminDeleteParcours: (id: string) =>
+      request<{ ok: boolean; error?: string }>(
+        `/api/admin/parcours/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+      ),
+
     importRestaurantLinks: (body: {
       text: string
       draft_token?: string

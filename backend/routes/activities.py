@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from admin_auth import require_admin
@@ -790,6 +790,113 @@ async def job_j7_reminders(authorization: Optional[str] = Header(None)):
     from activities.reminders import run_activity_j7_reminders
 
     return run_activity_j7_reminders(_svc())
+
+
+# —— Admin parcours catalogue (Lot 2) ——
+
+class AdminParcoursCreateBody(BaseModel):
+    title: Optional[str] = None
+    city_slug: Optional[str] = None
+    cover_image: Optional[str] = None
+
+
+class AdminParcoursStatusBody(BaseModel):
+    status: str
+
+
+@router.get("/api/admin/parcours")
+@require_admin
+async def admin_list_parcours(
+    request: Request,
+    city: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    occasion: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+):
+    from activities.itineraries_admin import list_admin_itineraries
+
+    return list_admin_itineraries(
+        _svc(), city=city, status=status, occasion=occasion, limit=limit
+    )
+
+
+@router.post("/api/admin/parcours")
+@require_admin
+async def admin_create_parcours(body: AdminParcoursCreateBody, request: Request):
+    from activities.itineraries_admin import create_admin_itinerary
+
+    out = create_admin_itinerary(
+        _svc(),
+        title=body.title or "Nouveau parcours",
+        city_slug=body.city_slug,
+        cover_image=body.cover_image,
+    )
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "create_failed")
+    return out
+
+
+@router.get("/api/admin/parcours/{itinerary_id}")
+@require_admin
+async def admin_get_parcours(itinerary_id: str, request: Request):
+    from activities.itineraries_admin import get_admin_itinerary
+
+    out = get_admin_itinerary(_svc(), itinerary_id)
+    if not out.get("ok"):
+        code = 404 if out.get("error") == "not_found" else 500
+        raise HTTPException(status_code=code, detail=out.get("error") or "error")
+    return out
+
+
+@router.patch("/api/admin/parcours/{itinerary_id}")
+@require_admin
+async def admin_update_parcours(
+    itinerary_id: str,
+    request: Request,
+    body: Dict[str, Any] = Body(...),
+):
+    from activities.itineraries_admin import update_admin_itinerary
+
+    out = update_admin_itinerary(_svc(), itinerary_id, dict(body or {}))
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "update_failed")
+    return out
+
+
+@router.post("/api/admin/parcours/{itinerary_id}/publish")
+@require_admin
+async def admin_publish_parcours(itinerary_id: str, request: Request):
+    from activities.itineraries_admin import publish_admin_itinerary
+
+    out = publish_admin_itinerary(_svc(), itinerary_id)
+    if not out.get("ok"):
+        # Return blockers for UI rather than opaque 400
+        return out
+    return out
+
+
+@router.post("/api/admin/parcours/{itinerary_id}/status")
+@require_admin
+async def admin_parcours_status(
+    itinerary_id: str, body: AdminParcoursStatusBody, request: Request
+):
+    from activities.itineraries_admin import set_status_admin_itinerary
+
+    out = set_status_admin_itinerary(_svc(), itinerary_id, body.status)
+    if not out.get("ok"):
+        return out
+    return out
+
+
+@router.delete("/api/admin/parcours/{itinerary_id}")
+@require_admin
+async def admin_delete_parcours(itinerary_id: str, request: Request):
+    from activities.itineraries_admin import delete_admin_itinerary
+
+    out = delete_admin_itinerary(_svc(), itinerary_id)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "delete_failed")
+    return out
 
 
 # —— Admin (require_admin) ——
