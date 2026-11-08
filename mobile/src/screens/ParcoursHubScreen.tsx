@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DealsScreen } from './DealsScreen'
 import { ParcoursCatalogScreen } from './ParcoursCatalogScreen'
+import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { FwKicker } from '../components/FwKicker'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, spacing } from '../theme'
@@ -16,8 +17,13 @@ export function ParcoursHubScreen() {
 
   const header = (
     <View style={{ paddingTop: insets.top + 12 }}>
-      <FwKicker>PARCOURS</FwKicker>
-      <Text style={styles.title}>Où aller, quoi faire</Text>
+      <View style={styles.topRow}>
+        <View style={styles.topCopy}>
+          <FwKicker>PARCOURS</FwKicker>
+          <Text style={styles.title}>Où aller, quoi faire</Text>
+        </View>
+        <AccountAvatarButton />
+      </View>
       <Text style={styles.subtitle}>
         Des balades et des week-ends choisis pour toi.
       </Text>
@@ -64,6 +70,13 @@ export function ParcoursHubScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topCopy: { flex: 1, minWidth: 0 },
   title: {
     marginTop: 6,
     fontFamily: fonts.extrabold,

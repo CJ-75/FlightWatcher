@@ -41,6 +41,7 @@ import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import { beginInspireLive, publishInspireLive } from '../lib/inspireLive'
 import type { MainTabParamList, RootStackParamList } from '../navigation/types'
+import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
 import { PassengerStepper } from '../components/PassengerStepper'
@@ -456,22 +457,25 @@ export function SearchScreen() {
         ]}
       >
         <View style={[styles.header, compact && styles.headerCompact]}>
-          <Pressable
-            onPress={() => {
-              scrollRef.current?.scrollTo({ y: 0, animated: true })
-            }}
-            style={[styles.brandRow, compact && { marginBottom: 4 }]}
-            accessibilityRole="button"
-            accessibilityLabel="FlightWatcher, haut de page"
-          >
-            <View style={[styles.logoMark, compact && { width: 30, height: 30, borderRadius: 9 }]}>
-              <Text style={[styles.logoLetter, compact && { fontSize: 15 }]}>F</Text>
-            </View>
-            <View>
-              <Text style={styles.brandName}>FlightWatcher</Text>
-              {!compact ? <Text style={styles.brandTag}>Vols bas prix</Text> : null}
-            </View>
-          </Pressable>
+          <View style={[styles.brandRow, compact && { marginBottom: 4 }]}>
+            <Pressable
+              onPress={() => {
+                scrollRef.current?.scrollTo({ y: 0, animated: true })
+              }}
+              style={styles.brandPress}
+              accessibilityRole="button"
+              accessibilityLabel="FlightWatcher, haut de page"
+            >
+              <View style={[styles.logoMark, compact && { width: 30, height: 30, borderRadius: 9 }]}>
+                <Text style={[styles.logoLetter, compact && { fontSize: 15 }]}>F</Text>
+              </View>
+              <View style={styles.brandCopy}>
+                <Text style={styles.brandName}>FlightWatcher</Text>
+                {!compact ? <Text style={styles.brandTag}>Vols bas prix</Text> : null}
+              </View>
+            </Pressable>
+            <AccountAvatarButton size={compact ? 32 : 36} />
+          </View>
           <Text style={[styles.hero, compact && styles.heroCompact]} numberOfLines={1}>
             Weekend <Text style={styles.heroAccent}>pas cher</Text>
           </Text>
@@ -664,9 +668,18 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
     marginBottom: 12,
   },
+  brandPress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  brandCopy: { flex: 1, minWidth: 0 },
   logoMark: {
     width: 36,
     height: 36,

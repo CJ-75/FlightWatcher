@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import {
   cityDisplayNameFr,
   cityImageUrl,
@@ -15,6 +16,7 @@ import {
   type Itinerary,
   type ItineraryDurationKind,
 } from '@flightwatcher/shared'
+import { cityCoverApiUrl, coverUri } from '../../lib/coverUri'
 import { fonts } from '../../theme'
 
 type Props = {
@@ -35,14 +37,40 @@ export function ItineraryCard({
   const city = itinerary.city_slug
     ? cityDisplayNameFr(null, itinerary.city_slug)
     : ''
-  const cover =
+  const width = variant === 'landscape' ? 960 : 500
+  const rawCover =
     (itinerary.cover_image || '').trim() ||
-    (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : null)
+    (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : '')
+  const primary = coverUri(rawCover, {
+    width,
+    citySlug: itinerary.city_slug,
+    slug: itinerary.slug,
+  })
+  const [uri, setUri] = useState<string | null>(primary)
   const meta = itineraryMetaLine({
     cityLabel: city || null,
     durationKind: itinerary.duration_kind as ItineraryDurationKind | null,
   })
   const landscape = variant === 'landscape'
+
+  useEffect(() => {
+    setUri(primary)
+  }, [primary])
+
+  const onImageError = () => {
+    const api = cityCoverApiUrl({
+      city: itinerary.city_slug,
+      slug: itinerary.slug,
+      width,
+    })
+    void fetch(api)
+      .then((r) => r.json())
+      .then((j: { ok?: boolean; url?: string }) => {
+        if (j?.ok && j.url && j.url !== uri) setUri(j.url)
+        else setUri(null)
+      })
+      .catch(() => setUri(null))
+  }
 
   return (
     <Pressable
@@ -54,22 +82,28 @@ export function ItineraryCard({
         style,
       ]}
     >
-      {cover ? (
+      {uri ? (
         <Image
-          source={{ uri: cover }}
-          style={StyleSheet.absoluteFillObject}
+          source={{ uri }}
+          style={styles.image}
           resizeMode="cover"
+          onError={onImageError}
         />
       ) : (
-        <View style={[StyleSheet.absoluteFillObject, styles.fallback]} />
+        <View style={[styles.image, styles.fallback]} />
       )}
-      <View style={styles.scrim} />
+      <LinearGradient
+        pointerEvents="none"
+        colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.55)']}
+        locations={[0.45, 0.72, 1]}
+        style={styles.scrim}
+      />
       {badge ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       ) : null}
-      <View style={styles.bottom}>
+      <View style={styles.bottom} pointerEvents="none">
         <Text
           style={[styles.title, landscape && styles.titleLg]}
           numberOfLines={2}
@@ -92,6 +126,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: '#FFE9DD',
+    position: 'relative',
   },
   portrait: {
     width: 220,
@@ -101,16 +136,16 @@ const styles = StyleSheet.create({
     width: 320,
     aspectRatio: 16 / 10,
   },
+  image: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
   fallback: {
     backgroundColor: '#FFE9DD',
   },
   scrim: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '55%',
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    ...StyleSheet.absoluteFillObject,
   },
   badge: {
     position: 'absolute',

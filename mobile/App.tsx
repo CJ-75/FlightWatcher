@@ -18,6 +18,7 @@ import {
 import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
+import { ParcoursHubScreen } from './src/screens/ParcoursHubScreen'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
 import { stackHeaderOptions } from './src/navigation/stackHeader'
@@ -64,11 +65,20 @@ function RouteSpinner() {
   )
 }
 
-/** Defer heavy screens until first navigation — keeps cold start lean. */
+/** Defer heavy screens until first navigation — keeps cold start lean.
+ *  Home (ParcoursHubScreen) stays eager — React.lazy + Fabric flaky on initial route.
+ */
 function lazyScreen<P extends object>(
   loader: () => Promise<{ default: React.ComponentType<P> }>,
+  label = 'Screen',
 ): React.ComponentType<P> {
-  const Lazy = React.lazy(loader)
+  const Lazy = React.lazy(async () => {
+    const mod = await loader()
+    if (!mod?.default) {
+      throw new Error(`[lazyScreen] ${label}: export default manquant`)
+    }
+    return mod
+  })
   function Wrapped(props: P) {
     return (
       <Suspense fallback={<RouteSpinner />}>
@@ -76,26 +86,33 @@ function lazyScreen<P extends object>(
       </Suspense>
     )
   }
-  Wrapped.displayName = 'LazyScreen'
+  Wrapped.displayName = `LazyScreen(${label})`
   return Wrapped
 }
 
-const ParcoursHubScreen = lazyScreen(() =>
-  import('./src/screens/ParcoursHubScreen').then((m) => ({
-    default: m.ParcoursHubScreen,
-  })),
+const PlannerScreen = lazyScreen(
+  () =>
+    import('./src/screens/PlannerScreen').then((m) => ({ default: m.PlannerScreen })),
+  'PlannerScreen',
 )
-const PlannerScreen = lazyScreen(() =>
-  import('./src/screens/PlannerScreen').then((m) => ({ default: m.PlannerScreen })),
+const ActivitiesScreen = lazyScreen(
+  () =>
+    import('./src/screens/ActivitiesScreen').then((m) => ({
+      default: m.ActivitiesScreen,
+    })),
+  'ActivitiesScreen',
 )
-const ActivitiesScreen = lazyScreen(() =>
-  import('./src/screens/ActivitiesScreen').then((m) => ({ default: m.ActivitiesScreen })),
+const FavoritesScreen = lazyScreen(
+  () =>
+    import('./src/screens/FavoritesScreen').then((m) => ({
+      default: m.FavoritesScreen,
+    })),
+  'FavoritesScreen',
 )
-const FavoritesScreen = lazyScreen(() =>
-  import('./src/screens/FavoritesScreen').then((m) => ({ default: m.FavoritesScreen })),
-)
-const ProfileScreen = lazyScreen(() =>
-  import('./src/screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
+const ProfileScreen = lazyScreen(
+  () =>
+    import('./src/screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
+  'ProfileScreen',
 )
 const ResultsScreen = lazyScreen(() =>
   import('./src/screens/ResultsScreen').then((m) => ({ default: m.ResultsScreen })),
@@ -145,7 +162,9 @@ const NotFoundScreen = lazyScreen(() =>
 
 function MainTabs() {
   const insets = useSafeAreaInsets()
-  const tabClearance = FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
+  // +18 : orbe Parcours relevé au-dessus du dock
+  const tabClearance =
+    FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + 18 + Math.max(insets.bottom, 8)
   const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(true)
 
   // Airports after first paint — never compete with boot JS/fonts/auth
@@ -180,7 +199,7 @@ function MainTabs() {
 
   return (
     <Tab.Navigator
-      initialRouteName="Search"
+      initialRouteName="Deals"
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerStyle: {
@@ -211,39 +230,38 @@ function MainTabs() {
         options={{ title: 'Vols', headerShown: false }}
       />
       <Tab.Screen
-        name="Deals"
-        component={ParcoursHubScreen}
-        options={{ title: 'Parcours', headerShown: false }}
-      />
-      <Tab.Screen
         name="Activities"
         component={ActivitiesScreen}
         options={{
           title: 'Activités',
           headerShown: false,
-          // Keep route registered; hide tab when flag off
           href: activitiesUiEnabled ? undefined : null,
         }}
       />
       <Tab.Screen
+        name="Deals"
+        component={ParcoursHubScreen}
+        options={{ title: 'Parcours', headerShown: false }}
+      />
+      <Tab.Screen
         name="Planner"
         component={PlannerScreen}
-        options={{ title: 'Voyages', headerShown: false }}
+        options={{ title: 'Planner', headerShown: false }}
       />
       <Tab.Screen
         name="Favorites"
         component={FavoritesScreen}
-        options={{
-          title: 'Favoris',
-          headerShown: false,
-          // Accessible from Compte — not shown in the tab bar
-          href: null,
-        }}
+        options={{ title: 'Favoris', headerShown: false }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ title: 'Profil', headerShown: false }}
+        options={{
+          title: 'Profil',
+          headerShown: false,
+          // Compte via avatar haut-droite — pas dans la tab bar
+          href: null,
+        }}
       />
     </Tab.Navigator>
   )

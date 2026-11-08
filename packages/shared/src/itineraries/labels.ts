@@ -12,6 +12,28 @@ export const ITINERARY_OCCASION_LABELS: Record<ItineraryOccasion, string> = {
   saison: 'De saison',
 }
 
+/** Emojis chips Envies — alignés look Séjours. */
+export const ITINERARY_OCCASION_EMOJIS: Record<ItineraryOccasion, string> = {
+  romantique: '💕',
+  ferie: '📅',
+  soleil: '☀️',
+  pluie: '🌧️',
+  amis: '🍻',
+  petit_budget: '💶',
+  famille: '👨‍👩‍👧',
+  nuit: '🌙',
+  saison: '✨',
+}
+
+export function itineraryOccasionEmoji(
+  occasion: ItineraryOccasion | string | null | undefined,
+): string {
+  if (!occasion) return '✨'
+  return (
+    ITINERARY_OCCASION_EMOJIS[occasion as ItineraryOccasion] || '✨'
+  )
+}
+
 export const ITINERARY_DURATION_LABELS: Record<ItineraryDurationKind, string> = {
   '2h': '2 h',
   half_day: 'Demi-journée',

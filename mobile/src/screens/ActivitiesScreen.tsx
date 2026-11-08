@@ -74,6 +74,7 @@ import { auth, getApi } from '../lib/client'
 import { listTravelWorkspacesCached } from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
+import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { ActivityCard } from '../components/ActivityCard'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { ActivityDetailSheet } from '../components/ActivityDetailSheet'
@@ -899,8 +900,13 @@ export function ActivitiesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.kicker}>{ACTIVITY_PAGE_KICKER_FR}</Text>
-            <Text style={styles.title}>{ACTIVITY_PAGE_TITLE_FR}</Text>
+            <View style={styles.topRow}>
+              <View style={styles.topCopy}>
+                <Text style={styles.kicker}>{ACTIVITY_PAGE_KICKER_FR}</Text>
+                <Text style={styles.title}>{ACTIVITY_PAGE_TITLE_FR}</Text>
+              </View>
+              <AccountAvatarButton />
+            </View>
             <Text style={styles.subtitle}>{ACTIVITY_PAGE_SUBTITLE_FR}</Text>
 
             {activeTrip ? (
@@ -1293,6 +1299,13 @@ export function ActivitiesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: { marginBottom: spacing.lg, gap: 4 },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topCopy: { flex: 1, minWidth: 0 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,

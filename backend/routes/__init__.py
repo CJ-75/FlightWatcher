@@ -7,6 +7,7 @@ from routes import (
     deals,
     hotel_bookings,
     hotel_upsell,
+    media,
     meta,
     persistence,
     planner,
@@ -19,6 +20,7 @@ from routes import (
 
 def include_all_routers(app: FastAPI) -> None:
     app.include_router(meta.router)
+    app.include_router(media.router)
     app.include_router(scan.router)
     app.include_router(ref.router)
     app.include_router(persistence.router)

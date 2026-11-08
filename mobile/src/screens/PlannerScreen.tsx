@@ -61,6 +61,7 @@ import {
 } from '../lib/workspacesCache'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
+import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { CityPicker } from '../components/CityPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
@@ -357,8 +358,13 @@ export function PlannerScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <Text style={styles.kicker}>{PLANNER_HUB_KICKER_FR}</Text>
-              <Text style={styles.title}>{PLANNER_HUB_TITLE_FR}</Text>
+              <View style={styles.topRow}>
+                <View style={styles.topCopy}>
+                  <Text style={styles.kicker}>{PLANNER_HUB_KICKER_FR}</Text>
+                  <Text style={styles.title}>{PLANNER_HUB_TITLE_FR}</Text>
+                </View>
+                <AccountAvatarButton />
+              </View>
               <Text style={styles.subtitle}>{PLANNER_HUB_SUBTITLE_FR}</Text>
               <View style={styles.hubTabs}>
                 {PLANNER_HUB_TABS.map(({ key, labelFr }) => (
@@ -936,6 +942,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   header: { marginBottom: 22, gap: 4 },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topCopy: { flex: 1, minWidth: 0 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,

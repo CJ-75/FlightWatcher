@@ -9,6 +9,7 @@ import {
   cityImageUrl,
   itineraryBudgetLabel,
   itineraryInfoChips,
+  itineraryUnsplashUrl,
   type Itinerary,
   type ItineraryItem,
 } from '@flightwatcher/shared'
@@ -137,6 +138,11 @@ export default function ParcoursPublicPage() {
   }
 
   const cover =
+    itineraryUnsplashUrl({
+      slug: itin.slug,
+      citySlug: itin.city_slug,
+      width: 1280,
+    }) ||
     itin.cover_image ||
     (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris'))
   const cityLabel = cityDisplayNameFr(null, itin.city_slug || '') || itin.city_slug

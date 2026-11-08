@@ -44,6 +44,7 @@ import {
   unlikeGuestActivity,
   unlikeGuestDeal,
 } from '../dev/guestPreview'
+import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { FavoriteFlightCard } from '../components/FavoriteFlightCard'
 import { DealCard } from '../components/DealCard'
 import { ActivityCard } from '../components/ActivityCard'
@@ -316,8 +317,13 @@ export function FavoritesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.kicker}>FAVORIS</Text>
-            <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
+            <View style={styles.topRow}>
+              <View style={styles.topCopy}>
+                <Text style={styles.kicker}>FAVORIS</Text>
+                <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
+              </View>
+              <AccountAvatarButton />
+            </View>
             <Text style={styles.subtitle}>
               {translate('fr', 'favorites.subtitle')}
             </Text>
@@ -501,6 +507,13 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   list: { flex: 1, backgroundColor: 'transparent' },
   header: { marginBottom: 22, gap: 4 },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topCopy: { flex: 1, minWidth: 0 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,

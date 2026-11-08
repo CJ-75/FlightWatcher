@@ -2,6 +2,7 @@ import {
   cityDisplayNameFr,
   cityImageUrl,
   itineraryMetaLine,
+  itineraryUnsplashUrl,
   type Itinerary,
   type ItineraryDurationKind,
 } from '@flightwatcher/shared'
@@ -33,6 +34,11 @@ export function ItineraryCard({
     ? cityDisplayNameFr(null, itinerary.city_slug)
     : ''
   const cover =
+    itineraryUnsplashUrl({
+      slug: itinerary.slug,
+      citySlug: itinerary.city_slug,
+      width: 960,
+    }) ||
     (itinerary.cover_image || '').trim() ||
     (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : null)
   const meta = itineraryMetaLine({
@@ -45,8 +51,10 @@ export function ItineraryCard({
     <button
       type="button"
       onClick={onOpen}
-      className={`relative overflow-hidden text-left shadow-sm transition-transform active:scale-[0.98] ${
-        isLandscape ? 'aspect-[16/10] w-full' : 'aspect-[3/4] w-full'
+      className={`relative overflow-hidden text-left shadow-sm transition-transform active:scale-[0.98] lg:shadow-md ${
+        isLandscape
+          ? 'aspect-[16/10] w-full lg:aspect-[16/9]'
+          : 'aspect-[3/4] w-full'
       } ${className}`}
       style={{ borderRadius: 'var(--fw-radius-card, 24px)' }}
     >
@@ -66,7 +74,7 @@ export function ItineraryCard({
           }}
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
 
       {badge ? (
         <span className="absolute left-3 top-3 rounded-md bg-black px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
@@ -102,7 +110,9 @@ export function ItineraryCard({
         ) : null}
         <h3
           className={`m-0 line-clamp-2 font-extrabold tracking-tight text-white ${
-            isLandscape ? 'text-xl leading-snug' : 'text-[17px] leading-snug'
+            isLandscape
+              ? 'text-xl lg:text-2xl leading-snug'
+              : 'text-[17px] lg:text-lg leading-snug'
           }`}
         >
           {itinerary.title || 'Sans titre'}

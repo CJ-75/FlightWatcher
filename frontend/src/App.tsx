@@ -139,7 +139,7 @@ function Dashboard() {
     } catch {
       /* ignore */
     }
-    return 'search'
+    return 'deals'
   })
 
   const setActiveTab = useCallback(
@@ -172,10 +172,11 @@ function Dashboard() {
     const fromPath = tabFromPath(location.pathname)
     if (fromPath === activeTab) return
     const onLegacyHome =
+      location.pathname === '/sejours' ||
       location.pathname === '/vols' ||
       location.pathname === '/recherche' ||
       location.pathname === '/'
-    if (activeTab && onLegacyHome && activeTab !== 'search') {
+    if (activeTab && onLegacyHome && activeTab !== 'deals') {
       navigate(
         {
           pathname: TAB_PATH[activeTab],
@@ -520,7 +521,7 @@ function Dashboard() {
         if (!dealsOn && activeTab === 'deals') setActiveTab('search')
         const alertsOn = cfg.alerts_ui_enabled === true
         setAlertsUiEnabled(alertsOn)
-        if (!alertsOn && activeTab === 'alerts') setActiveTab('search')
+        if (!alertsOn && activeTab === 'alerts') setActiveTab('deals')
         const activitiesOn = cfg.activities_ui_enabled === true
         setActivitiesUiEnabled(activitiesOn)
         try {
@@ -531,7 +532,7 @@ function Dashboard() {
         } catch {
           /* ignore */
         }
-        if (!activitiesOn && activeTab === 'activities') setActiveTab('search')
+        if (!activitiesOn && activeTab === 'activities') setActiveTab('deals')
       })
       .finally(() => setUiFlagsReady(true))
     // Prefetch catalogue Paris dès l’idle pour ouvrir Activités sans attendre.
@@ -557,8 +558,8 @@ function Dashboard() {
     if (alertsUiEnabled) return
     const p = location.pathname.replace(/\/+$/, '') || '/'
     if (p === '/alertes' || p === '/alerts') {
-      navigate('/vols', { replace: true })
-      if (activeTab === 'alerts') setActiveTabState('search')
+      navigate('/sejours', { replace: true })
+      if (activeTab === 'alerts') setActiveTabState('deals')
     }
   }, [activeTab, alertsUiEnabled, location.pathname, navigate, uiFlagsReady])
 
@@ -568,8 +569,8 @@ function Dashboard() {
     if (activitiesUiEnabled) return
     const p = location.pathname.replace(/\/+$/, '') || '/'
     if (p === '/activites' || p.startsWith('/activites/')) {
-      navigate('/vols', { replace: true })
-      if (activeTab === 'activities') setActiveTabState('search')
+      navigate('/sejours', { replace: true })
+      if (activeTab === 'activities') setActiveTabState('deals')
     }
   }, [activeTab, activitiesUiEnabled, location.pathname, navigate, uiFlagsReady])
 
@@ -1299,10 +1300,13 @@ function Dashboard() {
           {/* Brand + compte : pleine largeur */}
           <header className="flex items-center justify-between gap-3">
             <Link
-              to="/vols"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              to="/sejours"
+              onClick={() => {
+                setActiveTabState('deals')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-              aria-label="FlightWatcher, retour à la recherche"
+              aria-label="FlightWatcher, retour à Parcours"
             >
               <p className="app-kicker mb-0.5">FlightWatcher</p>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
@@ -1314,31 +1318,27 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* Onglets : barre bas mobile, pill centrée desktop */}
+          {/* Onglets : Vols · Activités · Parcours+ · Planner · Favoris */}
           <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
             <div className="app-tabbar w-full max-w-lg sm:max-w-2xl">
               {(
                 [
                   { id: 'search' as const, label: t('nav.search') },
-                  ...(dealsUiEnabled
-                    ? [{ id: 'deals' as const, label: t('nav.deals') }]
-                    : []),
                   ...(activitiesUiEnabled
                     ? [{ id: 'activities' as const, label: 'Activités' }]
                     : []),
-                  { id: 'planner' as const, label: t('nav.planner') },
-                  ...(alertsUiEnabled
-                    ? [{ id: 'alerts' as const, label: t('nav.alerts') }]
+                  ...(dealsUiEnabled
+                    ? [{ id: 'deals' as const, label: t('nav.deals') }]
                     : []),
+                  { id: 'planner' as const, label: t('nav.planner') },
                   { id: 'saved' as const, label: t('nav.saved') },
                 ] as const
               ).map((tab) => (
                 <motion.div
                   key={tab.id}
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ type: 'spring', stiffness: 380, damping: 24 }}
-                  className="min-w-0 flex-1"
+                  whileTap={{ scale: tab.id === 'deals' ? 0.94 : 0.97 }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                  className={`min-w-0 flex-1 ${tab.id === 'deals' ? 'app-tab-center-slot' : ''}`}
                 >
                   <Link
                     to={
@@ -1346,11 +1346,44 @@ function Dashboard() {
                         ? { pathname: TAB_PATH[tab.id], search: location.search }
                         : TAB_PATH[tab.id]
                     }
-                    onClick={() => setActiveTabState(tab.id)}
-                    className={`app-tab ${activeTab === tab.id ? 'app-tab-active' : ''}`}
+                    onClick={() => {
+                      if (activeTab === tab.id) {
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                        window.dispatchEvent(
+                          new CustomEvent('fw:tab-scroll-top', {
+                            detail: { tab: tab.id },
+                          }),
+                        )
+                      }
+                      setActiveTabState(tab.id)
+                    }}
+                    className={`app-tab ${tab.id === 'deals' ? 'app-tab-center' : ''} ${
+                      activeTab === tab.id
+                        ? tab.id === 'deals'
+                          ? 'app-tab-center-active'
+                          : 'app-tab-active'
+                        : ''
+                    }`}
                     aria-current={activeTab === tab.id ? 'page' : undefined}
                   >
-                    <span className="relative z-[1] truncate">{tab.label}</span>
+                    {tab.id === 'deals' ? (
+                      <>
+                        <span className="app-tab-orb" aria-hidden>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10Z"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinejoin="round"
+                            />
+                            <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+                          </svg>
+                        </span>
+                        <span className="app-tab-center-label truncate">{tab.label}</span>
+                      </>
+                    ) : (
+                      <span className="relative z-[1] truncate">{tab.label}</span>
+                    )}
                   </Link>
                 </motion.div>
               ))}

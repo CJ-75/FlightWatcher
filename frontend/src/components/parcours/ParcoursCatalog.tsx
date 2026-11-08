@@ -4,6 +4,7 @@ import {
   buildParcoursFeed,
   cityDisplayNameFr,
   isFeaturedToday,
+  itineraryOccasionEmoji,
   type Itinerary,
   type ItineraryOccasion,
   type ParcoursFeedRow,
@@ -11,7 +12,6 @@ import {
 import { getApiClient } from '../../utils/apiClient'
 import { FwKicker } from '../ui/FwKicker'
 import { ItineraryCard } from './ItineraryCard'
-import { ItineraryOccasionIcon } from './ItineraryOccasionIcon'
 
 const CITY_CHOICES = [
   'paris',
@@ -129,22 +129,26 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
   return (
     <div className="w-full">
       {!embedded ? (
-        <div className="mb-5 sm:mb-6">
+        <div className="mb-5 sm:mb-6 lg:mb-8">
           <FwKicker>Parcours</FwKicker>
-          <h2 className="mt-1.5 text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+          <h2 className="mt-1.5 text-2xl sm:text-3xl lg:text-4xl font-extrabold text-ink tracking-tight">
             Où aller, quoi faire
           </h2>
-          <p className="app-subtitle mt-1 max-w-xl">
+          <p className="app-subtitle mt-1 max-w-xl lg:max-w-2xl">
             Des balades et des week-ends choisis pour toi.
           </p>
         </div>
       ) : null}
 
-      <div className={`relative inline-block ${embedded ? 'mb-5' : 'mb-5 -mt-1'}`}>
+      <div
+        className={`relative inline-block ${
+          embedded ? 'mb-5 lg:mb-6' : 'mb-5 -mt-1 lg:mb-6'
+        }`}
+      >
         <button
           type="button"
           onClick={() => setCityOpen((v) => !v)}
-          className="rounded-full border border-line bg-white px-3.5 py-2 text-sm font-bold text-ink shadow-sm"
+          className="rounded-full border border-line bg-white px-3.5 py-2 lg:px-4 lg:py-2.5 text-sm lg:text-[15px] font-bold text-ink shadow-sm"
         >
           Près de toi · {cityLabel} ▾
         </button>
@@ -184,7 +188,7 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
       ) : null}
 
       {loading ? (
-        <div className="space-y-8">
+        <div className="space-y-8 lg:space-y-12">
           <SkeletonRow landscape />
           <SkeletonRow />
         </div>
@@ -198,7 +202,10 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
         <EmptyCity cityLabel={cityLabel} />
       ) : null}
 
-      {!loading && !occasion && items.length > 0 && !rows.some((r) => r.kind === 'near') ? (
+      {!loading &&
+      !occasion &&
+      items.length > 0 &&
+      !rows.some((r) => r.kind === 'near') ? (
         <EmptyCity cityLabel={cityLabel} nearby={nearbyCities(items, city)} />
       ) : null}
 
@@ -226,31 +233,32 @@ function FeedRow({
 }) {
   if (row.kind === 'envies') {
     return (
-      <section className="mb-10">
-        <h3 className="mb-3 text-xl font-bold text-ink">{row.title}</h3>
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-none">
+      <section className="mb-10 lg:mb-14" aria-label="Envies">
+        <p className="mb-2 px-0.5 text-xs font-extrabold uppercase tracking-wider text-ink-soft">
+          Inspire-toi
+        </p>
+        <h3 className="mb-3 lg:mb-4 text-xl lg:text-2xl font-bold text-ink">
+          {row.title}
+        </h3>
+        <div className="flex flex-wrap gap-2 lg:gap-2.5 -mx-0.5 px-0.5">
           {row.chips.map((chip) => (
             <button
               key={chip.occasion}
               type="button"
               onClick={() => onOccasion(chip.occasion)}
-              className="min-w-[132px] shrink-0 rounded-2xl border border-line bg-white p-3 text-left shadow-sm"
+              className="inline-flex items-center gap-1.5 shrink-0 rounded-full border border-line bg-white px-3 py-1.5 lg:px-3.5 lg:py-2 text-left transition-all hover:border-[color:var(--fw-accent,#FF6B35)]/40"
             >
-              <div
-                className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl"
-                style={{
-                  background: 'var(--fw-accent-soft)',
-                  color: 'var(--fw-accent)',
-                }}
-              >
-                <ItineraryOccasionIcon occasion={chip.occasion} size={20} />
-              </div>
-              <p className="text-sm font-bold text-ink leading-snug">
+              <span className="inline-flex h-6 w-6 lg:h-7 lg:w-7 items-center justify-center rounded-lg bg-[color:var(--fw-accent-soft,#FFE7DC)] text-[13px] lg:text-[14px] leading-none">
+                {itineraryOccasionEmoji(chip.occasion)}
+              </span>
+              <span className="text-[12px] lg:text-[13px] font-bold whitespace-nowrap text-ink">
                 {chip.label}
-              </p>
-              <p className="mt-1 text-xs font-medium text-muted">
-                {chip.count} parcours
-              </p>
+              </span>
+              {chip.count > 0 ? (
+                <span className="inline-flex min-w-[1.25rem] justify-center rounded-full bg-[color:var(--fw-accent-soft,#FFE7DC)] px-1.5 py-0.5 text-[10px] lg:text-[11px] font-bold tabular-nums leading-none text-[color:var(--fw-accent,#FF6B35)]">
+                  {chip.count}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -260,19 +268,23 @@ function FeedRow({
 
   if (row.kind === 'featured') {
     return (
-      <section className="mb-10">
-        <h3 className="mb-3 text-xl font-bold text-ink">{row.title}</h3>
-        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory -mx-1 px-1">
+      <section className="mb-10 lg:mb-14">
+        <h3 className="mb-3 lg:mb-4 text-xl lg:text-2xl font-bold text-ink">
+          {row.title}
+        </h3>
+        {/* Mobile: carrousel · Desktop: grille large */}
+        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory -mx-1 px-1 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:overflow-visible lg:pb-0 xl:gap-6">
           {row.items.map((it) => (
             <div
               key={it.id}
-              className="w-[min(100%,420px)] shrink-0 snap-start sm:w-[520px]"
+              className="w-[min(100%,420px)] shrink-0 snap-start sm:w-[520px] lg:w-auto lg:min-w-0 lg:shrink"
             >
               <ItineraryCard
                 itinerary={it}
                 variant="landscape"
                 badge={cardBadge(it)}
                 onOpen={() => onOpen(it)}
+                className="lg:hover:scale-[1.01] lg:transition-transform"
               />
             </div>
           ))}
@@ -282,19 +294,23 @@ function FeedRow({
   }
 
   return (
-    <section className="mb-10">
-      <h3 className="mb-3 text-xl font-bold text-ink">{row.title}</h3>
-      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+    <section className="mb-10 lg:mb-14">
+      <h3 className="mb-3 lg:mb-4 text-xl lg:text-2xl font-bold text-ink">
+        {row.title}
+      </h3>
+      {/* Mobile: carrousel · Desktop: grille portraits */}
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-3 lg:gap-5 lg:overflow-visible lg:pb-0 xl:grid-cols-4 xl:gap-6">
         {row.items.map((it) => (
           <div
             key={it.id}
-            className="w-[70vw] max-w-[260px] shrink-0 sm:w-[240px]"
+            className="w-[70vw] max-w-[260px] shrink-0 sm:w-[240px] lg:w-auto lg:max-w-none lg:shrink"
           >
             <ItineraryCard
               itinerary={it}
               variant="portrait"
               badge={cardBadge(it)}
               onOpen={() => onOpen(it)}
+              className="lg:hover:scale-[1.015] lg:transition-transform"
             />
           </div>
         ))}
@@ -330,8 +346,8 @@ function EmptyCity({
   nearby?: string[]
 }) {
   return (
-    <div className="mb-8 rounded-2xl border border-line bg-white px-4 py-5">
-      <p className="text-sm font-semibold text-ink">
+    <div className="mb-8 rounded-2xl border border-line bg-white px-4 py-5 lg:px-6 lg:py-6">
+      <p className="text-sm lg:text-base font-semibold text-ink">
         Pas encore de parcours à {cityLabel}
       </p>
       {nearby && nearby.length ? (
@@ -346,15 +362,21 @@ function EmptyCity({
 function SkeletonRow({ landscape }: { landscape?: boolean }) {
   return (
     <div>
-      <div className="mb-3 h-6 w-40 rounded bg-line/80" />
-      <div className="flex gap-3 overflow-hidden">
-        {[0, 1].map((i) => (
+      <div className="mb-3 h-6 w-40 rounded bg-line/80 lg:mb-4 lg:h-7 lg:w-52" />
+      <div
+        className={`flex gap-3 overflow-hidden lg:gap-5 ${
+          landscape
+            ? 'lg:grid lg:grid-cols-2 lg:overflow-visible'
+            : 'lg:grid lg:grid-cols-3 xl:grid-cols-4 lg:overflow-visible'
+        }`}
+      >
+        {[0, 1, 2, 3].slice(0, landscape ? 2 : 4).map((i) => (
           <div
             key={i}
-            className={`shrink-0 animate-pulse rounded-[24px] bg-line/70 ${
+            className={`shrink-0 animate-pulse rounded-[24px] bg-line/70 lg:w-auto lg:shrink ${
               landscape
-                ? 'aspect-[16/10] w-[min(100%,420px)]'
-                : 'aspect-[3/4] w-[70vw] max-w-[240px]'
+                ? 'aspect-[16/10] w-[min(100%,420px)] lg:w-full'
+                : 'aspect-[3/4] w-[70vw] max-w-[240px] lg:max-w-none lg:w-full'
             }`}
           />
         ))}

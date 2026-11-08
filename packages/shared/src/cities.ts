@@ -867,12 +867,26 @@ function fallbackImageForKey(key: string): string {
 /** Hero backgrounds need >330px; Wikimedia REST thumbs are tiny by default. */
 const CITY_HERO_WIDTH = 1280
 
+/** Wikimedia hotlink steps only (https://w.wiki/GHai) — other widths → HTTP 400. */
+const WIKIMEDIA_THUMB_STEPS = [
+  20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840,
+] as const
+
+function snapWikimediaThumbWidth(width: number): number {
+  const w = Math.max(1, Math.round(width))
+  for (const step of WIKIMEDIA_THUMB_STEPS) {
+    if (step >= w) return step
+  }
+  return WIKIMEDIA_THUMB_STEPS[WIKIMEDIA_THUMB_STEPS.length - 1]
+}
+
 export function upscaleCityHeroUrl(url: string, width = CITY_HERO_WIDTH): string {
   const raw = (url || '').trim()
   if (!raw) return raw
   if (/thumb\.wikimedia\.org|upload\.wikimedia\.org/i.test(raw)) {
     // Handles `/330px-` and `/langfr-330px-` variants.
-    return raw.replace(/(\d+)px-/i, `${width}px-`)
+    const step = snapWikimediaThumbWidth(width)
+    return raw.replace(/(\d+)px-/i, `${step}px-`)
   }
   if (/images\.unsplash\.com/i.test(raw)) {
     try {

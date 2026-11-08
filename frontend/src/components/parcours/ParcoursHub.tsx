@@ -32,20 +32,24 @@ export function ParcoursHub() {
 
   return (
     <div className="w-full">
-      <div className="mb-1.5">
-        <FwKicker>Parcours</FwKicker>
-      </div>
-      <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-        Où aller, quoi faire
-      </h2>
-      <p className="app-subtitle mt-1 mb-4 max-w-xl">
-        Des balades et des week-ends choisis pour toi.
-      </p>
+      <header className="mb-5 lg:mb-7 lg:flex lg:items-end lg:justify-between lg:gap-8">
+        <div className="min-w-0">
+          <div className="mb-1.5">
+            <FwKicker>Parcours</FwKicker>
+          </div>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-ink tracking-tight">
+            Où aller, quoi faire
+          </h2>
+          <p className="app-subtitle mt-1.5 max-w-xl lg:max-w-2xl lg:text-[15px]">
+            Des balades et des week-ends choisis pour toi.
+          </p>
+        </div>
+      </header>
 
       <div
         role="tablist"
         aria-label="Parcours ou séjours"
-        className="mb-5 flex w-full gap-5 border-b border-line"
+        className="mb-5 lg:mb-7 flex w-full gap-5 lg:gap-8 border-b border-line"
       >
         {(
           [
@@ -61,7 +65,7 @@ export function ParcoursHub() {
               role="tab"
               aria-selected={on}
               onClick={() => select(s.id)}
-              className={`relative pb-3 text-sm font-bold tracking-tight transition-colors ${
+              className={`relative pb-3 lg:pb-3.5 text-sm lg:text-[15px] font-bold tracking-tight transition-colors ${
                 on ? 'text-ink' : 'text-muted hover:text-ink'
               }`}
             >

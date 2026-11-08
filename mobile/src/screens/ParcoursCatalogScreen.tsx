@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -8,13 +8,14 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useScrollToTop } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildParcoursFeed,
   cityDisplayNameFr,
   isFeaturedToday,
+  itineraryOccasionEmoji,
   type Itinerary,
   type ItineraryOccasion,
 } from '@flightwatcher/shared'
@@ -22,7 +23,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
 import { FwKicker } from '../components/FwKicker'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
-import { ItineraryOccasionIcon } from '../components/parcours/ItineraryOccasionIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, spacing } from '../theme'
@@ -47,6 +47,8 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const scrollRef = useRef<ScrollView>(null)
+  useScrollToTop(scrollRef)
   const [city, setCity] = useState('paris')
   const [cityOpen, setCityOpen] = useState(false)
   const [items, setItems] = useState<Itinerary[]>([])
@@ -125,6 +127,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
     <View style={styles.root}>
       <ScreenBackground />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{
           paddingTop: embedded ? 0 : insets.top + 12,
           paddingBottom: insets.bottom + 110,
@@ -202,27 +205,51 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
           if (row.kind === 'envies') {
             return (
               <View key={row.id} style={styles.section}>
+                <Text style={styles.envieKicker}>INSPIRE-TOI</Text>
                 <Text style={styles.rowTitle}>{row.title}</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {row.chips.map((chip) => (
-                    <Pressable
-                      key={chip.occasion}
-                      onPress={() => setOccasion(chip.occasion)}
-                      style={styles.envie}
-                    >
-                      <View style={styles.envieIcon}>
-                        <ItineraryOccasionIcon
-                          occasion={chip.occasion}
-                          size={20}
-                          color="#FF6B35"
-                        />
-                      </View>
-                      <Text style={styles.envieLabel}>{chip.label}</Text>
-                      <Text style={styles.envieCount}>
-                        {chip.count} parcours
-                      </Text>
-                    </Pressable>
-                  ))}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.envieRail}
+                >
+                  {row.chips.map((chip) => {
+                    const on = occasion === chip.occasion
+                    return (
+                      <Pressable
+                        key={chip.occasion}
+                        onPress={() =>
+                          setOccasion((prev) =>
+                            prev === chip.occasion ? null : chip.occasion,
+                          )
+                        }
+                        style={[styles.envie, on && styles.envieOn]}
+                      >
+                        <View
+                          style={[styles.envieIcon, on && styles.envieIconOn]}
+                        >
+                          <Text style={styles.envieEmoji}>
+                            {itineraryOccasionEmoji(chip.occasion)}
+                          </Text>
+                        </View>
+                        <Text
+                          style={[styles.envieLabel, on && styles.envieLabelOn]}
+                          numberOfLines={2}
+                        >
+                          {chip.label}
+                        </Text>
+                        {chip.count > 0 ? (
+                          <Text
+                            style={[
+                              styles.envieCount,
+                              on && styles.envieCountOn,
+                            ]}
+                          >
+                            {chip.count} parcours
+                          </Text>
+                        ) : null}
+                      </Pressable>
+                    )
+                  })}
                 </ScrollView>
               </View>
             )
@@ -321,29 +348,62 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginBottom: 12,
   },
+  envieKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    color: colors.muted,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  envieRail: {
+    gap: 8,
+    paddingRight: 8,
+  },
   envie: {
-    width: 132,
-    marginRight: 12,
-    backgroundColor: '#fff',
+    width: 124,
     borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  envieOn: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
   envieIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 10,
     backgroundColor: '#FFE7DC',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
   },
-  envieLabel: { fontFamily: fonts.bold, fontSize: 14, color: colors.ink },
-  envieCount: {
-    marginTop: 4,
-    fontFamily: fonts.medium,
+  envieIconOn: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  envieEmoji: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  envieLabel: {
+    fontFamily: fonts.extrabold,
     fontSize: 12,
+    color: colors.ink,
+    lineHeight: 15,
+  },
+  envieLabelOn: {
+    color: '#F5EFEA',
+  },
+  envieCount: {
+    fontFamily: fonts.semibold,
+    fontSize: 10,
     color: colors.muted,
+  },
+  envieCountOn: {
+    color: 'rgba(245,239,234,0.7)',
   },
 })

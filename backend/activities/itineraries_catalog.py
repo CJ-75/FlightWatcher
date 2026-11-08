@@ -14,47 +14,22 @@ PUBLIC_COLS = (
     "budget_estimate_eur,budget_basis,sort_weight,published_at,is_demo"
 )
 
-# Wikimedia city heroes (aligned with packages/shared cityImages) — fill empty covers in API.
+# Unsplash covers (mobile-friendly) — aligned with packages/shared cityUnsplash.ts
 _CITY_COVER_FALLBACK = {
-    "paris": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/"
-        "La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg/"
-        "1280px-La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg"
-    ),
-    "marseille": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/"
-        "Notre-Dame_de_la_Garde_aerial_view_2020.jpeg/"
-        "1280px-Notre-Dame_de_la_Garde_aerial_view_2020.jpeg"
-    ),
-    "lisbon": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/"
-        "Lisboa_-_Portugal_%2852597836992%29.jpg/"
-        "1280px-Lisboa_-_Portugal_%2852597836992%29.jpg"
-    ),
-    "lisbonne": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/"
-        "Lisboa_-_Portugal_%2852597836992%29.jpg/"
-        "1280px-Lisboa_-_Portugal_%2852597836992%29.jpg"
-    ),
-    "porto": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/"
-        "Puente_Don_Luis_I%2C_Oporto%2C_Portugal%2C_2012-05-09%2C_DD_13.JPG/"
-        "1280px-Puente_Don_Luis_I%2C_Oporto%2C_Portugal%2C_2012-05-09%2C_DD_13.JPG"
-    ),
+    "paris": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "marseille": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "lisbon": "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "lisbonne": "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "porto": "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1280&q=80&fm=jpg",
 }
 
-# Per-slug covers so demo cards are not all identical for a city.
 _SLUG_COVER_FALLBACK = {
-    "ferie-11-novembre-paris": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/"
-        "Paris_-_Eiffelturm_und_Marsfeld2.jpg/"
-        "1280px-Paris_-_Eiffelturm_und_Marsfeld2.jpg"
-    ),
-    "marseille-en-amoureux": (
-        "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/"
-        "Vieux-Port_de_Marseille.jpg/"
-        "1280px-Vieux-Port_de_Marseille.jpg"
-    ),
+    "balade-romantique-paris": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "ferie-11-novembre-paris": "https://images.unsplash.com/photo-1522093007474-d86e9bf7ba6f?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "marseille-au-soleil": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "marseille-en-amoureux": "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "lisbonne-week-end": "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1280&q=80&fm=jpg",
+    "porto-tout-doux": "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1280&q=80&fm=jpg",
 }
 
 
@@ -82,15 +57,19 @@ def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
                 str(it.get("sort_key") or ""),
             ),
         )
+    slug = str(out.get("slug") or "").strip().lower()
+    city = str(out.get("city_slug") or "").strip().lower()
     cover = str(out.get("cover_image") or "").strip()
-    if not cover:
-        slug = str(out.get("slug") or "").strip().lower()
-        city = str(out.get("city_slug") or "").strip().lower()
-        out["cover_image"] = (
-            _SLUG_COVER_FALLBACK.get(slug)
-            or _CITY_COVER_FALLBACK.get(city)
-            or None
-        )
+    # Prefer curated Unsplash for known demo slugs (avoids dead Wikimedia / 404 Unsplash ids).
+    curated = _SLUG_COVER_FALLBACK.get(slug) or _CITY_COVER_FALLBACK.get(city)
+    if curated and (
+        not cover
+        or "wikimedia.org" in cover
+        or "photo-1499853387-4b3839150cba" in cover
+    ):
+        out["cover_image"] = curated
+    elif not cover and curated:
+        out["cover_image"] = curated
     return out
 
 

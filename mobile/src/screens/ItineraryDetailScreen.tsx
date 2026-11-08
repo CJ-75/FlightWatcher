@@ -26,6 +26,7 @@ import {
   type ItineraryItem,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { coverUri } from '../lib/coverUri'
 import { useAuth } from '../context/AuthContext'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
@@ -137,8 +138,15 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   }
 
   const cover =
-    itin.cover_image ||
-    (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris'))
+    coverUri(
+      itin.cover_image ||
+        (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris')),
+      {
+        width: 1280,
+        citySlug: itin.city_slug,
+        slug: itin.slug,
+      },
+    ) || cityImageUrl('paris')
   const cityLabel =
     cityDisplayNameFr(null, itin.city_slug || '') || itin.city_slug || ''
   const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]
