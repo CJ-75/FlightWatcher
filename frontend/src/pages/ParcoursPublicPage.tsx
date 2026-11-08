@@ -286,10 +286,6 @@ export default function ParcoursPublicPage() {
               onBookActivity={openActivity}
             />
           </section>
-
-          <p className="text-[11px] leading-relaxed text-[#A3988C]">
-            Photos et lieux : OSM, Geoapify, Viator, Wikimedia, Panoramax.
-          </p>
         </div>
       </ItineraryDetailChrome>
 

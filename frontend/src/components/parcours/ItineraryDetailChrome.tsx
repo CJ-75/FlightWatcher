@@ -43,6 +43,7 @@ export function ItineraryDetailChrome({
           src={heroUrl}
           alt=""
           aria-hidden
+          referrerPolicy="no-referrer"
           className="absolute inset-0 h-full w-full scale-[1.02] object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-transparent" />

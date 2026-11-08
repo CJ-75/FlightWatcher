@@ -388,7 +388,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, embedded && styles.rootEmbedded]}>
       {!embedded ? <ScreenBackground /> : null}
 
       <FlatList
@@ -400,6 +400,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
             return item.deal.id || String(i)
           }}
           keyboardShouldPersistTaps="handled"
+          style={embedded ? styles.listTransparent : undefined}
           contentContainerStyle={{
             paddingHorizontal: embedded ? 0 : spacing.xl,
             paddingTop: embedded ? 8 : insets.top + 12,
@@ -741,6 +742,8 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  rootEmbedded: { backgroundColor: 'transparent' },
+  listTransparent: { backgroundColor: 'transparent' },
   centered: {
     flex: 1,
     alignItems: 'center',

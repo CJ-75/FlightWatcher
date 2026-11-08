@@ -35,7 +35,8 @@ WITH seeded AS (
         'paris',
         'published', 'admin', 'half_day',
         ARRAY['romantique', 'nuit'],
-        NULL, 40, 'for_two', 10, now(), true, 'public'
+        'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg/1280px-La_Tour_Eiffel_vue_de_la_Tour_Saint-Jacques%2C_Paris_ao%C3%BBt_2014_%282%29.jpg',
+        40, 'for_two', 10, now(), true, 'public'
     ),
     (
         'Férié du 11 novembre à Paris',
@@ -45,7 +46,8 @@ WITH seeded AS (
         'paris',
         'published', 'admin', 'day',
         ARRAY['ferie', 'petit_budget'],
-        NULL, 55, 'per_person', 20, now(), true, 'public'
+        'https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6e/Paris_-_Eiffelturm_und_Marsfeld2.jpg/1280px-Paris_-_Eiffelturm_und_Marsfeld2.jpg',
+        55, 'per_person', 20, now(), true, 'public'
     ),
     (
         'Marseille au soleil',
@@ -55,7 +57,8 @@ WITH seeded AS (
         'marseille',
         'published', 'admin', 'day',
         ARRAY['soleil', 'amis'],
-        NULL, 35, 'per_person', 15, now(), true, 'public'
+        'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a1/Notre-Dame_de_la_Garde_aerial_view_2020.jpeg/1280px-Notre-Dame_de_la_Garde_aerial_view_2020.jpeg',
+        35, 'per_person', 15, now(), true, 'public'
     ),
     (
         'Marseille en amoureux',
@@ -65,7 +68,8 @@ WITH seeded AS (
         'marseille',
         'published', 'admin', 'half_day',
         ARRAY['romantique', 'soleil'],
-        NULL, 60, 'for_two', 12, now(), true, 'public'
+        'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Vieux-Port_de_Marseille.jpg/1280px-Vieux-Port_de_Marseille.jpg',
+        60, 'for_two', 12, now(), true, 'public'
     ),
     (
         'Lisbonne en un week-end',
@@ -75,7 +79,8 @@ WITH seeded AS (
         'lisbon',
         'published', 'admin', 'weekend',
         ARRAY['amis', 'saison'],
-        NULL, 80, 'per_person', 8, now(), true, 'public'
+        'https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f2/Lisboa_-_Portugal_%2852597836992%29.jpg/1280px-Lisboa_-_Portugal_%2852597836992%29.jpg',
+        80, 'per_person', 8, now(), true, 'public'
     ),
     (
         'Porto tout doux',
@@ -85,7 +90,8 @@ WITH seeded AS (
         'porto',
         'published', 'admin', 'day',
         ARRAY['petit_budget', 'romantique'],
-        NULL, 45, 'for_two', 5, now(), true, 'public'
+        'https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e5/Puente_Don_Luis_I%2C_Oporto%2C_Portugal%2C_2012-05-09%2C_DD_13.JPG/1280px-Puente_Don_Luis_I%2C_Oporto%2C_Portugal%2C_2012-05-09%2C_DD_13.JPG',
+        45, 'for_two', 5, now(), true, 'public'
     )
     RETURNING id, slug
 )

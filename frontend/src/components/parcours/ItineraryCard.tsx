@@ -33,12 +33,8 @@ export function ItineraryCard({
     ? cityDisplayNameFr(null, itinerary.city_slug)
     : ''
   const cover =
-    itinerary.cover_image ||
-    (itinerary.city_slug
-      ? cityImageUrl(
-          cityDisplayNameFr(null, itinerary.city_slug) || itinerary.city_slug,
-        )
-      : null)
+    (itinerary.cover_image || '').trim() ||
+    (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : null)
   const meta = itineraryMetaLine({
     cityLabel: city || null,
     durationKind: itinerary.duration_kind as ItineraryDurationKind | null,
@@ -58,6 +54,7 @@ export function ItineraryCard({
         <img
           src={cover}
           alt=""
+          referrerPolicy="no-referrer"
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (

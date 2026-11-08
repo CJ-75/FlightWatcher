@@ -269,10 +269,6 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
               })}
             </View>
           ))}
-
-          <Text style={styles.attr}>
-            Sources : OSM, Geoapify, Viator, Wikimedia, Panoramax.
-          </Text>
         </View>
       </ItineraryDetailChrome>
 
@@ -385,12 +381,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 12,
     color: '#FF6B35',
-  },
-  attr: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    color: '#A3988C',
-    lineHeight: 16,
   },
   toast: {
     position: 'absolute',
