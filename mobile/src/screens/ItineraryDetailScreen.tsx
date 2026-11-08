@@ -27,6 +27,10 @@ import {
   type ItineraryItem,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import {
+  getParcoursDetailMemory,
+  setParcoursDetailMemory,
+} from '../lib/parcoursCache'
 import { coverUri } from '../lib/coverUri'
 import { useAuth } from '../context/AuthContext'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
@@ -38,11 +42,32 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ItineraryDetail'>
 
 const CITY_LS = 'fw_parcours_city'
 
+function initialItinerary(
+  itineraryId: string,
+  preview?: RootStackParamList['ItineraryDetail']['preview'],
+): Itinerary | null {
+  const cached = getParcoursDetailMemory(itineraryId)
+  if (cached) return cached
+  if (preview?.id || preview?.title) {
+    return { ...(preview as Itinerary), id: preview.id || itineraryId }
+  }
+  return null
+}
+
+function hasSteps(it: Itinerary | null): boolean {
+  return Array.isArray(it?.itinerary_items)
+}
+
 export function ItineraryDetailScreen({ route, navigation }: Props) {
-  const { itineraryId } = route.params
+  const { itineraryId, preview } = route.params
   const { user, signInWithGoogle } = useAuth()
-  const [itin, setItin] = useState<Itinerary | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [itin, setItin] = useState<Itinerary | null>(() =>
+    initialItinerary(itineraryId, preview),
+  )
+  /** Full detail (with steps) still in flight — chrome can already paint. */
+  const [loadingSteps, setLoadingSteps] = useState(
+    () => !hasSteps(initialItinerary(itineraryId, preview)),
+  )
   const [error, setError] = useState<string | null>(null)
   const [userCity, setUserCity] = useState('paris')
   const [toast, setToast] = useState<string | null>(null)
@@ -72,12 +97,16 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   )
 
   useEffect(() => {
-    setLoading(true)
+    const boot = initialItinerary(itineraryId, preview)
+    if (boot) setItin(boot)
+    const needFetch = !hasSteps(boot)
+    if (needFetch) setLoadingSteps(true)
     void getApi()
       .getParcours(itineraryId)
       .then((r) => {
         if (!r.ok || !r.itinerary) throw new Error('not_found')
         const row = r.itinerary as unknown as Itinerary
+        setParcoursDetailMemory(row)
         setItin(row)
         setError(null)
         void refreshLiked(row.id)
@@ -92,11 +121,13 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
           .catch(() => {})
       })
       .catch(() => {
-        setItin(null)
-        setError('Parcours introuvable')
+        if (!boot) {
+          setItin(null)
+          setError('Parcours introuvable')
+        }
       })
-      .finally(() => setLoading(false))
-  }, [itineraryId, refreshLiked])
+      .finally(() => setLoadingSteps(false))
+  }, [itineraryId, preview, refreshLiked])
 
   useEffect(() => {
     if (!toast) return
@@ -119,7 +150,7 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     return true
   }
 
-  if (loading) {
+  if (!itin && loadingSteps) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />
@@ -237,6 +268,19 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
           ) : null}
 
           <Text style={styles.sectionTitle}>Les étapes</Text>
+          {loadingSteps && !items.length ? (
+            <View style={{ gap: 12 }}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={styles.stepSkeleton}>
+                  <View style={styles.stepNum} />
+                  <View style={{ flex: 1, gap: 8, paddingTop: 4 }}>
+                    <View style={[styles.skLine, { width: '36%' }]} />
+                    <View style={[styles.skLine, { width: '68%', height: 14 }]} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
           {days.map((day) => (
             <View key={day.dayOffset} style={{ marginBottom: 16 }}>
               {days.length > 1 ? (
@@ -360,6 +404,12 @@ const styles = StyleSheet.create({
   },
   step: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   stepPressed: { opacity: 0.72 },
+  stepSkeleton: { flexDirection: 'row', gap: 12, marginBottom: 4 },
+  skLine: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#EDE8E1',
+  },
   stepNum: {
     width: 32,
     height: 32,

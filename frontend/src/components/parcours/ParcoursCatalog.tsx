@@ -44,22 +44,45 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
     }
   })
   const [cityOpen, setCityOpen] = useState(false)
-  const [items, setItems] = useState<Itinerary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<Itinerary[]>(() => {
+    try {
+      const raw = sessionStorage.getItem('fw_parcours_catalog_v1')
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as Itinerary[]
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  })
+  const [loading, setLoading] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('fw_parcours_catalog_v1')
+      if (!raw) return true
+      const parsed = JSON.parse(raw) as Itinerary[]
+      return !(Array.isArray(parsed) && parsed.length > 0)
+    } catch {
+      return true
+    }
+  })
   const [error, setError] = useState<string | null>(null)
   const [occasion, setOccasion] = useState<ItineraryOccasion | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const api = getApiClient()
       const res = await api.listParcours({ limit: 80 })
       if (!res.ok) throw new Error('Catalogue indisponible')
-      setItems((res.itineraries || []) as unknown as Itinerary[])
+      const next = (res.itineraries || []) as unknown as Itinerary[]
+      setItems(next)
+      try {
+        sessionStorage.setItem('fw_parcours_catalog_v1', JSON.stringify(next))
+      } catch {
+        /* ignore */
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
-      setItems([])
+      setItems((prev) => prev)
     } finally {
       setLoading(false)
     }

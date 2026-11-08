@@ -14,6 +14,12 @@ PUBLIC_COLS = (
     "budget_estimate_eur,budget_basis,sort_weight,published_at,is_demo"
 )
 
+# Avoid places.geom (heavy geography) on public detail — meta.lat/lng is enough for Maps.
+DETAIL_SELECT = (
+    f"{PUBLIC_COLS}, "
+    "itinerary_items(*, places(id,name,kind,city_slug,location_precision,meta))"
+)
+
 # Unsplash covers (mobile-friendly) — aligned with packages/shared cityUnsplash.ts
 _CITY_COVER_FALLBACK = {
     "paris": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=90&fm=jpg",
@@ -128,7 +134,7 @@ def get_published_itinerary(
     try:
         q = (
             supabase.table("itineraries")
-            .select(f"{PUBLIC_COLS}, itinerary_items(*, places(*))")
+            .select(DETAIL_SELECT)
             .eq("status", "published")
             .limit(1)
         )

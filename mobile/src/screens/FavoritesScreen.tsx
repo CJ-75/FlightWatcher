@@ -528,7 +528,16 @@ export function FavoritesScreen() {
             variant="landscape"
             onPress={() =>
               navigation.navigate('ItineraryDetail', {
-                itineraryId: liked.itinerary_id,
+                itineraryId: card.slug || liked.itinerary_id,
+                preview: {
+                  id: liked.itinerary_id,
+                  slug: card.slug,
+                  title: card.title,
+                  subtitle: card.subtitle,
+                  cover_image: card.cover_image,
+                  city_slug: card.city_slug,
+                  duration_kind: card.duration_kind,
+                },
               })
             }
             style={styles.parcoursCard}

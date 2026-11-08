@@ -92,6 +92,24 @@ export type RootStackParamList = {
     returnHotelId?: string
   }
   InAppBrowser: { url: string; title?: string }
-  ItineraryDetail: { itineraryId: string }
+  ItineraryDetail: {
+    itineraryId: string
+    /** Card snapshot for instant chrome before detail fetch. */
+    preview?: {
+      id: string
+      slug?: string | null
+      title?: string
+      subtitle?: string | null
+      intro?: string | null
+      cover_image?: string | null
+      city_slug?: string | null
+      duration_kind?: string | null
+      occasions?: string[] | null
+      featured_from?: string | null
+      featured_to?: string | null
+      budget_estimate_eur?: number | null
+      budget_basis?: string | null
+    }
+  }
   NotFound: undefined
 }

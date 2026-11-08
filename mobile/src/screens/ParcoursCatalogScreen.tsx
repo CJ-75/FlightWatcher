@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native'
 import { useNavigation, useScrollToTop } from '@react-navigation/native'
@@ -21,11 +20,18 @@ import {
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
+import {
+  getParcoursCatalogMemory,
+  hydrateParcoursCatalogMemory,
+  rememberParcoursPreview,
+  setParcoursCatalogMemory,
+  setParcoursDetailMemory,
+} from '../lib/parcoursCache'
 import { FwKicker } from '../components/FwKicker'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, spacing } from '../theme'
+import { colors, fonts, shadow, spacing } from '../theme'
 
 const CITY_LS = 'fw_parcours_city'
 const CITIES = [
@@ -51,8 +57,10 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   useScrollToTop(scrollRef)
   const [city, setCity] = useState('paris')
   const [cityOpen, setCityOpen] = useState(false)
-  const [items, setItems] = useState<Itinerary[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<Itinerary[]>(
+    () => getParcoursCatalogMemory() ?? [],
+  )
+  const [loading, setLoading] = useState(() => !getParcoursCatalogMemory())
   const [refreshing, setRefreshing] = useState(false)
   const [occasion, setOccasion] = useState<ItineraryOccasion | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,15 +73,17 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
 
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true)
-    else setLoading(true)
+    else if (!getParcoursCatalogMemory()?.length) setLoading(true)
     setError(null)
     try {
       const res = await getApi().listParcours({ limit: 80 })
       if (!res.ok) throw new Error('Catalogue indisponible')
-      setItems((res.itineraries || []) as unknown as Itinerary[])
+      const next = (res.itineraries || []) as unknown as Itinerary[]
+      setItems(next)
+      setParcoursCatalogMemory(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
-      setItems([])
+      if (!getParcoursCatalogMemory()?.length) setItems([])
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -81,7 +91,20 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   }, [])
 
   useEffect(() => {
-    void load()
+    let cancelled = false
+    ;(async () => {
+      if (!getParcoursCatalogMemory()) {
+        const disk = await hydrateParcoursCatalogMemory()
+        if (!cancelled && disk?.length) {
+          setItems(disk)
+          setLoading(false)
+        }
+      }
+      if (!cancelled) void load()
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [load])
 
   useEffect(() => {
@@ -107,6 +130,16 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   )
 
   const open = (it: Itinerary) => {
+    rememberParcoursPreview(it)
+    // Prefetch detail while pushing the screen
+    void getApi()
+      .getParcours(it.slug || it.id)
+      .then((r) => {
+        if (r.ok && r.itinerary) {
+          setParcoursDetailMemory(r.itinerary as unknown as Itinerary)
+        }
+      })
+      .catch(() => {})
     void getApi()
       .trackActivityEvent({
         domain: 'itinerary',
@@ -118,10 +151,26 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       .catch(() => {})
     navigation.navigate('ItineraryDetail', {
       itineraryId: it.slug || it.id,
+      preview: {
+        id: it.id,
+        slug: it.slug,
+        title: it.title,
+        subtitle: it.subtitle,
+        intro: it.intro,
+        cover_image: it.cover_image,
+        city_slug: it.city_slug,
+        duration_kind: it.duration_kind,
+        occasions: it.occasions,
+        featured_from: it.featured_from,
+        featured_to: it.featured_to,
+        budget_estimate_eur: it.budget_estimate_eur,
+        budget_basis: it.budget_basis,
+      },
     })
   }
 
   const cityLabel = citySlugDisplayNameFr(city) || city
+  const showSkeleton = loading && items.length === 0
 
   return (
     <View style={styles.root}>
@@ -185,12 +234,25 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
           </Pressable>
         ) : null}
 
-        {loading ? (
-          <ActivityIndicator style={{ marginTop: 32 }} color={colors.primary} />
+        {error && items.length === 0 ? (
+          <Text style={styles.error}>{error}</Text>
         ) : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {!loading &&
+        {showSkeleton ? (
+          <View style={styles.skeletonBlock}>
+            {[0, 1, 2].map((i) => (
+              <View key={i} style={[styles.skeletonCard, shadow.soft]}>
+                <View style={styles.skeletonImage} />
+                <View style={styles.skeletonBody}>
+                  <View style={[styles.skeletonLine, { width: '70%' }]} />
+                  <View style={[styles.skeletonLine, { width: '42%' }]} />
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {!showSkeleton &&
           !occasion &&
           items.length > 0 &&
           !rows.some((r) => r.kind === 'near') ? (
@@ -341,6 +403,19 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   emptyTitle: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  skeletonBlock: { marginTop: 28, gap: 14 },
+  skeletonCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  skeletonImage: { height: 160, backgroundColor: colors.primaryMuted },
+  skeletonBody: { padding: 14, gap: 10 },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.primarySoft,
+  },
   section: { marginTop: 28 },
   rowTitle: {
     fontFamily: fonts.bold,
