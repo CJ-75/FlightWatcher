@@ -22,6 +22,24 @@ class TestEventValidation(unittest.TestCase):
             )
         )
 
+    def test_allows_planner_trip_detail(self):
+        self.assertIsNone(
+            validate_event_fields(
+                domain="planner",
+                event="trip_detail_viewed",
+                surface="trip_detail",
+                platform="web",
+            )
+        )
+        self.assertIsNone(
+            validate_event_fields(
+                domain="planner",
+                event="trip_tab_viewed",
+                surface="trip_detail",
+                platform="ios",
+            )
+        )
+
     def test_rejects_bad_event(self):
         self.assertEqual(
             validate_event_fields(

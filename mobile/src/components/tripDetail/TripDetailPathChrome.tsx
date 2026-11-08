@@ -7,9 +7,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   Platform,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import Svg, { Path } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   TRIP_DETAIL_TABS,
@@ -19,57 +21,101 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
+import { HotelPhotoGallery } from '../HotelPhotoGallery'
 
-type InsideChip = {
-  label: string
-  icon?: string
-  tab?: TripDetailTabId
-  onClick?: () => void
+type HotelHero = {
+  hotelId: string
+  hotelName: string
+  seedPhoto?: string | null
+  seedPhotos?: string[]
 }
 
 type Props = {
   tripId: string
   heroUrl: string
-  title: string
-  metaLine: string
+  city: string
+  /** When set, hero becomes a sliding hotel photo gallery */
+  hotelHero?: HotelHero | null
   metaChips?: string[]
   phaseLabel: string
   primary: TripPrimaryAction
   onPrimary: () => void
   onBack: () => void
   onShare?: () => void
+  onRename?: () => void
+  titleEditing?: boolean
+  titleDraft?: string
+  onTitleDraftChange?: (value: string) => void
+  onTitleSave?: () => void
+  onTitleCancel?: () => void
+  titleSaving?: boolean
   guideAvatarUrl?: string | null
   guideName?: string | null
   guideSubtitle?: string | null
-  groupRow?: ReactNode
   apercu: ReactNode
   programme: ReactNode
-  carnet: ReactNode
-  insideChips?: InsideChip[]
+  voyageurs: ReactNode
+  estimatedTotalLabel?: string | null
+  activeTab?: TripDetailTabId
+  onTabChange?: (tab: TripDetailTabId) => void
+}
+
+function PencilIcon({ color = '#fff', size = 13 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 20h9"
+        stroke={color}
+        strokeWidth="1.85"
+        strokeLinecap="round"
+      />
+      <Path
+        d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"
+        stroke={color}
+        strokeWidth="1.85"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  )
 }
 
 export function TripDetailPathChrome({
   tripId,
   heroUrl,
-  title,
-  metaLine,
+  city,
+  hotelHero,
   metaChips,
   phaseLabel,
   primary,
   onPrimary,
-  onBack,
+  onBack: _onBack,
   onShare,
+  onRename,
+  titleEditing,
+  titleDraft,
+  onTitleDraftChange,
+  onTitleSave,
+  onTitleCancel,
+  titleSaving,
   guideAvatarUrl,
   guideName,
   guideSubtitle,
-  groupRow,
   apercu,
   programme,
-  carnet,
-  insideChips,
+  voyageurs,
+  estimatedTotalLabel,
+  activeTab,
+  onTabChange,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const [tab, setTab] = useState<TripDetailTabId>('apercu')
+  const [tabInternal, setTabInternal] = useState<TripDetailTabId>('apercu')
+  const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
+  const tab = activeTab ?? tabInternal
+  const setTab = (next: TripDetailTabId) => {
+    onTabChange?.(next)
+    if (activeTab == null) setTabInternal(next)
+  }
 
   useEffect(() => {
     void trackTripTabViewed((body) => getApi().trackActivityEvent(body), {
@@ -81,55 +127,124 @@ export function TripDetailPathChrome({
   }, [tab, tripId])
 
   const body =
-    tab === 'apercu' ? apercu : tab === 'programme' ? programme : carnet
+    tab === 'programme'
+      ? programme
+      : tab === 'voyageurs'
+        ? voyageurs
+        : apercu
+  const chips = (metaChips || []).filter(Boolean)
 
-  const chips =
-    metaChips && metaChips.length > 0 ? metaChips : [phaseLabel].filter(Boolean)
+  const heroCopy = (
+    <View style={styles.heroCopy}>
+      <View style={styles.phasePill}>
+        <Text style={styles.phaseText}>{phaseLabel}</Text>
+      </View>
+      {titleEditing ? (
+        <View style={styles.renameRow}>
+          <TextInput
+            value={titleDraft ?? ''}
+            onChangeText={onTitleDraftChange}
+            autoFocus
+            maxLength={80}
+            editable={!titleSaving}
+            placeholder="Nom du voyage"
+            placeholderTextColor="rgba(255,255,255,0.45)"
+            style={styles.renameInput}
+            returnKeyType="done"
+            onSubmitEditing={onTitleSave}
+          />
+          <Pressable
+            onPress={onTitleSave}
+            disabled={titleSaving}
+            style={styles.renameOk}
+          >
+            <Text style={styles.renameOkText}>
+              {titleSaving ? '…' : 'OK'}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={onTitleCancel}
+            disabled={titleSaving}
+            style={styles.renameCancel}
+          >
+            <Text style={styles.renameCancelText}>Annuler</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={3}>
+            {city}
+          </Text>
+          {onRename ? (
+            <Pressable
+              onPress={onRename}
+              style={styles.renameBtn}
+              accessibilityLabel="Renommer"
+            >
+              <PencilIcon />
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+      {chips.length > 0 ? (
+        <View style={styles.chipRow}>
+          {chips.map((c, i) => (
+            <View key={`${c}-${i}`} style={styles.chipItem}>
+              {i > 0 ? <Text style={styles.chipDot}> · </Text> : null}
+              <Text style={styles.chipText}>{c}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  )
 
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 32 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={!gallerySwipeActive}
       >
-        <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
-          <LinearGradient
-            colors={['rgba(0,0,0,0.38)', 'transparent', 'rgba(0,0,0,0.72)']}
-            locations={[0, 0.35, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[styles.heroTop, { paddingTop: insets.top + 6 }]}>
-            <Pressable onPress={onBack} style={styles.glassBtn}>
-              <Text style={styles.glassIcon}>←</Text>
-            </Pressable>
-            {onShare ? (
-              <Pressable onPress={onShare} style={styles.glassBtn}>
-                <Text style={styles.glassIcon}>↗</Text>
-              </Pressable>
-            ) : (
-              <View style={{ width: 40 }} />
-            )}
-          </View>
-          <View style={styles.heroCopy}>
-            <Text style={styles.title} numberOfLines={3}>
-              {title}
-            </Text>
-            <View style={styles.chipRow}>
-              {chips.map((c, i) => (
-                <View key={`${c}-${i}`} style={styles.chipItem}>
-                  {i > 0 ? <Text style={styles.chipDot}> · </Text> : null}
-                  <Text style={styles.chipText}>{c}</Text>
+        {hotelHero ? (
+          <View style={styles.heroGallery}>
+            <HotelPhotoGallery
+              variant="hero"
+              hotelId={hotelHero.hotelId}
+              seedPhoto={hotelHero.seedPhoto || heroUrl}
+              seedPhotos={
+                hotelHero.seedPhotos?.length
+                  ? hotelHero.seedPhotos
+                  : [hotelHero.seedPhoto || heroUrl].filter(Boolean)
+              }
+              alt={hotelHero.hotelName}
+              hotelName={hotelHero.hotelName}
+              cityLabel={city}
+              height={340}
+              onHorizontalGesture={setGallerySwipeActive}
+              overlay={
+                <View>
+                  <View style={{ height: insets.top + 8 }} />
+                  {heroCopy}
                 </View>
-              ))}
-            </View>
-            {metaLine && chips.join(' · ') !== metaLine ? (
-              <Text style={styles.meta}>{metaLine}</Text>
-            ) : null}
+              }
+            />
           </View>
-        </ImageBackground>
+        ) : (
+          <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
+            <LinearGradient
+              colors={['rgba(0,0,0,0.4)', 'transparent', 'rgba(0,0,0,0.72)']}
+              locations={[0, 0.4, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={{ height: insets.top + 8 }} />
+            {heroCopy}
+          </ImageBackground>
+        )}
 
         <View style={styles.sheet}>
-          {(guideName || groupRow) && (
+          {(guideName || guideSubtitle) && (
             <View style={styles.guideRow}>
               <View style={styles.guideLeft}>
                 <View style={styles.avatar}>
@@ -160,11 +275,10 @@ export function TripDetailPathChrome({
               ) : null}
             </View>
           )}
-          {groupRow && !guideName ? groupRow : null}
 
           <View style={styles.tabs}>
             {TRIP_DETAIL_TABS.map((t) => {
-              const active = tab === t.id
+              const selected = tab === t.id
               return (
                 <Pressable
                   key={t.id}
@@ -172,188 +286,215 @@ export function TripDetailPathChrome({
                   style={styles.tab}
                 >
                   <Text
-                    style={[styles.tabLabel, active && styles.tabLabelActive]}
+                    style={[styles.tabLabel, selected && styles.tabLabelActive]}
                   >
                     {t.label}
                   </Text>
-                  {active ? <View style={styles.tabUnderline} /> : null}
+                  {selected ? <View style={styles.tabUnderline} /> : null}
                 </Pressable>
               )
             })}
           </View>
 
-          {tab === 'apercu' && insideChips && insideChips.length > 0 ? (
-            <View style={styles.insideGrid}>
-              {insideChips.map((chip) => (
-                <Pressable
-                  key={chip.label}
-                  onPress={() => {
-                    if (chip.tab) setTab(chip.tab)
-                    chip.onClick?.()
-                  }}
-                  style={styles.insideChip}
-                >
-                  <View style={styles.insideIcon}>
-                    <Text style={styles.insideIconText}>
-                      {chip.icon || chip.label.slice(0, 1)}
-                    </Text>
-                  </View>
-                  <Text style={styles.insideLabel}>{chip.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
           <View style={styles.panel}>{body}</View>
-
-          {!primary.informational ? (
-            <Pressable onPress={onPrimary} style={styles.inlineCta}>
-              <Text style={styles.inlineCtaText}>{primary.label}</Text>
-            </Pressable>
-          ) : null}
         </View>
       </ScrollView>
+
+      <View
+        style={[styles.sticky, { paddingBottom: Math.max(insets.bottom, 12) }]}
+      >
+        {estimatedTotalLabel ? (
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.stickyPriceKicker}>Total</Text>
+            <Text style={styles.stickyPrice} numberOfLines={1}>
+              {estimatedTotalLabel}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+        {primary.informational ? (
+          <Text style={styles.stickyInfo}>{primary.label}</Text>
+        ) : (
+          <Pressable onPress={onPrimary} style={styles.stickyCta}>
+            <Text style={styles.stickyCtaText}>{primary.label}</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F7F4EF' },
-  hero: {
-    minHeight: 420,
-    justifyContent: 'space-between',
-  },
-  heroTop: {
+  root: { flex: 1, backgroundColor: '#FFFBF8' },
+  hero: { minHeight: 340, justifyContent: 'space-between' },
+  heroGallery: { minHeight: 340, overflow: 'hidden' },
+  heroCopy: { paddingHorizontal: 20, paddingBottom: 36, gap: 8 },
+  titleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-  },
-  glassBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  glassIcon: {
-    color: '#fff',
-    fontFamily: fonts.semibold,
-    fontSize: 16,
-  },
-  heroCopy: {
-    paddingHorizontal: 20,
-    paddingBottom: 44,
+    alignItems: 'flex-start',
     gap: 8,
   },
   title: {
+    flexShrink: 1,
     color: '#fff',
-    fontFamily: fonts.serifItalic,
-    fontSize: 40,
-    lineHeight: 44,
-    letterSpacing: -0.6,
+    fontFamily: fonts.semibold,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: -0.4,
   },
-  chipRow: {
+  renameBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+    marginTop: 2,
+  },
+  renameRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
+    gap: 8,
   },
+  renameInput: {
+    flexGrow: 1,
+    minWidth: 150,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: '#fff',
+    fontFamily: fonts.semibold,
+    fontSize: 18,
+  },
+  renameOk: {
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  renameOkText: {
+    color: '#C2410C',
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+  },
+  renameCancel: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  renameCancelText: {
+    color: '#fff',
+    fontFamily: fonts.medium,
+    fontSize: 13,
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
   chipItem: { flexDirection: 'row', alignItems: 'center' },
   chipDot: {
-    color: 'rgba(255,255,255,0.4)',
-    fontFamily: fonts.medium,
-    fontSize: 13,
-  },
-  chipText: {
-    color: 'rgba(255,255,255,0.88)',
-    fontFamily: fonts.medium,
-    fontSize: 13,
-  },
-  meta: {
-    color: 'rgba(255,255,255,0.55)',
+    color: 'rgba(255,255,255,0.35)',
     fontFamily: fonts.medium,
     fontSize: 12,
   },
+  chipText: {
+    color: 'rgba(255,255,255,0.78)',
+    fontFamily: fonts.medium,
+    fontSize: 12,
+  },
+  phasePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.1)',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  phaseText: {
+    color: colors.ink,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
   sheet: {
-    marginTop: -28,
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+    marginTop: -24,
+    backgroundColor: '#FFFBF8',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 18,
     minHeight: 420,
-    shadowColor: '#140C08',
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 8,
   },
   guideRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 16,
     gap: 12,
   },
   guideLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EDE8E1',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0E8E0',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  avatarImg: { width: 44, height: 44 },
+  avatarImg: { width: 40, height: 40 },
   avatarLetter: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: '#6B5C50',
-  },
-  guideName: {
     fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.ink,
+    fontSize: 13,
+    color: '#8A6A58',
   },
+  guideName: { fontFamily: fonts.semibold, fontSize: 13, color: colors.ink },
   guideSub: {
     fontFamily: fonts.medium,
-    fontSize: 12,
-    color: '#8A7B6E',
+    fontSize: 11,
+    color: '#8A6A58',
     marginTop: 1,
   },
   inviteBtn: {
-    backgroundColor: colors.ink,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 999,
   },
-  inviteText: {
-    color: '#fff',
-    fontFamily: fonts.bold,
-    fontSize: 12,
-  },
+  inviteText: { color: '#fff', fontFamily: fonts.semibold, fontSize: 12 },
   tabs: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EDE8E1',
-    marginBottom: 18,
+    borderBottomColor: '#EDE4DC',
+    marginBottom: 16,
   },
-  tab: { paddingBottom: 12 },
-  tabLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: '#A3988C',
-  },
+  tab: { paddingBottom: 10 },
+  tabLabel: { fontFamily: fonts.semibold, fontSize: 13, color: '#A89888' },
   tabLabelActive: { color: colors.ink },
   tabUnderline: {
     position: 'absolute',
@@ -361,51 +502,53 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 2,
-    borderRadius: 2,
-    backgroundColor: colors.ink,
-  },
-  insideGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  insideChip: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F7F4EF',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-  },
-  insideIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  insideIconText: { fontSize: 15 },
-  insideLabel: {
-    fontFamily: fonts.semibold,
-    fontSize: 10,
-    color: '#5C4F44',
-    textAlign: 'center',
+    borderRadius: 1,
+    backgroundColor: colors.primary,
   },
   panel: { paddingBottom: 16 },
-  inlineCta: {
-    marginTop: 8,
-    marginBottom: 8,
-    alignSelf: 'stretch',
-    backgroundColor: colors.ink,
-    paddingVertical: 15,
-    borderRadius: 999,
+  sticky: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: 'rgba(255,251,248,0.96)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EDE4DC',
   },
-  inlineCtaText: {
-    color: '#fff',
+  stickyPriceKicker: {
+    fontFamily: fonts.semibold,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: '#8A6A58',
+  },
+  stickyPrice: {
     fontFamily: fonts.semibold,
     fontSize: 15,
+    color: colors.ink,
+    marginTop: 1,
+  },
+  stickyInfo: {
+    flex: 1,
+    textAlign: 'right',
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.muted,
+  },
+  stickyCta: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 999,
+  },
+  stickyCtaText: {
+    color: '#fff',
+    fontFamily: fonts.semibold,
+    fontSize: 14,
   },
 })

@@ -1,12 +1,21 @@
 /**
- * Shared trip-detail view model for Path skin (Aperçu · Programme · Carnet).
+ * Shared trip-detail view model for Path skin (Aperçu · Programme).
  * Pure logic — web/Expo only render. Flag TRIP_DETAIL_V2 gates the new shell.
+ * PDF 8 nov 2026 — affichage only.
  */
 
 import type { TravelWorkspacePhase } from '../types'
+import {
+  buildStayPipeline,
+  type FlightStepStatus,
+  type HotelStepStatus,
+  type PipelineStepState,
+  type StayPipelineStep,
+  type StayStepId,
+} from '../deals/stayPipeline'
 import { PLANNER_PHASE_LABEL_FR } from './copy'
 
-export type TripDetailTabId = 'apercu' | 'programme' | 'carnet'
+export type TripDetailTabId = 'apercu' | 'programme' | 'voyageurs'
 
 export type TripDetailRole = 'organizer' | 'member'
 
@@ -20,11 +29,7 @@ export type TripPrimaryActionId =
   | 'choose_my_hotel'
   | 'finalize_hotel'
   | 'finalize_my_hotel'
-  | 'complete_programme'
   | 'view_programme'
-  | 'programme_today'
-  | 'tell_story'
-  | 'leave_review'
   | 'waiting_flight'
 
 export type TripPrimaryAction = {
@@ -32,6 +37,14 @@ export type TripPrimaryAction = {
   label: string
   /** Soft / informational (e.g. invitee waiting) — not a hard CTA */
   informational?: boolean
+}
+
+export type TripDetailStepTile = {
+  id: StayStepId
+  label: string
+  state: PipelineStepState
+  /** Short FR status for the Étapes tile */
+  statusLabel: string
 }
 
 export type TripDetailViewInput = {
@@ -43,22 +56,49 @@ export type TripDetailViewInput = {
   hotelBooked?: boolean
   hotelComposing?: boolean
   activitiesEnabled?: boolean
+  restaurantsEnabled?: boolean
+  /** Airline label for « Réserver sur {compagnie} » */
+  airlineLabel?: string | null
+  /** Hotel finalize price fragment e.g. "189 €" */
+  hotelFinalizePriceLabel?: string | null
   /** Display name of organizer for invitee waiting copy */
   organizerFirstName?: string | null
+  flight?: FlightStepStatus
+  hotel?: HotelStepStatus
+  activitiesDone?: boolean
+  activitiesPartial?: boolean
+  restaurantsDone?: boolean
+  restaurantsPartial?: boolean
 }
 
 export type TripDetailView = {
   tabs: { id: TripDetailTabId; label: string }[]
   phaseLabel: string
   primary: TripPrimaryAction
+  steps: TripDetailStepTile[]
   showStepsActivities: boolean
+  showStepsAddresses: boolean
 }
 
 export const TRIP_DETAIL_TABS: { id: TripDetailTabId; label: string }[] = [
   { id: 'apercu', label: 'Aperçu' },
   { id: 'programme', label: 'Programme' },
-  { id: 'carnet', label: 'Carnet' },
+  { id: 'voyageurs', label: 'Voyageurs' },
 ]
+
+const STEP_LABEL: Record<StayStepId, string> = {
+  flight: 'Vol',
+  hotel: 'Hôtel',
+  activities: 'Activités',
+  restaurants: 'Adresses',
+}
+
+const STEP_STATUS_LABEL: Record<PipelineStepState, string> = {
+  done: 'Fait',
+  current: 'En cours',
+  upcoming: 'À faire',
+  off: 'Off',
+}
 
 function organizerFirst(name?: string | null): string {
   const raw = String(name || '').trim()
@@ -66,8 +106,14 @@ function organizerFirst(name?: string | null): string {
   return raw.split(/\s+/)[0] || 'l’organisateur'
 }
 
+function airlineShort(label?: string | null): string {
+  const raw = String(label || '').trim()
+  if (!raw) return 'la compagnie'
+  return raw.split(/[·|]/)[0]?.trim() || 'la compagnie'
+}
+
 /**
- * One primary sticky CTA from phase × role (PROMPT Path §4.3).
+ * One primary sticky CTA from phase × role (PDF §4).
  */
 export function resolveTripPrimaryAction(
   input: TripDetailViewInput,
@@ -77,8 +123,9 @@ export function resolveTripPrimaryAction(
     role,
     hasProposals,
     flightBooked,
-    hotelBooked,
     hotelComposing,
+    airlineLabel,
+    hotelFinalizePriceLabel,
   } = input
   const isOrga = role === 'organizer'
 
@@ -100,7 +147,10 @@ export function resolveTripPrimaryAction(
   if (phase === 'flight_selected') {
     if (!flightBooked) {
       return isOrga
-        ? { id: 'book_flight', label: 'Réserver sur la compagnie' }
+        ? {
+            id: 'book_flight',
+            label: `Réserver sur ${airlineShort(airlineLabel)}`,
+          }
         : { id: 'book_my_flight', label: 'Réserver mon vol' }
     }
     return isOrga
@@ -109,27 +159,18 @@ export function resolveTripPrimaryAction(
   }
 
   if (phase === 'composing' || hotelComposing) {
-    return isOrga
-      ? { id: 'finalize_hotel', label: 'Finaliser l’hôtel' }
-      : { id: 'finalize_my_hotel', label: 'Finaliser mon hôtel' }
-  }
-
-  if (phase === 'booked') {
-    if (hotelBooked) {
-      // During stay vs before — callers can refine; default programme
-      return isOrga
-        ? { id: 'complete_programme', label: 'Compléter le programme' }
-        : { id: 'view_programme', label: 'Voir le programme' }
+    if (isOrga) {
+      const price = String(hotelFinalizePriceLabel || '').trim()
+      return {
+        id: 'finalize_hotel',
+        label: price ? `Finaliser l’hôtel · ${price}` : 'Finaliser l’hôtel',
+      }
     }
-    return isOrga
-      ? { id: 'choose_hotel', label: 'Choisir l’hôtel' }
-      : { id: 'choose_my_hotel', label: 'Choisir mon hôtel' }
+    return { id: 'finalize_my_hotel', label: 'Finaliser mon hôtel' }
   }
 
-  if (phase === 'past') {
-    return isOrga
-      ? { id: 'tell_story', label: 'Raconter le voyage' }
-      : { id: 'leave_review', label: 'Donner mon avis' }
+  if (phase === 'booked' || phase === 'past') {
+    return { id: 'view_programme', label: 'Voir le programme' }
   }
 
   return isOrga
@@ -141,16 +182,45 @@ export function resolveTripPrimaryAction(
       }
 }
 
+function stepsFromPipeline(pipeline: StayPipelineStep[]): TripDetailStepTile[] {
+  return pipeline
+    .filter((s) => s.state !== 'off')
+    .map((s) => ({
+      id: s.id,
+      label: STEP_LABEL[s.id] || s.shortLabel || s.label,
+      state: s.state,
+      statusLabel: s.hint || STEP_STATUS_LABEL[s.state] || s.state,
+    }))
+}
+
 export function buildTripDetailView(input: TripDetailViewInput): TripDetailView {
+  const activitiesEnabled = Boolean(input.activitiesEnabled)
+  const restaurantsEnabled = Boolean(input.restaurantsEnabled)
+  const pipeline =
+    input.flight != null || input.hotel != null
+      ? buildStayPipeline({
+          flight: input.flight || 'none',
+          hotel: input.hotel || 'none',
+          activitiesEnabled,
+          activitiesDone: input.activitiesDone,
+          activitiesPartial: input.activitiesPartial,
+          restaurantsEnabled,
+          restaurantsDone: input.restaurantsDone,
+          restaurantsPartial: input.restaurantsPartial,
+        })
+      : []
+
   return {
     tabs: TRIP_DETAIL_TABS,
     phaseLabel: PLANNER_PHASE_LABEL_FR[input.phase] || input.phase,
     primary: resolveTripPrimaryAction(input),
-    showStepsActivities: Boolean(input.activitiesEnabled),
+    steps: stepsFromPipeline(pipeline),
+    showStepsActivities: activitiesEnabled,
+    showStepsAddresses: restaurantsEnabled,
   }
 }
 
-/** Analytics event names (CADRE §4) — same on v1 and v2. */
+/** Analytics event names (PDF §10) — same on v1 and v2. */
 export const TRIP_DETAIL_EVENTS = {
   viewed: 'trip_detail_viewed',
   tabViewed: 'trip_tab_viewed',

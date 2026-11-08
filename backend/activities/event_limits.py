@@ -12,6 +12,7 @@ ALLOWED_DOMAINS: Set[str] = {
     "flight",
     "itinerary",
     "trip",
+    "planner",
 }
 ALLOWED_PLATFORMS: Set[str] = {"web", "ios", "android"}
 ALLOWED_SURFACES: Set[str] = {
@@ -24,6 +25,7 @@ ALLOWED_SURFACES: Set[str] = {
     "saved_ideas",
     "scheduler",
     "admin",
+    "trip_detail",
 }
 ALLOWED_EVENTS: Set[str] = {
     "view",
@@ -40,6 +42,15 @@ ALLOWED_EVENTS: Set[str] = {
     "transfer",
     "apply_itinerary",
     "create_itinerary",
+    # Path trip detail (CADRE §4 / trip-detail-v2-metrics.sql)
+    "trip_detail_viewed",
+    "trip_tab_viewed",
+    "trip_primary_action_clicked",
+    "trip_partner_booking_clicked",
+    "trip_invite_opened",
+    "trip_invite_joined",
+    "trip_item_placed",
+    "trip_shared",
 }
 
 _lock = threading.Lock()

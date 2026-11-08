@@ -56,12 +56,14 @@ import {
   type StayStepId,
 } from '@flightwatcher/shared'
 import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
+import { PathStepsTiles } from '../components/tripDetail/PathStepsTiles'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { getApi, plannerInviteUrl } from '../lib/client'
 import {
   invalidateTravelWorkspacesCache,
   listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
 } from '../lib/workspacesCache'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -175,26 +177,44 @@ export function TripDetailScreen() {
   const [savingName, setSavingName] = useState(false)
   const [showModalities, setShowModalities] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] =
+    useState(false)
   const [tripDetailV2, setTripDetailV2] = useState(false)
+  const [pathTab, setPathTab] = useState<
+    'apercu' | 'programme' | 'voyageurs'
+  >('apercu')
   const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
   const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
-  const [activityItems, setActivityItems] = useState<{ status?: string | null }[]>([])
-  const onActivityItemsChange = useCallback(
-    (items: { status?: string | null }[]) => {
-      setActivityItems((prev) => {
-        if (items.length === 0 && prev.length > 0) return prev
-        if (
-          prev.length === items.length &&
-          prev.every((p, i) => p.status === items[i]?.status)
-        ) {
-          return prev
-        }
-        return items
-      })
-    },
-    [],
-  )
+  type ActivityRow = {
+    id?: string
+    item_type?: string
+    title?: string | null
+    name?: string | null
+    day_offset?: number | null
+    moment?: string | null
+    notes?: string | null
+    status?: string | null
+  }
+  const [activityItems, setActivityItems] = useState<ActivityRow[]>([])
+  const onActivityItemsChange = useCallback((items: ActivityRow[]) => {
+    setActivityItems((prev) => {
+      if (items.length === 0 && prev.length > 0) return prev
+      if (
+        prev.length === items.length &&
+        prev.every(
+          (p, i) =>
+            p.status === items[i]?.status &&
+            p.id === items[i]?.id &&
+            p.day_offset === items[i]?.day_offset &&
+            p.moment === items[i]?.moment,
+        )
+      ) {
+        return prev
+      }
+      return items
+    })
+  }, [])
   const extrasRef = useRef<View>(null)
   const scrollRef = useRef<ScrollView>(null)
   const extrasOffsetY = useRef(0)
@@ -208,6 +228,9 @@ export function TripDetailScreen() {
       .getConfig()
       .then((cfg) => {
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
+        setPlannerRestaurantsEnabled(
+          cfg.planner_restaurants_enabled === true,
+        )
         setTripDetailV2(cfg.trip_detail_v2_enabled === true)
       })
       .catch(() => undefined)
@@ -251,62 +274,78 @@ export function TripDetailScreen() {
         navigation.setOptions({ title: detail.name || 'Voyage' })
         setWorkspace(null)
         setFlightDraft(null)
-      } else {
-        const [detail, workspaces] = await Promise.all([
-          getApi().getPlannedTrip(tripId),
-          listTravelWorkspacesCached({ force: false }),
-        ])
-        if (!detail) throw new Error('Voyage introuvable')
-        setTrip(detail)
-        setEditBudget(detail.budget_max || 150)
-        setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
-        navigation.setOptions({ title: detail.name || 'Voyage' })
+        setLoading(false)
+        return
+      }
+
+      const peeked = peekTravelWorkspacesCache()
+      const peekedMatch =
+        peeked?.find((item) => item.planned_trip_id === tripId) || null
+      if (peekedMatch) setWorkspace(peekedMatch)
+
+      // First paint: trip only.
+      const detail = await getApi().getPlannedTrip(tripId)
+      if (!detail) throw new Error('Voyage introuvable')
+      setTrip(detail)
+      setEditBudget(detail.budget_max || 150)
+      setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
+      navigation.setOptions({ title: detail.name || 'Voyage' })
+      setLoading(false)
+
+      const acceptedId =
+        detail.accepted_proposal?.id ||
+        (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
+        null
+
+      const withWorkspaceBooked = (
+        draft: MyTripDraft,
+        matched: TravelWorkspace | null,
+      ): MyTripDraft => {
+        if (matched?.pipeline?.flight !== 'booked') return draft
+        const payload = (draft.payload || {}) as Record<string, unknown>
+        if (
+          draft.flight_booked_at ||
+          payload.flight_booked ||
+          draft.flight_booking_status === 'user_confirmed' ||
+          draft.flight_booking_status === 'partner_confirmed'
+        ) {
+          return draft
+        }
+        const now = new Date().toISOString()
+        return {
+          ...draft,
+          flight_booked_at: now,
+          flight_booking_status: 'user_confirmed',
+          payload: {
+            ...payload,
+            flight_booked: true,
+            flight_booked_at: now,
+            flight_booking_status: 'user_confirmed',
+          },
+        }
+      }
+
+      void (async () => {
         try {
+          const workspaces = await listTravelWorkspacesCached({ force: false })
           const matched =
             workspaces.find((item) => item.planned_trip_id === tripId) || null
           setWorkspace(matched)
-          const acceptedId =
-            detail.accepted_proposal?.id ||
-            (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
-            null
-          const withWorkspaceBooked = (draft: MyTripDraft): MyTripDraft => {
-            if (matched?.pipeline?.flight !== 'booked') return draft
-            const payload = (draft.payload || {}) as Record<string, unknown>
-            if (
-              draft.flight_booked_at ||
-              payload.flight_booked ||
-              draft.flight_booking_status === 'user_confirmed' ||
-              draft.flight_booking_status === 'partner_confirmed'
-            ) {
-              return draft
-            }
-            const now = new Date().toISOString()
-            return {
-              ...draft,
-              flight_booked_at: now,
-              flight_booking_status: 'user_confirmed',
-              payload: {
-                ...payload,
-                flight_booked: true,
-                flight_booked_at: now,
-                flight_booking_status: 'user_confirmed',
-              },
-            }
-          }
           if (matched?.draft_token) {
             setFlightDraft(
-              withWorkspaceBooked(await getApi().getMyTrip(matched.draft_token)),
+              withWorkspaceBooked(
+                await getApi().getMyTrip(matched.draft_token),
+                matched,
+              ),
             )
           } else if (acceptedId) {
-            // Chosen flight is in DB — ensure séjour draft exists and keep it.
             try {
               const draft = await getApi().getOrCreateExecutionDraft(acceptedId)
-              setFlightDraft(withWorkspaceBooked(draft))
+              setFlightDraft(withWorkspaceBooked(draft, matched))
             } catch {
               setFlightDraft((prev) => prev)
             }
           } else {
-            // Keep a locally confirmed draft — don't wipe "Oui, c’est réservé".
             setFlightDraft((prev) => {
               const booked = Boolean(
                 prev?.flight_booked_at ||
@@ -319,13 +358,12 @@ export function TripDetailScreen() {
         } catch {
           // Keep current draft/workspace on transient workspace errors.
         }
-      }
+      })()
     } catch (e) {
       if (!silent) {
         setError(e instanceof Error ? e.message : 'Chargement impossible')
         setTrip(null)
       }
-    } finally {
       setLoading(false)
     }
   }, [tripId, navigation, useGuestPreview])
@@ -354,25 +392,36 @@ export function TripDetailScreen() {
     if ((!tripId && !token) || !plannerActivitiesEnabled) return
     if (__DEV__ && tripId && String(tripId).startsWith('dev-trip-')) return
     let cancelled = false
-    const asActivityRows = (
-      items: { item_type?: string; status?: string | null }[],
-    ) =>
+    const asActivityRows = (items: Record<string, unknown>[]) =>
       items
-        .filter((i) => String(i.item_type || 'activity') === 'activity')
-        .map((i) => ({ status: i.status ?? null }))
+        .filter((i) => {
+          const t = String(i.item_type || 'activity')
+          return t === 'activity' || t === 'restaurant'
+        })
+        .map((i) => ({
+          id: i.id != null ? String(i.id) : undefined,
+          item_type: (i.item_type as string | undefined) ?? 'activity',
+          title: (i.title as string | null | undefined) ?? null,
+          name: (i.name as string | null | undefined) ?? null,
+          day_offset:
+            i.day_offset == null ? null : Number(i.day_offset),
+          moment: (i.moment as string | null | undefined) ?? null,
+          notes: (i.notes as string | null | undefined) ?? null,
+          status: (i.status as string | null | undefined) ?? null,
+        }))
 
     void (async () => {
       try {
-        let items: { item_type?: string; status?: string | null }[] = []
+        let items: Record<string, unknown>[] = []
         if (tripId) {
           const res = await getApi().listTripItems({ planned_trip_id: tripId })
           if (cancelled) return
-          items = res.items || []
+          items = (res.items || []) as Record<string, unknown>[]
         }
         if (!items.length && token) {
           const res = await getApi().listTripItems({ draft_token: token })
           if (cancelled) return
-          items = res.items || []
+          items = (res.items || []) as Record<string, unknown>[]
         }
         if (cancelled) return
         const rows = asActivityRows(items)
@@ -1582,6 +1631,27 @@ export function TripDetailScreen() {
   const detailPhase =
     workspace?.phase ||
     (trip.status === 'locked' ? 'flight_selected' : 'planning')
+  const airlineMobile = accepted
+    ? formatAirlineLabel(accepted.trip_data as EnrichedTripResponse)
+    : null
+  const organizerIsSelf =
+    !!viewUser?.id && trip.organizer_id === viewUser.id
+  const authMeta = viewUser?.user_metadata as
+    | Record<string, unknown>
+    | null
+    | undefined
+  const authAvatarRaw = organizerIsSelf
+    ? (typeof authMeta?.avatar_url === 'string' && authMeta.avatar_url) ||
+      (typeof authMeta?.picture === 'string' && authMeta.picture) ||
+      ''
+    : ''
+  const authAvatar = authAvatarRaw.trim() || null
+  const authName = organizerIsSelf
+    ? (typeof authMeta?.full_name === 'string' && authMeta.full_name.trim()) ||
+      (typeof authMeta?.name === 'string' && authMeta.name.trim()) ||
+      viewUser?.email?.split('@')[0] ||
+      null
+    : null
   const pathView = buildTripDetailView({
     phase: detailPhase,
     role: isOrganizer ? 'organizer' : 'member',
@@ -1590,8 +1660,29 @@ export function TripDetailScreen() {
     hotelBooked: reservationFlags.hotelBooked,
     hotelComposing: detailPhase === 'composing',
     activitiesEnabled: plannerActivitiesEnabled,
+    restaurantsEnabled: false,
+    airlineLabel: airlineMobile,
+    hotelFinalizePriceLabel:
+      stayParty.hotelPp > 0
+        ? `${stayParty.hotelPp} €${partyPriceSuffixFr(pax)}`
+        : null,
     organizerFirstName:
-      trip.organizer?.full_name || trip.member_names?.[0] || null,
+      authName ||
+      trip.organizer?.full_name ||
+      trip.member_names?.[0] ||
+      null,
+    flight: resolveFlightStepStatus({
+      hasFlightPayload: Boolean(accepted || flightDraft),
+      flightBooked: reservationFlags.flightBooked,
+      externalFlight: reservationFlags.externalFlight,
+    }),
+    hotel: resolveHotelStepStatus({
+      hasHotel: reservationFlags.hasHotel,
+      hotelBooked: reservationFlags.hotelBooked,
+      externalHotel: reservationFlags.externalHotel,
+    }),
+    activitiesDone: activityStepProgress(activityItems).done,
+    activitiesPartial: activityStepProgress(activityItems).partial,
   })
   const outDateMobile =
     workspace?.out_date || trip.dates_depart?.[0]?.date || null
@@ -1603,6 +1694,7 @@ export function TripDetailScreen() {
     outDateMobile && retDateMobile
       ? formatTripDateRangeFr(outDateMobile, retDateMobile)
       : null
+  const tripDataMobile = accepted?.trip_data as EnrichedTripResponse | undefined
   const programmeMobile = buildProgrammeTimeline({
     outDate: outDateMobile,
     retDate: retDateMobile,
@@ -1612,10 +1704,28 @@ export function TripDetailScreen() {
         reservationFlags.externalFlight,
     ),
     hasHotel: reservationFlags.hasHotel || reservationFlags.hotelBooked,
-    flightLabel: accepted
-      ? formatAirlineLabel(accepted.trip_data as EnrichedTripResponse)
-      : null,
+    restaurantsEnabled: false,
+    flightLabel: airlineMobile,
+    hotelLabel: reservationFlags.hasHotel ? 'Hôtel' : null,
+    flightOutDepAt: tripDataMobile?.aller?.departureTime || null,
+    flightOutArrAt: tripDataMobile?.aller?.arrivalTime || null,
+    items: activityItems
+      .filter((i) => i.id)
+      .map((i) => ({
+        id: String(i.id),
+        item_type: i.item_type,
+        title: i.title,
+        name: i.name,
+        day_offset: i.day_offset,
+        moment: i.moment,
+        notes: i.notes,
+        status: i.status,
+      })),
   })
+  const orgaDisplayMobile =
+    authName || trip.organizer?.full_name || trip.member_names?.[0] || null
+  const orgaFirstMobile =
+    (orgaDisplayMobile || '').trim().split(/\s+/)[0] || null
 
   if (tripDetailV2) {
     return (
@@ -1623,29 +1733,52 @@ export function TripDetailScreen() {
         <TripDetailPathChrome
           tripId={trip.id}
           heroUrl={destinationImage}
-          title={trip.name}
-          metaLine={[dateLineMobile, cityLabel].filter(Boolean).join(' · ')}
+          city={cityLabel || trip.name}
+          hotelHero={
+            showHotelGallery
+              ? {
+                  hotelId,
+                  hotelName,
+                  seedPhoto: hotelPhoto || null,
+                  seedPhotos: hotelSeedPhotos,
+                }
+              : (reservationFlags.hotelBooked || reservationFlags.hasHotel) &&
+                  hotelPhoto
+                ? {
+                    hotelId: hotelId || 'seed',
+                    hotelName,
+                    seedPhoto: hotelPhoto,
+                    seedPhotos: hotelSeedPhotos.length
+                      ? hotelSeedPhotos
+                      : [hotelPhoto],
+                  }
+                : null
+          }
           metaChips={[
-            cityLabel !== 'ta ville' ? cityLabel : null,
-            dateLineMobile || pathView.phaseLabel,
+            dateLineMobile,
             `${pax} voyageur${pax > 1 ? 's' : ''}`,
           ].filter(Boolean) as string[]}
           phaseLabel={pathView.phaseLabel}
           guideName={
-            trip.organizer?.full_name || trip.member_names?.[0] || null
+            orgaFirstMobile
+              ? `Organisé par ${orgaFirstMobile}`
+              : orgaDisplayMobile
           }
-          guideAvatarUrl={trip.organizer?.avatar_url || null}
-          guideSubtitle={
-            isOrganizer
-              ? 'Organisateur · toi'
-              : 'Organisateur du voyage'
+          guideAvatarUrl={
+            authAvatar || trip.organizer?.avatar_url || null
           }
-          insideChips={[
-            { label: 'Vol', icon: '✈', tab: 'apercu' },
-            { label: 'Hôtel', icon: '⌂', tab: 'apercu' },
-            { label: 'Programme', icon: '☰', tab: 'programme' },
-            { label: 'Carnet', icon: '✎', tab: 'carnet' },
-          ]}
+          guideSubtitle={`${pax} voyageur${pax > 1 ? 's' : ''}`}
+          activeTab={pathTab}
+          onTabChange={setPathTab}
+          estimatedTotalLabel={
+            stayParty.perPerson > 0
+              ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)}${
+                  reservationFlags.flightBooked && reservationFlags.hotelBooked
+                    ? ''
+                    : ' estimé'
+                }`
+              : null
+          }
           primary={pathView.primary}
           onPrimary={() => {
             void getApi()
@@ -1663,27 +1796,26 @@ export function TripDetailScreen() {
               })
               .catch(() => undefined)
             const id = pathView.primary.id
-            if (id === 'scan' || id === 'choose_flight') {
+            if (id === 'view_programme') {
+              setPathTab('programme')
+              return
+            }
+            if (id === 'scan' || id === 'choose_flight' || id === 'view_proposals') {
               void scan()
+              return
+            }
+            if (id === 'book_flight' || id === 'book_my_flight') {
+              void bookSelectedFlight()
               return
             }
             if (
               id === 'choose_hotel' ||
               id === 'choose_my_hotel' ||
               id === 'finalize_hotel' ||
-              id === 'finalize_my_hotel' ||
-              id === 'book_flight' ||
-              id === 'book_my_flight'
+              id === 'finalize_my_hotel'
             ) {
               const token =
                 flightDraft?.draft_token || workspace?.draft_token || null
-              if (
-                id === 'book_flight' ||
-                id === 'book_my_flight'
-              ) {
-                void bookSelectedFlight()
-                return
-              }
               if (token) {
                 navigation.navigate('HotelCompose', { draftToken: token })
               }
@@ -1701,51 +1833,22 @@ export function TripDetailScreen() {
                 }
               : undefined
           }
+          onRename={isOrganizer ? startRename : undefined}
+          titleEditing={editingName}
+          titleDraft={nameDraft}
+          onTitleDraftChange={setNameDraft}
+          onTitleSave={() => void saveRename()}
+          onTitleCancel={() => {
+            if (!savingName) setEditingName(false)
+          }}
+          titleSaving={savingName}
           apercu={
-            <View style={{ gap: 20 }}>
-              <View>
-                <Text
-                  style={{
-                    fontFamily: fonts.serifItalic,
-                    fontSize: 22,
-                    color: colors.ink,
-                    marginBottom: 6,
-                  }}
-                >
-                  À propos
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: fonts.medium,
-                    fontSize: 14,
-                    lineHeight: 21,
-                    color: '#6B5C50',
-                    marginBottom: 14,
-                  }}
-                >
-                  {dateLineMobile
-                    ? `${cityLabel} · ${dateLineMobile}. `
-                    : `${cityLabel}. `}
-                  Phase actuelle : {pathView.phaseLabel.toLowerCase()}.
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: fonts.semibold,
-                    fontSize: 11,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                    color: '#A3988C',
-                    marginBottom: 8,
-                  }}
-                >
-                  Étapes
-                </Text>
-                <StayPipelineStepper
-                  steps={pipelineForUi}
-                  onStepPress={onPipelineStep}
-                />
-              </View>
-              {accepted?.trip_data ? (
+            <View style={{ gap: 16 }}>
+              <PathStepsTiles
+                steps={pathView.steps}
+                onStepPress={(id) => onPipelineStep(id)}
+              />
+              {accepted?.trip_data && !reservationFlags.externalFlight ? (
                 <MobileBoardingPass
                   trip={sanitizeTripAirports(
                     accepted.trip_data as EnrichedTripResponse,
@@ -1758,146 +1861,224 @@ export function TripDetailScreen() {
                   onBook={() => void bookSelectedFlight()}
                 />
               ) : null}
-              <TravelersSection
-                members={trip.members || []}
-                seats={trip.passengers}
-                currentUserId={viewUser?.id}
-                isOrganizer={!!isOrganizer}
-                busy={membersBusy}
-                inviteToken={trip.invite_token}
-                tripName={trip.name}
-                onAdd={addMember}
-                onRemove={removeMember}
-              />
+              {!reservationFlags.externalHotel ? (
+                <View style={[styles.nextStepCard, shadow.soft]}>
+                  <ImageBackground
+                    source={{
+                      uri: hotelPhoto || destinationImage,
+                    }}
+                    style={styles.nextStepImage}
+                    imageStyle={styles.nextStepImageRadius}
+                  >
+                    <LinearGradient
+                      colors={[
+                        'rgba(31,16,9,0.15)',
+                        'rgba(31,16,9,0.94)',
+                      ]}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.nextStepContent}>
+                      <View style={styles.nextStepBadge}>
+                        <Text style={styles.nextStepBadgeText}>HÔTEL</Text>
+                      </View>
+                      <Text style={styles.nextStepTitle}>
+                        {reservationFlags.hotelBooked ||
+                        reservationFlags.hasHotel
+                          ? hotelName
+                          : 'Choisir mon hôtel'}
+                      </Text>
+                      <Text style={styles.nextStepBody}>
+                        {reservationFlags.hotelBooked ||
+                        reservationFlags.hasHotel
+                          ? `Séjour à ${cityLabel}.`
+                          : `Photos, avis et prix pour ${cityLabel}.`}
+                      </Text>
+                      <Pressable
+                        onPress={() => openMyHotel()}
+                        disabled={hotelBusy || skippingHotel}
+                        style={({ pressed }) => [
+                          styles.nextStepButton,
+                          (pressed || hotelBusy) && { opacity: 0.88 },
+                        ]}
+                      >
+                        <Text style={styles.nextStepButtonText}>
+                          {hotelBusy
+                            ? 'Ouverture…'
+                            : reservationFlags.hotelBooked ||
+                                reservationFlags.externalHotel
+                              ? 'Voir mon hôtel →'
+                              : reservationFlags.hasHotel
+                                ? 'Payer ma chambre →'
+                                : 'Choisir mon hôtel →'}
+                        </Text>
+                      </Pressable>
+                      {reservationFlags.canSkipHotel ? (
+                        <Pressable
+                          onPress={() => void skipHotel()}
+                          disabled={skippingHotel || hotelBusy}
+                          style={({ pressed }) => [
+                            styles.hotelSkipInCard,
+                            (skippingHotel || pressed) && { opacity: 0.7 },
+                          ]}
+                        >
+                          <Text style={styles.hotelSkipInCardText}>
+                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </ImageBackground>
+                </View>
+              ) : null}
+              {plannerActivitiesEnabled ? (
+                <ActivityStepPanel
+                  plannedTripId={trip.id}
+                  draftToken={
+                    flightDraft?.draft_token || workspace?.draft_token || null
+                  }
+                  citySlug={citySlug}
+                  enabled={plannerActivitiesEnabled}
+                  onItemsChange={onActivityItemsChange}
+                />
+              ) : null}
             </View>
           }
+          voyageurs={
+            <TravelersSection
+              members={trip.members || []}
+              seats={trip.passengers}
+              currentUserId={viewUser?.id}
+              isOrganizer={!!isOrganizer}
+              busy={membersBusy}
+              inviteToken={trip.invite_token}
+              tripName={trip.name}
+              onAdd={addMember}
+              onRemove={removeMember}
+            />
+          }
           programme={
-            <View style={{ gap: 22 }}>
-              <View style={{ gap: 6 }}>
-                <Text
-                  style={{
-                    fontFamily: fonts.serifItalic,
-                    fontSize: 24,
-                    color: colors.ink,
-                  }}
-                >
-                  Programme
-                </Text>
+            <View style={{ gap: 16 }}>
+              <Text
+                style={{
+                  fontFamily: fonts.semibold,
+                  fontSize: 17,
+                  color: colors.ink,
+                }}
+              >
+                Programme
+              </Text>
+              {programmeMobile.needsDates ? (
                 <Text
                   style={{
                     fontFamily: fonts.medium,
-                    fontSize: 14,
-                    lineHeight: 20,
+                    fontSize: 13,
                     color: '#6B5C50',
+                    lineHeight: 19,
                   }}
                 >
-                  {programmeMobile.days.length} jour
-                  {programmeMobile.days.length > 1 ? 's' : ''} · vol, hôtel et
-                  activités jour par jour.
+                  Les jours apparaîtront quand les dates seront fixées.
                 </Text>
-              </View>
+              ) : null}
               {programmeMobile.unplaced.length > 0 ? (
                 <View
                   style={{
-                    backgroundColor: '#F7F4EF',
-                    borderRadius: 20,
+                    backgroundColor: '#fff',
+                    borderRadius: 16,
                     padding: 14,
-                    gap: 10,
+                    gap: 6,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: '#EDE4DC',
                   }}
                 >
                   <Text
                     style={{
-                      fontFamily: fonts.serifItalic,
-                      fontSize: 20,
+                      fontFamily: fonts.semibold,
+                      fontSize: 15,
                       color: colors.ink,
                     }}
                   >
                     À placer
                   </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.medium,
+                      fontSize: 12,
+                      color: '#8A7B6E',
+                    }}
+                  >
+                    {programmeMobile.unplacedHint}
+                  </Text>
                   {programmeMobile.unplaced.map((it) => (
-                    <View
+                    <Text
                       key={it.id}
                       style={{
-                        backgroundColor: '#fff',
-                        borderRadius: 12,
-                        paddingHorizontal: 12,
-                        paddingVertical: 10,
+                        fontFamily: fonts.semibold,
+                        fontSize: 14,
+                        color: colors.ink,
                       }}
                     >
-                      <Text
-                        style={{
-                          fontFamily: fonts.semibold,
-                          fontSize: 11,
-                          color: '#C2410C',
-                          textTransform: 'uppercase',
-                          marginBottom: 4,
-                        }}
-                      >
-                        Activité
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: fonts.medium,
-                          fontSize: 14,
-                          color: colors.ink,
-                        }}
-                      >
-                        {it.title}
-                      </Text>
-                    </View>
+                      {it.title}
+                    </Text>
                   ))}
                 </View>
               ) : null}
               {programmeMobile.days.map((d) => (
-                <View key={d.dayOffset} style={{ gap: 12, paddingLeft: 4 }}>
+                <View key={d.dayOffset} style={{ gap: 10 }}>
                   <Text
                     style={{
-                      fontFamily: fonts.serifItalic,
-                      fontSize: 22,
+                      fontFamily: fonts.semibold,
+                      fontSize: 15,
                       color: colors.ink,
                       textTransform: 'capitalize',
                     }}
                   >
                     {d.label}
                   </Text>
-                  {d.slots.map((slot) => (
-                    <View key={slot.moment} style={{ gap: 6 }}>
-                      <Text
-                        style={{
-                          fontFamily: fonts.semibold,
-                          fontSize: 11,
-                          letterSpacing: 1.2,
-                          textTransform: 'uppercase',
-                          color: '#A3988C',
-                        }}
-                      >
-                        {slot.label}
-                      </Text>
-                      {slot.items.length === 0 ? (
-                        <View
+                  {d.empty ? (
+                    <Text
+                      style={{
+                        fontFamily: fonts.medium,
+                        fontSize: 13,
+                        color: '#C4B8AC',
+                      }}
+                    >
+                      Journée libre
+                    </Text>
+                  ) : (
+                    d.slots.map((slot) => (
+                      <View key={slot.moment} style={{ gap: 6 }}>
+                        <Text
                           style={{
-                            borderWidth: 1,
-                            borderStyle: 'dashed',
-                            borderColor: '#E4DCD3',
-                            borderRadius: 16,
-                            paddingHorizontal: 14,
-                            paddingVertical: 12,
+                            fontFamily: fonts.semibold,
+                            fontSize: 11,
+                            letterSpacing: 1.2,
+                            textTransform: 'uppercase',
+                            color: '#A3988C',
                           }}
                         >
-                          <Text
-                            style={{
-                              fontFamily: fonts.medium,
-                              fontSize: 13,
-                              color: '#C4B8AC',
-                            }}
-                          >
-                            Moment libre
-                          </Text>
-                        </View>
-                      ) : (
-                        slot.items.map((it) => (
-                          <View
+                          {slot.label}
+                        </Text>
+                        {slot.items.map((it) => (
+                          <Pressable
                             key={it.id}
+                            onPress={() => {
+                              if (it.action === 'scan') void scan()
+                              else if (it.action === 'flight')
+                                void bookSelectedFlight()
+                              else if (it.action === 'hotel') {
+                                const token =
+                                  flightDraft?.draft_token ||
+                                  workspace?.draft_token ||
+                                  null
+                                if (token) {
+                                  navigation.navigate('HotelCompose', {
+                                    draftToken: token,
+                                  })
+                                }
+                              } else if (it.action === 'activity') {
+                                setPathTab('apercu')
+                              }
+                            }}
                             style={{
                               backgroundColor: '#F7F4EF',
                               borderRadius: 16,
@@ -1906,26 +2087,6 @@ export function TripDetailScreen() {
                               gap: 4,
                             }}
                           >
-                            <Text
-                              style={{
-                                fontFamily: fonts.semibold,
-                                fontSize: 10,
-                                letterSpacing: 0.8,
-                                textTransform: 'uppercase',
-                                color:
-                                  it.kind === 'activity'
-                                    ? '#C2410C'
-                                    : it.kind === 'hotel'
-                                      ? '#5C4F44'
-                                      : colors.ink,
-                              }}
-                            >
-                              {it.kind === 'hotel'
-                                ? 'Hôtel'
-                                : it.kind === 'activity'
-                                  ? 'Activité'
-                                  : 'Vol'}
-                            </Text>
                             <Text
                               style={{
                                 fontFamily: fonts.semibold,
@@ -1946,58 +2107,24 @@ export function TripDetailScreen() {
                                 {it.subtitle}
                               </Text>
                             ) : null}
-                          </View>
-                        ))
-                      )}
-                    </View>
-                  ))}
+                            {it.notes ? (
+                              <Text
+                                style={{
+                                  fontFamily: fonts.medium,
+                                  fontSize: 12,
+                                  color: '#6B5C50',
+                                }}
+                              >
+                                {it.notes}
+                              </Text>
+                            ) : null}
+                          </Pressable>
+                        ))}
+                      </View>
+                    ))
+                  )}
                 </View>
               ))}
-              {plannerActivitiesEnabled ? (
-                <View style={{ gap: 8, paddingTop: 8 }}>
-                  <Text
-                    style={{
-                      fontFamily: fonts.serifItalic,
-                      fontSize: 20,
-                      color: colors.ink,
-                    }}
-                  >
-                    Idées & activités
-                  </Text>
-                  <ActivityStepPanel
-                    plannedTripId={trip.id}
-                    draftToken={
-                      flightDraft?.draft_token || workspace?.draft_token || null
-                    }
-                    citySlug={citySlug}
-                    enabled={plannerActivitiesEnabled}
-                    onItemsChange={onActivityItemsChange}
-                  />
-                </View>
-              ) : null}
-            </View>
-          }
-          carnet={
-            <View style={{ gap: 8 }}>
-              <Text
-                style={{
-                  fontFamily: fonts.serifItalic,
-                  fontSize: 22,
-                  color: colors.ink,
-                }}
-              >
-                Carnet
-              </Text>
-              <Text
-                style={{
-                  fontFamily: fonts.medium,
-                  fontSize: 14,
-                  lineHeight: 21,
-                  color: '#6B5C50',
-                }}
-              >
-                Notes du groupe, avis catalogue et documents de réservation.
-              </Text>
             </View>
           }
         />

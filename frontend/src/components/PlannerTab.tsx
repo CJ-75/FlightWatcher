@@ -96,9 +96,9 @@ import {
 import { CreateTripModal } from './planner/CreateTripModal'
 import { TripDetailPathChrome } from './planner/detail/TripDetailPathChrome'
 import { ProgrammePanel } from './planner/detail/ProgrammePanel'
+import { PathStepsTiles } from './planner/detail/PathStepsTiles'
 import { StayPipelineStepper } from './StayPipelineStepper'
 import { ActivityStepPanel } from './ActivityStepPanel'
-import { HotelPhotoGallery } from './HotelPhotoGallery'
 
 function PencilIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
   return (
@@ -1378,7 +1378,18 @@ function TripDetailView({
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
   const [askFlightBooked, setAskFlightBooked] = useState(false)
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] =
+    useState(false)
+  const [pathTab, setPathTab] = useState<
+    'apercu' | 'programme' | 'voyageurs'
+  >('apercu')
   const [tripDetailV2, setTripDetailV2] = useState(false)
+  /** Defer heavy aperçu panels until after first paint. */
+  const [deferHeavyPanels, setDeferHeavyPanels] = useState(false)
+  const [orgaAuth, setOrgaAuth] = useState<{
+    name: string
+    avatarUrl?: string
+  } | null>(null)
   const [activityItems, setActivityItems] = useState<
     {
       id?: string
@@ -1433,10 +1444,36 @@ function TripDetailView({
       .then((cfg) => {
         if (!cfg) return
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
+        setPlannerRestaurantsEnabled(
+          cfg.planner_restaurants_enabled === true,
+        )
         setTripDetailV2(cfg.trip_detail_v2_enabled === true)
       })
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => {
+    if (!trip?.id) {
+      setDeferHeavyPanels(false)
+      return
+    }
+    let cancelled = false
+    const arm = () => {
+      if (!cancelled) setDeferHeavyPanels(true)
+    }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(arm, { timeout: 400 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback(idleId)
+      }
+    }
+    const t = window.setTimeout(arm, 120)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [trip?.id])
 
   useEffect(() => {
     if (!trip?.id) return
@@ -1456,6 +1493,21 @@ function TripDetailView({
     )
   }, [trip?.id, trip?.status, trip?.organizer_id, userId, workspace?.phase, tripDetailV2])
 
+  useEffect(() => {
+    const oid = trip?.organizer_id
+    if (!oid) {
+      setOrgaAuth(null)
+      return
+    }
+    let cancelled = false
+    void loadAccountHolderInfo(oid).then((info) => {
+      if (!cancelled) setOrgaAuth(info)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [trip?.organizer_id])
+
   const syncEditFromTrip = useCallback((detail: PlannedTripDetail) => {
     setEditBudget(detail.budget_max || 150)
     setEditPassengers(Math.max(1, detail.passengers || 1))
@@ -1469,77 +1521,89 @@ function TripDetailView({
     const silent = Boolean(opts?.silent)
     if (!silent) setError(null)
     try {
-      const [detail, workspaces] = await Promise.all([
-        getApiClient().getPlannedTrip(tripId),
-        // Soft refresh keeps the 60s hub cache; mutations invalidate explicitly.
-        listTravelWorkspacesCached({ force: false }),
-      ])
+      // Paint from hub cache immediately when coming from planner list.
+      const peeked = peekTravelWorkspacesCache()
+      const peekedMatch =
+        peeked?.find((item) => item.planned_trip_id === tripId) || null
+      if (peekedMatch) setWorkspace(peekedMatch)
+
+      // First paint: trip only — don't wait for workspaces / draft.
+      const detail = await getApiClient().getPlannedTrip(tripId)
       setTrip(detail)
       syncEditFromTrip(detail)
-      try {
-        const matched =
-          workspaces.find((item) => item.planned_trip_id === tripId) || null
-        setWorkspace(matched)
-        const acceptedId =
-          detail.accepted_proposal?.id ||
-          (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
-          null
-        const withWorkspaceBooked = (draft: MyTripDraft): MyTripDraft => {
-          if (matched?.pipeline?.flight !== 'booked') return draft
-          const payload = (draft.payload || {}) as Record<string, unknown>
-          if (
-            draft.flight_booked_at ||
-            payload.flight_booked ||
-            draft.flight_booking_status === 'user_confirmed' ||
-            draft.flight_booking_status === 'partner_confirmed'
-          ) {
-            return draft
-          }
-          const now = new Date().toISOString()
-          return {
-            ...draft,
+      if (!silent) setLoading(false)
+
+      const acceptedId =
+        detail.accepted_proposal?.id ||
+        (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
+        null
+
+      const withWorkspaceBooked = (
+        draft: MyTripDraft,
+        matched: TravelWorkspace | null,
+      ): MyTripDraft => {
+        if (matched?.pipeline?.flight !== 'booked') return draft
+        const payload = (draft.payload || {}) as Record<string, unknown>
+        if (
+          draft.flight_booked_at ||
+          payload.flight_booked ||
+          draft.flight_booking_status === 'user_confirmed' ||
+          draft.flight_booking_status === 'partner_confirmed'
+        ) {
+          return draft
+        }
+        const now = new Date().toISOString()
+        return {
+          ...draft,
+          flight_booked_at: now,
+          flight_booking_status: 'user_confirmed',
+          payload: {
+            ...payload,
+            flight_booked: true,
             flight_booked_at: now,
             flight_booking_status: 'user_confirmed',
-            payload: {
-              ...payload,
-              flight_booked: true,
-              flight_booked_at: now,
-              flight_booking_status: 'user_confirmed',
-            },
-          }
+          },
         }
-        if (matched?.draft_token) {
-          setFlightDraft(
-            withWorkspaceBooked(
-              await getApiClient().getMyTrip(matched.draft_token),
-            ),
-          )
-        } else if (acceptedId) {
-          // Chosen flight is in DB — ensure séjour draft exists and keep it.
-          try {
-            const draft =
-              await getApiClient().getOrCreateExecutionDraft(acceptedId)
-            setFlightDraft(withWorkspaceBooked(draft))
-          } catch {
-            setFlightDraft((prev) => prev)
-          }
-        } else {
-          // Keep a locally confirmed draft — don't wipe "J’ai réservé".
-          setFlightDraft((prev) => {
-            const booked = Boolean(
-              prev?.flight_booked_at ||
-                prev?.flight_booking_status === 'user_confirmed' ||
-                prev?.flight_booking_status === 'partner_confirmed',
-            )
-            return booked ? prev : null
-          })
-        }
-      } catch {
-        // Keep current draft/workspace on transient workspace errors.
       }
+
+      // Secondary: workspace list + execution draft (non-blocking).
+      void (async () => {
+        try {
+          const workspaces = await listTravelWorkspacesCached({ force: false })
+          const matched =
+            workspaces.find((item) => item.planned_trip_id === tripId) || null
+          setWorkspace(matched)
+          if (matched?.draft_token) {
+            setFlightDraft(
+              withWorkspaceBooked(
+                await getApiClient().getMyTrip(matched.draft_token),
+                matched,
+              ),
+            )
+          } else if (acceptedId) {
+            try {
+              const draft =
+                await getApiClient().getOrCreateExecutionDraft(acceptedId)
+              setFlightDraft(withWorkspaceBooked(draft, matched))
+            } catch {
+              setFlightDraft((prev) => prev)
+            }
+          } else {
+            setFlightDraft((prev) => {
+              const booked = Boolean(
+                prev?.flight_booked_at ||
+                  prev?.flight_booking_status === 'user_confirmed' ||
+                  prev?.flight_booking_status === 'partner_confirmed',
+              )
+              return booked ? prev : null
+            })
+          }
+        } catch {
+          // Keep current draft/workspace on transient workspace errors.
+        }
+      })()
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : t('app.error'))
-    } finally {
       if (!silent) setLoading(false)
     }
   }, [tripId, t, syncEditFromTrip])
@@ -2770,6 +2834,19 @@ function TripDetailView({
   const detailPhase =
     workspace?.phase ||
     (trip.status === 'locked' ? 'flight_selected' : 'planning')
+  const flightStepStatus = resolveFlightStepStatus({
+    hasFlightPayload: Boolean(accepted || flightDraft),
+    flightBooked,
+    externalFlight,
+  })
+  const hotelStepStatus = resolveHotelStepStatus({
+    hasHotel,
+    hotelBooked,
+    externalHotel,
+  })
+  const airlineForCta = accepted
+    ? formatAirlineLabel(accepted.trip_data as EnrichedTripResponse)
+    : null
   const pathView = buildTripDetailView({
     phase: detailPhase,
     role: isOrganizer ? 'organizer' : 'member',
@@ -2778,8 +2855,21 @@ function TripDetailView({
     hotelBooked,
     hotelComposing: detailPhase === 'composing',
     activitiesEnabled: plannerActivitiesEnabled,
+    restaurantsEnabled: false,
+    airlineLabel: airlineForCta,
+    hotelFinalizePriceLabel:
+      stayParty.hotelPp > 0
+        ? `${stayParty.hotelPp} €${partyPriceSuffixFr(pax)}`
+        : null,
     organizerFirstName:
-      trip.organizer?.full_name || trip.member_names?.[0] || null,
+      orgaAuth?.name ||
+      trip.organizer?.full_name ||
+      trip.member_names?.[0] ||
+      null,
+    flight: flightStepStatus,
+    hotel: hotelStepStatus,
+    activitiesDone: activityStepProgress(activityItems).done,
+    activitiesPartial: activityStepProgress(activityItems).partial,
   })
 
   const runPathPrimary = () => {
@@ -2799,6 +2889,10 @@ function TripDetailView({
         },
       })
       .catch(() => undefined)
+    if (id === 'view_programme') {
+      setPathTab('programme')
+      return
+    }
     if (id === 'scan' || id === 'choose_flight' || id === 'view_proposals') {
       void scan()
       return
@@ -2830,47 +2924,57 @@ function TripDetailView({
         notes: i.notes,
         status: i.status,
       }))
-    const pipelineSteps = buildStayPipeline({
-      flight: resolveFlightStepStatus({
-        hasFlightPayload: Boolean(accepted || flightDraft),
-        flightBooked,
-        externalFlight,
-      }),
-      hotel: resolveHotelStepStatus({
-        hasHotel,
-        hotelBooked,
-        externalHotel,
-      }),
-      activitiesEnabled: plannerActivitiesEnabled,
-      activitiesDone: activityStepProgress(activityItems).done,
-      activitiesPartial: activityStepProgress(activityItems).partial,
-    })
+    const tripData = accepted?.trip_data as EnrichedTripResponse | undefined
+    const orgaDisplayName =
+      orgaAuth?.name ||
+      trip.organizer?.full_name ||
+      trip.member_names?.[0] ||
+      null
+    const orgaFirst =
+      (orgaDisplayName || '').trim().split(/\s+/)[0] || null
     return (
       <TripDetailPathChrome
         tripId={trip.id}
         heroUrl={destinationImage}
-        title={trip.name}
-        metaLine={[dateLine, routeLine].filter(Boolean).join(' · ')}
+        city={destinationName}
+        hotelHero={
+          showHotelGallery
+            ? {
+                hotelId,
+                hotelName,
+                seedPhoto: hotelPhoto || null,
+                seedPhotos: hotelSeedPhotos,
+              }
+            : (hotelBooked || hasHotel) && hotelPhoto
+              ? {
+                  hotelId: hotelId || 'seed',
+                  hotelName,
+                  seedPhoto: hotelPhoto,
+                  seedPhotos: hotelSeedPhotos.length
+                    ? hotelSeedPhotos
+                    : [hotelPhoto],
+                }
+              : null
+        }
         metaChips={[
-          destinationName,
-          dateLine || pathView.phaseLabel,
+          dateLine,
           `${pax} voyageur${pax > 1 ? 's' : ''}`,
         ].filter(Boolean) as string[]}
         phaseLabel={pathView.phaseLabel}
         primary={pathView.primary}
         onPrimary={runPathPrimary}
         onBack={onBack}
+        activeTab={pathTab}
+        onTabChange={setPathTab}
         guideName={
-          trip.organizer?.full_name?.trim() ||
-          trip.member_names?.[0] ||
+          orgaFirst ? `Organisé par ${orgaFirst}` : orgaDisplayName
+        }
+        guideAvatarUrl={
+          orgaAuth?.avatarUrl?.trim() ||
+          trip.organizer?.avatar_url?.trim() ||
           null
         }
-        guideAvatarUrl={trip.organizer?.avatar_url?.trim() || null}
-        guideSubtitle={
-          isOrganizer
-            ? 'Organisateur · toi'
-            : 'Organisateur du voyage'
-        }
+        guideSubtitle={`${pax} voyageur${pax > 1 ? 's' : ''}`}
         onShare={
           isOrganizer
             ? () => {
@@ -2880,36 +2984,36 @@ function TripDetailView({
               }
             : undefined
         }
-        insideChips={[
-          { label: 'Vol', icon: '✈', tab: 'apercu' },
-          { label: 'Hôtel', icon: '⌂', tab: 'apercu' },
-          { label: 'Programme', icon: '☰', tab: 'programme' },
-          { label: 'Carnet', icon: '✎', tab: 'carnet' },
-        ]}
+        onRename={isOrganizer ? startRename : undefined}
+        titleEditing={editingName}
+        titleDraft={nameDraft}
+        onTitleDraftChange={setNameDraft}
+        onTitleSave={() => void saveRename()}
+        onTitleCancel={cancelRename}
+        titleSaving={savingName}
+        estimatedTotalLabel={
+          stayParty.perPerson > 0
+            ? `${stayParty.perPerson} €${partyPriceSuffixFr(pax)}${
+                flightBooked && hotelBooked ? '' : ' estimé'
+              }`
+            : null
+        }
         apercu={
-          <div className="space-y-7" ref={stayExtrasRef}>
-            <div>
-              <h3
-                className="mb-1 text-xl font-normal italic text-[#1A120E]"
-                style={{ fontFamily: '"Instrument Serif", Georgia, serif' }}
-              >
-                À propos
-              </h3>
-              <p className="mb-4 text-sm leading-relaxed text-[#6B5C50]">
-                {dateLine
-                  ? `${destinationName} · ${dateLine}. `
-                  : `${destinationName}. `}
-                Phase actuelle : {pathView.phaseLabel.toLowerCase()}.
-                {isOrganizer
-                  ? ' Tu pilotes les prochaines étapes du groupe.'
-                  : ' Suis les étapes et réserve ta part.'}
-              </p>
-              <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#A3988C]">
-                Étapes
-              </h4>
-              <StayPipelineStepper steps={pipelineSteps} />
-            </div>
-            {accepted?.trip_data ? (
+          <div className="space-y-5" ref={stayExtrasRef}>
+            <PathStepsTiles
+              steps={pathView.steps}
+              onStepPress={(id) => {
+                if (id === 'flight') {
+                  if (accepted) openReservation(false)
+                  else void scan()
+                } else if (id === 'hotel') {
+                  openReservation(true)
+                } else if (id === 'activities' && plannerActivitiesEnabled) {
+                  stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth' })
+                }
+              }}
+            />
+            {accepted?.trip_data && !externalFlight ? (
               <SelectedFlightBoardingPass
                 trip={accepted.trip_data as EnrichedTripResponse}
                 passengers={pax}
@@ -2921,69 +3025,57 @@ function TripDetailView({
                 onConfirm={() => undefined}
                 onDismissAsk={() => undefined}
               />
-            ) : scanning ? (
-              <PlannerScanPanel
-                fromLabel={departureRouteLabel(trip.departure_airport)}
-                toLabel={
-                  trip.arrival_airport
-                    ? trip.arrival_airport.replace(/,/g, ' · ')
-                    : 'inspire'
-                }
-              />
-            ) : isOrganizer ? (
-              <button
-                type="button"
-                onClick={() => void scan()}
-                className="rounded-full bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white"
-              >
-                Scanner les prix
-              </button>
             ) : null}
-            <TravelersPanel
-              members={trip.members || []}
-              seats={trip.passengers}
-              currentUserId={userId}
-              isOrganizer={!!isOrganizer}
-              busy={membersBusy}
-              addOpen={addOpen}
-              newFirstName={newFirstName}
-              newLastName={newLastName}
-              newEmail={newEmail}
-              onOpenAdd={() => setAddOpen(true)}
-              onCloseAdd={() => {
-                setAddOpen(false)
-                setNewFirstName('')
-                setNewLastName('')
-                setNewEmail('')
-              }}
-              onFirstNameChange={setNewFirstName}
-              onLastNameChange={setNewLastName}
-              onEmailChange={setNewEmail}
-              onAdd={() => void addMember()}
-              onRemove={(m) => void removeMember(m)}
-              t={t}
-            />
-          </div>
-        }
-        programme={
-          <ProgrammePanel
-            tripId={trip.id}
-            outDate={outDate}
-            retDate={retDate}
-            flightLabel={
-              accepted
-                ? formatAirlineLabel(
-                    accepted.trip_data as EnrichedTripResponse,
-                  )
-                : null
-            }
-            hotelLabel={hasHotel ? hotelName : null}
-            hasFlight={Boolean(accepted || flightBooked || externalFlight)}
-            hasHotel={hasHotel || hotelBooked}
-            items={programmeItems}
-            onItemsChange={() => void load({ silent: true })}
-            activitiesSlot={
-              plannerActivitiesEnabled ? (
+            {!externalHotel ? (
+              <div className="relative flex min-h-[200px] w-full flex-col justify-end overflow-hidden rounded-2xl border border-[#EDE4DC] p-5 text-left">
+                <img
+                  src={hotelBlockImage}
+                  alt=""
+                  aria-hidden
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/15" />
+                <div className="relative z-[1] flex flex-col">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/80">
+                    Hôtel
+                  </p>
+                  <p className="mt-1.5 text-xl font-semibold tracking-tight text-white leading-tight">
+                    {hotelBooked || hasHotel ? hotelName : HOTEL_CTA_FR.choose}
+                  </p>
+                  <p className="mt-1.5 max-w-md text-[13px] text-white/75 leading-relaxed">
+                    {hotelBooked || hasHotel
+                      ? `Séjour à ${destinationName}.`
+                      : `Compare les chambres à ${destinationName}.`}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={hotelBusy || skippingHotel}
+                      onClick={onHotelBlockCta}
+                      className="inline-flex min-h-[44px] items-center gap-2 rounded-full bg-white px-5 py-2.5 text-[13px] font-semibold text-[#C2410C] disabled:opacity-60"
+                    >
+                      {hotelBlockCtaLabel}
+                      <span aria-hidden>›</span>
+                    </button>
+                    {canSkipHotel ? (
+                      <button
+                        type="button"
+                        disabled={skippingHotel || hotelBusy}
+                        onClick={() => void skipHotel()}
+                        className="inline-flex min-h-[44px] items-center rounded-full border border-white/30 bg-white/10 px-4 py-2.5 text-[13px] font-semibold text-white backdrop-blur-md disabled:opacity-60"
+                      >
+                        {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {plannerActivitiesEnabled && deferHeavyPanels ? (
+              <div>
+                <h4 className="mb-2 text-[15px] font-semibold tracking-tight text-[#1A120E] dark:text-[#FFF9F5]">
+                  Activités
+                </h4>
                 <ActivityStepPanel
                   plannedTripId={trip.id}
                   draftToken={
@@ -2997,47 +3089,85 @@ function TripDetailView({
                   })}
                   onItemsChange={onActivityItemsChange}
                 />
-              ) : null
-            }
+              </div>
+            ) : null}
+            {(hotelInvoiceReady ||
+              (reservationToken && (hotelBooked || flightBooked))) && (
+              <div className="space-y-2 border-t border-[#EDE8E1] pt-5">
+                {hotelInvoiceReady ? (
+                  <button
+                    type="button"
+                    disabled={invoiceBusy}
+                    onClick={downloadHotelInvoice}
+                    className="rounded-full bg-[#1A120E] px-5 py-3 text-sm font-semibold text-white"
+                  >
+                    {invoiceBusy
+                      ? '…'
+                      : invoiceDone
+                        ? 'Facture ✓'
+                        : 'Télécharger la facture'}
+                  </button>
+                ) : null}
+                {reservationToken && (hotelBooked || flightBooked) ? (
+                  <button
+                    type="button"
+                    onClick={openReservations}
+                    className="block text-sm font-semibold text-[#1A120E] underline decoration-[#EDE8E1] underline-offset-4"
+                  >
+                    Voir les réservations
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        }
+        voyageurs={
+          <TravelersPanel
+            members={trip.members || []}
+            seats={trip.passengers}
+            currentUserId={userId}
+            isOrganizer={!!isOrganizer}
+            busy={membersBusy}
+            addOpen={addOpen}
+            newFirstName={newFirstName}
+            newLastName={newLastName}
+            newEmail={newEmail}
+            onOpenAdd={() => setAddOpen(true)}
+            onCloseAdd={() => {
+              setAddOpen(false)
+              setNewFirstName('')
+              setNewLastName('')
+              setNewEmail('')
+            }}
+            onFirstNameChange={setNewFirstName}
+            onLastNameChange={setNewLastName}
+            onEmailChange={setNewEmail}
+            onAdd={() => void addMember()}
+            onRemove={(m) => void removeMember(m)}
+            t={t}
           />
         }
-        carnet={
-          <div className="space-y-5">
-            <div>
-              <h3
-                className="text-xl font-normal italic text-[#1A120E]"
-                style={{ fontFamily: '"Instrument Serif", Georgia, serif' }}
-              >
-                Carnet
-              </h3>
-              <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
-                Notes du groupe, avis catalogue et documents de réservation.
-              </p>
-            </div>
-            {hotelInvoiceReady ? (
-              <button
-                type="button"
-                disabled={invoiceBusy}
-                onClick={downloadHotelInvoice}
-                className="rounded-full bg-[#1A120E] px-5 py-3 text-sm font-semibold text-white"
-              >
-                {invoiceBusy
-                  ? '…'
-                  : invoiceDone
-                    ? 'Facture ✓'
-                    : 'Télécharger la facture'}
-              </button>
-            ) : null}
-            {reservationToken && (hotelBooked || flightBooked) ? (
-              <button
-                type="button"
-                onClick={openReservations}
-                className="block text-sm font-semibold text-[#1A120E] underline decoration-[#EDE8E1] underline-offset-4"
-              >
-                Voir les réservations
-              </button>
-            ) : null}
-          </div>
+        programme={
+          <ProgrammePanel
+            outDate={outDate}
+            retDate={retDate}
+            flightLabel={airlineForCta}
+            hotelLabel={hasHotel ? hotelName : null}
+            hasFlight={Boolean(accepted || flightBooked || externalFlight)}
+            hasHotel={hasHotel || hotelBooked}
+            restaurantsEnabled={false}
+            flightOutDepAt={tripData?.aller?.departureTime || null}
+            flightOutArrAt={tripData?.aller?.arrivalTime || null}
+            items={programmeItems}
+            onOpenItem={(item) => {
+              if (item.action === 'scan') void scan()
+              else if (item.action === 'flight') openReservation(false)
+              else if (item.action === 'hotel') openReservation(true)
+              else if (item.action === 'activity' && plannerActivitiesEnabled) {
+                setPathTab('apercu')
+              }
+            }}
+          />
         }
       />
     )
@@ -3310,152 +3440,78 @@ function TripDetailView({
               </div>
             ) : (
               <div
-                className={`group relative isolate flex h-full min-h-[280px] min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 ${
+                className={`group relative isolate flex h-full min-h-[220px] min-w-0 overflow-hidden rounded-[28px] border border-orange-100/70 shadow-xl shadow-orange-950/10 ${
                   externalFlight && !accepted ? 'lg:col-span-2' : ''
                 }`}
               >
-                {showHotelGallery ? (
-                  <HotelPhotoGallery
-                    variant="hero"
-                    className="h-full w-full"
-                    hotelId={hotelId}
-                    seedPhoto={hotelPhoto || null}
-                    seedPhotos={hotelSeedPhotos}
-                    alt={hotelName}
-                    hotelName={hotelName}
-                    cityLabel={destinationName}
-                    overlay={
-                      <div className="flex flex-col text-left">
-                        <p
-                          className={`text-[11px] font-black uppercase tracking-[0.18em] ${
-                            hotelBooked || hasHotel
-                              ? 'text-emerald-200'
-                              : 'text-orange-300'
-                          }`}
-                        >
-                          {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
-                        </p>
-                        <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                          {hotelBooked || hasHotel
-                            ? hotelName
-                            : HOTEL_CTA_FR.choose}
-                        </p>
-                        <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
-                          {hotelBooked || hasHotel
-                            ? `Séjour à ${destinationName}.`
-                            : `Compare les chambres à ${destinationName}.`}
-                        </p>
-                        <div className="mt-5 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={hotelBusy || skippingHotel}
-                            onClick={onHotelBlockCta}
-                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
-                          >
-                            {hotelBlockCtaLabel}
-                            <span aria-hidden>›</span>
-                          </button>
-                          {hotelInvoiceReady ? (
-                            <button
-                              type="button"
-                              disabled={invoiceBusy}
-                              aria-busy={invoiceBusy}
-                              onClick={() => downloadHotelInvoice()}
-                              className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
-                            >
-                              {invoiceBusy ? (
-                                <InvoiceBusyLabel label="Préparation…" />
-                              ) : invoiceDone ? (
-                                'Facture ✓'
-                              ) : (
-                                'Facture'
-                              )}
-                            </button>
-                          ) : null}
-                          {canSkipHotel ? (
-                            <button
-                              type="button"
-                              disabled={skippingHotel || hotelBusy}
-                              onClick={() => void skipHotel()}
-                              className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
-                            >
-                              {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    }
+                <div className="relative flex h-full w-full min-h-[220px] flex-col justify-end p-6 sm:p-7 text-left">
+                  <img
+                    src={hotelBlockImage}
+                    alt=""
+                    aria-hidden
+                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                   />
-                ) : (
-                  <div className="relative flex h-full w-full min-h-[280px] flex-col justify-end p-6 sm:p-7 text-left">
-                    <img
-                      src={hotelBlockImage}
-                      alt=""
-                      aria-hidden
-                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
-                    <div className="relative z-[1] flex flex-col">
-                      <p
-                        className={`text-[11px] font-black uppercase tracking-[0.18em] ${
-                          hotelBooked || hasHotel
-                            ? 'text-emerald-200'
-                            : 'text-orange-300'
-                        }`}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+                  <div className="relative z-[1] flex flex-col">
+                    <p
+                      className={`text-[11px] font-black uppercase tracking-[0.18em] ${
+                        hotelBooked || hasHotel
+                          ? 'text-emerald-200'
+                          : 'text-orange-300'
+                      }`}
+                    >
+                      Hôtel
+                    </p>
+                    <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                      {hotelBooked || hasHotel
+                        ? hotelName
+                        : HOTEL_CTA_FR.choose}
+                    </p>
+                    <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                      {hotelBooked || hasHotel
+                        ? `Séjour à ${destinationName}.`
+                        : `Compare les chambres à ${destinationName}.`}
+                    </p>
+                    <div className="mt-5 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={hotelBusy || skippingHotel}
+                        onClick={onHotelBlockCta}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
                       >
-                        {hotelBooked || hasHotel ? 'Hôtel' : 'Prochaine étape'}
-                      </p>
-                      <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                        {hotelBooked || hasHotel
-                          ? hotelName
-                          : HOTEL_CTA_FR.choose}
-                      </p>
-                      <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
-                        {hotelBooked || hasHotel
-                          ? `Séjour à ${destinationName}.`
-                          : `Compare les chambres à ${destinationName}.`}
-                      </p>
-                      <div className="mt-5 flex flex-wrap items-center gap-2">
+                        {hotelBlockCtaLabel}
+                        <span aria-hidden>›</span>
+                      </button>
+                      {hotelInvoiceReady ? (
                         <button
                           type="button"
-                          disabled={hotelBusy || skippingHotel}
-                          onClick={onHotelBlockCta}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg min-h-[48px] disabled:opacity-60"
+                          disabled={invoiceBusy}
+                          aria-busy={invoiceBusy}
+                          onClick={() => downloadHotelInvoice()}
+                          className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
                         >
-                          {hotelBlockCtaLabel}
-                          <span aria-hidden>›</span>
+                          {invoiceBusy ? (
+                            <InvoiceBusyLabel label="Préparation…" />
+                          ) : invoiceDone ? (
+                            'Facture ✓'
+                          ) : (
+                            'Facture'
+                          )}
                         </button>
-                        {hotelInvoiceReady ? (
-                          <button
-                            type="button"
-                            disabled={invoiceBusy}
-                            aria-busy={invoiceBusy}
-                            onClick={() => downloadHotelInvoice()}
-                            className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
-                          >
-                            {invoiceBusy ? (
-                              <InvoiceBusyLabel label="Préparation…" />
-                            ) : invoiceDone ? (
-                              'Facture ✓'
-                            ) : (
-                              'Facture'
-                            )}
-                          </button>
-                        ) : null}
-                        {canSkipHotel ? (
-                          <button
-                            type="button"
-                            disabled={skippingHotel || hotelBusy}
-                            onClick={() => void skipHotel()}
-                            className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
-                          >
-                            {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
-                          </button>
-                        ) : null}
-                      </div>
+                      ) : null}
+                      {canSkipHotel ? (
+                        <button
+                          type="button"
+                          disabled={skippingHotel || hotelBusy}
+                          onClick={() => void skipHotel()}
+                          className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-4 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60 min-h-[48px] backdrop-blur-md"
+                        >
+                          {skippingHotel ? '…' : 'J’ai déjà un hôtel'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>
