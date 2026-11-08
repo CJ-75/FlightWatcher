@@ -19,11 +19,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, DealOccasionChip, TravelDeal } from '@flightwatcher/shared'
 import {
   airportSelectionLabel,
+  DEAL_INSPIRE_HIDDEN,
+  DEAL_INSPIRE_SEED,
   dealStartStillUpcoming,
   dedupeDealsByHotelTitle,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
+  mergeDealOccasionChips,
   parseAirportCodes,
   translate,
 } from '@flightwatcher/shared'
@@ -39,11 +42,13 @@ import { PassengerStepper } from '../components/PassengerStepper'
 import { useLikedDeals } from '../hooks/useLikedDeals'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { FwKicker } from '../components/FwKicker'
+import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const STALE_MS = 90_000
 const ORIGIN_LS_KEY = 'fw_deals_origin'
+const DEALS_CACHE_KEY = 'fw_deals_wall_v1'
 const DEALS_PAGE = 36
 const DEALS_MAX = 96
 type DurationTab = 'weekend' | 'short' | 'week'
@@ -53,14 +58,17 @@ type DealsListItem =
   | { kind: 'filler_header' }
   | { kind: 'skeleton'; id: string }
 
+/** Instant remount paint (hub tab switch). */
+let dealsMemoryCache: TravelDeal[] | null = null
+
 export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { viewUser, signInWithGoogle } = useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
-  const [deals, setDeals] = useState<TravelDeal[]>([])
-  const [loading, setLoading] = useState(true)
+  const [deals, setDeals] = useState<TravelDeal[]>(() => dealsMemoryCache ?? [])
+  const [loading, setLoading] = useState(() => !dealsMemoryCache?.length)
   const [loadingMore, setLoadingMore] = useState(false)
   const [fetchLimit, setFetchLimit] = useState(DEALS_PAGE)
   const [hasMore, setHasMore] = useState(false)
@@ -74,7 +82,9 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
   const [occasion, setOccasion] = useState<string | null>(null)
-  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
+  const [occasionChips, setOccasionChips] =
+    useState<DealOccasionChip[]>(() => [...DEAL_INSPIRE_SEED])
+  const [occasionCountsPending, setOccasionCountsPending] = useState(true)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [uiEnabled, setUiEnabled] = useState(true)
@@ -87,6 +97,8 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   useScrollToTop(listRef)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originHydratedRef = useRef(false)
+  const dealsRef = useRef(deals)
+  dealsRef.current = deals
 
   const setOriginPersist = useCallback((value: string) => {
     setOrigin(value)
@@ -94,6 +106,26 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   }, [])
 
   useEffect(() => subscribeAirports(setAirports), [])
+
+  // Disk cache → paint deals before network when memory was cold
+  useEffect(() => {
+    if (dealsMemoryCache?.length) return
+    let cancelled = false
+    void AsyncStorage.getItem(DEALS_CACHE_KEY)
+      .then((raw) => {
+        if (cancelled || !raw) return
+        const parsed = JSON.parse(raw) as TravelDeal[]
+        if (!Array.isArray(parsed) || !parsed.length) return
+        if (dealsRef.current.length) return
+        dealsMemoryCache = parsed
+        setDeals(parsed)
+        setLoading(false)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (originHydratedRef.current || !airports.length) return
@@ -178,7 +210,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
       }
       if (more) setLoadingMore(true)
       else if (isRefresh) setRefreshing(true)
-      else setLoading(true)
+      else if (dealsRef.current.length === 0) setLoading(true)
       setError(null)
       try {
         if (uiEnabled === false) {
@@ -195,6 +227,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         })
         if (!more) {
           void refreshLikes()
+          setOccasionCountsPending(true)
           void getApi()
             .getDealOccasions({
               origin: queryOrigin || undefined,
@@ -202,31 +235,29 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
               duration: durationTab,
             })
             .then((res) => {
-              const hidden = new Set([
-                'ambiance-noel',
-                'pont-noel',
-                'nouvel-an',
-                'max-sur-place',
-                'hors-vacances',
-                'pepites',
-              ])
               const seen = new Set<string>()
               const all: DealOccasionChip[] = []
               for (const c of [...(res?.main || []), ...(res?.more || [])]) {
-                if (!c?.slug || seen.has(c.slug) || hidden.has(c.slug)) continue
+                if (!c?.slug || seen.has(c.slug) || DEAL_INSPIRE_HIDDEN.has(c.slug))
+                  continue
                 if (typeof c.count === 'number' && c.count <= 0) continue
                 seen.add(c.slug)
                 all.push(c)
               }
-              setOccasionChips(all)
+              const ordered = mergeDealOccasionChips(all)
+              setOccasionChips(ordered)
               setOccasion((prev) => {
                 if (!prev) return null
-                return all.some((c) => c.slug === prev) ? prev : null
+                return ordered.some((c) => c.slug === prev) ? prev : null
               })
             })
             .catch(() => {
-              setOccasionChips([])
+              // Keep seed chips — never wipe the inspire rail on error
+              setOccasionChips((prev) =>
+                prev.length ? prev : [...DEAL_INSPIRE_SEED],
+              )
             })
+            .finally(() => setOccasionCountsPending(false))
         }
         const list = await listPromise
         const raw = Array.isArray(list) ? list : []
@@ -236,12 +267,17 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
           return dealStartStillUpcoming(d)
         })
         setDeals(withHotelPhoto)
+        dealsMemoryCache = withHotelPhoto
+        void AsyncStorage.setItem(
+          DEALS_CACHE_KEY,
+          JSON.stringify(withHotelPhoto.slice(0, 48)),
+        ).catch(() => undefined)
         setFetchLimit(limit)
         setHasMore(raw.length >= limit && limit < DEALS_MAX)
         lastFetchAtRef.current = Date.now()
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Impossible de charger les deals')
-        if (!more) {
+        if (!more && dealsRef.current.length === 0) {
           setDeals([])
           setHasMore(false)
         }
@@ -458,74 +494,81 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
                 ))}
               </View>
 
-              {occasionChips.length > 0 ? (
-                <View style={styles.occasionBlock}>
-                  <View style={styles.occasionHeader}>
-                    <View>
-                      <Text style={styles.occasionKicker}>INSPIRE-TOI</Text>
-                      <Text style={styles.occasionTitle}>Envies & moments</Text>
-                    </View>
-                    {occasion ? (
-                      <Pressable onPress={() => setOccasion(null)} hitSlop={8}>
-                        <Text style={styles.occasionClear}>Tous les séjours</Text>
-                      </Pressable>
-                    ) : null}
+              <View style={styles.occasionBlock}>
+                <View style={styles.occasionHeader}>
+                  <View>
+                    <Text style={styles.occasionKicker}>INSPIRE-TOI</Text>
+                    <Text style={styles.occasionTitle}>Envies & moments</Text>
                   </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.occasionRail}
-                  >
-                    {occasionChips.map((f) => {
-                      const on = occasion === f.slug
-                      return (
-                        <Pressable
-                          key={f.slug}
-                          onPress={() =>
-                            setOccasion((prev) => (prev === f.slug ? null : f.slug))
-                          }
-                          style={[styles.occasionCard, on && styles.occasionCardOn]}
-                        >
-                          <View
-                            style={[styles.occasionIcon, on && styles.occasionIconOn]}
-                          >
-                            <OccasionIcon
-                              icon={f.icon}
-                              slug={f.slug}
-                              size={16}
-                              color={on ? '#F5EFEA' : colors.primary}
-                            />
-                          </View>
-                          <Text
-                            style={[styles.occasionLabel, on && styles.occasionLabelOn]}
-                            numberOfLines={2}
-                          >
-                            {f.label || f.slug}
-                          </Text>
-                          {(f.count ?? 0) > 0 ? (
-                            <Text
-                              style={[styles.occasionCount, on && styles.occasionCountOn]}
-                            >
-                              {f.count} séjours
-                            </Text>
-                          ) : null}
-                        </Pressable>
-                      )
-                    })}
-                  </ScrollView>
-                  {occasion
-                    ? (() => {
-                        const active = occasionChips.find((c) => c.slug === occasion)
-                        return active?.explain ? (
-                          <View style={styles.occasionExplain}>
-                            <Text style={styles.occasionExplainTitle}>{active.label}</Text>
-                            <Text style={styles.occasionExplainBody}>{active.explain}</Text>
-                          </View>
-                        ) : null
-                      })()
-                    : null}
+                  {occasion ? (
+                    <Pressable onPress={() => setOccasion(null)} hitSlop={8}>
+                      <Text style={styles.occasionClear}>Tous les séjours</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-              ) : null}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.occasionRail}
+                >
+                  {occasionChips.map((f) => {
+                    const on = occasion === f.slug
+                    const count = f.count
+                    const hasCount = typeof count === 'number' && count > 0
+                    return (
+                      <Pressable
+                        key={f.slug}
+                        onPress={() =>
+                          setOccasion((prev) => (prev === f.slug ? null : f.slug))
+                        }
+                        style={[styles.occasionCard, on && styles.occasionCardOn]}
+                      >
+                        <View
+                          style={[styles.occasionIcon, on && styles.occasionIconOn]}
+                        >
+                          <OccasionIcon
+                            icon={f.icon}
+                            slug={f.slug}
+                            size={18}
+                            color={on ? '#F5EFEA' : colors.primary}
+                          />
+                        </View>
+                        <Text
+                          style={[styles.occasionLabel, on && styles.occasionLabelOn]}
+                          numberOfLines={2}
+                        >
+                          {f.label || f.slug}
+                        </Text>
+                        {hasCount ? (
+                          <Text
+                            style={[styles.occasionCount, on && styles.occasionCountOn]}
+                          >
+                            {count} séjours
+                          </Text>
+                        ) : occasionCountsPending ? (
+                          <View
+                            style={[
+                              styles.occasionCountSk,
+                              on && styles.occasionCountSkOn,
+                            ]}
+                          />
+                        ) : null}
+                      </Pressable>
+                    )
+                  })}
+                </ScrollView>
+                {occasion
+                  ? (() => {
+                      const active = occasionChips.find((c) => c.slug === occasion)
+                      return active?.explain ? (
+                        <View style={styles.occasionExplain}>
+                          <Text style={styles.occasionExplainTitle}>{active.label}</Text>
+                          <Text style={styles.occasionExplainBody}>{active.explain}</Text>
+                        </View>
+                      ) : null
+                    })()
+                  : null}
+              </View>
 
               <View style={[styles.card, shadow.soft]}>
                 <Pressable
@@ -761,19 +804,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    letterSpacing: -1,
-    color: colors.ink,
-    includeFontPadding: false,
+    ...tabScreenHeaderStyles.title,
   },
   subtitle: {
-    marginTop: 6,
+    ...tabScreenHeaderStyles.subtitle,
     marginBottom: 12,
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.muted,
-    includeFontPadding: false,
   },
   occasionBlock: {
     marginTop: 4,
@@ -822,12 +857,13 @@ const styles = StyleSheet.create({
     borderColor: colors.ink,
   },
   occasionIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   occasionIconOn: {
     backgroundColor: 'rgba(255,255,255,0.18)',
@@ -848,6 +884,16 @@ const styles = StyleSheet.create({
   },
   occasionCountOn: {
     color: 'rgba(245,239,234,0.85)',
+  },
+  occasionCountSk: {
+    marginTop: 2,
+    height: 8,
+    width: 52,
+    borderRadius: 4,
+    backgroundColor: colors.primaryMuted,
+  },
+  occasionCountSkOn: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   occasionExplain: {
     marginTop: 10,

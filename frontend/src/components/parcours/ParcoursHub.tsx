@@ -78,11 +78,13 @@ export function ParcoursHub() {
         })}
       </div>
 
-      {segment === 'parcours' ? (
-        <ParcoursCatalog active embedded />
-      ) : (
+      {/* Keep both mounted — instant tab switch + preload. */}
+      <div className={segment === 'parcours' ? 'block' : 'hidden'} aria-hidden={segment !== 'parcours'}>
+        <ParcoursCatalog active={segment === 'parcours'} embedded />
+      </div>
+      <div className={segment === 'sejours' ? 'block' : 'hidden'} aria-hidden={segment !== 'sejours'}>
         <DealsTab embedded />
-      )}
+      </div>
     </div>
   )
 }

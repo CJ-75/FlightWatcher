@@ -1,11 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   RefreshControl,
-  ActivityIndicator,
   Pressable,
   Modal,
   TextInput,
@@ -55,13 +54,14 @@ import {
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import {
+  hydrateTravelWorkspacesCache,
   invalidateTravelWorkspacesCache,
   listTravelWorkspacesCached,
   peekTravelWorkspacesCache,
 } from '../lib/workspacesCache'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
-import { AccountAvatarButton } from '../components/AccountAvatarButton'
+import { TabScreenHeader } from '../components/TabScreenHeader'
 import { CityAirportPicker } from '../components/CityAirportPicker'
 import { CityPicker } from '../components/CityPicker'
 import { BudgetSlider } from '../components/BudgetSlider'
@@ -121,41 +121,70 @@ function tripAsWorkspace(
   }
 }
 
+type PlannerListItem =
+  | { kind: 'workspace'; workspace: TravelWorkspace }
+  | { kind: 'skeleton'; id: string }
+
+const PLANNER_SKELETONS: PlannerListItem[] = Array.from({ length: 3 }, (_, i) => ({
+  kind: 'skeleton' as const,
+  id: `planner-sk-${i}`,
+}))
+
+function filterVisibleWorkspaces(list: TravelWorkspace[]): TravelWorkspace[] {
+  return (Array.isArray(list) ? list : []).filter((w) => {
+    if (w.planned_trip_id) return true
+    const hotel = w.pipeline?.hotel
+    if (hotel === 'selected' || hotel === 'booked') return true
+    if (w.hotel_booking_id) return true
+    const st = String(w.hotel_booking_status || '')
+    return (
+      st === 'draft' ||
+      st === 'prebooked' ||
+      st === 'payment_pending' ||
+      st === 'payment_succeeded' ||
+      st === 'booking_pending' ||
+      st === 'confirmed'
+    )
+  })
+}
+
 export function PlannerScreen() {
   const insets = useSafeAreaInsets()
   const { viewUser, isGuest } = useAuth()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
+  const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>(() =>
+    filterVisibleWorkspaces(peekTravelWorkspacesCache() || []),
+  )
   const [filter, setFilter] = useState<HubFilter>('upcoming')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(
+    () => !(peekTravelWorkspacesCache()?.length),
+  )
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const lastFetchAtRef = useRef(0)
   const workspacesLenRef = useRef(0)
-  const listRef = useRef<FlatList<TravelWorkspace>>(null)
+  const listRef = useRef<FlatList<PlannerListItem>>(null)
   useScrollToTop(listRef)
   workspacesLenRef.current = workspaces.length
 
   const applyWorkspaceList = useCallback((list: TravelWorkspace[]) => {
-    setWorkspaces(
-      (Array.isArray(list) ? list : []).filter((w) => {
-        if (w.planned_trip_id) return true
-        const hotel = w.pipeline?.hotel
-        if (hotel === 'selected' || hotel === 'booked') return true
-        if (w.hotel_booking_id) return true
-        const st = String(w.hotel_booking_status || '')
-        return (
-          st === 'draft' ||
-          st === 'prebooked' ||
-          st === 'payment_pending' ||
-          st === 'payment_succeeded' ||
-          st === 'booking_pending' ||
-          st === 'confirmed'
-        )
-      }),
-    )
+    setWorkspaces(filterVisibleWorkspaces(list))
   }, [])
+
+  // Cold start: disk → paint before network
+  useEffect(() => {
+    if (peekTravelWorkspacesCache()?.length) return
+    let cancelled = false
+    void hydrateTravelWorkspacesCache().then((disk) => {
+      if (cancelled || !disk?.length || workspacesLenRef.current > 0) return
+      applyWorkspaceList(disk)
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [applyWorkspaceList])
 
   const load = useCallback(
     async (opts?: { refresh?: boolean; force?: boolean; silent?: boolean }) => {
@@ -325,30 +354,36 @@ export function PlannerScreen() {
     return <PlannerGuestLanding insetsTop={insets.top} insetsBottom={insets.bottom} />
   }
 
+  const showSkeleton = loading && workspaces.length === 0
+  const listData: PlannerListItem[] = showSkeleton
+    ? PLANNER_SKELETONS
+    : filteredWorkspaces.map((workspace) => ({
+        kind: 'workspace' as const,
+        workspace,
+      }))
+  const listDensity: JourneyDensity = showSkeleton ? 'groupe' : density
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
 
-      {loading && workspaces.length === 0 ? (
-        <View style={[styles.centered, { paddingTop: insets.top }]}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Chargement des voyages…</Text>
-        </View>
-      ) : (
-        <FlatList
+      <FlatList
           ref={listRef}
-          key={`planner-${density}`}
-          data={filteredWorkspaces}
-          keyExtractor={(item) => item.workspace_id}
-          numColumns={density === 'duo' ? 2 : 1}
-          columnWrapperStyle={density === 'duo' ? styles.duoRow : undefined}
+          key={`planner-${listDensity}`}
+          data={listData}
+          keyExtractor={(item) =>
+            item.kind === 'skeleton' ? item.id : item.workspace.workspace_id
+          }
+          numColumns={listDensity === 'duo' ? 2 : 1}
+          columnWrapperStyle={listDensity === 'duo' ? styles.duoRow : undefined}
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
-            paddingTop: insets.top + 8,
+            paddingTop: insets.top + 12,
             // Leave room for the FAB; tab bar clearance is already on the scene.
             paddingBottom: 88,
             flexGrow: 1,
           }}
+          extraData={{ showSkeleton, filter, counts }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -358,30 +393,30 @@ export function PlannerScreen() {
           }
           ListHeaderComponent={
             <View style={styles.header}>
-              <View style={styles.topRow}>
-                <View style={styles.topCopy}>
-                  <Text style={styles.kicker}>{PLANNER_HUB_KICKER_FR}</Text>
-                  <Text style={styles.title}>{PLANNER_HUB_TITLE_FR}</Text>
+              <TabScreenHeader
+                kicker={PLANNER_HUB_KICKER_FR}
+                title={PLANNER_HUB_TITLE_FR}
+                subtitle={PLANNER_HUB_SUBTITLE_FR}
+              >
+                <View style={styles.hubTabs}>
+                  {PLANNER_HUB_TABS.map(({ key, labelFr }) => (
+                    <Pressable
+                      key={key}
+                      onPress={() => setFilter(key)}
+                      style={[styles.hubTab, filter === key && styles.hubTabActive]}
+                    >
+                      <Text style={[styles.hubTabText, filter === key && styles.hubTabTextActive]}>
+                        {labelFr}
+                        {showSkeleton ? '' : ` · ${counts[key]}`}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
-                <AccountAvatarButton />
-              </View>
-              <Text style={styles.subtitle}>{PLANNER_HUB_SUBTITLE_FR}</Text>
-              <View style={styles.hubTabs}>
-                {PLANNER_HUB_TABS.map(({ key, labelFr }) => (
-                  <Pressable
-                    key={key}
-                    onPress={() => setFilter(key)}
-                    style={[styles.hubTab, filter === key && styles.hubTabActive]}
-                  >
-                    <Text style={[styles.hubTabText, filter === key && styles.hubTabTextActive]}>
-                      {labelFr} · {counts[key]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+              </TabScreenHeader>
             </View>
           }
           ListEmptyComponent={
+            showSkeleton ? null : (
             <View style={[styles.emptyCard, shadow.soft]}>
               {error ? (
                 <>
@@ -432,17 +467,28 @@ export function PlannerScreen() {
                 </>
               )}
             </View>
+            )
           }
-          renderItem={({ item }) => (
-            <JourneyCard
-              workspace={item}
-              density={density}
-              onPress={() => openWorkspace(item)}
-            />
-          )}
+          renderItem={({ item }) =>
+            item.kind === 'skeleton' ? (
+              <View style={[styles.skeletonCard, shadow.soft]}>
+                <View style={styles.skeletonBanner} />
+                <View style={styles.skeletonBody}>
+                  <View style={[styles.skeletonLine, { width: '58%' }]} />
+                  <View style={[styles.skeletonLine, { width: '40%' }]} />
+                  <View style={[styles.skeletonLine, { width: '72%', height: 14 }]} />
+                </View>
+              </View>
+            ) : (
+              <JourneyCard
+                workspace={item.workspace}
+                density={listDensity}
+                onPress={() => openWorkspace(item.workspace)}
+              />
+            )
+          }
           showsVerticalScrollIndicator={false}
         />
-      )}
 
       <Pressable
         onPress={() => setShowCreate(true)}
@@ -944,11 +990,11 @@ const styles = StyleSheet.create({
   header: { marginBottom: 22, gap: 4 },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  topCopy: { flex: 1, minWidth: 0 },
+  topCopy: { flex: 1, minWidth: 0, paddingRight: 4 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,
@@ -998,6 +1044,25 @@ const styles = StyleSheet.create({
   },
   hubTabTextActive: { color: colors.white },
   loadingText: { fontFamily: fonts.medium, color: colors.muted, marginTop: 8 },
+  skeletonCard: {
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  skeletonBanner: {
+    height: 96,
+    backgroundColor: colors.primaryMuted,
+  },
+  skeletonBody: {
+    padding: 16,
+    gap: 10,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.primarySoft,
+  },
   emptyCard: {
     backgroundColor: colors.white,
     borderRadius: radius.xl,

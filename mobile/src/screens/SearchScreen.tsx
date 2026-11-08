@@ -50,7 +50,7 @@ import { ExcludeDestinationsModal } from '../components/ExcludeDestinationsModal
 import { HoursSheet } from '../components/HoursSheet'
 import { Button } from '../components/ui/Button'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { colors, fonts, shadow } from '../theme'
+import { colors, fonts, shadow, spacing } from '../theme'
 
 const PRESETS: { id: DatePresetId; label: string; hint: string }[] = [
   { id: 'next-weekend', label: 'Weekend prochain', hint: 'Sam → Dim' },
@@ -453,7 +453,7 @@ export function SearchScreen() {
       <View
         style={[
           styles.screen,
-          { paddingTop: insets.top + (compact ? 4 : 8), paddingBottom: 8 },
+          { paddingTop: insets.top + 12, paddingBottom: 8 },
         ]}
       >
         <View style={[styles.header, compact && styles.headerCompact]}>
@@ -474,7 +474,7 @@ export function SearchScreen() {
                 {!compact ? <Text style={styles.brandTag}>Vols bas prix</Text> : null}
               </View>
             </Pressable>
-            <AccountAvatarButton size={compact ? 32 : 36} />
+            <AccountAvatarButton />
           </View>
           <Text style={[styles.hero, compact && styles.heroCompact]} numberOfLines={1}>
             Weekend <Text style={styles.heroAccent}>pas cher</Text>
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   screen: {
     flex: 1,
-    paddingHorizontal: 18,
+    paddingHorizontal: spacing.xl,
   },
   header: {
     marginBottom: 2,
@@ -669,7 +669,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 12,
     marginBottom: 12,
   },
   brandPress: {
@@ -678,6 +678,7 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
     minWidth: 0,
+    paddingRight: 4,
   },
   brandCopy: { flex: 1, minWidth: 0 },
   logoMark: {

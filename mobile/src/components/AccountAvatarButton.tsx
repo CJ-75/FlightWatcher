@@ -13,8 +13,15 @@ import { useAuth } from '../context/AuthContext'
 import { colors, fonts } from '../theme'
 import type { MainTabParamList } from '../navigation/types'
 
-/** Avatar compte — haut droite, anneau blanc + halo soft. */
-export function AccountAvatarButton({ size = 36 }: { size?: number }) {
+/** Taille unique sur tous les onglets — aligne le bord droit sans saut horizontal. */
+export const ACCOUNT_AVATAR_SIZE = 36
+
+/** Avatar compte — anneau blanc + halo soft. */
+export function AccountAvatarButton({
+  size = ACCOUNT_AVATAR_SIZE,
+}: {
+  size?: number
+}) {
   const { viewUser } = useAuth()
   const navigation = useNavigation<NavigationProp<MainTabParamList>>()
   const [failed, setFailed] = useState(false)
@@ -37,6 +44,7 @@ export function AccountAvatarButton({ size = 36 }: { size?: number }) {
     .toUpperCase()
 
   const inner = Math.max(size - 4, 12)
+  const outer = size + 6
 
   return (
     <Pressable
@@ -47,11 +55,10 @@ export function AccountAvatarButton({ size = 36 }: { size?: number }) {
       style={({ pressed }) => [
         styles.halo,
         {
-          width: size + 6,
-          height: size + 6,
-          borderRadius: (size + 6) / 2,
+          width: outer,
+          height: outer,
+          borderRadius: outer / 2,
           opacity: pressed ? 0.88 : 1,
-          transform: [{ scale: pressed ? 0.95 : 1 }],
         },
       ]}
     >
@@ -99,6 +106,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 107, 53, 0.14)',
+    // Empêche le shrink flex qui décale le cercle horizontalement
+    flexShrink: 0,
   },
   ring: {
     alignItems: 'center',

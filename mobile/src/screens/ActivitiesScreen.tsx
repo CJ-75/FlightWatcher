@@ -74,7 +74,7 @@ import { auth, getApi } from '../lib/client'
 import { listTravelWorkspacesCached } from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
-import { AccountAvatarButton } from '../components/AccountAvatarButton'
+import { TabScreenHeader } from '../components/TabScreenHeader'
 import { ActivityCard } from '../components/ActivityCard'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { ActivityDetailSheet } from '../components/ActivityDetailSheet'
@@ -887,7 +887,7 @@ export function ActivitiesScreen() {
         data={cards}
         keyExtractor={(c) => c.productCode || c.title}
         contentContainerStyle={{
-          paddingTop: insets.top + 8,
+          paddingTop: insets.top + 12,
           paddingHorizontal: spacing.xl,
           paddingBottom: insets.bottom + 120,
         }}
@@ -900,14 +900,11 @@ export function ActivitiesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <View style={styles.topRow}>
-              <View style={styles.topCopy}>
-                <Text style={styles.kicker}>{ACTIVITY_PAGE_KICKER_FR}</Text>
-                <Text style={styles.title}>{ACTIVITY_PAGE_TITLE_FR}</Text>
-              </View>
-              <AccountAvatarButton />
-            </View>
-            <Text style={styles.subtitle}>{ACTIVITY_PAGE_SUBTITLE_FR}</Text>
+            <TabScreenHeader
+              kicker={ACTIVITY_PAGE_KICKER_FR}
+              title={ACTIVITY_PAGE_TITLE_FR}
+              subtitle={ACTIVITY_PAGE_SUBTITLE_FR}
+            />
 
             {activeTrip ? (
               <ActivityTripHero
@@ -1301,11 +1298,11 @@ const styles = StyleSheet.create({
   header: { marginBottom: spacing.lg, gap: 4 },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  topCopy: { flex: 1, minWidth: 0 },
+  topCopy: { flex: 1, minWidth: 0, paddingRight: 4 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,

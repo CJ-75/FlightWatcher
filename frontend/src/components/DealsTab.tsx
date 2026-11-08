@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  ACTIVITY_OCCASIONS_CTA_FR,
   airportSelectionLabel,
+  DEAL_INSPIRE_HIDDEN,
+  DEAL_INSPIRE_SEED,
   dealStartStillUpcoming,
   dedupeDealsByHotelTitle,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
+  mergeDealOccasionChips,
   parseAirportCodes,
   type Airport,
 } from '@flightwatcher/shared'
@@ -19,7 +23,6 @@ import { DealDetailModal } from './DealDetailModal'
 import { OriginAlertSignup } from './OriginAlertSignup'
 import { OccasionRail } from './OccasionRail'
 import { ActivitySurfaceBanner } from './ActivitySurfaceBanner'
-import { ACTIVITY_OCCASIONS_CTA_FR } from '@flightwatcher/shared'
 import { PassengerStepper } from './PassengerStepper'
 import { CityAirportSelect } from './CityAirportSelect'
 import { useI18n } from '../contexts/I18nContext'
@@ -38,21 +41,26 @@ const springConfig = {
 const ORIGIN_LS_KEY = 'fw_deals_origin'
 type DurationTab = 'weekend' | 'short' | 'week'
 
-/** Inspire-toi rail — labels/icons immediately; counts merge from API. */
-const INSPIRE_SEED: DealOccasionChip[] = [
-  { slug: 'sans-conge', label: 'Sans poser de congé', icon: 'briefcase-off' },
-  { slug: 'hiver-soleil', label: 'Fuyez l’hiver', icon: 'sun' },
-  { slug: 'moins-200', label: 'Moins de 200 €', icon: 'euro' },
-]
+const DEALS_CACHE_KEY = 'fw_deals_wall_v1'
 
-const INSPIRE_HIDDEN = new Set([
-  'max-sur-place',
-  'hors-vacances',
-  'pepites',
-  'ambiance-noel',
-  'pont-noel',
-  'nouvel-an',
-])
+function readDealsCache(): TravelDeal[] {
+  try {
+    const raw = sessionStorage.getItem(DEALS_CACHE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as TravelDeal[]
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeDealsCache(list: TravelDeal[]) {
+  try {
+    sessionStorage.setItem(DEALS_CACHE_KEY, JSON.stringify(list.slice(0, 48)))
+  } catch {
+    /* ignore */
+  }
+}
 
 function readStoredOrigin(): string {
   try {
@@ -94,10 +102,10 @@ const DEALS_MAX = 96
 
 export function DealsTab({ embedded = false }: { embedded?: boolean }) {
   const { t } = useI18n()
-  const [deals, setDeals] = useState<TravelDeal[]>([])
+  const [deals, setDeals] = useState<TravelDeal[]>(() => readDealsCache())
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const shellReady = useShellReady()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => readDealsCache().length === 0)
   const [loadingMore, setLoadingMore] = useState(false)
   const [fetchLimit, setFetchLimit] = useState(DEALS_PAGE)
   const [hasMore, setHasMore] = useState(false)
@@ -123,7 +131,9 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
       return null
     }
   })
-  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>([])
+  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>(() => [
+    ...DEAL_INSPIRE_SEED,
+  ])
   const [occasionCountsPending, setOccasionCountsPending] = useState(true)
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>(() => peekAirports())
@@ -226,31 +236,19 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
       const seen = new Set<string>()
       const all: DealOccasionChip[] = []
       for (const c of [...(res?.main || []), ...(res?.more || [])]) {
-        if (!c?.slug || seen.has(c.slug) || INSPIRE_HIDDEN.has(c.slug)) continue
+        if (!c?.slug || seen.has(c.slug) || DEAL_INSPIRE_HIDDEN.has(c.slug)) continue
         if (typeof c.count === 'number' && c.count <= 0) continue
         seen.add(c.slug)
         all.push(c)
       }
-      // Keep seed order for launch chips that still have stays, then API extras
-      const bySlug = new Map(all.map((c) => [c.slug, c]))
-      const ordered: DealOccasionChip[] = []
-      for (const seed of INSPIRE_SEED) {
-        const hit = bySlug.get(seed.slug)
-        if (!hit) continue
-        ordered.push(hit)
-        bySlug.delete(seed.slug)
-      }
-      for (const c of all) {
-        if (bySlug.has(c.slug)) ordered.push(c)
-      }
+      const ordered = mergeDealOccasionChips(all)
       setOccasionChips(ordered)
       setOccasion((prev) => {
         if (!prev) return null
         return ordered.some((c) => c.slug === prev) ? prev : null
       })
     } catch {
-      /* no optimistic empty chips — wait for a successful load */
-      setOccasionChips([])
+      setOccasionChips((prev) => (prev.length ? prev : [...DEAL_INSPIRE_SEED]))
     } finally {
       setOccasionCountsPending(false)
     }
@@ -293,6 +291,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
           return dealStartStillUpcoming(d)
         })
         setDeals(withHotelPhoto)
+        writeDealsCache(withHotelPhoto)
         setFetchLimit(limit)
         setHasMore(raw.length >= limit && limit < DEALS_MAX)
       } catch (e) {
@@ -673,12 +672,12 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
         </div>
       ) : null}
 
-      {loading ? (
+      {loading && deals.length === 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-3xl border border-line bg-white overflow-hidden shadow-soft animate-pulse"
+              className="rounded-3xl border border-line bg-white overflow-hidden shadow-soft"
             >
               <div className="aspect-[16/10] bg-primary-50" />
               <div className="p-5 space-y-3">
@@ -691,7 +690,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
             </div>
           ))}
         </div>
-      ) : error ? (
+      ) : error && deals.length === 0 ? (
         <div className="app-card p-8 text-center max-w-md mx-auto">
           <p className="font-bold text-ink mb-2">{t('deals.errorTitle')}</p>
           <p className="text-sm text-muted mb-4 line-clamp-3">{error}</p>

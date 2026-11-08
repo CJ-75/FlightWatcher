@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text, View } from 'react-native'
+import { Platform, Text, View } from 'react-native'
 import { resolveOccasionIconId, type OccasionIconId } from '@flightwatcher/shared'
 import { colors } from '../theme'
 
@@ -13,6 +13,7 @@ type Props = {
 /**
  * Lightweight occasion glyphs — no @expo/vector-icons (missing in this Expo app).
  * Same resolveOccasionIconId mapping as web SVG OccasionIcon.
+ * Emoji need extra line-box room or they clip top/bottom.
  */
 export function OccasionIcon({
   icon,
@@ -21,23 +22,35 @@ export function OccasionIcon({
   color = colors.primaryDeep,
 }: Props) {
   const id = resolveOccasionIconId(icon, slug)
+  const fontSize = Math.round(size)
+  // Emoji ascent/descent overflows a tight size×size box — pad the line box.
+  const lineBox = Math.ceil(fontSize * 1.35)
   return (
     <View
       style={{
-        width: size,
-        height: size,
+        width: lineBox,
+        height: lineBox,
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'visible',
       }}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
       <Text
+        allowFontScaling={false}
         style={{
-          fontSize: Math.round(size * 0.92),
-          lineHeight: size,
+          fontSize,
+          lineHeight: lineBox,
+          height: lineBox,
+          width: lineBox,
           color,
           textAlign: 'center',
+          includeFontPadding: false,
+          ...Platform.select({
+            android: { textAlignVertical: 'center' as const },
+            default: {},
+          }),
         }}
       >
         {glyphFor(id)}

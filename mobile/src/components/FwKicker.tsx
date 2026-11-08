@@ -1,25 +1,13 @@
 import React from 'react'
-import { Text, StyleSheet, type TextStyle, type StyleProp } from 'react-native'
-import { fwColor, fwType } from '@flightwatcher/shared'
-import { fonts } from '../theme'
+import { Text, type TextStyle, type StyleProp } from 'react-native'
+import { tabScreenHeaderStyles } from './TabScreenHeader'
 
 type Props = {
   children: string
   style?: StyleProp<TextStyle>
 }
 
-/** Surtitre accent — jetons shared (§8.2). */
+/** Surtitre accent — même forme que TabScreenHeader (onglets). */
 export function FwKicker({ children, style }: Props) {
-  return <Text style={[styles.kicker, style]}>{children}</Text>
+  return <Text style={[tabScreenHeaderStyles.kicker, style]}>{children}</Text>
 }
-
-const styles = StyleSheet.create({
-  kicker: {
-    fontFamily: fonts.bold,
-    fontSize: fwType.kicker.size,
-    letterSpacing: fwType.kicker.trackingEm * fwType.kicker.size,
-    textTransform: 'uppercase',
-    color: fwColor.light.accent,
-    includeFontPadding: false,
-  },
-})

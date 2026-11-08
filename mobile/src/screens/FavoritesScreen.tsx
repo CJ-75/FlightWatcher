@@ -46,7 +46,7 @@ import {
   unlikeGuestActivity,
   unlikeGuestDeal,
 } from '../dev/guestPreview'
-import { AccountAvatarButton } from '../components/AccountAvatarButton'
+import { TabScreenHeader } from '../components/TabScreenHeader'
 import { FavoriteFlightCard } from '../components/FavoriteFlightCard'
 import { DealCard } from '../components/DealCard'
 import { ActivityCard } from '../components/ActivityCard'
@@ -580,9 +580,9 @@ export function FavoritesScreen() {
       <ScreenBackground />
       <FlatList<FavListItem>
         style={styles.list}
-        contentContainerStyle={{
+          contentContainerStyle={{
           paddingHorizontal: spacing.xl,
-          paddingTop: insets.top + 8,
+          paddingTop: insets.top + 12,
           paddingBottom: insets.bottom + 120,
           flexGrow: 1,
         }}
@@ -603,46 +603,42 @@ export function FavoritesScreen() {
         }
         ListHeaderComponent={
           <View style={styles.header}>
-            <View style={styles.topRow}>
-              <View style={styles.topCopy}>
-                <Text style={styles.kicker}>FAVORIS</Text>
-                <Text style={styles.title}>{translate('fr', 'favorites.title')}</Text>
-              </View>
-              <AccountAvatarButton />
-            </View>
-            <Text style={styles.subtitle}>
-              {translate('fr', 'favorites.collectionsHint')}
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.collectionsRow}
-              style={styles.collectionsScroll}
+            <TabScreenHeader
+              kicker="FAVORIS"
+              title={translate('fr', 'favorites.title')}
+              subtitle={translate('fr', 'favorites.collectionsHint')}
             >
-              {COLLECTIONS.map(({ id, labelKey }) => (
-                <Pressable
-                  key={id}
-                  onPress={() => {
-                    setTab(id)
-                    setArchiveOpen(false)
-                  }}
-                  style={[
-                    styles.collectionChip,
-                    tab === id && styles.collectionChipOn,
-                  ]}
-                >
-                  <Text
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.collectionsRow}
+                style={styles.collectionsScroll}
+              >
+                {COLLECTIONS.map(({ id, labelKey }) => (
+                  <Pressable
+                    key={id}
+                    onPress={() => {
+                      setTab(id)
+                      setArchiveOpen(false)
+                    }}
                     style={[
-                      styles.collectionLabel,
-                      tab === id && styles.collectionLabelOn,
+                      styles.collectionChip,
+                      tab === id && styles.collectionChipOn,
                     ]}
-                    numberOfLines={1}
                   >
-                    {translate('fr', labelKey)}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+                    <Text
+                      style={[
+                        styles.collectionLabel,
+                        tab === id && styles.collectionLabelOn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {translate('fr', labelKey)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </TabScreenHeader>
           </View>
         }
         ListEmptyComponent={
@@ -822,11 +818,11 @@ const styles = StyleSheet.create({
   header: { marginBottom: 22, gap: 4 },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  topCopy: { flex: 1, minWidth: 0 },
+  topCopy: { flex: 1, minWidth: 0, paddingRight: 4 },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,

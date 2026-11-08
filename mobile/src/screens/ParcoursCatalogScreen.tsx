@@ -28,6 +28,7 @@ import {
   setParcoursDetailMemory,
 } from '../lib/parcoursCache'
 import { FwKicker } from '../components/FwKicker'
+import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
@@ -350,17 +351,10 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   title: {
-    marginTop: 6,
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    letterSpacing: -1,
-    color: colors.ink,
+    ...tabScreenHeaderStyles.title,
   },
   subtitle: {
-    marginTop: 6,
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.muted,
+    ...tabScreenHeaderStyles.subtitle,
     marginBottom: 12,
   },
   cityChip: {

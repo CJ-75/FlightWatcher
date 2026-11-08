@@ -1022,10 +1022,16 @@ export function PlannerTab() {
   const location = useLocation()
   const [userId, setUserId] = useState<string | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>([])
+  const [workspaces, setWorkspaces] = useState<TravelWorkspace[]>(() =>
+    (peekTravelWorkspacesCache() || []).filter(workspaceVisibleInPlanner),
+  )
   const [airports, setAirports] = useState<Airport[]>([])
   const shellReady = useShellReady()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(
+    () =>
+      !(peekTravelWorkspacesCache() || []).filter(workspaceVisibleInPlanner)
+        .length,
+  )
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [autoScanTripId, setAutoScanTripId] = useState<string | null>(null)
@@ -1232,7 +1238,7 @@ export function PlannerTab() {
         </button>
       </div>
 
-      {loading ? (
+      {loading && workspaces.length === 0 ? (
         <div
           className="space-y-4"
           aria-busy="true"
@@ -1242,14 +1248,14 @@ export function PlannerTab() {
             {Array.from({ length: 3 }).map((_, i) => (
               <div
                 key={i}
-                className="h-9 w-24 rounded-full bg-white/80 border border-orange-100 animate-pulse"
+                className="h-9 w-24 rounded-full bg-white/80 border border-orange-100"
               />
             ))}
           </div>
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-[28px] border border-orange-100 bg-white p-5 sm:p-6 shadow-lg animate-pulse"
+              className="rounded-[28px] border border-orange-100 bg-white p-5 sm:p-6 shadow-lg"
             >
               <div className="flex gap-4">
                 <div className="h-20 w-20 rounded-2xl bg-orange-50 shrink-0" />
@@ -1262,7 +1268,7 @@ export function PlannerTab() {
             </div>
           ))}
         </div>
-      ) : error ? (
+      ) : error && workspaces.length === 0 ? (
         <div className="bg-white/90 backdrop-blur rounded-3xl border border-orange-100 shadow-lg p-8 text-center">
           <p className="font-bold text-slate-900 mb-2">{error}</p>
           <button
