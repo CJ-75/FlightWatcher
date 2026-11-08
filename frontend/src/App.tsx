@@ -123,6 +123,61 @@ function tabFromPath(pathname: string): Tab | null {
   return null
 }
 
+function TabIcon({
+  name,
+}: {
+  name: 'search' | 'activities' | 'parcours' | 'planner' | 'saved'
+}) {
+  const common = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none' as const,
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true as const,
+  }
+  switch (name) {
+    case 'search':
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16.5 16.5 21 21" />
+        </svg>
+      )
+    case 'activities':
+      return (
+        <svg {...common}>
+          <path d="M8 4h8v4H8z" />
+          <path d="M6 12h12v8H6z" />
+          <path d="M10 8v4M14 8v4" />
+        </svg>
+      )
+    case 'parcours':
+      return (
+        <svg {...common}>
+          <path d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10Z" />
+          <circle cx="12" cy="11" r="2" fill="currentColor" stroke="none" />
+        </svg>
+      )
+    case 'planner':
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3v4M16 3v4M4 10h16" />
+        </svg>
+      )
+    case 'saved':
+      return (
+        <svg {...common}>
+          <path d="M12 20.5 4.5 13A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 6Z" />
+        </svg>
+      )
+  }
+}
+
 function Dashboard() {
   const { t, language } = useI18n()
   const location = useLocation()
@@ -1318,75 +1373,70 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* Onglets : Vols · Activités · Parcours+ · Planner · Favoris */}
+          {/* Onglets : Vols · Activités · Parcours · Planner · Favoris */}
           <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
-            <div className="app-tabbar w-full max-w-lg sm:max-w-2xl">
+            <div className="app-tabbar w-full max-w-md sm:max-w-lg">
               {(
                 [
-                  { id: 'search' as const, label: t('nav.search') },
+                  { id: 'search' as const, label: t('nav.search'), icon: 'search' as const },
                   ...(activitiesUiEnabled
-                    ? [{ id: 'activities' as const, label: 'Activités' }]
+                    ? [{ id: 'activities' as const, label: 'Activités', icon: 'activities' as const }]
                     : []),
                   ...(dealsUiEnabled
-                    ? [{ id: 'deals' as const, label: t('nav.deals') }]
+                    ? [{ id: 'deals' as const, label: t('nav.deals'), icon: 'parcours' as const }]
                     : []),
-                  { id: 'planner' as const, label: t('nav.planner') },
-                  { id: 'saved' as const, label: t('nav.saved') },
+                  { id: 'planner' as const, label: t('nav.planner'), icon: 'planner' as const },
+                  { id: 'saved' as const, label: t('nav.saved'), icon: 'saved' as const },
                 ] as const
-              ).map((tab) => (
-                <motion.div
-                  key={tab.id}
-                  whileTap={{ scale: tab.id === 'deals' ? 0.94 : 0.97 }}
-                  transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                  className={`min-w-0 flex-1 ${tab.id === 'deals' ? 'app-tab-center-slot' : ''}`}
-                >
-                  <Link
-                    to={
-                      tab.id === 'deals' && location.search
-                        ? { pathname: TAB_PATH[tab.id], search: location.search }
-                        : TAB_PATH[tab.id]
-                    }
-                    onClick={() => {
-                      if (activeTab === tab.id) {
-                        window.scrollTo({ top: 0, behavior: 'smooth' })
-                        window.dispatchEvent(
-                          new CustomEvent('fw:tab-scroll-top', {
-                            detail: { tab: tab.id },
-                          }),
-                        )
-                      }
-                      setActiveTabState(tab.id)
-                    }}
-                    className={`app-tab ${tab.id === 'deals' ? 'app-tab-center' : ''} ${
-                      activeTab === tab.id
-                        ? tab.id === 'deals'
-                          ? 'app-tab-center-active'
-                          : 'app-tab-active'
-                        : ''
-                    }`}
-                    aria-current={activeTab === tab.id ? 'page' : undefined}
+              ).map((tab) => {
+                const active = activeTab === tab.id
+                const isCenter = tab.id === 'deals'
+                return (
+                  <motion.div
+                    key={tab.id}
+                    whileTap={{ scale: 0.96 }}
+                    transition={{ type: 'spring', stiffness: 480, damping: 30 }}
+                    className="min-w-0 flex-1"
                   >
-                    {tab.id === 'deals' ? (
-                      <>
-                        <span className="app-tab-orb" aria-hidden>
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                            <path
-                              d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10Z"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinejoin="round"
-                            />
-                            <circle cx="12" cy="11" r="2.2" fill="currentColor" />
-                          </svg>
-                        </span>
-                        <span className="app-tab-center-label truncate">{tab.label}</span>
-                      </>
-                    ) : (
-                      <span className="relative z-[1] truncate">{tab.label}</span>
-                    )}
-                  </Link>
-                </motion.div>
-              ))}
+                    <Link
+                      to={
+                        tab.id === 'deals' && location.search
+                          ? { pathname: TAB_PATH[tab.id], search: location.search }
+                          : TAB_PATH[tab.id]
+                      }
+                      onClick={() => {
+                        if (active) {
+                          window.scrollTo({ top: 0, behavior: 'smooth' })
+                          window.dispatchEvent(
+                            new CustomEvent('fw:tab-scroll-top', {
+                              detail: { tab: tab.id },
+                            }),
+                          )
+                        }
+                        setActiveTabState(tab.id)
+                      }}
+                      className={`app-tab ${isCenter ? 'app-tab-center' : ''} ${
+                        active
+                          ? isCenter
+                            ? 'app-tab-center-active'
+                            : 'app-tab-active'
+                          : ''
+                      }`}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      <span
+                        className={`app-tab-well ${isCenter ? 'app-tab-well-center' : ''} ${
+                          active ? 'app-tab-well-on' : ''
+                        }`}
+                        aria-hidden
+                      >
+                        <TabIcon name={tab.icon} />
+                      </span>
+                      <span className="app-tab-label truncate">{tab.label}</span>
+                    </Link>
+                  </motion.div>
+                )
+              })}
             </div>
           </nav>
         </div>

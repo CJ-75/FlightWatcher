@@ -19,6 +19,10 @@ import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
 import { ParcoursHubScreen } from './src/screens/ParcoursHubScreen'
+import { ActivitiesScreen } from './src/screens/ActivitiesScreen'
+import { PlannerScreen } from './src/screens/PlannerScreen'
+import { FavoritesScreen } from './src/screens/FavoritesScreen'
+import { ProfileScreen } from './src/screens/ProfileScreen'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
 import { stackHeaderOptions } from './src/navigation/stackHeader'
@@ -65,9 +69,7 @@ function RouteSpinner() {
   )
 }
 
-/** Defer heavy screens until first navigation — keeps cold start lean.
- *  Home (ParcoursHubScreen) stays eager — React.lazy + Fabric flaky on initial route.
- */
+/** Stack screens only — tab screens are eager (Metro + React.lazy flaky under Fabric). */
 function lazyScreen<P extends object>(
   loader: () => Promise<{ default: React.ComponentType<P> }>,
   label = 'Screen',
@@ -90,32 +92,10 @@ function lazyScreen<P extends object>(
   return Wrapped
 }
 
-const PlannerScreen = lazyScreen(
+const ResultsScreen = lazyScreen(
   () =>
-    import('./src/screens/PlannerScreen').then((m) => ({ default: m.PlannerScreen })),
-  'PlannerScreen',
-)
-const ActivitiesScreen = lazyScreen(
-  () =>
-    import('./src/screens/ActivitiesScreen').then((m) => ({
-      default: m.ActivitiesScreen,
-    })),
-  'ActivitiesScreen',
-)
-const FavoritesScreen = lazyScreen(
-  () =>
-    import('./src/screens/FavoritesScreen').then((m) => ({
-      default: m.FavoritesScreen,
-    })),
-  'FavoritesScreen',
-)
-const ProfileScreen = lazyScreen(
-  () =>
-    import('./src/screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })),
-  'ProfileScreen',
-)
-const ResultsScreen = lazyScreen(() =>
-  import('./src/screens/ResultsScreen').then((m) => ({ default: m.ResultsScreen })),
+    import('./src/screens/ResultsScreen').then((m) => ({ default: m.ResultsScreen })),
+  'ResultsScreen',
 )
 const DealDetailScreen = lazyScreen(() =>
   import('./src/screens/DealDetailScreen').then((m) => ({ default: m.DealDetailScreen })),
@@ -162,9 +142,8 @@ const NotFoundScreen = lazyScreen(() =>
 
 function MainTabs() {
   const insets = useSafeAreaInsets()
-  // +18 : orbe Parcours relevé au-dessus du dock
   const tabClearance =
-    FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + 18 + Math.max(insets.bottom, 8)
+    FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
   const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(true)
 
   // Airports after first paint — never compete with boot JS/fonts/auth
@@ -293,7 +272,7 @@ function RootNavigator() {
     }
   }, [loading, user, isGuest])
 
-  // Auth boot: branded carousel — 1100ms hold if session, then Main → Search
+  // Auth boot — puis Main → Parcours (home)
   if (loading) {
     return <LoginScreen />
   }
@@ -310,7 +289,7 @@ function RootNavigator() {
           <Stack.Screen
             name="Main"
             component={MainTabs}
-            initialParams={{ screen: 'Search' }}
+            initialParams={{ screen: 'Deals' }}
           />
           <Stack.Screen
             name="Results"

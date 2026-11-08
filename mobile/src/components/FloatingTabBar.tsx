@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react'
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, fonts } from '../theme'
@@ -17,15 +16,19 @@ const LABELS: Record<string, string> = {
   Favorites: 'Favoris',
 }
 
-/** Dock + orbe légèrement relevé (pattern travel / Airbnb Book). */
-export const FLOATING_TAB_HEIGHT = 58
-export const FLOATING_TAB_MARGIN = 16
-const ORB = 46
-const ORB_LIFT = 18
+/**
+ * Dock flottant style Apple / Airbnb :
+ * - capsule translucide au-dessus du contenu
+ * - 5 slots égaux, icône + label
+ * - actif = puits teinté sous l’icône
+ * - Parcours = puits toujours présent (home), rempli si focus
+ */
+export const FLOATING_TAB_HEIGHT = 64
+export const FLOATING_TAB_MARGIN = 18
 
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
-  const bottom = Math.max(insets.bottom, 8)
+  const bottom = Math.max(insets.bottom, 10)
 
   const tabs = useMemo(() => {
     const byName = new Map(
@@ -61,42 +64,13 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             }
           }
 
-          if (isCenter) {
-            return (
-              <Pressable
-                key={route.key}
-                onPress={onPress}
-                accessibilityRole="button"
-                accessibilityState={focused ? { selected: true } : {}}
-                accessibilityLabel={label}
-                style={({ pressed }) => [
-                  styles.centerSlot,
-                  pressed && styles.centerPressed,
-                ]}
-              >
-                <View style={styles.orbWrap}>
-                  <LinearGradient
-                    colors={
-                      focused
-                        ? [colors.primary, colors.primaryDeep]
-                        : [colors.primary, '#FF8A5C']
-                    }
-                    start={{ x: 0.15, y: 0 }}
-                    end={{ x: 0.85, y: 1 }}
-                    style={[styles.orb, focused && styles.orbFocused]}
-                  >
-                    <DealsTabIcon size={20} color="#fff" />
-                  </LinearGradient>
-                </View>
-                <Text
-                  style={[styles.label, styles.centerLabel, focused && styles.labelActive]}
-                  numberOfLines={1}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            )
-          }
+          const iconColor = isCenter
+            ? focused
+              ? '#fff'
+              : colors.primary
+            : focused
+              ? colors.primary
+              : colors.muted
 
           return (
             <Pressable
@@ -107,14 +81,29 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               accessibilityLabel={label}
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             >
-              <View style={styles.iconWrap}>
-                <TabBarIcon name={route.name} focused={focused} size={22} />
+              <View
+                style={[
+                  styles.well,
+                  isCenter && styles.wellCenter,
+                  focused && !isCenter && styles.wellActive,
+                  focused && isCenter && styles.wellCenterActive,
+                ]}
+              >
+                {isCenter ? (
+                  <DealsTabIcon size={18} color={iconColor} />
+                ) : (
+                  <TabBarIcon name={route.name} focused={focused} size={20} />
+                )}
               </View>
               <Text
-                style={[styles.label, focused && styles.labelActive]}
+                style={[
+                  styles.label,
+                  focused && styles.labelActive,
+                  isCenter && styles.labelCenter,
+                ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.8}
+                minimumFontScale={0.78}
               >
                 {label}
               </Text>
@@ -137,94 +126,80 @@ const styles = StyleSheet.create({
   },
   bar: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 400,
     height: FLOATING_TAB_HEIGHT,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    paddingHorizontal: 4,
-    paddingBottom: 8,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 6,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 22,
-        shadowOffset: { width: 0, height: 10 },
+        shadowColor: '#1A120E',
+        shadowOpacity: 0.12,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 12 },
       },
-      android: { elevation: 12 },
+      android: { elevation: 14 },
       default: {},
     }),
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: 'rgba(26, 18, 14, 0.06)',
   },
   item: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 3,
-    paddingBottom: 0,
-  },
-  pressed: {
-    opacity: 0.55,
-  },
-  iconWrap: {
-    height: 24,
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+    paddingTop: 2,
   },
-  centerSlot: {
-    flex: 1,
-    minWidth: 0,
+  pressed: {
+    opacity: 0.62,
+  },
+  /** Puits sous l’icône — sélection claire sans FAB. */
+  well: {
+    width: 44,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 2,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  centerPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.96 }],
+  wellActive: {
+    backgroundColor: colors.primarySoft,
   },
-  orbWrap: {
-    marginTop: -ORB_LIFT,
-    marginBottom: 1,
+  wellCenter: {
+    backgroundColor: colors.primarySoft,
+  },
+  wellCenterActive: {
+    backgroundColor: colors.primary,
     ...Platform.select({
       ios: {
         shadowColor: colors.primary,
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
       },
-      android: { elevation: 8 },
+      android: { elevation: 3 },
       default: {},
     }),
-  },
-  orb: {
-    width: ORB,
-    height: ORB,
-    borderRadius: ORB / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  orbFocused: {
-    borderColor: '#fff',
   },
   label: {
     fontFamily: fonts.medium,
     fontSize: 10,
     lineHeight: 12,
-    letterSpacing: -0.08,
+    letterSpacing: -0.1,
     color: colors.muted,
     textAlign: 'center',
     includeFontPadding: false,
   },
-  centerLabel: {
-    marginTop: 0,
-  },
   labelActive: {
     color: colors.primary,
+    fontFamily: fonts.semibold,
+  },
+  labelCenter: {
     fontFamily: fonts.semibold,
   },
 })

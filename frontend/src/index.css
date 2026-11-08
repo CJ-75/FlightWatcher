@@ -175,11 +175,11 @@
   }
 
   .app-tabbar {
-    @apply flex items-end gap-0 px-1 pt-1 pb-1.5 rounded-full
-      bg-white/94 border border-black/[0.06] shadow-lift backdrop-blur-md;
+    @apply flex items-center gap-0 px-1.5 rounded-[28px]
+      bg-white/92 border border-black/[0.06] shadow-lift backdrop-blur-xl;
   }
 
-  /* Mobile: dock + orbe Parcours relevé */
+  /* Mobile: dock flottant Apple-like */
   @media (max-width: 639px) {
     .app-tabnav {
       position: fixed;
@@ -187,99 +187,101 @@
       right: 0;
       bottom: 0;
       z-index: 40;
-      padding: 0.85rem 1rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
-      background: linear-gradient(180deg, transparent, rgba(255, 249, 245, 0.9) 32%);
+      padding: 0.5rem 1.1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(180deg, transparent 0%, rgba(255, 249, 245, 0.88) 42%);
       pointer-events: none;
     }
 
     .app-tabnav .app-tabbar {
       pointer-events: auto;
       max-width: none;
-      overflow: visible;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+      height: 4rem;
+      box-shadow: 0 12px 32px rgba(26, 18, 14, 0.12);
     }
 
     .app-tab {
-      @apply text-[10px] px-1 py-1 min-h-[44px] rounded-full font-medium
-        flex-col gap-0.5;
+      @apply text-[10px] px-0.5 py-1 min-h-0 h-full rounded-none
+        flex-col gap-1 font-medium;
     }
 
-    .app-tab-center-slot {
-      overflow: visible;
-    }
-
-    .app-tab-center {
-      @apply text-primary font-semibold bg-transparent;
-      transform: none;
-    }
-
-    .app-tab-orb {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 2.75rem;
-      height: 2.75rem;
-      margin-top: -1.1rem;
-      border-radius: 999px;
-      color: #fff;
-      background: linear-gradient(145deg, #ff6b35 0%, #e85a28 100%);
-      border: 3px solid #fff;
-      box-shadow: 0 6px 14px rgba(255, 107, 53, 0.35);
-    }
-
-    .app-tab-center-active .app-tab-orb {
-      background: linear-gradient(145deg, #e85a28 0%, #d44a1c 100%);
-      box-shadow: 0 8px 18px rgba(255, 107, 53, 0.42);
-    }
-
-    .app-tab-center-label {
+    .app-tab-label {
       font-size: 10px;
       line-height: 12px;
-      letter-spacing: -0.08px;
+      letter-spacing: -0.1px;
     }
   }
 
   .app-tab {
-    @apply relative inline-flex items-center justify-center px-2 sm:px-3 py-2 rounded-full
-      text-xs sm:text-sm font-medium text-muted min-h-[40px] w-full leading-tight;
+    @apply relative inline-flex items-center justify-center px-2 sm:px-3 py-2
+      text-xs sm:text-sm font-medium text-muted min-h-[44px] w-full leading-tight;
     transition: color 140ms ease, opacity 140ms ease;
   }
 
-  .app-tab-orb {
-    display: none;
+  .app-tab-well {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    color: inherit;
+    background: transparent;
+    transition:
+      background-color 160ms ease,
+      color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .app-tab-well-center {
+    background: color-mix(in srgb, var(--fw-accent, #ff6b35) 16%, white);
+    color: var(--fw-accent, #ff6b35);
+  }
+
+  .app-tab-active,
+  .app-tab-center-active {
+    @apply text-primary font-semibold bg-transparent;
+  }
+
+  .app-tab-active .app-tab-well,
+  .app-tab-well-on:not(.app-tab-well-center) {
+    background: color-mix(in srgb, var(--fw-accent, #ff6b35) 14%, white);
+    color: var(--fw-accent, #ff6b35);
+  }
+
+  .app-tab-center-active .app-tab-well-center,
+  .app-tab-center-active .app-tab-well-on {
+    background: var(--fw-accent, #ff6b35);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.28);
+  }
+
+  .app-tab-label {
+    @apply truncate;
+  }
+
+  .app-tab-center .app-tab-label {
+    @apply font-semibold;
   }
 
   @media (min-width: 640px) {
-    .app-tab-center .app-tab-orb {
-      display: none;
+    .app-tabbar {
+      @apply p-1.5;
     }
 
-    .app-tab-center {
-      @apply font-semibold;
-    }
-
-    .app-tab-center-active {
-      @apply text-primary font-semibold;
+    .app-tab {
+      @apply flex-col gap-1.5 py-2.5;
     }
   }
 
   @media (hover: hover) and (pointer: fine) {
     .app-tab:hover:not(.app-tab-active):not(.app-tab-center-active) {
       @apply text-ink;
-      opacity: 0.85;
+      opacity: 0.9;
     }
   }
 
   .app-tab:active {
     opacity: 0.55;
-  }
-
-  .app-tab-active {
-    @apply text-primary font-semibold bg-transparent;
-  }
-
-  .app-tab-center-active {
-    @apply text-primary font-semibold bg-transparent;
   }
 
   .app-icon-btn {
