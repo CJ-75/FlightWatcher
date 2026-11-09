@@ -93,13 +93,15 @@ const PREF_VISUAL: Record<TravelPreference, { photo: string; line: string }> = {
     line: 'Deux places, une même envie',
   },
   solo: {
-    // MQfDZmBkLe8
+    // sCiKTRwnSFg
     photo:
-      'https://images.unsplash.com/photo-1768463851971-a813d5797341?auto=format&fit=crop&w=2400&q=95&fm=jpg',
+      'https://images.unsplash.com/photo-1620424722820-c86c2672d7f5?auto=format&fit=crop&w=2400&q=95&fm=jpg',
     line: 'Ton rythme, tes envies',
   },
   famille: {
-    photo: `https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=${PHOTO_W}&q=85&fm=jpg`,
+    // DgEtNnBf9_o
+    photo:
+      'https://images.unsplash.com/photo-1742401709446-53625fca69e8?auto=format&fit=crop&w=2400&q=95&fm=jpg',
     line: 'Des week-ends qui plaisent à tous',
   },
 }
@@ -706,16 +708,13 @@ const styles = StyleSheet.create({
     height: 158,
     borderRadius: 22,
     overflow: 'hidden',
-    marginTop: 2,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(40,32,24,0.06)',
+    /** Fond = teinte sombre image — pas de frange grise / canvas si anti-alias. */
+    backgroundColor: '#1A120E',
   },
-  prefHeroImg: { flex: 1, overflow: 'hidden' },
-  /** Décale le crop vers le bas pour que le haut de la photo ne soit pas coupé sous la barre. */
+  prefHeroImg: { flex: 1 },
   prefHeroBitmap: {
     borderRadius: 22,
-    transform: [{ scale: 1.12 }, { translateY: 10 }],
   },
   prefHeroGrad: {
     flex: 1,
