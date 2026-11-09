@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import * as Linking from 'expo-linking'
 import type { Session, User } from '@flightwatcher/shared'
 import { auth, redirectTo, authRedirectWarning } from '../lib/client'
-import { resetActivitiesWarmup } from '../lib/activitiesWarmup'
 import { clearLikedParcoursIdsLocal } from '../lib/parcoursCache'
 import { DEV_GUEST_USER } from '../dev/guestPreview'
 
@@ -187,7 +186,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (__DEV__) console.warn('[auth] signOut error', e)
         } finally {
           clearLikedParcoursIdsLocal()
-          resetActivitiesWarmup()
+          // Lazy — avoid Auth↔activitiesWarmup import cycle at login boot.
+          void import('../lib/activitiesWarmup').then((m) =>
+            m.resetActivitiesWarmup(),
+          )
           setUser(null)
           setSession(null)
           setIsGuest(false)

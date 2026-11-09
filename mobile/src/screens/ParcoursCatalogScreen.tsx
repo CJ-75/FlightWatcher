@@ -28,6 +28,8 @@ import {
   rememberParcoursPreview,
   setParcoursCatalogMemory,
 } from '../lib/parcoursCache'
+import { scheduleActivitiesWarmup } from '../lib/activitiesWarmup'
+import { useAuth } from '../context/AuthContext'
 import { FwKicker } from '../components/FwKicker'
 import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
@@ -55,9 +57,12 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const { user, isGuest } = useAuth()
   const scrollRef = useRef<ScrollView>(null)
   useScrollToTop(scrollRef)
   const [city, setCity] = useState('paris')
+  const cityRef = useRef(city)
+  cityRef.current = city
   const [cityOpen, setCityOpen] = useState(false)
   const [items, setItems] = useState<Itinerary[]>(
     () => getParcoursCatalogMemory() ?? [],
@@ -66,6 +71,12 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const [refreshing, setRefreshing] = useState(false)
   const [occasion, setOccasion] = useState<ItineraryOccasion | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const kickActivitiesWarm = useCallback(() => {
+    const key = user?.id || (isGuest ? 'guest' : '')
+    if (!key) return
+    scheduleActivitiesWarmup(key, cityRef.current)
+  }, [user?.id, isGuest])
 
   useEffect(() => {
     void AsyncStorage.getItem(CITY_LS).then((v) => {
@@ -88,14 +99,18 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
         next.map((it) => it.slug || it.id),
         { limit: 12 },
       )
+      // Parcours ready → activités next (post-login sequencing).
+      kickActivitiesWarm()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       if (!getParcoursCatalogMemory()?.length) setItems([])
+      // Still try activities if we already had disk/memory catalogue.
+      if (getParcoursCatalogMemory()?.length) kickActivitiesWarm()
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [kickActivitiesWarm])
 
   useEffect(() => {
     let cancelled = false
@@ -105,14 +120,18 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
         if (!cancelled && disk?.length) {
           setItems(disk)
           setLoading(false)
+          // Disk hit: home is usable — start activités warm without waiting HTTP.
+          kickActivitiesWarm()
         }
+      } else if (!cancelled && getParcoursCatalogMemory()?.length) {
+        kickActivitiesWarm()
       }
       if (!cancelled) void load()
     })()
     return () => {
       cancelled = true
     }
-  }, [load])
+  }, [load, kickActivitiesWarm])
 
   // Warm Metro chunk before first tap (cold open was ~700–800ms).
   useEffect(() => {

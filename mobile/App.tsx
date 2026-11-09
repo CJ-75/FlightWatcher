@@ -16,6 +16,7 @@ import {
   Sora_800ExtraBold,
 } from '@expo-google-fonts/sora'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
+import { subscribeParcoursCatalogReady } from './src/lib/parcoursCache'
 import { scheduleActivitiesWarmup } from './src/lib/activitiesWarmup'
 import { AuthSheetHost } from './src/components/onboarding/AuthSheetHost'
 import { OnboardingFlowScreen } from './src/screens/OnboardingFlowScreen'
@@ -164,6 +165,7 @@ const NotFoundScreen = lazyScreen(() =>
 
 function MainTabs() {
   const insets = useSafeAreaInsets()
+  const { user, isGuest } = useAuth()
   const tabClearance =
     FLOATING_TAB_HEIGHT + FLOATING_TAB_MARGIN + Math.max(insets.bottom, 10)
   const [activitiesUiEnabled, setActivitiesUiEnabled] = useState(true)
@@ -185,56 +187,14 @@ function MainTabs() {
     }
   }, [])
 
-  // Like web prefetchActivitiesCatalog — disk hydrate + public HTTP for last city.
+  // Parcours ready → warm activités HTTP in background (no tab click).
   React.useEffect(() => {
-    let cancelled = false
-    const t = setTimeout(() => {
-      if (cancelled) return
-      void (async () => {
-        try {
-          const cache = await import('./src/lib/activitiesCache')
-          const { fetchCityActivitiesPublic } = await import(
-            './src/lib/activitiesCatalogFetch'
-          )
-          const { listRememberedTrips } = await import('./src/lib/tripRecovery')
-          const { resolveActivityCitySlug } = await import('@flightwatcher/shared')
-
-          let slug = (await cache.hydrateLastCitySlug()) || ''
-          if (!slug) {
-            const remembered = await listRememberedTrips().catch(() => [])
-            const city = remembered[0]?.city
-            if (city) {
-              slug = resolveActivityCitySlug({
-                cityLabel: city,
-                citySlug: city,
-              })
-            }
-          }
-          if (!slug) slug = 'paris'
-          if (cancelled) return
-          await cache.hydrateCityActivities(slug, 2)
-          if (cancelled) return
-          if (!cache.peekCityActivities(slug, 2)?.ok) {
-            await cache.getCityActivitiesCached(slug, 2, () =>
-              fetchCityActivitiesPublic(slug, 2),
-            )
-          } else {
-            void cache
-              .getCityActivitiesCached(slug, 2, () =>
-                fetchCityActivitiesPublic(slug, 2),
-              )
-              .catch(() => undefined)
-          }
-        } catch {
-          /* best-effort */
-        }
-      })()
-    }, 0)
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [])
+    const key = user?.id || (isGuest ? 'guest' : '')
+    if (!key) return
+    return subscribeParcoursCatalogReady(() => {
+      scheduleActivitiesWarmup(key, 'paris')
+    })
+  }, [user?.id, isGuest])
 
   React.useEffect(() => {
     let cancelled = false
@@ -387,16 +347,7 @@ function RootNavigator() {
     })
   }, [loading, user, isGuest])
 
-  // Post-login/guest only: background warm for likely next screens (activités).
-  // Never from LoginScreen — keep pre-auth boot free of API catalogue work.
-  useEffect(() => {
-    if (loading || needsOnboarding === null) return
-    if (needsOnboarding || forceOnboarding) return
-    if (!user && !isGuest) return
-    const key = user?.id || (isGuest ? 'guest' : '')
-    if (!key) return
-    scheduleActivitiesWarmup(key)
-  }, [loading, needsOnboarding, forceOnboarding, user, isGuest])
+  // Activities warm: after Parcours catalogue loads (see ParcoursCatalogScreen).
 
   // Auth boot — puis Main → Parcours (home)
   if (loading || needsOnboarding === null) {

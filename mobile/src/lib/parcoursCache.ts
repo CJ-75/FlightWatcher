@@ -11,9 +11,32 @@ const detailInflight = new Map<string, Promise<Itinerary>>()
 /** Liked parcours ids for the current session (optimistic heart). */
 let likedParcoursIds: Set<string> | null = null
 let likedParcoursIdsInflight: Promise<Set<string>> | null = null
+const catalogReadyListeners = new Set<() => void>()
 
 function hasSteps(it: Itinerary | null | undefined): boolean {
   return Array.isArray(it?.itinerary_items) && (it!.itinerary_items?.length ?? 0) > 0
+}
+
+function notifyParcoursCatalogReady() {
+  if (!catalogMemory?.length) return
+  for (const fn of catalogReadyListeners) {
+    try {
+      fn()
+    } catch {
+      /* listener best-effort */
+    }
+  }
+}
+
+/** Fires now if catalogue already loaded, then on each non-empty set/hydrate. */
+export function subscribeParcoursCatalogReady(fn: () => void): () => void {
+  catalogReadyListeners.add(fn)
+  if (catalogMemory?.length) {
+    queueMicrotask(fn)
+  }
+  return () => {
+    catalogReadyListeners.delete(fn)
+  }
 }
 
 export function getParcoursCatalogMemory(): Itinerary[] | null {
@@ -31,6 +54,7 @@ export function setParcoursCatalogMemory(items: Itinerary[]) {
   catalogMemory = items
   hydrateDetailsFromCatalog(items)
   void AsyncStorage.setItem(CATALOG_KEY, JSON.stringify(items)).catch(() => {})
+  notifyParcoursCatalogReady()
 }
 
 export async function hydrateParcoursCatalogMemory(): Promise<Itinerary[] | null> {
@@ -42,6 +66,7 @@ export async function hydrateParcoursCatalogMemory(): Promise<Itinerary[] | null
     if (!Array.isArray(parsed)) return null
     catalogMemory = parsed
     hydrateDetailsFromCatalog(parsed)
+    notifyParcoursCatalogReady()
     return parsed
   } catch {
     return null

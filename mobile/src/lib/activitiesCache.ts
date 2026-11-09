@@ -40,6 +40,11 @@ export function setLastCitySlug(slug: string) {
   void AsyncStorage.setItem(LAST_CITY_KEY, s).catch(() => {})
 }
 
+export function clearLastCitySlug() {
+  lastCitySlug = null
+  void AsyncStorage.removeItem(LAST_CITY_KEY).catch(() => {})
+}
+
 export async function hydrateLastCitySlug(): Promise<string | null> {
   if (lastCitySlug) return lastCitySlug
   if (!lastCityHydrate) {
@@ -101,15 +106,22 @@ export async function hydrateCityActivities(
 /**
  * Memory hit → sync-fast. Else one shared HTTP for concurrent callers.
  * Default fetch is public (no JWT) — pass `fetchFn` only to override.
+ * `force: true` skips memory (still joins in-flight) — used to warm Viator
+ * server/client without waiting for the Activities tab.
  */
 export function getCityActivitiesCached(
   citySlug: string,
   adults: number,
   fetchFn?: () => Promise<CityActivitiesResult>,
+  opts?: { force?: boolean },
 ): Promise<CityActivitiesResult> {
   const key = cacheKey(citySlug, adults)
-  const mem = memory.get(key)
-  if (mem?.ok && Array.isArray(mem.items)) return Promise.resolve(mem)
+  const force = Boolean(opts?.force)
+
+  if (!force) {
+    const mem = memory.get(key)
+    if (mem?.ok && Array.isArray(mem.items)) return Promise.resolve(mem)
+  }
 
   const pending = inflight.get(key)
   if (pending) return pending

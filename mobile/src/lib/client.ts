@@ -213,7 +213,7 @@ async function openOAuthSession(authUrl: string): Promise<string | null> {
 
     // Background safety net only (login UI is not blocked). Native builds
     // return via deep link in a few seconds; Expo Go + tunnel can be slower.
-    const hardTimer = setTimeout(() => finish(null, 'timeout-45s'), 45_000)
+    const hardTimer = setTimeout(() => finish(null, 'timeout-90s'), 90_000)
 
     // Watch for exp:// deep link produced by /auth/mobile-callback
     authLog('openAuthSessionAsync (HTTPS bridge → deep link)')

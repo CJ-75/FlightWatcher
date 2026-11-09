@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   Pressable,
-  ActivityIndicator,
   Modal,
   AppState,
   type AppStateStatus,
@@ -14,6 +13,9 @@ import {
   ScrollView,
   TextInput,
   ImageBackground,
+  Animated,
+  Dimensions,
+  Easing,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -74,17 +76,12 @@ import { auth, getApi } from '../lib/client'
 import {
   getCityActivitiesCached,
   hydrateCityActivities,
-  hydrateLastCitySlug,
   peekCityActivities,
-  peekLastCitySlug,
   setLastCitySlug,
 } from '../lib/activitiesCache'
 import { fetchCityActivitiesPublic } from '../lib/activitiesCatalogFetch'
-import {
-  hydrateTravelWorkspacesCache,
-  listTravelWorkspacesCached,
-  peekTravelWorkspacesCache,
-} from '../lib/workspacesCache'
+import { peekWarmedActivityCity } from '../lib/activitiesWarmup'
+import { listTravelWorkspacesCached } from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { TabScreenHeader } from '../components/TabScreenHeader'
@@ -104,6 +101,70 @@ import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 function eventPlatform(): 'ios' | 'android' {
   return Platform.OS === 'ios' ? 'ios' : 'android'
+}
+
+const SKELETON_HERO_H = Math.min(
+  220,
+  Math.round(Dimensions.get('window').width * 0.52),
+)
+
+const LOAD_HINTS = [
+  'On aligne ton séjour…',
+  'On déniche les meilleures activités…',
+  'Encore une seconde…',
+]
+
+/** Image-led placeholders — same rhythm as ActivityCard, no bare spinner. */
+function ActivitiesCatalogSkeleton({
+  status,
+}: {
+  status: string
+}) {
+  const pulse = useRef(new Animated.Value(0.45)).current
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 750,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.45,
+          duration: 750,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [pulse])
+
+  return (
+    <View style={styles.skeletonBlock} accessibilityLabel={status}>
+      <Text style={styles.loadingKicker}>CHARGEMENT</Text>
+      <Text style={styles.loadingStatus}>{status}</Text>
+      {[0, 1, 2].map((i) => (
+        <Animated.View
+          key={i}
+          style={[styles.skeletonCard, shadow.soft, { opacity: pulse }]}
+        >
+          <View style={styles.skeletonHero} />
+          <View style={styles.skeletonBody}>
+            <View style={[styles.skeletonLine, { width: '78%' }]} />
+            <View style={[styles.skeletonLine, { width: '48%' }]} />
+            <View style={styles.skeletonMetaRow}>
+              <View style={[styles.skeletonChip, { width: 72 }]} />
+              <View style={[styles.skeletonChip, { width: 56 }]} />
+            </View>
+            <View style={styles.skeletonCta} />
+          </View>
+        </Animated.View>
+      ))}
+    </View>
+  )
 }
 
 function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
@@ -190,12 +251,14 @@ export function ActivitiesScreen() {
   const { viewUser, signInWithGoogle, user, session, isGuest, loading: authLoading } =
     useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
-  // Seed disk/remembered before network — avoids paris → planner city double fetch.
+  // Catalogue after planner lockCity / route / background Viator warm.
+  // Never seed UI from disk workspaces[0] (stale Malte → 2nd load) — warm
+  // resolves arrival city the same way as lockCity before fetching Viator.
   const routeCityInit = route.params?.city?.trim().toLowerCase() || ''
-  const [citySlug, setCitySlug] = useState(
-    () => routeCityInit || peekLastCitySlug() || '',
-  )
-  const [citySeeded, setCitySeeded] = useState(() => Boolean(routeCityInit))
+  const warmedInit = peekWarmedActivityCity() || ''
+  const seedCity = routeCityInit || warmedInit
+  const [citySlug, setCitySlug] = useState(() => seedCity)
+  const cityConfirmed = useRef(Boolean(seedCity))
   const [tripReady, setTripReady] = useState(false)
   const loadGen = useRef(0)
   const authKey =
@@ -206,61 +269,45 @@ export function ActivitiesScreen() {
   useEffect(() => {
     const fromRoute = route.params?.city?.trim().toLowerCase()
     if (fromRoute && fromRoute !== citySlug) {
+      cityConfirmed.current = true
       setCitySlug(fromRoute)
-      setCitySeeded(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.city])
 
+  // Warm may resolve after first paint — adopt city so loadCity joins Viator inflight.
   useEffect(() => {
-    if (citySeeded) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const last = await hydrateLastCitySlug()
-        if (cancelled) return
-        const remembered = await listRememberedTrips().catch(() => [])
-        const memCity = remembered[0]?.city
-        let slug = ''
-        if (memCity) {
-          slug = resolveActivityCitySlug({
-            cityLabel: memCity,
-            citySlug: memCity,
-          })
-        }
-        if (!slug) {
-          let ws = peekTravelWorkspacesCache()
-          if (!ws?.length) ws = (await hydrateTravelWorkspacesCache()) || null
-          if (cancelled) return
-          const top = ws?.length
-            ? filterActivitySwitcherWorkspaces(ws)[0]
-            : null
-          if (top) slug = cityFromWorkspace(top).slug
-        }
-        if (!slug) slug = last || 'paris'
-        if (!cancelled) {
-          setLastCitySlug(slug)
-          setCitySlug((prev) => prev || slug)
-          setCitySeeded(true)
-        }
-      } catch {
-        if (!cancelled) {
-          setCitySlug((prev) => prev || 'paris')
-          setCitySeeded(true)
-        }
+    let tries = 0
+    const tick = () => {
+      const warmed = peekWarmedActivityCity()
+      if (warmed && !cityConfirmed.current) {
+        cityConfirmed.current = true
+        setLastCitySlug(warmed)
+        setCitySlug((prev) => prev || warmed)
+        return true
       }
-    })()
-    return () => {
-      cancelled = true
+      return Boolean(warmed)
     }
-  }, [citySeeded])
+    if (tick()) return
+    const id = setInterval(() => {
+      tries += 1
+      if (tick() || tries > 40) clearInterval(id)
+    }, 200)
+    return () => clearInterval(id)
+  }, [])
 
   const [adults] = useState(2)
-  const warmBoot = peekCityActivities(
-    citySlug || peekLastCitySlug() || 'paris',
-    2,
-  )
+  const [loadHintIdx, setLoadHintIdx] = useState(0)
+  const warmBoot = seedCity ? peekCityActivities(seedCity, 2) : null
   const [loading, setLoading] = useState(() => !warmBoot?.items?.length)
+
+  useEffect(() => {
+    if (!loading || refreshing) return
+    const t = setInterval(() => {
+      setLoadHintIdx((i) => (i + 1) % LOAD_HINTS.length)
+    }, 2200)
+    return () => clearInterval(t)
+  }, [loading, refreshing])
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<Record<string, unknown>[]>(
@@ -333,9 +380,11 @@ export function ActivitiesScreen() {
         const lockCity = (slug: string) => {
           if (!slug) {
             didAutoCity.current = true
+            cityConfirmed.current = true
             return
           }
           didAutoCity.current = true
+          cityConfirmed.current = true
           setLastCitySlug(slug)
           setCitySlug((prev) => (prev === slug ? prev : slug))
         }
@@ -764,15 +813,18 @@ export function ActivitiesScreen() {
     [adults],
   )
 
-  // Wait for city seed (disk/remembered) — then one catalog fetch on the right city.
+  // Load only after lockCity (or route). Avoids Malte-from-disk then correct city.
   useEffect(() => {
-    if (!citySeeded) return
+    if (!cityConfirmed.current && !tripReady) return
     if (!citySlug) {
-      setCitySlug('paris')
+      if (tripReady) {
+        cityConfirmed.current = true
+        setCitySlug('paris')
+      }
       return
     }
     void loadCity(citySlug)
-  }, [citySeeded, citySlug, loadCity])
+  }, [citySlug, tripReady, loadCity])
 
   useEffect(() => {
     pendingRef.current = pendingBook
@@ -1172,8 +1224,18 @@ export function ActivitiesScreen() {
               </View>
             ) : null}
 
-            {loading && !refreshing ? (
-              <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
+            {loading && !refreshing && cards.length === 0 ? (
+              <ActivitiesCatalogSkeleton
+                status={
+                  citySlug
+                    ? [
+                        `Activités à ${activityDestinationLabelFr(citySlug)}…`,
+                        `On déniche le meilleur à ${activityDestinationLabelFr(citySlug)}…`,
+                        `Presque prêt pour ${activityDestinationLabelFr(citySlug)}…`,
+                      ][loadHintIdx % 3]
+                    : LOAD_HINTS[loadHintIdx]
+                }
+              />
             ) : null}
           </View>
         }
@@ -1391,6 +1453,52 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   topCopy: { flex: 1, minWidth: 0, paddingRight: 4 },
+  loadingKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  loadingStatus: {
+    fontFamily: fonts.semibold,
+    fontSize: 16,
+    color: colors.inkSoft,
+    marginBottom: 16,
+    letterSpacing: -0.2,
+  },
+  skeletonBlock: { marginTop: 8, marginBottom: 8 },
+  skeletonCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+  },
+  skeletonHero: {
+    height: SKELETON_HERO_H,
+    backgroundColor: colors.primaryMuted,
+  },
+  skeletonBody: { padding: 14, gap: 10 },
+  skeletonLine: {
+    height: 13,
+    borderRadius: 7,
+    backgroundColor: colors.primarySoft,
+  },
+  skeletonMetaRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  skeletonChip: {
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primarySoft,
+  },
+  skeletonCta: {
+    marginTop: 6,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.primaryMuted,
+  },
   kicker: {
     fontFamily: fonts.bold,
     fontSize: 11,
