@@ -15,8 +15,10 @@ const INSTANT = BUNDLE.length >= 80 ? BUNDLE : SEED
 const LS_KEY = 'fw_airports_v1'
 const LS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const MIN_FULL_COUNT = 80
-/** Fail fast on LAN — backend often bound to 127.0.0.1 only. */
-const NETWORK_TIMEOUT_MS = 4_000
+/** ~110KB payload — 4s was too tight under concurrent parcours/deals on LAN. */
+const NETWORK_TIMEOUT_MS = 12_000
+/** Don't re-hit /api/airports on every screen mount once we have a full catalog. */
+const NETWORK_REFRESH_TTL_MS = 6 * 60 * 60 * 1000
 
 let cached: Airport[] | null = null
 let inflight: Promise<Airport[]> | null = null
@@ -25,6 +27,8 @@ let quietRefreshStarted = false
 let hydrateStarted = false
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let retryAttempt = 0
+let lastNetworkOkAt = 0
+let lastNetworkFailAt = 0
 
 type Listener = (list: Airport[]) => void
 const listeners = new Set<Listener>()
@@ -67,9 +71,23 @@ function writeDisk(list: Airport[]) {
 function applyFull(list: Airport[], source: 'network' | 'disk' | 'bundle') {
   cached = list
   fromDisk = source === 'disk'
-  retryAttempt = 0
-  if (source === 'network') writeDisk(list)
+  if (source === 'network') {
+    retryAttempt = 0
+    lastNetworkOkAt = Date.now()
+    writeDisk(list)
+  }
   notify(list)
+}
+
+function shouldNetworkRefresh(): boolean {
+  if (quietRefreshStarted) return false
+  if (lastNetworkOkAt && Date.now() - lastNetworkOkAt < NETWORK_REFRESH_TTL_MS) {
+    return false
+  }
+  // Back off after a fail until scheduleRetry fires (or cooldown elapsed).
+  if (retryTimer) return false
+  if (lastNetworkFailAt && Date.now() - lastNetworkFailAt < 3_000) return false
+  return true
 }
 
 function fetchNetwork(): Promise<Airport[]> {
@@ -109,7 +127,7 @@ function fetchNetwork(): Promise<Airport[]> {
 function scheduleRetry() {
   if (retryTimer || retryAttempt >= 4) return
   retryAttempt += 1
-  const delayMs = Math.min(15_000, 3000 * retryAttempt)
+  const delayMs = Math.min(30_000, 4_000 * retryAttempt)
   retryTimer = setTimeout(() => {
     retryTimer = null
     refreshQuiet()
@@ -117,11 +135,13 @@ function scheduleRetry() {
 }
 
 function refreshQuiet() {
-  if (quietRefreshStarted) return
+  if (!shouldNetworkRefresh()) return
   quietRefreshStarted = true
   fetchNetwork()
     .catch((err) => {
+      lastNetworkFailAt = Date.now()
       if (__DEV__) console.warn('[airports] refresh skipped', err)
+      scheduleRetry()
     })
     .finally(() => {
       quietRefreshStarted = false
@@ -134,6 +154,8 @@ function ensureHydrate(): void {
   void readDisk().then((fromLs) => {
     if (fromLs && (!cached || fromLs.length >= (cached?.length ?? 0))) {
       applyFull(fromLs, 'disk')
+      // Disk count as recent enough — avoid hammering LAN on every app open.
+      if (!lastNetworkOkAt) lastNetworkOkAt = Date.now() - NETWORK_REFRESH_TTL_MS / 2
     }
     refreshQuiet()
   })
@@ -143,6 +165,14 @@ ensureHydrate()
 
 export function getCachedAirports(opts?: { force?: boolean }): Promise<Airport[]> {
   const force = Boolean(opts?.force)
+
+  if (force) {
+    lastNetworkOkAt = 0
+    if (retryTimer) {
+      clearTimeout(retryTimer)
+      retryTimer = null
+    }
+  }
 
   if (!force && isFullCatalog(cached)) {
     refreshQuiet()
@@ -166,6 +196,7 @@ export function getCachedAirports(opts?: { force?: boolean }): Promise<Airport[]
         const fromLs = await readDisk()
         if (fromLs) {
           applyFull(fromLs, 'disk')
+          if (!lastNetworkOkAt) lastNetworkOkAt = Date.now() - NETWORK_REFRESH_TTL_MS / 2
           refreshQuiet()
           if (__DEV__) {
             console.log('[airports] disk', fromLs.length, 'in', Date.now() - t0, 'ms')
@@ -182,6 +213,7 @@ export function getCachedAirports(opts?: { force?: boolean }): Promise<Airport[]
       if (__DEV__) console.warn('[airports] network fail — using bundle', err)
       const fallback = isFullCatalog(cached) ? cached! : INSTANT
       applyFull(fallback, isFullCatalog(cached) ? 'disk' : 'bundle')
+      lastNetworkFailAt = Date.now()
       scheduleRetry()
       return fallback
     } finally {
