@@ -75,7 +75,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const kickActivitiesWarm = useCallback(() => {
     const key = user?.id || (isGuest ? 'guest' : '')
     if (!key) return
-    scheduleActivitiesWarmup(key, cityRef.current)
+    scheduleActivitiesWarmup(key, 'paris')
   }, [user?.id, isGuest])
 
   useEffect(() => {

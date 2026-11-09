@@ -59,6 +59,11 @@ import {
   listTravelWorkspacesCached,
   peekTravelWorkspacesCache,
 } from '../lib/workspacesCache'
+import {
+  getPlannedTripCached,
+  prefetchPlannedTrips,
+  setPlannedTripMemory,
+} from '../lib/plannedTripCache'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { TabScreenHeader } from '../components/TabScreenHeader'
@@ -177,7 +182,13 @@ export function PlannerScreen() {
   workspacesLenRef.current = workspaces.length
 
   const applyWorkspaceList = useCallback((list: TravelWorkspace[]) => {
-    setWorkspaces(filterVisibleWorkspaces(list))
+    const next = filterVisibleWorkspaces(list)
+    setWorkspaces(next)
+    // Warm trip details so opening a séjour skips the cold spinner.
+    prefetchPlannedTrips(
+      next.map((w) => w.planned_trip_id),
+      { limit: 6 },
+    )
   }, [])
 
   // Cold start: disk → paint before network
@@ -309,7 +320,10 @@ export function PlannerScreen() {
 
   const openWorkspace = (workspace: TravelWorkspace) => {
     if (workspace.planned_trip_id) {
-      navigation.navigate('TripDetail', { tripId: workspace.planned_trip_id })
+      const tripId = workspace.planned_trip_id
+      // Start fetch before push so TripDetail joins the same inflight.
+      void getPlannedTripCached(tripId).catch(() => {})
+      navigation.navigate('TripDetail', { tripId })
       return
     }
     // Séjour perso → promote to planner (vol + hôtel), pas TripSummary.
@@ -334,6 +348,7 @@ export function PlannerScreen() {
             draft_token: workspace.draft_token!,
             name: workspace.city || workspace.title || undefined,
           })
+          if (created?.id) setPlannedTripMemory(created)
           Alert.alert('', PLANNER_PROMOTE_TOAST_FR)
           navigation.navigate('TripDetail', { tripId: created.id })
           invalidateTravelWorkspacesCache()

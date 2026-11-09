@@ -251,14 +251,12 @@ export function ActivitiesScreen() {
   const { viewUser, signInWithGoogle, user, session, isGuest, loading: authLoading } =
     useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
-  // Catalogue after planner lockCity / route / background Viator warm.
-  // Never seed UI from disk workspaces[0] (stale Malte → 2nd load) — warm
-  // resolves arrival city the same way as lockCity before fetching Viator.
+  // Default Paris (parcours + catalogue) — don't wait on planner arrival.
+  // Route city (depuis le planner) overrides; Sync ramène au séjour.
   const routeCityInit = route.params?.city?.trim().toLowerCase() || ''
-  const warmedInit = peekWarmedActivityCity() || ''
-  const seedCity = routeCityInit || warmedInit
+  const seedCity = routeCityInit || peekWarmedActivityCity() || 'paris'
   const [citySlug, setCitySlug] = useState(() => seedCity)
-  const cityConfirmed = useRef(Boolean(seedCity))
+  const cityConfirmed = useRef(true)
   const [tripReady, setTripReady] = useState(false)
   const loadGen = useRef(0)
   const authKey =
@@ -275,30 +273,9 @@ export function ActivitiesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.city])
 
-  // Warm may resolve after first paint — adopt city so loadCity joins Viator inflight.
-  useEffect(() => {
-    let tries = 0
-    const tick = () => {
-      const warmed = peekWarmedActivityCity()
-      if (warmed && !cityConfirmed.current) {
-        cityConfirmed.current = true
-        setLastCitySlug(warmed)
-        setCitySlug((prev) => prev || warmed)
-        return true
-      }
-      return Boolean(warmed)
-    }
-    if (tick()) return
-    const id = setInterval(() => {
-      tries += 1
-      if (tick() || tries > 40) clearInterval(id)
-    }, 200)
-    return () => clearInterval(id)
-  }, [])
-
   const [adults] = useState(2)
   const [loadHintIdx, setLoadHintIdx] = useState(0)
-  const warmBoot = seedCity ? peekCityActivities(seedCity, 2) : null
+  const warmBoot = peekCityActivities(seedCity, 2)
   const [loading, setLoading] = useState(() => !warmBoot?.items?.length)
 
   useEffect(() => {
@@ -339,8 +316,6 @@ export function ActivitiesScreen() {
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
   const didAutoCity = useRef(false)
-  /** Align city on trip once when planner boots (like web syncedOnOpen). */
-  const syncedCityToTrip = useRef(false)
   const listRef = useRef<FlatList<ActivityCardModel>>(null)
   useScrollToTop(listRef)
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedActivities()
@@ -353,7 +328,6 @@ export function ActivitiesScreen() {
     if (authLoading) return
     let cancelled = false
     didAutoCity.current = false
-    syncedCityToTrip.current = false
     setTripReady(false)
     const routeCity = route.params?.city?.trim().toLowerCase() || ''
     void (async () => {
@@ -683,7 +657,8 @@ export function ActivitiesScreen() {
             outDate,
             retDate,
           })
-          lockCity(slug)
+          // Free open: keep Paris catalogue — Sync aligns to séjour if wanted.
+          // (Route/planner entry already locked city above.)
 
           if (draftToken) {
             await rememberTrip({ draft_token: draftToken, city: slug })
@@ -704,11 +679,9 @@ export function ActivitiesScreen() {
             setAddedCodes(new Set())
           }
         } else if (!cancelled) {
-          // Aucun planner : filtre de base Paris (1ʳᵉ connexion).
           setActiveTrip(null)
           setPlannerCount(0)
           setAddedCodes(new Set())
-          lockCity(routeCity || 'paris')
         }
       } finally {
         if (!cancelled) setTripReady(true)
@@ -719,27 +692,6 @@ export function ActivitiesScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftFromRoute, plannedFromRoute, route.params?.city, authKey, authLoading])
-
-  // Une fois au bootstrap du séjour : aligner la ville. Ensuite le picker
-  // peut explorer d’autres villes (comme le web) ; « Sync » ramène au séjour.
-  useEffect(() => {
-    if (!activeTrip?.slug) {
-      syncedCityToTrip.current = false
-      if (draftFromRoute || plannedFromRoute || route.params?.city) return
-      setCitySlug((prev) => (prev ? prev : 'paris'))
-      return
-    }
-    if (syncedCityToTrip.current) return
-    syncedCityToTrip.current = true
-    setCitySlug((prev) =>
-      prev === activeTrip.slug ? prev : activeTrip.slug,
-    )
-  }, [
-    activeTrip?.slug,
-    draftFromRoute,
-    plannedFromRoute,
-    route.params?.city,
-  ])
 
   useEffect(() => {
     setSearchQuery('')
@@ -813,18 +765,16 @@ export function ActivitiesScreen() {
     [adults],
   )
 
-  // Load only after lockCity (or route). Avoids Malte-from-disk then correct city.
+  // Paris (or route city) loads immediately — don't wait on tripReady/planner.
   useEffect(() => {
-    if (!cityConfirmed.current && !tripReady) return
+    const slug = citySlug || 'paris'
     if (!citySlug) {
-      if (tripReady) {
-        cityConfirmed.current = true
-        setCitySlug('paris')
-      }
+      cityConfirmed.current = true
+      setCitySlug('paris')
       return
     }
-    void loadCity(citySlug)
-  }, [citySlug, tripReady, loadCity])
+    void loadCity(slug)
+  }, [citySlug, loadCity])
 
   useEffect(() => {
     pendingRef.current = pendingBook

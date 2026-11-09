@@ -64,6 +64,13 @@ import {
   listTravelWorkspacesCached,
   peekTravelWorkspacesCache,
 } from '../lib/workspacesCache'
+import {
+  getPlannedTripCached,
+  hydratePlannedTrip,
+  peekPlannedTrip,
+  setPlannedTripMemory,
+  stubPlannedTripFromWorkspace,
+} from '../lib/plannedTripCache'
 import { useAuth } from '../context/AuthContext'
 import {
   acceptGuestProposal,
@@ -160,8 +167,14 @@ export function TripDetailScreen() {
     navigation.navigate('Main', { screen: 'Planner' })
   }, [navigation])
 
-  const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [trip, setTrip] = useState<PlannedTripDetail | null>(() => {
+    if (!tripId || useGuestPreview) return null
+    return peekPlannedTrip(tripId)
+  })
+  const [loading, setLoading] = useState(() => {
+    if (useGuestPreview) return true
+    return !peekPlannedTrip(tripId)
+  })
   const [scanning, setScanning] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
@@ -292,9 +305,31 @@ export function TripDetailScreen() {
         peeked?.find((item) => item.planned_trip_id === tripId) || null
       if (peekedMatch) setWorkspace(peekedMatch)
 
-      // First paint: trip only.
-      const detail = await getApi().getPlannedTrip(tripId)
-      if (!detail) throw new Error('Voyage introuvable')
+      // Instant paint: memory → disk → hub stub, then refresh via singleflight.
+      let warm = peekPlannedTrip(tripId)
+      if (!warm) {
+        warm = (await hydratePlannedTrip(tripId)) || null
+      }
+      if (!warm && peekedMatch) {
+        warm = stubPlannedTripFromWorkspace(tripId, peekedMatch)
+      }
+      if (warm && !silent) {
+        setTrip(warm)
+        setEditBudget(warm.budget_max || 150)
+        setWatchInterval(
+          Math.max(900, warm.auto_scan_interval_seconds || 3600),
+        )
+        navigation.setOptions({ title: warm.name || 'Voyage' })
+        setLoading(false)
+      }
+
+      const cachedReal = peekPlannedTrip(tripId)?.invite_token
+      const detail = await getPlannedTripCached(
+        tripId,
+        () => getApi().getPlannedTrip(tripId),
+        // Stub/disk-miss → fetch (joins Planner prefetch). Silent focus → refresh.
+        { force: silent || !cachedReal },
+      )
       setTrip(detail)
       setEditBudget(detail.budget_max || 150)
       setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
@@ -395,6 +430,12 @@ export function TripDetailScreen() {
   useEffect(() => {
     setActivityItems([])
   }, [tripId])
+
+  // Keep cache warm after scan / accept / rename (instant re-open).
+  useEffect(() => {
+    if (useGuestPreview || !trip?.id || !trip.invite_token) return
+    setPlannedTripMemory(trip)
+  }, [trip, useGuestPreview])
 
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
