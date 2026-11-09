@@ -55,8 +55,22 @@ function initialItinerary(
   return null
 }
 
+function stepsCount(it: Itinerary | null | undefined): number {
+  return Array.isArray(it?.itinerary_items) ? it!.itinerary_items!.length : 0
+}
+
 function hasSteps(it: Itinerary | null): boolean {
-  return Array.isArray(it?.itinerary_items)
+  return stepsCount(it) > 0
+}
+
+function sameParcours(
+  a: Itinerary | null | undefined,
+  b: Itinerary | null | undefined,
+): boolean {
+  if (!a || !b) return false
+  if (a.id && b.id && a.id === b.id) return true
+  if (a.slug && b.slug && a.slug === b.slug) return true
+  return false
 }
 
 export function ItineraryDetailScreen({ route, navigation }: Props) {
@@ -99,19 +113,48 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   )
 
   useEffect(() => {
+    let cancelled = false
     const boot = initialItinerary(itineraryId, preview)
-    if (boot) setItin(boot)
+    if (boot) {
+      setItin((prev) => {
+        // Never clobber a detail that already has steps with a chrome-only preview.
+        if (
+          prev &&
+          sameParcours(prev, boot) &&
+          stepsCount(prev) > stepsCount(boot)
+        ) {
+          return prev
+        }
+        return boot
+      })
+    }
     const needFetch = !hasSteps(boot)
     if (needFetch) setLoadingSteps(true)
+
+    // Prefetch from catalog may land in memory after mount — pick it up.
+    let poll: ReturnType<typeof setInterval> | null = null
+    if (needFetch) {
+      poll = setInterval(() => {
+        if (cancelled || !poll) return
+        const cached = getParcoursDetailMemory(itineraryId)
+        if (hasSteps(cached)) {
+          setItin(cached)
+          setLoadingSteps(false)
+          clearInterval(poll)
+          poll = null
+        }
+      }, 120)
+    }
+
     void getApi()
       .getParcours(itineraryId)
       .then((r) => {
+        if (cancelled) return
         if (!r.ok || !r.itinerary) throw new Error('not_found')
         const row = r.itinerary as unknown as Itinerary
         setParcoursDetailMemory(row)
         setItin(row)
         setError(null)
-        void refreshLiked(row.id)
         void getApi()
           .trackActivityEvent({
             domain: 'itinerary',
@@ -123,13 +166,28 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
           .catch(() => {})
       })
       .catch(() => {
+        if (cancelled) return
+        // Keep chrome preview if we have one; only hard-fail with no boot.
         if (!boot) {
-          setItin(null)
+          setItin((prev) => (hasSteps(prev) ? prev : null))
           setError('Parcours introuvable')
         }
       })
-      .finally(() => setLoadingSteps(false))
-  }, [itineraryId, preview, refreshLiked])
+      .finally(() => {
+        if (!cancelled) setLoadingSteps(false)
+      })
+    return () => {
+      cancelled = true
+      if (poll) clearInterval(poll)
+    }
+    // preview omitted on purpose: new object identity was re-booting without steps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- itineraryId is the load key
+  }, [itineraryId])
+
+  useEffect(() => {
+    if (!itin?.id) return
+    void refreshLiked(itin.id)
+  }, [itin?.id, refreshLiked])
 
   useEffect(() => {
     if (!toast) return
@@ -290,6 +348,9 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
                 </View>
               ))}
             </View>
+          ) : null}
+          {!loadingSteps && !items.length ? (
+            <Text style={styles.stepNote}>Aucune étape pour l’instant.</Text>
           ) : null}
           {days.map((day) => (
             <View key={day.dayOffset} style={{ marginBottom: 16 }}>

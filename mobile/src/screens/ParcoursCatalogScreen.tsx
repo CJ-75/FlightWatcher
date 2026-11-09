@@ -132,12 +132,16 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
 
   const open = (it: Itinerary) => {
     rememberParcoursPreview(it)
-    // Prefetch detail while pushing the screen
+    // Prefetch detail while pushing the screen (detail screen also fetches;
+    // cache lets it paint steps if this wins the race).
     void getApi()
       .getParcours(it.slug || it.id)
       .then((r) => {
         if (r.ok && r.itinerary) {
-          setParcoursDetailMemory(r.itinerary as unknown as Itinerary)
+          const row = r.itinerary as unknown as Itinerary
+          if (Array.isArray(row.itinerary_items) && row.itinerary_items.length) {
+            setParcoursDetailMemory(row)
+          }
         }
       })
       .catch(() => {})

@@ -46,6 +46,14 @@ export function setParcoursDetailMemory(it: Itinerary) {
 export function rememberParcoursPreview(it: Partial<Itinerary> & { id: string }) {
   const existing = detailMemory.get(it.id) || (it.slug ? detailMemory.get(it.slug) : null)
   if (existing?.itinerary_items?.length) return
-  const row = { ...existing, ...it } as Itinerary
+  // Never persist an empty steps array from a chrome-only preview.
+  const { itinerary_items: _drop, ...rest } = it as Partial<Itinerary> & {
+    id: string
+    itinerary_items?: unknown
+  }
+  const row = { ...existing, ...rest } as Itinerary
+  if (!row.itinerary_items?.length) {
+    delete row.itinerary_items
+  }
   setParcoursDetailMemory(row)
 }
