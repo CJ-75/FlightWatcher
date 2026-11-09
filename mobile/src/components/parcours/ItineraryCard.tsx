@@ -145,7 +145,9 @@ const styles = StyleSheet.create({
   },
   landscape: {
     width: 320,
+    maxWidth: '100%',
     aspectRatio: 16 / 10,
+    minHeight: 180,
   },
   image: {
     ...StyleSheet.absoluteFillObject,

@@ -192,19 +192,11 @@ export default function ParcoursPublicPage() {
   const shareUrl = `${window.location.origin}/parcours/${itin.slug || itin.id}`
 
   const doLike = async () => {
+    const next = !liked
+    setLiked(next)
     try {
       const api = getApiClient()
-      if (liked) {
-        await api.unlikeItinerary(itin!.id)
-        setLiked(false)
-        void api.trackActivityEvent({
-          domain: 'itinerary',
-          event: 'itinerary_unliked',
-          surface: 'parcours',
-          platform: 'web',
-          meta: { id: itin!.id },
-        })
-      } else {
+      if (next) {
         await api.likeItinerary({
           itinerary_id: itin!.id,
           itinerary_data: {
@@ -216,7 +208,6 @@ export default function ParcoursPublicPage() {
             subtitle: itin!.subtitle,
           },
         })
-        setLiked(true)
         void api.trackActivityEvent({
           domain: 'itinerary',
           event: 'itinerary_liked',
@@ -224,8 +215,18 @@ export default function ParcoursPublicPage() {
           platform: 'web',
           meta: { id: itin!.id },
         })
+      } else {
+        await api.unlikeItinerary(itin!.id)
+        void api.trackActivityEvent({
+          domain: 'itinerary',
+          event: 'itinerary_unliked',
+          surface: 'parcours',
+          platform: 'web',
+          meta: { id: itin!.id },
+        })
       }
     } catch (e) {
+      setLiked(!next)
       setToast(e instanceof Error ? e.message : 'Favori impossible')
     }
   }

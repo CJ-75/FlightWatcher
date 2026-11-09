@@ -431,34 +431,23 @@ async def like_itinerary(body: LikeItineraryRequest, request: Request):
     sb = _svc()
     if not sb:
         raise HTTPException(status_code=503, detail="no_supabase")
+    row = {
+        "user_id": user_id,
+        "itinerary_id": iid,
+        "itinerary_data": body.itinerary_data or {},
+    }
     try:
-        existing = (
-            sb.table("liked_itineraries")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("itinerary_id", iid)
-            .limit(1)
-            .execute()
-        )
-        if existing.data:
-            return {"ok": True, "item": existing.data[0]}
-        result = (
-            sb.table("liked_itineraries")
-            .insert(
-                {
-                    "user_id": user_id,
-                    "itinerary_id": iid,
-                    "itinerary_data": body.itinerary_data or {},
-                }
-            )
-            .execute()
-        )
+        # One round-trip on happy path (no pre-SELECT). Duplicate → already liked.
+        result = sb.table("liked_itineraries").insert(row).execute()
         if not result.data:
             raise HTTPException(status_code=500, detail="like_failed")
         return {"ok": True, "item": result.data[0]}
     except HTTPException:
         raise
     except Exception as e:
+        msg = str(e).lower()
+        if "duplicate" in msg or "unique" in msg or "23505" in msg:
+            return {"ok": True, "item": row}
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -37,6 +37,7 @@ import {
   translate,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import { setLikedParcoursIdLocal } from '../lib/parcoursCache'
 import { useAuth } from '../context/AuthContext'
 import {
   listGuestFlightFavorites,
@@ -191,17 +192,17 @@ export function FavoritesScreen() {
           setLikedDeals(next)
           patchCache({ likedDeals: next })
         } else if (id === 'activities') {
-          const acts = await api
-            .getLikedActivities()
-            .catch(() => [] as LikedActivity[])
+          const acts = await api.getLikedActivities()
           const next = Array.isArray(acts) ? acts : []
           setLikedActivities(next)
           patchCache({ likedActivities: next })
         } else {
-          const parcoursRes = await api
-            .listLikedItineraries()
-            .catch(() => ({ ok: false, items: [] as LikedItinerary[] }))
-          const next = Array.isArray(parcoursRes?.items) ? parcoursRes.items : []
+          // Never .catch→[] : that wiped liked parcours when API/backend failed.
+          const parcoursRes = await api.listLikedItineraries()
+          if (!parcoursRes?.ok) {
+            throw new Error('Favoris parcours indisponibles')
+          }
+          const next = Array.isArray(parcoursRes.items) ? parcoursRes.items : []
           setLikedParcours(next)
           patchCache({ likedParcours: next })
         }
@@ -211,6 +212,7 @@ export function FavoritesScreen() {
             e instanceof Error ? e.message : translate('fr', 'favorites.empty'),
           )
         }
+        // Keep previous collection state on failure (do not clear to []).
       } finally {
         markReady(id)
       }
@@ -375,6 +377,7 @@ export function FavoritesScreen() {
 
   const unlikeParcours = async (itineraryId: string) => {
     try {
+      setLikedParcoursIdLocal(itineraryId, false)
       await getApi().unlikeItinerary(itineraryId)
       setLikedParcours((prev) => {
         const next = prev.filter((p) => p.itinerary_id !== itineraryId)
@@ -588,7 +591,16 @@ export function FavoritesScreen() {
           flexGrow: 1,
         }}
         data={listData}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => {
+          if (isSkeletonItem(item)) return item.id
+          if ('itinerary_id' in item && (item as LikedItinerary).itinerary_id) {
+            return `parcours-${(item as LikedItinerary).itinerary_id}`
+          }
+          if ('product_code' in item && (item as LikedActivity).product_code) {
+            return `act-${(item as LikedActivity).product_code}`
+          }
+          return String((item as { id?: string }).id || Math.random())
+        }}
         extraData={{
           tab,
           archiveOpen,
@@ -643,7 +655,9 @@ export function FavoritesScreen() {
           </View>
         }
         ListEmptyComponent={
-          showSkeleton ? null : listData.length === 0 &&
+          showSkeleton ? null : error && listData.length === 0 ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : listData.length === 0 &&
             archivedItems.length === 0 ? (
             <FavorisEmpty
               onExplore={() =>
@@ -943,6 +957,14 @@ const styles = StyleSheet.create({
   },
   archiveList: {
     gap: 0,
+  },
+  errorText: {
+    marginTop: spacing.xl,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.inkSoft,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   onlyArchivedHint: {
     marginTop: spacing.lg,

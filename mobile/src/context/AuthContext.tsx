@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import * as Linking from 'expo-linking'
 import type { Session, User } from '@flightwatcher/shared'
 import { auth, redirectTo, authRedirectWarning } from '../lib/client'
+import { clearLikedParcoursIdsLocal } from '../lib/parcoursCache'
 import { DEV_GUEST_USER } from '../dev/guestPreview'
 
 interface AuthContextValue {
@@ -184,6 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {
           if (__DEV__) console.warn('[auth] signOut error', e)
         } finally {
+          clearLikedParcoursIdsLocal()
           setUser(null)
           setSession(null)
           setIsGuest(false)

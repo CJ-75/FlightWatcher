@@ -8,6 +8,9 @@ let catalogMemory: Itinerary[] | null = null
 const detailMemory = new Map<string, Itinerary>()
 /** In-flight detail fetches — catalog prefetch + detail screen share one HTTP. */
 const detailInflight = new Map<string, Promise<Itinerary>>()
+/** Liked parcours ids for the current session (optimistic heart). */
+let likedParcoursIds: Set<string> | null = null
+let likedParcoursIdsInflight: Promise<Set<string>> | null = null
 
 function hasSteps(it: Itinerary | null | undefined): boolean {
   return Array.isArray(it?.itinerary_items) && (it!.itinerary_items?.length ?? 0) > 0
@@ -107,6 +110,39 @@ export function getParcoursCached(idOrSlug: string): Promise<Itinerary> {
   detailInflight.set(key, req)
   // Same promise under id+slug once resolved is handled via detailMemory keys.
   return req
+}
+
+/** null = unknown (not loaded yet). */
+export function peekLikedParcoursId(itineraryId: string): boolean | null {
+  if (!likedParcoursIds) return null
+  return likedParcoursIds.has(itineraryId)
+}
+
+export function setLikedParcoursIdLocal(itineraryId: string, liked: boolean) {
+  if (!likedParcoursIds) likedParcoursIds = new Set()
+  if (liked) likedParcoursIds.add(itineraryId)
+  else likedParcoursIds.delete(itineraryId)
+}
+
+export function clearLikedParcoursIdsLocal() {
+  likedParcoursIds = null
+  likedParcoursIdsInflight = null
+}
+
+export async function ensureLikedParcoursIds(
+  fetchIds: () => Promise<string[]>,
+): Promise<Set<string>> {
+  if (likedParcoursIds) return likedParcoursIds
+  if (likedParcoursIdsInflight) return likedParcoursIdsInflight
+  likedParcoursIdsInflight = fetchIds()
+    .then((ids) => {
+      likedParcoursIds = new Set(ids.filter(Boolean))
+      return likedParcoursIds
+    })
+    .finally(() => {
+      likedParcoursIdsInflight = null
+    })
+  return likedParcoursIdsInflight
 }
 
 /** Warm detail cache for visible/featured catalogue cards (staggered). */

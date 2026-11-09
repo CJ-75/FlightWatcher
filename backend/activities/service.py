@@ -5,6 +5,8 @@ import hashlib
 import logging
 import math
 import re
+import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -14,6 +16,34 @@ from activities.ranking import haversine_km, rank_activities
 from activities.viator_client import ViatorClient, ViatorError
 
 logger = logging.getLogger("activities.service")
+
+# Process memory — skip Supabase provider_cache RTT on warm hits (Viator TTL still applies).
+_CITY_MEM_TTL_SEC = 900.0  # 15 min
+_city_mem: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_city_inflight: Dict[str, threading.Event] = {}
+_city_lock = threading.Lock()
+
+
+def _city_mem_get(key: str) -> Optional[Dict[str, Any]]:
+    hit = _city_mem.get(key)
+    if not hit:
+        return None
+    expires_at, payload = hit
+    if time.monotonic() >= expires_at:
+        _city_mem.pop(key, None)
+        return None
+    return payload
+
+
+def _city_mem_set(key: str, payload: Dict[str, Any]) -> None:
+    _city_mem[key] = (time.monotonic() + _CITY_MEM_TTL_SEC, payload)
+
+
+def _serve_city_payload(payload: Dict[str, Any], *, cached: bool) -> Dict[str, Any]:
+    items = exclude_gastronomy(
+        [it for it in (payload.get("items") or []) if isinstance(it, dict)]
+    )
+    return {**payload, "items": items, "cached": cached}
 
 # Sandbox/RC shop hosts often resolve poorly in browsers (city landing instead of PDP).
 _VIATOR_SANDBOX_HOST_RE = re.compile(
@@ -799,77 +829,113 @@ def search_city_activities(
     # destv5: lean list payload + smaller Viator page size
     dest = destination_id or _resolve_destination_id(supabase, slug)
     cache_key = f"city:{slug}:{dest or ''}:destv5"
-    cached = cache_get(
-        supabase, provider="viator", resource="city_search", cache_key=cache_key
-    )
-    if isinstance(cached, dict) and cached.get("items"):
-        cached_dest = str(cached.get("destination_id") or "")
-        # Serve cache only when destinationId matches (guards lisbonne→LA style bugs).
-        if dest and cached_dest and cached_dest == str(dest):
-            items = exclude_gastronomy(
-                [it for it in (cached.get("items") or []) if isinstance(it, dict)]
-            )
-            return {**cached, "items": items, "cached": True}
 
-    client = ViatorClient(cfg)
-    if not client.enabled:
-        return {"ok": False, "error": "viator_disabled", "items": []}
+    mem = _city_mem_get(cache_key)
+    if isinstance(mem, dict) and mem.get("items"):
+        mem_dest = str(mem.get("destination_id") or "")
+        if not dest or not mem_dest or mem_dest == str(dest):
+            logger.info("city_search mem_hit key=%s", cache_key)
+            return _serve_city_payload(mem, cached=True)
 
-    if not dest:
-        return {
-            "ok": False,
-            "error": "unknown_city",
-            "items": [],
-            "city_slug": slug,
-            "hint": "Ville pas encore couverte — choisis une suggestion ou une grande ville EU",
-        }
+    # Singleflight — concurrent same-city requests wait for the first fetch.
+    waiter: Optional[threading.Event] = None
+    leader = False
+    with _city_lock:
+        mem = _city_mem_get(cache_key)
+        if isinstance(mem, dict) and mem.get("items"):
+            return _serve_city_payload(mem, cached=True)
+        existing = _city_inflight.get(cache_key)
+        if existing is not None:
+            waiter = existing
+        else:
+            waiter = threading.Event()
+            _city_inflight[cache_key] = waiter
+            leader = True
 
-    # Ask Viator for slightly more than we show (gastronomy filter), not 2×.
-    page_count = min(40, max(cfg.max_results + 6, cfg.min_results + 6))
+    if not leader and waiter is not None:
+        waiter.wait(timeout=35.0)
+        mem = _city_mem_get(cache_key)
+        if isinstance(mem, dict) and mem.get("items"):
+            return _serve_city_payload(mem, cached=True)
+        # Leader failed — fall through and try ourselves.
+
     try:
-        raw = client.search_products(
-            {
-                "filtering": {"destination": str(dest)},
-                "pagination": {"start": 1, "count": page_count},
-                "currency": "EUR",
-            }
+        cached = cache_get(
+            supabase, provider="viator", resource="city_search", cache_key=cache_key
         )
-    except ViatorError as e:
-        return {"ok": False, "error": str(e), "items": []}
+        if isinstance(cached, dict) and cached.get("items"):
+            cached_dest = str(cached.get("destination_id") or "")
+            # Serve cache only when destinationId matches (guards lisbonne→LA style bugs).
+            if dest and cached_dest and cached_dest == str(dest):
+                _city_mem_set(cache_key, cached)
+                return _serve_city_payload(cached, cached=True)
 
-    products = []
-    if isinstance(raw, dict):
-        products = raw.get("products") or raw.get("data") or []
-    items = [
-        _normalize_product(p)
-        for p in products
-        if isinstance(p, dict)
-    ]
-    items = exclude_gastronomy(items)
-    items = rank_activities(items)
-    # Cap to multiple of 3 between min and max
-    n = max(cfg.min_results, min(cfg.max_results, len(items)))
-    n = n - (n % 3) if n >= 3 else n
-    items = items[:n] if n else items[: cfg.max_results]
-    payload = {
-        "ok": True,
-        "city_slug": city_slug,
-        "destination_id": str(dest),
-        "adults": adults,
-        "items": items,
-        "indicative": False,
-        "cached": False,
-    }
-    cache_set(
-        supabase,
-        provider="viator",
-        resource="city_search",
-        cache_key=cache_key,
-        payload=payload,
-        ttl_h=cfg.cache_ttl_h,
-        license_class="basic_ephemeral",
-    )
-    return payload
+        client = ViatorClient(cfg)
+        if not client.enabled:
+            return {"ok": False, "error": "viator_disabled", "items": []}
+
+        if not dest:
+            return {
+                "ok": False,
+                "error": "unknown_city",
+                "items": [],
+                "city_slug": slug,
+                "hint": "Ville pas encore couverte — choisis une suggestion ou une grande ville EU",
+            }
+
+        # Ask Viator for slightly more than we show (gastronomy filter), not 2×.
+        page_count = min(40, max(cfg.max_results + 6, cfg.min_results + 6))
+        try:
+            raw = client.search_products(
+                {
+                    "filtering": {"destination": str(dest)},
+                    "pagination": {"start": 1, "count": page_count},
+                    "currency": "EUR",
+                }
+            )
+        except ViatorError as e:
+            return {"ok": False, "error": str(e), "items": []}
+
+        products = []
+        if isinstance(raw, dict):
+            products = raw.get("products") or raw.get("data") or []
+        items = [
+            _normalize_product(p)
+            for p in products
+            if isinstance(p, dict)
+        ]
+        items = exclude_gastronomy(items)
+        items = rank_activities(items)
+        # Cap to multiple of 3 between min and max
+        n = max(cfg.min_results, min(cfg.max_results, len(items)))
+        n = n - (n % 3) if n >= 3 else n
+        items = items[:n] if n else items[: cfg.max_results]
+        payload = {
+            "ok": True,
+            "city_slug": city_slug,
+            "destination_id": str(dest),
+            "adults": adults,
+            "items": items,
+            "indicative": False,
+            "cached": False,
+        }
+        cache_set(
+            supabase,
+            provider="viator",
+            resource="city_search",
+            cache_key=cache_key,
+            payload=payload,
+            ttl_h=cfg.cache_ttl_h,
+            license_class="basic_ephemeral",
+        )
+        _city_mem_set(cache_key, payload)
+        return payload
+    finally:
+        if leader:
+            with _city_lock:
+                ev = _city_inflight.pop(cache_key, None)
+            if ev is not None:
+                ev.set()
 
 
 def nearby_activities(

@@ -34,6 +34,7 @@ import {
 } from './StayBookingCard'
 import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
+import { getCityActivitiesCached } from '../lib/activitiesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
@@ -188,7 +189,9 @@ async function enrichActivityPhotos(
   const byCode = new Map<string, string>()
   const priceByCode = new Map<string, number>()
   try {
-    const res = await getApi().listCityActivities(citySlug, 2)
+    const res = await getCityActivitiesCached(citySlug, 2, () =>
+      getApi().listCityActivities(citySlug, 2),
+    )
     for (const raw of res.items || []) {
       const row = raw as Record<string, unknown>
       const code = String(row.product_code || row.productCode || '').trim()

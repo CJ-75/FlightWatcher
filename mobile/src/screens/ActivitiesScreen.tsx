@@ -71,6 +71,10 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { getGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { auth, getApi } from '../lib/client'
+import {
+  getCityActivitiesCached,
+  peekCityActivities,
+} from '../lib/activitiesCache'
 import { listTravelWorkspacesCached } from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
@@ -648,12 +652,20 @@ export function ActivitiesScreen() {
   const loadCity = useCallback(
     async (slug: string, opts?: { silent?: boolean }) => {
       if (!slug) return
-      if (!opts?.silent) setLoading(true)
+      const warm = peekCityActivities(slug, adults)
+      if (warm?.ok && Array.isArray(warm.items)) {
+        setItems(warm.items)
+        setLoading(false)
+      } else if (!opts?.silent) {
+        setLoading(true)
+      }
       setError(null)
       setHeader(null)
       setFallbackHint(null)
       try {
-        const res = await getApi().listCityActivities(slug, adults)
+        const res = await getCityActivitiesCached(slug, adults, () =>
+          getApi().listCityActivities(slug, adults),
+        )
         if (!res.ok) {
           const msg =
             res.error === 'unknown_city'
@@ -667,7 +679,7 @@ export function ActivitiesScreen() {
         setItems(Array.isArray(res.items) ? res.items : [])
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erreur')
-        setItems([])
+        if (!warm?.items?.length) setItems([])
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -677,14 +689,27 @@ export function ActivitiesScreen() {
   )
 
   useEffect(() => {
-    if (!tripReady) return
     if (!citySlug) {
       // Sécurité : 1ʳᵉ connexion sans ville → Paris.
       setCitySlug('paris')
       return
     }
+    // Don't wait for planner bootstrap when city is already known (route / default).
+    // Only delay when a trip param may still replace the city.
+    const waitingTripCity =
+      !tripReady &&
+      Boolean(plannedFromRoute || draftFromRoute) &&
+      !route.params?.city
+    if (waitingTripCity) return
     void loadCity(citySlug)
-  }, [tripReady, citySlug, loadCity])
+  }, [
+    tripReady,
+    citySlug,
+    loadCity,
+    plannedFromRoute,
+    draftFromRoute,
+    route.params?.city,
+  ])
 
   useEffect(() => {
     pendingRef.current = pendingBook

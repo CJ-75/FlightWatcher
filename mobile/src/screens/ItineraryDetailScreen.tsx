@@ -28,8 +28,11 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import {
+  ensureLikedParcoursIds,
   getParcoursCached,
   getParcoursDetailMemory,
+  peekLikedParcoursId,
+  setLikedParcoursIdLocal,
 } from '../lib/parcoursCache'
 import { coverUri } from '../lib/coverUri'
 import { useAuth } from '../context/AuthContext'
@@ -102,9 +105,17 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         setLiked(false)
         return
       }
+      const known = peekLikedParcoursId(id)
+      if (known !== null) {
+        setLiked(known)
+        return
+      }
       try {
-        const res = await getApi().listLikedItineraryIds()
-        setLiked((res.ids || []).includes(id))
+        const ids = await ensureLikedParcoursIds(async () => {
+          const res = await getApi().listLikedItineraryIds()
+          return res.ids || []
+        })
+        setLiked(ids.has(id))
       } catch {
         setLiked(false)
       }
@@ -244,25 +255,31 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   }
 
   const doLike = async () => {
+    const next = !liked
+    // Optimistic — heart flips before Supabase RTT (~3s).
+    setLiked(next)
+    setLikedParcoursIdLocal(itin.id, next)
     try {
       const api = getApi()
-      if (liked) {
-        await api.unlikeItinerary(itin.id)
-        setLiked(false)
-      } else {
+      if (next) {
         await api.likeItinerary({
           itinerary_id: itin.id,
           itinerary_data: {
             id: itin.id,
             slug: itin.slug,
             title: itin.title,
+            subtitle: itin.subtitle,
             city_slug: itin.city_slug,
             cover_image: itin.cover_image,
+            duration_kind: itin.duration_kind,
           },
         })
-        setLiked(true)
+      } else {
+        await api.unlikeItinerary(itin.id)
       }
     } catch (e) {
+      setLiked(!next)
+      setLikedParcoursIdLocal(itin.id, !next)
       setToast(e instanceof Error ? e.message : 'Favori impossible')
     }
   }
