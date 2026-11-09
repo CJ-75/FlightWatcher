@@ -483,14 +483,16 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className="w-full">
       {!embedded ? (
-        <div className="mb-5 sm:mb-6">
+        <div className="mb-5 sm:mb-6 lg:mb-8">
           <div className="mb-1.5">
             <FwKicker>Séjours</FwKicker>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-ink tracking-tight">
             {t('deals.titleSell')}
           </h2>
-          <p className="app-subtitle mt-1 max-w-xl">{t('deals.subtitleSell')}</p>
+          <p className="app-subtitle mt-1 max-w-xl lg:max-w-2xl">
+            {t('deals.subtitleSell')}
+          </p>
           {readonlyBanner ? (
             <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-2 max-w-xl">
               {t('deals.readonlyBanner')}
@@ -673,7 +675,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
       ) : null}
 
       {loading && deals.length === 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 lg:gap-7">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
@@ -744,7 +746,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
           ) : null}
           <motion.div
             layout
-            className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 lg:gap-7"
           >
             {gridDeals.flatMap((deal, i) => {
               const card = (
@@ -783,7 +785,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
               </p>
               <motion.div
                 layout
-                className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 lg:gap-7"
               >
                 {secondaryFillers.map((deal) => (
                   <DealCard

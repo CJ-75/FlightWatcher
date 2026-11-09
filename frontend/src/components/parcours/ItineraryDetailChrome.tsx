@@ -185,7 +185,7 @@ export function ItineraryDetailChrome({
       </section>
 
       <div className="relative z-[1] -mt-8 rounded-t-[32px] bg-white px-5 pb-8 pt-7 shadow-[0_-8px_40px_rgba(20,12,8,0.12)] sm:px-8 lg:-mt-10 lg:rounded-t-[40px] lg:px-10 lg:pb-12 lg:pt-8">
-        <div className="mx-auto w-full max-w-3xl">{children}</div>
+        <div className="mx-auto w-full max-w-3xl lg:max-w-5xl">{children}</div>
       </div>
 
       {stickyCta ? (
@@ -193,7 +193,7 @@ export function ItineraryDetailChrome({
           ref={stickyRef}
           className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE8E1] bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
         >
-          <div className="mx-auto flex max-w-3xl items-center gap-3">
+          <div className="mx-auto flex max-w-3xl lg:max-w-5xl items-center gap-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-[#1A120E]">
                 {stickyLeft || ' '}

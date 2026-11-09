@@ -845,12 +845,16 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
 
   return (
     <div className="w-full">
-      <div className="mb-5 sm:mb-6">
-        <p className="app-kicker mb-1.5">{ACTIVITY_PAGE_KICKER_FR}</p>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
-          {ACTIVITY_PAGE_TITLE_FR}
-        </h2>
-        <p className="app-subtitle mt-1 max-w-xl">{ACTIVITY_PAGE_SUBTITLE_FR}</p>
+      <div className="mb-5 sm:mb-6 lg:mb-8 lg:flex lg:items-end lg:justify-between lg:gap-8">
+        <div className="min-w-0">
+          <p className="app-kicker mb-1.5">{ACTIVITY_PAGE_KICKER_FR}</p>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-ink tracking-tight">
+            {ACTIVITY_PAGE_TITLE_FR}
+          </h2>
+          <p className="app-subtitle mt-1 max-w-xl lg:max-w-2xl">
+            {ACTIVITY_PAGE_SUBTITLE_FR}
+          </p>
+        </div>
       </div>
 
       {activeTrip && plannerHref ? (
@@ -1075,7 +1079,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
@@ -1090,7 +1094,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
           ))}
         </div>
       ) : cards.length ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
           {cards.map((c) => (
               <ActivityCard
                 key={c.productCode || c.title}

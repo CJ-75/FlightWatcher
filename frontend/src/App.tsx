@@ -1351,10 +1351,10 @@ function Dashboard() {
 
   return (
     <div className="app-shell">
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8 pb-24 sm:pb-8">
-        <div className="w-full mb-5 sm:mb-7 space-y-4">
+      <div className="app-col-wide px-4 sm:px-6 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 pb-24 sm:pb-10">
+        <div className="w-full mb-5 sm:mb-7 lg:mb-9 space-y-4 lg:space-y-6">
           {/* Brand + compte : pleine largeur */}
-          <header className="flex items-center justify-between gap-3">
+          <header className="flex items-center justify-between gap-4 lg:gap-8">
             <Link
               to="/sejours"
               onClick={() => {
@@ -1365,7 +1365,7 @@ function Dashboard() {
               aria-label="FlightWatcher, retour à Parcours"
             >
               <p className="app-kicker mb-0.5">FlightWatcher</p>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>
             </Link>
@@ -1375,8 +1375,8 @@ function Dashboard() {
           </header>
 
           {/* Onglets : Vols · Activités · Parcours · Planner · Favoris */}
-          <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
-            <div className="app-tabbar w-full max-w-md sm:max-w-lg">
+          <nav className="app-tabnav flex justify-center w-full" aria-label="Navigation principale">
+            <div className="app-tabbar w-full max-w-md sm:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
               {(
                 [
                   { id: 'search' as const, label: t('nav.search'), icon: 'search' as const },
@@ -1445,7 +1445,7 @@ function Dashboard() {
         {/* Contenu selon l'onglet — Deals + Activités warm-mount pour 1er open rapide */}
         {dealsUiEnabled ? (
           <div
-            className={activeTab === 'deals' ? undefined : 'hidden'}
+            className={activeTab === 'deals' ? 'app-page' : 'hidden'}
             aria-hidden={activeTab !== 'deals'}
           >
             <ParcoursHub />
@@ -1454,7 +1454,9 @@ function Dashboard() {
         {activitiesUiEnabled ? (
           <div
             className={
-              activeTab === 'activities' ? 'w-full pt-1 sm:pt-2 pb-24' : 'hidden'
+              activeTab === 'activities'
+                ? 'app-page w-full pt-1 sm:pt-2 lg:pt-3 pb-24 lg:pb-8'
+                : 'hidden'
             }
             aria-hidden={activeTab !== 'activities'}
           >
@@ -1462,6 +1464,7 @@ function Dashboard() {
           </div>
         ) : null}
         {activeTab === 'deals' || activeTab === 'activities' ? null : activeTab === 'planner' ? (
+          <div className="app-page">
           <Suspense
             fallback={
               <div className="flex flex-col items-center justify-center py-20 text-slate-500">
@@ -1472,9 +1475,10 @@ function Dashboard() {
           >
             <PlannerTab />
           </Suspense>
+          </div>
         ) : activeTab === 'search' ? (
-          <>
-            <div className="app-col pt-5 sm:pt-8">
+          <div className="app-page">
+            <div className="app-col pt-5 sm:pt-8 lg:pt-4 lg:mx-0 lg:max-w-none xl:max-w-5xl">
               <SimpleSearch
                 key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
@@ -1683,7 +1687,7 @@ function Dashboard() {
                     </div>
                   </div>
                 ) : null}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 items-stretch">
                   {visibleSimpleResults.map((trip, index) => (
                     <motion.div
                       key={`${trip.aller.origin}-${trip.destination_code}-${trip.aller.departureTime}-${trip.retour.departureTime}`}
@@ -1705,8 +1709,9 @@ function Dashboard() {
                 </div>
               </motion.div>
             )}
-          </>
+          </div>
         ) : activeTab === 'alerts' && alertsUiEnabled ? (
+          <div className="app-page">
           <SavedTab
             variant="alerts"
             loading={loading}
@@ -1718,7 +1723,9 @@ function Dashboard() {
             setToastMessage={setToastMessage}
             setToastType={setToastType}
           />
+          </div>
         ) : (
+          <div className="app-page">
           <SavedTab
             variant="favorites"
             loading={loading}
@@ -1730,6 +1737,7 @@ function Dashboard() {
             setToastMessage={setToastMessage}
             setToastType={setToastType}
           />
+          </div>
         )}
       </div>
 
@@ -1782,7 +1790,7 @@ function Dashboard() {
         duration={toastType === 'info' ? 5000 : 3000}
       />
 
-      <div className="app-col">
+      <div className="app-col-wide px-4 sm:px-6 lg:px-10 xl:px-12">
         <SiteFooter />
       </div>
     </div>
@@ -3484,7 +3492,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
                 {likedParcours.map((item) => {
                   const card = likedParcoursToCard(item)
                   return (
@@ -3529,7 +3537,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   </p>
                 ) : null}
                 {activeLikedActivities.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
                     {activeLikedActivities.map((item) => {
                       const card = likedActivityToCard(item)
                       const iso = countryIsoForCityLabel(card.destinationLabel)
@@ -3617,7 +3625,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                       </span>
                     </button>
                     {archiveOpen ? (
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 opacity-50">
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 opacity-50">
                         {archivedLikedActivities.map((item) => {
                           const card = likedActivityToCard(item)
                           const iso = countryIsoForCityLabel(card.destinationLabel)
@@ -3699,7 +3707,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                   </p>
                 ) : null}
                 {activeLikedDeals.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
                     {activeLikedDeals.map((item) => (
                       <DealCard
                         key={item.id}
@@ -3731,7 +3739,7 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                         <p className="text-xs text-slate-500 mb-3 px-1">
                           {t('favorites.archivedHint')}
                         </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 opacity-50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 opacity-50">
                           {archivedLikedDeals.map((item) => (
                             <DealCard
                               key={item.id}

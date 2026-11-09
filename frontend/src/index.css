@@ -20,6 +20,22 @@
   --fw-radius-pill: 999px;
   --fw-font-sans: 'Sora', system-ui, sans-serif;
   --fw-font-serif: 'Instrument Serif', Georgia, serif;
+  --fw-content-max: 80rem; /* 7xl */
+  --fw-form-max: 48rem; /* 3xl → élargi en lg */
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --fw-space-screen-x: 40px;
+    --fw-form-max: 56rem; /* 4xl / ~5xl */
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --fw-space-screen-x: 48px;
+    --fw-form-max: 64rem;
+  }
 }
 
 .dark {
@@ -77,13 +93,26 @@
     background: linear-gradient(180deg, #ffdcc8 0%, #ffe8dc 28%, #fff9f5 100%);
   }
 
-  /* Colonnes web : contenu form/tabs + résultats larges */
+  /* Colonnes web : form lisible mobile → largeur desktop */
   .app-col {
-    @apply w-full max-w-3xl mx-auto;
+    @apply w-full mx-auto;
+    max-width: var(--fw-form-max, 48rem);
   }
 
   .app-col-wide {
-    @apply w-full max-w-7xl mx-auto;
+    @apply w-full mx-auto;
+    max-width: var(--fw-content-max, 80rem);
+  }
+
+  /* Zone page principale (tabs content) */
+  .app-page {
+    @apply w-full;
+  }
+
+  @media (min-width: 1024px) {
+    .app-page {
+      @apply pt-1;
+    }
   }
 
   /* Dialogs web : sheet mobile → panel desktop centré */
@@ -162,16 +191,23 @@
     color: var(--fw-accent);
   }
 
+  @media (min-width: 1024px) {
+    .app-kicker {
+      font-size: 13px;
+      letter-spacing: 0.1em;
+    }
+  }
+
   .app-title {
-    @apply text-3xl sm:text-4xl font-extrabold text-ink tracking-tightest;
+    @apply text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-ink tracking-tightest;
   }
 
   .app-subtitle {
-    @apply text-sm sm:text-base font-medium text-muted;
+    @apply text-sm sm:text-base lg:text-[17px] font-medium text-muted lg:leading-relaxed;
   }
 
   .app-card {
-    @apply bg-white rounded-3xl border border-line shadow-soft;
+    @apply bg-white rounded-3xl border border-line shadow-soft lg:rounded-[28px];
   }
 
   .app-tabbar {
@@ -265,12 +301,45 @@
   }
 
   @media (min-width: 640px) {
+    .app-tabnav {
+      @apply w-full;
+    }
+
     .app-tabbar {
-      @apply p-1.5;
+      @apply p-1.5 w-full max-w-2xl mx-auto;
     }
 
     .app-tab {
       @apply flex-col gap-1.5 py-2.5;
+    }
+  }
+
+  /* Desktop web : tabbar pleine largeur, icône + label en ligne */
+  @media (min-width: 1024px) {
+    .app-tabbar {
+      @apply max-w-4xl p-2 gap-1 rounded-[32px];
+    }
+
+    .app-tab {
+      @apply flex-row gap-2.5 px-3 py-3 text-sm min-h-[52px];
+    }
+
+    .app-tab-well {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 14px;
+    }
+
+    .app-tab-label {
+      font-size: 0.875rem;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .app-tabbar {
+      @apply max-w-5xl;
     }
   }
 
