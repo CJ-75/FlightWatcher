@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { signInWithGoogle } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
+import { useAuthSheet } from './onboarding/AuthSheetHost'
 
 type Props = {
   onStartSignIn?: () => void
@@ -16,18 +16,20 @@ export function AccountGuestLanding({
   inviteTripName,
 }: Props) {
   const { t } = useI18n()
+  const { openAuthSheet } = useAuthSheet()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const onCta = async () => {
+  const onCta = () => {
     setError(null)
     setSigningIn(true)
     onStartSignIn?.()
-    const { error: err } = await signInWithGoogle()
-    if (err) {
-      setError(err.message)
-      setSigningIn(false)
-    }
+    openAuthSheet({
+      trigger: inviteMode ? 'invite_join' : 'already_account',
+      inviteFirstName: inviteTripName || null,
+      onAuthenticated: () => setSigningIn(false),
+    })
+    setSigningIn(false)
   }
 
   const title = inviteMode

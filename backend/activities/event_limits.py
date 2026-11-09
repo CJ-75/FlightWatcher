@@ -13,6 +13,9 @@ ALLOWED_DOMAINS: Set[str] = {
     "itinerary",
     "trip",
     "planner",
+    "auth",
+    "onboarding",
+    "invite",
 }
 ALLOWED_PLATFORMS: Set[str] = {"web", "ios", "android"}
 ALLOWED_SURFACES: Set[str] = {
@@ -27,6 +30,10 @@ ALLOWED_SURFACES: Set[str] = {
     "admin",
     "trip_detail",
     "parcours",
+    "auth_sheet",
+    "invite_landing",
+    "onboarding",
+    "permissions",
 }
 ALLOWED_EVENTS: Set[str] = {
     "view",
@@ -60,6 +67,27 @@ ALLOWED_EVENTS: Set[str] = {
     "itinerary_unliked",
     "itinerary_make_trip",
     "itinerary_launch_maps",
+    # Onboarding / auth (brief §8)
+    "auth_sheet_opened",
+    "auth_started",
+    "auth_succeeded",
+    "auth_failed",
+    "invite_landing_viewed",
+    "invite_join_clicked",
+    "invite_joined",
+    "invite_preview_failed",
+    "onboarding_started",
+    "onboarding_city_set",
+    "onboarding_pref_set",
+    "onboarding_completed",
+    "permission_preprompt_shown",
+    "permission_accepted",
+    "permission_deferred",
+    "app_promo_shown",
+    "app_promo_clicked",
+    "app_promo_dismissed",
+    "first_name_prompt_shown",
+    "first_name_saved",
 }
 
 _lock = threading.Lock()

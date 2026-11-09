@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
+import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { GoogleGIcon, prefetchGoogleG } from '../components/GoogleGIcon'
 import { getWebOrigin } from '../lib/client'
 import { colors } from '../theme'
@@ -52,7 +53,8 @@ function uri(id: string) {
 const URIS = SLIDES.map((s) => uri(s.id))
 
 export function LoginScreen() {
-  const { signInWithGoogle, continueAsGuest, user, session } = useAuth()
+  const { continueAsGuest, user, session } = useAuth()
+  const { openAuthSheet } = useAuthSheet()
   const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
   const [slide, setSlide] = useState(0)
@@ -120,14 +122,13 @@ export function LoginScreen() {
     }),
   ).current
 
-  const onLogin = async () => {
+  const onLogin = () => {
     setLoading(true)
-    try {
-      const { error: err } = await signInWithGoogle()
-      if (err && __DEV__) console.warn('[auth] signIn', err.message)
-    } finally {
-      setLoading(false)
-    }
+    openAuthSheet({
+      trigger: 'already_account',
+      onAuthenticated: () => setLoading(false),
+    })
+    setLoading(false)
   }
 
   const current = SLIDES[slide]

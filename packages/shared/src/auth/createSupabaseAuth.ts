@@ -35,6 +35,9 @@ export interface SupabaseAuth {
   /** Force refresh (resume after auth_required while still signed in). */
   refreshAccessToken: () => Promise<string | null>
   signInWithGoogle: () => Promise<{ error: Error | null }>
+  signInWithApple: () => Promise<{ error: Error | null }>
+  /** Email magic link / OTP (passwordless). */
+  signInWithOtp: (email: string) => Promise<{ error: Error | null }>
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<{ error: Error | null }>
   /** Complete OAuth from a deep-link / auth-session redirect URL. */
@@ -115,6 +118,82 @@ async function applySessionFromUrl(
  * Factory for platform-agnostic Supabase auth (web + Expo).
  * Loads URL/anon key from GET /api/config.
  */
+async function signInWithOAuthProvider(
+  c: SupabaseClient | null,
+  provider: 'google' | 'apple',
+  options: SupabaseAuthOptions,
+): Promise<{ error: Error | null }> {
+  if (!c) return { error: new Error('Supabase is not configured') }
+  const redirectTo = options.redirectTo
+  const useNative = typeof options.openAuthSession === 'function'
+
+  console.log(`[auth] signInWith${provider} start`, {
+    redirectTo,
+    useNative,
+    flowType: options.authOptions?.flowType ?? '(default)',
+  })
+
+  const { data, error } = await c.auth.signInWithOAuth({
+    provider,
+    options: {
+      ...(redirectTo ? { redirectTo } : {}),
+      skipBrowserRedirect: useNative,
+    },
+  })
+  if (error) {
+    console.warn('[auth] signInWithOAuth error', error.message)
+    return { error: new Error(error.message) }
+  }
+
+  console.log('[auth] signInWithOAuth ok', {
+    provider,
+    hasUrl: !!data?.url,
+    urlPreview: data?.url?.slice(0, 220) ?? null,
+  })
+
+  if (!useNative) return { error: null }
+
+  if (!data?.url) return { error: new Error('No OAuth URL returned') }
+
+  try {
+    console.log('[auth] openAuthSession…')
+    const resultUrl = await options.openAuthSession!(data.url, redirectTo || '')
+    console.log('[auth] openAuthSession returned', {
+      hasUrl: !!resultUrl,
+      preview: resultUrl?.slice(0, 220) ?? null,
+    })
+    if (!resultUrl) {
+      console.warn('[auth] openAuthSession returned null (cancel / timeout / fallback open only)')
+      const {
+        data: { session: maybe },
+      } = await c.auth.getSession()
+      if (maybe) {
+        console.log('[auth] session present after null return')
+        return { error: null }
+      }
+      return { error: null }
+    }
+    console.log('[auth] applySessionFromUrl…')
+    const { session, error: sessionError } = await applySessionFromUrl(c, resultUrl)
+    if (sessionError && !session) {
+      const {
+        data: { session: late },
+      } = await c.auth.getSession()
+      if (late) {
+        console.log('[auth] applySessionFromUrl race OK via getSession')
+        return { error: null }
+      }
+      console.warn('[auth] applySessionFromUrl FAILED', sessionError.message)
+      return { error: sessionError }
+    }
+    console.log('[auth] applySessionFromUrl OK')
+    return { error: null }
+  } catch (e) {
+    console.warn('[auth] openAuthSession / applySession threw', e)
+    return { error: e instanceof Error ? e : new Error(String(e)) }
+  }
+}
+
 export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseAuth {
   const apiBase = options.apiBaseUrl ?? ''
   const fetchFn = options.fetchImpl ?? fetch.bind(globalThis)
@@ -220,81 +299,24 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
       return session?.access_token ?? null
     },
     createSessionFromUrl,
-    signInWithGoogle: async () => {
+    signInWithGoogle: async () => signInWithOAuthProvider(await getClient(), 'google', options),
+    signInWithApple: async () => signInWithOAuthProvider(await getClient(), 'apple', options),
+    signInWithOtp: async (email) => {
       const c = await getClient()
       if (!c) return { error: new Error('Supabase is not configured') }
+      const trimmed = String(email || '').trim().toLowerCase()
+      if (!trimmed || !trimmed.includes('@')) {
+        return { error: new Error('Email invalide') }
+      }
       const redirectTo = options.redirectTo
-      const useNative = typeof options.openAuthSession === 'function'
-
-      console.log('[auth] signInWithGoogle start', {
-        redirectTo,
-        useNative,
-        flowType: options.authOptions?.flowType ?? '(default)',
-      })
-
-      const { data, error } = await c.auth.signInWithOAuth({
-        provider: 'google',
+      const { error } = await c.auth.signInWithOtp({
+        email: trimmed,
         options: {
-          ...(redirectTo ? { redirectTo } : {}),
-          skipBrowserRedirect: useNative,
+          ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+          shouldCreateUser: true,
         },
       })
-      if (error) {
-        console.warn('[auth] signInWithOAuth error', error.message)
-        return { error: new Error(error.message) }
-      }
-
-      console.log('[auth] signInWithOAuth ok', {
-        hasUrl: !!data?.url,
-        urlPreview: data?.url?.slice(0, 220) ?? null,
-      })
-
-      if (!useNative) return { error: null }
-
-      if (!data?.url) return { error: new Error('No OAuth URL returned') }
-
-      try {
-        console.log('[auth] openAuthSession…')
-        const resultUrl = await options.openAuthSession!(data.url, redirectTo || '')
-        console.log('[auth] openAuthSession returned', {
-          hasUrl: !!resultUrl,
-          preview: resultUrl?.slice(0, 220) ?? null,
-        })
-        if (!resultUrl) {
-          console.warn('[auth] openAuthSession returned null (cancel / timeout / fallback open only)')
-          // Linking may still have completed the session in the background.
-          const {
-            data: { session: maybe },
-          } = await c.auth.getSession()
-          if (maybe) {
-            console.log('[auth] session present after null return')
-            return { error: null }
-          }
-          return { error: null }
-        }
-        console.log('[auth] applySessionFromUrl…')
-        const { session, error: sessionError } = await applySessionFromUrl(
-          c,
-          resultUrl,
-        )
-        if (sessionError && !session) {
-          // Last chance: Linking handler may have won the race.
-          const {
-            data: { session: late },
-          } = await c.auth.getSession()
-          if (late) {
-            console.log('[auth] applySessionFromUrl race OK via getSession')
-            return { error: null }
-          }
-          console.warn('[auth] applySessionFromUrl FAILED', sessionError.message)
-          return { error: sessionError }
-        }
-        console.log('[auth] applySessionFromUrl OK')
-        return { error: null }
-      } catch (e) {
-        console.warn('[auth] openAuthSession / applySession threw', e)
-        return { error: e instanceof Error ? e : new Error(String(e)) }
-      }
+      return { error: error ? new Error(error.message) : null }
     },
     signInWithEmail: async (email, password) => {
       const c = await getClient()

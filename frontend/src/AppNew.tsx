@@ -6,6 +6,32 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast'
 import { I18nProvider } from './contexts/I18nContext'
 import { prefetchAirports } from './hooks/useAirports'
+import { AuthSheetHost } from './components/onboarding/AuthSheetHost'
+import { configureOnboardingKv } from '@flightwatcher/shared'
+
+configureOnboardingKv({
+  getItem: (k) => {
+    try {
+      return localStorage.getItem(k)
+    } catch {
+      return null
+    }
+  },
+  setItem: (k, v) => {
+    try {
+      localStorage.setItem(k, v)
+    } catch {
+      /* ignore */
+    }
+  },
+  removeItem: (k) => {
+    try {
+      localStorage.removeItem(k)
+    } catch {
+      /* ignore */
+    }
+  },
+})
 
 prefetchAirports()
 import Login from './pages/Login'
@@ -91,6 +117,7 @@ function App() {
   return (
     <I18nProvider>
       <BrowserRouter>
+        <AuthSheetHost>
         <Toaster position="top-right" />
         <Suspense fallback={<RouteFallback />}>
         <Routes>
@@ -160,6 +187,7 @@ function App() {
         <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
+        </AuthSheetHost>
       </BrowserRouter>
     </I18nProvider>
   )

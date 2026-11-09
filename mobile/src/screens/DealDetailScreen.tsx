@@ -32,6 +32,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
+import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { openInAppBrowser } from '../lib/openInApp'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { rememberTrip } from '../lib/tripRecovery'
@@ -76,7 +77,8 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const { dealId } = route.params
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
-  const { user, isGuest, signInWithGoogle } = useAuth()
+  const { user, isGuest } = useAuth()
+  const { openAuthSheet } = useAuthSheet()
   const { isLiked, toggleLike, refresh: refreshLikes } = useLikedDeals()
 
   // Large gallery (as before); shrink only on very short phones so 1er hôtel can peek.
@@ -346,7 +348,13 @@ export function DealDetailScreen({ route, navigation }: Props) {
           { text: 'Annuler', style: 'cancel' },
           {
             text: 'Se connecter',
-            onPress: () => void signInWithGoogle(),
+            onPress: () =>
+              openAuthSheet({
+                trigger: 'book',
+                onAuthenticated: () => {
+                  void startMyTrip()
+                },
+              }),
           },
         ],
       )

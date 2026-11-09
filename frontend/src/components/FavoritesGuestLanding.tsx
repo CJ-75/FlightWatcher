@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { signInWithGoogle } from '../lib/supabase'
 import { useI18n } from '../contexts/I18nContext'
+import { useAuthSheet } from './onboarding/AuthSheetHost'
 
 export function FavoritesGuestLanding() {
   const { t } = useI18n()
+  const { openAuthSheet } = useAuthSheet()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -14,7 +15,7 @@ export function FavoritesGuestLanding() {
     { title: t('favorites.guest.step3'), detail: t('favorites.guest.step3.detail') },
   ]
 
-  const onCta = async () => {
+  const onCta = () => {
     setError(null)
     setSigningIn(true)
     try {
@@ -22,11 +23,11 @@ export function FavoritesGuestLanding() {
     } catch {
       /* ignore */
     }
-    const { error: err } = await signInWithGoogle()
-    if (err) {
-      setError(err.message)
-      setSigningIn(false)
-    }
+    openAuthSheet({
+      trigger: 'favorite',
+      onAuthenticated: () => setSigningIn(false),
+    })
+    setSigningIn(false)
   }
 
   return (

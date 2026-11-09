@@ -14,7 +14,8 @@ import {
   type ItineraryItem,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
-import { getCurrentUser, signInWithGoogle } from '../lib/supabase'
+import { getCurrentUser } from '../lib/supabase'
+import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { ItineraryMarkerTiles } from '../components/parcours/ItineraryMarkerTiles'
 import { ItineraryStepsTimeline } from '../components/parcours/ItineraryStepsTimeline'
@@ -25,6 +26,7 @@ const CITY_LS = 'fw_parcours_city'
 export default function ParcoursPublicPage() {
   const { itineraryId } = useParams<{ itineraryId: string }>()
   const navigate = useNavigate()
+  const { openAuthSheet } = useAuthSheet()
   const [itin, setItin] = useState<Itinerary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -157,15 +159,43 @@ export default function ParcoursPublicPage() {
   })
   const shareUrl = `${window.location.origin}/parcours/${itin.slug || itin.id}`
 
-  const requireAuth = async (): Promise<boolean> => {
-    const user = await getCurrentUser()
-    if (user) return true
-    const { error: authErr } = await signInWithGoogle()
-    if (authErr) {
-      setToast('Connexion requise')
-      return false
+  const doLike = async () => {
+    try {
+      const api = getApiClient()
+      if (liked) {
+        await api.unlikeItinerary(itin!.id)
+        setLiked(false)
+        void api.trackActivityEvent({
+          domain: 'itinerary',
+          event: 'itinerary_unliked',
+          surface: 'parcours',
+          platform: 'web',
+          meta: { id: itin!.id },
+        })
+      } else {
+        await api.likeItinerary({
+          itinerary_id: itin!.id,
+          itinerary_data: {
+            id: itin!.id,
+            slug: itin!.slug,
+            title: itin!.title,
+            city_slug: itin!.city_slug,
+            cover_image: itin!.cover_image,
+            subtitle: itin!.subtitle,
+          },
+        })
+        setLiked(true)
+        void api.trackActivityEvent({
+          domain: 'itinerary',
+          event: 'itinerary_liked',
+          surface: 'parcours',
+          platform: 'web',
+          meta: { id: itin!.id },
+        })
+      }
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Favori impossible')
     }
-    return !!(await getCurrentUser())
   }
 
   const onSticky = async () => {
@@ -186,48 +216,28 @@ export default function ParcoursPublicPage() {
       } else setToast('Ajoute des lieux pour lancer le parcours.')
       return
     }
-    if (!(await requireAuth())) return
+    // MakeTripSheet gère auth au moment de create — ouvrir sans auth
     setMakeTripOpen(true)
   }
 
   const toggleLike = async () => {
-    if (!(await requireAuth())) return
-    try {
-      const api = getApiClient()
-      if (liked) {
-        await api.unlikeItinerary(itin.id)
-        setLiked(false)
-        void api.trackActivityEvent({
-          domain: 'itinerary',
-          event: 'itinerary_unliked',
-          surface: 'parcours',
-          platform: 'web',
-          meta: { id: itin.id },
-        })
-      } else {
-        await api.likeItinerary({
-          itinerary_id: itin.id,
-          itinerary_data: {
-            id: itin.id,
-            slug: itin.slug,
-            title: itin.title,
-            city_slug: itin.city_slug,
-            cover_image: itin.cover_image,
-            subtitle: itin.subtitle,
-          },
-        })
-        setLiked(true)
-        void api.trackActivityEvent({
-          domain: 'itinerary',
-          event: 'itinerary_liked',
-          surface: 'parcours',
-          platform: 'web',
-          meta: { id: itin.id },
-        })
-      }
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : 'Favori impossible')
+    const user = await getCurrentUser()
+    if (!user) {
+      openAuthSheet({
+        trigger: 'favorite',
+        pending: {
+          type: 'like_itinerary',
+          trigger: 'favorite',
+          payload: { itineraryId: itin.id },
+          createdAt: Date.now(),
+        },
+        onAuthenticated: () => {
+          void doLike()
+        },
+      })
+      return
     }
+    await doLike()
   }
 
   const openActivity = (item: ItineraryItem) => {

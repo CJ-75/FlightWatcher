@@ -16,6 +16,27 @@ import {
   Sora_800ExtraBold,
 } from '@expo-google-fonts/sora'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
+import { AuthSheetHost } from './src/components/onboarding/AuthSheetHost'
+import { OnboardingFlowScreen } from './src/screens/OnboardingFlowScreen'
+import {
+  FirstNameSheet,
+  shouldPromptFirstName,
+} from './src/components/onboarding/FirstNameSheet'
+import {
+  OnboardingGateProvider,
+  useOnboardingGate,
+} from './src/context/OnboardingGateContext'
+import {
+  configureOnboardingKv,
+  loadOnboardingPrefs,
+} from '@flightwatcher/shared'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
+configureOnboardingKv({
+  getItem: (k) => AsyncStorage.getItem(k),
+  setItem: (k, v) => AsyncStorage.setItem(k, v),
+  removeItem: (k) => AsyncStorage.removeItem(k),
+})
 import { LoginScreen } from './src/screens/LoginScreen'
 import { SearchScreen } from './src/screens/SearchScreen'
 import { ParcoursHubScreen } from './src/screens/ParcoursHubScreen'
@@ -249,6 +270,11 @@ function MainTabs() {
 function RootNavigator() {
   const { user, loading, isGuest } = useAuth()
   const pendingInviteHandled = React.useRef(false)
+  const { forceOnboarding, clearForceOnboarding } = useOnboardingGate()
+  const [needsOnboarding, setNeedsOnboarding] = React.useState<boolean | null>(
+    null,
+  )
+  const [showFirstName, setShowFirstName] = React.useState(false)
 
   // Après Google OAuth : reprendre le lien d’invite → join auto.
   useEffect(() => {
@@ -272,14 +298,60 @@ function RootNavigator() {
     }
   }, [loading, user, isGuest])
 
+  useEffect(() => {
+    if (loading) return
+    if (!user && !isGuest) {
+      setNeedsOnboarding(false)
+      return
+    }
+    let cancelled = false
+    void loadOnboardingPrefs().then((p) => {
+      if (!cancelled) setNeedsOnboarding(!p.onboardingCompletedAt)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, isGuest])
+
+  useEffect(() => {
+    if (loading || !user || isGuest) return
+    const meta = user.user_metadata || {}
+    const oauthName =
+      (meta.full_name as string) ||
+      (meta.name as string) ||
+      (meta.given_name as string) ||
+      ''
+    void shouldPromptFirstName(oauthName).then((need) => {
+      if (need) setShowFirstName(true)
+    })
+  }, [loading, user, isGuest])
+
   // Auth boot — puis Main → Parcours (home)
-  if (loading) {
+  if (loading || needsOnboarding === null) {
     return <LoginScreen />
   }
 
   const signedIn = !!user || isGuest
 
+  if (signedIn && (needsOnboarding || forceOnboarding)) {
+    return (
+      <>
+        <OnboardingFlowScreen
+          onDone={() => {
+            clearForceOnboarding()
+            setNeedsOnboarding(false)
+          }}
+        />
+        <FirstNameSheet
+          open={showFirstName}
+          onDone={() => setShowFirstName(false)}
+        />
+      </>
+    )
+  }
+
   return (
+    <>
     <Stack.Navigator
       screenOptions={{ headerShown: false }}
       initialRouteName={signedIn ? 'Main' : 'Login'}
@@ -381,6 +453,11 @@ function RootNavigator() {
         </>
       )}
     </Stack.Navigator>
+    <FirstNameSheet
+      open={showFirstName}
+      onDone={() => setShowFirstName(false)}
+    />
+    </>
   )
 }
 
@@ -439,14 +516,18 @@ export default function App() {
   return (
     <SafeAreaProvider onLayout={onLayoutRoot}>
       <AuthProvider>
-        <NavigationContainer
-          ref={navigationRef}
-          theme={navTheme}
-          linking={linking as any}
-        >
-          <StatusBar style="dark" />
-          <RootNavigator />
-        </NavigationContainer>
+        <OnboardingGateProvider>
+          <AuthSheetHost>
+            <NavigationContainer
+              ref={navigationRef}
+              theme={navTheme}
+              linking={linking as any}
+            >
+              <StatusBar style="dark" />
+              <RootNavigator />
+            </NavigationContainer>
+          </AuthSheetHost>
+        </OnboardingGateProvider>
       </AuthProvider>
     </SafeAreaProvider>
   )

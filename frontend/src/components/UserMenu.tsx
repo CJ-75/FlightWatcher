@@ -5,13 +5,13 @@ import {
   getCurrentSession,
   getCurrentUser,
   signOut,
-  signInWithGoogle,
   onAuthStateChange,
 } from '../lib/supabase';
 import { migrateLocalStorageToSupabase } from '../utils/migration';
 import { useI18n } from '../contexts/I18nContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { prefetchHotelBookings } from '../utils/bookingsCache';
+import { useAuthSheet } from './onboarding/AuthSheetHost';
 import type { User } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -22,6 +22,7 @@ interface UserProfile {
 export function UserMenu() {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const { openAuthSheet } = useAuthSheet();
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [signingIn, setSigningIn] = useState(false);
@@ -159,16 +160,13 @@ export function UserMenu() {
     }
   };
 
-  const handleSignIn = async () => {
+  const handleSignIn = () => {
     setSigningIn(true);
-    const { error } = await signInWithGoogle();
-    
-    if (error) {
-      console.error('Erreur connexion:', error);
-      alert(`${t('auth.error.connection')}: ${error.message}`);
-      setSigningIn(false);
-    }
-    // Sinon redirect OAuth — ne pas rebloquer le bouton en skeleton.
+    openAuthSheet({
+      trigger: 'already_account',
+      onAuthenticated: () => setSigningIn(false),
+    });
+    setSigningIn(false);
   };
 
   if (user) {

@@ -21,6 +21,7 @@ import {
   rememberPendingInvite,
 } from '../lib/pendingInvite'
 import { useAuth } from '../context/AuthContext'
+import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { GoogleGIcon } from '../components/GoogleGIcon'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
@@ -67,8 +68,8 @@ const SIGNUP_STEPS = [
 export function PlannerInviteScreen({ route, navigation }: Props) {
   const { token } = route.params
   const insets = useSafeAreaInsets()
-  const { user, isGuest, signInWithGoogle, continueAsGuest, setAppearLoggedOut } =
-    useAuth()
+  const { user, isGuest, continueAsGuest, setAppearLoggedOut } = useAuth()
+  const { openAuthSheet } = useAuthSheet()
   const loggedIn = Boolean(user) && !isGuest
   // Bypass Google uniquement sur tokens de test Expo (pas les vrais liens d’invite).
   const expoTest = __DEV__ && String(token || '').startsWith('dev-invite-')
@@ -165,13 +166,25 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
     setSigningIn(true)
     setError(null)
     await rememberPendingInvite(token)
-    const { error: err } = await signInWithGoogle()
-    if (err) {
-      setError(err.message)
-      setSigningIn(false)
-      return
-    }
-    // OAuth redirect — on reprend au retour session.
+    const firstName =
+      preview?.organizer?.first_name ||
+      (preview?.organizer_name || '').split(/\s+/)[0] ||
+      null
+    openAuthSheet({
+      trigger: 'invite_join',
+      inviteFirstName: firstName,
+      pending: {
+        type: 'join_invite',
+        trigger: 'invite_join',
+        payload: { token },
+        createdAt: Date.now(),
+      },
+      onAuthenticated: () => {
+        setSigningIn(false)
+        void join()
+      },
+    })
+    setSigningIn(false)
   }
 
   /** Bypass Google — uniquement __DEV__ / Expo. */

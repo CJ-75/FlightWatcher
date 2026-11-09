@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
+import { useOnboardingGate } from '../context/OnboardingGateContext'
 import { DEV_INVITE_TOKEN } from '../dev/guestPreview'
 import { apiBase } from '../lib/client'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
@@ -73,6 +74,7 @@ export function ProfileScreen() {
     appearLoggedOut,
     setAppearLoggedOut,
   } = useAuth()
+  const { replayOnboarding } = useOnboardingGate()
   const insets = useSafeAreaInsets()
   const navigation = useNavigation()
   const scrollRef = useRef<ScrollView>(null)
@@ -314,6 +316,20 @@ export function ProfileScreen() {
               <Text style={styles.devPreviewTitle}>Voir comme non connecté</Text>
               <Text style={styles.devPreviewSub}>
                 Affiche les landings Compte / Favoris / Planner
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void replayOnboarding()}
+              style={({ pressed }) => [
+                styles.devPreviewBtn,
+                pressed && { opacity: 0.9 },
+              ]}
+            >
+              <Text style={styles.devPreviewTitle}>
+                Revoir onboarding (3 écrans)
+              </Text>
+              <Text style={styles.devPreviewSub}>
+                Promise → ville → envie, avec ton compte connecté
               </Text>
             </Pressable>
             <Pressable

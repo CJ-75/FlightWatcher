@@ -20,6 +20,8 @@ interface AuthContextValue {
   /** user unless appearLoggedOut (dev preview). Use for UI gates. */
   viewUser: User | null
   signInWithGoogle: () => Promise<{ error: Error | null }>
+  signInWithApple: () => Promise<{ error: Error | null }>
+  signInWithOtp: (email: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
 
@@ -174,6 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ? null
           : user ?? (__DEV__ && isGuest ? DEV_GUEST_USER : null),
       signInWithGoogle: () => auth.signInWithGoogle(),
+      signInWithApple: () => auth.signInWithApple(),
+      signInWithOtp: (email: string) => auth.signInWithOtp(email),
       signOut: async () => {
         try {
           await auth.signOut()

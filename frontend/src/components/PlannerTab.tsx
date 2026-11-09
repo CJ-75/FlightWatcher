@@ -26,7 +26,8 @@ import {
 } from '../utils/workspacesCache'
 import { loadAirportsOnce } from '../hooks/useAirports'
 import { useShellReady } from '../hooks/useShellReady'
-import { getCurrentUser, getSupabaseClient, signInWithGoogle, onAuthStateChange } from '../lib/supabase'
+import { getCurrentUser, getSupabaseClient, onAuthStateChange } from '../lib/supabase'
+import { useAuthSheet } from './onboarding/AuthSheetHost'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
 import { PlannerScanPanel } from './PlannerScanPanel'
@@ -152,6 +153,7 @@ async function shareInvite(name: string, token: string) {
 
 function PlannerGuestLanding() {
   const { t } = useI18n()
+  const { openAuthSheet } = useAuthSheet()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -161,7 +163,7 @@ function PlannerGuestLanding() {
     { title: t('planner.guest.step3'), detail: t('planner.guest.step3.detail') },
   ]
 
-  const onCta = async () => {
+  const onCta = () => {
     setError(null)
     setSigningIn(true)
     try {
@@ -169,11 +171,11 @@ function PlannerGuestLanding() {
     } catch {
       /* ignore */
     }
-    const { error: err } = await signInWithGoogle()
-    if (err) {
-      setError(err.message)
-      setSigningIn(false)
-    }
+    openAuthSheet({
+      trigger: 'invite_friends',
+      onAuthenticated: () => setSigningIn(false),
+    })
+    setSigningIn(false)
   }
 
   return (

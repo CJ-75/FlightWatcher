@@ -19,11 +19,13 @@ import {
   parseAirportCodes,
   partyModeDefaultPassengers,
   suggestedParcoursDates,
+  loadOnboardingPrefs,
   type Itinerary,
   type PartyMode,
 } from '@flightwatcher/shared'
 import { getApi } from '../../lib/client'
 import { useAuth } from '../../context/AuthContext'
+import { useAuthSheet } from '../onboarding/AuthSheetHost'
 import { fonts, colors, spacing } from '../../theme'
 
 type Props = {
@@ -40,7 +42,8 @@ export function MakeTripSheet({
   onCreated,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const { user, signInWithGoogle } = useAuth()
+  const { user } = useAuth()
+  const { openAuthSheet } = useAuthSheet()
   const suggested = useMemo(
     () => suggestedParcoursDates(itinerary),
     [itinerary],
@@ -63,20 +66,18 @@ export function MakeTripSheet({
     setInbound(suggested.inbound)
   }, [suggested])
 
+  useEffect(() => {
+    void loadOnboardingPrefs().then((p) => {
+      if (p.departureAirportCodes) setDeparture(p.departureAirportCodes)
+    })
+  }, [])
+
   const cityLabel =
     citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
 
-  const submit = async () => {
-    setError(null)
-    if (!user) {
-      const { error: authErr } = await signInWithGoogle()
-      if (authErr) {
-        setError(authErr.message || 'Connexion requise')
-        return
-      }
-    }
+  const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
     if (!dep) {
       setError('Indique un aéroport de départ (ex. CDG,ORY)')
@@ -116,6 +117,33 @@ export function MakeTripSheet({
     } finally {
       setSaving(false)
     }
+  }
+
+  const submit = async () => {
+    setError(null)
+    if (!user) {
+      openAuthSheet({
+        trigger: 'create_trip',
+        pending: {
+          type: 'create_trip_from_parcours',
+          trigger: 'create_trip',
+          payload: {
+            itineraryId: itinerary.id,
+            departure,
+            passengers,
+            outbound,
+            inbound,
+            budget,
+          },
+          createdAt: Date.now(),
+        },
+        onAuthenticated: () => {
+          void createTrip()
+        },
+      })
+      return
+    }
+    await createTrip()
   }
 
   return (

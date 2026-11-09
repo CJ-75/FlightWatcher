@@ -189,23 +189,52 @@ export const updatePassword = async (
   return { error: error ? new Error(error.message) : null }
 }
 
-/**
- * Se connecter avec Google OAuth
- */
-export const signInWithGoogle = async (): Promise<{ error: Error | null }> => {
+async function signInWithOAuthProvider(
+  provider: 'google' | 'apple',
+): Promise<{ error: Error | null }> {
   const client = await getSupabaseClient()
   if (!client) {
-    return { error: new Error('Supabase n\'est pas configuré') }
+    return { error: new Error("Supabase n'est pas configuré") }
   }
 
   const { error } = await client.auth.signInWithOAuth({
-    provider: 'google',
+    provider,
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`
-    }
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
   })
 
-  return { error }
+  return { error: error ? new Error(error.message) : null }
+}
+
+/** Se connecter avec Google OAuth */
+export const signInWithGoogle = async (): Promise<{ error: Error | null }> =>
+  signInWithOAuthProvider('google')
+
+/** Se connecter avec Apple OAuth */
+export const signInWithApple = async (): Promise<{ error: Error | null }> =>
+  signInWithOAuthProvider('apple')
+
+/** Magic link / OTP email (passwordless). */
+export const signInWithOtp = async (
+  email: string,
+): Promise<{ error: Error | null }> => {
+  const client = await getSupabaseClient()
+  if (!client) {
+    return { error: new Error("Supabase n'est pas configuré") }
+  }
+  const trimmed = String(email || '').trim().toLowerCase()
+  if (!trimmed || !trimmed.includes('@')) {
+    return { error: new Error('Email invalide') }
+  }
+  const { error } = await client.auth.signInWithOtp({
+    email: trimmed,
+    options: {
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+      shouldCreateUser: true,
+    },
+  })
+  return { error: error ? new Error(error.message) : null }
 }
 
 /**

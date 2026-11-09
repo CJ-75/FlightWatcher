@@ -116,6 +116,7 @@ import {
 } from '../components/ActivityPlannerPicker'
 import { HeartIcon } from '../components/HeartIcon'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
+import { FavorisEmpty } from '../components/onboarding/EmptyStates'
 import { openInAppBrowser } from '../lib/openInApp'
 import { bookCtaLabel, preparePartnerBook } from '../lib/partnerBook'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -644,33 +645,11 @@ export function FavoritesScreen() {
         ListEmptyComponent={
           showSkeleton ? null : listData.length === 0 &&
             archivedItems.length === 0 ? (
-            <View style={[styles.emptyCard, shadow.soft]}>
-              <View style={styles.emptyIcon}>
-                <HeartIcon size={28} filled={false} color={colors.primary} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                {error
-                  ? error
-                  : tab === 'deals'
-                    ? translate('fr', 'favorites.dealsEmptyTitle')
-                    : tab === 'activities'
-                      ? translate('fr', 'favorites.activitiesEmptyTitle')
-                      : tab === 'parcours'
-                        ? translate('fr', 'favorites.parcoursEmptyTitle')
-                        : translate('fr', 'favorites.flightsEmpty')}
-              </Text>
-              <Text style={styles.emptyBody}>
-                {error
-                  ? 'Tire pour réessayer.'
-                  : tab === 'deals'
-                    ? translate('fr', 'favorites.dealsEmpty')
-                    : tab === 'activities'
-                      ? translate('fr', 'favorites.activitiesEmpty')
-                      : tab === 'parcours'
-                        ? translate('fr', 'favorites.parcoursEmpty')
-                        : translate('fr', 'favorites.flightsEmptyBody')}
-              </Text>
-            </View>
+            <FavorisEmpty
+              onExplore={() =>
+                navigation.navigate('Main', { screen: 'Deals' } as never)
+              }
+            />
           ) : listData.length === 0 ? (
             <Text style={styles.onlyArchivedHint}>
               {translate('fr', 'favorites.archivedHint')}

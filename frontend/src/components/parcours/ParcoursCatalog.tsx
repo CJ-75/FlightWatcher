@@ -5,6 +5,8 @@ import {
   citySlugDisplayNameFr,
   isFeaturedToday,
   itineraryOccasionEmoji,
+  loadOnboardingPrefs,
+  setDepartureCity,
   type Itinerary,
   type ItineraryOccasion,
   type ParcoursFeedRow,
@@ -12,6 +14,7 @@ import {
 import { getApiClient } from '../../utils/apiClient'
 import { FwKicker } from '../ui/FwKicker'
 import { ItineraryCard } from './ItineraryCard'
+import { CityBanner } from '../onboarding/CityBanner'
 
 const CITY_CHOICES = [
   'paris',
@@ -66,6 +69,19 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
   })
   const [error, setError] = useState<string | null>(null)
   const [occasion, setOccasion] = useState<ItineraryOccasion | null>(null)
+
+  useEffect(() => {
+    void loadOnboardingPrefs().then((p) => {
+      if (p.departureCitySlug) {
+        setCity(p.departureCitySlug)
+        try {
+          localStorage.setItem(CITY_LS, p.departureCitySlug)
+        } catch {
+          /* ignore */
+        }
+      }
+    })
+  }, [])
 
   const load = useCallback(async () => {
     setError(null)
@@ -164,16 +180,38 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
       ) : null}
 
       <div
-        className={`relative inline-block ${
+        className={`flex flex-wrap items-center gap-3 ${
           embedded ? 'mb-5 lg:mb-6' : 'mb-5 -mt-1 lg:mb-6'
         }`}
       >
+        <CityBanner
+          onCityChange={(_codes, label) => {
+            const slug =
+              CITY_CHOICES.find(
+                (c) =>
+                  (citySlugDisplayNameFr(c) || c).toLowerCase() ===
+                  label.toLowerCase(),
+              ) || city
+            setCity(slug)
+            try {
+              localStorage.setItem(CITY_LS, slug)
+            } catch {
+              /* ignore */
+            }
+            void setDepartureCity({
+              slug,
+              label,
+              airportCodes: _codes,
+            })
+          }}
+        />
+      <div className="relative inline-block">
         <button
           type="button"
           onClick={() => setCityOpen((v) => !v)}
           className="rounded-full border border-line bg-white px-3.5 py-2 lg:px-4 lg:py-2.5 text-sm lg:text-[15px] font-bold text-ink shadow-sm"
         >
-          Près de toi · {cityLabel} ▾
+          Parcours · {cityLabel} ▾
         </button>
         {cityOpen ? (
           <div className="absolute left-0 z-20 mt-2 max-h-64 w-56 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg">
@@ -196,6 +234,7 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
             ))}
           </div>
         ) : null}
+      </div>
       </div>
 
       {occasion ? (

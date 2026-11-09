@@ -1,0 +1,56 @@
+.fw-city-banner {
+  position: relative;
+  display: inline-flex;
+  font-family: 'Sora', system-ui, sans-serif;
+}
+
+.fw-city-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(40, 32, 24, 0.12);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: rgba(40, 32, 24, 0.7);
+  cursor: pointer;
+}
+
+.fw-city-banner-btn strong {
+  color: #1c1814;
+  font-weight: 700;
+}
+
+.fw-city-banner-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 160px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(40, 32, 24, 0.1);
+  box-shadow: 0 12px 28px rgba(28, 22, 16, 0.12);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
+.fw-city-banner-option {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #1c1814;
+}
+
+.fw-city-banner-option:hover {
+  background: #fff5ef;
+}

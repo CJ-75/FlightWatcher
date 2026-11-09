@@ -33,6 +33,7 @@ import {
 } from '../lib/parcoursCache'
 import { coverUri } from '../lib/coverUri'
 import { useAuth } from '../context/AuthContext'
+import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
 import type { RootStackParamList } from '../navigation/types'
@@ -60,7 +61,8 @@ function hasSteps(it: Itinerary | null): boolean {
 
 export function ItineraryDetailScreen({ route, navigation }: Props) {
   const { itineraryId, preview } = route.params
-  const { user, signInWithGoogle } = useAuth()
+  const { user } = useAuth()
+  const { openAuthSheet } = useAuthSheet()
   const [itin, setItin] = useState<Itinerary | null>(() =>
     initialItinerary(itineraryId, preview),
   )
@@ -140,16 +142,6 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     return buildItinerarySticky({ itinerary: itin, userCitySlug: userCity })
   }, [itin, userCity])
 
-  const requireAuth = async () => {
-    if (user) return true
-    const { error: authErr } = await signInWithGoogle()
-    if (authErr) {
-      setToast('Connexion requise')
-      return false
-    }
-    return true
-  }
-
   if (!itin && loadingSteps) {
     return (
       <View style={styles.center}>
@@ -208,12 +200,11 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
       } else setToast('Ajoute des lieux pour lancer le parcours.')
       return
     }
-    if (!(await requireAuth())) return
+    // Auth only at create inside MakeTripSheet
     setMakeTripOpen(true)
   }
 
-  const toggleLike = async () => {
-    if (!(await requireAuth())) return
+  const doLike = async () => {
     try {
       const api = getApi()
       if (liked) {
@@ -235,6 +226,25 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Favori impossible')
     }
+  }
+
+  const toggleLike = async () => {
+    if (!user) {
+      openAuthSheet({
+        trigger: 'favorite',
+        pending: {
+          type: 'like_itinerary',
+          trigger: 'favorite',
+          payload: { itineraryId: itin.id },
+          createdAt: Date.now(),
+        },
+        onAuthenticated: () => {
+          void doLike()
+        },
+      })
+      return
+    }
+    await doLike()
   }
 
   return (

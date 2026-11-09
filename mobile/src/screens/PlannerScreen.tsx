@@ -69,6 +69,10 @@ import { PassengerStepper } from '../components/PassengerStepper'
 import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { Button } from '../components/ui/Button'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
+import {
+  VoyagesEmpty,
+  shouldShowInviteTip,
+} from '../components/onboarding/EmptyStates'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { JourneyCard, type JourneyDensity } from '../components/JourneyCard'
 import type { RootStackParamList } from '../navigation/types'
@@ -162,6 +166,10 @@ export function PlannerScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [showInviteTip, setShowInviteTip] = useState(false)
+  useEffect(() => {
+    void shouldShowInviteTip().then(setShowInviteTip)
+  }, [])
   const lastFetchAtRef = useRef(0)
   const workspacesLenRef = useRef(0)
   const listRef = useRef<FlatList<PlannerListItem>>(null)
@@ -439,31 +447,40 @@ export function PlannerScreen() {
                       <Text style={styles.emptyIconText}>✈</Text>
                     </LinearGradient>
                   </View>
-                  <Text style={styles.emptyTitle}>
-                    {workspaces.length
-                      ? PLANNER_HUB_EMPTY_FR[filter].title
-                      : 'Ton premier voyage'}
-                  </Text>
-                  <Text style={styles.emptyBody}>
-                    {workspaces.length
-                      ? PLANNER_HUB_EMPTY_FR[filter].body
-                      : 'Choisis une ville, scanne les prix, partage le lien.'}
-                  </Text>
-                  {!workspaces.length || PLANNER_HUB_EMPTY_FR[filter].cta ? (
-                    <Pressable
-                      onPress={() => setShowCreate(true)}
-                      style={({ pressed }) => [
-                        styles.emptyCta,
-                        pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-                      ]}
-                    >
-                      <Text style={styles.emptyCtaText}>
-                        {workspaces.length
-                          ? PLANNER_HUB_EMPTY_FR[filter].cta || PLANNER_NEW_STAY_FR
-                          : PLANNER_NEW_STAY_FR}
+                  {!workspaces.length ? (
+                    <VoyagesEmpty
+                      onExplore={() =>
+                        navigation.navigate('Main', { screen: 'Deals' } as never)
+                      }
+                      showInviteTip={showInviteTip}
+                      onInviteTipDismiss={() => setShowInviteTip(false)}
+                    />
+                  ) : (
+                    <>
+                      <Text style={styles.emptyTitle}>
+                        {PLANNER_HUB_EMPTY_FR[filter].title}
                       </Text>
-                    </Pressable>
-                  ) : null}
+                      <Text style={styles.emptyBody}>
+                        {PLANNER_HUB_EMPTY_FR[filter].body}
+                      </Text>
+                      {PLANNER_HUB_EMPTY_FR[filter].cta ? (
+                        <Pressable
+                          onPress={() => setShowCreate(true)}
+                          style={({ pressed }) => [
+                            styles.emptyCta,
+                            pressed && {
+                              opacity: 0.92,
+                              transform: [{ scale: 0.98 }],
+                            },
+                          ]}
+                        >
+                          <Text style={styles.emptyCtaText}>
+                            {PLANNER_HUB_EMPTY_FR[filter].cta || PLANNER_NEW_STAY_FR}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </>
+                  )}
                 </>
               )}
             </View>

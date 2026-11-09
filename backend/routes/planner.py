@@ -3829,6 +3829,7 @@ async def reject_proposal(proposal_id: str, request: Request):
 
 @router.get("/api/planner/invite/{token}")
 async def invite_preview(token: str):
+    """Public invite preview — restricted fields only (brief §6)."""
     supabase = _svc()
     trip = (
         supabase.table("planned_trips")
@@ -3857,23 +3858,82 @@ async def invite_preview(token: str):
     accepted_trip = None
     if accepted.data:
         accepted_trip = accepted.data[0].get("trip_data")
+
     org_name = None
+    org_first = None
+    org_avatar = None
     org_id = row.get("organizer_id")
     if org_id:
         try:
             prof = (
                 supabase.table("user_profiles")
-                .select("full_name")
+                .select("full_name,first_name,avatar_url")
                 .eq("id", org_id)
                 .limit(1)
                 .execute()
             )
             if prof.data:
-                org_name = (prof.data[0].get("full_name") or "").strip() or None
+                p = prof.data[0]
+                org_name = (p.get("full_name") or "").strip() or None
+                org_first = (p.get("first_name") or "").strip() or None
+                if not org_first and org_name:
+                    org_first = org_name.split()[0]
+                org_avatar = (p.get("avatar_url") or "").strip() or None
         except Exception:
             org_name = None
+
+    # City / cover / price / program from accepted trip when present
+    city = None
+    cover_url = None
+    price_estimate = None
+    price_status = "unknown"
+    program_summary: list = []
+    if isinstance(accepted_trip, dict):
+        flight = accepted_trip.get("flight") or {}
+        hotel = accepted_trip.get("hotel") or {}
+        city = (
+            flight.get("destination_city")
+            or hotel.get("city")
+            or accepted_trip.get("city")
+            or row.get("arrival_airport")
+        )
+        cover_url = (
+            hotel.get("image_url")
+            or hotel.get("photo_url")
+            or accepted_trip.get("cover_url")
+            or accepted_trip.get("image_url")
+        )
+        total = accepted_trip.get("total_price") or accepted_trip.get("price_per_person")
+        if total is not None:
+            try:
+                price_estimate = float(total)
+                price_status = "estimated"
+            except (TypeError, ValueError):
+                pass
+        steps = accepted_trip.get("program") or accepted_trip.get("activities") or []
+        if isinstance(steps, list):
+            for s in steps[:3]:
+                if isinstance(s, dict):
+                    title = (s.get("title") or s.get("name") or "").strip()
+                    if title:
+                        program_summary.append(title)
+                elif isinstance(s, str) and s.strip():
+                    program_summary.append(s.strip())
+
+    if not city:
+        city = row.get("arrival_airport") or row.get("name")
+
+    status = (row.get("status") or "open").lower()
+    state = "open"
+    if status in ("cancelled", "expired", "closed"):
+        state = "expired"
+    elif status == "full":
+        state = "full"
+
     return {
         "name": row["name"],
+        "city": city,
+        "cover_url": cover_url,
         "departure_airport": row["departure_airport"],
         "arrival_airport": row.get("arrival_airport"),
         "passengers": row.get("passengers") or 1,
@@ -3881,9 +3941,17 @@ async def invite_preview(token: str):
         "dates_retour": row.get("dates_retour") or [],
         "budget_max": row.get("budget_max") or 200,
         "organizer_name": org_name,
+        "organizer": {
+            "first_name": org_first,
+            "avatar_url": org_avatar,
+        },
         "accepted_trip": accepted_trip,
         "members_count": members.count or 0,
         "invite_token": row["invite_token"],
+        "price_estimate": price_estimate,
+        "price_status": price_status,
+        "program_summary": program_summary[:3],
+        "state": state,
     }
 
 

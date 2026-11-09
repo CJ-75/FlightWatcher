@@ -13,7 +13,9 @@ import {
 import { getApiClient } from '../../utils/apiClient'
 import { CityAirportSelect } from '../CityAirportSelect'
 import { PassengerStepper } from '../PassengerStepper'
-import { getCurrentUser, signInWithGoogle } from '../../lib/supabase'
+import { getCurrentUser } from '../../lib/supabase'
+import { useAuthSheet } from '../onboarding/AuthSheetHost'
+import { loadOnboardingPrefs } from '@flightwatcher/shared'
 
 type Props = {
   itinerary: Itinerary
@@ -25,6 +27,7 @@ type Props = {
  * Feuille §7.4 — dates / départ / pax → create trip + apply parcours.
  */
 export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
+  const { openAuthSheet } = useAuthSheet()
   const suggested = useMemo(
     () => suggestedParcoursDates(itinerary),
     [itinerary],
@@ -37,11 +40,10 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
   const [budget, setBudget] = useState(200)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [needAuth, setNeedAuth] = useState(false)
 
   useEffect(() => {
-    void getCurrentUser().then((u) => {
-      if (!u) setNeedAuth(true)
+    void loadOnboardingPrefs().then((p) => {
+      if (p.departureAirportCodes) setDeparture(p.departureAirportCodes)
     })
   }, [])
 
@@ -56,17 +58,7 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
   const arrival =
     arrivalCodesForCitySlug(itinerary.city_slug) || undefined
 
-  const submit = async () => {
-    setError(null)
-    const user = await getCurrentUser()
-    if (!user) {
-      setNeedAuth(true)
-      const { error: authErr } = await signInWithGoogle()
-      if (authErr) {
-        setError(authErr.message || 'Connexion requise')
-        return
-      }
-    }
+  const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
     if (!dep) {
       setError('Choisis une ville de départ')
@@ -117,6 +109,35 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
     }
   }
 
+  const submit = async () => {
+    setError(null)
+    const user = await getCurrentUser()
+    if (!user) {
+      // Dates / form already filled — auth only at create (brief §7)
+      openAuthSheet({
+        trigger: 'create_trip',
+        pending: {
+          type: 'create_trip_from_parcours',
+          trigger: 'create_trip',
+          payload: {
+            itineraryId: itinerary.id,
+            departure,
+            passengers,
+            outbound,
+            inbound,
+            budget,
+          },
+          createdAt: Date.now(),
+        },
+        onAuthenticated: () => {
+          void createTrip()
+        },
+      })
+      return
+    }
+    await createTrip()
+  }
+
   const useNextWeekend = () => {
     const d = generateDatesFromPreset('next-weekend')
     const out = d.dates_depart[0]?.date
@@ -151,12 +172,6 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
             {itinerary.title}
             {cityLabel ? ` · ${cityLabel}` : ''}
           </p>
-
-          {needAuth ? (
-            <p className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-xs font-semibold text-amber-900">
-              Connexion requise pour créer le voyage.
-            </p>
-          ) : null}
 
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">

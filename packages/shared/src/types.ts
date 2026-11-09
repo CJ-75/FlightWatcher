@@ -518,8 +518,18 @@ export interface UpdatePlannedTripRequest {
   auto_scan_interval_seconds?: number
 }
 
+export type InvitePreviewState =
+  | 'open'
+  | 'full'
+  | 'expired'
+  | 'already_member'
+  | 'not_found'
+
 export interface InvitePreview {
   name: string
+  /** Destination city label (never airport codes in UI). */
+  city?: string | null
+  cover_url?: string | null
   departure_airport: string
   arrival_airport?: string | null
   passengers: number
@@ -527,9 +537,19 @@ export interface InvitePreview {
   dates_retour: DateAvecHoraire[]
   budget_max: number
   organizer_name?: string | null
+  organizer?: {
+    first_name: string | null
+    avatar_url: string | null
+  } | null
   accepted_trip?: EnrichedTripResponse | null
   members_count: number
   invite_token: string
+  /** Estimated price per person when available. */
+  price_estimate?: number | null
+  price_status?: 'estimated' | 'confirmed' | 'unknown' | null
+  /** Up to 3 programme step titles. */
+  program_summary?: string[]
+  state?: InvitePreviewState
 }
 
 /** Slim alternative deal (same city + origin, other dates). */
