@@ -81,7 +81,12 @@ function photoOf(it: ItemRow): string {
 }
 
 function titleOf(it: ItemRow) {
-  return String(placeOf(it)?.name || it.meta?.title || 'Activité')
+  return String(
+    placeOf(it)?.name ||
+      it.title ||
+      it.meta?.title ||
+      'Activité',
+  )
 }
 
 function rawPriceOf(it: ItemRow): number | null {
@@ -295,8 +300,8 @@ export function ActivityStepPanel(props: {
       rows.filter(isActivityItem).map((i) => ({
         id: i.id,
         item_type: i.item_type,
-        title: i.title ?? placeOf(i)?.name ?? null,
-        name: placeOf(i)?.name ?? null,
+        title: titleOf(i),
+        name: placeOf(i)?.name ?? i.title ?? null,
         day_offset: i.day_offset ?? null,
         moment: i.moment ?? null,
         notes: i.notes ?? null,
@@ -309,20 +314,44 @@ export function ActivityStepPanel(props: {
     const planned = owner.planned_trip_id
     const draft = owner.draft_token || draftFallback || undefined
     if (planned && String(planned).startsWith('dev-trip-')) return []
-    let rows: ItemRow[] = []
+
+    // Merge planned + draft — activities may live on either side; draft-token
+    // reads can remap to planned server-side, so XOR fallback is not enough.
+    const jobs: Promise<ItemRow[]>[] = []
     if (planned) {
-      const res = await getApi().listTripItems({ planned_trip_id: planned })
-      rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+      jobs.push(
+        getApi()
+          .listTripItems({ planned_trip_id: planned })
+          .then((res) =>
+            ((res.items || []) as ItemRow[]).filter(isActivityItem),
+          )
+          .catch(() => [] as ItemRow[]),
+      )
     }
-    // Same fallback as TripDetailScreen — activities may still live on the draft.
-    if (!rows.length && draft) {
-      const res = await getApi().listTripItems({ draft_token: draft })
-      rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+    if (draft) {
+      jobs.push(
+        getApi()
+          .listTripItems({ draft_token: draft })
+          .then((res) =>
+            ((res.items || []) as ItemRow[]).filter(isActivityItem),
+          )
+          .catch(() => [] as ItemRow[]),
+      )
     }
-    return rows
+    if (!jobs.length) return []
+    const chunks = await Promise.all(jobs)
+    const byId = new Map<string, ItemRow>()
+    for (const rows of chunks) {
+      for (const it of rows) {
+        const id = String(it.id || '')
+        if (!id || byId.has(id)) continue
+        byId.set(id, it)
+      }
+    }
+    return Array.from(byId.values())
   }, [owner.planned_trip_id, owner.draft_token, draftFallback])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!owner.draft_token && !owner.planned_trip_id && !draftFallback) return
     // Dev guest trips are in-memory only — never hit auth-required trip-items.
     if (
@@ -335,7 +364,8 @@ export function ActivityStepPanel(props: {
       return
     }
     const gen = ++loadGenRef.current
-    setLoading(true)
+    const silent = Boolean(opts?.silent)
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const rows = await fetchActivityRows()
@@ -417,7 +447,7 @@ export function ActivityStepPanel(props: {
     useCallback(() => {
       if (!enabled) return
       authRetryRef.current = false
-      void load()
+      void load({ silent: true })
     }, [enabled, load]),
   )
 

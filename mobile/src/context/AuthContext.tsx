@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { AppState, type AppStateStatus } from 'react-native'
 import * as Linking from 'expo-linking'
 import type { Session, User } from '@flightwatcher/shared'
-import { auth, redirectTo, authRedirectWarning } from '../lib/client'
+import { auth, getRedirectTo, authRedirectWarning } from '../lib/client'
 import { clearLikedParcoursIdsLocal } from '../lib/parcoursCache'
 import { DEV_GUEST_USER } from '../dev/guestPreview'
 
@@ -142,8 +143,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void handleUrl(url)
     })
 
+    // After Google / browser return: re-check persisted session without needing
+    // a new Cloudflare / Expo tunnel restart.
+    const onAppState = (state: AppStateStatus) => {
+      if (state !== 'active' || !mounted) return
+      void auth
+        .getCurrentSession()
+        .then((s) => {
+          if (!mounted) return
+          if (s?.user) applySession(s, false)
+        })
+        .catch(() => undefined)
+    }
+    const appSub = AppState.addEventListener('change', onAppState)
+
     if (__DEV__) {
-      console.log('[auth] AuthContext ready redirectTo=', redirectTo)
+      console.log('[auth] AuthContext ready redirectTo=', getRedirectTo())
       if (authRedirectWarning) console.warn('[auth] CONFIG', authRedirectWarning)
     }
 
@@ -153,6 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (splashTimer) clearTimeout(splashTimer)
       unsub()
       linkSub.remove()
+      appSub.remove()
     }
   }, [])
 

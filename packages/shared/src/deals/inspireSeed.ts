@@ -16,7 +16,7 @@ export const DEAL_INSPIRE_HIDDEN = new Set([
   'nouvel-an',
 ])
 
-/** Prefer seed order, then remaining API chips. */
+/** Prefer seed order, then remaining API chips. Keep seed chrome; take API counts. */
 export function mergeDealOccasionChips(
   fromApi: DealOccasionChip[],
   seed: DealOccasionChip[] = DEAL_INSPIRE_SEED,
@@ -26,7 +26,13 @@ export function mergeDealOccasionChips(
   for (const s of seed) {
     const hit = bySlug.get(s.slug)
     if (hit) {
-      ordered.push(hit)
+      ordered.push({
+        ...s,
+        ...hit,
+        label: hit.label || s.label,
+        icon: hit.icon || s.icon,
+        count: hit.count ?? s.count,
+      })
       bySlug.delete(s.slug)
     } else {
       ordered.push(s)
@@ -36,4 +42,27 @@ export function mergeDealOccasionChips(
     if (bySlug.has(c.slug)) ordered.push(c)
   }
   return ordered
+}
+
+/** Fill missing chip counts from the deals wall (occasion_tags). */
+export function applyDealOccasionCountsFromWall(
+  chips: DealOccasionChip[],
+  deals: Array<{ occasion_tags?: string[] | null }>,
+): DealOccasionChip[] {
+  const counts: Record<string, number> = {}
+  for (const d of deals || []) {
+    for (const raw of d.occasion_tags || []) {
+      const slug = String(raw || '')
+        .trim()
+        .toLowerCase()
+      if (!slug) continue
+      counts[slug] = (counts[slug] || 0) + 1
+    }
+  }
+  if (!Object.keys(counts).length) return chips
+  return chips.map((c) => {
+    if (typeof c.count === 'number' && c.count > 0) return c
+    const n = counts[c.slug]
+    return n != null ? { ...c, count: n } : c
+  })
 }

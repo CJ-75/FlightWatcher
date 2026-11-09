@@ -6,6 +6,11 @@ export interface SupabaseAuthOptions {
   /** Override redirect URL for OAuth (web origin or mobile deep link). */
   redirectTo?: string
   /**
+   * Fresh redirect each sign-in (Expo Go tunnel / LAN URL can change).
+   * Preferred over static `redirectTo` when both are set.
+   */
+  getRedirectTo?: () => string
+  /**
    * Native / Expo: open the OAuth URL in an auth session and return the
    * redirect URL on success (null if cancelled). When set, skipBrowserRedirect
    * is used and the session is created from the callback URL.
@@ -124,7 +129,12 @@ async function signInWithOAuthProvider(
   options: SupabaseAuthOptions,
 ): Promise<{ error: Error | null }> {
   if (!c) return { error: new Error('Supabase is not configured') }
-  const redirectTo = options.redirectTo
+  const redirectTo =
+    (typeof options.getRedirectTo === 'function'
+      ? options.getRedirectTo()
+      : '') ||
+    options.redirectTo ||
+    ''
   const useNative = typeof options.openAuthSession === 'function'
 
   console.log(`[auth] signInWith${provider} start`, {
@@ -310,7 +320,12 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
       if (!trimmed || !trimmed.includes('@')) {
         return { error: new Error('Email invalide') }
       }
-      const redirectTo = options.redirectTo
+      const redirectTo =
+        (typeof options.getRedirectTo === 'function'
+          ? options.getRedirectTo()
+          : '') ||
+        options.redirectTo ||
+        ''
       const { error } = await c.auth.signInWithOtp({
         email: trimmed,
         options: {

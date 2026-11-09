@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Text,
   FlatList,
@@ -78,7 +78,9 @@ const SKELETON_ITEMS: FavListItem[] = Array.from({ length: 3 }, (_, i) => ({
   __skeleton: true as const,
 }))
 
-const FAV_CACHE_KEY = 'fw_favorites_cache_v1'
+const FAV_CACHE_KEY = 'fw_favorites_cache_v2'
+/** Skip network if this collection was fetched recently (stale-while-revalidate). */
+const FAV_STALE_MS = 45_000
 
 type FavCachePayload = {
   favorites: SavedFavorite[]
@@ -88,6 +90,7 @@ type FavCachePayload = {
 }
 
 type FavReady = Record<FavCollection, boolean>
+type FavFetchedAt = Record<FavCollection, number>
 
 const READY_NONE: FavReady = {
   flights: false,
@@ -101,9 +104,40 @@ const READY_ALL: FavReady = {
   activities: true,
   parcours: true,
 }
+const FETCHED_NONE: FavFetchedAt = {
+  flights: 0,
+  deals: 0,
+  activities: 0,
+  parcours: 0,
+}
 
 /** Instant paint across remounts / tab revisits. */
 let favMemoryCache: FavCachePayload | null = null
+let favFetchedAtMemory: FavFetchedAt = { ...FETCHED_NONE }
+let favDiskBootstrapped = false
+
+function normalizeFavCache(parsed: Partial<FavCachePayload> | null): FavCachePayload {
+  return {
+    favorites: Array.isArray(parsed?.favorites) ? parsed!.favorites : [],
+    likedDeals: Array.isArray(parsed?.likedDeals) ? parsed!.likedDeals : [],
+    likedActivities: Array.isArray(parsed?.likedActivities)
+      ? parsed!.likedActivities
+      : [],
+    likedParcours: Array.isArray(parsed?.likedParcours)
+      ? parsed!.likedParcours
+      : [],
+  }
+}
+
+function collectionFromCache(
+  cache: FavCachePayload,
+  id: FavCollection,
+): unknown[] {
+  if (id === 'flights') return cache.favorites
+  if (id === 'deals') return cache.likedDeals
+  if (id === 'activities') return cache.likedActivities
+  return cache.likedParcours
+}
 
 function isSkeletonItem(
   item: FavListItem,
@@ -211,6 +245,9 @@ export function FavoritesScreen() {
       likedParcours: [],
     },
   )
+  /** Per-collection in-flight token — late responses for an older token are dropped. */
+  const fetchTokenRef = useRef<FavFetchedAt>({ ...FETCHED_NONE })
+  const fetchedAtRef = useRef<FavFetchedAt>({ ...favFetchedAtMemory })
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
   const [tab, setTab] = useState<FavCollection>('flights')
@@ -221,6 +258,7 @@ export function FavoritesScreen() {
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [addBusy, setAddBusy] = useState(false)
   const dateSortAvailable = tab === 'flights' || tab === 'deals'
+  const inflightRef = useRef<Partial<Record<FavCollection, Promise<void>>>>({})
 
   const markReady = useCallback((id: FavCollection) => {
     if (readyRef.current[id]) return
@@ -235,44 +273,100 @@ export function FavoritesScreen() {
     persistFavCache(next)
   }, [])
 
+  const applyDiskCache = useCallback(
+    (payload: FavCachePayload) => {
+      favMemoryCache = payload
+      cacheRef.current = payload
+      setFavorites(payload.favorites)
+      setLikedDeals(payload.likedDeals)
+      setLikedActivities(payload.likedActivities)
+      setLikedParcours(payload.likedParcours)
+      readyRef.current = READY_ALL
+      setReady(READY_ALL)
+    },
+    [],
+  )
+
   const fetchCollection = useCallback(
-    async (id: FavCollection) => {
-      const api = getApi()
-      try {
-        if (id === 'flights') {
-          const list = await api.getFavorites()
-          const next = Array.isArray(list) ? list : []
-          setFavorites(next)
-          patchCache({ favorites: next })
-        } else if (id === 'deals') {
-          const deals = await api.getLikedDeals()
-          const next = Array.isArray(deals) ? deals : []
-          setLikedDeals(next)
-          patchCache({ likedDeals: next })
-        } else if (id === 'activities') {
-          const acts = await api.getLikedActivities()
-          const next = Array.isArray(acts) ? acts : []
-          setLikedActivities(next)
-          patchCache({ likedActivities: next })
-        } else {
-          // Never .catch→[] : that wiped liked parcours when API/backend failed.
-          const parcoursRes = await api.listLikedItineraries()
-          if (!parcoursRes?.ok) {
-            throw new Error('Favoris parcours indisponibles')
-          }
-          const next = Array.isArray(parcoursRes.items) ? parcoursRes.items : []
-          setLikedParcours(next)
-          patchCache({ likedParcours: next })
-        }
-      } catch (e) {
-        if (id === tabRef.current) {
-          setError(
-            e instanceof Error ? e.message : translate('fr', 'favorites.empty'),
-          )
-        }
-        // Keep previous collection state on failure (do not clear to []).
-      } finally {
+    async (id: FavCollection, opts?: { force?: boolean }) => {
+      const force = Boolean(opts?.force)
+      const age = Date.now() - (fetchedAtRef.current[id] || 0)
+      const hasPaint =
+        Boolean(favMemoryCache) ||
+        collectionFromCache(cacheRef.current, id).length > 0 ||
+        readyRef.current[id]
+      // Fresh enough → keep cache, no network.
+      if (!force && fetchedAtRef.current[id] && age < FAV_STALE_MS) {
         markReady(id)
+        return
+      }
+      // Already fetching this collection — reuse.
+      const existing = inflightRef.current[id]
+      if (existing && !force) {
+        markReady(id)
+        await existing
+        return
+      }
+
+      const token = (fetchTokenRef.current[id] || 0) + 1
+      fetchTokenRef.current[id] = token
+
+      const run = (async () => {
+        const api = getApi()
+        try {
+          if (id === 'flights') {
+            const list = await api.getFavorites()
+            if (fetchTokenRef.current[id] !== token) return
+            const next = Array.isArray(list) ? list : []
+            setFavorites(next)
+            patchCache({ favorites: next })
+          } else if (id === 'deals') {
+            const deals = await api.getLikedDeals()
+            if (fetchTokenRef.current[id] !== token) return
+            const next = Array.isArray(deals) ? deals : []
+            setLikedDeals(next)
+            patchCache({ likedDeals: next })
+          } else if (id === 'activities') {
+            const acts = await api.getLikedActivities()
+            if (fetchTokenRef.current[id] !== token) return
+            const next = Array.isArray(acts) ? acts : []
+            setLikedActivities(next)
+            patchCache({ likedActivities: next })
+          } else {
+            // Never .catch→[] : that wiped liked parcours when API/backend failed.
+            const parcoursRes = await api.listLikedItineraries()
+            if (fetchTokenRef.current[id] !== token) return
+            if (!parcoursRes?.ok) {
+              throw new Error('Favoris parcours indisponibles')
+            }
+            const next = Array.isArray(parcoursRes.items) ? parcoursRes.items : []
+            setLikedParcours(next)
+            patchCache({ likedParcours: next })
+          }
+          if (fetchTokenRef.current[id] !== token) return
+          const now = Date.now()
+          fetchedAtRef.current[id] = now
+          favFetchedAtMemory[id] = now
+        } catch (e) {
+          if (fetchTokenRef.current[id] !== token) return
+          if (id === tabRef.current && !hasPaint) {
+            setError(
+              e instanceof Error
+                ? e.message
+                : translate('fr', 'favorites.empty'),
+            )
+          }
+          // Keep previous collection state on failure (do not clear to []).
+        } finally {
+          if (fetchTokenRef.current[id] === token) markReady(id)
+        }
+      })()
+
+      inflightRef.current[id] = run
+      try {
+        await run
+      } finally {
+        if (inflightRef.current[id] === run) delete inflightRef.current[id]
       }
     },
     [markReady, patchCache],
@@ -305,66 +399,94 @@ export function FavoritesScreen() {
         setLikedActivities(next.likedActivities)
         setLikedParcours([])
         patchCache(next)
+        const now = Date.now()
+        for (const c of COLLECTIONS) {
+          fetchedAtRef.current[c.id] = now
+          favFetchedAtMemory[c.id] = now
+        }
         readyRef.current = READY_ALL
         setReady(READY_ALL)
         setRefreshing(false)
         return
       }
 
-      // Progressive: each collection paints as soon as it returns (no Promise.all gate).
       const prefer = tabRef.current
       const rest = COLLECTIONS.map((c) => c.id).filter((id) => id !== prefer)
-      const preferP = fetchCollection(prefer)
-      const restP = rest.map((id) => fetchCollection(id))
-      await preferP
-      await Promise.all(restP)
+      const force = Boolean(opts?.pull)
+
+      // 1) Visible tab first — paints ASAP; cache hit = instant.
+      await fetchCollection(prefer, { force })
       setRefreshing(false)
+
+      // 2) Lazy warm other tabs after paint (stale check skips if fresh).
+      for (const id of rest) {
+        void fetchCollection(id, { force: false })
+      }
     },
     [viewUser, isGuest, fetchCollection, patchCache],
   )
 
+  const selectTab = useCallback(
+    (id: FavCollection) => {
+      setTab(id)
+      setArchiveOpen(false)
+      setSort(id === 'flights' || id === 'deals' ? 'date' : 'recent')
+      // Lazy: fetch only if cold/stale — never block on other collections.
+      if (viewUser && !(__DEV__ && isGuest)) {
+        // Show cache immediately if we have it.
+        if (
+          collectionFromCache(cacheRef.current, id).length > 0 ||
+          fetchedAtRef.current[id]
+        ) {
+          markReady(id)
+        }
+        void fetchCollection(id)
+      }
+    },
+    [viewUser, isGuest, fetchCollection, markReady],
+  )
+
+  // Cold start: disk → paint before / with network (never blocks fetch).
+  useEffect(() => {
+    if (favMemoryCache || favDiskBootstrapped) return
+    favDiskBootstrapped = true
+    let cancelled = false
+    void AsyncStorage.getItem(FAV_CACHE_KEY)
+      .then(async (raw) => {
+        // Migrate v1 disk cache once if v2 empty.
+        let payload = raw
+        if (!payload) {
+          payload = await AsyncStorage.getItem('fw_favorites_cache_v1')
+        }
+        if (cancelled || !payload || favMemoryCache) return
+        const hydrated = normalizeFavCache(
+          JSON.parse(payload) as Partial<FavCachePayload>,
+        )
+        const any =
+          hydrated.favorites.length +
+            hydrated.likedDeals.length +
+            hydrated.likedActivities.length +
+            hydrated.likedParcours.length >
+          0
+        if (!any) return
+        // Don't clobber a network response that already landed.
+        const networkWon = COLLECTIONS.some(
+          (c) => (fetchedAtRef.current[c.id] || 0) > 0,
+        )
+        if (networkWon) return
+        applyDiskCache(hydrated)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [applyDiskCache])
+
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false
-      ;(async () => {
-        // Disk cache → paint before network if memory was cold
-        if (!favMemoryCache) {
-          try {
-            const raw = await AsyncStorage.getItem(FAV_CACHE_KEY)
-            if (raw && !cancelled) {
-              const parsed = JSON.parse(raw) as FavCachePayload
-              if (parsed && typeof parsed === 'object') {
-                favMemoryCache = {
-                  favorites: Array.isArray(parsed.favorites)
-                    ? parsed.favorites
-                    : [],
-                  likedDeals: Array.isArray(parsed.likedDeals)
-                    ? parsed.likedDeals
-                    : [],
-                  likedActivities: Array.isArray(parsed.likedActivities)
-                    ? parsed.likedActivities
-                    : [],
-                  likedParcours: Array.isArray(parsed.likedParcours)
-                    ? parsed.likedParcours
-                    : [],
-                }
-                cacheRef.current = favMemoryCache
-                setFavorites(favMemoryCache.favorites)
-                setLikedDeals(favMemoryCache.likedDeals)
-                setLikedActivities(favMemoryCache.likedActivities)
-                setLikedParcours(favMemoryCache.likedParcours)
-                readyRef.current = READY_ALL
-                setReady(READY_ALL)
-              }
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-        if (!cancelled) void load()
-      })()
+      void load()
       return () => {
-        cancelled = true
+        setRefreshing(false)
       }
     }, [load]),
   )
@@ -725,13 +847,7 @@ export function FavoritesScreen() {
                   return (
                     <Pressable
                       key={id}
-                      onPress={() => {
-                        setTab(id)
-                        setArchiveOpen(false)
-                        setSort(
-                          id === 'flights' || id === 'deals' ? 'date' : 'recent',
-                        )
-                      }}
+                      onPress={() => selectTab(id)}
                       style={[styles.hubTab, on && styles.hubTabActive]}
                       accessibilityRole="tab"
                       accessibilityState={{ selected: on }}
@@ -748,27 +864,10 @@ export function FavoritesScreen() {
                 })}
               </View>
 
-              {!showSkeleton ? (
+              {!showSkeleton && dateSortAvailable ? (
                 <View style={styles.toolbar}>
-                  <View style={styles.toolbarCopy}>
-                    <Text style={styles.toolbarKicker}>
-                      {dateSortAvailable
-                        ? translate('fr', 'favorites.upcomingKicker')
-                        : translate('fr', 'favorites.savedKicker')}
-                    </Text>
-                    <Text style={styles.toolbarCount}>
-                      {activeItems.length === 0
-                        ? translate('fr', 'favorites.listCountZero')
-                        : translate('fr', 'favorites.listCount', {
-                            n: activeItems.length,
-                          })}
-                    </Text>
-                  </View>
                   <View style={styles.sortRow}>
-                    {(dateSortAvailable
-                      ? (['date', 'recent'] as const)
-                      : (['recent'] as const)
-                    ).map((id) => {
+                    {(['date', 'recent'] as const).map((id) => {
                       const on = effectiveSort === id
                       return (
                         <Pressable
@@ -1019,24 +1118,8 @@ const styles = StyleSheet.create({
   toolbar: {
     marginTop: spacing.lg,
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  toolbarCopy: { flex: 1, minWidth: 0 },
-  toolbarKicker: {
-    fontFamily: fonts.extrabold,
-    fontSize: 10,
-    letterSpacing: 0.8,
-    color: colors.muted,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-  },
-  toolbarCount: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    letterSpacing: -0.2,
-    color: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   sortRow: {
     flexDirection: 'row',

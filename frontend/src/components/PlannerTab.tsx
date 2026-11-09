@@ -175,7 +175,7 @@ function PlannerGuestLanding() {
       trigger: 'invite_friends',
       onAuthenticated: () => setSigningIn(false),
     })
-    setSigningIn(false)
+      setSigningIn(false)
   }
 
   return (
@@ -1551,38 +1551,38 @@ function TripDetailView({
       syncEditFromTrip(detail)
       if (!silent) setLoading(false)
 
-      const acceptedId =
-        detail.accepted_proposal?.id ||
-        (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
-        null
+        const acceptedId =
+          detail.accepted_proposal?.id ||
+          (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
+          null
 
       const withWorkspaceBooked = (
         draft: MyTripDraft,
         matched: TravelWorkspace | null,
       ): MyTripDraft => {
-        if (matched?.pipeline?.flight !== 'booked') return draft
-        const payload = (draft.payload || {}) as Record<string, unknown>
-        if (
-          draft.flight_booked_at ||
-          payload.flight_booked ||
-          draft.flight_booking_status === 'user_confirmed' ||
-          draft.flight_booking_status === 'partner_confirmed'
-        ) {
-          return draft
-        }
-        const now = new Date().toISOString()
-        return {
-          ...draft,
-          flight_booked_at: now,
-          flight_booking_status: 'user_confirmed',
-          payload: {
-            ...payload,
-            flight_booked: true,
+          if (matched?.pipeline?.flight !== 'booked') return draft
+          const payload = (draft.payload || {}) as Record<string, unknown>
+          if (
+            draft.flight_booked_at ||
+            payload.flight_booked ||
+            draft.flight_booking_status === 'user_confirmed' ||
+            draft.flight_booking_status === 'partner_confirmed'
+          ) {
+            return draft
+          }
+          const now = new Date().toISOString()
+          return {
+            ...draft,
             flight_booked_at: now,
             flight_booking_status: 'user_confirmed',
-          },
+            payload: {
+              ...payload,
+              flight_booked: true,
+              flight_booked_at: now,
+              flight_booking_status: 'user_confirmed',
+            },
+          }
         }
-      }
 
       // Secondary: workspace list + execution draft (non-blocking).
       void (async () => {
@@ -1591,34 +1591,34 @@ function TripDetailView({
           const matched =
             workspaces.find((item) => item.planned_trip_id === tripId) || null
           setWorkspace(matched)
-          if (matched?.draft_token) {
-            setFlightDraft(
-              withWorkspaceBooked(
-                await getApiClient().getMyTrip(matched.draft_token),
+        if (matched?.draft_token) {
+          setFlightDraft(
+            withWorkspaceBooked(
+              await getApiClient().getMyTrip(matched.draft_token),
                 matched,
-              ),
-            )
-          } else if (acceptedId) {
-            try {
-              const draft =
-                await getApiClient().getOrCreateExecutionDraft(acceptedId)
+            ),
+          )
+        } else if (acceptedId) {
+          try {
+            const draft =
+              await getApiClient().getOrCreateExecutionDraft(acceptedId)
               setFlightDraft(withWorkspaceBooked(draft, matched))
-            } catch {
-              setFlightDraft((prev) => prev)
-            }
-          } else {
-            setFlightDraft((prev) => {
-              const booked = Boolean(
-                prev?.flight_booked_at ||
-                  prev?.flight_booking_status === 'user_confirmed' ||
-                  prev?.flight_booking_status === 'partner_confirmed',
-              )
-              return booked ? prev : null
-            })
+          } catch {
+            setFlightDraft((prev) => prev)
           }
-        } catch {
-          // Keep current draft/workspace on transient workspace errors.
+        } else {
+          setFlightDraft((prev) => {
+            const booked = Boolean(
+              prev?.flight_booked_at ||
+                prev?.flight_booking_status === 'user_confirmed' ||
+                prev?.flight_booking_status === 'partner_confirmed',
+            )
+            return booked ? prev : null
+          })
         }
+      } catch {
+        // Keep current draft/workspace on transient workspace errors.
+      }
       })()
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : t('app.error'))

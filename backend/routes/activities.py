@@ -510,14 +510,44 @@ async def get_trip_items(
     draft_token: Optional[str] = None,
     planned_trip_id: Optional[str] = None,
 ):
-    from activities.access import resolve_owner_for_write
+    from activities.access import draft_id_from_token, resolve_owner_for_write
     from activities.trip_items import enrich_trip_items_photos, list_trip_items
 
     sb = _svc()
+    # Keep the raw draft before resolve remaps linked séjour → planned.
+    token_draft_id = (
+        draft_id_from_token(sb, draft_token) if draft_token else None
+    )
     draft_id, planned = resolve_owner_for_write(
         sb, request, draft_token=draft_token, planned_trip_id=planned_trip_id
     )
     items = list_trip_items(sb, draft_id=draft_id, planned_trip_id=planned)
+    own_ids = {str(item.get("id")) for item in items}
+
+    def _merge(extra: list, *, inherited: bool = False, from_draft: bool = False):
+        for item in extra:
+            iid = str(item.get("id") or "")
+            if not iid or iid in own_ids:
+                continue
+            own_ids.add(iid)
+            row = {**item}
+            if inherited:
+                row["inherited"] = True
+            if from_draft:
+                row["from_draft"] = True
+            items.append(row)
+
+    # resolve remapped draft→planned: still surface that draft's own rows.
+    if planned and token_draft_id and str(token_draft_id) != str(draft_id or ""):
+        try:
+            _merge(
+                list_trip_items(sb, draft_id=str(token_draft_id)),
+                inherited=True,
+                from_draft=True,
+            )
+        except Exception:
+            pass
+
     # Draft → Planner: personal séjour inherits collaborative ideas (read-only).
     if draft_id and not planned:
         try:
@@ -534,18 +564,14 @@ async def get_trip_items(
                 else None
             )
             if source_trip_id:
-                inherited = list_trip_items(sb, planned_trip_id=source_trip_id)
-                own_ids = {str(item.get("id")) for item in items}
-                items.extend(
-                    {**item, "inherited": True}
-                    for item in inherited
-                    if str(item.get("id")) not in own_ids
+                _merge(
+                    list_trip_items(sb, planned_trip_id=source_trip_id),
+                    inherited=True,
                 )
         except Exception:
             pass
-    # Planner → Draft: ideas added while bound to a linked draft must still
-    # appear on the Planner (symmetric inherit).
-    if planned and not draft_id:
+    # Planner → Draft: ideas on any linked draft must appear on the Planner.
+    if planned:
         try:
             linked = (
                 sb.table("my_trip_drafts")
@@ -554,18 +580,17 @@ async def get_trip_items(
                 .limit(20)
                 .execute()
             )
-            own_ids = {str(item.get("id")) for item in items}
             for row in linked.data or []:
                 linked_draft_id = row.get("id")
                 if not linked_draft_id:
                     continue
-                extras = list_trip_items(sb, draft_id=str(linked_draft_id))
-                for item in extras:
-                    iid = str(item.get("id"))
-                    if iid in own_ids:
-                        continue
-                    own_ids.add(iid)
-                    items.append({**item, "inherited": True, "from_draft": True})
+                if token_draft_id and str(linked_draft_id) == str(token_draft_id):
+                    continue
+                _merge(
+                    list_trip_items(sb, draft_id=str(linked_draft_id)),
+                    inherited=True,
+                    from_draft=True,
+                )
         except Exception:
             pass
     items = enrich_trip_items_photos(sb, items)

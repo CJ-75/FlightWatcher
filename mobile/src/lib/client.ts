@@ -61,6 +61,7 @@ function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
   }
 
   // Expo Go — optional HTTPS bridge (Cloudflare). Not reliable for sign-off.
+  // Recompute every call: Expo LAN / tunnel host can change without Metro restart.
   const publicOrigin = env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN')?.replace(/\/$/, '')
   const expoLink = Linking.createURL('auth/callback')
   if (publicOrigin) {
@@ -78,20 +79,27 @@ function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
   }
 }
 
-const resolved = resolveRedirectTo()
-export const redirectTo = resolved.redirectTo
-export const appDeepLink =
-  Constants.appOwnership === 'expo'
-    ? Linking.createURL('auth/callback')
-    : 'flightwatcher://auth/callback'
-export const authRedirectWarning = resolved.warning
+/** Fresh each call — do not cache across Expo tunnel / LAN host changes. */
+export function getRedirectTo(): string {
+  return resolveRedirectTo().redirectTo
+}
+
+export function getAppDeepLink(): string {
+  if (Constants.appOwnership !== 'expo') return 'flightwatcher://auth/callback'
+  return Linking.createURL('auth/callback')
+}
+
+/** @deprecated Prefer getRedirectTo() — kept for boot logs / AuthContext. */
+export const redirectTo = getRedirectTo()
+export const appDeepLink = getAppDeepLink()
+export const authRedirectWarning = resolveRedirectTo().warning
 
 if (__DEV__) {
   console.log('[auth] boot env', {
     EXPO_PUBLIC_API_URL: env('EXPO_PUBLIC_API_URL') ?? null,
     EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN: env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN') ?? null,
     EXPO_PUBLIC_WEB_ORIGIN: env('EXPO_PUBLIC_WEB_ORIGIN') ?? null,
-    redirectTo,
+    redirectTo: getRedirectTo(),
     appOwnership: Constants.appOwnership,
   })
   if (Constants.appOwnership === 'expo' && !env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN')) {
@@ -116,7 +124,7 @@ function describeAuthorizeUrl(authUrl: string) {
     return {
       redirect_to: redirect,
       has_code_challenge: u.searchParams.has('code_challenge'),
-      matches_app_redirect: redirect === redirectTo,
+      matches_app_redirect: redirect === getRedirectTo(),
       has_lan_ip: !!redirect && LAN_IP_IN_URL.test(redirect),
       looksLikeLocalhost: !!redirect?.includes('localhost'),
     }
@@ -151,19 +159,18 @@ function isAuthCallback(url: string): boolean {
   )
 }
 
-/** Always watch for the native deep link (exp:// / flightwatcher://), even when
- * Supabase redirectTo is the HTTPS Cloudflare bridge — the HTML page then
- * navigates to appDeepLink and ASWebAuthenticationSession captures it. */
-function authSessionReturnUrl(): string {
-  return appDeepLink
-}
-
-async function openOAuthSession(authUrl: string): Promise<string | null> {
+async function openOAuthSession(
+  authUrl: string,
+  _redirectTo?: string,
+): Promise<string | null> {
+  // Fresh deep link each attempt — Expo host can change without restarting Metro.
+  const watchDeepLink = getAppDeepLink()
   authLog('—— openOAuthSession ——')
   authLog('appOwnership=', Constants.appOwnership)
-  authLog('redirectTo (Supabase)=', redirectTo)
-  authLog('watch deep link=', authSessionReturnUrl())
-  if (authRedirectWarning) authWarn('CONFIG', authRedirectWarning)
+  authLog('redirectTo (Supabase)=', _redirectTo || getRedirectTo())
+  authLog('watch deep link=', watchDeepLink)
+  const warning = resolveRedirectTo().warning
+  if (warning) authWarn('CONFIG', warning)
   authLog('authorize=', describeAuthorizeUrl(authUrl))
 
   return new Promise((resolve) => {
@@ -217,7 +224,7 @@ async function openOAuthSession(authUrl: string): Promise<string | null> {
 
     // Watch for exp:// deep link produced by /auth/mobile-callback
     authLog('openAuthSessionAsync (HTTPS bridge → deep link)')
-    void WebBrowser.openAuthSessionAsync(authUrl, authSessionReturnUrl(), {
+    void WebBrowser.openAuthSessionAsync(authUrl, watchDeepLink, {
       showInRecents: true,
       preferEphemeralSession: false,
     })
@@ -248,8 +255,8 @@ async function openOAuthSession(authUrl: string): Promise<string | null> {
 
 export const auth = createSupabaseAuth({
   apiBaseUrl: apiBase,
-  redirectTo,
-  openAuthSession: async (url) => openOAuthSession(url),
+  getRedirectTo,
+  openAuthSession: async (url, redirect) => openOAuthSession(url, redirect),
   authOptions: {
     detectSessionInUrl: false,
     persistSession: true,

@@ -478,33 +478,63 @@ export function TripDetailScreen() {
           const t = String(i.item_type || 'activity')
           return t === 'activity' || t === 'restaurant'
         })
-        .map((i) => ({
-          id: i.id != null ? String(i.id) : undefined,
-          item_type: (i.item_type as string | undefined) ?? 'activity',
-          title: (i.title as string | null | undefined) ?? null,
-          name: (i.name as string | null | undefined) ?? null,
-          day_offset:
-            i.day_offset == null ? null : Number(i.day_offset),
-          moment: (i.moment as string | null | undefined) ?? null,
-          notes: (i.notes as string | null | undefined) ?? null,
-          status: (i.status as string | null | undefined) ?? null,
-        }))
+        .map((i) => {
+          const places = i.places as
+            | { name?: string; meta?: Record<string, unknown> | null }
+            | Array<{ name?: string; meta?: Record<string, unknown> | null }>
+            | null
+            | undefined
+          const place = Array.isArray(places) ? places[0] : places
+          const meta = (i.meta || {}) as Record<string, unknown>
+          const title =
+            (typeof i.title === 'string' && i.title.trim()) ||
+            (typeof place?.name === 'string' && place.name.trim()) ||
+            (typeof meta.title === 'string' && meta.title.trim()) ||
+            null
+          return {
+            id: i.id != null ? String(i.id) : undefined,
+            item_type: (i.item_type as string | undefined) ?? 'activity',
+            title,
+            name: place?.name ?? (typeof i.name === 'string' ? i.name : null),
+            day_offset:
+              i.day_offset == null ? null : Number(i.day_offset),
+            moment: (i.moment as string | null | undefined) ?? null,
+            notes: (i.notes as string | null | undefined) ?? null,
+            status: (i.status as string | null | undefined) ?? null,
+          }
+        })
 
     void (async () => {
       try {
-        let items: Record<string, unknown>[] = []
+        const jobs: Promise<Record<string, unknown>[]>[] = []
         if (tripId) {
-          const res = await getApi().listTripItems({ planned_trip_id: tripId })
-          if (cancelled) return
-          items = (res.items || []) as Record<string, unknown>[]
+          jobs.push(
+            getApi()
+              .listTripItems({ planned_trip_id: tripId })
+              .then((res) => (res.items || []) as Record<string, unknown>[])
+              .catch(() => [] as Record<string, unknown>[]),
+          )
         }
-        if (!items.length && token) {
-          const res = await getApi().listTripItems({ draft_token: token })
-          if (cancelled) return
-          items = (res.items || []) as Record<string, unknown>[]
+        if (token) {
+          jobs.push(
+            getApi()
+              .listTripItems({ draft_token: token })
+              .then((res) => (res.items || []) as Record<string, unknown>[])
+              .catch(() => [] as Record<string, unknown>[]),
+          )
         }
+        if (!jobs.length) return
+        const chunks = await Promise.all(jobs)
         if (cancelled) return
-        const rows = asActivityRows(items)
+        const byId = new Map<string, Record<string, unknown>>()
+        for (const list of chunks) {
+          for (const it of list) {
+            const id = it.id != null ? String(it.id) : ''
+            if (!id || byId.has(id)) continue
+            byId.set(id, it)
+          }
+        }
+        const rows = asActivityRows(Array.from(byId.values()))
         if (rows.length === 0) return
         onActivityItemsChange(rows)
       } catch {

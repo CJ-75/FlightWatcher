@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
+import Svg, { Circle, Path } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   TRAVEL_PREFERENCE_CARDS,
@@ -76,28 +77,110 @@ const PROMISE_FEATURES = [
   },
 ] as const
 
-const HOW_IT_WORKS = [
+type HowIconId = 'parcours' | 'sejours' | 'activites' | 'planner'
+
+const HOW_IT_WORKS: {
+  id: HowIconId
+  title: string
+  detail: string
+  photo: string
+}[] = [
   {
+    id: 'parcours',
     title: 'Parcours',
     detail: 'Balades et week-ends choisis, étape par étape.',
     photo: `https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
+    id: 'sejours',
     title: 'Séjours',
     detail: 'Vol + hôtel au bon prix, prêts à réserver.',
     photo: `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
+    id: 'activites',
     title: 'Activités',
     detail: 'Que faire sur place, dès que ta ville est claire.',
     photo: `https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
+    id: 'planner',
     title: 'Planner',
     detail: 'Ton voyage en un lieu — solo ou à plusieurs.',
     photo: `https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
-] as const
+]
+
+function HowIcon({ id, color }: { id: HowIconId; color: string }) {
+  if (id === 'parcours') {
+    return (
+      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M4 19c2.5-1 4-3.2 4-6s-1.5-5-4-6"
+          stroke={color}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+        <Path
+          d="M20 19c-2.5-1-4-3.2-4-6s1.5-5 4-6"
+          stroke={color}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+        <Path
+          d="M8 13h8"
+          stroke={color}
+          strokeWidth={1.8}
+          strokeLinecap="round"
+        />
+        <Circle cx="12" cy="13" r="2.2" stroke={color} strokeWidth={1.8} />
+      </Svg>
+    )
+  }
+  if (id === 'sejours') {
+    return (
+      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"
+          stroke={color}
+          strokeWidth={1.75}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    )
+  }
+  if (id === 'activites') {
+    return (
+      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="2.75" stroke={color} strokeWidth={1.75} />
+        <Path
+          d="M12 3.5v2.5M12 18v2.5M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M3.5 12h2.5M18 12h2.5M4.8 19.2l1.8-1.8M17.4 6.6l1.8-1.8"
+          stroke={color}
+          strokeWidth={1.75}
+          strokeLinecap="round"
+        />
+      </Svg>
+    )
+  }
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M7 3.5h10a2 2 0 012 2V20l-3.2-1.6L12 20l-3.8-1.6L5 20V5.5a2 2 0 012-2z"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9 8.5h6M9 12h6M9 15.5h4"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+      />
+    </Svg>
+  )
+}
 
 /** Bandeau « Tu voyages plutôt… » (Fn27DlI8bZ8). */
 const PREF_HERO_PHOTO =
@@ -385,20 +468,25 @@ export function OnboardingFlowScreen({ onDone }: Props) {
                 </Text>
               </View>
 
-              <View style={[styles.howPath, shadow.soft]}>
+              <View style={styles.howStack}>
                 {HOW_IT_WORKS.map((f, i) => (
-                  <View key={f.title} style={styles.howPathStep}>
-                    <View style={styles.howPathRail}>
-                      <View style={styles.howPathDot}>
-                        <Text style={styles.howPathDotText}>{i + 1}</Text>
+                  <View key={f.id} style={[styles.howCard, shadow.soft]}>
+                    <ImageBackground
+                      source={{ uri: f.photo }}
+                      style={styles.howCardPhoto}
+                      imageStyle={styles.howCardPhotoImg}
+                    />
+                    <View style={styles.howCardBody}>
+                      <View style={styles.howCardTop}>
+                        <View style={styles.howIconWrap}>
+                          <HowIcon id={f.id} color={colors.primaryDeep} />
+                        </View>
+                        <Text style={styles.howCardIndex}>0{i + 1}</Text>
                       </View>
-                      {i < HOW_IT_WORKS.length - 1 ? (
-                        <View style={styles.howPathLine} />
-                      ) : null}
-                    </View>
-                    <View style={styles.howPathCopy}>
-                      <Text style={styles.howPathTitle}>{f.title}</Text>
-                      <Text style={styles.howPathDetail}>{f.detail}</Text>
+                      <Text style={styles.howCardTitle}>{f.title}</Text>
+                      <Text style={styles.howCardDetail} numberOfLines={2}>
+                        {f.detail}
+                      </Text>
                     </View>
                   </View>
                 ))}
@@ -741,91 +829,93 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   howHeader: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   howEyebrow: {
     fontFamily: fonts.bold,
     fontSize: 10,
     letterSpacing: 1.6,
     color: colors.primary,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   howTitle: {
     fontFamily: fonts.extrabold,
-    fontSize: 28,
-    lineHeight: 32,
-    letterSpacing: -0.8,
-    color: colors.ink,
-    marginBottom: 6,
-  },
-  howLead: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.muted,
-    maxWidth: 320,
-  },
-  howPath: {
-    flex: 1,
-    minHeight: 0,
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 10,
-  },
-  howPathStep: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 14,
-    minHeight: 0,
-  },
-  howPathRail: {
-    width: 32,
-    alignItems: 'center',
-  },
-  howPathDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  howPathDotText: {
-    fontFamily: fonts.extrabold,
-    fontSize: 13,
-    color: '#FFF9F5',
-  },
-  howPathLine: {
-    flex: 1,
-    width: 2,
-    marginTop: 6,
-    marginBottom: 6,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-  },
-  howPathCopy: {
-    flex: 1,
-    minWidth: 0,
-    paddingTop: 4,
-    paddingBottom: 12,
-    justifyContent: 'flex-start',
-  },
-  howPathTitle: {
-    fontFamily: fonts.extrabold,
-    fontSize: 18,
-    letterSpacing: -0.3,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.7,
     color: colors.ink,
     marginBottom: 4,
   },
-  howPathDetail: {
+  howLead: {
     fontFamily: fonts.regular,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+    maxWidth: 320,
+  },
+  howStack: {
+    flex: 1,
+    minHeight: 0,
+    gap: 8,
+  },
+  howCard: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: 'hidden',
+  },
+  howCardPhoto: {
+    width: 92,
+    alignSelf: 'stretch',
+    backgroundColor: colors.primaryMuted,
+  },
+  howCardPhotoImg: {
+    width: '100%',
+    height: '100%',
+  },
+  howCardBody: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+    gap: 3,
+  },
+  howCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  howIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  howCardIndex: {
+    fontFamily: fonts.extrabold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    color: colors.primary,
+  },
+  howCardTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 16,
+    letterSpacing: -0.2,
+    color: colors.ink,
+  },
+  howCardDetail: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.muted,
   },
   cityHero: {

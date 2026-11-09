@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Airport, DealOccasionChip, TravelDeal } from '@flightwatcher/shared'
 import {
   airportSelectionLabel,
+  applyDealOccasionCountsFromWall,
   DEAL_INSPIRE_HIDDEN,
   DEAL_INSPIRE_SEED,
   dealStartStillUpcoming,
@@ -196,6 +197,53 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
     setFiltersOpen(false)
   }, [origin, adults])
 
+  const chipsHaveCounts = useCallback((chips: DealOccasionChip[]) => {
+    return chips.some((c) => typeof c.count === 'number' && c.count > 0)
+  }, [])
+
+  const loadOccasions = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      // Keep seed visible; only show count skeletons on cold start.
+      if (!opts?.silent) setOccasionCountsPending(true)
+      try {
+        const res = await getApi().getDealOccasions({
+          origin: queryOrigin || undefined,
+          adults: queryAdults,
+          duration: durationTab,
+        })
+        const seen = new Set<string>()
+        const all: DealOccasionChip[] = []
+        for (const c of [...(res?.main || []), ...(res?.more || [])]) {
+          if (!c?.slug || seen.has(c.slug) || DEAL_INSPIRE_HIDDEN.has(c.slug))
+            continue
+          if (typeof c.count === 'number' && c.count <= 0) continue
+          seen.add(c.slug)
+          all.push(c)
+        }
+        const ordered = applyDealOccasionCountsFromWall(
+          mergeDealOccasionChips(all),
+          dealsRef.current,
+        )
+        setOccasionChips(ordered)
+        setOccasion((prev) => {
+          if (!prev) return null
+          return ordered.some((c) => c.slug === prev) ? prev : null
+        })
+      } catch {
+        // Keep seed chips — fill counts from the wall when possible.
+        setOccasionChips((prev) =>
+          applyDealOccasionCountsFromWall(
+            prev.length ? prev : [...DEAL_INSPIRE_SEED],
+            dealsRef.current,
+          ),
+        )
+      } finally {
+        setOccasionCountsPending(false)
+      }
+    },
+    [queryOrigin, queryAdults, durationTab],
+  )
+
   const load = useCallback(
     async (opts?: {
       refresh?: boolean
@@ -224,48 +272,14 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
           setHasMore(false)
           return
         }
-        const listPromise = getApi().getDeals({
+        if (!more) void refreshLikes()
+        const list = await getApi().getDeals({
           origin: queryOrigin || undefined,
           adults: queryAdults,
           occasion: occasion || undefined,
           duration: durationTab,
           limit,
         })
-        if (!more) {
-          void refreshLikes()
-          setOccasionCountsPending(true)
-          void getApi()
-            .getDealOccasions({
-              origin: queryOrigin || undefined,
-              adults: queryAdults,
-              duration: durationTab,
-            })
-            .then((res) => {
-              const seen = new Set<string>()
-              const all: DealOccasionChip[] = []
-              for (const c of [...(res?.main || []), ...(res?.more || [])]) {
-                if (!c?.slug || seen.has(c.slug) || DEAL_INSPIRE_HIDDEN.has(c.slug))
-                  continue
-                if (typeof c.count === 'number' && c.count <= 0) continue
-                seen.add(c.slug)
-                all.push(c)
-              }
-              const ordered = mergeDealOccasionChips(all)
-              setOccasionChips(ordered)
-              setOccasion((prev) => {
-                if (!prev) return null
-                return ordered.some((c) => c.slug === prev) ? prev : null
-              })
-            })
-            .catch(() => {
-              // Keep seed chips — never wipe the inspire rail on error
-              setOccasionChips((prev) =>
-                prev.length ? prev : [...DEAL_INSPIRE_SEED],
-              )
-            })
-            .finally(() => setOccasionCountsPending(false))
-        }
-        const list = await listPromise
         const raw = Array.isArray(list) ? list : []
         const withHotelPhoto = raw.filter((d) => {
           if (!d.hotel?.photo && !(d.image_url && String(d.image_url).trim()))
@@ -275,6 +289,14 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         setDeals(withHotelPhoto)
         dealsMemoryCache = withHotelPhoto
         rememberDealPreviews(withHotelPhoto)
+        // Instant counts from the wall — don't wait for /occasions.
+        if (!more) {
+          setOccasionChips((prev) => {
+            const next = applyDealOccasionCountsFromWall(prev, withHotelPhoto)
+            if (chipsHaveCounts(next)) setOccasionCountsPending(false)
+            return next
+          })
+        }
         void AsyncStorage.setItem(
           DEALS_CACHE_KEY,
           JSON.stringify(withHotelPhoto.slice(0, 48)),
@@ -294,17 +316,26 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         setLoadingMore(false)
       }
     },
-    [refreshLikes, queryOrigin, queryAdults, occasion, durationTab, uiEnabled],
+    [
+      refreshLikes,
+      queryOrigin,
+      queryAdults,
+      occasion,
+      durationTab,
+      uiEnabled,
+      chipsHaveCounts,
+    ],
   )
 
-  // Paint header + skeleton first, then fetch (after origin hydrate)
+  // Wall + chips in parallel as soon as origin is ready.
   useEffect(() => {
     if (!originReady) return
     setFetchLimit(DEALS_PAGE)
     setHasMore(false)
     let cancelled = false
     const timer = setTimeout(() => {
-      if (!cancelled) void load({ force: true, limit: DEALS_PAGE })
+      if (cancelled) return
+      void load({ force: true, limit: DEALS_PAGE })
     }, 0)
     return () => {
       cancelled = true
@@ -312,6 +343,21 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
   }, [originReady, queryOrigin, queryAdults, occasion, durationTab])
+
+  // Occasions independent of chip selection — silent refresh when counts already shown.
+  useEffect(() => {
+    if (!originReady) return
+    let cancelled = false
+    const silent = chipsHaveCounts(occasionChips)
+    const timer = setTimeout(() => {
+      if (!cancelled) void loadOccasions({ silent })
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- not on occasion / occasionChips
+  }, [originReady, queryOrigin, queryAdults, durationTab, loadOccasions])
 
   const loadMore = useCallback(() => {
     if (loadingMore || loading || !hasMore) return
@@ -487,7 +533,12 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
                   <Pressable
                     key={id}
                     onPress={() => setDurationTab(id)}
-                    style={[styles.chip, durationTab === id && styles.chipInk]}
+                    android_ripple={{ color: colors.primaryMuted }}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      durationTab === id && styles.chipActive,
+                      pressed && durationTab !== id && styles.chipPressed,
+                    ]}
                   >
                     <Text
                       style={[
@@ -528,7 +579,12 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
                         onPress={() =>
                           setOccasion((prev) => (prev === f.slug ? null : f.slug))
                         }
-                        style={[styles.occasionCard, on && styles.occasionCardOn]}
+                        android_ripple={{ color: colors.primaryMuted }}
+                        style={({ pressed }) => [
+                          styles.occasionCard,
+                          on && styles.occasionCardOn,
+                          pressed && !on && styles.occasionCardPressed,
+                        ]}
                       >
                         <View
                           style={[styles.occasionIcon, on && styles.occasionIconOn]}
@@ -537,7 +593,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
                             icon={f.icon}
                             slug={f.slug}
                             size={18}
-                            color={on ? '#F5EFEA' : colors.primary}
+                            color={on ? colors.white : colors.primary}
                           />
                         </View>
                         <Text
@@ -862,10 +918,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 6,
+    overflow: 'hidden',
   },
   occasionCardOn: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  occasionCardPressed: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryMuted,
   },
   occasionIcon: {
     width: 34,
@@ -877,7 +938,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   occasionIconOn: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   occasionLabel: {
     fontFamily: fonts.extrabold,
@@ -886,7 +947,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   occasionLabelOn: {
-    color: '#F5EFEA',
+    color: colors.white,
   },
   occasionCount: {
     fontFamily: fonts.semibold,
@@ -894,7 +955,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   occasionCountOn: {
-    color: 'rgba(245,239,234,0.85)',
+    color: 'rgba(255,255,255,0.88)',
   },
   occasionCountSk: {
     marginTop: 2,
@@ -904,7 +965,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryMuted,
   },
   occasionCountSkOn: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
   occasionExplain: {
     marginTop: 10,
@@ -940,14 +1001,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    overflow: 'hidden',
   },
   chipActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  chipInk: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+  chipPressed: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryMuted,
   },
   chipText: {
     fontFamily: fonts.bold,
