@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("activities.itineraries_catalog")
 
@@ -19,6 +20,11 @@ DETAIL_SELECT = (
     f"{PUBLIC_COLS}, "
     "itinerary_items(*, places(id,name,kind,city_slug,location_precision,meta))"
 )
+
+# Short TTL — demo/admin edits visible within a minute without write-path invalidation.
+_CACHE_TTL_SEC = 60.0
+_list_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_detail_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
 # Unsplash covers (mobile-friendly) — aligned with packages/shared cityUnsplash.ts
 _CITY_COVER_FALLBACK = {
@@ -46,6 +52,27 @@ def _allow_demo() -> bool:
         "yes",
         "on",
     )
+
+
+def _cache_get(store: Dict[str, Tuple[float, Dict[str, Any]]], key: str) -> Optional[Dict[str, Any]]:
+    hit = store.get(key)
+    if not hit:
+        return None
+    expires_at, payload = hit
+    if time.monotonic() >= expires_at:
+        store.pop(key, None)
+        return None
+    return payload
+
+
+def _cache_set(store: Dict[str, Tuple[float, Dict[str, Any]]], key: str, payload: Dict[str, Any]) -> None:
+    store[key] = (time.monotonic() + _CACHE_TTL_SEC, payload)
+
+
+def clear_itineraries_catalog_cache() -> None:
+    """Optional hook for admin writes — TTL alone is enough for demo."""
+    _list_cache.clear()
+    _detail_cache.clear()
 
 
 def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -92,6 +119,15 @@ def list_published_itineraries(
         return {"ok": False, "itineraries": [], "error": "no_supabase"}
     lim = max(1, min(int(limit or 40), 100))
     demo = _allow_demo() if include_demo is None else bool(include_demo)
+    cache_key = (
+        f"list|demo={int(demo)}|city={city or ''}|occ={occasion or ''}|"
+        f"feat={int(featured)}|lim={lim}"
+    )
+    cached = _cache_get(_list_cache, cache_key)
+    if cached is not None:
+        logger.info("list_published_itineraries cache_hit key=%s", cache_key)
+        return cached
+    t0 = time.perf_counter()
     try:
         q = (
             supabase.table("itineraries")
@@ -113,7 +149,14 @@ def list_published_itineraries(
             q = q.eq("is_demo", False)
         res = q.execute()
         rows = [_serialize(r) for r in (res.data or [])]
-        return {"ok": True, "itineraries": rows}
+        out = {"ok": True, "itineraries": rows}
+        _cache_set(_list_cache, cache_key, out)
+        logger.info(
+            "list_published_itineraries cache_miss ms=%.0f n=%s",
+            (time.perf_counter() - t0) * 1000,
+            len(rows),
+        )
+        return out
     except Exception as e:
         logger.warning("list_published_itineraries: %s", e)
         return {"ok": False, "itineraries": [], "error": str(e)}
@@ -131,6 +174,14 @@ def get_published_itinerary(
     if not itinerary_id and not slug:
         return {"ok": False, "error": "missing_id"}
     demo = _allow_demo() if include_demo is None else bool(include_demo)
+    slug_norm = str(slug).strip().lower() if slug else None
+    id_norm = str(itinerary_id).strip() if itinerary_id else None
+    cache_key = f"detail|demo={int(demo)}|slug={slug_norm or ''}|id={id_norm or ''}"
+    cached = _cache_get(_detail_cache, cache_key)
+    if cached is not None:
+        logger.info("get_published_itinerary cache_hit key=%s", cache_key)
+        return cached
+    t0 = time.perf_counter()
     try:
         q = (
             supabase.table("itineraries")
@@ -138,17 +189,39 @@ def get_published_itinerary(
             .eq("status", "published")
             .limit(1)
         )
-        if slug:
-            q = q.eq("slug", str(slug).strip().lower())
+        if slug_norm:
+            q = q.eq("slug", slug_norm)
         else:
-            q = q.eq("id", itinerary_id)
+            q = q.eq("id", id_norm)
         res = q.execute()
         if not res.data:
             return {"ok": False, "error": "not_found"}
         row = _serialize(res.data[0])
         if row.get("is_demo") and not demo:
             return {"ok": False, "error": "not_found"}
-        return {"ok": True, "itinerary": row}
+        out = {"ok": True, "itinerary": row}
+        _cache_set(_detail_cache, cache_key, out)
+        # Also index by the other key so slug/id lookups share the warm entry.
+        alt_slug = str(row.get("slug") or "").strip().lower()
+        alt_id = str(row.get("id") or "").strip()
+        if alt_slug and (not slug_norm or slug_norm != alt_slug):
+            _cache_set(
+                _detail_cache,
+                f"detail|demo={int(demo)}|slug={alt_slug}|id=",
+                out,
+            )
+        if alt_id and (not id_norm or id_norm != alt_id):
+            _cache_set(
+                _detail_cache,
+                f"detail|demo={int(demo)}|slug=|id={alt_id}",
+                out,
+            )
+        logger.info(
+            "get_published_itinerary cache_miss ms=%.0f slug=%s",
+            (time.perf_counter() - t0) * 1000,
+            alt_slug or slug_norm,
+        )
+        return out
     except Exception as e:
         logger.warning("get_published_itinerary: %s", e)
         return {"ok": False, "error": str(e)}

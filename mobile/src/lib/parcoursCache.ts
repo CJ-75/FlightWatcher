@@ -1,10 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Itinerary } from '@flightwatcher/shared'
+import { getApi } from './client'
 
 const CATALOG_KEY = 'fw_parcours_catalog_v1'
 
 let catalogMemory: Itinerary[] | null = null
 const detailMemory = new Map<string, Itinerary>()
+/** In-flight detail fetches — catalog prefetch + detail screen share one HTTP. */
+const detailInflight = new Map<string, Promise<Itinerary>>()
 
 export function getParcoursCatalogMemory(): Itinerary[] | null {
   return catalogMemory
@@ -56,4 +59,38 @@ export function rememberParcoursPreview(it: Partial<Itinerary> & { id: string })
     delete row.itinerary_items
   }
   setParcoursDetailMemory(row)
+}
+
+function hasSteps(it: Itinerary | null | undefined): boolean {
+  return Array.isArray(it?.itinerary_items) && it!.itinerary_items!.length > 0
+}
+
+/**
+ * Memory + singleflight getParcours — catalog open and detail screen share one request.
+ */
+export function getParcoursCached(idOrSlug: string): Promise<Itinerary> {
+  const key = String(idOrSlug || '').trim()
+  if (!key) return Promise.reject(new Error('missing_id'))
+
+  const mem = getParcoursDetailMemory(key)
+  if (hasSteps(mem)) return Promise.resolve(mem!)
+
+  const pending = detailInflight.get(key)
+  if (pending) return pending
+
+  const req = getApi()
+    .getParcours(key)
+    .then((r) => {
+      if (!r.ok || !r.itinerary) throw new Error('not_found')
+      const row = r.itinerary as unknown as Itinerary
+      if (hasSteps(row)) setParcoursDetailMemory(row)
+      return row
+    })
+    .finally(() => {
+      detailInflight.delete(key)
+    })
+
+  detailInflight.set(key, req)
+  // Same promise under id+slug once resolved is handled via detailMemory keys.
+  return req
 }

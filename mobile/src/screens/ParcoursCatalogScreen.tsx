@@ -21,11 +21,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
 import {
+  getParcoursCached,
   getParcoursCatalogMemory,
   hydrateParcoursCatalogMemory,
   rememberParcoursPreview,
   setParcoursCatalogMemory,
-  setParcoursDetailMemory,
 } from '../lib/parcoursCache'
 import { FwKicker } from '../components/FwKicker'
 import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
@@ -108,6 +108,11 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
     }
   }, [load])
 
+  // Warm Metro chunk before first tap (cold open was ~700–800ms).
+  useEffect(() => {
+    void import('./ItineraryDetailScreen')
+  }, [])
+
   useEffect(() => {
     void AsyncStorage.setItem(CITY_LS, city)
   }, [city])
@@ -132,19 +137,9 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
 
   const open = (it: Itinerary) => {
     rememberParcoursPreview(it)
-    // Prefetch detail while pushing the screen (detail screen also fetches;
-    // cache lets it paint steps if this wins the race).
-    void getApi()
-      .getParcours(it.slug || it.id)
-      .then((r) => {
-        if (r.ok && r.itinerary) {
-          const row = r.itinerary as unknown as Itinerary
-          if (Array.isArray(row.itinerary_items) && row.itinerary_items.length) {
-            setParcoursDetailMemory(row)
-          }
-        }
-      })
-      .catch(() => {})
+    const idOrSlug = it.slug || it.id
+    // Singleflight: detail screen awaits the same promise (one HTTP).
+    void getParcoursCached(idOrSlug).catch(() => {})
     void getApi()
       .trackActivityEvent({
         domain: 'itinerary',
@@ -155,7 +150,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       })
       .catch(() => {})
     navigation.navigate('ItineraryDetail', {
-      itineraryId: it.slug || it.id,
+      itineraryId: idOrSlug,
       preview: {
         id: it.id,
         slug: it.slug,

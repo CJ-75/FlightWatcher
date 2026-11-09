@@ -28,8 +28,8 @@ import {
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
 import {
+  getParcoursCached,
   getParcoursDetailMemory,
-  setParcoursDetailMemory,
 } from '../lib/parcoursCache'
 import { coverUri } from '../lib/coverUri'
 import { useAuth } from '../context/AuthContext'
@@ -131,28 +131,10 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     const needFetch = !hasSteps(boot)
     if (needFetch) setLoadingSteps(true)
 
-    // Prefetch from catalog may land in memory after mount — pick it up.
-    let poll: ReturnType<typeof setInterval> | null = null
-    if (needFetch) {
-      poll = setInterval(() => {
-        if (cancelled || !poll) return
-        const cached = getParcoursDetailMemory(itineraryId)
-        if (hasSteps(cached)) {
-          setItin(cached)
-          setLoadingSteps(false)
-          clearInterval(poll)
-          poll = null
-        }
-      }, 120)
-    }
-
-    void getApi()
-      .getParcours(itineraryId)
-      .then((r) => {
+    // Shares in-flight HTTP with catalog prefetch (singleflight).
+    void getParcoursCached(itineraryId)
+      .then((row) => {
         if (cancelled) return
-        if (!r.ok || !r.itinerary) throw new Error('not_found')
-        const row = r.itinerary as unknown as Itinerary
-        setParcoursDetailMemory(row)
         setItin(row)
         setError(null)
         void getApi()
@@ -178,7 +160,6 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
       })
     return () => {
       cancelled = true
-      if (poll) clearInterval(poll)
     }
     // preview omitted on purpose: new object identity was re-booting without steps.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- itineraryId is the load key
