@@ -198,8 +198,8 @@ function MainTabs() {
 
   React.useEffect(() => {
     let cancelled = false
-    void import('./src/lib/client')
-      .then(({ getApi }) => getApi().getConfig())
+    void import('./src/lib/appConfigCache')
+      .then(({ getAppConfigCached }) => getAppConfigCached())
       .then((cfg) => {
         if (!cancelled) setActivitiesUiEnabled(cfg.activities_ui_enabled !== false)
       })

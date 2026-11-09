@@ -71,6 +71,11 @@ import {
   setPlannedTripMemory,
   stubPlannedTripFromWorkspace,
 } from '../lib/plannedTripCache'
+import {
+  getAppConfigCached,
+  hydrateAppConfig,
+  peekAppConfig,
+} from '../lib/appConfigCache'
 import { useAuth } from '../context/AuthContext'
 import {
   acceptGuestProposal,
@@ -198,10 +203,18 @@ export function TripDetailScreen() {
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [showModalities, setShowModalities] = useState(false)
-  const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(false)
-  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] =
-    useState(false)
-  const [tripDetailV2, setTripDetailV2] = useState(false)
+  const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(
+    () => peekAppConfig()?.planner_activities_enabled === true,
+  )
+  const [plannerRestaurantsEnabled, setPlannerRestaurantsEnabled] = useState(
+    () => peekAppConfig()?.planner_restaurants_enabled === true,
+  )
+  /** null = config not known yet — never paint v1 while waiting (avoids design flash). */
+  const [tripDetailV2, setTripDetailV2] = useState<boolean | null>(() => {
+    const cfg = peekAppConfig()
+    if (!cfg) return null
+    return cfg.trip_detail_v2_enabled === true
+  })
   const [pathTab, setPathTab] = useState<
     'apercu' | 'programme' | 'voyageurs'
   >('apercu')
@@ -246,16 +259,28 @@ export function TripDetailScreen() {
   const flightAskShownRef = useRef(false)
 
   useEffect(() => {
-    void getApi()
-      .getConfig()
-      .then((cfg) => {
+    let cancelled = false
+    void (async () => {
+      const disk = await hydrateAppConfig()
+      if (!cancelled && disk) {
+        setPlannerActivitiesEnabled(disk.planner_activities_enabled === true)
+        setPlannerRestaurantsEnabled(disk.planner_restaurants_enabled === true)
+        setTripDetailV2(disk.trip_detail_v2_enabled === true)
+      }
+      try {
+        const cfg = await getAppConfigCached()
+        if (cancelled) return
         setPlannerActivitiesEnabled(cfg.planner_activities_enabled === true)
-        setPlannerRestaurantsEnabled(
-          cfg.planner_restaurants_enabled === true,
-        )
+        setPlannerRestaurantsEnabled(cfg.planner_restaurants_enabled === true)
         setTripDetailV2(cfg.trip_detail_v2_enabled === true)
-      })
-      .catch(() => undefined)
+      } catch {
+        if (!cancelled && tripDetailV2 === null) setTripDetailV2(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -268,7 +293,7 @@ export function TripDetailScreen() {
       (body) => getApi().trackActivityEvent(body),
       {
         tripId: trip.id,
-        variant: tripDetailV2 ? 'v2' : 'v1',
+        variant: tripDetailV2 === true ? 'v2' : 'v1',
         role: orga ? 'organizer' : 'member',
         phase,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
@@ -313,7 +338,9 @@ export function TripDetailScreen() {
       if (!warm && peekedMatch) {
         warm = stubPlannedTripFromWorkspace(tripId, peekedMatch)
       }
-      if (warm && !silent) {
+      // Only leave the spinner for a real trip (invite_token). Hub stubs
+      // used to paint v1 chrome then swap → felt like "ancien design".
+      if (warm?.invite_token && !silent) {
         setTrip(warm)
         setEditBudget(warm.budget_max || 150)
         setWatchInterval(
@@ -321,9 +348,12 @@ export function TripDetailScreen() {
         )
         navigation.setOptions({ title: warm.name || 'Voyage' })
         setLoading(false)
+      } else if (warm && !warm.invite_token && !silent) {
+        // Keep title hint while fetching; stay on spinner until real payload.
+        navigation.setOptions({ title: warm.name || 'Voyage' })
       }
 
-      const cachedReal = peekPlannedTrip(tripId)?.invite_token
+      const cachedReal = Boolean(peekPlannedTrip(tripId)?.invite_token)
       const detail = await getPlannedTripCached(
         tripId,
         () => getApi().getPlannedTrip(tripId),
@@ -1671,7 +1701,8 @@ export function TripDetailScreen() {
     }
   }
 
-  if (loading && !trip) {
+  // Wait for trip + skin flag — never flash v1 then swap to Path v2.
+  if ((loading && !trip) || tripDetailV2 === null) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
         <ScreenBackground />
@@ -1792,7 +1823,7 @@ export function TripDetailScreen() {
   const orgaFirstMobile =
     (orgaDisplayMobile || '').trim().split(/\s+/)[0] || null
 
-  if (tripDetailV2) {
+  if (tripDetailV2 === true) {
     return (
       <View style={styles.root}>
         <TripDetailPathChrome
