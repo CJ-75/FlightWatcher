@@ -54,6 +54,24 @@ const PHOTO_W = Math.min(
 
 const PROMISE_PHOTO = `https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=${PHOTO_W}&q=85&fm=jpg`
 
+const PROMISE_FEATURES = [
+  {
+    title: 'Depuis ta ville',
+    detail: 'Prix clairs, aéroports en coulisse',
+    photo: `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+  {
+    title: 'Parcours prêts',
+    detail: 'Des idées à partager en un lien',
+    photo: `https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+  {
+    title: 'À plusieurs',
+    detail: 'Invite tes amis sans tableur',
+    photo: `https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+] as const
+
 const PREF_VISUAL: Record<TravelPreference, { photo: string; line: string }> = {
   amis: {
     photo: `https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=${PHOTO_W}&q=80&fm=jpg`,
@@ -258,45 +276,66 @@ export function OnboardingFlowScreen({ onDone }: Props) {
       >
         {step === 0 ? (
           <>
-            <View style={[styles.heroFrame, shadow.soft]}>
-              <ImageBackground
-                source={{ uri: PROMISE_PHOTO }}
-                style={styles.heroImage}
-                imageStyle={styles.heroImageBitmap}
-              >
-                <LinearGradient
-                  colors={[
-                    'rgba(26,18,14,0.05)',
-                    'rgba(26,18,14,0.25)',
-                    'rgba(26,18,14,0.72)',
-                  ]}
-                  locations={[0, 0.45, 1]}
-                  style={styles.heroGrad}
+            <View style={styles.stepBody}>
+              <View style={[styles.heroFrame, shadow.soft]}>
+                <ImageBackground
+                  source={{ uri: PROMISE_PHOTO }}
+                  style={styles.heroImage}
+                  imageStyle={styles.heroImageBitmap}
                 >
-                  <Text style={styles.heroEyebrow}>WEEK-ENDS · PRÊTS À PARTIR</Text>
-                  <Text style={styles.heroTitle}>
-                    Le bon départ,{'\n'}le bon prix.
-                  </Text>
-                </LinearGradient>
-              </ImageBackground>
-            </View>
+                  <LinearGradient
+                    colors={[
+                      'rgba(26,18,14,0.2)',
+                      'rgba(26,18,14,0.15)',
+                      'rgba(26,18,14,0.78)',
+                    ]}
+                    locations={[0, 0.4, 1]}
+                    style={styles.heroGrad}
+                  >
+                    <View style={styles.heroBadge}>
+                      <Text style={styles.heroBadgeText}>Nouveau</Text>
+                    </View>
+                    <Text style={styles.heroEyebrow}>
+                      WEEK-ENDS · PRÊTS À PARTIR
+                    </Text>
+                    <Text style={styles.heroTitle}>
+                      Le bon départ,{'\n'}le bon prix.
+                    </Text>
+                    <Text style={styles.heroLead}>
+                      Prix clairs depuis ta ville — parcours à partager, sans
+                      tableur.
+                    </Text>
+                  </LinearGradient>
+                </ImageBackground>
+              </View>
 
-            <Text style={styles.lead}>
-              Prix clairs depuis ta ville, parcours à partager, voyages à
-              plusieurs — sans tableur.
-            </Text>
-
-            <View style={styles.chipRow}>
-              {['Ta ville', 'Parcours', 'À plusieurs'].map((label) => (
-                <View key={label} style={styles.chip}>
-                  <Text style={styles.chipText}>{label}</Text>
-                </View>
-              ))}
+              <View style={[styles.featureCard, shadow.soft]}>
+                {PROMISE_FEATURES.map((f, i) => (
+                  <View
+                    key={f.title}
+                    style={[
+                      styles.featureRow,
+                      i < PROMISE_FEATURES.length - 1 && styles.featureRowBorder,
+                    ]}
+                  >
+                    <ImageBackground
+                      source={{ uri: f.photo }}
+                      style={styles.featureThumb}
+                      imageStyle={styles.featureThumbImg}
+                    />
+                    <View style={styles.featureCopy}>
+                      <Text style={styles.featureTitle}>{f.title}</Text>
+                      <Text style={styles.featureDetail}>{f.detail}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
             </View>
 
             <Pressable
               style={({ pressed }) => [
                 styles.cta,
+                styles.ctaPinned,
                 pressed && styles.ctaPressed,
               ]}
               onPress={() => setStep(1)}
@@ -308,42 +347,53 @@ export function OnboardingFlowScreen({ onDone }: Props) {
 
         {step === 1 ? (
           <>
-            <Text style={styles.kicker}>Départ</Text>
-            <Text style={styles.title}>
-              Tu pars <Text style={styles.titleAccent}>d’où ?</Text>
-            </Text>
-
-            <View style={[styles.cityPreview, shadow.soft]}>
-              <ImageBackground
-                source={{ uri: cityPhoto(cityLabel) }}
-                style={styles.cityPreviewImg}
-                imageStyle={styles.cityPreviewBitmap}
-              >
-                <LinearGradient
-                  colors={['transparent', 'rgba(26,18,14,0.65)']}
-                  style={styles.cityPreviewGrad}
+            <View style={styles.stepBody}>
+              <View style={[styles.cityHero, shadow.soft]}>
+                <ImageBackground
+                  source={{ uri: cityPhoto(cityLabel) }}
+                  style={styles.cityHeroImg}
+                  imageStyle={styles.cityHeroBitmap}
                 >
-                  <Text style={styles.cityPreviewLabel}>{cityLabel}</Text>
-                </LinearGradient>
-              </ImageBackground>
-            </View>
+                  <LinearGradient
+                    colors={[
+                      'rgba(26,18,14,0.22)',
+                      'rgba(26,18,14,0.12)',
+                      'rgba(26,18,14,0.78)',
+                    ]}
+                    locations={[0, 0.4, 1]}
+                    style={styles.cityHeroGrad}
+                  >
+                    <Text style={styles.heroEyebrow}>DÉPART</Text>
+                    <Text style={styles.heroTitle}>
+                      Tu pars{'\n'}d’où ?
+                    </Text>
+                    <Text style={styles.heroLead}>
+                      On te propose {cityLabel} — même champ que dans Vols.
+                    </Text>
+                  </LinearGradient>
+                </ImageBackground>
+              </View>
 
-            <Text style={styles.leadTight}>
-              Même champ que dans Vols — change si besoin.
-            </Text>
-
-            <View style={[styles.card, shadow.soft]}>
-              <Text style={styles.fieldLabel}>Ville de départ</Text>
-              <CityAirportPicker
-                airports={airports}
-                value={airport}
-                onChange={setAirport}
-              />
+              <View style={[styles.card, shadow.soft]}>
+                <Text style={styles.fieldLabel}>Ville de départ</Text>
+                <CityAirportPicker
+                  airports={airports}
+                  value={airport}
+                  onChange={setAirport}
+                />
+                <View style={styles.cityHintRow}>
+                  <View style={styles.cityHintDot} />
+                  <Text style={styles.cityHintText}>
+                    Les aéroports restent en coulisse — tu choisis la ville.
+                  </Text>
+                </View>
+              </View>
             </View>
 
             <Pressable
               style={({ pressed }) => [
                 styles.cta,
+                styles.ctaPinned,
                 !codes.length && styles.ctaDisabled,
                 pressed && codes.length > 0 && styles.ctaPressed,
               ]}
@@ -360,54 +410,95 @@ export function OnboardingFlowScreen({ onDone }: Props) {
 
         {step === 2 ? (
           <>
-            <Text style={styles.kicker}>Envie</Text>
-            <Text style={styles.title}>
-              Tu voyages <Text style={styles.titleAccent}>plutôt…</Text>
-            </Text>
-            <Text style={styles.leadTight}>
-              On affine les idées. Tu pourras changer plus tard.
-            </Text>
-
-            <View style={styles.prefGrid}>
-              {TRAVEL_PREFERENCE_CARDS.map((c) => {
-                const on = pref === c.id
-                const visual = PREF_VISUAL[c.id]
-                return (
-                  <Pressable
-                    key={c.id}
-                    onPress={() => setPref(c.id)}
-                    style={({ pressed }) => [
-                      styles.prefTile,
-                      shadow.soft,
-                      on && styles.prefTileOn,
-                      pressed && { opacity: 0.95 },
+            <View style={styles.stepBody}>
+              <View style={[styles.prefHero, shadow.soft]}>
+                <ImageBackground
+                  source={{
+                    uri: pref
+                      ? PREF_VISUAL[pref].photo
+                      : PREF_VISUAL.amis.photo,
+                  }}
+                  style={styles.prefHeroImg}
+                  imageStyle={styles.prefHeroBitmap}
+                >
+                  <LinearGradient
+                    colors={[
+                      'rgba(26,18,14,0.25)',
+                      'rgba(26,18,14,0.2)',
+                      'rgba(26,18,14,0.8)',
                     ]}
+                    locations={[0, 0.35, 1]}
+                    style={styles.prefHeroGrad}
                   >
-                    <ImageBackground
-                      source={{ uri: visual.photo }}
-                      style={styles.prefBg}
-                      imageStyle={styles.prefBgImg}
-                    >
-                      <LinearGradient
-                        colors={
-                          on
-                            ? ['rgba(26,18,14,0.15)', 'rgba(232,90,40,0.88)']
-                            : ['rgba(26,18,14,0.1)', 'rgba(26,18,14,0.78)']
-                        }
-                        style={styles.prefOverlay}
-                      >
-                        <Text style={styles.prefLabel}>{c.label}</Text>
-                        <Text style={styles.prefLine}>{visual.line}</Text>
-                      </LinearGradient>
-                    </ImageBackground>
-                  </Pressable>
-                )
-              })}
+                    <Text style={styles.heroEyebrow}>ENVIE</Text>
+                    <Text style={styles.heroTitle}>
+                      Tu voyages{'\n'}plutôt…
+                    </Text>
+                    <Text style={styles.heroLead}>
+                      {pref
+                        ? PREF_VISUAL[pref].line
+                        : 'Choisis une façon de partir — tu pourras changer.'}
+                    </Text>
+                  </LinearGradient>
+                </ImageBackground>
+              </View>
+
+              <View style={styles.prefGrid}>
+                {[0, 1].map((row) => (
+                  <View key={row} style={styles.prefRow}>
+                    {TRAVEL_PREFERENCE_CARDS.slice(row * 2, row * 2 + 2).map(
+                      (c) => {
+                        const on = pref === c.id
+                        const visual = PREF_VISUAL[c.id]
+                        return (
+                          <Pressable
+                            key={c.id}
+                            onPress={() => setPref(c.id)}
+                            style={({ pressed }) => [
+                              styles.prefTile,
+                              shadow.soft,
+                              on && styles.prefTileOn,
+                              pressed && { opacity: 0.95 },
+                            ]}
+                          >
+                            <ImageBackground
+                              source={{ uri: visual.photo }}
+                              style={styles.prefBg}
+                              imageStyle={styles.prefBgImg}
+                            >
+                              <LinearGradient
+                                colors={
+                                  on
+                                    ? [
+                                        'rgba(26,18,14,0.1)',
+                                        'rgba(232,90,40,0.9)',
+                                      ]
+                                    : [
+                                        'rgba(26,18,14,0.08)',
+                                        'rgba(26,18,14,0.82)',
+                                      ]
+                                }
+                                style={styles.prefOverlay}
+                              >
+                                <Text style={styles.prefLabel}>{c.label}</Text>
+                                <Text style={styles.prefLine}>
+                                  {visual.line}
+                                </Text>
+                              </LinearGradient>
+                            </ImageBackground>
+                          </Pressable>
+                        )
+                      },
+                    )}
+                  </View>
+                ))}
+              </View>
             </View>
 
             <Pressable
               style={({ pressed }) => [
                 styles.cta,
+                styles.ctaPinned,
                 !pref && styles.ctaDisabled,
                 pressed && pref && styles.ctaPressed,
               ]}
@@ -483,16 +574,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
   },
   pane: { flex: 1 },
+  stepBody: { flex: 1 },
   heroFrame: {
+    flex: 1,
+    minHeight: 220,
     borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(40,32,24,0.06)',
   },
   heroImage: {
     width: '100%',
-    height: Math.min(280, W * 0.72),
+    flex: 1,
+    minHeight: 220,
   },
   heroImageBitmap: { borderRadius: 24 },
   heroGrad: {
@@ -500,7 +595,21 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingHorizontal: 18,
     paddingBottom: 18,
-    paddingTop: 40,
+    paddingTop: 28,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  heroBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: '#FFF9F5',
+    letterSpacing: 0.3,
   },
   heroEyebrow: {
     fontFamily: fonts.bold,
@@ -515,82 +624,72 @@ const styles = StyleSheet.create({
     lineHeight: 34,
     letterSpacing: -0.9,
     color: '#FFF9F5',
+    marginBottom: 8,
   },
-  kicker: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    color: colors.primary,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  title: {
-    fontFamily: fonts.extrabold,
-    fontSize: 32,
-    letterSpacing: -0.9,
-    lineHeight: 38,
-    color: colors.ink,
-    marginBottom: 10,
-  },
-  titleAccent: {
-    color: colors.primary,
-  },
-  lead: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    lineHeight: 23,
-    color: colors.inkSoft,
-    marginBottom: 14,
-    maxWidth: 360,
-  },
-  leadTight: {
+  heroLead: {
     fontFamily: fonts.regular,
     fontSize: 14,
-    lineHeight: 21,
-    color: colors.inkSoft,
-    marginBottom: 12,
-    maxWidth: 360,
+    lineHeight: 20,
+    color: 'rgba(255,249,245,0.82)',
+    maxWidth: 320,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 18,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+  featureCard: {
     backgroundColor: colors.surface,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.line,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 4,
   },
-  chipText: {
-    fontFamily: fonts.semibold,
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  featureRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
+  featureThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  featureThumbImg: { borderRadius: 14 },
+  featureCopy: { flex: 1, minWidth: 0 },
+  featureTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+    letterSpacing: -0.2,
+    marginBottom: 2,
+  },
+  featureDetail: {
+    fontFamily: fonts.regular,
     fontSize: 12,
-    color: colors.inkSoft,
+    lineHeight: 17,
+    color: colors.muted,
   },
-  cityPreview: {
-    height: 118,
-    borderRadius: 20,
+  cityHero: {
+    flex: 1,
+    minHeight: 200,
+    borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(40,32,24,0.06)',
   },
-  cityPreviewImg: { flex: 1 },
-  cityPreviewBitmap: { borderRadius: 20 },
-  cityPreviewGrad: {
+  cityHeroImg: { flex: 1, minHeight: 200 },
+  cityHeroBitmap: { borderRadius: 24 },
+  cityHeroGrad: {
     flex: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-  },
-  cityPreviewLabel: {
-    fontFamily: fonts.extrabold,
-    fontSize: 22,
-    letterSpacing: -0.5,
-    color: '#FFF9F5',
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    paddingTop: 28,
   },
   card: {
     backgroundColor: colors.surface,
@@ -598,7 +697,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: colors.line,
-    marginBottom: 14,
+    marginBottom: 4,
   },
   fieldLabel: {
     fontFamily: fonts.bold,
@@ -608,17 +707,57 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 10,
   },
-  prefGrid: {
+  cityHintRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  cityHintDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+    marginTop: 4,
+  },
+  cityHintText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+  },
+  prefHero: {
+    height: 148,
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(40,32,24,0.06)',
+  },
+  prefHeroImg: { flex: 1 },
+  prefHeroBitmap: { borderRadius: 22 },
+  prefHeroGrad: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 20,
+  },
+  prefGrid: {
+    flex: 1,
     gap: 10,
-    marginBottom: 14,
+  },
+  prefRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
   },
   prefTile: {
-    width: '48%',
-    flexGrow: 1,
-    minWidth: '46%',
-    height: 124,
+    flex: 1,
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 2,
@@ -648,11 +787,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255,249,245,0.82)',
   },
   cta: {
-    marginTop: 'auto',
     backgroundColor: colors.ink,
     borderRadius: 16,
     paddingVertical: 17,
     alignItems: 'center',
+  },
+  ctaPinned: {
+    marginTop: 12,
   },
   ctaPressed: { opacity: 0.9, transform: [{ scale: 0.985 }] },
   ctaDisabled: { opacity: 0.35 },
@@ -662,7 +803,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: -0.2,
   },
-  skip: { marginTop: 12, alignItems: 'center', paddingVertical: 6 },
+  skip: { marginTop: 10, alignItems: 'center', paddingVertical: 4 },
   skipText: {
     fontFamily: fonts.medium,
     fontSize: 14,
