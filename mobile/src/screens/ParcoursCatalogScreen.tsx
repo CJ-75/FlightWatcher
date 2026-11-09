@@ -35,18 +35,10 @@ import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, shadow, spacing } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 const CITY_LS = 'fw_parcours_city'
-const CITIES = [
-  'paris',
-  'marseille',
-  'lyon',
-  'lisbon',
-  'porto',
-  'barcelona',
-  'rome',
-]
+const CITIES = ['paris', 'marseille', 'lyon', 'lisbon', 'porto', 'barcelona', 'rome'] as const
 
 type Props = {
   headerExtra?: React.ReactNode
@@ -75,7 +67,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const kickActivitiesWarm = useCallback(() => {
     const key = user?.id || (isGuest ? 'guest' : '')
     if (!key) return
-    scheduleActivitiesWarmup(key, 'paris')
+    scheduleActivitiesWarmup(key)
   }, [user?.id, isGuest])
 
   useEffect(() => {

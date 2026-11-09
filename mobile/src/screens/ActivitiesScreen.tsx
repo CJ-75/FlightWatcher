@@ -80,7 +80,11 @@ import {
 } from '../lib/activitiesCache'
 import { fetchCityActivitiesPublic } from '../lib/activitiesCatalogFetch'
 import { peekWarmedActivityCity } from '../lib/activitiesWarmup'
-import { listTravelWorkspacesCached } from '../lib/workspacesCache'
+import {
+  hydrateTravelWorkspacesCache,
+  listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
+} from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { TabScreenHeader } from '../components/TabScreenHeader'
@@ -251,7 +255,11 @@ export function ActivitiesScreen() {
   const [loginLoading, setLoginLoading] = useState(false)
   // Default Paris (parcours + catalogue) — don't wait on planner arrival.
   // Route city (depuis le planner) overrides; Sync ramène au séjour.
-  const routeCityInit = route.params?.city?.trim().toLowerCase() || ''
+  // browse=true (depuis un séjour deal) → hero neutre, pas de ville forcée.
+  const browseMode = route.params?.browse === true
+  const routeCityInit = browseMode
+    ? ''
+    : route.params?.city?.trim().toLowerCase() || ''
   const seedCity = routeCityInit || peekWarmedActivityCity() || 'paris'
   const [citySlug, setCitySlug] = useState(() => seedCity)
   const cityConfirmed = useRef(true)
@@ -263,13 +271,14 @@ export function ActivitiesScreen() {
     (session?.access_token ? 'session' : '')
 
   useEffect(() => {
+    if (route.params?.browse === true) return
     const fromRoute = route.params?.city?.trim().toLowerCase()
     if (fromRoute && fromRoute !== citySlug) {
       cityConfirmed.current = true
       setCitySlug(fromRoute)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.params?.city])
+  }, [route.params?.city, route.params?.browse])
 
   const [adults] = useState(2)
   const [loadHintIdx, setLoadHintIdx] = useState(0)
@@ -330,6 +339,16 @@ export function ActivitiesScreen() {
       setPlannerCount(0)
       setAddedCodes(new Set())
       setTripReady(true)
+      return
+    }
+    // Depuis un séjour deal (« Que faire ») : hero neutre, ne pas accrocher le planner.
+    if (route.params?.browse === true) {
+      setActiveTrip(null)
+      setPlannerCount(0)
+      setAddedCodes(new Set())
+      setTripReady(true)
+      didAutoCity.current = true
+      cityConfirmed.current = true
       return
     }
     let cancelled = false
@@ -520,8 +539,26 @@ export function ActivitiesScreen() {
         if (__DEV__) {
           local.push(...listGuestTrips().map(tripAsWorkspace))
         }
-        const remembered = await listRememberedTrips()
+        const [remembered, diskWs] = await Promise.all([
+          listRememberedTrips(),
+          hydrateTravelWorkspacesCache(),
+        ])
+        if (cancelled) return
         local.push(...remembered.map(rememberedAsWorkspace))
+
+        // Ville planner ASAP (disque / mémoire) — ne pas attendre le réseau.
+        const earlyRemote =
+          peekTravelWorkspacesCache() ||
+          (Array.isArray(diskWs) ? diskWs : null) ||
+          []
+        const earlyTop = filterActivitySwitcherWorkspaces([
+          ...earlyRemote,
+          ...local,
+        ])[0]
+        if (earlyTop) {
+          const { slug: earlySlug } = cityFromWorkspace(earlyTop)
+          if (earlySlug) lockCity(earlySlug)
+        }
 
         let remote: TravelWorkspace[] = []
         const loadRemote = async () => {
@@ -563,6 +600,8 @@ export function ActivitiesScreen() {
             ? String(top.planned_trip_id)
             : undefined
           let { slug, label } = cityFromWorkspace(top)
+          // Confirme / corrige la ville dès qu’on a le top réseau.
+          if (slug) lockCity(slug)
 
           if (draftToken) {
             const row = await getApi().getMyTrip(draftToken).catch(() => null)
@@ -663,8 +702,8 @@ export function ActivitiesScreen() {
             outDate,
             retDate,
           })
-          // Free open: keep Paris catalogue — Sync aligns to séjour if wanted.
-          // (Route/planner entry already locked city above.)
+          // Planner présent : catalogue = ville d’arrivée (déjà lock ASAP + refine).
+          if (slug) lockCity(slug)
 
           if (draftToken) {
             await rememberTrip({ draft_token: draftToken, city: slug })
@@ -1006,7 +1045,7 @@ export function ActivitiesScreen() {
               </Pressable>
             ) : null}
 
-            {activeTrip ? (
+            {activeTrip && !browseMode ? (
               <ActivityTripHero
                 mode="active"
                 cityLabel={activeTrip.label}
@@ -1026,7 +1065,12 @@ export function ActivitiesScreen() {
             ) : (
               <ActivityTripHero
                 mode="empty"
-                cityLabel={activityDestinationLabelFr(citySlug || 'paris')}
+                // Browse depuis un séjour : hero neutre (pas de ville affichée).
+                cityLabel={
+                  browseMode
+                    ? ''
+                    : activityDestinationLabelFr(citySlug || 'paris')
+                }
                 onBrowseTrips={() => navigation.navigate('Deals')}
                 onChooseTrip={() => {
                   if (!viewUser) {

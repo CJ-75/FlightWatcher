@@ -27,12 +27,25 @@ export function ActivitySurfaceBanner(props: {
       .catch(() => undefined)
     try {
       // From DealDetail / TripSummary (root stack) → tab via Main.
-      navigation.navigate('Main', {
-        screen: 'Activities',
-        params: {
-          city: props.citySlug || undefined,
-        },
-      })
+      // Séjour deal: browse neutre — pas de ville / séjour préchargés (évite de perdre l’user).
+      if (props.surface === 'deal') {
+        navigation.navigate('Main', {
+          screen: 'Activities',
+          params: {
+            browse: true,
+            city: '',
+            draftToken: '',
+            plannedTripId: '',
+          },
+        })
+      } else {
+        navigation.navigate('Main', {
+          screen: 'Activities',
+          params: {
+            city: props.citySlug || undefined,
+          },
+        })
+      }
     } catch {
       /* tab may be gated off */
     }

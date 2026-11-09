@@ -315,6 +315,15 @@ export function HotelPhotoGallery({
           pointerEvents="none"
         />
 
+        {/* Compteur haut gauche — symétrique au like (topRight). */}
+        <View style={styles.topLeft} pointerEvents="none">
+          <View style={styles.counter}>
+            <Text style={styles.counterText}>
+              {loading ? '…' : `${index + 1}/${visible}`}
+            </Text>
+          </View>
+        </View>
+
         {topRight ? (
           <View style={styles.topRight} pointerEvents="box-none">
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
@@ -328,17 +337,8 @@ export function HotelPhotoGallery({
           </View>
         ) : null}
 
-        {/* Compteur + CTA photos en bas à droite — jamais à côté du retour. */}
-        <View
-          style={[styles.photoChrome, isHero && styles.photoChromeHero]}
-          pointerEvents="box-none"
-        >
-          <View style={styles.counter} pointerEvents="none">
-            <Text style={styles.counterText}>
-              {loading ? '…' : `${index + 1}/${visible}`}
-            </Text>
-          </View>
-          {!isHero ? (
+        {!isHero ? (
+          <View style={styles.photoChrome} pointerEvents="box-none">
             <Pressable
               disabled={blockHero}
               onPress={() => openLightbox(index)}
@@ -347,8 +347,8 @@ export function HotelPhotoGallery({
             >
               <Text style={styles.seeAllText}>Photos</Text>
             </Pressable>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
 
         {count > 1 ? (
           <View
@@ -505,10 +505,18 @@ const styles = StyleSheet.create({
     zIndex: 4,
   },
   image: { width: '100%', height: '100%' },
+  topLeft: {
+    position: 'absolute',
+    left: 14,
+    top: 12,
+    zIndex: 3,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
   topRight: {
     position: 'absolute',
-    right: 16,
-    top: 0,
+    right: 14,
+    top: 12,
     zIndex: 3,
   },
   bottomLeft: {
@@ -522,13 +530,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 12,
     bottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     zIndex: 3,
-  },
-  photoChromeHero: {
-    bottom: 18,
   },
   counter: {
     backgroundColor: 'rgba(12,18,34,0.55)',

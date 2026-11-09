@@ -1273,7 +1273,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: colors.white,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1.5,
     borderColor: colors.line,
     borderRadius: radius.md,
     padding: 12,
@@ -1281,7 +1281,7 @@ const styles = StyleSheet.create({
   },
   hotelOptionActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: colors.white,
   },
   hotelOptionName: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
   hotelOptionMeta: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, marginTop: 2 },

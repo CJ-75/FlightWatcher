@@ -101,9 +101,12 @@ function HeroShell({
 
 export function ActivityTripHero(props: Props) {
   if (props.mode === 'empty') {
-    const city = String(props.cityLabel || 'Paris').trim() || 'Paris'
+    const city = String(props.cityLabel || '').trim()
+    const title = city || 'Catalogue'
+    // Sans ville : image générique (pas une destination forcée).
+    const imageUrl = cityImageUrl(city || 'paris')
     return (
-      <HeroShell imageUrl={cityImageUrl(city)} tall>
+      <HeroShell imageUrl={imageUrl} tall>
         <View style={styles.badgeRow}>
           <View style={styles.liveBadge}>
             <View style={[styles.liveDot, { backgroundColor: DOT_COLOR.undated }]} />
@@ -113,7 +116,7 @@ export function ActivityTripHero(props: Props) {
 
         <View style={styles.bottom}>
           <Text style={styles.city} numberOfLines={1}>
-            {city}
+            {title}
           </Text>
           <Text style={styles.hint}>{ACTIVITY_NO_TRIP_CTA_BODY_FR}</Text>
           <View style={styles.actions}>

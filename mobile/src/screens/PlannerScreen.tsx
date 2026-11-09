@@ -428,7 +428,12 @@ export function PlannerScreen() {
                       onPress={() => setFilter(key)}
                       style={[styles.hubTab, filter === key && styles.hubTabActive]}
                     >
-                      <Text style={[styles.hubTabText, filter === key && styles.hubTabTextActive]}>
+                      <Text
+                        style={[
+                          styles.hubTabText,
+                          filter === key && styles.hubTabTextActive,
+                        ]}
+                      >
                         {labelFr}
                         {showSkeleton ? '' : ` · ${counts[key]}`}
                       </Text>

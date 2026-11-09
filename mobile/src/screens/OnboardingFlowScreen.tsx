@@ -76,10 +76,6 @@ const PROMISE_FEATURES = [
   },
 ] as const
 
-/** Frame « Comment ça marche » — map / itinerary feel. */
-const HOW_PHOTO =
-  'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=2400&q=95&fm=jpg'
-
 const HOW_IT_WORKS = [
   {
     title: 'Parcours',
@@ -381,49 +377,28 @@ export function OnboardingFlowScreen({ onDone }: Props) {
         {step === 1 ? (
           <>
             <View style={styles.stepBody}>
-              <View style={[styles.howHero, shadow.soft]}>
-                <ImageBackground
-                  source={{ uri: HOW_PHOTO }}
-                  style={styles.howHeroImg}
-                  imageStyle={styles.howHeroBitmap}
-                >
-                  <LinearGradient
-                    colors={[
-                      'rgba(26,18,14,0.28)',
-                      'rgba(26,18,14,0.14)',
-                      'rgba(26,18,14,0.8)',
-                    ]}
-                    locations={[0, 0.4, 1]}
-                    style={styles.howHeroGrad}
-                  >
-                    <Text style={styles.heroEyebrow}>MODE D’EMPLOI</Text>
-                    <Text style={styles.heroTitle}>
-                      Comment{'\n'}ça marche
-                    </Text>
-                    <Text style={styles.heroLead}>
-                      Quatre outils, un même but : partir sans te perdre.
-                    </Text>
-                  </LinearGradient>
-                </ImageBackground>
+              <View style={styles.howHeader}>
+                <Text style={styles.howEyebrow}>MODE D’EMPLOI</Text>
+                <Text style={styles.howTitle}>Comment ça marche</Text>
+                <Text style={styles.howLead}>
+                  Quatre outils, un même but : partir sans te perdre.
+                </Text>
               </View>
 
-              <View style={[styles.featureCard, shadow.soft]}>
+              <View style={[styles.howPath, shadow.soft]}>
                 {HOW_IT_WORKS.map((f, i) => (
-                  <View
-                    key={f.title}
-                    style={[
-                      styles.featureRow,
-                      i < HOW_IT_WORKS.length - 1 && styles.featureRowBorder,
-                    ]}
-                  >
-                    <ImageBackground
-                      source={{ uri: f.photo }}
-                      style={styles.featureThumb}
-                      imageStyle={styles.featureThumbImg}
-                    />
-                    <View style={styles.featureCopy}>
-                      <Text style={styles.featureTitle}>{f.title}</Text>
-                      <Text style={styles.featureDetail}>{f.detail}</Text>
+                  <View key={f.title} style={styles.howPathStep}>
+                    <View style={styles.howPathRail}>
+                      <View style={styles.howPathDot}>
+                        <Text style={styles.howPathDotText}>{i + 1}</Text>
+                      </View>
+                      {i < HOW_IT_WORKS.length - 1 ? (
+                        <View style={styles.howPathLine} />
+                      ) : null}
+                    </View>
+                    <View style={styles.howPathCopy}>
+                      <Text style={styles.howPathTitle}>{f.title}</Text>
+                      <Text style={styles.howPathDetail}>{f.detail}</Text>
                     </View>
                   </View>
                 ))}
@@ -765,23 +740,93 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: colors.muted,
   },
-  howHero: {
-    height: 168,
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(40,32,24,0.06)',
-    backgroundColor: '#1A120E',
+  howHeader: {
+    marginBottom: 16,
   },
-  howHeroImg: { flex: 1 },
-  howHeroBitmap: { borderRadius: 24 },
-  howHeroGrad: {
+  howEyebrow: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.6,
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  howTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 28,
+    lineHeight: 32,
+    letterSpacing: -0.8,
+    color: colors.ink,
+    marginBottom: 6,
+  },
+  howLead: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+    maxWidth: 320,
+  },
+  howPath: {
     flex: 1,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 18,
-    paddingBottom: 16,
-    paddingTop: 24,
+    minHeight: 0,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 10,
+  },
+  howPathStep: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 14,
+    minHeight: 0,
+  },
+  howPathRail: {
+    width: 32,
+    alignItems: 'center',
+  },
+  howPathDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  howPathDotText: {
+    fontFamily: fonts.extrabold,
+    fontSize: 13,
+    color: '#FFF9F5',
+  },
+  howPathLine: {
+    flex: 1,
+    width: 2,
+    marginTop: 6,
+    marginBottom: 6,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+  },
+  howPathCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 4,
+    paddingBottom: 12,
+    justifyContent: 'flex-start',
+  },
+  howPathTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    letterSpacing: -0.3,
+    color: colors.ink,
+    marginBottom: 4,
+  },
+  howPathDetail: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
   },
   cityHero: {
     flex: 1,

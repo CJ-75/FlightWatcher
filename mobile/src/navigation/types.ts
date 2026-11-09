@@ -34,6 +34,11 @@ export type MainTabParamList = {
         city?: string
         draftToken?: string
         plannedTripId?: string
+        /**
+         * Depuis un séjour (Que faire à X) — hero neutre, pas de voyage planner
+         * accroché (évite Sync / confusion).
+         */
+        browse?: boolean
       }
     | undefined
   Planner: undefined

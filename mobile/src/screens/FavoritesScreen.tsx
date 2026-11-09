@@ -718,12 +718,7 @@ export function FavoritesScreen() {
               title={translate('fr', 'favorites.title')}
               subtitle={translate('fr', 'favorites.subtitle')}
             >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.collectionsRow}
-                style={styles.collectionsScroll}
-              >
+              <View style={styles.hubTabs}>
                 {COLLECTIONS.map(({ id, labelKey }) => {
                   const on = tab === id
                   const n = collectionCounts[id]
@@ -737,43 +732,21 @@ export function FavoritesScreen() {
                           id === 'flights' || id === 'deals' ? 'date' : 'recent',
                         )
                       }}
-                      style={styles.collectionTab}
+                      style={[styles.hubTab, on && styles.hubTabActive]}
                       accessibilityRole="tab"
                       accessibilityState={{ selected: on }}
                     >
-                      <View style={styles.collectionTabInner}>
-                        <Text
-                          style={[
-                            styles.collectionLabel,
-                            on && styles.collectionLabelOn,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {translate('fr', labelKey)}
-                        </Text>
-                        {n > 0 ? (
-                          <View
-                            style={[
-                              styles.collectionCount,
-                              on && styles.collectionCountOn,
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.collectionCountText,
-                                on && styles.collectionCountTextOn,
-                              ]}
-                            >
-                              {n}
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      {on ? <View style={styles.collectionUnderline} /> : null}
+                      <Text
+                        style={[styles.hubTabText, on && styles.hubTabTextActive]}
+                        numberOfLines={1}
+                      >
+                        {translate('fr', labelKey)}
+                        {showSkeleton ? '' : ` · ${n}`}
+                      </Text>
                     </Pressable>
                   )
                 })}
-              </ScrollView>
+              </View>
 
               {!showSkeleton ? (
                 <View style={styles.toolbar}>
@@ -1016,64 +989,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
   },
   header: { marginBottom: 18, gap: 4 },
-  collectionsScroll: {
-    marginTop: 14,
-    marginHorizontal: -spacing.xl,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-  },
-  collectionsRow: {
-    paddingHorizontal: spacing.xl,
-    gap: 20,
+  hubTabs: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  collectionTab: {
-    paddingBottom: 12,
-    position: 'relative',
-  },
-  collectionTabInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 7,
+    marginTop: 14,
   },
-  collectionLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.muted,
-  },
-  collectionLabelOn: {
-    color: colors.ink,
-  },
-  collectionCount: {
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    borderRadius: 10,
-    backgroundColor: colors.primarySoft,
+  hubTab: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
-  collectionCountOn: {
+  hubTabActive: {
     backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
-  collectionCountText: {
+  hubTabText: {
     fontFamily: fonts.bold,
-    fontSize: 11,
+    fontSize: 10,
     color: colors.muted,
+    textAlign: 'center',
   },
-  collectionCountTextOn: {
-    color: colors.white,
-  },
-  collectionUnderline: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: colors.ink,
-  },
+  hubTabTextActive: { color: colors.white },
   toolbar: {
     marginTop: spacing.lg,
     flexDirection: 'row',

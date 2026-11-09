@@ -1,12 +1,19 @@
 /**
- * Background Viator warm — Paris by default (parcours + catalogue, not only
- * planner arrival). Kick after Parcours is ready; no trip resolve (too slow).
+ * Background Viator warm — Paris by default, planner city when known locally.
+ * Kick after Parcours is ready; no network trip resolve (too slow).
  */
+import { resolveActivityCitySlug } from '@flightwatcher/shared'
 import {
   getCityActivitiesCached,
+  peekLastCitySlug,
   setLastCitySlug,
 } from './activitiesCache'
 import { fetchCityActivitiesPublic } from './activitiesCatalogFetch'
+import { listRememberedTrips } from './tripRecovery'
+import {
+  hydrateTravelWorkspacesCache,
+  peekTravelWorkspacesCache,
+} from './workspacesCache'
 
 const ADULTS = 2
 const SAFE_WARM = 'paris'
@@ -44,8 +51,50 @@ async function warmCity(slug: string): Promise<void> {
   )
 }
 
+function slugFromHint(hint: string | null | undefined): string | null {
+  const raw = String(hint || '').trim()
+  if (!raw) return null
+  const slug = resolveActivityCitySlug({
+    citySlug: raw,
+    cityLabel: raw,
+    destIata: null,
+  })
+  return slug || null
+}
+
+/** Local-only: remembered trip / last city / workspaces disk — no API. */
+async function resolveWarmCity(
+  preferredCity?: string | null,
+): Promise<string> {
+  const preferred = slugFromHint(preferredCity)
+  if (preferred) return preferred
+
+  try {
+    const remembered = await listRememberedTrips()
+    const fromRemembered = slugFromHint(remembered[0]?.city)
+    if (fromRemembered) return fromRemembered
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const disk =
+      peekTravelWorkspacesCache() || (await hydrateTravelWorkspacesCache())
+    const top = Array.isArray(disk) ? disk[0] : null
+    const fromWs = slugFromHint(top?.city || top?.dest_iata || null)
+    if (fromWs) return fromWs
+  } catch {
+    /* ignore */
+  }
+
+  const last = peekLastCitySlug()
+  if (last) return last
+
+  return SAFE_WARM
+}
+
 /**
- * Once per session. Always Paris (or explicit preferredCity) — no planner RTT.
+ * Once per session. Prefers planner city when known locally, else Paris.
  */
 export function scheduleActivitiesWarmup(
   sessionKey: string,
@@ -58,18 +107,17 @@ export function scheduleActivitiesWarmup(
   warmedSessionKey = key
   cancelScheduled?.()
 
-  const city =
-    String(preferredCity || '').trim().toLowerCase() || SAFE_WARM
-
   const timer = setTimeout(() => {
-    warmInflight = warmCity(city)
-      .then(() => {
-        if (__DEV__) console.log('[activities] warm Viator ready city=', city)
-      })
+    warmInflight = resolveWarmCity(preferredCity)
+      .then((city) =>
+        warmCity(city).then(() => {
+          if (__DEV__) console.log('[activities] warm Viator ready city=', city)
+        }),
+      )
       .catch((e) => {
         if (__DEV__) console.warn('[activities] warm failed', e)
       })
-  }, 80)
+  }, 0)
 
   cancelScheduled = () => clearTimeout(timer)
 }
