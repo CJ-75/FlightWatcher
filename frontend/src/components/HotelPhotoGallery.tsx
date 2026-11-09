@@ -110,7 +110,8 @@ export function HotelPhotoGallery({
     if (mobileScrollerRef.current) mobileScrollerRef.current.scrollLeft = 0
 
     const hid = (hotelId || '').trim()
-    if (!hid || hid === 'primary') return
+    // Seed-only heroes (no LiteAPI id yet) — keep carousel on local photos.
+    if (!hid || hid === 'primary' || hid === 'seed') return
 
     let cancelled = false
     setLoading(true)
@@ -189,8 +190,6 @@ export function HotelPhotoGallery({
     el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
   }, [lightbox])
 
-  if (!photos.length) return null
-
   const count = photos.length
   const showMosaic = count >= 3
   const mosaicSlots = photos.slice(0, 5)
@@ -222,6 +221,25 @@ export function HotelPhotoGallery({
     },
     [heroSlides.length, mobileIdx, scrollHeroTo],
   )
+
+  if (!count) {
+    // Keep hero shell while seeds/API resolve — avoid empty hotel block flash.
+    if (isHero) {
+      return (
+        <div
+          className={`relative isolate flex h-full min-h-[280px] w-full overflow-hidden bg-[#1a100c] ${className}`}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#140c08]/95 via-[#1a100c]/55 to-black/20" />
+          {overlay ? (
+            <div className="relative z-[1] mt-auto flex h-full min-h-[280px] w-full flex-col justify-end p-6 sm:p-7 pointer-events-none [&_button]:pointer-events-auto [&_a]:pointer-events-auto">
+              {overlay}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+    return null
+  }
 
   return (
     <>

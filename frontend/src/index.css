@@ -210,13 +210,92 @@
     @apply bg-white rounded-3xl border border-line shadow-soft lg:rounded-[28px];
   }
 
+  /*
+   * Tabbar — base historique (fe9d96c / wider web layout) :
+   * pills compactes centrées, pas étirées plein écran.
+   * Desktop : légèrement plus large + icônes.
+   */
   .app-tabbar {
-    @apply flex items-center gap-0 px-1.5 rounded-[28px]
-      border border-black/[0.06] shadow-lift backdrop-blur-xl;
-    background-color: rgba(255, 255, 255, 0.92);
+    @apply grid items-stretch gap-1 p-1.5 rounded-[26px]
+      bg-white/95 border border-line shadow-lift backdrop-blur-md;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   }
 
-  /* Mobile: dock flottant Apple-like */
+  .app-tab {
+    @apply relative inline-flex flex-col sm:flex-row items-center justify-center
+      gap-1 sm:gap-2 px-1.5 sm:px-3 py-2.5 rounded-[20px]
+      text-[11px] sm:text-sm font-semibold text-muted min-h-[44px] w-full leading-tight;
+    transition:
+      color 160ms ease,
+      background-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+
+  .app-tab::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      130% 90% at 50% 0%,
+      rgba(255, 107, 53, 0.28),
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 160ms ease;
+    pointer-events: none;
+  }
+
+  .app-tab-well {
+    @apply relative z-[1] inline-flex items-center justify-center shrink-0;
+    width: 1.35rem;
+    height: 1.35rem;
+    color: inherit;
+  }
+
+  .app-tab-label {
+    @apply relative z-[1] truncate;
+  }
+
+  .app-tab-active,
+  .app-tab-center-active {
+    @apply bg-primary-50 text-primary-700 shadow-soft font-bold;
+  }
+
+  .app-tab-active .app-tab-well,
+  .app-tab-center-active .app-tab-well,
+  .app-tab-well-on,
+  .app-tab-well-center {
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .app-tab:hover:not(.app-tab-active):not(.app-tab-center-active) {
+      @apply text-primary-700 bg-primary-100 font-bold;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 18px rgba(255, 107, 53, 0.18);
+    }
+
+    .app-tab:hover:not(.app-tab-active):not(.app-tab-center-active)::after {
+      opacity: 1;
+    }
+
+    .app-tab-active:hover,
+    .app-tab-center-active:hover {
+      @apply bg-primary-100;
+      transform: translateY(-2px);
+      box-shadow: 0 12px 22px rgba(255, 107, 53, 0.22);
+    }
+  }
+
+  .app-tab:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  /* Mobile : dock bas (confort pouce) — style pills conservé */
   @media (max-width: 639px) {
     .app-tabnav {
       position: fixed;
@@ -224,134 +303,46 @@
       right: 0;
       bottom: 0;
       z-index: 40;
-      padding: 0.5rem 1.1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
-      background: linear-gradient(180deg, transparent 0%, rgba(255, 249, 245, 0.88) 42%);
+      padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(
+        180deg,
+        transparent 0%,
+        rgba(255, 249, 245, 0.9) 45%
+      );
       pointer-events: none;
     }
 
     .app-tabnav .app-tabbar {
       pointer-events: auto;
       max-width: none;
-      height: 4rem;
       box-shadow: 0 12px 32px rgba(26, 18, 14, 0.12);
     }
 
     .app-tab {
-      @apply text-[10px] px-0.5 py-1 min-h-0 h-full rounded-none
-        flex-col gap-1 font-medium;
+      @apply text-[10px] px-0.5 py-1.5 gap-0.5;
+      min-height: 3.25rem;
     }
 
     .app-tab-label {
       font-size: 10px;
       line-height: 12px;
-      letter-spacing: -0.1px;
     }
   }
 
-  .app-tab {
-    @apply relative inline-flex items-center justify-center px-2 sm:px-3 py-2
-      text-xs sm:text-sm font-medium text-muted min-h-[44px] w-full leading-tight;
-    transition: color 140ms ease, opacity 140ms ease;
-  }
-
-  .app-tab-well {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.75rem;
-    height: 1.75rem;
-    border-radius: 999px;
-    color: inherit;
-    background: transparent;
-    transition:
-      background-color 160ms ease,
-      color 160ms ease,
-      box-shadow 160ms ease;
-  }
-
-  .app-tab-well-center {
-    background: color-mix(in srgb, var(--fw-accent, #ff6b35) 16%, white);
-    color: var(--fw-accent, #ff6b35);
-  }
-
-  .app-tab-active,
-  .app-tab-center-active {
-    @apply text-primary-500 font-semibold bg-transparent;
-  }
-
-  .app-tab-active .app-tab-well,
-  .app-tab-well-on:not(.app-tab-well-center) {
-    background: color-mix(in srgb, var(--fw-accent, #ff6b35) 14%, white);
-    color: var(--fw-accent, #ff6b35);
-  }
-
-  .app-tab-center-active .app-tab-well-center,
-  .app-tab-center-active .app-tab-well-on {
-    background: var(--fw-accent, #ff6b35);
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.28);
-  }
-
-  .app-tab-label {
-    @apply truncate;
-  }
-
-  .app-tab-center .app-tab-label {
-    @apply font-semibold;
-  }
-
-  @media (min-width: 640px) {
-    .app-tabnav {
-      @apply w-full;
-    }
-
-    .app-tabbar {
-      @apply p-1.5 w-full max-w-2xl mx-auto;
-    }
-
-    .app-tab {
-      @apply flex-col gap-1.5 py-2.5;
-    }
-  }
-
-  /* Desktop web : tabbar pleine largeur, icône + label en ligne */
+  /* Desktop : même base compacte, un cran plus large (pas pleine largeur) */
   @media (min-width: 1024px) {
     .app-tabbar {
-      @apply max-w-4xl p-2 gap-1 rounded-[32px];
+      @apply p-2 gap-1.5 rounded-[28px];
     }
 
     .app-tab {
-      @apply flex-row gap-2.5 px-3 py-3 text-sm min-h-[52px];
+      @apply gap-2.5 px-4 py-3 text-sm min-h-[48px];
     }
 
     .app-tab-well {
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: 14px;
+      width: 1.5rem;
+      height: 1.5rem;
     }
-
-    .app-tab-label {
-      font-size: 0.875rem;
-      line-height: 1.2;
-      letter-spacing: -0.01em;
-    }
-  }
-
-  @media (min-width: 1280px) {
-    .app-tabbar {
-      @apply max-w-5xl;
-    }
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .app-tab:hover:not(.app-tab-active):not(.app-tab-center-active) {
-      @apply text-ink;
-      opacity: 0.9;
-    }
-  }
-
-  .app-tab:active {
-    opacity: 0.55;
   }
 
   .app-icon-btn {

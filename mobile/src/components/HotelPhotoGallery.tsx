@@ -131,7 +131,7 @@ export function HotelPhotoGallery({
     setPhotos(seeds)
     setIndex(0)
 
-    if (!hid || hid === 'primary') {
+    if (!hid || hid === 'primary' || hid === 'seed') {
       loadedKeyRef.current = key
       return
     }

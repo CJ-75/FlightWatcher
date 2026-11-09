@@ -1775,11 +1775,15 @@ export function TripDetailScreen() {
     if (hotelPhoto && !urls.includes(hotelPhoto)) urls.unshift(hotelPhoto)
     return urls
   }, [draftHotel, hotelPhoto])
+  // Chosen/booked hotel → scrollable hero even with seed-only photos (parity web dea0887).
+  const canFetchHotelGallery =
+    Boolean(hotelId) && hotelId !== 'primary' && hotelId !== 'seed'
   const showHotelGallery =
     Boolean(reservationFlags.hotelBooked || reservationFlags.hasHotel) &&
     !reservationFlags.externalHotel &&
-    Boolean(hotelId) &&
-    hotelId !== 'primary'
+    (canFetchHotelGallery ||
+      hotelSeedPhotos.length > 0 ||
+      Boolean(hotelPhoto))
 
   const openReservations = () => {
     if (!reservationToken) return
@@ -2046,9 +2050,17 @@ export function TripDetailScreen() {
                   {showHotelGallery ? (
                     <HotelPhotoGallery
                       variant="hero"
-                      hotelId={hotelId}
-                      seedPhoto={hotelPhoto || null}
-                      seedPhotos={hotelSeedPhotos}
+                      hotelId={canFetchHotelGallery ? hotelId : null}
+                      seedPhoto={hotelPhoto || destinationImage || null}
+                      seedPhotos={
+                        hotelSeedPhotos.length
+                          ? hotelSeedPhotos
+                          : hotelPhoto
+                            ? [hotelPhoto]
+                            : destinationImage
+                              ? [destinationImage]
+                              : []
+                      }
                       alt={hotelName}
                       hotelName={hotelName}
                       cityLabel={cityLabel}
@@ -2720,9 +2732,17 @@ export function TripDetailScreen() {
               {showHotelGallery ? (
                 <HotelPhotoGallery
                   variant="hero"
-                  hotelId={hotelId}
-                  seedPhoto={hotelPhoto || null}
-                  seedPhotos={hotelSeedPhotos}
+                  hotelId={canFetchHotelGallery ? hotelId : null}
+                  seedPhoto={hotelPhoto || destinationImage || null}
+                  seedPhotos={
+                    hotelSeedPhotos.length
+                      ? hotelSeedPhotos
+                      : hotelPhoto
+                        ? [hotelPhoto]
+                        : destinationImage
+                          ? [destinationImage]
+                          : []
+                  }
                   alt={hotelName}
                   hotelName={hotelName}
                   cityLabel={cityLabel}

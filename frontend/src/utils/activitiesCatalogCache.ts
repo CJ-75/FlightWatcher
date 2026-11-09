@@ -47,8 +47,13 @@ export async function fetchActivitiesCatalog(
   const req = (async () => {
     const base = getApiBaseUrl()
     const url = `${base}/api/activities/cities/${encodeURIComponent(normalized)}?adults=${adults}`
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null
+    const timer =
+      ctrl && typeof window !== 'undefined'
+        ? window.setTimeout(() => ctrl.abort(), 25_000)
+        : null
     try {
-      const res = await fetch(url)
+      const res = await fetch(url, ctrl ? { signal: ctrl.signal } : undefined)
       const data = (await res.json().catch(() => null)) as ActivitiesCatalogPayload | null
       if (!res.ok || !data) {
         return {
@@ -60,12 +65,20 @@ export async function fetchActivitiesCatalog(
       if (data.ok) mem.set(key, { at: Date.now(), data })
       return data
     } catch (e) {
+      const aborted =
+        (e instanceof DOMException && e.name === 'AbortError') ||
+        (e instanceof Error && /abort/i.test(e.message))
       return {
         ok: false,
         items: [],
-        error: e instanceof Error ? e.message : 'Erreur',
+        error: aborted
+          ? 'Délai dépassé — réessaie'
+          : e instanceof Error
+            ? e.message
+            : 'Erreur',
       }
     } finally {
+      if (timer != null) window.clearTimeout(timer)
       inflight.delete(key)
     }
   })()

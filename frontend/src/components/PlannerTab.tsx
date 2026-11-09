@@ -2861,11 +2861,15 @@ function TripDetailView({
     if (hotelPhoto && !urls.includes(hotelPhoto)) urls.unshift(hotelPhoto)
     return urls
   })()
+  // Like dea0887 / 0d73423: chosen/booked hotel → scrollable bg even with seed-only photos.
+  const canFetchHotelGallery =
+    Boolean(hotelId) && hotelId !== 'primary' && hotelId !== 'seed'
   const showHotelGallery =
     Boolean(hotelBooked || hasHotel) &&
     !externalHotel &&
-    Boolean(hotelId) &&
-    hotelId !== 'primary'
+    (canFetchHotelGallery ||
+      hotelSeedPhotos.length > 0 ||
+      Boolean(hotelPhoto))
 
   const detailPhase =
     workspace?.phase ||
@@ -3118,8 +3122,8 @@ function TripDetailView({
                     null
                   }
                   citySlug={resolveActivityCitySlug({
-                    city: destinationName,
-                    iata: destinationCode,
+                    cityLabel: destinationName,
+                    destIata: destinationCode,
                   })}
                   onItemsChange={onActivityItemsChange}
                 />
@@ -3465,9 +3469,17 @@ function TripDetailView({
                   <HotelPhotoGallery
                     variant="hero"
                     className="h-full w-full"
-                    hotelId={hotelId}
-                    seedPhoto={hotelPhoto || null}
-                    seedPhotos={hotelSeedPhotos}
+                    hotelId={canFetchHotelGallery ? hotelId : null}
+                    seedPhoto={hotelPhoto || hotelBlockImage || null}
+                    seedPhotos={
+                      hotelSeedPhotos.length
+                        ? hotelSeedPhotos
+                        : hotelPhoto
+                          ? [hotelPhoto]
+                          : hotelBlockImage
+                            ? [hotelBlockImage]
+                            : []
+                    }
                     alt={hotelName}
                     hotelName={hotelName}
                     cityLabel={destinationName}

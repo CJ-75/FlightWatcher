@@ -1351,10 +1351,11 @@ function Dashboard() {
 
   return (
     <div className="app-shell">
-      <div className="app-col-wide px-4 sm:px-6 lg:px-10 xl:px-12 py-4 sm:py-6 md:py-8 lg:py-10 pb-24 sm:pb-10">
-        <div className="w-full mb-5 sm:mb-7 lg:mb-9 space-y-4 lg:space-y-6">
+      {/* Shell historique wider web layout + léger scale desktop */}
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 xl:px-10 py-4 sm:py-6 md:py-8 lg:py-9 pb-24 sm:pb-8">
+        <div className="w-full mb-5 sm:mb-7 lg:mb-8 space-y-4">
           {/* Brand + compte : pleine largeur */}
-          <header className="flex items-center justify-between gap-4 lg:gap-8">
+          <header className="flex items-center justify-between gap-3">
             <Link
               to="/sejours"
               onClick={() => {
@@ -1365,7 +1366,7 @@ function Dashboard() {
               aria-label="FlightWatcher, retour à Parcours"
             >
               <p className="app-kicker mb-0.5">FlightWatcher</p>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-extrabold text-ink tracking-tight truncate">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>
             </Link>
@@ -1374,9 +1375,9 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* Onglets : Vols · Activités · Parcours · Planner · Favoris */}
-          <nav className="app-tabnav flex justify-center w-full" aria-label="Navigation principale">
-            <div className="app-tabbar w-full max-w-md sm:max-w-2xl lg:max-w-4xl xl:max-w-5xl">
+          {/* Pill onglets : largeur compacte centrée (base fe9d96c) */}
+          <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
+            <div className="app-tabbar w-full max-w-md sm:max-w-xl lg:max-w-2xl">
               {(
                 [
                   { id: 'search' as const, label: t('nav.search'), icon: 'search' as const },
@@ -1391,51 +1392,33 @@ function Dashboard() {
                 ] as const
               ).map((tab) => {
                 const active = activeTab === tab.id
-                const isCenter = tab.id === 'deals'
                 return (
-                  <motion.div
+                  <Link
                     key={tab.id}
-                    whileTap={{ scale: 0.96 }}
-                    transition={{ type: 'spring', stiffness: 480, damping: 30 }}
-                    className="min-w-0 flex-1"
-                  >
-                    <Link
-                      to={
-                        tab.id === 'deals' && location.search
-                          ? { pathname: TAB_PATH[tab.id], search: location.search }
-                          : TAB_PATH[tab.id]
+                    to={
+                      tab.id === 'deals' && location.search
+                        ? { pathname: TAB_PATH[tab.id], search: location.search }
+                        : TAB_PATH[tab.id]
+                    }
+                    onClick={() => {
+                      if (active) {
+                        window.scrollTo({ top: 0, behavior: 'smooth' })
+                        window.dispatchEvent(
+                          new CustomEvent('fw:tab-scroll-top', {
+                            detail: { tab: tab.id },
+                          }),
+                        )
                       }
-                      onClick={() => {
-                        if (active) {
-                          window.scrollTo({ top: 0, behavior: 'smooth' })
-                          window.dispatchEvent(
-                            new CustomEvent('fw:tab-scroll-top', {
-                              detail: { tab: tab.id },
-                            }),
-                          )
-                        }
-                        setActiveTabState(tab.id)
-                      }}
-                      className={`app-tab ${isCenter ? 'app-tab-center' : ''} ${
-                        active
-                          ? isCenter
-                            ? 'app-tab-center-active'
-                            : 'app-tab-active'
-                          : ''
-                      }`}
-                      aria-current={active ? 'page' : undefined}
-                    >
-                      <span
-                        className={`app-tab-well ${isCenter ? 'app-tab-well-center' : ''} ${
-                          active ? 'app-tab-well-on' : ''
-                        }`}
-                        aria-hidden
-                      >
-                        <TabIcon name={tab.icon} />
-                      </span>
-                      <span className="app-tab-label truncate">{tab.label}</span>
-                    </Link>
-                  </motion.div>
+                      setActiveTabState(tab.id)
+                    }}
+                    className={`app-tab ${active ? 'app-tab-active' : ''}`}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <span className="app-tab-well" aria-hidden>
+                      <TabIcon name={tab.icon} />
+                    </span>
+                    <span className="app-tab-label">{tab.label}</span>
+                  </Link>
                 )
               })}
             </div>
@@ -1478,7 +1461,7 @@ function Dashboard() {
           </div>
         ) : activeTab === 'search' ? (
           <div className="app-page">
-            <div className="app-col pt-5 sm:pt-8 lg:pt-4 lg:mx-0 lg:max-w-none xl:max-w-5xl">
+            <div className="app-col pt-5 sm:pt-8">
               <SimpleSearch
                 key={`search-form-${searchLoadToken}`}
                 onResults={handleSimpleResults}
@@ -1790,7 +1773,7 @@ function Dashboard() {
         duration={toastType === 'info' ? 5000 : 3000}
       />
 
-      <div className="app-col-wide px-4 sm:px-6 lg:px-10 xl:px-12">
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 xl:px-10">
         <SiteFooter />
       </div>
     </div>
