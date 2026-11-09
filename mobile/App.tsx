@@ -16,6 +16,7 @@ import {
   Sora_800ExtraBold,
 } from '@expo-google-fonts/sora'
 import { AuthProvider, useAuth } from './src/context/AuthContext'
+import { scheduleActivitiesWarmup } from './src/lib/activitiesWarmup'
 import { AuthSheetHost } from './src/components/onboarding/AuthSheetHost'
 import { OnboardingFlowScreen } from './src/screens/OnboardingFlowScreen'
 import {
@@ -305,11 +306,20 @@ function RootNavigator() {
       return
     }
     let cancelled = false
-    void loadOnboardingPrefs().then((p) => {
-      if (!cancelled) setNeedsOnboarding(!p.onboardingCompletedAt)
-    })
+    const fallback = setTimeout(() => {
+      if (!cancelled) setNeedsOnboarding(false)
+    }, 1500)
+    void loadOnboardingPrefs()
+      .then((p) => {
+        if (!cancelled) setNeedsOnboarding(!p.onboardingCompletedAt)
+      })
+      .catch(() => {
+        if (!cancelled) setNeedsOnboarding(false)
+      })
+      .finally(() => clearTimeout(fallback))
     return () => {
       cancelled = true
+      clearTimeout(fallback)
     }
   }, [loading, user, isGuest])
 
@@ -325,6 +335,17 @@ function RootNavigator() {
       if (need) setShowFirstName(true)
     })
   }, [loading, user, isGuest])
+
+  // Post-login/guest only: background warm for likely next screens (activités).
+  // Never from LoginScreen — keep pre-auth boot free of API catalogue work.
+  useEffect(() => {
+    if (loading || needsOnboarding === null) return
+    if (needsOnboarding || forceOnboarding) return
+    if (!user && !isGuest) return
+    const key = user?.id || (isGuest ? 'guest' : '')
+    if (!key) return
+    scheduleActivitiesWarmup(key)
+  }, [loading, needsOnboarding, forceOnboarding, user, isGuest])
 
   // Auth boot — puis Main → Parcours (home)
   if (loading || needsOnboarding === null) {

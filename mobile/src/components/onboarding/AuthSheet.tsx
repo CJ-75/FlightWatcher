@@ -22,6 +22,8 @@ import {
 import { useAuth } from '../../context/AuthContext'
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
+import { AppleLogoIcon } from '../AppleLogoIcon'
+import { GoogleGIcon } from '../GoogleGIcon'
 
 type Props = {
   open: boolean
@@ -137,17 +139,6 @@ export function AuthSheet({
             </Text>
 
             <Pressable
-              style={[styles.btn, styles.btnApple]}
-              disabled={!!busy}
-              onPress={() => void runOAuth('apple')}
-            >
-              {busy === 'apple' ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.btnAppleText}>Continuer avec Apple</Text>
-              )}
-            </Pressable>
-            <Pressable
               style={[styles.btn, styles.btnGoogle]}
               disabled={!!busy}
               onPress={() => void runOAuth('google')}
@@ -155,7 +146,24 @@ export function AuthSheet({
               {busy === 'google' ? (
                 <ActivityIndicator color={colors.ink} />
               ) : (
-                <Text style={styles.btnGoogleText}>Continuer avec Google</Text>
+                <View style={styles.btnRow}>
+                  <GoogleGIcon size={20} />
+                  <Text style={styles.btnGoogleText}>Continuer avec Google</Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.btn, styles.btnApple]}
+              disabled={!!busy}
+              onPress={() => void runOAuth('apple')}
+            >
+              {busy === 'apple' ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <View style={styles.btnRow}>
+                  <AppleLogoIcon size={20} color="#fff" />
+                  <Text style={styles.btnAppleText}>Continuer avec Apple</Text>
+                </View>
               )}
             </Pressable>
 
@@ -272,6 +280,12 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
     marginBottom: 10,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
   btnApple: { backgroundColor: '#111' },
   btnAppleText: { fontFamily: fonts.semibold, fontSize: 15, color: '#fff' },

@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
-import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
+import { AppleLogoIcon } from '../components/AppleLogoIcon'
 import { GoogleGIcon, prefetchGoogleG } from '../components/GoogleGIcon'
 import { getWebOrigin } from '../lib/client'
 import { colors } from '../theme'
@@ -53,10 +53,11 @@ function uri(id: string) {
 const URIS = SLIDES.map((s) => uri(s.id))
 
 export function LoginScreen() {
-  const { continueAsGuest, user, session } = useAuth()
-  const { openAuthSheet } = useAuthSheet()
+  const { continueAsGuest, user, session, signInWithGoogle, signInWithApple } =
+    useAuth()
   const insets = useSafeAreaInsets()
-  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState<'google' | 'apple' | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
   const [slide, setSlide] = useState(0)
 
   const loggedIn = Boolean(user || session)
@@ -97,12 +98,18 @@ export function LoginScreen() {
   const goRef = useRef(go)
   goRef.current = go
 
+  // Pre-login: only what the login surface needs (hero + Google mark).
+  // Catalogue / Viator / airports wait until Main (post login).
   useEffect(() => {
-    URIS.forEach((u) => {
-      void Image.prefetch(u)
-    })
+    void Image.prefetch(URIS[0])
+    if (URIS[1]) void Image.prefetch(URIS[1])
     prefetchGoogleG()
   }, [])
+
+  useEffect(() => {
+    const next = URIS[(slide + 1) % URIS.length]
+    if (next) void Image.prefetch(next)
+  }, [slide])
 
   useEffect(() => {
     armTimer()
@@ -122,13 +129,18 @@ export function LoginScreen() {
     }),
   ).current
 
-  const onLogin = () => {
-    setLoading(true)
-    openAuthSheet({
-      trigger: 'already_account',
-      onAuthenticated: () => setLoading(false),
-    })
-    setLoading(false)
+  const runOAuth = async (method: 'google' | 'apple') => {
+    setBusy(method)
+    setAuthError(null)
+    // Spinner only while the browser opens — session arrives via deep link /
+    // onAuthStateChange. Never block the login UI for 90s.
+    const pending =
+      method === 'apple' ? signInWithApple() : signInWithGoogle()
+    const releaseBusy = setTimeout(() => setBusy(null), 1400)
+    const { error } = await pending
+    clearTimeout(releaseBusy)
+    setBusy(null)
+    if (error) setAuthError(error.message)
   }
 
   const current = SLIDES[slide]
@@ -181,64 +193,82 @@ export function LoginScreen() {
             ))}
           </View>
 
-          {loggedIn ? (
-            <View style={styles.ctaBoot}>
-              <ActivityIndicator color={colors.white} />
+          <View style={styles.cta}>
+            {loggedIn && !busy ? (
               <Text style={styles.bootHint}>Ouverture de ta recherche…</Text>
-            </View>
-          ) : (
-            <View style={styles.cta}>
-              <Pressable
-                onPress={() => void onLogin()}
-                disabled={loading}
-                style={({ pressed }) => [
-                  styles.googleBtn,
-                  pressed && styles.googlePressed,
-                  loading && styles.googleDisabled,
-                ]}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.ink} />
-                ) : (
-                  <>
-                    <GoogleGIcon size={22} />
-                    <Text style={styles.googleLabel}>Continuer avec Google</Text>
-                  </>
-                )}
-              </Pressable>
+            ) : null}
 
-              {__DEV__ ? (
-                <Pressable
-                  onPress={continueAsGuest}
-                  style={({ pressed }) => [styles.guestBtn, pressed && { opacity: 0.65 }]}
-                  hitSlop={10}
-                >
-                  <Text style={styles.guestLabel}>Continuer sans compte</Text>
-                </Pressable>
-              ) : null}
-              <Text style={styles.legal}>
-                En continuant, tu acceptes les{' '}
-                <Text
-                  style={styles.legalLink}
-                  onPress={() =>
-                    void Linking.openURL(`${getWebOrigin()}/terms`)
-                  }
-                >
-                  CGU
-                </Text>
-                {' '}et la{' '}
-                <Text
-                  style={styles.legalLink}
-                  onPress={() =>
-                    void Linking.openURL(`${getWebOrigin()}/privacy`)
-                  }
-                >
-                  confidentialité
-                </Text>
-                .
+            <Pressable
+              onPress={() => void runOAuth('google')}
+              disabled={!!busy}
+              style={({ pressed }) => [
+                styles.googleBtn,
+                pressed && styles.btnPressed,
+                busy && styles.btnDisabled,
+              ]}
+            >
+              {busy === 'google' ? (
+                <ActivityIndicator color={colors.ink} />
+              ) : (
+                <>
+                  <GoogleGIcon size={22} />
+                  <Text style={styles.googleLabel}>Continuer avec Google</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => void runOAuth('apple')}
+              disabled={!!busy}
+              style={({ pressed }) => [
+                styles.appleBtn,
+                pressed && styles.btnPressed,
+                busy && styles.btnDisabled,
+              ]}
+            >
+              {busy === 'apple' ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <AppleLogoIcon size={22} color="#FFFFFF" />
+                  <Text style={styles.appleLabel}>Continuer avec Apple</Text>
+                </>
+              )}
+            </Pressable>
+
+            {authError ? <Text style={styles.authError}>{authError}</Text> : null}
+
+            {__DEV__ ? (
+              <Pressable
+                onPress={continueAsGuest}
+                style={({ pressed }) => [styles.guestBtn, pressed && { opacity: 0.65 }]}
+                hitSlop={10}
+              >
+                <Text style={styles.guestLabel}>Continuer sans compte</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.legal}>
+              En continuant, tu acceptes les{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() =>
+                  void Linking.openURL(`${getWebOrigin()}/terms`)
+                }
+              >
+                CGU
               </Text>
-            </View>
-          )}
+              {' '}et la{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() =>
+                  void Linking.openURL(`${getWebOrigin()}/privacy`)
+                }
+              >
+                confidentialité
+              </Text>
+              .
+            </Text>
+          </View>
         </LinearGradient>
       </ImageBackground>
     </View>
@@ -323,16 +353,29 @@ const styles = StyleSheet.create({
     gap: 10,
     alignSelf: 'stretch',
   },
-  ctaBoot: {
-    gap: 10,
-    alignItems: 'center',
-    alignSelf: 'stretch',
-  },
   bootHint: {
-    marginTop: 4,
+    textAlign: 'center',
     fontSize: 14,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.85)',
+    marginBottom: 4,
+  },
+  appleBtn: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#000000',
+    paddingHorizontal: 20,
+  },
+  appleLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
   },
   googleBtn: {
     alignSelf: 'stretch',
@@ -347,13 +390,20 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(0,0,0,0.08)',
   },
-  googlePressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
-  googleDisabled: { opacity: 0.7 },
+  btnPressed: { opacity: 0.92, transform: [{ scale: 0.985 }] },
+  btnDisabled: { opacity: 0.7 },
   googleLabel: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.ink,
     letterSpacing: -0.2,
+  },
+  authError: {
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFB4A8',
+    marginTop: 2,
   },
   guestBtn: {
     height: 40,

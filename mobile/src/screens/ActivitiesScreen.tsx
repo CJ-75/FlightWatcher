@@ -75,7 +75,11 @@ import {
   getCityActivitiesCached,
   peekCityActivities,
 } from '../lib/activitiesCache'
-import { listTravelWorkspacesCached } from '../lib/workspacesCache'
+import {
+  hydrateTravelWorkspacesCache,
+  listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
+} from '../lib/workspacesCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { TabScreenHeader } from '../components/TabScreenHeader'
@@ -181,11 +185,13 @@ export function ActivitiesScreen() {
   const { viewUser, signInWithGoogle, user, session, isGuest, loading: authLoading } =
     useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
-  // Première connexion / aucun séjour : Paris par défaut, écrasé dès qu’un planner est repris.
+  // Ville route si connue ; sinon hint local (remembered / disk) puis planner.
   const [citySlug, setCitySlug] = useState(
-    () => route.params?.city?.trim().toLowerCase() || 'paris',
+    () => route.params?.city?.trim().toLowerCase() || '',
   )
   const [tripReady, setTripReady] = useState(false)
+  const loadGen = useRef(0)
+  const cityHintDone = useRef(Boolean(route.params?.city?.trim()))
   const authKey =
     user?.id ||
     (isGuest ? 'guest' : '') ||
@@ -193,9 +199,55 @@ export function ActivitiesScreen() {
 
   useEffect(() => {
     const fromRoute = route.params?.city?.trim().toLowerCase()
-    if (fromRoute && fromRoute !== citySlug) setCitySlug(fromRoute)
+    if (fromRoute && fromRoute !== citySlug) {
+      cityHintDone.current = true
+      setCitySlug(fromRoute)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.city])
+
+  // Fast path: resolve city from local storage BEFORE remote planner bootstrap.
+  useEffect(() => {
+    if (cityHintDone.current || route.params?.city?.trim()) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const remembered = await listRememberedTrips()
+        if (cancelled) return
+        const memCity = remembered[0]?.city
+        if (memCity) {
+          const slug = resolveActivityCitySlug({
+            cityLabel: memCity,
+            citySlug: memCity,
+          })
+          if (slug) {
+            cityHintDone.current = true
+            setCitySlug(slug)
+            return
+          }
+        }
+        let ws = peekTravelWorkspacesCache()
+        if (!ws?.length) ws = (await hydrateTravelWorkspacesCache()) || null
+        if (cancelled) return
+        const top = ws?.[0]
+          ? filterActivitySwitcherWorkspaces(ws)[0]
+          : null
+        if (top) {
+          const { slug } = cityFromWorkspace(top)
+          if (slug) {
+            cityHintDone.current = true
+            setCitySlug(slug)
+            return
+          }
+        }
+      } catch {
+        /* trip bootstrap will set city */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [authKey, route.params?.city])
   const [adults] = useState(2)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -271,7 +323,8 @@ export function ActivitiesScreen() {
             return
           }
           didAutoCity.current = true
-          setCitySlug(slug)
+          cityHintDone.current = true
+          setCitySlug((prev) => (prev === slug ? prev : slug))
         }
 
         // Redirect planner → Activités : params route font foi (voyage + ville).
@@ -652,6 +705,7 @@ export function ActivitiesScreen() {
   const loadCity = useCallback(
     async (slug: string, opts?: { silent?: boolean }) => {
       if (!slug) return
+      const gen = ++loadGen.current
       const warm = peekCityActivities(slug, adults)
       if (warm?.ok && Array.isArray(warm.items)) {
         setItems(warm.items)
@@ -666,6 +720,7 @@ export function ActivitiesScreen() {
         const res = await getCityActivitiesCached(slug, adults, () =>
           getApi().listCityActivities(slug, adults),
         )
+        if (gen !== loadGen.current) return
         if (!res.ok) {
           const msg =
             res.error === 'unknown_city'
@@ -678,11 +733,14 @@ export function ActivitiesScreen() {
         }
         setItems(Array.isArray(res.items) ? res.items : [])
       } catch (e) {
+        if (gen !== loadGen.current) return
         setError(e instanceof Error ? e.message : 'Erreur')
         if (!warm?.items?.length) setItems([])
       } finally {
-        setLoading(false)
-        setRefreshing(false)
+        if (gen === loadGen.current) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     },
     [adults],
@@ -690,26 +748,12 @@ export function ActivitiesScreen() {
 
   useEffect(() => {
     if (!citySlug) {
-      // Sécurité : 1ʳᵉ connexion sans ville → Paris.
-      setCitySlug('paris')
+      // No local hint yet — Paris only after planner bootstrap confirms empty.
+      if (tripReady) setCitySlug('paris')
       return
     }
-    // Don't wait for planner bootstrap when city is already known (route / default).
-    // Only delay when a trip param may still replace the city.
-    const waitingTripCity =
-      !tripReady &&
-      Boolean(plannedFromRoute || draftFromRoute) &&
-      !route.params?.city
-    if (waitingTripCity) return
     void loadCity(citySlug)
-  }, [
-    tripReady,
-    citySlug,
-    loadCity,
-    plannedFromRoute,
-    draftFromRoute,
-    route.params?.city,
-  ])
+  }, [citySlug, tripReady, loadCity])
 
   useEffect(() => {
     pendingRef.current = pendingBook

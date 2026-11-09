@@ -171,7 +171,9 @@ async function signInWithOAuthProvider(
         console.log('[auth] session present after null return')
         return { error: null }
       }
-      return { error: null }
+      return {
+        error: new Error('Connexion annulée. Réessaie avec Google ou Apple.'),
+      }
     }
     console.log('[auth] applySessionFromUrl…')
     const { session, error: sessionError } = await applySessionFromUrl(c, resultUrl)
