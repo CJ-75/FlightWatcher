@@ -185,6 +185,57 @@ function MainTabs() {
     }
   }, [])
 
+  // Like web prefetchActivitiesCatalog — disk hydrate + public HTTP for last city.
+  React.useEffect(() => {
+    let cancelled = false
+    const t = setTimeout(() => {
+      if (cancelled) return
+      void (async () => {
+        try {
+          const cache = await import('./src/lib/activitiesCache')
+          const { fetchCityActivitiesPublic } = await import(
+            './src/lib/activitiesCatalogFetch'
+          )
+          const { listRememberedTrips } = await import('./src/lib/tripRecovery')
+          const { resolveActivityCitySlug } = await import('@flightwatcher/shared')
+
+          let slug = (await cache.hydrateLastCitySlug()) || ''
+          if (!slug) {
+            const remembered = await listRememberedTrips().catch(() => [])
+            const city = remembered[0]?.city
+            if (city) {
+              slug = resolveActivityCitySlug({
+                cityLabel: city,
+                citySlug: city,
+              })
+            }
+          }
+          if (!slug) slug = 'paris'
+          if (cancelled) return
+          await cache.hydrateCityActivities(slug, 2)
+          if (cancelled) return
+          if (!cache.peekCityActivities(slug, 2)?.ok) {
+            await cache.getCityActivitiesCached(slug, 2, () =>
+              fetchCityActivitiesPublic(slug, 2),
+            )
+          } else {
+            void cache
+              .getCityActivitiesCached(slug, 2, () =>
+                fetchCityActivitiesPublic(slug, 2),
+              )
+              .catch(() => undefined)
+          }
+        } catch {
+          /* best-effort */
+        }
+      })()
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [])
+
   React.useEffect(() => {
     let cancelled = false
     void import('./src/lib/client')

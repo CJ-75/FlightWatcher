@@ -73,8 +73,13 @@ import { getGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { auth, getApi } from '../lib/client'
 import {
   getCityActivitiesCached,
+  hydrateCityActivities,
+  hydrateLastCitySlug,
   peekCityActivities,
+  peekLastCitySlug,
+  setLastCitySlug,
 } from '../lib/activitiesCache'
+import { fetchCityActivitiesPublic } from '../lib/activitiesCatalogFetch'
 import {
   hydrateTravelWorkspacesCache,
   listTravelWorkspacesCached,
@@ -185,13 +190,14 @@ export function ActivitiesScreen() {
   const { viewUser, signInWithGoogle, user, session, isGuest, loading: authLoading } =
     useAuth()
   const [loginLoading, setLoginLoading] = useState(false)
-  // Ville route si connue ; sinon hint local (remembered / disk) puis planner.
+  // Seed disk/remembered before network — avoids paris → planner city double fetch.
+  const routeCityInit = route.params?.city?.trim().toLowerCase() || ''
   const [citySlug, setCitySlug] = useState(
-    () => route.params?.city?.trim().toLowerCase() || '',
+    () => routeCityInit || peekLastCitySlug() || '',
   )
+  const [citySeeded, setCitySeeded] = useState(() => Boolean(routeCityInit))
   const [tripReady, setTripReady] = useState(false)
   const loadGen = useRef(0)
-  const cityHintDone = useRef(Boolean(route.params?.city?.trim()))
   const authKey =
     user?.id ||
     (isGuest ? 'guest' : '') ||
@@ -200,59 +206,66 @@ export function ActivitiesScreen() {
   useEffect(() => {
     const fromRoute = route.params?.city?.trim().toLowerCase()
     if (fromRoute && fromRoute !== citySlug) {
-      cityHintDone.current = true
       setCitySlug(fromRoute)
+      setCitySeeded(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.city])
 
-  // Fast path: resolve city from local storage BEFORE remote planner bootstrap.
   useEffect(() => {
-    if (cityHintDone.current || route.params?.city?.trim()) return
+    if (citySeeded) return
     let cancelled = false
     void (async () => {
       try {
-        const remembered = await listRememberedTrips()
+        const last = await hydrateLastCitySlug()
         if (cancelled) return
+        const remembered = await listRememberedTrips().catch(() => [])
         const memCity = remembered[0]?.city
+        let slug = ''
         if (memCity) {
-          const slug = resolveActivityCitySlug({
+          slug = resolveActivityCitySlug({
             cityLabel: memCity,
             citySlug: memCity,
           })
-          if (slug) {
-            cityHintDone.current = true
-            setCitySlug(slug)
-            return
-          }
         }
-        let ws = peekTravelWorkspacesCache()
-        if (!ws?.length) ws = (await hydrateTravelWorkspacesCache()) || null
-        if (cancelled) return
-        const top = ws?.[0]
-          ? filterActivitySwitcherWorkspaces(ws)[0]
-          : null
-        if (top) {
-          const { slug } = cityFromWorkspace(top)
-          if (slug) {
-            cityHintDone.current = true
-            setCitySlug(slug)
-            return
-          }
+        if (!slug) {
+          let ws = peekTravelWorkspacesCache()
+          if (!ws?.length) ws = (await hydrateTravelWorkspacesCache()) || null
+          if (cancelled) return
+          const top = ws?.length
+            ? filterActivitySwitcherWorkspaces(ws)[0]
+            : null
+          if (top) slug = cityFromWorkspace(top).slug
+        }
+        if (!slug) slug = last || 'paris'
+        if (!cancelled) {
+          setLastCitySlug(slug)
+          setCitySlug((prev) => prev || slug)
+          setCitySeeded(true)
         }
       } catch {
-        /* trip bootstrap will set city */
+        if (!cancelled) {
+          setCitySlug((prev) => prev || 'paris')
+          setCitySeeded(true)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [authKey, route.params?.city])
+  }, [citySeeded])
+
   const [adults] = useState(2)
-  const [loading, setLoading] = useState(true)
+  const warmBoot = peekCityActivities(
+    citySlug || peekLastCitySlug() || 'paris',
+    2,
+  )
+  const [loading, setLoading] = useState(() => !warmBoot?.items?.length)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [items, setItems] = useState<Record<string, unknown>[]>([])
+  const [items, setItems] = useState<Record<string, unknown>[]>(
+    () => warmBoot?.items || [],
+  )
   const [header, setHeader] = useState<string | null>(null)
   const [fallbackHint, setFallbackHint] = useState<string | null>(null)
   const [sort, setSort] = useState<'recommended' | 'price' | 'rating'>('recommended')
@@ -323,7 +336,7 @@ export function ActivitiesScreen() {
             return
           }
           didAutoCity.current = true
-          cityHintDone.current = true
+          setLastCitySlug(slug)
           setCitySlug((prev) => (prev === slug ? prev : slug))
         }
 
@@ -706,8 +719,13 @@ export function ActivitiesScreen() {
     async (slug: string, opts?: { silent?: boolean }) => {
       if (!slug) return
       const gen = ++loadGen.current
-      const warm = peekCityActivities(slug, adults)
-      if (warm?.ok && Array.isArray(warm.items)) {
+      setLastCitySlug(slug)
+      let warm = peekCityActivities(slug, adults)
+      if (!warm?.items?.length) {
+        warm = (await hydrateCityActivities(slug, adults)) || null
+        if (gen !== loadGen.current) return
+      }
+      if (warm?.ok && Array.isArray(warm.items) && warm.items.length) {
         setItems(warm.items)
         setLoading(false)
       } else if (!opts?.silent) {
@@ -718,7 +736,7 @@ export function ActivitiesScreen() {
       setFallbackHint(null)
       try {
         const res = await getCityActivitiesCached(slug, adults, () =>
-          getApi().listCityActivities(slug, adults),
+          fetchCityActivitiesPublic(slug, adults),
         )
         if (gen !== loadGen.current) return
         if (!res.ok) {
@@ -746,14 +764,15 @@ export function ActivitiesScreen() {
     [adults],
   )
 
+  // Wait for city seed (disk/remembered) — then one catalog fetch on the right city.
   useEffect(() => {
+    if (!citySeeded) return
     if (!citySlug) {
-      // No local hint yet — Paris only after planner bootstrap confirms empty.
-      if (tripReady) setCitySlug('paris')
+      setCitySlug('paris')
       return
     }
     void loadCity(citySlug)
-  }, [citySlug, tripReady, loadCity])
+  }, [citySeeded, citySlug, loadCity])
 
   useEffect(() => {
     pendingRef.current = pendingBook

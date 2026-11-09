@@ -1,14 +1,16 @@
 /**
- * Post-login only — warm Viator city lists once Main is up.
- * Pre-login stays light (no catalogue / Viator). We load what the session
- * is likely to need next (remembered city + Paris), in the background.
+ * Post-login — prefetch catalogue public immédiatement (last / remembered city).
  */
 import { resolveActivityCitySlug } from '@flightwatcher/shared'
 import {
   getCityActivitiesCached,
+  hydrateCityActivities,
+  hydrateLastCitySlug,
   peekCityActivities,
+  peekLastCitySlug,
+  setLastCitySlug,
 } from './activitiesCache'
-import { getApi } from './client'
+import { fetchCityActivitiesPublic } from './activitiesCatalogFetch'
 import { listRememberedTrips } from './tripRecovery'
 import {
   hydrateTravelWorkspacesCache,
@@ -16,7 +18,6 @@ import {
 } from './workspacesCache'
 
 const ADULTS = 2
-const MAX_CITIES = 2
 
 let warmedSessionKey: string | null = null
 let cancelScheduled: (() => void) | null = null
@@ -33,51 +34,56 @@ async function resolveWarmCities(): Promise<string[]> {
     const slug = resolveActivityCitySlug({ cityLabel: raw, citySlug: raw })
     if (slug && !out.includes(slug)) out.push(slug)
   }
+
+  // Remembered trip city first — avoid warming Paris then loading planner city.
   try {
     const remembered = await listRememberedTrips()
-    for (const t of remembered.slice(0, 4)) {
-      push(t.city)
-      if (out.length >= MAX_CITIES) break
-    }
+    for (const t of remembered.slice(0, 3)) push(t.city)
   } catch {
     /* ignore */
   }
+
+  await hydrateLastCitySlug()
+  push(peekLastCitySlug())
+
   try {
     let ws = peekTravelWorkspacesCache()
     if (!ws?.length) ws = (await hydrateTravelWorkspacesCache()) || null
-    for (const row of ws || []) {
-      push(row.city)
-      if (out.length >= MAX_CITIES) break
-    }
+    for (const row of (ws || []).slice(0, 3)) push(row.city)
   } catch {
     /* ignore */
   }
-  // Paris only when no trip city known — avoid warming Paris then loading planner city.
+
   if (!out.length) push('paris')
-  return out.slice(0, MAX_CITIES)
+  return out.slice(0, 2)
 }
 
 async function warmCity(slug: string): Promise<void> {
+  setLastCitySlug(slug)
   if (peekCityActivities(slug, ADULTS)?.ok) return
+  await hydrateCityActivities(slug, ADULTS)
+  if (peekCityActivities(slug, ADULTS)?.ok) {
+    void getCityActivitiesCached(slug, ADULTS, () =>
+      fetchCityActivitiesPublic(slug, ADULTS),
+    ).catch(() => {})
+    return
+  }
   await getCityActivitiesCached(slug, ADULTS, () =>
-    getApi().listCityActivities(slug, ADULTS),
+    fetchCityActivitiesPublic(slug, ADULTS),
   )
 }
 
-/**
- * Fire-and-forget after Main is up. One run per auth session key.
- */
 export function scheduleActivitiesWarmup(sessionKey: string) {
   const key = String(sessionKey || '').trim()
   if (!key || warmedSessionKey === key) return
   warmedSessionKey = key
   cancelScheduled?.()
 
+  // Fire ASAP — no idle delay (tab may open before +350ms).
   const timer = setTimeout(() => {
     void (async () => {
       try {
         const cities = await resolveWarmCities()
-        // Sequential — avoid hammering Viator on cold boot.
         for (const slug of cities) {
           try {
             await warmCity(slug)
@@ -89,7 +95,7 @@ export function scheduleActivitiesWarmup(sessionKey: string) {
         /* best-effort */
       }
     })()
-  }, 900)
+  }, 0)
 
   cancelScheduled = () => clearTimeout(timer)
 }

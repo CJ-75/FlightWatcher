@@ -35,6 +35,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
 import { getCityActivitiesCached } from '../lib/activitiesCache'
+import { fetchCityActivitiesPublic } from '../lib/activitiesCatalogFetch'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
@@ -190,7 +191,7 @@ async function enrichActivityPhotos(
   const priceByCode = new Map<string, number>()
   try {
     const res = await getCityActivitiesCached(citySlug, 2, () =>
-      getApi().listCityActivities(citySlug, 2),
+      fetchCityActivitiesPublic(citySlug, 2),
     )
     for (const raw of res.items || []) {
       const row = raw as Record<string, unknown>
