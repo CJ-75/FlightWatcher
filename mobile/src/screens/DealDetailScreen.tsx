@@ -101,9 +101,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
     return s
   })
   const [loading, setLoading] = useState(() => !(preview || peekDealPreview(dealId)))
-  const [refreshing, setRefreshing] = useState(() =>
-    Boolean(preview || peekDealPreview(dealId)),
-  )
   const [error, setError] = useState<string | null>(null)
   const [hotelId, setHotelId] = useState<string | null>(
     () => deal?.hotel?.id || null,
@@ -124,11 +121,9 @@ export function DealDetailScreen({ route, navigation }: Props) {
       setDeal(local)
       setHotelId(local.hotel?.id || null)
       setLoading(false)
-      setRefreshing(true)
       setError(null)
     } else {
       setLoading(true)
-      setRefreshing(false)
       setError(null)
     }
     ;(async () => {
@@ -147,10 +142,7 @@ export function DealDetailScreen({ route, navigation }: Props) {
           setDeal(null)
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false)
-          setRefreshing(false)
-        }
+        if (!cancelled) setLoading(false)
       }
     })()
     return () => {
@@ -432,11 +424,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      {refreshing ? (
-        <View style={styles.refreshBar} pointerEvents="none">
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      ) : null}
       <ScrollView
         scrollEnabled={!gallerySwipeActive}
         showsVerticalScrollIndicator={false}
@@ -945,16 +932,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  refreshBar: {
-    position: 'absolute',
-    top: 8,
-    right: 16,
-    zIndex: 40,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 999,
-    padding: 6,
-    ...shadow.soft,
-  },
   centered: {
     flex: 1,
     alignItems: 'center',

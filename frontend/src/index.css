@@ -240,7 +240,7 @@
 
   .app-tab-active,
   .app-tab-center-active {
-    @apply text-primary font-semibold bg-transparent;
+    @apply text-primary-500 font-semibold bg-transparent;
   }
 
   .app-tab-active .app-tab-well,

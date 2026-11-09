@@ -135,9 +135,10 @@ export function prefetchPlannedTrips(
     const id = String(raw || '').trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
-    if (memory.get(id)?.id) continue
+    // Skip only real cached trips — hub stubs (no invite_token) must still prefetch.
+    if (memory.get(id)?.invite_token) continue
     if (inflight.has(id)) continue
-    void getPlannedTripCached(id).catch(() => {})
+    void getPlannedTripCached(id, undefined, { force: true }).catch(() => {})
     n += 1
     if (n >= limit) break
   }

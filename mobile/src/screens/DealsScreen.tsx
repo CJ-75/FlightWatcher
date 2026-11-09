@@ -55,6 +55,7 @@ import { colors, fonts, radius, shadow, spacing } from '../theme'
 const STALE_MS = 90_000
 const ORIGIN_LS_KEY = 'fw_deals_origin'
 const DEALS_CACHE_KEY = 'fw_deals_wall_v1'
+const OCCASIONS_CACHE_KEY = 'fw_deals_occasions_v1'
 const DEALS_PAGE = 36
 const DEALS_MAX = 96
 type DurationTab = 'weekend' | 'short' | 'week'
@@ -66,6 +67,36 @@ type DealsListItem =
 
 /** Instant remount paint (hub tab switch). */
 let dealsMemoryCache: TravelDeal[] | null = null
+let occasionsMemoryCache: DealOccasionChip[] | null = null
+
+function chipsHaveCounts(chips: DealOccasionChip[]): boolean {
+  return chips.some((c) => typeof c.count === 'number' && c.count > 0)
+}
+
+function initialOccasionChips(): DealOccasionChip[] {
+  if (occasionsMemoryCache && chipsHaveCounts(occasionsMemoryCache)) {
+    return occasionsMemoryCache
+  }
+  if (dealsMemoryCache?.length) {
+    const fromWall = applyDealOccasionCountsFromWall(
+      [...DEAL_INSPIRE_SEED],
+      dealsMemoryCache,
+    )
+    if (chipsHaveCounts(fromWall)) {
+      occasionsMemoryCache = fromWall
+      return fromWall
+    }
+  }
+  return [...DEAL_INSPIRE_SEED]
+}
+
+function persistOccasionChips(chips: DealOccasionChip[]) {
+  if (!chipsHaveCounts(chips)) return
+  occasionsMemoryCache = chips
+  void AsyncStorage.setItem(OCCASIONS_CACHE_KEY, JSON.stringify(chips)).catch(
+    () => undefined,
+  )
+}
 
 export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets()
@@ -88,9 +119,14 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [durationTab, setDurationTab] = useState<DurationTab>('weekend')
   const [occasion, setOccasion] = useState<string | null>(null)
-  const [occasionChips, setOccasionChips] =
-    useState<DealOccasionChip[]>(() => [...DEAL_INSPIRE_SEED])
-  const [occasionCountsPending, setOccasionCountsPending] = useState(true)
+  const [occasionChips, setOccasionChips] = useState<DealOccasionChip[]>(
+    initialOccasionChips,
+  )
+  const [occasionCountsPending, setOccasionCountsPending] = useState(
+    () => !chipsHaveCounts(initialOccasionChips()),
+  )
+  const occasionChipsRef = useRef(occasionChips)
+  occasionChipsRef.current = occasionChips
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc'>('recommended')
   const [airports, setAirports] = useState<Airport[]>(() => peekCachedAirports())
   const [uiEnabled, setUiEnabled] = useState(true)
@@ -113,22 +149,48 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
 
   useEffect(() => subscribeAirports(setAirports), [])
 
-  // Disk cache → paint deals before network when memory was cold
+  // Disk cache → paint deals + chip counts before network when memory was cold
   useEffect(() => {
-    if (dealsMemoryCache?.length) return
     let cancelled = false
-    void AsyncStorage.getItem(DEALS_CACHE_KEY)
-      .then((raw) => {
-        if (cancelled || !raw) return
-        const parsed = JSON.parse(raw) as TravelDeal[]
-        if (!Array.isArray(parsed) || !parsed.length) return
-        if (dealsRef.current.length) return
-        dealsMemoryCache = parsed
-        rememberDealPreviews(parsed)
-        setDeals(parsed)
-        setLoading(false)
-      })
-      .catch(() => undefined)
+    if (!dealsMemoryCache?.length) {
+      void AsyncStorage.getItem(DEALS_CACHE_KEY)
+        .then((raw) => {
+          if (cancelled || !raw) return
+          const parsed = JSON.parse(raw) as TravelDeal[]
+          if (!Array.isArray(parsed) || !parsed.length) return
+          if (dealsRef.current.length) return
+          dealsMemoryCache = parsed
+          rememberDealPreviews(parsed)
+          setDeals(parsed)
+          setLoading(false)
+          // Counts from cached wall — instant chips, no skeleton.
+          setOccasionChips((prev) => {
+            const next = applyDealOccasionCountsFromWall(
+              prev.length ? prev : [...DEAL_INSPIRE_SEED],
+              parsed,
+            )
+            if (chipsHaveCounts(next)) {
+              persistOccasionChips(next)
+              setOccasionCountsPending(false)
+            }
+            return next
+          })
+        })
+        .catch(() => undefined)
+    }
+    if (!occasionsMemoryCache || !chipsHaveCounts(occasionsMemoryCache)) {
+      void AsyncStorage.getItem(OCCASIONS_CACHE_KEY)
+        .then((raw) => {
+          if (cancelled || !raw) return
+          if (chipsHaveCounts(occasionChipsRef.current)) return
+          const parsed = JSON.parse(raw) as DealOccasionChip[]
+          if (!Array.isArray(parsed) || !chipsHaveCounts(parsed)) return
+          occasionsMemoryCache = parsed
+          setOccasionChips(parsed)
+          setOccasionCountsPending(false)
+        })
+        .catch(() => undefined)
+    }
     return () => {
       cancelled = true
     }
@@ -197,14 +259,11 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
     setFiltersOpen(false)
   }, [origin, adults])
 
-  const chipsHaveCounts = useCallback((chips: DealOccasionChip[]) => {
-    return chips.some((c) => typeof c.count === 'number' && c.count > 0)
-  }, [])
-
   const loadOccasions = useCallback(
     async (opts?: { silent?: boolean }) => {
-      // Keep seed visible; only show count skeletons on cold start.
-      if (!opts?.silent) setOccasionCountsPending(true)
+      // Never flash skeletons if we already show numbers (cache / wall).
+      const already = chipsHaveCounts(occasionChipsRef.current)
+      if (!opts?.silent && !already) setOccasionCountsPending(true)
       try {
         const res = await getApi().getDealOccasions({
           origin: queryOrigin || undefined,
@@ -225,18 +284,21 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
           dealsRef.current,
         )
         setOccasionChips(ordered)
+        persistOccasionChips(ordered)
         setOccasion((prev) => {
           if (!prev) return null
           return ordered.some((c) => c.slug === prev) ? prev : null
         })
       } catch {
         // Keep seed chips — fill counts from the wall when possible.
-        setOccasionChips((prev) =>
-          applyDealOccasionCountsFromWall(
+        setOccasionChips((prev) => {
+          const next = applyDealOccasionCountsFromWall(
             prev.length ? prev : [...DEAL_INSPIRE_SEED],
             dealsRef.current,
-          ),
-        )
+          )
+          persistOccasionChips(next)
+          return next
+        })
       } finally {
         setOccasionCountsPending(false)
       }
@@ -293,7 +355,10 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         if (!more) {
           setOccasionChips((prev) => {
             const next = applyDealOccasionCountsFromWall(prev, withHotelPhoto)
-            if (chipsHaveCounts(next)) setOccasionCountsPending(false)
+            if (chipsHaveCounts(next)) {
+              persistOccasionChips(next)
+              setOccasionCountsPending(false)
+            }
             return next
           })
         }
@@ -316,15 +381,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         setLoadingMore(false)
       }
     },
-    [
-      refreshLikes,
-      queryOrigin,
-      queryAdults,
-      occasion,
-      durationTab,
-      uiEnabled,
-      chipsHaveCounts,
-    ],
+    [refreshLikes, queryOrigin, queryAdults, occasion, durationTab, uiEnabled],
   )
 
   // Wall + chips in parallel as soon as origin is ready.
@@ -344,11 +401,11 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query* + occasion + duration
   }, [originReady, queryOrigin, queryAdults, occasion, durationTab])
 
-  // Occasions independent of chip selection — silent refresh when counts already shown.
+  // Occasions independent of chip selection — silent when counts already painted.
   useEffect(() => {
     if (!originReady) return
     let cancelled = false
-    const silent = chipsHaveCounts(occasionChips)
+    const silent = chipsHaveCounts(occasionChipsRef.current)
     const timer = setTimeout(() => {
       if (!cancelled) void loadOccasions({ silent })
     }, 0)
@@ -356,7 +413,6 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
       cancelled = true
       clearTimeout(timer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- not on occasion / occasionChips
   }, [originReady, queryOrigin, queryAdults, durationTab, loadOccasions])
 
   const loadMore = useCallback(() => {

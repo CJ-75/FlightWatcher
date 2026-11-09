@@ -293,7 +293,7 @@ export function TripDetailScreen() {
       (body) => getApi().trackActivityEvent(body),
       {
         tripId: trip.id,
-        variant: tripDetailV2 === true ? 'v2' : 'v1',
+        variant: tripDetailV2 !== false ? 'v2' : 'v1',
         role: orga ? 'organizer' : 'member',
         phase,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
@@ -338,9 +338,8 @@ export function TripDetailScreen() {
       if (!warm && peekedMatch) {
         warm = stubPlannedTripFromWorkspace(tripId, peekedMatch)
       }
-      // Only leave the spinner for a real trip (invite_token). Hub stubs
-      // used to paint v1 chrome then swap → felt like "ancien design".
-      if (warm?.invite_token && !silent) {
+      // Paint chrome immediately (stub OK) — network fills invite/proposals after.
+      if (warm && !silent) {
         setTrip(warm)
         setEditBudget(warm.budget_max || 150)
         setWatchInterval(
@@ -348,9 +347,6 @@ export function TripDetailScreen() {
         )
         navigation.setOptions({ title: warm.name || 'Voyage' })
         setLoading(false)
-      } else if (warm && !warm.invite_token && !silent) {
-        // Keep title hint while fetching; stay on spinner until real payload.
-        navigation.setOptions({ title: warm.name || 'Voyage' })
       }
 
       const cachedReal = Boolean(peekPlannedTrip(tripId)?.invite_token)
@@ -511,24 +507,24 @@ export function TripDetailScreen() {
           jobs.push(
             getApi()
               .listTripItems({ planned_trip_id: tripId })
-              .then((res) => (res.items || []) as Record<string, unknown>[])
-              .catch(() => [] as Record<string, unknown>[]),
+              .then((res) => (res.items || []) as Record<string, unknown>[]),
           )
         }
         if (token) {
           jobs.push(
             getApi()
               .listTripItems({ draft_token: token })
-              .then((res) => (res.items || []) as Record<string, unknown>[])
-              .catch(() => [] as Record<string, unknown>[]),
+              .then((res) => (res.items || []) as Record<string, unknown>[]),
           )
         }
         if (!jobs.length) return
-        const chunks = await Promise.all(jobs)
+        // allSettled — one side may 401 while the other still has rows.
+        const settled = await Promise.allSettled(jobs)
         if (cancelled) return
         const byId = new Map<string, Record<string, unknown>>()
-        for (const list of chunks) {
-          for (const it of list) {
+        for (const s of settled) {
+          if (s.status !== 'fulfilled') continue
+          for (const it of s.value) {
             const id = it.id != null ? String(it.id) : ''
             if (!id || byId.has(id)) continue
             byId.set(id, it)
@@ -1023,7 +1019,11 @@ export function TripDetailScreen() {
         workspace?.pipeline.hotel === 'booked',
     )
     const hasHotel = Boolean(
-      flightDraft?.hotel || payload.hotel || workspace?.hotel_booking_id,
+      flightDraft?.hotel ||
+        payload.hotel ||
+        workspace?.hotel_booking_id ||
+        workspace?.pipeline?.hotel === 'selected' ||
+        workspace?.pipeline?.hotel === 'booked',
     )
     const canSkipFlight =
       !externalFlight &&
@@ -1575,6 +1575,126 @@ export function TripDetailScreen() {
     return raw
   }, [flightDraft?.hotel, reservationFlags.payload.hotel])
 
+  // Hotel chosen/booked may live only on hotel_bookings.deal_snapshot — hydrate into draft.
+  useEffect(() => {
+    if (useGuestPreview) return
+    const token =
+      flightDraft?.draft_token || workspace?.draft_token || null
+    if (!token) return
+    const payload = (flightDraft?.payload || {}) as Record<string, unknown>
+    if (flightDraft?.hotel || payload.hotel) return
+    const bookingId = String(
+      workspace?.hotel_booking_id || payload.hotel_booking_id || '',
+    ).trim()
+    const need =
+      Boolean(bookingId) ||
+      workspace?.pipeline?.hotel === 'selected' ||
+      workspace?.pipeline?.hotel === 'booked' ||
+      Boolean(flightDraft?.hotel_booked_at) ||
+      Boolean(payload.hotel_booked) ||
+      Boolean(payload.hotel_booked_at)
+    if (!need) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        let booking = null as Awaited<
+          ReturnType<ReturnType<typeof getApi>['getHotelBooking']>
+        > | null
+        if (bookingId) {
+          booking = await getApi().getHotelBooking(bookingId, {
+            draft_token: token,
+          })
+        } else {
+          const list = await getApi().listHotelBookings({
+            draft_token: token,
+          })
+          if (!Array.isArray(list) || !list.length) return
+          booking =
+            list.find((b) =>
+              [
+                'confirmed',
+                'booking_pending',
+                'payment_succeeded',
+                'prebooked',
+                'held',
+              ].includes(String(b.status || '')),
+            ) || list[0]
+        }
+        if (cancelled || !booking) return
+        const snap = (booking.deal_snapshot || {}) as Record<string, unknown>
+        const snapHotel =
+          snap.hotel && typeof snap.hotel === 'object'
+            ? (snap.hotel as Record<string, unknown>)
+            : {}
+        const id = String(
+          snapHotel.id ||
+            snapHotel.hotel_id ||
+            booking.hotel_id ||
+            '',
+        ).trim()
+        const name = String(
+          snapHotel.name ||
+            booking.hotel_name ||
+            snap.hotel_name ||
+            '',
+        ).trim()
+        if (!id && !name) return
+        const hotel: Record<string, unknown> = {
+          id: id || undefined,
+          hotel_id: id || undefined,
+          name: name || 'Mon hôtel',
+          stars: snapHotel.stars ?? booking.hotel_stars ?? null,
+          rating: snapHotel.rating ?? booking.hotel_rating ?? null,
+          photo:
+            snapHotel.photo ||
+            snapHotel.main_photo ||
+            booking.hotel_photo ||
+            snap.image_url ||
+            null,
+          board: snapHotel.board ?? booking.board ?? null,
+          public_hotel_price:
+            snapHotel.public_hotel_price ??
+            booking.charged_price ??
+            booking.displayed_price ??
+            null,
+          hotel_pp: snapHotel.hotel_pp ?? null,
+          refundable: snapHotel.refundable ?? booking.refundable ?? null,
+          cancel_deadline:
+            snapHotel.cancel_deadline ?? booking.cancel_deadline ?? null,
+        }
+        setFlightDraft((prev) => {
+          if (!prev) return prev
+          const pl = (prev.payload || {}) as Record<string, unknown>
+          if (prev.hotel || pl.hotel) return prev
+          return {
+            ...prev,
+            hotel,
+            payload: {
+              ...pl,
+              hotel,
+              ...(booking!.id ? { hotel_booking_id: booking!.id } : {}),
+            },
+          }
+        })
+      } catch {
+        /* soft — keep "Mon hôtel" placeholder */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    useGuestPreview,
+    flightDraft?.draft_token,
+    flightDraft?.hotel,
+    flightDraft?.hotel_booked_at,
+    flightDraft?.payload,
+    workspace?.draft_token,
+    workspace?.hotel_booking_id,
+    workspace?.pipeline?.hotel,
+  ])
+
   const stayParty = useMemo(() => {
     const payload = reservationFlags.payload
     const flight = reservationFlags.flight
@@ -1731,8 +1851,8 @@ export function TripDetailScreen() {
     }
   }
 
-  // Wait for trip + skin flag — never flash v1 then swap to Path v2.
-  if ((loading && !trip) || tripDetailV2 === null) {
+  // Don't block on config — optimistic Path v2 until /api/config says otherwise.
+  if (loading && !trip) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top, paddingHorizontal: 24 }]}>
         <ScreenBackground />
@@ -1853,7 +1973,8 @@ export function TripDetailScreen() {
   const orgaFirstMobile =
     (orgaDisplayMobile || '').trim().split(/\s+/)[0] || null
 
-  if (tripDetailV2 === true) {
+  // null config → Path v2 (product default); only force v1 when flag is explicitly false.
+  if (tripDetailV2 !== false) {
     return (
       <View style={styles.root}>
         <TripDetailPathChrome

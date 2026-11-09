@@ -1029,6 +1029,11 @@ async def get_my_trip(draft_token: str):
         row = get_draft(_svc(), draft_token, touch_view=True)
         if not row:
             raise HTTPException(status_code=404, detail="Voyage introuvable ou expiré")
+        # Normalize like execution-draft — hotel may live only in payload.
+        if isinstance(row, dict) and not row.get("hotel"):
+            payload = row.get("payload") or {}
+            if isinstance(payload, dict) and payload.get("hotel"):
+                row = {**row, "hotel": payload.get("hotel")}
         return row
     except HTTPException:
         raise

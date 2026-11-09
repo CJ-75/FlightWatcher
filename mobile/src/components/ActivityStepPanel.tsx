@@ -317,6 +317,7 @@ export function ActivityStepPanel(props: {
 
     // Merge planned + draft — activities may live on either side; draft-token
     // reads can remap to planned server-side, so XOR fallback is not enough.
+    // Never .catch→[] : that hid auth/network errors and wiped the list.
     const jobs: Promise<ItemRow[]>[] = []
     if (planned) {
       jobs.push(
@@ -324,8 +325,7 @@ export function ActivityStepPanel(props: {
           .listTripItems({ planned_trip_id: planned })
           .then((res) =>
             ((res.items || []) as ItemRow[]).filter(isActivityItem),
-          )
-          .catch(() => [] as ItemRow[]),
+          ),
       )
     }
     if (draft) {
@@ -334,20 +334,25 @@ export function ActivityStepPanel(props: {
           .listTripItems({ draft_token: draft })
           .then((res) =>
             ((res.items || []) as ItemRow[]).filter(isActivityItem),
-          )
-          .catch(() => [] as ItemRow[]),
+          ),
       )
     }
     if (!jobs.length) return []
-    const chunks = await Promise.all(jobs)
+    const settled = await Promise.allSettled(jobs)
     const byId = new Map<string, ItemRow>()
-    for (const rows of chunks) {
-      for (const it of rows) {
-        const id = String(it.id || '')
-        if (!id || byId.has(id)) continue
-        byId.set(id, it)
+    let firstErr: unknown = null
+    for (const s of settled) {
+      if (s.status === 'fulfilled') {
+        for (const it of s.value) {
+          const id = String(it.id || '')
+          if (!id || byId.has(id)) continue
+          byId.set(id, it)
+        }
+      } else if (!firstErr) {
+        firstErr = s.reason
       }
     }
+    if (!byId.size && firstErr) throw firstErr
     return Array.from(byId.values())
   }, [owner.planned_trip_id, owner.draft_token, draftFallback])
 
