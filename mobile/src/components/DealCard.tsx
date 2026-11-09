@@ -26,6 +26,8 @@ import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 type Props = {
   deal: TravelDeal
   onPress: () => void
+  /** Warm getDeal before navigation (progressive séjour). */
+  onPressIn?: () => void
   liked?: boolean
   onToggleLike?: () => void
 }
@@ -150,7 +152,13 @@ function cardPlaceLabel(label?: string | null, fallback?: string | null): string
 /**
  * Image-led card with booking-temptation signals (rating, times, flight).
  */
-export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
+export function DealCard({
+  deal,
+  onPress,
+  onPressIn,
+  liked,
+  onToggleLike,
+}: Props) {
   const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
   const [photos, setPhotos] = useState(() =>
     uniqueUrls([...(deal.hotel?.photos || []), hotelPhoto]).slice(0, 12),
@@ -270,6 +278,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             }}
             renderItem={({ item, index: i }) => (
               <Pressable
+                onPressIn={onPressIn}
                 onPress={() => {
                   if (didSwipeRef.current) return
                   onPress()
@@ -287,7 +296,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
             )}
           />
         ) : (
-          <Pressable onPress={onPress} style={styles.image}>
+          <Pressable onPressIn={onPressIn} onPress={onPress} style={styles.image}>
             <LinearGradient colors={[colors.primary, colors.primaryDeep]} style={styles.image}>
               <Text style={styles.fallbackText}>{deal.city}</Text>
             </LinearGradient>
@@ -353,7 +362,7 @@ export function DealCard({ deal, onPress, liked, onToggleLike }: Props) {
 
       </View>
 
-      <Pressable onPress={onPress} style={styles.body}>
+      <Pressable onPressIn={onPressIn} onPress={onPress} style={styles.body}>
         <View style={styles.bodyMain}>
           <View style={styles.titleRow}>
             <View style={styles.titleCol}>

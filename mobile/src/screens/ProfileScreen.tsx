@@ -315,7 +315,7 @@ export function ProfileScreen() {
             >
               <Text style={styles.devPreviewTitle}>Voir comme non connecté</Text>
               <Text style={styles.devPreviewSub}>
-                Affiche les landings Compte / Favoris / Planner
+                Activités catalogue + hero Paris · landings Favoris / Planner
               </Text>
             </Pressable>
             <Pressable

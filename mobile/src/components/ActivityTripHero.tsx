@@ -13,7 +13,6 @@ import {
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_NO_TRIP_CTA_BODY_FR,
   ACTIVITY_NO_TRIP_CTA_SECONDARY_FR,
-  ACTIVITY_NO_TRIP_CTA_TITLE_FR,
   ACTIVITY_OPEN_PLANNER_FR,
   ACTIVITY_SYNC_CITY_FR,
   ACTIVITY_TRIP_PLANNER_COUNT_FR,
@@ -62,27 +61,60 @@ type ActiveProps = {
 
 type EmptyProps = {
   mode: 'empty'
+  /** Current catalogue city (Paris by default) — same hero language as a selected trip. */
+  cityLabel?: string
   onBrowseTrips: () => void
   onChooseTrip?: () => void
 }
 
 type Props = ActiveProps | EmptyProps
 
+function HeroShell({
+  imageUrl,
+  tall,
+  children,
+}: {
+  imageUrl: string
+  tall?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <ImageBackground
+      source={{ uri: imageUrl }}
+      style={[styles.hero, tall && styles.heroTall, shadow.soft]}
+      imageStyle={styles.image}
+    >
+      <LinearGradient
+        colors={[
+          'rgba(8,4,2,0.25)',
+          'rgba(8,4,2,0.35)',
+          'rgba(8,4,2,0.88)',
+        ]}
+        locations={[0, 0.4, 1]}
+        style={[styles.overlay, tall && styles.overlayTall]}
+      >
+        {children}
+      </LinearGradient>
+    </ImageBackground>
+  )
+}
+
 export function ActivityTripHero(props: Props) {
   if (props.mode === 'empty') {
+    const city = String(props.cityLabel || 'Paris').trim() || 'Paris'
     return (
-      <ImageBackground
-        source={{ uri: cityImageUrl(null) }}
-        style={[styles.hero, shadow.soft]}
-        imageStyle={styles.image}
-      >
-        <LinearGradient
-          colors={['rgba(20,12,8,0.35)', 'rgba(20,12,8,0.55)', 'rgba(20,12,8,0.88)']}
-          locations={[0, 0.45, 1]}
-          style={styles.overlay}
-        >
-          <Text style={styles.kickerMuted}>ACTIVITÉS + SÉJOUR</Text>
-          <Text style={styles.titleEmpty}>{ACTIVITY_NO_TRIP_CTA_TITLE_FR}</Text>
+      <HeroShell imageUrl={cityImageUrl(city)} tall>
+        <View style={styles.badgeRow}>
+          <View style={styles.liveBadge}>
+            <View style={[styles.liveDot, { backgroundColor: DOT_COLOR.undated }]} />
+            <Text style={styles.liveText}>CATALOGUE</Text>
+          </View>
+        </View>
+
+        <View style={styles.bottom}>
+          <Text style={styles.city} numberOfLines={1}>
+            {city}
+          </Text>
           <Text style={styles.hint}>{ACTIVITY_NO_TRIP_CTA_BODY_FR}</Text>
           <View style={styles.actions}>
             {props.onChooseTrip ? (
@@ -108,8 +140,8 @@ export function ActivityTripHero(props: Props) {
               </Text>
             </Pressable>
           </View>
-        </LinearGradient>
-      </ImageBackground>
+        </View>
+      </HeroShell>
     )
   }
 
@@ -122,84 +154,70 @@ export function ActivityTripHero(props: Props) {
   const imageUrl = cityImageUrl(props.imageCity || props.cityLabel)
 
   return (
-    <ImageBackground
-      source={{ uri: imageUrl }}
-      style={[styles.hero, styles.heroTall, shadow.soft]}
-      imageStyle={styles.image}
-    >
-      <LinearGradient
-        colors={[
-          'rgba(8,4,2,0.25)',
-          'rgba(8,4,2,0.35)',
-          'rgba(8,4,2,0.88)',
-        ]}
-        locations={[0, 0.4, 1]}
-        style={styles.overlay}
-      >
-        <View style={styles.badgeRow}>
-          <View style={styles.liveBadge}>
-            <View
-              style={[styles.liveDot, { backgroundColor: DOT_COLOR[timing] }]}
-            />
-            <Text style={styles.liveText}>{kicker}</Text>
-          </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countText}>
-              {ACTIVITY_TRIP_PLANNER_COUNT_FR(props.plannerCount)}
-            </Text>
-          </View>
+    <HeroShell imageUrl={imageUrl} tall>
+      <View style={styles.badgeRow}>
+        <View style={styles.liveBadge}>
+          <View
+            style={[styles.liveDot, { backgroundColor: DOT_COLOR[timing] }]}
+          />
+          <Text style={styles.liveText}>{kicker}</Text>
         </View>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>
+            {ACTIVITY_TRIP_PLANNER_COUNT_FR(props.plannerCount)}
+          </Text>
+        </View>
+      </View>
 
-        <View style={styles.bottom}>
-          {props.onChangeTrip ? (
+      <View style={styles.bottom}>
+        {props.onChangeTrip ? (
+          <Pressable
+            onPress={props.onChangeTrip}
+            accessibilityLabel={ACTIVITY_CHOOSE_TRIP_FR}
+            accessibilityHint={ACTIVITY_CHANGE_TRIP_FR}
+            hitSlop={6}
+            style={({ pressed }) => [
+              styles.cityBtn,
+              pressed && { opacity: 0.92 },
+            ]}
+          >
+            <Text style={styles.city} numberOfLines={1}>
+              {props.cityLabel}
+            </Text>
+            <View style={styles.changeChip}>
+              <ChevronDownIcon size={14} color={colors.ink} />
+            </View>
+          </Pressable>
+        ) : (
+          <Text style={styles.city}>{props.cityLabel}</Text>
+        )}
+        <Text style={styles.hint}>{hint}</Text>
+        <View style={styles.actions}>
+          <Pressable
+            onPress={props.onOpenPlanner}
+            style={({ pressed }) => [
+              styles.btnPrimary,
+              pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
+            ]}
+          >
+            <Text style={styles.btnPrimaryText}>{ACTIVITY_OPEN_PLANNER_FR}</Text>
+          </Pressable>
+          {props.showSyncCity && props.onSyncCity ? (
             <Pressable
-              onPress={props.onChangeTrip}
-              accessibilityLabel={ACTIVITY_CHOOSE_TRIP_FR}
-              accessibilityHint={ACTIVITY_CHANGE_TRIP_FR}
-              hitSlop={6}
+              onPress={props.onSyncCity}
               style={({ pressed }) => [
-                styles.cityBtn,
-                pressed && { opacity: 0.92 },
+                styles.btnGhost,
+                pressed && { opacity: 0.9 },
               ]}
             >
-              <Text style={styles.city} numberOfLines={1}>
-                {props.cityLabel}
+              <Text style={styles.btnGhostText}>
+                {ACTIVITY_SYNC_CITY_FR(props.cityLabel)}
               </Text>
-              <View style={styles.changeChip}>
-                <ChevronDownIcon size={14} color={colors.ink} />
-              </View>
             </Pressable>
-          ) : (
-            <Text style={styles.city}>{props.cityLabel}</Text>
-          )}
-          <Text style={styles.hint}>{hint}</Text>
-          <View style={styles.actions}>
-            <Pressable
-              onPress={props.onOpenPlanner}
-              style={({ pressed }) => [
-                styles.btnPrimary,
-                pressed && { opacity: 0.92, transform: [{ scale: 0.98 }] },
-              ]}
-            >
-              <Text style={styles.btnPrimaryText}>{ACTIVITY_OPEN_PLANNER_FR}</Text>
-            </Pressable>
-            {props.showSyncCity && props.onSyncCity ? (
-              <Pressable
-                onPress={props.onSyncCity}
-                style={({ pressed }) => [
-                  styles.btnGhost,
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <Text style={styles.btnGhostText}>
-                  {ACTIVITY_SYNC_CITY_FR(props.cityLabel)}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
+          ) : null}
         </View>
-      </LinearGradient>
-    </ImageBackground>
+      </View>
+    </HeroShell>
   )
 }
 
@@ -218,6 +236,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 140,
   },
+  overlayTall: { minHeight: 168 },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -287,19 +306,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: 'rgba(255,255,255,0.85)',
-  },
-  kickerMuted: {
-    fontFamily: fonts.extrabold,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    color: 'rgba(255,255,255,0.75)',
-    marginBottom: 6,
-  },
-  titleEmpty: {
-    fontFamily: fonts.extrabold,
-    fontSize: 17,
-    color: colors.white,
-    marginBottom: 4,
   },
   actions: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 /**
- * Lot 3 — entre canvas app et ancrage photo (Promise → Ville → Envie).
+ * Lot 3 — Promise → Comment ça marche → Ville → Envie.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -76,6 +76,33 @@ const PROMISE_FEATURES = [
   },
 ] as const
 
+/** Frame « Comment ça marche » — map / itinerary feel. */
+const HOW_PHOTO =
+  'https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=2400&q=95&fm=jpg'
+
+const HOW_IT_WORKS = [
+  {
+    title: 'Parcours',
+    detail: 'Balades et week-ends choisis, étape par étape.',
+    photo: `https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+  {
+    title: 'Séjours',
+    detail: 'Vol + hôtel au bon prix, prêts à réserver.',
+    photo: `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+  {
+    title: 'Activités',
+    detail: 'Que faire sur place, dès que ta ville est claire.',
+    photo: `https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+  {
+    title: 'Planner',
+    detail: 'Ton voyage en un lieu — solo ou à plusieurs.',
+    photo: `https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+  },
+] as const
+
 /** Bandeau « Tu voyages plutôt… » (Fn27DlI8bZ8). */
 const PREF_HERO_PHOTO =
   'https://images.unsplash.com/photo-1612278675615-7b093b07772d?auto=format&fit=crop&w=2400&q=95&fm=jpg'
@@ -129,7 +156,7 @@ function track(event: string, meta?: Record<string, unknown>) {
 
 export function OnboardingFlowScreen({ onDone }: Props) {
   const insets = useSafeAreaInsets()
-  const [step, setStep] = useState<0 | 1 | 2>(0)
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(0)
   const suggested = useMemo(
     () =>
       suggestCityFromLocale(
@@ -206,7 +233,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
         useNativeDriver: true,
       }),
       Animated.timing(progress, {
-        toValue: step / 2,
+        toValue: step / 3,
         duration: 300,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
@@ -272,7 +299,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
         </View>
         <Text style={styles.stepCount}>
           {step + 1}
-          <Text style={styles.stepCountMuted}> / 3</Text>
+          <Text style={styles.stepCountMuted}> / 4</Text>
         </Text>
       </View>
 
@@ -354,6 +381,74 @@ export function OnboardingFlowScreen({ onDone }: Props) {
         {step === 1 ? (
           <>
             <View style={styles.stepBody}>
+              <View style={[styles.howHero, shadow.soft]}>
+                <ImageBackground
+                  source={{ uri: HOW_PHOTO }}
+                  style={styles.howHeroImg}
+                  imageStyle={styles.howHeroBitmap}
+                >
+                  <LinearGradient
+                    colors={[
+                      'rgba(26,18,14,0.28)',
+                      'rgba(26,18,14,0.14)',
+                      'rgba(26,18,14,0.8)',
+                    ]}
+                    locations={[0, 0.4, 1]}
+                    style={styles.howHeroGrad}
+                  >
+                    <Text style={styles.heroEyebrow}>MODE D’EMPLOI</Text>
+                    <Text style={styles.heroTitle}>
+                      Comment{'\n'}ça marche
+                    </Text>
+                    <Text style={styles.heroLead}>
+                      Quatre outils, un même but : partir sans te perdre.
+                    </Text>
+                  </LinearGradient>
+                </ImageBackground>
+              </View>
+
+              <View style={[styles.featureCard, shadow.soft]}>
+                {HOW_IT_WORKS.map((f, i) => (
+                  <View
+                    key={f.title}
+                    style={[
+                      styles.featureRow,
+                      i < HOW_IT_WORKS.length - 1 && styles.featureRowBorder,
+                    ]}
+                  >
+                    <ImageBackground
+                      source={{ uri: f.photo }}
+                      style={styles.featureThumb}
+                      imageStyle={styles.featureThumbImg}
+                    />
+                    <View style={styles.featureCopy}>
+                      <Text style={styles.featureTitle}>{f.title}</Text>
+                      <Text style={styles.featureDetail}>{f.detail}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.cta,
+                styles.ctaPinned,
+                pressed && styles.ctaPressed,
+              ]}
+              onPress={() => {
+                track('onboarding_how_viewed')
+                setStep(2)
+              }}
+            >
+              <Text style={styles.ctaText}>Compris</Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {step === 2 ? (
+          <>
+            <View style={styles.stepBody}>
               <View style={[styles.cityHero, shadow.soft]}>
                 <ImageBackground
                   source={{ uri: CITY_STEP_PHOTO }}
@@ -397,7 +492,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
               disabled={!codes.length}
               onPress={() => {
                 persistCity()
-                setStep(2)
+                setStep(3)
               }}
             >
               <Text style={styles.ctaText}>Continuer</Text>
@@ -405,7 +500,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
           </>
         ) : null}
 
-        {step === 2 ? (
+        {step === 3 ? (
           <>
             <View style={styles.stepBody}>
               <View style={[styles.prefHero, shadow.soft]}>
@@ -669,6 +764,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: colors.muted,
+  },
+  howHero: {
+    height: 168,
+    borderRadius: 24,
+    overflow: 'hidden',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(40,32,24,0.06)',
+    backgroundColor: '#1A120E',
+  },
+  howHeroImg: { flex: 1 },
+  howHeroBitmap: { borderRadius: 24 },
+  howHeroGrad: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 18,
+    paddingBottom: 16,
+    paddingTop: 24,
   },
   cityHero: {
     flex: 1,

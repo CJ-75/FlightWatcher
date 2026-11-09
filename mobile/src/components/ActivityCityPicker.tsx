@@ -49,8 +49,42 @@ const PLACEHOLDER_CITIES = [
   { city: 'Marseille', country: 'France' },
 ] as const
 
+/** Curated hubs — same flag/country chrome as a picked city (ex. Lisbonne). */
+const CURATED_CITY_META: Record<string, { country: string; iso: string }> = {
+  paris: { country: 'France', iso: 'FR' },
+  lyon: { country: 'France', iso: 'FR' },
+  marseille: { country: 'France', iso: 'FR' },
+  nice: { country: 'France', iso: 'FR' },
+  lisbonne: { country: 'Portugal', iso: 'PT' },
+  porto: { country: 'Portugal', iso: 'PT' },
+  barcelone: { country: 'Espagne', iso: 'ES' },
+  madrid: { country: 'Espagne', iso: 'ES' },
+  rome: { country: 'Italie', iso: 'IT' },
+  milan: { country: 'Italie', iso: 'IT' },
+  venise: { country: 'Italie', iso: 'IT' },
+  florence: { country: 'Italie', iso: 'IT' },
+  amsterdam: { country: 'Pays-Bas', iso: 'NL' },
+  berlin: { country: 'Allemagne', iso: 'DE' },
+  bruxelles: { country: 'Belgique', iso: 'BE' },
+  athenes: { country: 'Grèce', iso: 'GR' },
+  cracovie: { country: 'Pologne', iso: 'PL' },
+  stockholm: { country: 'Suède', iso: 'SE' },
+  copenhague: { country: 'Danemark', iso: 'DK' },
+  londres: { country: 'Royaume-Uni', iso: 'GB' },
+}
+
 const SEED = seedPopularAirports()
 const MIN_FULL = 80
+
+function withCuratedMeta(opt: CityOpt): CityOpt {
+  const meta = CURATED_CITY_META[opt.slug]
+  if (!meta) return opt
+  return {
+    ...opt,
+    country: opt.country || meta.country,
+    iso: opt.iso || meta.iso,
+  }
+}
 
 function toOpt(g: CityAirportGroup): CityOpt {
   // Prefer IATA→ISO (stable) over country label (can be wrong after city merges).
@@ -91,7 +125,7 @@ function seedFallbackCities(): CityOpt[] {
   )
   return ACTIVITY_CITY_OPTIONS_FR.map((c) => {
     const hit = bySlug.get(c.slug)
-    return hit || { slug: c.slug, label: c.label }
+    return withCuratedMeta(hit || { slug: c.slug, label: c.label })
   })
 }
 
@@ -202,11 +236,15 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
     return [...merged, ...rest]
   }, [groups, allCities, catalogReady, effective])
 
-  const selected =
+  const selectedRaw =
     allCities.find((c) => c.slug === valueSlug) ||
     groups.map(toOpt).find((c) => c.slug === valueSlug) ||
-    (valueSlug ? { slug: valueSlug, label: valueLabel || valueSlug } : null)
+    (valueSlug
+      ? { slug: valueSlug, label: valueLabel || valueSlug }
+      : null)
+  const selected = selectedRaw ? withCuratedMeta(selectedRaw) : null
 
+  // Default city (Paris…) must look selected — never the rotating placeholder.
   const showPlaceholder = !selected
 
   useEffect(() => {

@@ -31,6 +31,11 @@ import {
   reviewMetaLine,
 } from '@flightwatcher/shared'
 import { getApi, getWebOrigin } from '../lib/client'
+import {
+  getDealCached,
+  peekDealPreview,
+  rememberDealPreview,
+} from '../lib/dealDetailCache'
 import { useAuth } from '../context/AuthContext'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { openInAppBrowser } from '../lib/openInApp'
@@ -74,7 +79,7 @@ function formatClock(iso?: string | null) {
 }
 
 export function DealDetailScreen({ route, navigation }: Props) {
-  const { dealId } = route.params
+  const { dealId, preview } = route.params
   const insets = useSafeAreaInsets()
   const { width: winW, height: winH } = useWindowDimensions()
   const { user, isGuest } = useAuth()
@@ -83,17 +88,26 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
   // Large gallery (as before); shrink only on very short phones so 1er hôtel can peek.
   const ctaH = 64 + Math.max(insets.bottom, 12)
-  /** Floating chrome (same as parcours) — no native stack header. */
-  const headerH = 44 + insets.top + 12
+  /** Native stack header sits above the gallery (avoids Dynamic Island crop). */
+  const headerH = 52 + insets.top
   const foldBudget = Math.max(420, winH - ctaH - headerH)
   const preferredHero = Math.min(240, Math.round(winW * 0.52))
   const heroH = Math.round(
     Math.max(168, Math.min(preferredHero, foldBudget - ABOVE_FOLD_BELOW_HERO)),
   )
-  const [deal, setDeal] = useState<TravelDeal | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [deal, setDeal] = useState<TravelDeal | null>(() => {
+    const s = preview || peekDealPreview(dealId)
+    if (s) rememberDealPreview(s)
+    return s
+  })
+  const [loading, setLoading] = useState(() => !(preview || peekDealPreview(dealId)))
+  const [refreshing, setRefreshing] = useState(() =>
+    Boolean(preview || peekDealPreview(dealId)),
+  )
   const [error, setError] = useState<string | null>(null)
-  const [hotelId, setHotelId] = useState<string | null>(null)
+  const [hotelId, setHotelId] = useState<string | null>(
+    () => deal?.hotel?.id || null,
+  )
   const [startingTrip, setStartingTrip] = useState(false)
   const [composingHotel, setComposingHotel] = useState(false)
   const [hotelSheetOpen, setHotelSheetOpen] = useState(false)
@@ -104,39 +118,54 @@ export function DealDetailScreen({ route, navigation }: Props) {
   const [gallerySwipeActive, setGallerySwipeActive] = useState(false)
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      setLoading(true)
+    const local = preview || peekDealPreview(dealId)
+    if (local) {
+      rememberDealPreview(local)
+      setDeal(local)
+      setHotelId(local.hotel?.id || null)
+      setLoading(false)
+      setRefreshing(true)
       setError(null)
+    } else {
+      setLoading(true)
+      setRefreshing(false)
+      setError(null)
+    }
+    ;(async () => {
       try {
-        const d = await getApi().getDeal(dealId)
-        if (!cancelled) {
-          setDeal(d)
-          setHotelId(d.hotel?.id || null)
-        }
-        await refreshLikes()
+        const d = await getDealCached(dealId)
+        if (cancelled) return
+        setDeal(d)
+        setHotelId((prev) => prev || d.hotel?.id || null)
+        setError(null)
+        // Likes in background — never block first paint / refresh.
+        void refreshLikes()
       } catch (e) {
-        if (!cancelled) {
+        if (cancelled) return
+        if (!local) {
           setError(e instanceof Error ? e.message : 'Deal introuvable')
           setDeal(null)
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [dealId, refreshLikes])
+  }, [dealId, preview, refreshLikes])
 
   const dealLiked = deal ? isLiked(deal.id) : false
 
-  const goBackFromDeal = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack()
-      return
-    }
-    navigation.navigate('Main', { screen: 'Deals' })
-  }
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: undefined,
+      title: deal?.city || 'Séjour',
+    })
+  }, [deal?.city, navigation])
 
   const hotelOptions = useMemo(() => {
     if (!deal) return [] as TravelDealHotel[]
@@ -235,19 +264,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ScreenBackground />
-        <View
-          pointerEvents="box-none"
-          style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
-        >
-          <Pressable
-            onPress={goBackFromDeal}
-            style={styles.actionBtn}
-            hitSlop={8}
-            accessibilityLabel="Retour"
-          >
-            <Text style={styles.backChevron}>‹</Text>
-          </Pressable>
-        </View>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     )
@@ -257,19 +273,6 @@ export function DealDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.centered}>
         <ScreenBackground />
-        <View
-          pointerEvents="box-none"
-          style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
-        >
-          <Pressable
-            onPress={goBackFromDeal}
-            style={styles.actionBtn}
-            hitSlop={8}
-            accessibilityLabel="Retour"
-          >
-            <Text style={styles.backChevron}>‹</Text>
-          </Pressable>
-        </View>
         <Text style={styles.errorText}>{error || 'Deal introuvable'}</Text>
       </View>
     )
@@ -429,36 +432,11 @@ export function DealDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      {/* Same fixed chrome as Parcours / planner unique — no native header */}
-      <View
-        pointerEvents="box-none"
-        style={[styles.fixedHeader, { paddingTop: insets.top + 12 }]}
-      >
-        <Pressable
-          onPress={goBackFromDeal}
-          style={styles.actionBtn}
-          hitSlop={8}
-          accessibilityLabel="Retour"
-        >
-          <Text style={styles.backChevron}>‹</Text>
-        </Pressable>
-        <View style={{ flex: 1 }} />
-        <Pressable
-          onPress={() => void toggleLike(deal)}
-          style={styles.actionBtn}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={
-            dealLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'
-          }
-        >
-          <HeartIcon
-            size={20}
-            filled={dealLiked}
-            color={dealLiked ? colors.primary : colors.inkSoft}
-          />
-        </Pressable>
-      </View>
+      {refreshing ? (
+        <View style={styles.refreshBar} pointerEvents="none">
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      ) : null}
       <ScrollView
         scrollEnabled={!gallerySwipeActive}
         showsVerticalScrollIndicator={false}
@@ -473,6 +451,23 @@ export function DealDetailScreen({ route, navigation }: Props) {
           cityLabel={[deal.city, deal.country].filter(Boolean).join(' · ')}
           height={heroH}
           onHorizontalGesture={setGallerySwipeActive}
+          topRight={
+            <Pressable
+              onPress={() => void toggleLike(deal)}
+              style={styles.likeOnPhoto}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                dealLiked ? 'Retirer des favoris' : 'Ajouter aux favoris'
+              }
+            >
+              <HeartIcon
+                size={20}
+                filled={dealLiked}
+                color={dealLiked ? colors.primary : colors.inkSoft}
+              />
+            </Pressable>
+          }
           bottomLeft={
             <View>
               {deal.badge ? (
@@ -950,6 +945,16 @@ export function DealDetailScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  refreshBar: {
+    position: 'absolute',
+    top: 8,
+    right: 16,
+    zIndex: 40,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 999,
+    padding: 6,
+    ...shadow.soft,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -963,17 +968,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-  },
-  actionBtn: {
+  likeOnPhoto: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -985,14 +980,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
-  },
-  backChevron: {
-    fontFamily: fonts.bold,
-    fontSize: 30,
-    lineHeight: 32,
-    color: colors.inkSoft,
-    marginTop: -2,
-    marginLeft: -1,
   },
   badge: {
     alignSelf: 'flex-start',

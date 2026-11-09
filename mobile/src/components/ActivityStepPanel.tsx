@@ -11,7 +11,7 @@ import {
   type AppStateStatus,
   Platform,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   ACTIVITY_ADD_LABEL_FR,
@@ -261,11 +261,13 @@ export function ActivityStepPanel(props: {
   const owner = useMemo(
     () =>
       pickTripItemOwner({
+        // Writes prefer planned; load may still fall back to draft below.
         draftToken: plannedTripId ? null : draftToken,
         plannedTripId,
       }),
     [draftToken, plannedTripId],
   )
+  const draftFallback = String(draftToken || '').trim()
   const [items, setItems] = useState<ItemRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -303,8 +305,25 @@ export function ActivityStepPanel(props: {
     )
   }, [])
 
+  const fetchActivityRows = useCallback(async (): Promise<ItemRow[]> => {
+    const planned = owner.planned_trip_id
+    const draft = owner.draft_token || draftFallback || undefined
+    if (planned && String(planned).startsWith('dev-trip-')) return []
+    let rows: ItemRow[] = []
+    if (planned) {
+      const res = await getApi().listTripItems({ planned_trip_id: planned })
+      rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+    }
+    // Same fallback as TripDetailScreen — activities may still live on the draft.
+    if (!rows.length && draft) {
+      const res = await getApi().listTripItems({ draft_token: draft })
+      rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+    }
+    return rows
+  }, [owner.planned_trip_id, owner.draft_token, draftFallback])
+
   const load = useCallback(async () => {
-    if (!owner.draft_token && !owner.planned_trip_id) return
+    if (!owner.draft_token && !owner.planned_trip_id && !draftFallback) return
     // Dev guest trips are in-memory only — never hit auth-required trip-items.
     if (
       owner.planned_trip_id &&
@@ -319,16 +338,18 @@ export function ActivityStepPanel(props: {
     setLoading(true)
     setError(null)
     try {
-      const res = await getApi().listTripItems(owner)
-      const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+      const rows = await fetchActivityRows()
       if (gen !== loadGenRef.current) return
       setItems(rows)
       publishParcours(rows)
+      // Don't block the block on photo enrich (catalog can be slow).
+      setLoading(false)
+      authRetryRef.current = false
+      if (!rows.length) return
       const enriched = await enrichActivityPhotos(rows, city)
       if (gen !== loadGenRef.current) return
       setItems(enriched)
       publishParcours(enriched)
-      authRetryRef.current = false
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
       if (isTripItemsAuthError(msg) && !authRetryRef.current) {
@@ -336,16 +357,17 @@ export function ActivityStepPanel(props: {
         const token = await auth.refreshAccessToken()
         if (token) {
           try {
-            const res = await getApi().listTripItems(owner)
-            const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+            const rows = await fetchActivityRows()
             if (gen !== loadGenRef.current) return
             setItems(rows)
             publishParcours(rows)
+            setLoading(false)
+            setError(null)
+            if (!rows.length) return
             const enriched = await enrichActivityPhotos(rows, city)
             if (gen !== loadGenRef.current) return
             setItems(enriched)
             publishParcours(enriched)
-            setError(null)
             return
           } catch (e2) {
             setError(e2 instanceof Error ? e2.message : msg)
@@ -360,7 +382,7 @@ export function ActivityStepPanel(props: {
     } finally {
       setLoading(false)
     }
-  }, [owner, city, publishParcours])
+  }, [owner, draftFallback, city, publishParcours, fetchActivityRows])
 
   const onResumeSession = async () => {
     setResuming(true)
@@ -384,12 +406,20 @@ export function ActivityStepPanel(props: {
 
   useEffect(() => {
     parcoursReadyRef.current = false
-    loadGenRef.current += 1
-  }, [owner.draft_token, owner.planned_trip_id])
+  }, [owner.draft_token, owner.planned_trip_id, draftFallback])
 
   useEffect(() => {
     if (enabled) void load()
   }, [enabled, load])
+
+  // Reload when coming back from Activities catalog / other screens.
+  useFocusEffect(
+    useCallback(() => {
+      if (!enabled) return
+      authRetryRef.current = false
+      void load()
+    }, [enabled, load]),
+  )
 
   useEffect(() => {
     if (!parcoursReadyRef.current) return

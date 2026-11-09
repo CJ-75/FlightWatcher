@@ -1,9 +1,9 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getApi } from '../lib/client'
-import type { MainTabParamList } from '../navigation/types'
+import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius } from '../theme'
 
 export function ActivitySurfaceBanner(props: {
@@ -12,7 +12,8 @@ export function ActivitySurfaceBanner(props: {
   title?: string
   subtitle?: string
 }) {
-  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>()
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>()
 
   const onPress = () => {
     void getApi()
@@ -25,8 +26,12 @@ export function ActivitySurfaceBanner(props: {
       })
       .catch(() => undefined)
     try {
-      navigation.navigate('Activities', {
-        city: props.citySlug || undefined,
+      // From DealDetail / TripSummary (root stack) → tab via Main.
+      navigation.navigate('Main', {
+        screen: 'Activities',
+        params: {
+          city: props.citySlug || undefined,
+        },
       })
     } catch {
       /* tab may be gated off */

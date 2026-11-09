@@ -33,6 +33,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { apiBase, getApi } from '../lib/client'
+import {
+  prefetchDealDetail,
+  rememberDealPreview,
+  rememberDealPreviews,
+} from '../lib/dealDetailCache'
 import { useAuth } from '../context/AuthContext'
 import { DealCard } from '../components/DealCard'
 import { OccasionIcon } from '../components/OccasionIcon'
@@ -118,6 +123,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         if (!Array.isArray(parsed) || !parsed.length) return
         if (dealsRef.current.length) return
         dealsMemoryCache = parsed
+        rememberDealPreviews(parsed)
         setDeals(parsed)
         setLoading(false)
       })
@@ -268,6 +274,7 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
         })
         setDeals(withHotelPhoto)
         dealsMemoryCache = withHotelPhoto
+        rememberDealPreviews(withHotelPhoto)
         void AsyncStorage.setItem(
           DEALS_CACHE_KEY,
           JSON.stringify(withHotelPhoto.slice(0, 48)),
@@ -750,16 +757,20 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
               )
             }
             const deal = item.deal
+            const dealId = String(deal.deal_key || deal.id || '')
             return (
               <DealCard
                 deal={deal}
                 liked={isLiked(deal.id)}
                 onToggleLike={() => void toggleLike(deal)}
-                onPress={() =>
+                onPressIn={() => prefetchDealDetail(dealId, deal)}
+                onPress={() => {
+                  rememberDealPreview(deal)
                   navigation.navigate('DealDetail', {
-                    dealId: String(deal.deal_key || deal.id || ''),
+                    dealId,
+                    preview: deal,
                   })
-                }
+                }}
               />
             )
           }}

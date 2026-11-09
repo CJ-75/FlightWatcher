@@ -56,6 +56,8 @@ export type RootStackParamList = {
   }
   DealDetail: {
     dealId: string
+    /** List/favorites snapshot — paint before getDeal returns. */
+    preview?: import('@flightwatcher/shared').TravelDeal
   }
   TripDetail: {
     tripId: string

@@ -75,8 +75,11 @@ export function HotelPhotoGallery({
   const lightboxOpenRef = useRef(false)
   const ignoreOpenUntilRef = useRef(0)
   const blockHeroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const heroMovedRef = useRef(false)
+  const unlockParentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const gestureActiveRef = useRef(false)
+  /** True only after a real horizontal drag this touch (not a tap). */
+  const dragActiveRef = useRef(false)
+  const touchStartRef = useRef({ x: 0, y: 0 })
   const [photos, setPhotos] = useState<HotelGalleryPhoto[]>(() =>
     toPhotos([...(seedPhotos || []), seedPhoto]),
   )
@@ -95,6 +98,25 @@ export function HotelPhotoGallery({
       onHorizontalGesture?.(active)
     },
     [onHorizontalGesture],
+  )
+
+  const clearUnlockParentTimer = useCallback(() => {
+    if (unlockParentTimerRef.current) {
+      clearTimeout(unlockParentTimerRef.current)
+      unlockParentTimerRef.current = null
+    }
+  }, [])
+
+  /** Last-resort unlock if momentum/end events never fire (stuck parent). */
+  const armUnlockParent = useCallback(
+    (ms = 2500) => {
+      clearUnlockParentTimer()
+      unlockParentTimerRef.current = setTimeout(() => {
+        unlockParentTimerRef.current = null
+        setGestureActive(false)
+      }, ms)
+    },
+    [clearUnlockParentTimer, setGestureActive],
   )
 
   const seedKey = [...(seedPhotos || []), seedPhoto || ''].join('|')
@@ -144,6 +166,7 @@ export function HotelPhotoGallery({
   useEffect(
     () => () => {
       if (blockHeroTimerRef.current) clearTimeout(blockHeroTimerRef.current)
+      if (unlockParentTimerRef.current) clearTimeout(unlockParentTimerRef.current)
     },
     [],
   )
@@ -153,27 +176,29 @@ export function HotelPhotoGallery({
       const x = e.nativeEvent.contentOffset.x
       const i = Math.round(x / Math.max(1, pageWidth))
       setIndex(Math.max(0, Math.min(i, photos.length - 1)))
+      clearUnlockParentTimer()
       setGestureActive(false)
     },
-    [pageWidth, photos.length, setGestureActive],
+    [pageWidth, photos.length, setGestureActive, clearUnlockParentTimer],
   )
 
   const closeLightbox = useCallback(() => {
     // Mark closed first so FlatList unmount scroll events cannot reopen.
     lightboxOpenRef.current = false
     ignoreOpenUntilRef.current = Date.now() + 1000
+    clearUnlockParentTimer()
     setGestureActive(false)
     setBlockHero(true)
     if (blockHeroTimerRef.current) clearTimeout(blockHeroTimerRef.current)
     blockHeroTimerRef.current = setTimeout(() => setBlockHero(false), 1000)
     setLightbox(null)
-  }, [setGestureActive])
+  }, [setGestureActive, clearUnlockParentTimer])
 
   const openLightbox = useCallback(
     (i: number) => {
       if (lightboxOpenRef.current) return
       if (blockHero || Date.now() < ignoreOpenUntilRef.current) return
-      if (heroMovedRef.current) return
+      if (dragActiveRef.current) return
       lightboxOpenRef.current = true
       setGestureActive(false)
       setLightbox(i)
@@ -221,34 +246,61 @@ export function HotelPhotoGallery({
             offset: slideW * i,
             index: i,
           })}
-          onScrollBeginDrag={() => {
-            heroMovedRef.current = true
+          onTouchStart={(e) => {
+            // Full-bleed swipe surface: no Pressable on slides, claim parent early.
+            dragActiveRef.current = false
+            const t = e.nativeEvent.touches[0] || e.nativeEvent
+            touchStartRef.current = { x: t.pageX, y: t.pageY }
             setGestureActive(true)
+            armUnlockParent(2500)
+          }}
+          onTouchEnd={(e) => {
+            if (dragActiveRef.current) return
+            clearUnlockParentTimer()
+            setGestureActive(false)
+            const t = e.nativeEvent.changedTouches[0] || e.nativeEvent
+            const dx = Math.abs(t.pageX - touchStartRef.current.x)
+            const dy = Math.abs(t.pageY - touchStartRef.current.y)
+            // Tap only — keep the whole image free for horizontal paging.
+            if (dx < 10 && dy < 10) openLightbox(index)
+          }}
+          onTouchCancel={() => {
+            if (!dragActiveRef.current) {
+              clearUnlockParentTimer()
+              setGestureActive(false)
+            }
+          }}
+          onScrollBeginDrag={() => {
+            dragActiveRef.current = true
+            setGestureActive(true)
+            armUnlockParent(2500)
           }}
           onScrollEndDrag={(e) => {
             const { velocity } = e.nativeEvent
             // Keep parent locked until momentum settles for a snappy page snap.
-            if (!velocity?.x || Math.abs(velocity.x) < 0.05) setGestureActive(false)
+            if (!velocity?.x || Math.abs(velocity.x) < 0.05) {
+              clearUnlockParentTimer()
+              setGestureActive(false)
+            } else {
+              armUnlockParent(900)
+            }
           }}
           onMomentumScrollEnd={onMomentum}
           renderItem={({ item, index: i }) => (
-            <Pressable
-              disabled={blockHero}
-              delayPressIn={120}
-              onPressIn={() => {
-                heroMovedRef.current = false
-              }}
-              onPress={() => openLightbox(i)}
+            <View
               style={{ width: slideW, height: slideH }}
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel={`${alt} ${i + 1}`}
             >
               <Image
                 source={{ uri: item.url }}
                 style={styles.image}
                 resizeMode="cover"
                 onError={onImageError}
-                accessibilityLabel={`${alt} ${i + 1}`}
+                pointerEvents="none"
               />
-            </Pressable>
+            </View>
           )}
         />
 
@@ -270,28 +322,33 @@ export function HotelPhotoGallery({
           </View>
         ) : null}
         {!isHero && bottomLeft ? (
-          <View style={styles.bottomLeft} pointerEvents="box-none">
+          <View style={styles.bottomLeft} pointerEvents="none">
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {bottomLeft as any}
           </View>
         ) : null}
 
-        <View style={[styles.counter, isHero && styles.counterHero]}>
-          <Text style={styles.counterText}>
-            {loading ? '…' : `${index + 1}/${visible}`}
-          </Text>
+        {/* Compteur + CTA photos en bas à droite — jamais à côté du retour. */}
+        <View
+          style={[styles.photoChrome, isHero && styles.photoChromeHero]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.counter} pointerEvents="none">
+            <Text style={styles.counterText}>
+              {loading ? '…' : `${index + 1}/${visible}`}
+            </Text>
+          </View>
+          {!isHero ? (
+            <Pressable
+              disabled={blockHero}
+              onPress={() => openLightbox(index)}
+              style={styles.seeAll}
+              hitSlop={8}
+            >
+              <Text style={styles.seeAllText}>Photos</Text>
+            </Pressable>
+          ) : null}
         </View>
-
-        {!isHero ? (
-          <Pressable
-            disabled={blockHero}
-            onPress={() => openLightbox(index)}
-            style={styles.seeAll}
-            hitSlop={8}
-          >
-            <Text style={styles.seeAllText}>Photos</Text>
-          </Pressable>
-        ) : null}
 
         {count > 1 ? (
           <View
@@ -461,18 +518,23 @@ const styles = StyleSheet.create({
     bottom: 36,
     zIndex: 2,
   },
-  counter: {
+  photoChrome: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    backgroundColor: 'rgba(12,18,34,0.5)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.full,
+    right: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     zIndex: 3,
   },
-  counterHero: {
-    top: 14,
+  photoChromeHero: {
+    bottom: 18,
+  },
+  counter: {
+    backgroundColor: 'rgba(12,18,34,0.55)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
   },
   counterText: {
     color: colors.white,
@@ -480,14 +542,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   seeAll: {
-    position: 'absolute',
-    right: 12,
-    bottom: 12,
     backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: radius.full,
-    zIndex: 3,
   },
   seeAllText: {
     fontFamily: fonts.bold,

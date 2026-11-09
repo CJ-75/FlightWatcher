@@ -65,7 +65,6 @@ import {
   pickTripItemOwner,
   toActivityCardModel,
   toggleActivityCategory,
-  translate,
   type ActivityCardModel,
   type PlannedTrip,
   type TravelWorkspace,
@@ -93,7 +92,6 @@ import {
   type ActivityPlannerTarget,
 } from '../components/ActivityPlannerPicker'
 import { ActivityTripHero } from '../components/ActivityTripHero'
-import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useLikedActivities } from '../hooks/useLikedActivities'
 import type { MainTabParamList, RootStackParamList } from '../navigation/types'
@@ -326,6 +324,14 @@ export function ActivitiesScreen() {
 
   useEffect(() => {
     if (authLoading) return
+    // Non connecté / aperçu logged-out : catalogue public + hero Paris (pas de séjour).
+    if (!viewUser) {
+      setActiveTrip(null)
+      setPlannerCount(0)
+      setAddedCodes(new Set())
+      setTripReady(true)
+      return
+    }
     let cancelled = false
     didAutoCity.current = false
     setTripReady(false)
@@ -691,7 +697,14 @@ export function ActivitiesScreen() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftFromRoute, plannedFromRoute, route.params?.city, authKey, authLoading])
+  }, [
+    draftFromRoute,
+    plannedFromRoute,
+    route.params?.city,
+    authKey,
+    authLoading,
+    viewUser,
+  ])
 
   useEffect(() => {
     setSearchQuery('')
@@ -866,7 +879,18 @@ export function ActivitiesScreen() {
     }
   }
 
+  const promptLogin = useCallback(async () => {
+    setLoginLoading(true)
+    const { error } = await signInWithGoogle()
+    if (error && __DEV__) console.warn('[auth] signIn', error.message)
+    setLoginLoading(false)
+  }, [signInWithGoogle])
+
   const onAddToPlanner = (card: ActivityCardModel) => {
+    if (!viewUser) {
+      void promptLogin()
+      return
+    }
     setAddNotice(null)
     setTripPickerOpen(false)
     setPendingAdd(card)
@@ -931,44 +955,6 @@ export function ActivitiesScreen() {
     else setRefreshing(false)
   }
 
-  if (!viewUser) {
-    const t = (key: string) => translate('fr', key as never)
-    return (
-      <GuestAuthLanding
-        insetsTop={insets.top}
-        insetsBottom={insets.bottom}
-        kicker="ACTIVITÉS"
-        title={t('activities.guest.title')}
-        lead={t('activities.guest.lead')}
-        steps={[
-          {
-            title: t('activities.guest.step1'),
-            detail: t('activities.guest.step1.detail'),
-          },
-          {
-            title: t('activities.guest.step2'),
-            detail: t('activities.guest.step2.detail'),
-          },
-          {
-            title: t('activities.guest.step3'),
-            detail: t('activities.guest.step3.detail'),
-          },
-        ]}
-        ctaLabel={t('activities.guest.cta')}
-        hint={t('activities.guest.hint')}
-        loginLoading={loginLoading}
-        onLogin={() => {
-          void (async () => {
-            setLoginLoading(true)
-            const { error } = await signInWithGoogle()
-            if (error && __DEV__) console.warn('[auth] signIn', error.message)
-            setLoginLoading(false)
-          })()
-        }}
-      />
-    )
-  }
-
   return (
     <View style={styles.root}>
       <ScreenBackground />
@@ -996,6 +982,30 @@ export function ActivitiesScreen() {
               subtitle={ACTIVITY_PAGE_SUBTITLE_FR}
             />
 
+            {!viewUser ? (
+              <Pressable
+                onPress={() => void promptLogin()}
+                disabled={loginLoading}
+                style={({ pressed }) => [
+                  styles.guestBanner,
+                  pressed && { opacity: 0.92 },
+                ]}
+              >
+                <View style={styles.guestBannerCopy}>
+                  <Text style={styles.guestBannerKicker}>COMPTE</Text>
+                  <Text style={styles.guestBannerTitle}>
+                    Connecte-toi pour lier un séjour
+                  </Text>
+                  <Text style={styles.guestBannerSub}>
+                    Le catalogue reste ouvert — like et ajout au planner après login.
+                  </Text>
+                </View>
+                <Text style={styles.guestBannerCta}>
+                  {loginLoading ? '…' : 'Google'}
+                </Text>
+              </Pressable>
+            ) : null}
+
             {activeTrip ? (
               <ActivityTripHero
                 mode="active"
@@ -1016,8 +1026,13 @@ export function ActivitiesScreen() {
             ) : (
               <ActivityTripHero
                 mode="empty"
+                cityLabel={activityDestinationLabelFr(citySlug || 'paris')}
                 onBrowseTrips={() => navigation.navigate('Deals')}
                 onChooseTrip={() => {
+                  if (!viewUser) {
+                    void promptLogin()
+                    return
+                  }
                   setPendingAdd(null)
                   setTripPickerOpen(true)
                 }}
@@ -1198,7 +1213,13 @@ export function ActivitiesScreen() {
               addLabel={ACTIVITY_ADD_TO_PLANNER_FR}
               addDisabled={addBusy}
               liked={isLiked(c.productCode)}
-              onToggleLike={() => void toggleLike(c)}
+              onToggleLike={() => {
+                if (!viewUser) {
+                  void promptLogin()
+                  return
+                }
+                void toggleLike(c)
+              }}
               added={Boolean(c.productCode && addedCodes.has(c.productCode))}
             />
         )}
@@ -1396,6 +1417,49 @@ export function ActivitiesScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   header: { marginBottom: spacing.lg, gap: 4 },
+  guestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primarySoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+  },
+  guestBannerCopy: { flex: 1, minWidth: 0 },
+  guestBannerKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  guestBannerTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 14,
+    color: colors.ink,
+    letterSpacing: -0.2,
+  },
+  guestBannerSub: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.inkSoft,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  guestBannerCta: {
+    fontFamily: fonts.extrabold,
+    fontSize: 12,
+    color: colors.ink,
+    backgroundColor: colors.white,
+    overflow: 'hidden',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',

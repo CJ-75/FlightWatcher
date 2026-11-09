@@ -14,17 +14,32 @@ import { colors, fonts, shadow } from '../theme'
 
 export type JourneyDensity = 'solo' | 'duo' | 'groupe'
 
-const PHASE_TONE: Record<TravelWorkspace['phase'], string> = {
-  planning: '#F97316',
-  flight_selected: '#F97316',
-  composing: '#F97316',
-  booked: '#0F8A5F',
-  past: '#64748B',
+/** Glass = same translucent pill as TripDetailPathChrome (planner unique). */
+type PhaseTone = { bg: string; text: string; glass?: boolean }
+
+const PHASE_TONE: Record<TravelWorkspace['phase'], PhaseTone> = {
+  planning: {
+    bg: 'rgba(255,255,255,0.82)',
+    text: colors.ink,
+    glass: true,
+  },
+  flight_selected: {
+    bg: 'rgba(255,255,255,0.82)',
+    text: colors.ink,
+    glass: true,
+  },
+  composing: {
+    bg: 'rgba(255,255,255,0.82)',
+    text: colors.ink,
+    glass: true,
+  },
+  booked: { bg: '#0F8A5F', text: colors.white },
+  past: { bg: '#64748B', text: colors.white },
 }
 
 const PHASE_META: Record<
   TravelWorkspace['phase'],
-  { label: string; action: string; tone: string }
+  { label: string; action: string; tone: PhaseTone }
 > = {
   planning: {
     label: PLANNER_PHASE_LABEL_FR.planning,
@@ -155,8 +170,16 @@ export function JourneyCard({
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.phaseStack}>
-            <View style={[styles.phase, { backgroundColor: meta.tone }]}>
-              <Text style={styles.phaseText}>{meta.label}</Text>
+            <View
+              style={[
+                styles.phase,
+                meta.tone.glass && styles.phaseGlass,
+                { backgroundColor: meta.tone.bg },
+              ]}
+            >
+              <Text style={[styles.phaseText, { color: meta.tone.text }]}>
+                {meta.label}
+              </Text>
             </View>
             {workspace.is_invitee ? (
               <View style={styles.inviteeTag}>
@@ -228,8 +251,16 @@ export function JourneyCard({
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.phaseStack}>
-          <View style={[styles.phase, { backgroundColor: meta.tone }]}>
-            <Text style={styles.phaseText}>{meta.label}</Text>
+          <View
+            style={[
+              styles.phase,
+              meta.tone.glass && styles.phaseGlass,
+              { backgroundColor: meta.tone.bg },
+            ]}
+          >
+            <Text style={[styles.phaseText, { color: meta.tone.text }]}>
+              {meta.label}
+            </Text>
           </View>
           {workspace.is_invitee ? (
             <View style={styles.inviteeTag}>
@@ -333,7 +364,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  phaseText: { fontFamily: fonts.bold, fontSize: 10, color: colors.white },
+  phaseGlass: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  phaseText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: colors.white,
+    letterSpacing: 0.2,
+  },
   inviteeTag: {
     borderRadius: 999,
     paddingHorizontal: 10,

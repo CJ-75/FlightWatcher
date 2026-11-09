@@ -289,7 +289,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
           !rows.some((r) => r.kind === 'near') ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>
-              Pas encore de parcours à {cityLabel}
+              Pas encore d’idées à {cityLabel}
             </Text>
           </View>
         ) : null}
@@ -330,16 +330,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
                         >
                           {chip.label}
                         </Text>
-                        {chip.count > 0 ? (
-                          <Text
-                            style={[
-                              styles.envieCount,
-                              on && styles.envieCountOn,
-                            ]}
-                          >
-                            {chip.count} parcours
-                          </Text>
-                        ) : null}
                       </Pressable>
                     )
                   })}
@@ -497,13 +487,5 @@ const styles = StyleSheet.create({
   },
   envieLabelOn: {
     color: '#F5EFEA',
-  },
-  envieCount: {
-    fontFamily: fonts.semibold,
-    fontSize: 10,
-    color: colors.muted,
-  },
-  envieCountOn: {
-    color: 'rgba(245,239,234,0.7)',
   },
 })

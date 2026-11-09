@@ -394,7 +394,7 @@ function RootNavigator() {
           <Stack.Screen
             name="DealDetail"
             component={DealDetailScreen}
-            options={{ headerShown: false }}
+            options={stackHeaderOptions('Séjour')}
           />
           <Stack.Screen
             name="TripDetail"

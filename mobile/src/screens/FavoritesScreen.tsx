@@ -37,6 +37,10 @@ import {
   translate,
 } from '@flightwatcher/shared'
 import { getApi } from '../lib/client'
+import {
+  prefetchDealDetail,
+  rememberDealPreview,
+} from '../lib/dealDetailCache'
 import { setLikedParcoursIdLocal } from '../lib/parcoursCache'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -107,6 +111,58 @@ function isSkeletonItem(
   return '__skeleton' in item && item.__skeleton === true
 }
 
+type FavSort = 'date' | 'recent'
+
+function dayKey(raw: string | null | undefined): string {
+  const s = String(raw || '').trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''
+}
+
+function favoriteTripDay(item: FavListItem): string {
+  if (isSkeletonItem(item)) return ''
+  if ('trip' in item && (item as SavedFavorite).trip) {
+    const t = (item as SavedFavorite).trip as EnrichedTripResponse
+    return dayKey(t.aller?.departureTime || t.retour?.departureTime)
+  }
+  if ('deal' in item && (item as LikedDeal).deal) {
+    return dayKey((item as LikedDeal).deal?.dates?.outbound)
+  }
+  return ''
+}
+
+function favoriteSavedAt(item: FavListItem): string {
+  if (isSkeletonItem(item)) return ''
+  if ('createdAt' in item && (item as SavedFavorite).createdAt) {
+    return String((item as SavedFavorite).createdAt)
+  }
+  if ('created_at' in item) {
+    return String((item as { created_at?: string }).created_at || '')
+  }
+  return ''
+}
+
+function sortFavorites(
+  items: FavListItem[],
+  sort: FavSort,
+  opts?: { reverseDate?: boolean },
+): FavListItem[] {
+  const list = items.slice()
+  if (sort === 'recent') {
+    list.sort((a, b) => favoriteSavedAt(b).localeCompare(favoriteSavedAt(a)))
+    return list
+  }
+  const dir = opts?.reverseDate ? -1 : 1
+  list.sort((a, b) => {
+    const da = favoriteTripDay(a)
+    const db = favoriteTripDay(b)
+    if (da && db && da !== db) return da < db ? -dir : dir
+    if (da && !db) return -1
+    if (!da && db) return 1
+    return favoriteSavedAt(b).localeCompare(favoriteSavedAt(a))
+  })
+  return list
+}
+
 function persistFavCache(next: FavCachePayload) {
   favMemoryCache = next
   void AsyncStorage.setItem(FAV_CACHE_KEY, JSON.stringify(next)).catch(() => {})
@@ -122,7 +178,7 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { bookCtaLabel, preparePartnerBook } from '../lib/partnerBook'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, shadow, spacing } from '../theme'
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 export function FavoritesScreen() {
   const insets = useSafeAreaInsets()
@@ -160,9 +216,11 @@ export function FavoritesScreen() {
   const [tab, setTab] = useState<FavCollection>('flights')
   const tabRef = useRef<FavCollection>('flights')
   tabRef.current = tab
+  const [sort, setSort] = useState<FavSort>('date')
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [addBusy, setAddBusy] = useState(false)
+  const dateSortAvailable = tab === 'flights' || tab === 'deals'
 
   const markReady = useCallback((id: FavCollection) => {
     if (readyRef.current[id]) return
@@ -456,7 +514,7 @@ export function FavoritesScreen() {
     }
   }
 
-  const { active: activeItems, archived: archivedItems } = useMemo(() => {
+  const { active: activeRaw, archived: archivedRaw } = useMemo(() => {
     if (tab === 'flights') {
       return partitionFavoritesByPast(favorites, isPastFavoriteFlight)
     }
@@ -469,8 +527,31 @@ export function FavoritesScreen() {
     return { active: likedParcours, archived: [] as LikedItinerary[] }
   }, [tab, favorites, likedDeals, likedActivities, likedParcours])
 
+  const effectiveSort: FavSort = dateSortAvailable ? sort : 'recent'
+
+  const activeItems = useMemo(
+    () => sortFavorites(activeRaw as FavListItem[], effectiveSort),
+    [activeRaw, effectiveSort],
+  )
+  const archivedItems = useMemo(
+    () =>
+      sortFavorites(archivedRaw as FavListItem[], effectiveSort, {
+        reverseDate: true,
+      }),
+    [archivedRaw, effectiveSort],
+  )
+
   const showSkeleton = !ready[tab]
   const listData: FavListItem[] = showSkeleton ? SKELETON_ITEMS : activeItems
+  const collectionCounts = useMemo(
+    () => ({
+      flights: favorites.length,
+      deals: likedDeals.length,
+      activities: likedActivities.length,
+      parcours: likedParcours.length,
+    }),
+    [favorites.length, likedDeals.length, likedActivities.length, likedParcours.length],
+  )
 
   const renderFavoriteItem = (item: FavListItem, faded: boolean) => {
     if (isSkeletonItem(item)) {
@@ -495,11 +576,26 @@ export function FavoritesScreen() {
           deal={(item as LikedDeal).deal}
           liked
           onToggleLike={() => void unlikeDeal((item as LikedDeal).deal_id)}
-          onPress={() =>
+          onPressIn={() => {
+            const liked = item as LikedDeal
+            const deal = liked.deal
+            const dealId = String(
+              liked.deal_key || liked.deal_id || deal?.deal_key || deal?.id || '',
+            )
+            if (dealId) prefetchDealDetail(dealId, deal)
+          }}
+          onPress={() => {
+            const liked = item as LikedDeal
+            const deal = liked.deal
+            const dealId = String(
+              liked.deal_key || liked.deal_id || deal?.deal_key || deal?.id || '',
+            )
+            if (deal) rememberDealPreview(deal)
             navigation.navigate('DealDetail', {
-              dealId: (item as LikedDeal).deal_id,
+              dealId,
+              preview: deal,
             })
-          }
+          }}
         />,
       )
     }
@@ -603,6 +699,7 @@ export function FavoritesScreen() {
         }}
         extraData={{
           tab,
+          sort: effectiveSort,
           archiveOpen,
           archivedCount: archivedItems.length,
           showSkeleton,
@@ -619,7 +716,7 @@ export function FavoritesScreen() {
             <TabScreenHeader
               kicker="FAVORIS"
               title={translate('fr', 'favorites.title')}
-              subtitle={translate('fr', 'favorites.collectionsHint')}
+              subtitle={translate('fr', 'favorites.subtitle')}
             >
               <ScrollView
                 horizontal
@@ -627,30 +724,105 @@ export function FavoritesScreen() {
                 contentContainerStyle={styles.collectionsRow}
                 style={styles.collectionsScroll}
               >
-                {COLLECTIONS.map(({ id, labelKey }) => (
-                  <Pressable
-                    key={id}
-                    onPress={() => {
-                      setTab(id)
-                      setArchiveOpen(false)
-                    }}
-                    style={[
-                      styles.collectionChip,
-                      tab === id && styles.collectionChipOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.collectionLabel,
-                        tab === id && styles.collectionLabelOn,
-                      ]}
-                      numberOfLines={1}
+                {COLLECTIONS.map(({ id, labelKey }) => {
+                  const on = tab === id
+                  const n = collectionCounts[id]
+                  return (
+                    <Pressable
+                      key={id}
+                      onPress={() => {
+                        setTab(id)
+                        setArchiveOpen(false)
+                        setSort(
+                          id === 'flights' || id === 'deals' ? 'date' : 'recent',
+                        )
+                      }}
+                      style={styles.collectionTab}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: on }}
                     >
-                      {translate('fr', labelKey)}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <View style={styles.collectionTabInner}>
+                        <Text
+                          style={[
+                            styles.collectionLabel,
+                            on && styles.collectionLabelOn,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {translate('fr', labelKey)}
+                        </Text>
+                        {n > 0 ? (
+                          <View
+                            style={[
+                              styles.collectionCount,
+                              on && styles.collectionCountOn,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.collectionCountText,
+                                on && styles.collectionCountTextOn,
+                              ]}
+                            >
+                              {n}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {on ? <View style={styles.collectionUnderline} /> : null}
+                    </Pressable>
+                  )
+                })}
               </ScrollView>
+
+              {!showSkeleton ? (
+                <View style={styles.toolbar}>
+                  <View style={styles.toolbarCopy}>
+                    <Text style={styles.toolbarKicker}>
+                      {dateSortAvailable
+                        ? translate('fr', 'favorites.upcomingKicker')
+                        : translate('fr', 'favorites.savedKicker')}
+                    </Text>
+                    <Text style={styles.toolbarCount}>
+                      {activeItems.length === 0
+                        ? translate('fr', 'favorites.listCountZero')
+                        : translate('fr', 'favorites.listCount', {
+                            n: activeItems.length,
+                          })}
+                    </Text>
+                  </View>
+                  <View style={styles.sortRow}>
+                    {(dateSortAvailable
+                      ? (['date', 'recent'] as const)
+                      : (['recent'] as const)
+                    ).map((id) => {
+                      const on = effectiveSort === id
+                      return (
+                        <Pressable
+                          key={id}
+                          onPress={() => setSort(id)}
+                          style={({ pressed }) => [
+                            styles.sortChip,
+                            on && styles.sortChipOn,
+                            pressed && { opacity: 0.9 },
+                          ]}
+                        >
+                          <Text
+                            style={[styles.sortLabel, on && styles.sortLabelOn]}
+                          >
+                            {translate(
+                              'fr',
+                              id === 'date'
+                                ? 'favorites.sort.date'
+                                : 'favorites.sort.recent',
+                            )}
+                          </Text>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                </View>
+              ) : null}
             </TabScreenHeader>
           </View>
         }
@@ -672,19 +844,52 @@ export function FavoritesScreen() {
         }
         ListFooterComponent={
           !showSkeleton && archivedItems.length > 0 ? (
-            <View style={styles.archiveBlock}>
+            <View style={[styles.archiveCard, shadow.soft]}>
               <Pressable
                 onPress={() => setArchiveOpen((o) => !o)}
-                style={styles.archiveHeader}
+                style={({ pressed }) => [
+                  styles.archiveHeader,
+                  archiveOpen && styles.archiveHeaderOpen,
+                  pressed && { opacity: 0.92 },
+                ]}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: archiveOpen }}
               >
-                <Text style={styles.archiveTitle}>
-                  {translate('fr', 'favorites.archivedSectionCount', {
-                    n: archivedItems.length,
-                  })}
-                </Text>
-                <Text style={styles.archiveChevron}>{archiveOpen ? '▾' : '▸'}</Text>
+                <View style={styles.archiveCopy}>
+                  <Text
+                    style={[
+                      styles.archiveKicker,
+                      archiveOpen && styles.archiveKickerOpen,
+                    ]}
+                  >
+                    PASSÉS
+                  </Text>
+                  <Text
+                    style={[
+                      styles.archiveTitle,
+                      archiveOpen && styles.archiveTitleOpen,
+                    ]}
+                  >
+                    {translate('fr', 'favorites.archivedSectionCount', {
+                      n: archivedItems.length,
+                    })}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.archiveChevronWrap,
+                    archiveOpen && styles.archiveChevronWrapOpen,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.archiveChevron,
+                      archiveOpen && styles.archiveChevronOpen,
+                    ]}
+                  >
+                    {archiveOpen ? '▾' : '▸'}
+                  </Text>
+                </View>
               </Pressable>
               {archiveOpen ? (
                 <View style={styles.archiveList}>
@@ -692,7 +897,9 @@ export function FavoritesScreen() {
                     {translate('fr', 'favorites.archivedHint')}
                   </Text>
                   {archivedItems.map((item) => (
-                    <View key={item.id}>{renderFavoriteItem(item, true)}</View>
+                    <View key={String((item as { id?: string }).id)}>
+                      {renderFavoriteItem(item, true)}
+                    </View>
                   ))}
                 </View>
               ) : null}
@@ -808,63 +1015,112 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: colors.primarySoft,
   },
-  header: { marginBottom: 22, gap: 4 },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  topCopy: { flex: 1, minWidth: 0, paddingRight: 4 },
-  kicker: {
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    color: colors.primary,
-    marginBottom: 2,
-  },
-  title: {
-    fontFamily: fonts.extrabold,
-    fontSize: 34,
-    color: colors.ink,
-    letterSpacing: -1,
-    lineHeight: 40,
-  },
-  subtitle: {
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    color: colors.muted,
-    lineHeight: 22,
-    marginTop: 2,
-  },
+  header: { marginBottom: 18, gap: 4 },
   collectionsScroll: {
-    marginTop: spacing.lg,
+    marginTop: 14,
     marginHorizontal: -spacing.xl,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
   },
   collectionsRow: {
     paddingHorizontal: spacing.xl,
-    gap: 8,
+    gap: 20,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  collectionTab: {
+    paddingBottom: 12,
+    position: 'relative',
+  },
+  collectionTabInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 7,
   },
-  collectionChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
+  collectionLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  collectionLabelOn: {
+    color: colors.ink,
+  },
+  collectionCount: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 10,
     backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  collectionChipOn: {
+  collectionCountOn: {
+    backgroundColor: colors.ink,
+  },
+  collectionCountText: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    color: colors.muted,
+  },
+  collectionCountTextOn: {
+    color: colors.white,
+  },
+  collectionUnderline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 2.5,
+    borderRadius: 2,
+    backgroundColor: colors.ink,
+  },
+  toolbar: {
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  toolbarCopy: { flex: 1, minWidth: 0 },
+  toolbarKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    color: colors.muted,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  toolbarCount: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    letterSpacing: -0.2,
+    color: colors.ink,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+  },
+  sortChipOn: {
     backgroundColor: colors.ink,
     borderColor: colors.ink,
   },
-  collectionLabel: {
+  sortLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.inkSoft,
+    fontSize: 12,
+    color: colors.muted,
   },
-  collectionLabelOn: {
+  sortLabelOn: {
+    fontFamily: fonts.bold,
     color: colors.white,
   },
   parcoursRow: {
@@ -923,39 +1179,76 @@ const styles = StyleSheet.create({
   archivedItem: {
     opacity: 0.48,
   },
-  archiveBlock: {
+  archiveCard: {
     marginTop: spacing.xl,
     marginBottom: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-    paddingTop: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    overflow: 'hidden',
   },
   archiveHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+    backgroundColor: colors.primarySoft,
+  },
+  archiveHeaderOpen: {
+    backgroundColor: colors.ink,
+  },
+  archiveCopy: { flex: 1, minWidth: 0 },
+  archiveKicker: {
+    fontFamily: fonts.extrabold,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    color: colors.primaryInk,
+    marginBottom: 2,
+  },
+  archiveKickerOpen: {
+    color: colors.primaryMuted,
   },
   archiveTitle: {
     fontFamily: fonts.extrabold,
-    fontSize: 15,
-    color: colors.inkSoft,
+    fontSize: 16,
+    color: colors.ink,
     letterSpacing: -0.2,
+  },
+  archiveTitleOpen: {
+    color: colors.white,
+  },
+  archiveChevronWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archiveChevronWrapOpen: {
+    backgroundColor: colors.primary,
   },
   archiveChevron: {
     fontFamily: fonts.bold,
-    fontSize: 16,
-    color: colors.muted,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  archiveChevronOpen: {
+    color: colors.white,
   },
   archiveHint: {
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.muted,
     marginBottom: spacing.md,
-    paddingHorizontal: 4,
+    paddingHorizontal: 16,
   },
   archiveList: {
+    paddingHorizontal: 10,
+    paddingBottom: 10,
     gap: 0,
   },
   errorText: {
