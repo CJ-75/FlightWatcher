@@ -24,6 +24,8 @@ type Props = {
   variant?: 'portrait' | 'landscape'
   badge?: string | null
   onPress?: () => void
+  /** Start detail fetch on finger-down (before navigate). */
+  onPressIn?: () => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -32,6 +34,7 @@ export function ItineraryCard({
   variant = 'portrait',
   badge,
   onPress,
+  onPressIn,
   style,
 }: Props) {
   const city = itinerary.city_slug
@@ -76,6 +79,7 @@ export function ItineraryCard({
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={onPressIn}
       style={({ pressed }) => [
         styles.card,
         landscape ? styles.landscape : styles.portrait,

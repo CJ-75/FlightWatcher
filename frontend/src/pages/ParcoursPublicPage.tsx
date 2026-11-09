@@ -59,49 +59,81 @@ export default function ParcoursPublicPage() {
   useEffect(() => {
     if (!itineraryId) return
     setLoading(true)
+
+    const applyRow = (row: Itinerary) => {
+      setItin(row)
+      setError(null)
+      document.title = `${row.title} · FlightWatcher`
+      const desc = row.subtitle || row.intro || ''
+      let meta = document.querySelector('meta[name="description"]')
+      if (!meta) {
+        meta = document.createElement('meta')
+        meta.setAttribute('name', 'description')
+        document.head.appendChild(meta)
+      }
+      meta.setAttribute('content', desc.slice(0, 160))
+      const setOg = (property: string, content: string) => {
+        let el = document.querySelector(`meta[property="${property}"]`)
+        if (!el) {
+          el = document.createElement('meta')
+          el.setAttribute('property', property)
+          document.head.appendChild(el)
+        }
+        el.setAttribute('content', content)
+      }
+      const cover =
+        row.cover_image ||
+        (row.city_slug ? cityImageUrl(row.city_slug) : '')
+      setOg('og:title', row.title)
+      setOg('og:description', desc.slice(0, 160))
+      if (cover) setOg('og:image', cover)
+      setOg('og:type', 'article')
+      void refreshLiked(row.id)
+      void getApiClient()
+        .trackActivityEvent({
+          domain: 'itinerary',
+          event: 'view',
+          surface: 'parcours',
+          platform: 'web',
+          meta: { id: itineraryId },
+        })
+        .catch(() => {})
+    }
+
+    // Instant paint if catalogue (session) already embedded steps.
+    try {
+      const raw = sessionStorage.getItem('fw_parcours_catalog_v1')
+      if (raw) {
+        const list = JSON.parse(raw) as Itinerary[]
+        const hit = list.find(
+          (x) => x.slug === itineraryId || x.id === itineraryId,
+        )
+        if (
+          hit &&
+          Array.isArray(hit.itinerary_items) &&
+          hit.itinerary_items.length
+        ) {
+          applyRow(hit)
+          setLoading(false)
+          // Soft revalidate in background
+          void getApiClient()
+            .getParcours(itineraryId)
+            .then((r) => {
+              if (r.ok && r.itinerary) applyRow(r.itinerary as unknown as Itinerary)
+            })
+            .catch(() => {})
+          return
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
     void getApiClient()
       .getParcours(itineraryId)
       .then((r) => {
         if (!r.ok || !r.itinerary) throw new Error('not_found')
-        const row = r.itinerary as unknown as Itinerary
-        setItin(row)
-        setError(null)
-        document.title = `${row.title} · FlightWatcher`
-        const desc = row.subtitle || row.intro || ''
-        let meta = document.querySelector('meta[name="description"]')
-        if (!meta) {
-          meta = document.createElement('meta')
-          meta.setAttribute('name', 'description')
-          document.head.appendChild(meta)
-        }
-        meta.setAttribute('content', desc.slice(0, 160))
-        // OG basics (SPA — crawlers limités sans SSR)
-        const setOg = (property: string, content: string) => {
-          let el = document.querySelector(`meta[property="${property}"]`)
-          if (!el) {
-            el = document.createElement('meta')
-            el.setAttribute('property', property)
-            document.head.appendChild(el)
-          }
-          el.setAttribute('content', content)
-        }
-        const cover =
-          row.cover_image ||
-          (row.city_slug ? cityImageUrl(row.city_slug) : '')
-        setOg('og:title', row.title)
-        setOg('og:description', desc.slice(0, 160))
-        if (cover) setOg('og:image', cover)
-        setOg('og:type', 'article')
-        void refreshLiked(row.id)
-        void getApiClient()
-          .trackActivityEvent({
-            domain: 'itinerary',
-            event: 'view',
-            surface: 'parcours',
-            platform: 'web',
-            meta: { id: itineraryId },
-          })
-          .catch(() => {})
+        applyRow(r.itinerary as unknown as Itinerary)
       })
       .catch(() => {
         setItin(null)

@@ -75,6 +75,33 @@ def clear_itineraries_catalog_cache() -> None:
     _detail_cache.clear()
 
 
+def _seed_detail_cache_from_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    demo: bool,
+) -> None:
+    """Promote list rows (with steps) into detail cache — same payload as by-slug."""
+    for row in rows:
+        items = row.get("itinerary_items")
+        if not isinstance(items, list) or not items:
+            continue
+        payload = {"ok": True, "itinerary": row}
+        slug = str(row.get("slug") or "").strip().lower()
+        iid = str(row.get("id") or "").strip()
+        if slug:
+            _cache_set(
+                _detail_cache,
+                f"detail|demo={int(demo)}|slug={slug}|id=",
+                payload,
+            )
+        if iid:
+            _cache_set(
+                _detail_cache,
+                f"detail|demo={int(demo)}|slug=|id={iid}",
+                payload,
+            )
+
+
 def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(row)
     occasions = out.get("occasions")
@@ -119,19 +146,23 @@ def list_published_itineraries(
         return {"ok": False, "itineraries": [], "error": "no_supabase"}
     lim = max(1, min(int(limit or 40), 100))
     demo = _allow_demo() if include_demo is None else bool(include_demo)
+    # listv2 = catalogue embeds itinerary_items (instant detail open on clients).
     cache_key = (
-        f"list|demo={int(demo)}|city={city or ''}|occ={occasion or ''}|"
+        f"listv2|demo={int(demo)}|city={city or ''}|occ={occasion or ''}|"
         f"feat={int(featured)}|lim={lim}"
     )
     cached = _cache_get(_list_cache, cache_key)
     if cached is not None:
         logger.info("list_published_itineraries cache_hit key=%s", cache_key)
+        rows = cached.get("itineraries") or []
+        if isinstance(rows, list) and rows:
+            _seed_detail_cache_from_rows(rows, demo=demo)
         return cached
     t0 = time.perf_counter()
     try:
         q = (
             supabase.table("itineraries")
-            .select(PUBLIC_COLS)
+            .select(DETAIL_SELECT)
             .eq("status", "published")
             .eq("author_kind", "admin")
             .order("sort_weight", desc=True)
@@ -151,8 +182,9 @@ def list_published_itineraries(
         rows = [_serialize(r) for r in (res.data or [])]
         out = {"ok": True, "itineraries": rows}
         _cache_set(_list_cache, cache_key, out)
+        _seed_detail_cache_from_rows(rows, demo=demo)
         logger.info(
-            "list_published_itineraries cache_miss ms=%.0f n=%s",
+            "list_published_itineraries cache_miss ms=%.0f n=%s with_steps",
             (time.perf_counter() - t0) * 1000,
             len(rows),
         )

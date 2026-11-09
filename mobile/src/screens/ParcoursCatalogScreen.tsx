@@ -24,6 +24,7 @@ import {
   getParcoursCached,
   getParcoursCatalogMemory,
   hydrateParcoursCatalogMemory,
+  prefetchParcoursDetails,
   rememberParcoursPreview,
   setParcoursCatalogMemory,
 } from '../lib/parcoursCache'
@@ -82,6 +83,11 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       const next = (res.itineraries || []) as unknown as Itinerary[]
       setItems(next)
       setParcoursCatalogMemory(next)
+      // Warm detail+steps before tap (backend TTL + client singleflight).
+      prefetchParcoursDetails(
+        next.map((it) => it.slug || it.id),
+        { limit: 12 },
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       if (!getParcoursCatalogMemory()?.length) setItems([])
@@ -135,11 +141,15 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
     [items, city, occasion],
   )
 
+  const warm = (it: Itinerary) => {
+    const idOrSlug = it.slug || it.id
+    if (idOrSlug) void getParcoursCached(idOrSlug).catch(() => {})
+  }
+
   const open = (it: Itinerary) => {
     rememberParcoursPreview(it)
     const idOrSlug = it.slug || it.id
-    // Singleflight: detail screen awaits the same promise (one HTTP).
-    void getParcoursCached(idOrSlug).catch(() => {})
+    warm(it)
     void getApi()
       .trackActivityEvent({
         domain: 'itinerary',
@@ -165,6 +175,8 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
         featured_to: it.featured_to,
         budget_estimate_eur: it.budget_estimate_eur,
         budget_basis: it.budget_basis,
+        // Instant steps when catalogue embeds itinerary_items.
+        itinerary_items: it.itinerary_items,
       },
     })
   }
@@ -335,6 +347,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
                           : null
                     }
                     onPress={() => open(it)}
+                    onPressIn={() => warm(it)}
                     style={{ marginRight: 12 }}
                   />
                 ))}

@@ -9,12 +9,24 @@ const detailMemory = new Map<string, Itinerary>()
 /** In-flight detail fetches — catalog prefetch + detail screen share one HTTP. */
 const detailInflight = new Map<string, Promise<Itinerary>>()
 
+function hasSteps(it: Itinerary | null | undefined): boolean {
+  return Array.isArray(it?.itinerary_items) && (it!.itinerary_items?.length ?? 0) > 0
+}
+
 export function getParcoursCatalogMemory(): Itinerary[] | null {
   return catalogMemory
 }
 
+/** Seed detail Map from catalogue rows that already embed steps. */
+export function hydrateDetailsFromCatalog(items: Itinerary[]) {
+  for (const it of items) {
+    if (hasSteps(it)) setParcoursDetailMemory(it)
+  }
+}
+
 export function setParcoursCatalogMemory(items: Itinerary[]) {
   catalogMemory = items
+  hydrateDetailsFromCatalog(items)
   void AsyncStorage.setItem(CATALOG_KEY, JSON.stringify(items)).catch(() => {})
 }
 
@@ -26,6 +38,7 @@ export async function hydrateParcoursCatalogMemory(): Promise<Itinerary[] | null
     const parsed = JSON.parse(raw) as Itinerary[]
     if (!Array.isArray(parsed)) return null
     catalogMemory = parsed
+    hydrateDetailsFromCatalog(parsed)
     return parsed
   } catch {
     return null
@@ -47,6 +60,11 @@ export function setParcoursDetailMemory(it: Itinerary) {
 }
 
 export function rememberParcoursPreview(it: Partial<Itinerary> & { id: string }) {
+  // Catalogue rows may already embed steps — keep them for instant detail.
+  if (hasSteps(it as Itinerary)) {
+    setParcoursDetailMemory(it as Itinerary)
+    return
+  }
   const existing = detailMemory.get(it.id) || (it.slug ? detailMemory.get(it.slug) : null)
   if (existing?.itinerary_items?.length) return
   // Never persist an empty steps array from a chrome-only preview.
@@ -59,10 +77,6 @@ export function rememberParcoursPreview(it: Partial<Itinerary> & { id: string })
     delete row.itinerary_items
   }
   setParcoursDetailMemory(row)
-}
-
-function hasSteps(it: Itinerary | null | undefined): boolean {
-  return Array.isArray(it?.itinerary_items) && it!.itinerary_items!.length > 0
 }
 
 /**
@@ -93,4 +107,27 @@ export function getParcoursCached(idOrSlug: string): Promise<Itinerary> {
   detailInflight.set(key, req)
   // Same promise under id+slug once resolved is handled via detailMemory keys.
   return req
+}
+
+/** Warm detail cache for visible/featured catalogue cards (staggered). */
+export function prefetchParcoursDetails(
+  idOrSlugs: Array<string | null | undefined>,
+  opts?: { limit?: number },
+): void {
+  const lim = Math.max(1, Math.min(opts?.limit ?? 10, 20))
+  const seen = new Set<string>()
+  const keys: string[] = []
+  for (const raw of idOrSlugs) {
+    const key = String(raw || '').trim()
+    if (!key || seen.has(key)) continue
+    if (hasSteps(getParcoursDetailMemory(key))) continue
+    seen.add(key)
+    keys.push(key)
+    if (keys.length >= lim) break
+  }
+  keys.forEach((key, i) => {
+    setTimeout(() => {
+      void getParcoursCached(key).catch(() => {})
+    }, i * 80)
+  })
 }

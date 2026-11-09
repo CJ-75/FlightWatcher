@@ -96,7 +96,7 @@ export type RootStackParamList = {
   InAppBrowser: { url: string; title?: string }
   ItineraryDetail: {
     itineraryId: string
-    /** Card snapshot for instant chrome before detail fetch. */
+    /** Card snapshot for instant chrome (+ steps when catalogue embeds them). */
     preview?: {
       id: string
       slug?: string | null
@@ -111,6 +111,7 @@ export type RootStackParamList = {
       featured_to?: string | null
       budget_estimate_eur?: number | null
       budget_basis?: string | null
+      itinerary_items?: import('@flightwatcher/shared').ItineraryItem[] | null
     }
   }
   NotFound: undefined
