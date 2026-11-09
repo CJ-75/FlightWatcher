@@ -20,7 +20,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   TRAVEL_PREFERENCE_CARDS,
   airportSelectionLabel,
-  cityImageUrl,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -52,42 +51,56 @@ const PHOTO_W = Math.min(
   Math.round(Math.max(W, 390) * Math.min(PixelRatio.get(), 2.5)),
 )
 
-const PROMISE_PHOTO = `https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=${PHOTO_W}&q=85&fm=jpg`
+/** Frame 1 — Cinque Terre / week-end méditerranéen. */
+const PROMISE_PHOTO = `https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=${PHOTO_W}&q=90&fm=jpg`
+
+/** Frame 2 — Arc de Triomphe (bastien-nvs / SprV1eqNrqM). */
+const CITY_STEP_PHOTO =
+  'https://images.unsplash.com/photo-1603378995290-8d4ce0495ddd?auto=format&fit=crop&w=2400&q=95&fm=jpg'
 
 const PROMISE_FEATURES = [
   {
-    title: 'Depuis ta ville',
-    detail: 'Prix clairs, aéroports en coulisse',
-    photo: `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+    title: 'Depuis chez toi',
+    detail: 'Des week-ends qui collent à ton budget',
+    photo: `https://images.unsplash.com/photo-1603378995290-8d4ce0495ddd?auto=format&fit=crop&w=800&q=90&fm=jpg`,
   },
   {
-    title: 'Parcours prêts',
-    detail: 'Des idées à partager en un lien',
+    title: 'Des idées toutes prêtes',
+    detail: 'Un parcours à suivre, ou à partager',
     photo: `https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
-    title: 'À plusieurs',
-    detail: 'Invite tes amis sans tableur',
-    photo: `https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=640&q=80&fm=jpg`,
+    title: 'Avec qui tu veux',
+    detail: 'Solo, duo ou toute la bande',
+    photo: `https://images.unsplash.com/photo-1647282518004-f37573ae12d4?auto=format&fit=crop&w=800&q=90&fm=jpg`,
   },
 ] as const
 
+/** Bandeau « Tu voyages plutôt… » (Fn27DlI8bZ8). */
+const PREF_HERO_PHOTO =
+  'https://images.unsplash.com/photo-1612278675615-7b093b07772d?auto=format&fit=crop&w=2400&q=95&fm=jpg'
+
 const PREF_VISUAL: Record<TravelPreference, { photo: string; line: string }> = {
   amis: {
-    photo: `https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=${PHOTO_W}&q=80&fm=jpg`,
-    line: 'Week-ends à plusieurs, sans tableur',
+    // 5_DX7zql8a0
+    photo:
+      'https://images.unsplash.com/photo-1647282518004-f37573ae12d4?auto=format&fit=crop&w=2400&q=95&fm=jpg',
+    line: 'La bande, les rires, zéro prise de tête',
   },
   couple: {
+    // gardée — validée
     photo: `https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&fit=crop&w=${PHOTO_W}&q=80&fm=jpg`,
     line: 'Deux places, une même envie',
   },
   solo: {
-    photo: `https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=${PHOTO_W}&q=80&fm=jpg`,
-    line: 'Tu pars quand tu veux',
+    // MQfDZmBkLe8
+    photo:
+      'https://images.unsplash.com/photo-1768463851971-a813d5797341?auto=format&fit=crop&w=2400&q=95&fm=jpg',
+    line: 'Ton rythme, tes envies',
   },
   famille: {
-    photo: `https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=${PHOTO_W}&q=80&fm=jpg`,
-    line: 'Des idées qui tiennent la route',
+    photo: `https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=${PHOTO_W}&q=85&fm=jpg`,
+    line: 'Des week-ends qui plaisent à tous',
   },
 }
 
@@ -98,13 +111,6 @@ function slugifyCity(label: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-}
-
-function cityPhoto(label: string) {
-  const raw = cityImageUrl(label)
-  if (!raw) return PROMISE_PHOTO
-  if (raw.includes('w=')) return raw.replace(/w=\d+/, `w=${PHOTO_W}`)
-  return `${raw}${raw.includes('?') ? '&' : '?'}w=${PHOTO_W}&q=85`
 }
 
 function track(event: string, meta?: Record<string, unknown>) {
@@ -293,17 +299,15 @@ export function OnboardingFlowScreen({ onDone }: Props) {
                     style={styles.heroGrad}
                   >
                     <View style={styles.heroBadge}>
-                      <Text style={styles.heroBadgeText}>Nouveau</Text>
+                      <Text style={styles.heroBadgeText}>Week-ends</Text>
                     </View>
-                    <Text style={styles.heroEyebrow}>
-                      WEEK-ENDS · PRÊTS À PARTIR
-                    </Text>
+                    <Text style={styles.heroEyebrow}>FLIGHTWATCHER</Text>
                     <Text style={styles.heroTitle}>
-                      Le bon départ,{'\n'}le bon prix.
+                      Pars mieux,{'\n'}sans y passer des heures.
                     </Text>
                     <Text style={styles.heroLead}>
-                      Prix clairs depuis ta ville — parcours à partager, sans
-                      tableur.
+                      Des idées depuis chez toi, au bon prix — prêtes à
+                      partager.
                     </Text>
                   </LinearGradient>
                 </ImageBackground>
@@ -350,7 +354,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
             <View style={styles.stepBody}>
               <View style={[styles.cityHero, shadow.soft]}>
                 <ImageBackground
-                  source={{ uri: cityPhoto(cityLabel) }}
+                  source={{ uri: CITY_STEP_PHOTO }}
                   style={styles.cityHeroImg}
                   imageStyle={styles.cityHeroBitmap}
                 >
@@ -363,30 +367,21 @@ export function OnboardingFlowScreen({ onDone }: Props) {
                     locations={[0, 0.4, 1]}
                     style={styles.cityHeroGrad}
                   >
-                    <Text style={styles.heroEyebrow}>DÉPART</Text>
+                    <Text style={styles.heroEyebrow}>CHEZ TOI</Text>
                     <Text style={styles.heroTitle}>
                       Tu pars{'\n'}d’où ?
-                    </Text>
-                    <Text style={styles.heroLead}>
-                      On te propose {cityLabel} — même champ que dans Vols.
                     </Text>
                   </LinearGradient>
                 </ImageBackground>
               </View>
 
               <View style={[styles.card, shadow.soft]}>
-                <Text style={styles.fieldLabel}>Ville de départ</Text>
+                <Text style={styles.fieldLabel}>Ta ville</Text>
                 <CityAirportPicker
                   airports={airports}
                   value={airport}
                   onChange={setAirport}
                 />
-                <View style={styles.cityHintRow}>
-                  <View style={styles.cityHintDot} />
-                  <Text style={styles.cityHintText}>
-                    Les aéroports restent en coulisse — tu choisis la ville.
-                  </Text>
-                </View>
               </View>
             </View>
 
@@ -414,31 +409,30 @@ export function OnboardingFlowScreen({ onDone }: Props) {
               <View style={[styles.prefHero, shadow.soft]}>
                 <ImageBackground
                   source={{
-                    uri: pref
-                      ? PREF_VISUAL[pref].photo
-                      : PREF_VISUAL.amis.photo,
+                    uri: pref ? PREF_VISUAL[pref].photo : PREF_HERO_PHOTO,
                   }}
                   style={styles.prefHeroImg}
                   imageStyle={styles.prefHeroBitmap}
+                  resizeMode="cover"
                 >
                   <LinearGradient
                     colors={[
-                      'rgba(26,18,14,0.25)',
-                      'rgba(26,18,14,0.2)',
-                      'rgba(26,18,14,0.8)',
+                      'rgba(26,18,14,0.35)',
+                      'rgba(26,18,14,0.18)',
+                      'rgba(26,18,14,0.82)',
                     ]}
-                    locations={[0, 0.35, 1]}
+                    locations={[0, 0.42, 1]}
                     style={styles.prefHeroGrad}
                   >
-                    <Text style={styles.heroEyebrow}>ENVIE</Text>
-                    <Text style={styles.heroTitle}>
-                      Tu voyages{'\n'}plutôt…
+                    <Text style={styles.heroEyebrow}>AVEC QUI</Text>
+                    <Text style={styles.prefHeroTitle}>
+                      Tu voyages plutôt…
                     </Text>
-                    <Text style={styles.heroLead}>
-                      {pref
-                        ? PREF_VISUAL[pref].line
-                        : 'Choisis une façon de partir — tu pourras changer.'}
-                    </Text>
+                    {pref ? (
+                      <Text style={styles.heroLead}>
+                        {PREF_VISUAL[pref].line}
+                      </Text>
+                    ) : null}
                   </LinearGradient>
                 </ImageBackground>
               </View>
@@ -544,7 +538,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 18,
+    zIndex: 2,
   },
   brand: {
     fontFamily: fonts.extrabold,
@@ -573,8 +568,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.regular,
   },
-  pane: { flex: 1 },
-  stepBody: { flex: 1 },
+  pane: { flex: 1, zIndex: 1 },
+  stepBody: { flex: 1, minHeight: 0 },
   heroFrame: {
     flex: 1,
     minHeight: 220,
@@ -707,45 +702,35 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 10,
   },
-  cityHintRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-  },
-  cityHintDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: colors.primary,
-    marginTop: 4,
-  },
-  cityHintText: {
-    flex: 1,
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    lineHeight: 17,
-    color: colors.muted,
-  },
   prefHero: {
-    height: 148,
+    height: 158,
     borderRadius: 22,
     overflow: 'hidden',
+    marginTop: 2,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(40,32,24,0.06)',
   },
-  prefHeroImg: { flex: 1 },
-  prefHeroBitmap: { borderRadius: 22 },
+  prefHeroImg: { flex: 1, overflow: 'hidden' },
+  /** Décale le crop vers le bas pour que le haut de la photo ne soit pas coupé sous la barre. */
+  prefHeroBitmap: {
+    borderRadius: 22,
+    transform: [{ scale: 1.12 }, { translateY: 10 }],
+  },
   prefHeroGrad: {
     flex: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
     paddingBottom: 14,
-    paddingTop: 20,
+    paddingTop: 28,
+  },
+  prefHeroTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.7,
+    color: '#FFF9F5',
+    marginBottom: 6,
   },
   prefGrid: {
     flex: 1,
