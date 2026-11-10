@@ -1002,6 +1002,9 @@ async def create_my_trip(body: MyTripDraftRequest, request: Request):
     Create anonymous « Mon voyage » draft (booking-oriented).
     Auth optional — claim later to save / invite / pay.
     """
+    import time
+
+    t0 = time.perf_counter()
     try:
         from deals.my_trips import create_draft
 
@@ -1014,6 +1017,9 @@ async def create_my_trip(body: MyTripDraftRequest, request: Request):
             deal_key=body.deal_key,
             source_kind="deal",
         )
+        ms = int((time.perf_counter() - t0) * 1000)
+        if ms >= 400:
+            print(f"⚠️ create_my_trip SLOW ms={ms} deal_key={body.deal_key or (payload or {}).get('deal_key')}")
         return draft
     except HTTPException:
         raise

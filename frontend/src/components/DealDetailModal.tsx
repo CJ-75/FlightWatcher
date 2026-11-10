@@ -413,12 +413,26 @@ export function DealDetailModal({
           draft_token: draft.draft_token,
           name: deal.city || undefined,
         })
+        if (!created?.id) throw new Error('Planner non créé')
         onClose()
         navigate(`/planner/${encodeURIComponent(created.id)}`)
-      } catch {
-        // Fallback: séjour with vol + hôtel already in draft
+      } catch (promoteErr) {
+        const msg =
+          promoteErr instanceof Error ? promoteErr.message : String(promoteErr || '')
+        const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
         onClose()
-        navigate(`/trip/${draft.draft_token}`)
+        if (dup?.[1]) {
+          navigate(`/planner/${encodeURIComponent(dup[1])}`)
+          return
+        }
+        // Soft landing: séjour already has vol + hôtel in draft.
+        if (draft.draft_token) {
+          navigate(`/trip/${draft.draft_token}`)
+          return
+        }
+        throw promoteErr instanceof Error
+          ? promoteErr
+          : new Error(msg || 'Impossible d’ouvrir le planner')
       }
     } catch {
       if (flightUrl) window.open(flightUrl, '_blank', 'noopener,noreferrer')

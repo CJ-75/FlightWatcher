@@ -29,10 +29,17 @@ def create_draft(
     raw = dict(payload or {})
     if deal_key and not raw.get("deal_key"):
         raw["deal_key"] = deal_key
-    # Never persist client-stated pack price — rebuild from deal/rates.
-    from deals.draft_pricing import trust_create_payload
+    # Planner execution drafts are already built from an accepted proposal —
+    # skip trust_create_payload (deal enrich / rates) so from-flight stays snappy.
+    if source_kind == "planner":
+        trusted = dict(raw)
+        if deal_key and not trusted.get("deal_key"):
+            trusted["deal_key"] = deal_key
+    else:
+        # Never persist client-stated pack price — rebuild from deal/rates.
+        from deals.draft_pricing import trust_create_payload
 
-    trusted = trust_create_payload(supabase, raw)
+        trusted = trust_create_payload(supabase, raw)
     flight = trusted.get("flight") or {}
     hotel = trusted.get("hotel")
     dates = trusted.get("dates") or {}
@@ -70,9 +77,16 @@ def create_draft(
         "id": data["id"],
         "draft_token": data["draft_token"],
         "status": data["status"],
-        "payload": data.get("payload") or payload,
+        "payload": data.get("payload") or trusted,
         "expires_at": data.get("expires_at"),
-        "hotel": hotel,
+        "deal_key": data.get("deal_key"),
+        "origin_iata": data.get("origin_iata"),
+        "dest_iata": data.get("dest_iata"),
+        "city_name": data.get("city_name"),
+        "out_date": data.get("out_date"),
+        "ret_date": data.get("ret_date"),
+        "adults": data.get("adults"),
+        "hotel": hotel or (trusted.get("hotel") if isinstance(trusted, dict) else None),
         "invite_available": True,
     }
 

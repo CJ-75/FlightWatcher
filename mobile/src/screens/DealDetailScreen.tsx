@@ -356,19 +356,19 @@ export function DealDetailScreen({ route, navigation }: Props) {
       return
     }
     setStartingTrip(true)
+    let draftToken: string | null = null
     try {
       const draft = await resolveDraft()
+      draftToken = String(draft?.draft_token || '').trim() || null
+      if (!draftToken) {
+        throw new Error('Brouillon séjour introuvable')
+      }
       void rememberTrip({
-        draft_token: draft.draft_token,
+        draft_token: draftToken,
         city: draft.city_name || deal.city,
       })
-      warmHotelUpsell({
-        iata: draft.dest_iata || deal.destination,
-        checkin: draft.out_date || deal.dates?.outbound,
-        checkout: draft.ret_date || deal.dates?.inbound,
-        participants: adults,
-        flight_pp: deal.flight?.price_pp,
-      })
+      // Do not warm live hotel-upsell here — it contended with promote and
+      // made « Ajouter au planner » wait on LiteAPI. Upsell belongs to compose.
       if (__DEV__ && isGuest) {
         const { addGuestTripFromMyTripDraft } = await import('../dev/guestPreview')
         const created = addGuestTripFromMyTripDraft({
@@ -378,13 +378,33 @@ export function DealDetailScreen({ route, navigation }: Props) {
         navigation.navigate('TripDetail', { tripId: created.id })
         return
       }
-      const created = await getApi().createPlannedTripFromMyTrip({
-        draft_token: draft.draft_token,
-        name: deal.city || undefined,
-      })
-      navigation.navigate('TripDetail', { tripId: created.id })
-    } catch {
-      Alert.alert('Erreur', 'Impossible d’ouvrir le planner. Réessaie.')
+      try {
+        const created = await getApi().createPlannedTripFromMyTrip({
+          draft_token: draftToken,
+          name: deal.city || undefined,
+        })
+        if (!created?.id) throw new Error('Planner non créé')
+        navigation.navigate('TripDetail', { tripId: created.id })
+        return
+      } catch (promoteErr) {
+        const msg =
+          promoteErr instanceof Error ? promoteErr.message : String(promoteErr || '')
+        const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
+        if (dup?.[1]) {
+          navigation.navigate('TripDetail', { tripId: dup[1] })
+          return
+        }
+        throw promoteErr instanceof Error
+          ? promoteErr
+          : new Error(msg || 'Impossible d’ouvrir le planner. Réessaie.')
+      }
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error && e.message
+          ? e.message
+          : 'Impossible d’ouvrir le planner. Réessaie.',
+      )
     } finally {
       setStartingTrip(false)
     }

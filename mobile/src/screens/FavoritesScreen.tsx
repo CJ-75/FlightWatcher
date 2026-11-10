@@ -79,8 +79,11 @@ const SKELETON_ITEMS: FavListItem[] = Array.from({ length: 3 }, (_, i) => ({
 }))
 
 const FAV_CACHE_KEY = 'fw_favorites_cache_v2'
-/** Skip network if this collection was fetched recently (stale-while-revalidate). */
-const FAV_STALE_MS = 45_000
+/**
+ * Background warm only — never skip network for the focused / selected tab.
+ * Paint can still come from memory/disk; the list must revalidate every open.
+ */
+const FAV_BG_STALE_MS = 45_000
 
 type FavCachePayload = {
   favorites: SavedFavorite[]
@@ -288,19 +291,25 @@ export function FavoritesScreen() {
   )
 
   const fetchCollection = useCallback(
-    async (id: FavCollection, opts?: { force?: boolean }) => {
+    async (id: FavCollection, opts?: { force?: boolean; background?: boolean }) => {
       const force = Boolean(opts?.force)
+      const background = Boolean(opts?.background)
       const age = Date.now() - (fetchedAtRef.current[id] || 0)
       const hasPaint =
         Boolean(favMemoryCache) ||
         collectionFromCache(cacheRef.current, id).length > 0 ||
         readyRef.current[id]
-      // Fresh enough → keep cache, no network.
-      if (!force && fetchedAtRef.current[id] && age < FAV_STALE_MS) {
+      // Soft skip only for lazy background warm of inactive tabs.
+      if (
+        background &&
+        !force &&
+        fetchedAtRef.current[id] &&
+        age < FAV_BG_STALE_MS
+      ) {
         markReady(id)
         return
       }
-      // Already fetching this collection — reuse.
+      // Already fetching this collection — reuse (unless forced refresh).
       const existing = inflightRef.current[id]
       if (existing && !force) {
         markReady(id)
@@ -412,15 +421,14 @@ export function FavoritesScreen() {
 
       const prefer = tabRef.current
       const rest = COLLECTIONS.map((c) => c.id).filter((id) => id !== prefer)
-      const force = Boolean(opts?.pull)
 
-      // 1) Visible tab first — paints ASAP; cache hit = instant.
-      await fetchCollection(prefer, { force })
+      // 1) Visible tab — always revalidate (cache paints first, network wins).
+      await fetchCollection(prefer, { force: true })
       setRefreshing(false)
 
-      // 2) Lazy warm other tabs after paint (stale check skips if fresh).
+      // 2) Lazy warm other tabs after paint (may skip if recently fetched).
       for (const id of rest) {
-        void fetchCollection(id, { force: false })
+        void fetchCollection(id, { background: true })
       }
     },
     [viewUser, isGuest, fetchCollection, patchCache],
@@ -431,7 +439,6 @@ export function FavoritesScreen() {
       setTab(id)
       setArchiveOpen(false)
       setSort(id === 'flights' || id === 'deals' ? 'date' : 'recent')
-      // Lazy: fetch only if cold/stale — never block on other collections.
       if (viewUser && !(__DEV__ && isGuest)) {
         // Show cache immediately if we have it.
         if (
@@ -440,7 +447,8 @@ export function FavoritesScreen() {
         ) {
           markReady(id)
         }
-        void fetchCollection(id)
+        // Always hit the API so likes/unlikes elsewhere aren't stale.
+        void fetchCollection(id, { force: true })
       }
     },
     [viewUser, isGuest, fetchCollection, markReady],

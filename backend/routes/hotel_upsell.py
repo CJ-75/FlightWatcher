@@ -67,11 +67,16 @@ async def upsell_lookup(body: UpsellLookupRequest):
     status per item: ready | miss | pending | unavailable
     """
     try:
+        import asyncio
+
         from deals.upsell import batch_lookup
 
         supabase = _svc()
         items = [i.model_dump() for i in (body.items or [])]
-        return {"results": batch_lookup(supabase, items)}
+        # Run sync Supabase batch off the event loop so « Ajouter au planner »
+        # (from-flight) is not stuck behind results prefetch.
+        results = await asyncio.to_thread(batch_lookup, supabase, items)
+        return {"results": results}
     except HTTPException:
         raise
     except Exception as e:

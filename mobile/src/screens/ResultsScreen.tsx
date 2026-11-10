@@ -196,9 +196,21 @@ export function ResultsScreen({ route, navigation }: Props) {
         trip,
         passengers,
       })
+      if (!created?.id) throw new Error('Planner non créé')
       navigation.navigate('TripDetail', { tripId: created.id })
-    } catch {
-      Alert.alert('Erreur', 'Impossible d’ajouter au planner. Réessaie.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err || '')
+      const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
+      if (dup?.[1]) {
+        navigation.navigate('TripDetail', { tripId: dup[1] })
+        return
+      }
+      Alert.alert(
+        'Erreur',
+        msg && msg.length < 180
+          ? msg
+          : 'Impossible d’ajouter au planner. Réessaie.',
+      )
     } finally {
       setHotelUpsellBusy(false)
     }

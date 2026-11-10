@@ -111,13 +111,68 @@ def _resolve_hotel_from_rates(
     return _match_hotel_in_list(options, hotel_id)
 
 
+def _deal_from_active_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Minimal deal shape for draft pricing — no enrich / related (keeps CTA instant)."""
+    flight_snap = dict(row.get("flight_snapshot") or {})
+    hotels = [h for h in (row.get("hotel_top3") or []) if isinstance(h, dict)]
+    primary = hotels[0] if hotels else None
+    flight_pp = _as_float(
+        flight_snap.get("price_pp_eur") or flight_snap.get("price_pp")
+    ) or 0.0
+    origin = str(
+        row.get("origin_iata") or flight_snap.get("origin_iata") or ""
+    ).upper()
+    dest = str(
+        row.get("dest_iata") or flight_snap.get("destination_iata") or ""
+    ).upper()
+    out_date = str(row.get("out_date") or "")[:10]
+    ret_date = str(row.get("ret_date") or "")[:10]
+    flight = {
+        **flight_snap,
+        "price_pp": flight_pp,
+        "origin_iata": origin or flight_snap.get("origin_iata"),
+        "destination_iata": dest or flight_snap.get("destination_iata"),
+        "outbound_local": flight_snap.get("out_dep_local")
+        or flight_snap.get("outbound_local"),
+        "inbound_local": flight_snap.get("ret_dep_local")
+        or flight_snap.get("inbound_local"),
+    }
+    return {
+        "deal_key": row.get("deal_key"),
+        "origin_iata": origin,
+        "destination": dest,
+        "dates": {"outbound": out_date, "inbound": ret_date},
+        "flight": flight,
+        "hotel": primary,
+        "alt_hotels": hotels[1:],
+        "price_breakdown": {"flight_pp": flight_pp},
+        "booking_url": flight_snap.get("booking_url"),
+    }
+
+
 def _load_deal(supabase, deal_key: Optional[str]) -> Optional[Dict[str, Any]]:
+    """
+    Fast deals_active snapshot for draft trust.
+
+    Avoid get_community_deal() here: enrich + related_deals is multi-second and
+    blocks « Ajouter au planner » (createMyTrip → from-my-trip).
+    """
     if not deal_key or not supabase:
         return None
     try:
-        from deals.provider import get_deal_provider
-
-        return get_deal_provider().get_deal(str(deal_key))
+        res = (
+            supabase.table("deals_active")
+            .select(
+                "deal_key,origin_iata,dest_iata,out_date,ret_date,"
+                "flight_snapshot,hotel_top3,status"
+            )
+            .eq("deal_key", str(deal_key))
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return None
+        return _deal_from_active_row(res.data[0])
     except Exception as e:
         logger.warning("draft load deal %s: %s", deal_key, e)
         return None
@@ -154,8 +209,9 @@ def resolve_trusted_hotel(
         if matched and _hotel_public_total(matched, adults) is not None:
             return matched
 
-    # Soft trust FIRST when the client already sends a priced hotel (live compose).
-    # Rates re-lookup is slow and was timing out « Impossible d’enregistrer l’hôtel ».
+    # Soft trust when the client already sends a priced hotel (live compose).
+    # Must run before rates re-lookup — that path is multi-second and blocked
+    # « Choisir cet hôtel ». Checkout revalidates live before payment.
     if hid and hotel_ref and _hotel_public_total(hotel_ref, adults) is not None:
         return dict(hotel_ref)
 

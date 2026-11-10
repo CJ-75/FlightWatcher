@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
 from api_models import (
     AddTripMemberRequest,
@@ -2375,10 +2375,39 @@ def _trip_data_from_my_trip_draft(draft: dict) -> dict:
     }
 
 
+def _bg_ensure_execution_draft(trip_id: str, proposal_id: str, user_id: str) -> None:
+    """Non-blocking draft bootstrap after from-flight CTA returns."""
+    try:
+        supabase = _svc()
+        trip_rows = (
+            supabase.table("planned_trips")
+            .select("*")
+            .eq("id", trip_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        prop_rows = (
+            supabase.table("trip_proposals")
+            .select("*")
+            .eq("id", proposal_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        if not trip_rows or not prop_rows:
+            return
+        _ensure_execution_draft_for_accepted(
+            supabase, trip=trip_rows[0], proposal=prop_rows[0], user_id=user_id
+        )
+    except Exception as exc:
+        print(f"⚠️ from-flight bg draft: {exc}")
+
+
 @router.post("/api/planner/trips/from-flight")
 @optional_auth
 async def create_trip_from_flight(
-    body: CreatePlannedTripFromFlightRequest, request: Request
+    body: CreatePlannedTripFromFlightRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     """Search → Planner: create locked trip with this flight already accepted."""
     user_id = _require_user(request)
@@ -2410,6 +2439,50 @@ async def create_trip_from_flight(
         except (TypeError, ValueError):
             direct_flag = True
 
+    d_out = _leg_date_horaire(aller)
+    d_ret = _leg_date_horaire(retour)
+    dep = _normalize_departure(_single_iata(aller.get("origin") or ""))
+    arr = _normalize_arrival(
+        _single_iata(
+            trip_data.get("destination_code") or aller.get("destination") or ""
+        )
+    )
+    # « Ajouter au planner » depuis résultats : reopen same slots (don't 409).
+    if d_out and d_ret:
+        existing = _find_organizer_trip_same_flight_slots(
+            supabase,
+            user_id,
+            d_out=d_out,
+            d_ret=d_ret,
+            departure_airport=dep,
+            arrival_airport=arr,
+        )
+        if existing:
+            trip_id = str(existing.get("id") or "")
+            proposals = (
+                supabase.table("trip_proposals")
+                .select("*")
+                .eq("trip_id", trip_id)
+                .order("created_at", desc=True)
+                .execute()
+            ).data or []
+            proposal = next(
+                (p for p in proposals if p.get("status") == "accepted"),
+                proposals[0] if proposals else None,
+            )
+            if proposal:
+                background_tasks.add_task(
+                    _bg_ensure_execution_draft,
+                    trip_id,
+                    str(proposal["id"]),
+                    user_id,
+                )
+                out = _row_to_trip(existing, proposals_count=len(proposals))
+                out["accepted_proposal"] = proposal
+                out["proposals"] = proposals
+                out["reused"] = True
+                return out
+
     trip, proposal = _insert_locked_trip_with_proposal(
         supabase,
         user_id=user_id,
@@ -2419,12 +2492,13 @@ async def create_trip_from_flight(
         direct=bool(direct_flag),
     )
 
-    try:
-        _ensure_execution_draft_for_accepted(
-            supabase, trip=trip, proposal=proposal, user_id=user_id
-        )
-    except Exception as exc:
-        print(f"⚠️ from-flight draft: {exc}")
+    # Draft bootstrap can wait — CTA only needs trip id to open TripDetail.
+    background_tasks.add_task(
+        _bg_ensure_execution_draft,
+        str(trip["id"]),
+        str(proposal["id"]),
+        user_id,
+    )
 
     out = _row_to_trip(trip, proposals_count=1)
     out["accepted_proposal"] = proposal
@@ -2479,8 +2553,17 @@ async def create_trip_from_my_trip(
             draft = claimed
 
     trip_data = _trip_data_json(_trip_data_from_my_trip_draft(draft))
-    if not (trip_data.get("aller") and trip_data.get("retour")):
+    aller = trip_data.get("aller") or {}
+    retour = trip_data.get("retour") or {}
+    if not aller or not retour:
         raise HTTPException(status_code=400, detail="Vol incomplets dans le séjour")
+    d_out = _leg_date_horaire(aller)
+    d_ret = _leg_date_horaire(retour)
+    if not d_out or not d_ret:
+        raise HTTPException(
+            status_code=400,
+            detail="Dates de vol manquantes dans le séjour — réessaie depuis la fiche",
+        )
 
     passengers = _clamp_passengers(
         draft.get("adults")
@@ -2497,6 +2580,99 @@ async def create_trip_from_my_trip(
     direct_flag = flight.get("direct")
     if direct_flag is None:
         direct_flag = int(trip_data.get("transfers") or 0) == 0
+
+    dep = _normalize_departure(_single_iata(aller.get("origin") or ""))
+    arr = _normalize_arrival(
+        _single_iata(
+            trip_data.get("destination_code") or aller.get("destination") or ""
+        )
+    )
+    # « Ajouter au planner » : reopen existing trip on same slots (don't 409).
+    existing = _find_organizer_trip_same_flight_slots(
+        supabase,
+        user_id,
+        d_out=d_out,
+        d_ret=d_ret,
+        departure_airport=dep,
+        arrival_airport=arr,
+    )
+    if existing:
+        trip_id = str(existing.get("id") or "")
+        proposals = (
+            supabase.table("trip_proposals")
+            .select("*")
+            .eq("trip_id", trip_id)
+            .order("created_at", desc=True)
+            .execute()
+        ).data or []
+        proposal = next(
+            (p for p in proposals if p.get("status") == "accepted"),
+            proposals[0] if proposals else None,
+        )
+        if not proposal:
+            # Empty same-slot trip → attach accepted flight instead of 409 insert.
+            try:
+                price = float(trip_data.get("prix_total") or 0)
+            except (TypeError, ValueError):
+                price = 0.0
+            now = datetime.utcnow().isoformat()
+            patch = {
+                "status": "locked",
+                "passengers": passengers,
+                "direct": bool(direct_flag),
+                "budget_max": max(1, int(round(price)) if price > 0 else 200),
+                "updated_at": now,
+            }
+            if name and not str(existing.get("name") or "").strip():
+                patch["name"] = name
+            try:
+                updated = (
+                    supabase.table("planned_trips")
+                    .update(patch)
+                    .eq("id", trip_id)
+                    .execute()
+                )
+                if updated.data:
+                    existing = updated.data[0]
+            except Exception as exc:
+                print(f"⚠️ from-my-trip lock existing trip: {exc}")
+            proposal_ins = (
+                supabase.table("trip_proposals")
+                .insert(
+                    {
+                        "trip_id": trip_id,
+                        "trip_data": trip_data,
+                        "status": "accepted",
+                    }
+                )
+                .execute()
+            )
+            if not proposal_ins.data:
+                raise HTTPException(
+                    status_code=500, detail="Proposition planner non créée"
+                )
+            proposal = proposal_ins.data[0]
+            proposals = [proposal]
+
+        try:
+            if not draft.get("user_id"):
+                supabase.table("my_trip_drafts").update(
+                    {
+                        "user_id": user_id,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                ).eq("id", draft["id"]).execute()
+                draft["user_id"] = user_id
+            _sync_execution_draft_to_proposal(
+                supabase, draft, trip=existing, proposal=proposal
+            )
+        except Exception as exc:
+            print(f"⚠️ from-my-trip reuse link draft: {exc}")
+        out = _row_to_trip(existing, proposals_count=len(proposals))
+        out["accepted_proposal"] = proposal
+        out["proposals"] = proposals
+        out["reused"] = True
+        return out
 
     trip, proposal = _insert_locked_trip_with_proposal(
         supabase,

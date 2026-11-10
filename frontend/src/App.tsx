@@ -1260,9 +1260,20 @@ function Dashboard() {
         trip,
         passengers: searchPassengersForBook,
       })
+      if (!created?.id) throw new Error('Planner non créé')
       navigate(`/planner/${encodeURIComponent(created.id)}`)
-    } catch {
-      setToastMessage('Impossible d’ajouter au planner. Réessaie.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err || '')
+      const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
+      if (dup?.[1]) {
+        navigate(`/planner/${encodeURIComponent(dup[1])}`)
+        return
+      }
+      setToastMessage(
+        msg && msg.length < 180
+          ? msg
+          : 'Impossible d’ajouter au planner. Réessaie.',
+      )
       setToastType('error')
     } finally {
       setHotelUpsellBusy(false)
