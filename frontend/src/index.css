@@ -255,7 +255,9 @@
   }
 
   .app-tab-label {
-    @apply relative z-[1] truncate;
+    @apply relative z-[1] text-center whitespace-nowrap;
+    /* Avoid cutting « Activités » / « Parcours » when 5 tabs share the bar. */
+    overflow: visible;
   }
 
   .app-tab-active,

@@ -254,7 +254,12 @@ export function ActivityPlannerPicker({
         const merged = applyFilter(local)
         setItems(merged)
         if (!merged.length) {
-          setError(e instanceof Error ? e.message : 'Erreur')
+          const msg = e instanceof Error ? e.message : 'Erreur'
+          setError(
+            /fetch failed|network request failed|failed to fetch/i.test(msg)
+              ? 'Connexion impossible. Vérifie le réseau / le backend, puis réessaie.'
+              : msg,
+          )
         }
       } finally {
         if (!cancelled) setLoading(false)

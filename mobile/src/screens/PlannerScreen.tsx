@@ -45,7 +45,6 @@ import {
   PLANNER_HUB_TITLE_FR,
   sortWorkspacesByDeparture,
   PLANNER_NEW_STAY_FR,
-  PLANNER_PROMOTE_TOAST_FR,
   type DatePresetId,
   type FlexibleDates,
   type PartyMode,
@@ -62,7 +61,7 @@ import {
 import {
   getPlannedTripCached,
   prefetchPlannedTrips,
-  setPlannedTripMemory,
+  prepareCreatedPlannerTrip,
 } from '../lib/plannedTripCache'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
@@ -348,11 +347,10 @@ export function PlannerScreen() {
             draft_token: workspace.draft_token!,
             name: workspace.city || workspace.title || undefined,
           })
-          if (created?.id) setPlannedTripMemory(created)
-          Alert.alert('', PLANNER_PROMOTE_TOAST_FR)
-          navigation.navigate('TripDetail', { tripId: created.id })
+          const tripId = await prepareCreatedPlannerTrip(created)
           invalidateTravelWorkspacesCache()
           void load({ force: true })
+          navigation.navigate('TripDetail', { tripId })
         } catch {
           navigation.navigate('TripSummary', {
             draftToken: workspace.draft_token!,

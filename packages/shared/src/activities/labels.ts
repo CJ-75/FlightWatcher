@@ -216,6 +216,9 @@ export function tripItemsErrorLabelFr(message?: string | null): string {
   if (key === 'exactly_one_owner' || key === 'orphan_item') {
     return 'Impossible de lier les activités à ce voyage.'
   }
+  if (/fetch failed|network request failed|failed to fetch|networkerror/.test(key)) {
+    return 'Connexion impossible. Vérifie le réseau / le backend, puis réessaie.'
+  }
   if (/^[a-z][a-z0-9_]*$/.test(key) && key.includes('_')) {
     return 'Impossible de charger les activités pour le moment.'
   }

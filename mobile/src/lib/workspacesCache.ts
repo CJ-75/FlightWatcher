@@ -25,12 +25,20 @@ export async function listTravelWorkspacesCached(opts?: {
     return cached.data
   }
   if (!force && inflight) return inflight
+  const stale = cached?.data ?? null
   inflight = getApi()
     .listTravelWorkspaces()
     .then((list) => {
       const data = Array.isArray(list) ? list : []
       setMemory(data)
       return data
+    })
+    .catch(async (err) => {
+      // Network blip (« Fetch failed ») — keep hub usable from memory/disk.
+      if (stale?.length) return stale
+      const disk = await hydrateTravelWorkspacesCache()
+      if (disk?.length) return disk
+      throw err
     })
     .finally(() => {
       inflight = null

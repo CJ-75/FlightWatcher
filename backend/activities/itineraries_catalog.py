@@ -259,6 +259,73 @@ def get_published_itinerary(
         return {"ok": False, "error": str(e)}
 
 
+_CARD_KEYS = (
+    "id",
+    "slug",
+    "title",
+    "subtitle",
+    "city_slug",
+    "cover_image",
+    "duration_kind",
+)
+
+
+def hydrate_liked_itinerary_cards(
+    supabase,
+    likes: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Replace frozen like snapshots with live published card fields.
+
+    Liked rows keep itinerary_data from like-time (often an old cover/title).
+    Favorites must show the current catalogue version without N detail fetches.
+    """
+    if not supabase or not likes:
+        return likes
+    ids = sorted(
+        {
+            str(row.get("itinerary_id") or "").strip()
+            for row in likes
+            if str(row.get("itinerary_id") or "").strip()
+        }
+    )
+    if not ids:
+        return likes
+    live_by_id: Dict[str, Dict[str, Any]] = {}
+    try:
+        demo = _allow_demo()
+        q = (
+            supabase.table("itineraries")
+            .select(PUBLIC_COLS)
+            .in_("id", ids)
+            .eq("status", "published")
+            .eq("author_kind", "admin")
+        )
+        if not demo:
+            q = q.eq("is_demo", False)
+        res = q.execute()
+        for raw in res.data or []:
+            row = _serialize(raw)
+            iid = str(row.get("id") or "").strip()
+            if iid:
+                live_by_id[iid] = {k: row.get(k) for k in _CARD_KEYS}
+    except Exception as e:
+        logger.warning("hydrate_liked_itinerary_cards: %s", e)
+        return likes
+
+    out: List[Dict[str, Any]] = []
+    for like in likes:
+        item = dict(like)
+        iid = str(item.get("itinerary_id") or "").strip()
+        live = live_by_id.get(iid)
+        if live:
+            snap = item.get("itinerary_data")
+            base = dict(snap) if isinstance(snap, dict) else {}
+            base.update({k: v for k, v in live.items() if v is not None})
+            item["itinerary_data"] = base
+        out.append(item)
+    return out
+
+
 def featured_row_label(itineraries: List[Dict[str, Any]]) -> Optional[str]:
     """FR label for À la une — weekday when férié daté."""
     if not itineraries:

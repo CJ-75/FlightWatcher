@@ -272,7 +272,12 @@ export function ActivitiesScreen() {
 
   useEffect(() => {
     if (route.params?.browse === true) return
-    const fromRoute = route.params?.city?.trim().toLowerCase()
+    const raw = route.params?.city?.trim()
+    if (!raw) return
+    const fromRoute = resolveActivityCitySlug({
+      citySlug: raw,
+      cityLabel: raw,
+    })
     if (fromRoute && fromRoute !== citySlug) {
       cityConfirmed.current = true
       setCitySlug(fromRoute)
@@ -925,18 +930,19 @@ export function ActivitiesScreen() {
     setLoginLoading(false)
   }, [signInWithGoogle])
 
-  const onAddToPlanner = (card: ActivityCardModel) => {
-    if (!viewUser) {
-      void promptLogin()
-      return
+  const networkErrorFr = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e || '')
+    if (/fetch failed|network request failed|failed to fetch|networkerror/i.test(msg)) {
+      return 'Connexion impossible. Vérifie le réseau / le backend, puis réessaie.'
     }
-    setAddNotice(null)
-    setTripPickerOpen(false)
-    setPendingAdd(card)
+    return msg || 'Ajout impossible'
   }
 
-  const confirmAddToTarget = async (target: ActivityPlannerTarget) => {
-    const card = pendingAdd
+  const confirmAddToTarget = async (
+    target: ActivityPlannerTarget,
+    cardOverride?: ActivityCardModel | null,
+  ) => {
+    const card = cardOverride || pendingAdd
     if (!card) return
     const owner = pickTripItemOwner({
       draftToken: target.draftToken,
@@ -970,10 +976,39 @@ export function ActivitiesScreen() {
       setPendingAdd(null)
       setDetail(null)
     } catch (e) {
-      setAddNotice(e instanceof Error ? e.message : 'Ajout impossible')
+      setAddNotice(networkErrorFr(e))
     } finally {
       setAddBusy(false)
     }
+  }
+
+  const onAddToPlanner = (card: ActivityCardModel) => {
+    if (!viewUser) {
+      void promptLogin()
+      return
+    }
+    setAddNotice(null)
+    setTripPickerOpen(false)
+    // Déjà sur un planner (ex. Prague depuis TripDetail) → ajout direct, pas de fetch séjours.
+    const owner = pickTripItemOwner({
+      draftToken: activeTrip?.draftToken,
+      plannedTripId: activeTrip?.plannedTripId,
+    })
+    if (activeTrip && hasTripItemOwner(owner)) {
+      void confirmAddToTarget(
+        {
+          plannedTripId: activeTrip.plannedTripId,
+          draftToken: activeTrip.draftToken,
+          label: activeTrip.label,
+          city: activeTrip.slug,
+          outDate: activeTrip.outDate,
+          retDate: activeTrip.retDate,
+        },
+        card,
+      )
+      return
+    }
+    setPendingAdd(card)
   }
 
   const openPlanner = () => {

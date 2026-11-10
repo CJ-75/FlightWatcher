@@ -24,6 +24,7 @@ import {
   formatActivityPrice,
   isTripItemsAuthError,
   pickTripItemOwner,
+  resolveActivityCitySlug,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
   type ActivityCardModel,
@@ -531,10 +532,14 @@ export function ActivityStepPanel(props: {
     if (draftToken) {
       void rememberTrip({ draft_token: draftToken, city })
     }
+    const citySlug = resolveActivityCitySlug({
+      cityLabel: city,
+      citySlug: city,
+    })
     navigation.navigate('Main', {
       screen: 'Activities',
       params: {
-        city,
+        city: citySlug || city,
         draftToken: draftToken || undefined,
         plannedTripId: plannedTripId || undefined,
       },

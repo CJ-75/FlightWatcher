@@ -42,6 +42,8 @@ import { openInAppBrowser } from '../lib/openInApp'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { rememberTrip } from '../lib/tripRecovery'
 import { warmHotelUpsell } from '../lib/partnerBook'
+import { prepareCreatedPlannerTrip } from '../lib/plannedTripCache'
+import { invalidateTravelWorkspacesCache } from '../lib/workspacesCache'
 import { HeartIcon } from '../components/HeartIcon'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
@@ -383,15 +385,18 @@ export function DealDetailScreen({ route, navigation }: Props) {
           draft_token: draftToken,
           name: deal.city || undefined,
         })
-        if (!created?.id) throw new Error('Planner non créé')
-        navigation.navigate('TripDetail', { tripId: created.id })
+        const tripId = await prepareCreatedPlannerTrip(created)
+        invalidateTravelWorkspacesCache()
+        navigation.navigate('TripDetail', { tripId })
         return
       } catch (promoteErr) {
         const msg =
           promoteErr instanceof Error ? promoteErr.message : String(promoteErr || '')
         const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
         if (dup?.[1]) {
-          navigation.navigate('TripDetail', { tripId: dup[1] })
+          const tripId = await prepareCreatedPlannerTrip({ id: dup[1] })
+          invalidateTravelWorkspacesCache()
+          navigation.navigate('TripDetail', { tripId })
           return
         }
         throw promoteErr instanceof Error

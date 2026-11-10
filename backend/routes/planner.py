@@ -2407,7 +2407,6 @@ def _bg_ensure_execution_draft(trip_id: str, proposal_id: str, user_id: str) -> 
 async def create_trip_from_flight(
     body: CreatePlannedTripFromFlightRequest,
     request: Request,
-    background_tasks: BackgroundTasks,
 ):
     """Search → Planner: create locked trip with this flight already accepted."""
     user_id = _require_user(request)
@@ -2471,12 +2470,16 @@ async def create_trip_from_flight(
                 proposals[0] if proposals else None,
             )
             if proposal:
-                background_tasks.add_task(
-                    _bg_ensure_execution_draft,
-                    trip_id,
-                    str(proposal["id"]),
-                    user_id,
-                )
+                # Sync — TripDetail must open with execution draft ready (no « Séjour ajouté » fallback).
+                try:
+                    _ensure_execution_draft_for_accepted(
+                        supabase,
+                        trip=existing,
+                        proposal=proposal,
+                        user_id=user_id,
+                    )
+                except Exception as exc:
+                    print(f"⚠️ from-flight reuse draft: {exc}")
                 out = _row_to_trip(existing, proposals_count=len(proposals))
                 out["accepted_proposal"] = proposal
                 out["proposals"] = proposals
@@ -2492,13 +2495,13 @@ async def create_trip_from_flight(
         direct=bool(direct_flag),
     )
 
-    # Draft bootstrap can wait — CTA only needs trip id to open TripDetail.
-    background_tasks.add_task(
-        _bg_ensure_execution_draft,
-        str(trip["id"]),
-        str(proposal["id"]),
-        user_id,
-    )
+    # Sync draft before respond — CTA opens a fully hydrated planner trip.
+    try:
+        _ensure_execution_draft_for_accepted(
+            supabase, trip=trip, proposal=proposal, user_id=user_id
+        )
+    except Exception as exc:
+        print(f"⚠️ from-flight draft: {exc}")
 
     out = _row_to_trip(trip, proposals_count=1)
     out["accepted_proposal"] = proposal

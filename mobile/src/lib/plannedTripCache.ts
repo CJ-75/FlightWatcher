@@ -28,6 +28,26 @@ export function setPlannedTripMemory(trip: PlannedTripDetail) {
   void AsyncStorage.setItem(diskKey(id), JSON.stringify(trip)).catch(() => {})
 }
 
+/**
+ * After « Ajouter au planner »: seed cache, force-refresh detail, then open.
+ * Avoids TripDetail opening on a half-created trip (popup « Séjour ajouté »).
+ */
+export async function prepareCreatedPlannerTrip(
+  created: PlannedTripDetail | { id?: string } | null | undefined,
+): Promise<string> {
+  const id = String(created?.id || '').trim()
+  if (!id) throw new Error('Planner non créé')
+  if (created && typeof created === 'object' && 'invite_token' in created) {
+    setPlannedTripMemory(created as PlannedTripDetail)
+  }
+  try {
+    await getPlannedTripCached(id, undefined, { force: true })
+  } catch {
+    // Seed above is enough to leave the spinner; TripDetail will retry.
+  }
+  return id
+}
+
 export function clearPlannedTripCache(id?: string) {
   if (id) {
     const key = String(id).trim()

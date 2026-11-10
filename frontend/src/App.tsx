@@ -1261,11 +1261,14 @@ function Dashboard() {
         passengers: searchPassengersForBook,
       })
       if (!created?.id) throw new Error('Planner non créé')
+      // Draft is synced server-side; refresh detail before open.
+      await getApiClient().getPlannedTrip(created.id).catch(() => created)
       navigate(`/planner/${encodeURIComponent(created.id)}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err || '')
       const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
       if (dup?.[1]) {
+        await getApiClient().getPlannedTrip(dup[1]).catch(() => null)
         navigate(`/planner/${encodeURIComponent(dup[1])}`)
         return
       }
@@ -1315,18 +1318,7 @@ function Dashboard() {
       clearFlightReturnAsk(draftToken)
       setPostBookTrip(null)
       setPostBookDraftToken(null)
-      const user = await getCurrentUser()
-      if (user) {
-        try {
-          const created = await getApiClient().createPlannedTripFromMyTrip({
-            draft_token: draftToken,
-          })
-          navigate(`/planner/${encodeURIComponent(created.id)}`)
-          return
-        } catch {
-          // Fall through to Mon voyage compose.
-        }
-      }
+      // Never auto-promote to Planner after book — only « Ajouter au planner ».
       const path = `/trip/${draftToken}?compose=1`
       const opened = window.open(path, '_blank', 'noopener,noreferrer')
       if (!opened) {
@@ -1386,9 +1378,9 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* Pill onglets : largeur compacte centrée (base fe9d96c) */}
+          {/* Pill onglets : assez large pour 5 items (search / activités / parcours / planner / saved) */}
           <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
-            <div className="app-tabbar w-full max-w-md sm:max-w-xl lg:max-w-2xl">
+            <div className="app-tabbar w-full max-w-lg sm:max-w-2xl lg:max-w-3xl xl:max-w-4xl">
               {(
                 [
                   { id: 'search' as const, label: t('nav.search'), icon: 'search' as const },

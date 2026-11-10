@@ -78,12 +78,14 @@ const SKELETON_ITEMS: FavListItem[] = Array.from({ length: 3 }, (_, i) => ({
   __skeleton: true as const,
 }))
 
-const FAV_CACHE_KEY = 'fw_favorites_cache_v2'
-/**
- * Background warm only — never skip network for the focused / selected tab.
- * Paint can still come from memory/disk; the list must revalidate every open.
- */
-const FAV_BG_STALE_MS = 45_000
+/** v3: legacy v1/v2 cleared (frozen parcours snapshots). */
+const FAV_CACHE_KEY = 'fw_favorites_cache_v3'
+const FAV_CACHE_LEGACY_KEYS = [
+  'fw_favorites_cache_v2',
+  'fw_favorites_cache_v1',
+] as const
+/** Soft-stale for the whole screen (pull always forces). */
+const FAV_STALE_MS = 20_000
 
 type FavCachePayload = {
   favorites: SavedFavorite[]
@@ -92,32 +94,12 @@ type FavCachePayload = {
   likedParcours: LikedItinerary[]
 }
 
-type FavReady = Record<FavCollection, boolean>
-type FavFetchedAt = Record<FavCollection, number>
-
-const READY_NONE: FavReady = {
-  flights: false,
-  deals: false,
-  activities: false,
-  parcours: false,
-}
-const READY_ALL: FavReady = {
-  flights: true,
-  deals: true,
-  activities: true,
-  parcours: true,
-}
-const FETCHED_NONE: FavFetchedAt = {
-  flights: 0,
-  deals: 0,
-  activities: 0,
-  parcours: 0,
-}
-
 /** Instant paint across remounts / tab revisits. */
 let favMemoryCache: FavCachePayload | null = null
-let favFetchedAtMemory: FavFetchedAt = { ...FETCHED_NONE }
+/** Last successful full-screen network load. */
+let favFetchedAtMemory = 0
 let favDiskBootstrapped = false
+let favInflight: Promise<void> | null = null
 
 function normalizeFavCache(parsed: Partial<FavCachePayload> | null): FavCachePayload {
   return {
@@ -130,16 +112,6 @@ function normalizeFavCache(parsed: Partial<FavCachePayload> | null): FavCachePay
       ? parsed!.likedParcours
       : [],
   }
-}
-
-function collectionFromCache(
-  cache: FavCachePayload,
-  id: FavCollection,
-): unknown[] {
-  if (id === 'flights') return cache.favorites
-  if (id === 'deals') return cache.likedDeals
-  if (id === 'activities') return cache.likedActivities
-  return cache.likedParcours
 }
 
 function isSkeletonItem(
@@ -235,11 +207,9 @@ export function FavoritesScreen() {
   )
   /** Pull-to-refresh only — never toggled on focus (évite le bounce). */
   const [refreshing, setRefreshing] = useState(false)
-  /** Per-collection ready — skeleton only on the active tab until its fetch lands. */
-  const [ready, setReady] = useState<FavReady>(() =>
-    favMemoryCache ? READY_ALL : READY_NONE,
-  )
-  const readyRef = useRef<FavReady>(favMemoryCache ? READY_ALL : READY_NONE)
+  /** One screen-level gate — never per-tab loading. */
+  const [screenReady, setScreenReady] = useState(() => Boolean(favMemoryCache))
+  const screenReadyRef = useRef(Boolean(favMemoryCache))
   const cacheRef = useRef<FavCachePayload>(
     favMemoryCache ?? {
       favorites: [],
@@ -248,26 +218,30 @@ export function FavoritesScreen() {
       likedParcours: [],
     },
   )
-  /** Per-collection in-flight token — late responses for an older token are dropped. */
-  const fetchTokenRef = useRef<FavFetchedAt>({ ...FETCHED_NONE })
-  const fetchedAtRef = useRef<FavFetchedAt>({ ...favFetchedAtMemory })
+  const fetchTokenRef = useRef(0)
+  const fetchedAtRef = useRef(favFetchedAtMemory)
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
   const [tab, setTab] = useState<FavCollection>('flights')
-  const tabRef = useRef<FavCollection>('flights')
-  tabRef.current = tab
   const [sort, setSort] = useState<FavSort>('date')
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
   const [addBusy, setAddBusy] = useState(false)
   const dateSortAvailable = tab === 'flights' || tab === 'deals'
-  const inflightRef = useRef<Partial<Record<FavCollection, Promise<void>>>>({})
 
-  const markReady = useCallback((id: FavCollection) => {
-    if (readyRef.current[id]) return
-    const next = { ...readyRef.current, [id]: true }
-    readyRef.current = next
-    setReady(next)
+  const hasAnyPaint = useCallback((payload: FavCachePayload) => {
+    return (
+      payload.favorites.length +
+        payload.likedDeals.length +
+        payload.likedActivities.length +
+        payload.likedParcours.length >
+      0
+    )
+  }, [])
+
+  const markScreenReady = useCallback((value: boolean) => {
+    screenReadyRef.current = value
+    setScreenReady(value)
   }, [])
 
   const patchCache = useCallback((partial: Partial<FavCachePayload>) => {
@@ -276,109 +250,117 @@ export function FavoritesScreen() {
     persistFavCache(next)
   }, [])
 
-  const applyDiskCache = useCallback(
-    (payload: FavCachePayload) => {
+  const applyPayload = useCallback(
+    (payload: FavCachePayload, opts?: { ready?: boolean }) => {
       favMemoryCache = payload
       cacheRef.current = payload
       setFavorites(payload.favorites)
       setLikedDeals(payload.likedDeals)
       setLikedActivities(payload.likedActivities)
       setLikedParcours(payload.likedParcours)
-      readyRef.current = READY_ALL
-      setReady(READY_ALL)
+      persistFavCache(payload)
+      if (opts?.ready !== false) markScreenReady(true)
     },
-    [],
+    [markScreenReady],
   )
 
-  const fetchCollection = useCallback(
-    async (id: FavCollection, opts?: { force?: boolean; background?: boolean }) => {
+  const fetchAllCollections = useCallback(
+    async (opts?: { force?: boolean }) => {
       const force = Boolean(opts?.force)
-      const background = Boolean(opts?.background)
-      const age = Date.now() - (fetchedAtRef.current[id] || 0)
-      const hasPaint =
+      const age = Date.now() - (fetchedAtRef.current || 0)
+      const painted =
         Boolean(favMemoryCache) ||
-        collectionFromCache(cacheRef.current, id).length > 0 ||
-        readyRef.current[id]
-      // Soft skip only for lazy background warm of inactive tabs.
-      if (
-        background &&
-        !force &&
-        fetchedAtRef.current[id] &&
-        age < FAV_BG_STALE_MS
-      ) {
-        markReady(id)
+        hasAnyPaint(cacheRef.current) ||
+        screenReadyRef.current
+
+      if (!force && fetchedAtRef.current && age < FAV_STALE_MS) {
+        markScreenReady(true)
         return
       }
-      // Already fetching this collection — reuse (unless forced refresh).
-      const existing = inflightRef.current[id]
-      if (existing && !force) {
-        markReady(id)
-        await existing
+      if (favInflight && !force) {
+        if (!painted) markScreenReady(false)
+        await favInflight
         return
       }
 
-      const token = (fetchTokenRef.current[id] || 0) + 1
-      fetchTokenRef.current[id] = token
+      // Cold = one screen skeleton. Warm = keep list, refresh in background.
+      if (!painted) markScreenReady(false)
+      else markScreenReady(true)
+
+      const token = fetchTokenRef.current + 1
+      fetchTokenRef.current = token
 
       const run = (async () => {
         const api = getApi()
         try {
-          if (id === 'flights') {
-            const list = await api.getFavorites()
-            if (fetchTokenRef.current[id] !== token) return
-            const next = Array.isArray(list) ? list : []
-            setFavorites(next)
-            patchCache({ favorites: next })
-          } else if (id === 'deals') {
-            const deals = await api.getLikedDeals()
-            if (fetchTokenRef.current[id] !== token) return
-            const next = Array.isArray(deals) ? deals : []
-            setLikedDeals(next)
-            patchCache({ likedDeals: next })
-          } else if (id === 'activities') {
-            const acts = await api.getLikedActivities()
-            if (fetchTokenRef.current[id] !== token) return
-            const next = Array.isArray(acts) ? acts : []
-            setLikedActivities(next)
-            patchCache({ likedActivities: next })
-          } else {
-            // Never .catch→[] : that wiped liked parcours when API/backend failed.
-            const parcoursRes = await api.listLikedItineraries()
-            if (fetchTokenRef.current[id] !== token) return
-            if (!parcoursRes?.ok) {
-              throw new Error('Favoris parcours indisponibles')
-            }
-            const next = Array.isArray(parcoursRes.items) ? parcoursRes.items : []
-            setLikedParcours(next)
-            patchCache({ likedParcours: next })
+          const [flightsRes, dealsRes, actsRes, parcoursRes] =
+            await Promise.all([
+              api.getFavorites().catch((e) => e as unknown),
+              api.getLikedDeals().catch((e) => e as unknown),
+              api.getLikedActivities().catch((e) => e as unknown),
+              api.listLikedItineraries().catch((e) => e as unknown),
+            ])
+          if (fetchTokenRef.current !== token) return
+
+          const next: FavCachePayload = { ...cacheRef.current }
+          let hardError: unknown = null
+
+          if (Array.isArray(flightsRes)) next.favorites = flightsRes
+          else hardError = flightsRes
+
+          if (Array.isArray(dealsRes)) next.likedDeals = dealsRes
+          else hardError = hardError || dealsRes
+
+          if (Array.isArray(actsRes)) next.likedActivities = actsRes
+          else hardError = hardError || actsRes
+
+          if (
+            parcoursRes &&
+            typeof parcoursRes === 'object' &&
+            'ok' in (parcoursRes as object) &&
+            (parcoursRes as { ok?: boolean }).ok
+          ) {
+            const items = (parcoursRes as { items?: LikedItinerary[] }).items
+            next.likedParcours = Array.isArray(items) ? items : []
+          } else if (parcoursRes) {
+            hardError = hardError || parcoursRes
           }
-          if (fetchTokenRef.current[id] !== token) return
+
+          applyPayload(next)
           const now = Date.now()
-          fetchedAtRef.current[id] = now
-          favFetchedAtMemory[id] = now
+          fetchedAtRef.current = now
+          favFetchedAtMemory = now
+          setError(null)
+
+          if (!hasAnyPaint(next) && hardError) {
+            setError(
+              hardError instanceof Error
+                ? hardError.message
+                : translate('fr', 'favorites.empty'),
+            )
+          }
         } catch (e) {
-          if (fetchTokenRef.current[id] !== token) return
-          if (id === tabRef.current && !hasPaint) {
+          if (fetchTokenRef.current !== token) return
+          if (!painted) {
             setError(
               e instanceof Error
                 ? e.message
                 : translate('fr', 'favorites.empty'),
             )
           }
-          // Keep previous collection state on failure (do not clear to []).
         } finally {
-          if (fetchTokenRef.current[id] === token) markReady(id)
+          if (fetchTokenRef.current === token) markScreenReady(true)
         }
       })()
 
-      inflightRef.current[id] = run
+      favInflight = run
       try {
         await run
       } finally {
-        if (inflightRef.current[id] === run) delete inflightRef.current[id]
+        if (favInflight === run) favInflight = null
       }
     },
-    [markReady, patchCache],
+    [applyPayload, hasAnyPaint, markScreenReady],
   )
 
   const load = useCallback(
@@ -388,8 +370,7 @@ export function FavoritesScreen() {
         setLikedDeals([])
         setLikedActivities([])
         setLikedParcours([])
-        readyRef.current = READY_ALL
-        setReady(READY_ALL)
+        markScreenReady(true)
         setRefreshing(false)
         return
       }
@@ -403,56 +384,26 @@ export function FavoritesScreen() {
           likedActivities: listGuestLikedActivities(),
           likedParcours: [],
         }
-        setFavorites(next.favorites)
-        setLikedDeals(next.likedDeals)
-        setLikedActivities(next.likedActivities)
-        setLikedParcours([])
-        patchCache(next)
+        applyPayload(next)
         const now = Date.now()
-        for (const c of COLLECTIONS) {
-          fetchedAtRef.current[c.id] = now
-          favFetchedAtMemory[c.id] = now
-        }
-        readyRef.current = READY_ALL
-        setReady(READY_ALL)
+        fetchedAtRef.current = now
+        favFetchedAtMemory = now
         setRefreshing(false)
         return
       }
 
-      const prefer = tabRef.current
-      const rest = COLLECTIONS.map((c) => c.id).filter((id) => id !== prefer)
-
-      // 1) Visible tab — always revalidate (cache paints first, network wins).
-      await fetchCollection(prefer, { force: true })
+      await fetchAllCollections({ force: Boolean(opts?.pull) })
       setRefreshing(false)
-
-      // 2) Lazy warm other tabs after paint (may skip if recently fetched).
-      for (const id of rest) {
-        void fetchCollection(id, { background: true })
-      }
     },
-    [viewUser, isGuest, fetchCollection, patchCache],
+    [viewUser, isGuest, fetchAllCollections, applyPayload, markScreenReady],
   )
 
-  const selectTab = useCallback(
-    (id: FavCollection) => {
-      setTab(id)
-      setArchiveOpen(false)
-      setSort(id === 'flights' || id === 'deals' ? 'date' : 'recent')
-      if (viewUser && !(__DEV__ && isGuest)) {
-        // Show cache immediately if we have it.
-        if (
-          collectionFromCache(cacheRef.current, id).length > 0 ||
-          fetchedAtRef.current[id]
-        ) {
-          markReady(id)
-        }
-        // Always hit the API so likes/unlikes elsewhere aren't stale.
-        void fetchCollection(id, { force: true })
-      }
-    },
-    [viewUser, isGuest, fetchCollection, markReady],
-  )
+  const selectTab = useCallback((id: FavCollection) => {
+    // Instant switch — data already loaded for all collections.
+    setTab(id)
+    setArchiveOpen(false)
+    setSort(id === 'flights' || id === 'deals' ? 'date' : 'recent')
+  }, [])
 
   // Cold start: disk → paint before / with network (never blocks fetch).
   useEffect(() => {
@@ -461,34 +412,22 @@ export function FavoritesScreen() {
     let cancelled = false
     void AsyncStorage.getItem(FAV_CACHE_KEY)
       .then(async (raw) => {
-        // Migrate v1 disk cache once if v2 empty.
-        let payload = raw
-        if (!payload) {
-          payload = await AsyncStorage.getItem('fw_favorites_cache_v1')
-        }
-        if (cancelled || !payload || favMemoryCache) return
+        void Promise.all(
+          FAV_CACHE_LEGACY_KEYS.map((k) => AsyncStorage.removeItem(k)),
+        ).catch(() => undefined)
+        if (cancelled || !raw || favMemoryCache) return
         const hydrated = normalizeFavCache(
-          JSON.parse(payload) as Partial<FavCachePayload>,
+          JSON.parse(raw) as Partial<FavCachePayload>,
         )
-        const any =
-          hydrated.favorites.length +
-            hydrated.likedDeals.length +
-            hydrated.likedActivities.length +
-            hydrated.likedParcours.length >
-          0
-        if (!any) return
-        // Don't clobber a network response that already landed.
-        const networkWon = COLLECTIONS.some(
-          (c) => (fetchedAtRef.current[c.id] || 0) > 0,
-        )
-        if (networkWon) return
-        applyDiskCache(hydrated)
+        if (!hasAnyPaint(hydrated)) return
+        if (fetchedAtRef.current > 0) return
+        applyPayload(hydrated)
       })
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [applyDiskCache])
+  }, [applyPayload, hasAnyPaint])
 
   useFocusEffect(
     useCallback(() => {
@@ -671,7 +610,7 @@ export function FavoritesScreen() {
     [archivedRaw, effectiveSort],
   )
 
-  const showSkeleton = !ready[tab]
+  const showSkeleton = !screenReady
   const listData: FavListItem[] = showSkeleton ? SKELETON_ITEMS : activeItems
   const collectionCounts = useMemo(
     () => ({

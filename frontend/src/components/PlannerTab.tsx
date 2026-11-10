@@ -71,7 +71,6 @@ import {
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_HINT_FR,
   PLANNER_PHASE_ACTION_FR,
-  PLANNER_PROMOTE_TOAST_FR,
   PLANNER_SHARE_ACTION_FR,
   PLANNER_SHARE_EYEBROW_FR,
   PLANNER_SHARE_HINT_FR,
@@ -1136,10 +1135,12 @@ export function PlannerTab() {
               draft_token: workspace.draft_token!,
               name: workspace.city || workspace.title || undefined,
             })
+            if (!created?.id) throw new Error('Planner non créé')
+            // Wait for full trip detail before open — no « Séjour ajouté » toast.
+            await getApiClient().getPlannedTrip(created.id)
             invalidateTravelWorkspacesCache()
-            setToast(PLANNER_PROMOTE_TOAST_FR)
-            navigate(`/planner/${encodeURIComponent(created.id)}`)
             void load({ silent: true })
+            navigate(`/planner/${encodeURIComponent(created.id)}`)
           } catch {
             navigate(`/trip/${encodeURIComponent(workspace.draft_token!)}`)
           }
@@ -1152,7 +1153,7 @@ export function PlannerTab() {
         )
       }
     },
-    [navigate, load, setToast],
+    [navigate, load],
   )
 
   useEffect(() => {

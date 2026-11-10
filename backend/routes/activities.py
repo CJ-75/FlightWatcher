@@ -379,6 +379,8 @@ async def list_liked_itineraries(request: Request):
     if not sb:
         raise HTTPException(status_code=503, detail="no_supabase")
     try:
+        from activities.itineraries_catalog import hydrate_liked_itinerary_cards
+
         result = (
             sb.table("liked_itineraries")
             .select("*")
@@ -386,7 +388,9 @@ async def list_liked_itineraries(request: Request):
             .order("created_at", desc=True)
             .execute()
         )
-        return {"ok": True, "items": result.data or []}
+        # Live catalogue card fields — never serve frozen like-time snapshots alone.
+        items = hydrate_liked_itinerary_cards(sb, result.data or [])
+        return {"ok": True, "items": items}
     except Exception as e:
         msg = str(e).lower()
         if "liked_itineraries" in msg and (

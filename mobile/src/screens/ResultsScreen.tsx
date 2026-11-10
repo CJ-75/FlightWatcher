@@ -44,6 +44,8 @@ import { PostBookLightbox } from '../components/PostBookLightbox'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import { peekInspireLive, subscribeInspireLive } from '../lib/inspireLive'
+import { prepareCreatedPlannerTrip } from '../lib/plannedTripCache'
+import { invalidateTravelWorkspacesCache } from '../lib/workspacesCache'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>
 const kv = createAsyncKVStore(AsyncStorage)
@@ -196,13 +198,16 @@ export function ResultsScreen({ route, navigation }: Props) {
         trip,
         passengers,
       })
-      if (!created?.id) throw new Error('Planner non créé')
-      navigation.navigate('TripDetail', { tripId: created.id })
+      const tripId = await prepareCreatedPlannerTrip(created)
+      invalidateTravelWorkspacesCache()
+      navigation.navigate('TripDetail', { tripId })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err || '')
       const dup = msg.match(/\[trip_id=([0-9a-f-]{36})\]/i)
       if (dup?.[1]) {
-        navigation.navigate('TripDetail', { tripId: dup[1] })
+        const tripId = await prepareCreatedPlannerTrip({ id: dup[1] })
+        invalidateTravelWorkspacesCache()
+        navigation.navigate('TripDetail', { tripId })
         return
       }
       Alert.alert(
