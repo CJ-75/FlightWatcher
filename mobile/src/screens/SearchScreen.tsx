@@ -285,6 +285,8 @@ export function SearchScreen() {
 
     setLoading(true)
     setLoadingMsg(LOADING_MESSAGES[0])
+    // Hold 2s so TP + Ryanair can both land before first Results paint.
+    const MIN_LOADING_MS = 2000
     const startedAt = Date.now()
     const liveToken = beginInspireLive()
     const abort = new AbortController()
@@ -330,6 +332,8 @@ export function SearchScreen() {
         })
       }
 
+      const revealTimer = setTimeout(revealResults, MIN_LOADING_MS)
+
       try {
         await getApi().inspireStream(
           request,
@@ -340,9 +344,8 @@ export function SearchScreen() {
             }
             if (ev.type === 'batch' && Array.isArray(ev.resultats) && ev.resultats.length) {
               accumulated = mergeStreamTrips(accumulated, ev.resultats)
+              // Buffer during the 2s hold — revealTimer opens Results with TP+Ryanair.
               publishInspireLive(liveToken, accumulated)
-              // Instant: open Results on first flights — later batches append live.
-              revealResults()
             }
             if (ev.type === 'done') {
               nombreRequetes = ev.nombre_requetes || nombreRequetes
@@ -359,19 +362,24 @@ export function SearchScreen() {
           nombreRequetes = result.nombre_requetes || 0
           publishInspireLive(liveToken, accumulated)
         } else if (!accumulated.length) {
+          clearTimeout(revealTimer)
           throw streamErr
         }
         // Partial stream batches already published — keep them
       }
 
       if (streamError && !accumulated.length) {
+        clearTimeout(revealTimer)
         throw new Error(streamError)
       }
 
       if (!revealed) {
-        // Stream done with no early batch (empty or blocking fallback) — show now.
+        const wait = Math.max(0, MIN_LOADING_MS - (Date.now() - startedAt))
+        if (wait > 0) await new Promise<void>((r) => setTimeout(r, wait))
+        clearTimeout(revealTimer)
         revealResults()
       } else {
+        clearTimeout(revealTimer)
         publishInspireLive(liveToken, accumulated)
       }
 
