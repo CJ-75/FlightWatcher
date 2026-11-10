@@ -328,7 +328,7 @@ export function HotelPhotoGallery({
           ) : null}
 
           <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-ink/45 px-2.5 py-1 text-[11px] font-bold tabular-nums text-white">
-            {loading ? '…' : `${mobileIdx + 1}/${heroSlides.length}`}
+            {`${mobileIdx + 1}/${heroSlides.length}`}
           </span>
 
           {topRight ? (
@@ -425,15 +425,9 @@ export function HotelPhotoGallery({
           Photos
         </button>
 
-        {loading ? (
-          <span className="absolute top-3 left-3 z-10 rounded-full bg-ink/50 text-white text-[10px] font-semibold px-2 py-1">
-            …
-          </span>
-        ) : (
-          <span className="absolute top-3 left-3 z-10 rounded-full bg-ink/45 text-white text-[11px] font-bold tabular-nums px-2.5 py-1">
-            {mobileIdx + 1}/{Math.min(count, mobileSlides.length)}
-          </span>
-        )}
+        <span className="absolute top-3 left-3 z-10 rounded-full bg-ink/45 text-white text-[11px] font-bold tabular-nums px-2.5 py-1">
+          {mobileIdx + 1}/{Math.min(count, mobileSlides.length)}
+        </span>
       </div>
       ) : null}
 

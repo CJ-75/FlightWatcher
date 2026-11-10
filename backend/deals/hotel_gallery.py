@@ -287,9 +287,44 @@ def get_hotel_gallery(
             {"url": fallback_photo, "thumb": fallback_photo, "caption": None, "order": 0},
         )
 
-    # Enrich via LiteAPI details (full gallery + conversion fields)
-    cfg = load_deals_config()
-    if cfg.api_key:
+    def _finalize(photo_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        seen = set()
+        unique: List[Dict[str, Any]] = []
+        for p in photo_rows:
+            u = p.get("url")
+            if u and u not in seen:
+                seen.add(u)
+                unique.append(p)
+        return {
+            "hotel_id": hid,
+            "name": name,
+            "description": description,
+            "address": address,
+            "city": city,
+            "facilities": facilities,
+            "checkin_time": checkin_time,
+            "checkout_time": checkout_time,
+            "lat": lat,
+            "lng": lng,
+            "photos": unique,
+            "count": len(unique),
+        }
+
+    def _store(payload: Dict[str, Any]) -> Dict[str, Any]:
+        with _CACHE_LOCK:
+            _CACHE[cache_key] = (time.monotonic(), payload)
+            if len(_CACHE) > 256:
+                items = sorted(_CACHE.items(), key=lambda kv: kv[1][0])
+                for k, _ in items[:128]:
+                    _CACHE.pop(k, None)
+        return payload
+
+    def _enrich_from_liteapi() -> List[Dict[str, Any]]:
+        nonlocal name, description, address, city, facilities
+        nonlocal checkin_time, checkout_time, lat, lng
+        cfg = load_deals_config()
+        if not cfg.api_key:
+            return photos
         client = LiteApiClient(cfg=cfg)
         try:
             payload = client.get_hotel_details(hid, language=lang, timeout=6)
@@ -315,42 +350,39 @@ def get_hotel_gallery(
                     pass
                 api_photos = _extract_urls(payload)
                 if api_photos:
-                    photos = api_photos
+                    return api_photos
         except LiteApiError as e:
             logger.info("hotel_gallery liteapi miss %s: %s", hid, e)
         except Exception as e:
             logger.warning("hotel_gallery fail %s: %s", hid, e)
         finally:
             client.close()
+        return photos
 
-    # Dedup urls keep order
-    seen = set()
-    unique = []
-    for p in photos:
-        u = p.get("url")
-        if u and u not in seen:
-            seen.add(u)
-            unique.append(p)
+    pool_result = _finalize(photos)
+    # Fast path: pool/fallback already has photos → paint 1/X immediately.
+    # LiteAPI enrich warms cache in background; client may soft-refetch via partial.
+    if pool_result["count"] >= 1:
+        pool_result = {**pool_result, "partial": True}
+        _store(pool_result)
 
-    result = {
-        "hotel_id": hid,
-        "name": name,
-        "description": description,
-        "address": address,
-        "city": city,
-        "facilities": facilities,
-        "checkin_time": checkin_time,
-        "checkout_time": checkout_time,
-        "lat": lat,
-        "lng": lng,
-        "photos": unique,
-        "count": len(unique),
-    }
-    with _CACHE_LOCK:
-        _CACHE[cache_key] = (time.monotonic(), result)
-        if len(_CACHE) > 256:
-            # drop oldest half
-            items = sorted(_CACHE.items(), key=lambda kv: kv[1][0])
-            for k, _ in items[:128]:
-                _CACHE.pop(k, None)
-    return result
+        def _bg_enrich() -> None:
+            try:
+                enriched_photos = _enrich_from_liteapi()
+                enriched = {**_finalize(enriched_photos), "partial": False}
+                if enriched["count"] >= pool_result["count"]:
+                    _store(enriched)
+                else:
+                    _store({**pool_result, "partial": False})
+            except Exception as e:
+                logger.debug("hotel_gallery bg enrich %s: %s", hid, e)
+                _store({**pool_result, "partial": False})
+
+        threading.Thread(
+            target=_bg_enrich, name=f"hotel-gallery-{hid[:12]}", daemon=True
+        ).start()
+        return dict(pool_result)
+
+    # No pool photos — must wait on LiteAPI for a usable gallery.
+    photos = _enrich_from_liteapi()
+    return _store({**_finalize(photos), "partial": False})

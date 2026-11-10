@@ -16,7 +16,10 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { HotelGalleryPhoto } from '@flightwatcher/shared'
-import { getApi } from '../lib/client'
+import {
+  getHotelGalleryCached,
+  peekHotelGallery,
+} from '../lib/hotelGalleryCache'
 import { colors, fonts, radius } from '../theme'
 
 const SCREEN_W = Dimensions.get('window').width
@@ -86,7 +89,6 @@ export function HotelPhotoGallery({
   const [index, setIndex] = useState(0)
   const [lightbox, setLightbox] = useState<number | null>(null)
   const [blockHero, setBlockHero] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [pageWidth, setPageWidth] = useState(SCREEN_W)
   const isHero = variant === 'hero'
   const heroHeight = Math.max(height, 280)
@@ -128,7 +130,15 @@ export function HotelPhotoGallery({
 
     if (loadedKeyRef.current === key) return
 
-    setPhotos(seeds)
+    // Instant 1/X from seeds (or memory cache) — never blank the counter on fetch.
+    const cached = hid ? peekHotelGallery(hid, 'fr') : null
+    const initial =
+      cached?.photos?.length && cached.photos.length >= seeds.length
+        ? cached.photos
+        : seeds.length
+          ? seeds
+          : cached?.photos || []
+    setPhotos(initial)
     setIndex(0)
 
     if (!hid || hid === 'primary' || hid === 'seed') {
@@ -136,30 +146,55 @@ export function HotelPhotoGallery({
       return
     }
 
+    if (cached?.photos?.length && cached.photos.length > seeds.length) {
+      loadedKeyRef.current = key
+      return
+    }
+
     let cancelled = false
-    setLoading(true)
-    void getApi()
-      .getHotelGallery(hid, {
-        language: 'fr',
-        fallback: seedPhoto || seeds[0]?.url,
-      })
-      .then((res) => {
-        if (cancelled) return
-        const next = (res.photos || []).filter((p) => p?.url)
-        if (next.length) setPhotos(next)
-        else if (seeds.length) setPhotos(seeds)
-        loadedKeyRef.current = key
-      })
+    let softTimer: ReturnType<typeof setTimeout> | null = null
+
+    const applyGallery = (res: {
+      photos?: HotelGalleryPhoto[]
+      partial?: boolean
+    }) => {
+      if (cancelled) return
+      const next = (res.photos || []).filter((p) => p?.url)
+      if (next.length) setPhotos(next)
+      else if (seeds.length) setPhotos(seeds)
+      loadedKeyRef.current = key
+      // Pool-first response: pick up full LiteAPI set once bg enrich lands.
+      if (res.partial && next.length) {
+        softTimer = setTimeout(() => {
+          if (cancelled) return
+          void getHotelGalleryCached(hid, {
+            language: 'fr',
+            fallback: seedPhoto || seeds[0]?.url,
+            force: true,
+          })
+            .then((again) => {
+              if (cancelled) return
+              const more = (again.photos || []).filter((p) => p?.url)
+              if (more.length > next.length) setPhotos(more)
+            })
+            .catch(() => undefined)
+        }, 2200)
+      }
+    }
+
+    void getHotelGalleryCached(hid, {
+      language: 'fr',
+      fallback: seedPhoto || seeds[0]?.url,
+    })
+      .then(applyGallery)
       .catch(() => {
         if (!cancelled && seeds.length) setPhotos(seeds)
         if (!cancelled) loadedKeyRef.current = key
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
 
     return () => {
       cancelled = true
+      if (softTimer) clearTimeout(softTimer)
     }
   }, [hotelId, seedPhoto, seedKey])
 
@@ -315,11 +350,11 @@ export function HotelPhotoGallery({
           pointerEvents="none"
         />
 
-        {/* Compteur haut gauche — symétrique au like (topRight). */}
+        {/* Compteur haut gauche — toujours 1/X dès les seeds (pas de « … » réseau). */}
         <View style={styles.topLeft} pointerEvents="none">
           <View style={styles.counter}>
             <Text style={styles.counterText}>
-              {loading ? '…' : `${index + 1}/${visible}`}
+              {`${index + 1}/${visible}`}
             </Text>
           </View>
         </View>

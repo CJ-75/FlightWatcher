@@ -242,6 +242,8 @@ export interface HotelGalleryResponse {
   lng?: number | null
   photos: HotelGalleryPhoto[]
   count?: number
+  /** True when response is pool-first; full LiteAPI set may follow. */
+  partial?: boolean
 }
 
 export interface HotelGuestReview {
