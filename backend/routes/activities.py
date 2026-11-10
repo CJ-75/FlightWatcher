@@ -246,9 +246,10 @@ async def list_liked_activities(request: Request):
             raise HTTPException(status_code=503, detail="no_supabase")
         result = (
             sb.table("liked_activities")
-            .select("*")
+            .select("id,product_code,activity_data,created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
+            .limit(100)
             .execute()
         )
         return [_row_to_liked_activity(row) for row in (result.data or [])]
@@ -383,9 +384,10 @@ async def list_liked_itineraries(request: Request):
 
         result = (
             sb.table("liked_itineraries")
-            .select("*")
+            .select("id,itinerary_id,itinerary_data,created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
+            .limit(100)
             .execute()
         )
         # Live catalogue card fields — never serve frozen like-time snapshots alone.

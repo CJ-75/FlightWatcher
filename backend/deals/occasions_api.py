@@ -65,7 +65,7 @@ def list_active_occasions(
     today = today or date.today()
     from deals.community_list import list_community_deals
 
-    # Same wall filters as GET /api/deals — limit 36 shares L1/L2 with mur (hp6).
+    # Same wall filters as GET /api/deals — limit 36 shares L1/L2 with mur (hp7).
     deals = list_community_deals(
         supabase,
         origin=origin,

@@ -16,6 +16,8 @@ _list_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 # 8 min — deals only change on promote/materialize; invalidate_list_cache() bumps epoch
 _LIST_CACHE_TTL_S = 480.0
 _list_cache_epoch = 0
+# Single-flight: mur + occasions cold-start share one assemble per cache_key
+_assemble_waiters: Dict[str, threading.Event] = {}
 _flag_cache_lock = threading.Lock()
 _flag_cache: Dict[str, Tuple[float, Any]] = {}
 _FLAG_CACHE_TTL_S = 60.0
@@ -497,14 +499,58 @@ _DEALS_ACTIVE_LIST_SELECT = (
 )
 
 
+def _nights_range_for_duration(duration_tab: Optional[str]) -> Optional[Tuple[int, int]]:
+    """SQL-friendly nights band for duration tabs (weekday soft-fill stays in Python)."""
+    tab = (duration_tab or "").strip().lower() or None
+    if tab == "weekend":
+        return (1, 3)
+    if tab == "short":
+        return (4, 6)
+    if tab == "week":
+        return (6, 15)
+    return None
+
+
+def _apply_fetch_filters(q, *, codes: Optional[List[str]], occasion_slug: Optional[str], nights_range: Optional[Tuple[int, int]]):
+    if codes and len(codes) == 1:
+        q = q.eq("origin_iata", codes[0])
+    elif codes and len(codes) > 1:
+        q = q.in_("origin_iata", codes)
+    if occasion_slug:
+        # GIN-backed contains — filter before enrich/diversify
+        try:
+            q = q.contains("occasion_tags", [occasion_slug])
+        except Exception:
+            pass
+    if nights_range:
+        lo, hi = nights_range
+        q = q.gte("nights", lo).lte("nights", hi)
+    return q
+
+
+def _merge_deal_rows(*groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for group in groups:
+        for row in group:
+            key = str(row.get("deal_key") or "")
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(row)
+    return out
+
+
 def _fetch_active_rows(
     supabase,
     *,
     codes: Optional[List[str]] = None,
     limit: int = 60,
     occasion: Optional[str] = None,
+    nights_range: Optional[Tuple[int, int]] = None,
 ) -> List[Dict[str, Any]]:
     today = _today_iso()
+    occasion_slug = (occasion or "").strip().lower() or None
     q = (
         supabase.table("deals_active")
         .select(_DEALS_ACTIVE_LIST_SELECT)
@@ -513,17 +559,9 @@ def _fetch_active_rows(
         .order("deal_score", desc=True)
         .limit(limit)
     )
-    if codes and len(codes) == 1:
-        q = q.eq("origin_iata", codes[0])
-    elif codes and len(codes) > 1:
-        q = q.in_("origin_iata", codes)
-    occasion_slug = (occasion or "").strip().lower() or None
-    if occasion_slug:
-        # GIN-backed contains — filter before enrich/diversify
-        try:
-            q = q.contains("occasion_tags", [occasion_slug])
-        except Exception:
-            pass
+    q = _apply_fetch_filters(
+        q, codes=codes, occasion_slug=occasion_slug, nights_range=nights_range
+    )
     try:
         res = q.execute()
         return [r for r in (res.data or []) if _row_out_date_ok(r, today)]
@@ -543,15 +581,9 @@ def _fetch_active_rows(
                 .order("deal_score", desc=True)
                 .limit(limit)
             )
-            if codes and len(codes) == 1:
-                q2 = q2.eq("origin_iata", codes[0])
-            elif codes and len(codes) > 1:
-                q2 = q2.in_("origin_iata", codes)
-            if occasion_slug:
-                try:
-                    q2 = q2.contains("occasion_tags", [occasion_slug])
-                except Exception:
-                    pass
+            q2 = _apply_fetch_filters(
+                q2, codes=codes, occasion_slug=occasion_slug, nights_range=nights_range
+            )
             return [r for r in ((q2.execute().data) or []) if _row_out_date_ok(r, today)]
         except Exception:
             return []
@@ -1296,7 +1328,7 @@ def list_related_community_deals(
         today = _today_iso()
         q = (
             supabase.table("deals_active")
-            .select("*")
+            .select(_DEALS_ACTIVE_LIST_SELECT)
             .eq("dest_iata", dest)
             .eq("status", "active")
             .gte("out_date", today)
@@ -1418,47 +1450,108 @@ def list_community_deals(
     # Limit is applied after cache so 36 / 48 / 96 share one wall assemble.
     shared_n = max(target, min(wall_max, 96))
     cache_key = (
-        f"hp6|{epoch}|{origin or ''}|{destination or ''}|"
+        f"hp7|{epoch}|{origin or ''}|{destination or ''}|"
         f"{adults_n}|{max_pp}|{occasion_slug or ''}|{duration_tab or ''}|"
         f"shared{shared_n}|min{WALL_MIN_DEALS}"
     )
-    now = time.monotonic()
     today = _today_iso()
+
+    def _cached_slice() -> Optional[List[Dict[str, Any]]]:
+        now = time.monotonic()
+        with _list_cache_lock:
+            hit = _list_cache.get(cache_key)
+            if hit and now - hit[0] < _LIST_CACHE_TTL_S:
+                fresh_hit = [dict(d) for d in hit[1] if _deal_out_date_ok(d, today)]
+                return fresh_hit[:target]
+        try:
+            from deals.wall_list_cache import get_shared
+
+            shared = get_shared(cache_key)
+            if shared is not None:
+                fresh_shared = [dict(d) for d in shared if _deal_out_date_ok(d, today)]
+                with _list_cache_lock:
+                    _list_cache[cache_key] = (
+                        time.monotonic(),
+                        [dict(d) for d in shared],
+                    )
+                return fresh_shared[:target]
+        except Exception:
+            pass
+        return None
+
+    cached = _cached_slice()
+    if cached is not None:
+        log.info(
+            "list_community_deals cache_hit origin=%s dest=%s n=%s ms=%.0f",
+            origin,
+            destination,
+            len(cached),
+            (time.monotonic() - t0) * 1000,
+        )
+        return cached
+
+    # Coalesce parallel mur + occasions cold starts onto one assemble.
+    claimed = False
+    waiter: Optional[threading.Event] = None
     with _list_cache_lock:
-        hit = _list_cache.get(cache_key)
-        if hit and now - hit[0] < _LIST_CACHE_TTL_S:
-            fresh_hit = [dict(d) for d in hit[1] if _deal_out_date_ok(d, today)]
-            sliced = fresh_hit[:target]
+        waiter = _assemble_waiters.get(cache_key)
+        if waiter is None:
+            waiter = threading.Event()
+            _assemble_waiters[cache_key] = waiter
+            claimed = True
+    if not claimed and waiter is not None:
+        waiter.wait(timeout=12.0)
+        cached_after = _cached_slice()
+        if cached_after is not None:
             log.info(
-                "list_community_deals cache_hit origin=%s dest=%s n=%s ms=%.0f",
+                "list_community_deals coalesce_hit origin=%s dest=%s n=%s ms=%.0f",
                 origin,
                 destination,
-                len(sliced),
+                len(cached_after),
                 (time.monotonic() - t0) * 1000,
             )
-            return sliced
+            return cached_after
 
-    # L2 shared file cache (multi-worker) — Phase 3 latency
     try:
-        from deals.wall_list_cache import get_shared
-
-        shared = get_shared(cache_key)
-        if shared is not None:
-            fresh_shared = [dict(d) for d in shared if _deal_out_date_ok(d, today)]
+        return _assemble_community_deals(
+            supabase,
+            log=log,
+            t0=t0,
+            origin=origin,
+            destination=destination,
+            adults_n=adults_n,
+            max_pp=max_pp,
+            occasion_slug=occasion_slug,
+            duration_tab=duration_tab,
+            target=target,
+            shared_n=shared_n,
+            cache_key=cache_key,
+            today=today,
+        )
+    finally:
+        if claimed:
             with _list_cache_lock:
-                _list_cache[cache_key] = (time.monotonic(), [dict(d) for d in shared])
-            sliced = fresh_shared[:target]
-            log.info(
-                "list_community_deals l2_hit origin=%s dest=%s n=%s ms=%.0f",
-                origin,
-                destination,
-                len(sliced),
-                (time.monotonic() - t0) * 1000,
-            )
-            return sliced
-    except Exception:
-        pass
+                done = _assemble_waiters.pop(cache_key, None)
+            if done is not None:
+                done.set()
 
+
+def _assemble_community_deals(
+    supabase,
+    *,
+    log,
+    t0: float,
+    origin: Optional[str],
+    destination: Optional[str],
+    adults_n: int,
+    max_pp: Optional[float],
+    occasion_slug: Optional[str],
+    duration_tab: Optional[str],
+    target: int,
+    shared_n: int,
+    cache_key: str,
+    today: str,
+) -> List[Dict[str, Any]]:
     fresh = _baselines_fresh_flag(supabase)
     from deals.click_checks import is_cached_deals_enabled
     from deals.liteapi_config import load_deals_config
@@ -1478,12 +1571,38 @@ def list_community_deals(
     dest_codes = _expand_destination_iatas(supabase, destination)
     origin_set = set(origin_codes)
     dest_set = set(dest_codes)
-    # Oversample: duration + diversify shrink the pool — aim well above floor
-    fetch_n = max(shared_n * 5, 120)
+    nights_range = _nights_range_for_duration(duration_tab)
 
-    all_rows = _fetch_active_rows(
-        supabase, codes=None, limit=fetch_n, occasion=occasion_slug
-    )
+    # Origin-first pool + small global fill (secondary fillers / soft fallback).
+    # Avoids scanning hundreds of unrelated origins on every cold wall.
+    if origin_codes:
+        primary_n = max(shared_n * 2, 72)
+        fill_n = max(shared_n, 40)
+        primary = _fetch_active_rows(
+            supabase,
+            codes=origin_codes,
+            limit=primary_n,
+            occasion=occasion_slug,
+            nights_range=nights_range,
+        )
+        fill = _fetch_active_rows(
+            supabase,
+            codes=None,
+            limit=fill_n,
+            occasion=occasion_slug,
+            nights_range=nights_range,
+        )
+        all_rows = _merge_deal_rows(primary, fill)
+        fetch_n = len(all_rows) or primary_n
+    else:
+        fetch_n = max(shared_n * 3, 96)
+        all_rows = _fetch_active_rows(
+            supabase,
+            codes=None,
+            limit=fetch_n,
+            occasion=occasion_slug,
+            nights_range=nights_range,
+        )
 
     def _row_match_origin(r: Dict[str, Any]) -> bool:
         if not origin_set:

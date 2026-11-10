@@ -244,9 +244,10 @@ async def list_liked_deals(request: Request):
         supabase = _svc()
         result = (
             supabase.table("liked_deals")
-            .select("*")
+            .select("id,deal_id,deal_data,created_at")
             .eq("user_id", user_id)
             .order("created_at", desc=True)
+            .limit(100)
             .execute()
         )
         return [_row_to_liked(row) for row in (result.data or [])]

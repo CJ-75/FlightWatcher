@@ -36,6 +36,7 @@ import {
   canonicalViatorProductUrl,
   cityDisplayNameFr,
   cityImageUrl,
+  countryIsoForCityLabel,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
   activityMatchesCategories,
@@ -62,6 +63,7 @@ import {
   type ActivityPlannerTarget,
 } from './ActivityPlannerPicker'
 import { ActivityTripHero } from './ActivityTripHero'
+import { CountryFlag } from './CountryFlag'
 import { RatingStars } from './RatingStars'
 
 const springConfig = {
@@ -123,17 +125,20 @@ function ActivityCard({
     card.reviewCount != null && card.reviewCount > 0
       ? `${card.reviewCount.toLocaleString('fr-FR')} avis`
       : null
+  const ratingValue =
+    card.rating != null ? card.rating.toFixed(1).replace('.', ',') : null
+  const destIso = countryIsoForCityLabel(card.destinationLabel)
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={springConfig}
-      whileHover={{ y: -3, transition: { duration: 0.18 } }}
-      className={`group flex flex-col rounded-2xl overflow-hidden border bg-canvas shadow-soft hover:shadow-lift transition-all duration-200 text-left ${
+      whileHover={{ y: -4, transition: { duration: 0.18 } }}
+      className={`group flex flex-col h-full rounded-3xl overflow-hidden border bg-white shadow-soft hover:shadow-lift transition-all duration-200 text-left ${
         added
           ? 'border-emerald-400 hover:border-emerald-500'
-          : 'border-line/80 hover:border-primary-200'
+          : 'border-line hover:border-primary-200'
       }`}
     >
       <button
@@ -150,17 +155,21 @@ function ActivityCard({
         ) : (
           <div className="absolute inset-0 bg-slate-200" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-ink/85 via-ink/25 to-transparent" />
-        <div className="absolute top-2.5 left-2.5 z-[3] flex flex-col gap-1 items-start">
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/35 via-transparent to-transparent" />
+        <div className="absolute top-3 left-3 z-[3] flex flex-col gap-1.5 items-start">
           {added ? (
-            <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold shadow-soft">
+            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-emerald-600 text-white text-[11px] font-bold shadow-soft">
               <span aria-hidden>✓</span>
               {ACTIVITY_ADDED_BADGE_FR}
             </span>
           ) : null}
           {card.freeCancellation ? (
-            <span className="rounded-md px-2 py-1 bg-white/90 text-ink text-[10px] font-bold shadow-soft">
+            <span className="rounded-full px-2.5 py-1 bg-white/95 text-ink text-[11px] font-bold shadow-soft">
               Annulation gratuite
+            </span>
+          ) : card.instantConfirmation ? (
+            <span className="rounded-full px-2.5 py-1 bg-ink text-white text-[11px] font-bold shadow-soft">
+              Confirmation instantanée
             </span>
           ) : null}
         </div>
@@ -181,76 +190,101 @@ function ActivityCard({
               }
             }}
             aria-label={liked ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-            className={`absolute top-2.5 right-2.5 z-[3] w-9 h-9 rounded-full flex items-center justify-center shadow-soft transition-colors ${
+            className={`absolute top-3 right-3 z-[3] w-10 h-10 rounded-full flex items-center justify-center shadow-soft transition-colors ${
               liked
                 ? 'bg-white text-primary-500'
-                : 'bg-white/90 text-ink-soft hover:text-primary-500'
+                : 'bg-white/95 text-ink-soft hover:text-primary-500'
             }`}
           >
             <ActivityHeartSvg filled={!!liked} />
           </span>
         ) : null}
-        <div className="absolute inset-x-0 bottom-0 z-[2] p-2.5 sm:p-3 space-y-1">
-          <h3 className="font-bold text-white text-[13px] sm:text-sm leading-snug line-clamp-2 drop-shadow-sm">
-            {card.title}
-          </h3>
-          {chips.length ? (
-            <div className="flex flex-wrap gap-1">
-              {chips.map((label) => (
-                <span
-                  key={label}
-                  className="inline-flex items-center rounded-md bg-white/15 px-1.5 py-0.5 text-[9px] font-semibold text-white/90 backdrop-blur-sm"
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
       </button>
 
-      <div className="flex items-center justify-between gap-2 px-2.5 py-2 sm:px-3 sm:py-2.5 bg-white/70 border-t border-line/60">
-        <div className="min-w-0">
-          {card.rating != null ? (
-            <div className="flex items-center gap-1.5 mb-1 min-w-0">
-              <RatingStars rating={card.rating} size={12} />
-              {reviewLabel ? (
-                <span className="text-[10px] font-semibold text-muted truncate leading-none">
-                  {reviewLabel}
-                </span>
+      <div className="flex flex-col flex-1 min-h-0 p-3.5 sm:p-4 gap-3">
+        <button type="button" onClick={onOpen} className="text-left space-y-2 min-w-0">
+          <h3 className="font-extrabold text-ink text-[15px] sm:text-base tracking-tight leading-snug line-clamp-2 flex items-start gap-2">
+            {destIso ? (
+              <CountryFlag
+                iso={destIso}
+                className="w-5 h-[14px] mt-1 shrink-0"
+                title={card.destinationLabel || undefined}
+              />
+            ) : null}
+            <span className="min-w-0">{card.title}</span>
+          </h3>
+          {card.rating != null || chips.length ? (
+            <div className="space-y-1.5">
+              {card.rating != null ? (
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <RatingStars rating={card.rating} size={12} />
+                  {ratingValue ? (
+                    <span className="text-xs font-bold text-ink tabular-nums">
+                      {ratingValue}
+                    </span>
+                  ) : null}
+                  {reviewLabel ? (
+                    <span className="text-[11px] font-semibold text-muted truncate">
+                      · {reviewLabel}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {chips.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {chips.map((label) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center rounded-full bg-primary-50 text-primary-700 px-2 py-0.5 text-[11px] font-semibold"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
               ) : null}
             </div>
           ) : null}
-          <p className="text-[9px] font-bold uppercase tracking-wider text-muted leading-none mb-0.5">
-            À partir de
-          </p>
-          <p className="text-base font-extrabold text-primary-500 tabular-nums leading-none truncate">
-            {card.priceLabel || 'Voir'}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {!hideAdd ? (
+        </button>
+
+        <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-1">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-ink-soft leading-none mb-1">
+              À partir de
+            </p>
+            <p className="text-xl sm:text-2xl font-extrabold text-primary-500 tabular-nums leading-none truncate">
+              {card.priceLabel || 'Voir'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!hideAdd ? (
+              added ? (
+                <span className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold min-h-[40px] px-3">
+                  ✓ {ACTIVITY_ADDED_BADGE_FR}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onAdd}
+                  disabled={addDisabled}
+                  aria-label={addLabel}
+                  title={addLabel}
+                  className="inline-flex items-center justify-center gap-1 rounded-xl border border-line text-ink text-xs font-bold min-h-[40px] px-3 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50"
+                >
+                  <span className="text-base leading-none font-extrabold" aria-hidden>
+                    +
+                  </span>
+                  <span>{addLabel}</span>
+                </button>
+              )
+            ) : null}
             <button
               type="button"
-              onClick={onAdd}
-              disabled={addDisabled}
-              aria-label={addLabel}
-              title={addLabel}
-              className="inline-flex items-center justify-center gap-1 rounded-lg border border-line text-ink text-[11px] font-bold min-h-[36px] min-w-[36px] px-2 hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50"
+              onClick={onBook}
+              className="rounded-xl bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold px-3.5 min-h-[40px]"
             >
-              <span className="text-base leading-none font-extrabold" aria-hidden>
-                +
-              </span>
-              <span>{addLabel}</span>
+              Réserver
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onBook}
-            className="rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold px-2.5 py-1.5 min-h-[36px]"
-          >
-            Réserver
-          </button>
+          </div>
         </div>
       </div>
     </motion.article>
@@ -307,7 +341,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   const [tripPickerOpen, setTripPickerOpen] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
   const didAutoCity = useRef(false)
-  const syncedOnOpen = useRef(false)
+  const loadGen = useRef(0)
 
   const catalogNavOpts = useMemo(
     () => ({
@@ -350,30 +384,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
     }
   }, [tabActive, params.city, draftFromUrl, plannedFromUrl, navigate])
 
-  // Une fois à l’ouverture de l’onglet : aligner la ville sur le séjour bootstrappé.
-  useEffect(() => {
-    if (!tabActive) {
-      syncedOnOpen.current = false
-      return
-    }
-    if (syncedOnOpen.current || !activeTrip?.slug) return
-    syncedOnOpen.current = true
-    if (activeTrip.slug === citySlug) return
-    navigate(
-      activitiesCityPath(activeTrip.slug, {
-        draftToken: activeTrip.draftToken,
-        plannedTripId: activeTrip.plannedTripId,
-      }),
-      { replace: true },
-    )
-  }, [
-    tabActive,
-    activeTrip?.slug,
-    activeTrip?.draftToken,
-    activeTrip?.plannedTripId,
-    citySlug,
-    navigate,
-  ])
+  // Sync ville planner : une seule voie via applyTripCity / bindActiveTrip (pas de 2e navigate).
 
   useEffect(() => {
     setSearchQuery('')
@@ -401,12 +412,14 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   const loadCity = useCallback(
     async (slug: string) => {
       if (!slug) return
+      const gen = ++loadGen.current
       const cached = peekActivitiesCatalog(slug, adults)
       if (cached?.ok) {
         setItems(Array.isArray(cached.items) ? cached.items : [])
         setError(null)
         setLoading(false)
       } else {
+        setItems([])
         setLoading(true)
       }
       setHeader(null)
@@ -414,6 +427,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       try {
         // Fetch public — ne bloque pas sur JWT / Supabase config.
         const res = await fetchActivitiesCatalog(slug, adults)
+        if (gen !== loadGen.current) return
         if (!res.ok) {
           const hint =
             res.error === 'unknown_city'
@@ -429,12 +443,13 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         setItems(Array.isArray(res.items) ? res.items : [])
         setError(null)
       } catch (e) {
+        if (gen !== loadGen.current) return
         if (!cached?.ok) {
           setError(e instanceof Error ? e.message : 'Erreur')
           setItems([])
         }
       } finally {
-        setLoading(false)
+        if (gen === loadGen.current) setLoading(false)
       }
     },
     [adults],
@@ -978,7 +993,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         </div>
       ) : null}
 
-      <div className="mb-4 sm:mb-5 flex flex-wrap items-center gap-1.5">
+      <div className="mb-5 sm:mb-6 flex flex-wrap items-center gap-1.5 sm:gap-2">
         {ACTIVITY_CATEGORY_TAGS_FR.map((t) => {
           const on = categories.includes(t.id)
           return (
@@ -1029,14 +1044,14 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       ) : null}
 
       {!loading && !error && cards.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-5">
           <p className="text-xs font-semibold text-muted">
             {cards.length} activité{cards.length > 1 ? 's' : ''}
             {categories.length
               ? ` · ${activityCategoriesSummaryFr(categories)}`
               : ''}
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {(
               Object.keys(ACTIVITY_SORT_LABEL_FR) as Array<
                 keyof typeof ACTIVITY_SORT_LABEL_FR
@@ -1079,22 +1094,26 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       ) : null}
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-2xl overflow-hidden border border-line/80 bg-canvas animate-pulse"
+              className="rounded-3xl overflow-hidden border border-line bg-white shadow-soft animate-pulse"
             >
-              <div className="aspect-[16/10] bg-slate-200" />
-              <div className="flex items-center justify-between gap-2 px-3 py-2.5 bg-white/70">
-                <div className="h-7 w-20 rounded bg-slate-200" />
-                <div className="h-9 w-28 rounded-lg bg-slate-200" />
+              <div className="aspect-[16/10] bg-primary-50" />
+              <div className="p-3.5 sm:p-4 space-y-3">
+                <div className="h-5 w-4/5 rounded bg-primary-50" />
+                <div className="h-4 w-2/5 rounded bg-primary-50" />
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <div className="h-8 w-24 rounded bg-primary-50" />
+                  <div className="h-10 w-36 rounded-xl bg-primary-50" />
+                </div>
               </div>
             </div>
           ))}
         </div>
       ) : cards.length ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
           {cards.map((c) => (
               <ActivityCard
                 key={c.productCode || c.title}

@@ -223,6 +223,8 @@ export function FavoritesScreen() {
   const [error, setError] = useState<string | null>(null)
   const [loginLoading, setLoginLoading] = useState(false)
   const [tab, setTab] = useState<FavCollection>('flights')
+  const tabRef = useRef<FavCollection>('flights')
+  tabRef.current = tab
   const [sort, setSort] = useState<FavSort>('date')
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [pendingAdd, setPendingAdd] = useState<ActivityCardModel | null>(null)
@@ -265,7 +267,7 @@ export function FavoritesScreen() {
   )
 
   const fetchAllCollections = useCallback(
-    async (opts?: { force?: boolean }) => {
+    async (opts?: { force?: boolean; priority?: FavCollection }) => {
       const force = Boolean(opts?.force)
       const age = Date.now() - (fetchedAtRef.current || 0)
       const painted =
@@ -289,42 +291,75 @@ export function FavoritesScreen() {
 
       const token = fetchTokenRef.current + 1
       fetchTokenRef.current = token
+      const priority = opts?.priority ?? tabRef.current
 
       const run = (async () => {
         const api = getApi()
+
+        const mergeOne = (
+          next: FavCachePayload,
+          id: FavCollection,
+          res: unknown,
+        ): unknown | null => {
+          if (id === 'flights') {
+            if (Array.isArray(res)) {
+              next.favorites = res as SavedFavorite[]
+              return null
+            }
+            return res
+          }
+          if (id === 'deals') {
+            if (Array.isArray(res)) {
+              next.likedDeals = res as LikedDeal[]
+              return null
+            }
+            return res
+          }
+          if (id === 'activities') {
+            if (Array.isArray(res)) {
+              next.likedActivities = res as LikedActivity[]
+              return null
+            }
+            return res
+          }
+          if (
+            res &&
+            typeof res === 'object' &&
+            'ok' in (res as object) &&
+            (res as { ok?: boolean }).ok
+          ) {
+            const items = (res as { items?: LikedItinerary[] }).items
+            next.likedParcours = Array.isArray(items) ? items : []
+            return null
+          }
+          return res ?? null
+        }
+
+        const fetchOne = (id: FavCollection) => {
+          if (id === 'flights') return api.getFavorites().catch((e) => e as unknown)
+          if (id === 'deals') return api.getLikedDeals().catch((e) => e as unknown)
+          if (id === 'activities')
+            return api.getLikedActivities().catch((e) => e as unknown)
+          return api.listLikedItineraries().catch((e) => e as unknown)
+        }
+
         try {
-          const [flightsRes, dealsRes, actsRes, parcoursRes] =
-            await Promise.all([
-              api.getFavorites().catch((e) => e as unknown),
-              api.getLikedDeals().catch((e) => e as unknown),
-              api.getLikedActivities().catch((e) => e as unknown),
-              api.listLikedItineraries().catch((e) => e as unknown),
-            ])
+          // Priority tab first → paint sooner; other collections follow.
+          const restIds = COLLECTIONS.map((c) => c.id).filter((id) => id !== priority)
+          const firstRes = await fetchOne(priority)
           if (fetchTokenRef.current !== token) return
 
           const next: FavCachePayload = { ...cacheRef.current }
-          let hardError: unknown = null
+          let hardError: unknown = mergeOne(next, priority, firstRes)
+          applyPayload(next, { ready: true })
 
-          if (Array.isArray(flightsRes)) next.favorites = flightsRes
-          else hardError = flightsRes
+          const restRes = await Promise.all(restIds.map((id) => fetchOne(id)))
+          if (fetchTokenRef.current !== token) return
 
-          if (Array.isArray(dealsRes)) next.likedDeals = dealsRes
-          else hardError = hardError || dealsRes
-
-          if (Array.isArray(actsRes)) next.likedActivities = actsRes
-          else hardError = hardError || actsRes
-
-          if (
-            parcoursRes &&
-            typeof parcoursRes === 'object' &&
-            'ok' in (parcoursRes as object) &&
-            (parcoursRes as { ok?: boolean }).ok
-          ) {
-            const items = (parcoursRes as { items?: LikedItinerary[] }).items
-            next.likedParcours = Array.isArray(items) ? items : []
-          } else if (parcoursRes) {
-            hardError = hardError || parcoursRes
-          }
+          restIds.forEach((id, i) => {
+            const err = mergeOne(next, id, restRes[i])
+            if (err) hardError = hardError || err
+          })
 
           applyPayload(next)
           const now = Date.now()

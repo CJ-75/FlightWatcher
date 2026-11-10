@@ -280,14 +280,20 @@ async def get_favorites_supabase(request: Request):
 
     try:
         supabase = get_supabase_client()
-        result = supabase.table("favorites")\
-            .select("*")\
-            .eq("user_id", user_id)\
-            .order("created_at", desc=False)\
+        result = (
+            supabase.table("favorites")
+            .select(
+                "id,user_id,created_at,destination_code,outbound_date,return_date,"
+                "total_price,outbound_flight,return_flight,search_request,"
+                "is_archived,is_available"
+            )
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(100)
             .execute()
+        )
 
         rows = list(result.data or [])
-        rows.reverse()
         rows = _apply_favorites_lifecycle(supabase, user_id, rows)
 
         favorites = []
