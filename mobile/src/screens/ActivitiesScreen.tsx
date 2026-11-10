@@ -85,6 +85,11 @@ import {
   listTravelWorkspacesCached,
   peekTravelWorkspacesCache,
 } from '../lib/workspacesCache'
+import {
+  getPlannedTripCached,
+  hydratePlannedTrip,
+  peekPlannedTrip,
+} from '../lib/plannedTripCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { listRememberedTrips, rememberTrip } from '../lib/tripRecovery'
 import { TabScreenHeader } from '../components/TabScreenHeader'
@@ -243,6 +248,62 @@ function cityFromWorkspace(ws: TravelWorkspace): {
       known?.label || cityLabel || activityDestinationLabelFr(slug),
     ),
     destIata,
+  }
+}
+
+type ActiveTripHero = {
+  draftToken?: string
+  plannedTripId?: string
+  slug: string
+  label: string
+  outDate?: string | null
+  retDate?: string | null
+}
+
+/** Hero chrome from hub card — no getPlannedTrip / getMyTrip round-trip. */
+function activeTripFromWorkspace(ws: TravelWorkspace): ActiveTripHero {
+  const { slug, label } = cityFromWorkspace(ws)
+  return {
+    draftToken: ws.draft_token ? String(ws.draft_token) : undefined,
+    plannedTripId: ws.planned_trip_id ? String(ws.planned_trip_id) : undefined,
+    slug,
+    label,
+    outDate: String(ws.out_date || '').slice(0, 10) || null,
+    retDate: String(ws.ret_date || '').slice(0, 10) || null,
+  }
+}
+
+function refineActiveTripFromPlanned(
+  base: ActiveTripHero,
+  trip: PlannedTrip,
+): ActiveTripHero {
+  const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
+  const cityLabel = arrival
+    ? cityDisplayNameFr(arrival)
+    : String(trip.name || '').replace(/^Weekend\s+/i, '').trim() || null
+  const slug = resolveActivityCitySlug({
+    citySlug: cityLabel,
+    cityLabel,
+    destIata: arrival || null,
+  })
+  const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
+  return {
+    ...base,
+    plannedTripId: String(trip.id || base.plannedTripId || '') || base.plannedTripId,
+    slug,
+    label: String(
+      known?.label || cityLabel || activityDestinationLabelFr(slug),
+    ),
+    outDate:
+      String(trip.dates_depart?.[0]?.date || '').slice(0, 10) ||
+      base.outDate ||
+      null,
+    retDate:
+      String(
+        trip.dates_retour?.[trip.dates_retour.length - 1]?.date || '',
+      ).slice(0, 10) ||
+      base.retDate ||
+      null,
   }
 }
 
@@ -551,7 +612,7 @@ export function ActivitiesScreen() {
         if (cancelled) return
         local.push(...remembered.map(rememberedAsWorkspace))
 
-        // Ville planner ASAP (disque / mémoire) — ne pas attendre le réseau.
+        // Hero ASAP depuis disque / mémoire (dernier planner) — zéro réseau.
         const earlyRemote =
           peekTravelWorkspacesCache() ||
           (Array.isArray(diskWs) ? diskWs : null) ||
@@ -561,8 +622,11 @@ export function ActivitiesScreen() {
           ...local,
         ])[0]
         if (earlyTop) {
-          const { slug: earlySlug } = cityFromWorkspace(earlyTop)
-          if (earlySlug) lockCity(earlySlug)
+          const earlyHero = activeTripFromWorkspace(earlyTop)
+          if (earlyHero.slug) lockCity(earlyHero.slug)
+          setActiveTrip(earlyHero)
+          // Compteur / refine peuvent attendre — le chrome hero est déjà là.
+          setTripReady(true)
         }
 
         let remote: TravelWorkspace[] = []
@@ -598,135 +662,151 @@ export function ActivitiesScreen() {
         ])
         const top = candidates[0]
         if (top) {
-          let draftToken = top.draft_token
-            ? String(top.draft_token)
-            : undefined
-          let plannedTripId = top.planned_trip_id
-            ? String(top.planned_trip_id)
-            : undefined
-          let { slug, label } = cityFromWorkspace(top)
-          // Confirme / corrige la ville dès qu’on a le top réseau.
-          if (slug) lockCity(slug)
+          let hero = activeTripFromWorkspace(top)
+          if (hero.slug) lockCity(hero.slug)
+          setActiveTrip(hero)
+          setTripReady(true)
 
-          if (draftToken) {
-            const row = await getApi().getMyTrip(draftToken).catch(() => null)
-            if (cancelled) return
-            if (row) {
-              plannedTripId =
-                plannedTripId ||
-                (row.source_planned_trip_id
-                  ? String(row.source_planned_trip_id)
-                  : undefined)
-              // Draft seul : enrichir la ville depuis le payload.
-              if (!plannedTripId) {
+          const draftToken = hero.draftToken
+          let plannedTripId = hero.plannedTripId
+
+          // Refine + items en parallèle — n’bloque plus le hero.
+          const isDevTrip =
+            Boolean(plannedTripId) &&
+            __DEV__ &&
+            String(plannedTripId).startsWith('dev-trip-')
+
+          const refineTrip = async () => {
+            if (!plannedTripId || isDevTrip) {
+              if (isDevTrip && plannedTripId) {
+                const guest = getGuestTrip(plannedTripId)
+                if (guest) return refineActiveTripFromPlanned(hero, guest)
+              }
+              // Draft seul sans dates hub → un getMyTrip léger.
+              if (draftToken && (!hero.outDate || !hero.retDate || !plannedTripId)) {
+                const row = await getApi().getMyTrip(draftToken).catch(() => null)
+                if (!row) return hero
+                plannedTripId =
+                  plannedTripId ||
+                  (row.source_planned_trip_id
+                    ? String(row.source_planned_trip_id)
+                    : undefined)
                 const pl = (row.payload || {}) as Record<string, unknown>
                 const fl = (pl.flight || {}) as Record<string, unknown>
-                const cityLabel =
-                  String(row.city_name || pl.city || top.city || '').trim() ||
-                  null
-                const citySlugHint =
-                  typeof pl.city_slug === 'string' ? pl.city_slug : cityLabel
-                const destIata =
-                  String(
-                    fl.destination_iata ||
-                      pl.destination ||
-                      pl.dest_iata ||
-                      row.dest_iata ||
-                      '',
-                  ).trim() || null
-                slug = resolveActivityCitySlug({
-                  citySlug: citySlugHint || cityLabel,
-                  cityLabel,
-                  destIata,
-                })
-                const known = ACTIVITY_CITY_OPTIONS_FR.find(
-                  (c) => c.slug === slug,
-                )
-                label = String(
-                  known?.label ||
-                    cityLabel ||
-                    activityDestinationLabelFr(slug),
-                )
+                if (!plannedTripId) {
+                  const cityLabel =
+                    String(row.city_name || pl.city || top.city || '').trim() ||
+                    null
+                  const citySlugHint =
+                    typeof pl.city_slug === 'string' ? pl.city_slug : cityLabel
+                  const destIata =
+                    String(
+                      fl.destination_iata ||
+                        pl.destination ||
+                        pl.dest_iata ||
+                        row.dest_iata ||
+                        '',
+                    ).trim() || null
+                  const slug = resolveActivityCitySlug({
+                    citySlug: citySlugHint || cityLabel,
+                    cityLabel,
+                    destIata,
+                  })
+                  const known = ACTIVITY_CITY_OPTIONS_FR.find(
+                    (c) => c.slug === slug,
+                  )
+                  return {
+                    ...hero,
+                    draftToken,
+                    plannedTripId,
+                    slug,
+                    label: String(
+                      known?.label ||
+                        cityLabel ||
+                        activityDestinationLabelFr(slug),
+                    ),
+                    outDate:
+                      String(row.out_date || '').slice(0, 10) ||
+                      hero.outDate ||
+                      null,
+                    retDate:
+                      String(row.ret_date || '').slice(0, 10) ||
+                      hero.retDate ||
+                      null,
+                  }
+                }
+                return {
+                  ...hero,
+                  plannedTripId,
+                  outDate:
+                    String(row.out_date || '').slice(0, 10) ||
+                    hero.outDate ||
+                    null,
+                  retDate:
+                    String(row.ret_date || '').slice(0, 10) ||
+                    hero.retDate ||
+                    null,
+                }
               }
+              return hero
+            }
+
+            const cached =
+              peekPlannedTrip(plannedTripId) ||
+              (await hydratePlannedTrip(plannedTripId))
+            if (cached) {
+              hero = refineActiveTripFromPlanned(hero, cached)
+            }
+            try {
+              const trip = await getPlannedTripCached(plannedTripId)
+              return refineActiveTripFromPlanned(hero, trip)
+            } catch {
+              return hero
             }
           }
 
-          // Planner chargé : ville d’arrivée du trip obligatoire.
-          let outDate: string | null = null
-          let retDate: string | null = null
-          if (plannedTripId) {
-            const isDevTrip =
-              __DEV__ && String(plannedTripId).startsWith('dev-trip-')
-            const guest = isDevTrip ? getGuestTrip(plannedTripId) : null
-            const trip =
-              guest ||
-              (isDevTrip
-                ? null
-                : await getApi()
-                    .getPlannedTrip(plannedTripId)
-                    .catch(() => null))
-            if (cancelled) return
-            if (trip) {
-              const arrival = parseAirportCodes(trip.arrival_airport)[0] || ''
-              const cityLabel = arrival
-                ? cityDisplayNameFr(arrival)
-                : String(trip.name || '').replace(/^Weekend\s+/i, '').trim() ||
-                  null
-              slug = resolveActivityCitySlug({
-                citySlug: cityLabel,
-                cityLabel,
-                destIata: arrival || null,
-              })
-              const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === slug)
-              label = String(
-                known?.label || cityLabel || activityDestinationLabelFr(slug),
+          const loadItems = async (tripHero: ActiveTripHero) => {
+            const owner = pickTripItemOwner({
+              draftToken: tripHero.draftToken,
+              plannedTripId: tripHero.plannedTripId,
+            })
+            if (
+              hasTripItemOwner(owner) &&
+              !(
+                tripHero.plannedTripId &&
+                String(tripHero.plannedTripId).startsWith('dev-trip-')
               )
-              outDate =
-                String(trip.dates_depart?.[0]?.date || '').slice(0, 10) || null
-              retDate =
-                String(
-                  trip.dates_retour?.[trip.dates_retour.length - 1]?.date || '',
-                ).slice(0, 10) || null
-            }
-          } else if (draftToken) {
-            const row = await getApi()
-              .getMyTrip(draftToken)
-              .catch(() => null)
-            if (row) {
-              outDate = String(row.out_date || '').slice(0, 10) || null
-              retDate = String(row.ret_date || '').slice(0, 10) || null
+            ) {
+              const itemsRes = await getApi()
+                .listTripItems(owner)
+                .catch(() => null)
+              if (!cancelled) applyItems(itemsRes?.items)
+            } else if (!cancelled) {
+              setPlannerCount(0)
+              setAddedCodes(new Set())
             }
           }
 
+          const [refined] = await Promise.all([
+            refineTrip(),
+            loadItems(hero),
+            draftToken
+              ? rememberTrip({
+                  draft_token: draftToken,
+                  city: hero.slug,
+                }).catch(() => undefined)
+              : Promise.resolve(),
+          ])
           if (cancelled) return
-          setActiveTrip({
-            draftToken,
-            plannedTripId,
-            slug,
-            label,
-            outDate,
-            retDate,
-          })
-          // Planner présent : catalogue = ville d’arrivée (déjà lock ASAP + refine).
-          if (slug) lockCity(slug)
-
-          if (draftToken) {
-            await rememberTrip({ draft_token: draftToken, city: slug })
-          }
-
-          const owner = pickTripItemOwner({ draftToken, plannedTripId })
           if (
-            hasTripItemOwner(owner) &&
-            !(plannedTripId && String(plannedTripId).startsWith('dev-trip-'))
+            refined.slug !== hero.slug ||
+            refined.label !== hero.label ||
+            refined.outDate !== hero.outDate ||
+            refined.retDate !== hero.retDate ||
+            refined.plannedTripId !== hero.plannedTripId
           ) {
-            const itemsRes = await getApi()
-              .listTripItems(owner)
-              .catch(() => null)
-            if (cancelled) return
-            applyItems(itemsRes?.items)
-          } else if (!cancelled) {
-            setPlannerCount(0)
-            setAddedCodes(new Set())
+            setActiveTrip(refined)
+            if (refined.slug) lockCity(refined.slug)
           }
         } else if (!cancelled) {
           setActiveTrip(null)
