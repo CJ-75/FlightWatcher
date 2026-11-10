@@ -24,6 +24,14 @@ import {
   listTravelWorkspacesCached,
   peekTravelWorkspacesCache,
 } from '../utils/workspacesCache'
+import {
+  getPlannedTripCached,
+  hydratePlannedTrip,
+  peekPlannedTrip,
+  prefetchPlannedTrips,
+  setPlannedTripMemory,
+  stubPlannedTripFromWorkspace,
+} from '../utils/plannedTripCache'
 import { loadAirportsOnce } from '../hooks/useAirports'
 import { useShellReady } from '../hooks/useShellReady'
 import { getCurrentUser, getSupabaseClient, onAuthStateChange } from '../lib/supabase'
@@ -1100,15 +1108,23 @@ export function PlannerTab() {
     try {
       try {
         const list = await listTravelWorkspacesCached({ force })
-        setWorkspaces(
-          (Array.isArray(list) ? list : []).filter(workspaceVisibleInPlanner),
+        const visible = (Array.isArray(list) ? list : []).filter(
+          workspaceVisibleInPlanner,
+        )
+        setWorkspaces(visible)
+        prefetchPlannedTrips(
+          visible.map((w) => w.planned_trip_id),
+          { limit: 6 },
         )
       } catch {
         const legacy = await getApiClient().listPlannedTrips()
-        setWorkspaces(
-          (Array.isArray(legacy) ? legacy : []).map((t) =>
-            tripAsWorkspace(t, userId),
-          ),
+        const visible = (Array.isArray(legacy) ? legacy : []).map((t) =>
+          tripAsWorkspace(t, userId),
+        )
+        setWorkspaces(visible)
+        prefetchPlannedTrips(
+          visible.map((w) => w.planned_trip_id),
+          { limit: 6 },
         )
       }
     } catch (e) {
@@ -1546,8 +1562,22 @@ function TripDetailView({
         peeked?.find((item) => item.planned_trip_id === tripId) || null
       if (peekedMatch) setWorkspace(peekedMatch)
 
+      // Instant chrome from memory/disk/stub — then refresh.
+      const early =
+        peekPlannedTrip(tripId) ||
+        hydratePlannedTrip(tripId) ||
+        (peekedMatch
+          ? stubPlannedTripFromWorkspace(tripId, peekedMatch)
+          : null)
+      if (early) {
+        if (early.invite_token) setPlannedTripMemory(early)
+        setTrip(early)
+        syncEditFromTrip(early)
+        if (!silent) setLoading(false)
+      }
+
       // First paint: trip only — don't wait for workspaces / draft.
-      const detail = await getApiClient().getPlannedTrip(tripId)
+      const detail = await getPlannedTripCached(tripId)
       setTrip(detail)
       syncEditFromTrip(detail)
       if (!silent) setLoading(false)

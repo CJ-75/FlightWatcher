@@ -2,7 +2,10 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { HotelGalleryPhoto } from '@flightwatcher/shared'
-import { getApiClient } from '../utils/apiClient'
+import {
+  getHotelGalleryCached,
+  peekHotelGallery,
+} from '../utils/hotelGalleryCache'
 
 export interface HotelPhotoGalleryProps {
   hotelId?: string | null
@@ -113,18 +116,40 @@ export function HotelPhotoGallery({
     // Seed-only heroes (no LiteAPI id yet) — keep carousel on local photos.
     if (!hid || hid === 'primary' || hid === 'seed') return
 
+    const cached = peekHotelGallery(hid, language)
+    if (cached?.photos?.length && cached.photos.length >= seeds.length) {
+      setPhotos(cached.photos)
+      if (!cached.partial) return
+    }
+
     let cancelled = false
+    let softTimer: ReturnType<typeof setTimeout> | null = null
     setLoading(true)
-    void getApiClient()
-      .getHotelGallery(hid, {
-        language,
-        fallback: seedPhoto || seeds[0]?.url,
-      })
+    void getHotelGalleryCached(hid, {
+      language,
+      fallback: seedPhoto || seeds[0]?.url,
+    })
       .then((res) => {
         if (cancelled) return
         const next = Array.isArray(res.photos) ? res.photos.filter((p) => p?.url) : []
         if (next.length) setPhotos(next)
         else if (seeds.length) setPhotos(seeds)
+        if (res.partial && next.length) {
+          softTimer = setTimeout(() => {
+            if (cancelled) return
+            void getHotelGalleryCached(hid, {
+              language,
+              fallback: seedPhoto || seeds[0]?.url,
+              force: true,
+            })
+              .then((again) => {
+                if (cancelled) return
+                const more = (again.photos || []).filter((p) => p?.url)
+                if (more.length > next.length) setPhotos(more)
+              })
+              .catch(() => undefined)
+          }, 2200)
+        }
       })
       .catch(() => {
         if (!cancelled && seeds.length) setPhotos(seeds)
@@ -135,6 +160,7 @@ export function HotelPhotoGallery({
 
     return () => {
       cancelled = true
+      if (softTimer) clearTimeout(softTimer)
     }
   }, [hotelId, seedPhoto, language, seedKey])
 

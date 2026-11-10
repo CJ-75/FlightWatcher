@@ -1,7 +1,8 @@
 /**
- * Catalogue activités — fetch public (sans attendre le JWT) + cache mémoire.
+ * Catalogue activités — fetch public (sans attendre le JWT) + mémoire + L2 durable.
  */
 import { getApiBaseUrl } from './apiBase'
+import { readDurableJson, writeDurableJson } from './durableStore'
 
 export type ActivitiesCatalogPayload = {
   ok: boolean
@@ -15,10 +16,24 @@ type CacheEntry = { at: number; data: ActivitiesCatalogPayload }
 
 const mem = new Map<string, CacheEntry>()
 const TTL_MS = 5 * 60 * 1000
+const DISK_TTL_MS = 24 * 60 * 60 * 1000
 const inflight = new Map<string, Promise<ActivitiesCatalogPayload>>()
 
 function cacheKey(slug: string, adults: number) {
   return `${slug.trim().toLowerCase()}:${adults}`
+}
+
+function diskKey(slug: string, adults: number) {
+  return `fw_activities_catalog_v1_${cacheKey(slug, adults)}`
+}
+
+function peekDisk(slug: string, adults: number): ActivitiesCatalogPayload | null {
+  const packed = readDurableJson<{ at: number; data: ActivitiesCatalogPayload }>(
+    diskKey(slug, adults),
+  )
+  if (!packed?.data?.ok) return null
+  if (Date.now() - (packed.at || 0) > DISK_TTL_MS) return null
+  return packed.data
 }
 
 export function peekActivitiesCatalog(
@@ -27,9 +42,13 @@ export function peekActivitiesCatalog(
 ): ActivitiesCatalogPayload | null {
   const key = cacheKey(slug, adults)
   const hit = mem.get(key)
-  if (!hit) return null
-  if (Date.now() - hit.at > TTL_MS) return null
-  return hit.data
+  if (hit && Date.now() - hit.at <= TTL_MS) return hit.data
+  const disk = peekDisk(slug, adults)
+  if (disk) {
+    mem.set(key, { at: Date.now(), data: disk })
+    return disk
+  }
+  return null
 }
 
 export async function fetchActivitiesCatalog(
@@ -38,8 +57,9 @@ export async function fetchActivitiesCatalog(
 ): Promise<ActivitiesCatalogPayload> {
   const normalized = slug.trim().toLowerCase() || 'paris'
   const key = cacheKey(normalized, adults)
-  const cached = peekActivitiesCatalog(normalized, adults)
-  if (cached) return cached
+  // Skip network only on fresh memory — disk is for instant paint, not forever-fresh.
+  const memHit = mem.get(key)
+  if (memHit && Date.now() - memHit.at <= TTL_MS) return memHit.data
 
   const pending = inflight.get(key)
   if (pending) return pending
@@ -62,7 +82,13 @@ export async function fetchActivitiesCatalog(
           error: data?.error || res.statusText || 'Chargement impossible',
         }
       }
-      if (data.ok) mem.set(key, { at: Date.now(), data })
+      if (data.ok) {
+        mem.set(key, { at: Date.now(), data })
+        writeDurableJson(diskKey(normalized, adults), {
+          at: Date.now(),
+          data,
+        })
+      }
       return data
     } catch (e) {
       const aborted =

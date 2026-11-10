@@ -1,5 +1,10 @@
 import type { TravelWorkspace } from '@flightwatcher/shared'
 import { getApiClient } from './apiClient'
+import {
+  migrateSessionToDurable,
+  removeDurable,
+  writeDurableJson,
+} from './durableStore'
 
 /** Hub + detail share one hit; mutations call invalidateTravelWorkspacesCache. */
 const TTL_MS = 60_000
@@ -8,34 +13,17 @@ const DISK_KEY = 'fw_travel_workspaces_v1'
 let cached: { at: number; data: TravelWorkspace[] } | null = null
 let inflight: Promise<TravelWorkspace[]> | null = null
 
-function readDisk(): TravelWorkspace[] | null {
-  try {
-    const raw = sessionStorage.getItem(DISK_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as TravelWorkspace[]
-    return Array.isArray(parsed) && parsed.length ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function writeDisk(data: TravelWorkspace[]) {
-  try {
-    sessionStorage.setItem(DISK_KEY, JSON.stringify(data.slice(0, 60)))
-  } catch {
-    /* ignore */
-  }
-}
-
 function setMemory(data: TravelWorkspace[]) {
   cached = { at: Date.now(), data }
-  writeDisk(data)
+  writeDurableJson(DISK_KEY, data.slice(0, 60))
 }
 
-// Hydrate memory from session on module load (instant hub paint).
+// Hydrate memory from durable L2 (migrate session → local once).
 ;(() => {
-  const disk = readDisk()
-  if (disk && !cached) cached = { at: 0, data: disk }
+  const disk = migrateSessionToDurable<TravelWorkspace[]>(DISK_KEY)
+  if (Array.isArray(disk) && disk.length && !cached) {
+    cached = { at: 0, data: disk }
+  }
 })()
 
 export async function listTravelWorkspacesCached(opts?: {
@@ -66,6 +54,7 @@ export function peekTravelWorkspacesCache(): TravelWorkspace[] | null {
 export function invalidateTravelWorkspacesCache() {
   cached = null
   inflight = null
+  removeDurable(DISK_KEY)
   try {
     sessionStorage.removeItem(DISK_KEY)
   } catch {

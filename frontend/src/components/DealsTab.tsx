@@ -30,6 +30,11 @@ import { Toast } from './Toast'
 import { openSearchFromDeals } from '../utils/searchPrefill'
 import { useShellReady } from '../hooks/useShellReady'
 import { FwKicker } from './ui/FwKicker'
+import {
+  migrateSessionToDurable,
+  readDurableJson,
+  writeDurableJson,
+} from '../utils/durableStore'
 
 const springConfig = {
   type: 'spring' as const,
@@ -44,22 +49,13 @@ type DurationTab = 'weekend' | 'short' | 'week'
 const DEALS_CACHE_KEY = 'fw_deals_wall_v1'
 
 function readDealsCache(): TravelDeal[] {
-  try {
-    const raw = sessionStorage.getItem(DEALS_CACHE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as TravelDeal[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
+  const migrated = migrateSessionToDurable<TravelDeal[]>(DEALS_CACHE_KEY)
+  const parsed = migrated || readDurableJson<TravelDeal[]>(DEALS_CACHE_KEY)
+  return Array.isArray(parsed) ? parsed : []
 }
 
 function writeDealsCache(list: TravelDeal[]) {
-  try {
-    sessionStorage.setItem(DEALS_CACHE_KEY, JSON.stringify(list.slice(0, 48)))
-  } catch {
-    /* ignore */
-  }
+  writeDurableJson(DEALS_CACHE_KEY, list.slice(0, 48))
 }
 
 function readStoredOrigin(): string {

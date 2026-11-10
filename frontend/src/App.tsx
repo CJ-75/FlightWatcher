@@ -59,6 +59,10 @@ import { useI18n } from './contexts/I18nContext'
 import { getApiClient } from './utils/apiClient'
 import { getAppConfig } from './utils/configCache'
 import { prefetchActivitiesCatalog } from './utils/activitiesCatalogCache'
+import {
+  readFavoritesCache,
+  writeFavoritesCache,
+} from './utils/favoritesCache'
 import { useAirports } from './hooks/useAirports'
 import { useDestinations } from './hooks/useDestinations'
 import {
@@ -198,9 +202,20 @@ function Dashboard() {
     return 'deals'
   })
 
+  /** Keep tabs warm after first visit (parity mobile freezeOnBlur). */
+  const [visitedTabs, setVisitedTabs] = useState<Set<Tab>>(
+    () => new Set<Tab>(['deals']),
+  )
+
   const setActiveTab = useCallback(
     (tab: Tab) => {
       setActiveTabState(tab)
+      setVisitedTabs((prev) => {
+        if (prev.has(tab)) return prev
+        const next = new Set(prev)
+        next.add(tab)
+        return next
+      })
       const path = TAB_PATH[tab]
       const search = tab === 'deals' ? location.search : ''
       if (location.pathname !== path || (tab !== 'deals' && location.search)) {
@@ -216,6 +231,12 @@ function Dashboard() {
     if (fromPath && fromPath !== activeTab) {
       // Prefer URL when user used back/forward or deep link
       setActiveTabState(fromPath)
+      setVisitedTabs((prev) => {
+        if (prev.has(fromPath)) return prev
+        const next = new Set(prev)
+        next.add(fromPath)
+        return next
+      })
       return
     }
     if (!fromPath && activeTab) {
@@ -1449,8 +1470,11 @@ function Dashboard() {
             <ActivitiesTab active={activeTab === 'activities'} />
           </div>
         ) : null}
-        {activeTab === 'deals' || activeTab === 'activities' ? null : activeTab === 'planner' ? (
-          <div className="app-page">
+        {visitedTabs.has('planner') || activeTab === 'planner' ? (
+          <div
+            className={activeTab === 'planner' ? 'app-page' : 'hidden'}
+            aria-hidden={activeTab !== 'planner'}
+          >
           <Suspense
             fallback={
               <div className="flex flex-col items-center justify-center py-20 text-slate-500">
@@ -1462,7 +1486,12 @@ function Dashboard() {
             <PlannerTab />
           </Suspense>
           </div>
-        ) : activeTab === 'search' ? (
+        ) : null}
+        {activeTab === 'deals' ||
+        activeTab === 'activities' ||
+        activeTab === 'planner'
+          ? null
+          : activeTab === 'search' ? (
           <div className="app-page">
             <div className="app-col pt-5 sm:pt-8">
               <SimpleSearch
@@ -2580,51 +2609,96 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
         setSavedSearches(searches)
         return
       }
-      // Favoris: vols + séjours + activités + parcours
-      const [favs, deals, acts, parcoursRes] = await Promise.all([
-        getFavorites(force),
+      const uid = userId
+      // Paint from durable cache first (cold reopen).
+      if (uid && !force) {
+        const cached = readFavoritesCache(uid)
+        if (cached) {
+          setFavorites(cached.favorites)
+          setLikedDeals(cached.likedDeals)
+          setLikedActivities(cached.likedActivities)
+          setLikedParcours(cached.likedParcours)
+        }
+      }
+
+      const fetchFlights = () => getFavorites(force)
+      const fetchDeals = () =>
         getApiClient()
           .getLikedDeals()
-          .catch(() => [] as LikedDeal[]),
+          .catch(() => [] as LikedDeal[])
+      const fetchActs = () =>
         getApiClient()
           .getLikedActivities()
-          .catch(() => [] as LikedActivity[]),
+          .catch(() => [] as LikedActivity[])
+      const fetchParcours = () =>
         getApiClient()
           .listLikedItineraries()
-          .catch(() => ({ ok: false, items: [] as LikedItinerary[] })),
+          .catch(() => ({ ok: false, items: [] as LikedItinerary[] }))
+
+      // Priority tab first → paint sooner; other collections follow.
+      const priority = favoritesKind
+      let nextFavs = favorites
+      let nextDeals = likedDeals
+      let nextActs = likedActivities
+      let nextParcours = likedParcours
+
+      if (priority === 'flights') {
+        nextFavs = await fetchFlights()
+        setFavorites(nextFavs)
+      } else if (priority === 'deals') {
+        const deals = await fetchDeals()
+        nextDeals = Array.isArray(deals) ? deals : []
+        setLikedDeals(nextDeals)
+      } else if (priority === 'activities') {
+        const acts = await fetchActs()
+        nextActs = Array.isArray(acts) ? acts : []
+        setLikedActivities(nextActs)
+      } else {
+        const parcoursRes = await fetchParcours()
+        nextParcours = Array.isArray(parcoursRes?.items)
+          ? parcoursRes.items
+          : []
+        setLikedParcours(nextParcours)
+      }
+
+      const [favs, deals, acts, parcoursRes] = await Promise.all([
+        priority === 'flights' ? Promise.resolve(nextFavs) : fetchFlights(),
+        priority === 'deals' ? Promise.resolve(nextDeals) : fetchDeals(),
+        priority === 'activities' ? Promise.resolve(nextActs) : fetchActs(),
+        priority === 'parcours'
+          ? Promise.resolve({ ok: true, items: nextParcours })
+          : fetchParcours(),
       ])
-      setFavorites(favs)
-      setLikedDeals(Array.isArray(deals) ? deals : [])
-      setLikedActivities(Array.isArray(acts) ? acts : [])
-      setLikedParcours(
-        Array.isArray(parcoursRes?.items) ? parcoursRes.items : [],
-      )
+      nextFavs = favs
+      nextDeals = Array.isArray(deals) ? deals : []
+      nextActs = Array.isArray(acts) ? acts : []
+      nextParcours = Array.isArray(parcoursRes?.items) ? parcoursRes.items : []
+      setFavorites(nextFavs)
+      setLikedDeals(nextDeals)
+      setLikedActivities(nextActs)
+      setLikedParcours(nextParcours)
+      if (uid) {
+        writeFavoritesCache(uid, {
+          favorites: nextFavs,
+          likedDeals: nextDeals,
+          likedActivities: nextActs,
+          likedParcours: nextParcours,
+        })
+      }
       if (opts?.resetFilter) setArchiveOpen(false)
     } catch (error) {
       console.error('❌ Erreur refreshData:', error)
       try {
         if (variant === 'alerts') {
           setSavedSearches(await getSavedSearches(true))
-        } else {
-          const [favs, deals, acts, parcoursRes] = await Promise.all([
-            getFavorites(true),
-            getApiClient()
-              .getLikedDeals()
-              .catch(() => [] as LikedDeal[]),
-            getApiClient()
-              .getLikedActivities()
-              .catch(() => [] as LikedActivity[]),
-            getApiClient()
-              .listLikedItineraries()
-              .catch(() => ({ ok: false, items: [] as LikedItinerary[] })),
-          ])
-          setFavorites(favs)
-          setLikedDeals(Array.isArray(deals) ? deals : [])
-          setLikedActivities(Array.isArray(acts) ? acts : [])
-          setLikedParcours(
-            Array.isArray(parcoursRes?.items) ? parcoursRes.items : [],
-          )
-          if (opts?.resetFilter) setArchiveOpen(false)
+        } else if (userId) {
+          const cached = readFavoritesCache(userId)
+          if (cached) {
+            setFavorites(cached.favorites)
+            setLikedDeals(cached.likedDeals)
+            setLikedActivities(cached.likedActivities)
+            setLikedParcours(cached.likedParcours)
+          }
         }
       } catch (fallbackError) {
         console.error('❌ Erreur fallback refreshData:', fallbackError)
@@ -2728,18 +2802,26 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
     }
   }, [])
 
-  // Charger les données au montage / à chaque ouverture d’onglet
+  // Hydrate durable cache sync, then soft refresh (priority tab first).
   useEffect(() => {
     if (!userId) return
+    if (variant === 'favorites') {
+      const cached = readFavoritesCache(userId)
+      if (cached) {
+        setFavorites(cached.favorites)
+        setLikedDeals(cached.likedDeals)
+        setLikedActivities(cached.likedActivities)
+        setLikedParcours(cached.likedParcours)
+      }
+    }
     const timer = setTimeout(() => {
-      // Favoris: force refresh pour tout avoir tout de suite (pas de cache partiel)
-      void refreshData(variant === 'favorites', {
+      void refreshData(false, {
         resetFilter: variant === 'favorites',
       })
     }, 0)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, variant])
+  }, [userId, variant, favoritesKind])
 
   // Fonction pour afficher une notification Toast dans le frontend
   const showNotification = (_title: string, body: string, _searchName: string, _newResults: TripResponse[]) => {

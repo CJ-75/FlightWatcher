@@ -14,6 +14,12 @@ import {
   type ItineraryItem,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../utils/apiClient'
+import {
+  getParcoursCached,
+  getParcoursDetailMemory,
+  hydrateParcoursCatalogMemory,
+  setParcoursDetailMemory,
+} from '../utils/parcoursCache'
 import { getCurrentUser } from '../lib/supabase'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
@@ -100,40 +106,22 @@ export default function ParcoursPublicPage() {
         .catch(() => {})
     }
 
-    // Instant paint if catalogue (session) already embedded steps.
-    try {
-      const raw = sessionStorage.getItem('fw_parcours_catalog_v1')
-      if (raw) {
-        const list = JSON.parse(raw) as Itinerary[]
-        const hit = list.find(
-          (x) => x.slug === itineraryId || x.id === itineraryId,
-        )
-        if (
-          hit &&
-          Array.isArray(hit.itinerary_items) &&
-          hit.itinerary_items.length
-        ) {
-          applyRow(hit)
-          setLoading(false)
-          // Soft revalidate in background
-          void getApiClient()
-            .getParcours(itineraryId)
-            .then((r) => {
-              if (r.ok && r.itinerary) applyRow(r.itinerary as unknown as Itinerary)
-            })
-            .catch(() => {})
-          return
-        }
-      }
-    } catch {
-      /* ignore */
+    // Instant paint from durable catalogue / detail memory.
+    hydrateParcoursCatalogMemory()
+    const mem = getParcoursDetailMemory(itineraryId)
+    if (mem && Array.isArray(mem.itinerary_items) && mem.itinerary_items.length) {
+      applyRow(mem)
+      setLoading(false)
+      void getParcoursCached(itineraryId)
+        .then((row) => applyRow(row))
+        .catch(() => {})
+      return
     }
 
-    void getApiClient()
-      .getParcours(itineraryId)
-      .then((r) => {
-        if (!r.ok || !r.itinerary) throw new Error('not_found')
-        applyRow(r.itinerary as unknown as Itinerary)
+    void getParcoursCached(itineraryId)
+      .then((row) => {
+        setParcoursDetailMemory(row)
+        applyRow(row)
       })
       .catch(() => {
         setItin(null)
