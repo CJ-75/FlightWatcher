@@ -1,5 +1,6 @@
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
+import Svg, { Circle, Path } from 'react-native-svg'
 import { colors } from '../theme'
 import { HeartIcon } from './HeartIcon'
 
@@ -41,56 +42,33 @@ export function SearchTabIcon({ size = 22, color = colors.faint }: IconProps) {
   )
 }
 
-/** Parcours — pin + route (trait). Remplace l’étiquette prix Séjours. */
+/** Explorer / Parcours — boussole losange (L7 double anneau). */
 export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
-  const stroke = Math.max(2, size * 0.1)
-  const pinR = size * 0.22
+  const stroke = Math.max(1.6, size * 0.09)
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* route curve */}
-      <View
-        style={{
-          position: 'absolute',
-          width: size * 0.55,
-          height: size * 0.55,
-          borderLeftWidth: stroke,
-          borderBottomWidth: stroke,
-          borderColor: color,
-          borderBottomLeftRadius: size * 0.45,
-          left: size * 0.18,
-          top: size * 0.22,
-        }}
-      />
-      {/* pin */}
-      <View
-        style={{
-          position: 'absolute',
-          top: size * 0.08,
-          right: size * 0.12,
-          width: pinR * 2,
-          height: pinR * 2.4,
-          alignItems: 'center',
-        }}
-      >
-        <View
-          style={{
-            width: pinR * 2,
-            height: pinR * 2,
-            borderRadius: pinR,
-            borderWidth: stroke,
-            borderColor: color,
-            backgroundColor: 'transparent',
-          }}
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle
+          cx="12"
+          cy="12"
+          r="9"
+          stroke={color}
+          strokeWidth={stroke}
         />
-        <View
-          style={{
-            width: stroke,
-            height: pinR * 0.7,
-            backgroundColor: color,
-            marginTop: -stroke * 0.3,
-          }}
+        <Circle
+          cx="12"
+          cy="12"
+          r="6.2"
+          stroke={color}
+          strokeWidth={stroke * 0.75}
         />
-      </View>
+        <Path
+          d="M15.6 8.4 13.7 13.7 8.4 15.6 10.3 10.3Z"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinejoin="round"
+        />
+      </Svg>
     </View>
   )
 }

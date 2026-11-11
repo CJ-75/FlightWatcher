@@ -163,8 +163,9 @@ function TabIcon({
     case 'parcours':
       return (
         <svg {...common}>
-          <path d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10Z" />
-          <circle cx="12" cy="11" r="2" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="6.2" strokeWidth={1.5} />
+          <path d="M15.6 8.4 13.7 13.7 8.4 15.6 10.3 10.3Z" />
         </svg>
       )
     case 'planner':
