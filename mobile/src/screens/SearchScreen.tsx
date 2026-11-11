@@ -317,6 +317,7 @@ export function SearchScreen() {
 
       let accumulated: EnrichedTripResponse[] = []
       let revealed = false
+      let streamFinished = false
       let nombreRequetes = 0
       let streamError: string | null = null
 
@@ -332,7 +333,15 @@ export function SearchScreen() {
         })
       }
 
-      const revealTimer = setTimeout(revealResults, MIN_LOADING_MS)
+      /** Keep loader until first batch (or done) — don't open empty Results at T+2s. */
+      const tryReveal = () => {
+        if (revealed) return
+        if (accumulated.length === 0 && !streamFinished) return
+        if (Date.now() - startedAt < MIN_LOADING_MS) return
+        revealResults()
+      }
+
+      const revealTimer = setTimeout(tryReveal, MIN_LOADING_MS)
 
       try {
         await getApi().inspireStream(
@@ -344,8 +353,9 @@ export function SearchScreen() {
             }
             if (ev.type === 'batch' && Array.isArray(ev.resultats) && ev.resultats.length) {
               accumulated = mergeStreamTrips(accumulated, ev.resultats)
-              // Buffer during the 2s hold — revealTimer opens Results with TP+Ryanair.
+              // Live buffer during hold; open Results once floor + first batch.
               publishInspireLive(liveToken, accumulated)
+              if (!revealed) tryReveal()
             }
             if (ev.type === 'done') {
               nombreRequetes = ev.nombre_requetes || nombreRequetes
@@ -367,6 +377,8 @@ export function SearchScreen() {
         }
         // Partial stream batches already published — keep them
       }
+
+      streamFinished = true
 
       if (streamError && !accumulated.length) {
         clearTimeout(revealTimer)

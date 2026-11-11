@@ -414,6 +414,7 @@ export function SimpleSearch({
 
       let accumulated: EnrichedTripResponse[] = [];
       let revealed = false;
+      let streamFinished = false;
       let nombreRequetes = 0;
       let streamError: string | null = null;
       /** Hold loading ≥2s so Ryanair can land before first paint. */
@@ -431,8 +432,15 @@ export function SimpleSearch({
         setShowEmpty(accumulated.length === 0);
       };
 
-      // Always reveal at T+2s (even if TP already answered) so Ryanair can catch up
-      const revealTimer = window.setTimeout(revealResults, MIN_LOADING_MS);
+      /** Never paint empty while providers are still racing — keep the skeleton. */
+      const tryReveal = () => {
+        if (revealed || abort.signal.aborted) return;
+        if (accumulated.length === 0 && !streamFinished) return;
+        if (Date.now() - startedAt < MIN_LOADING_MS) return;
+        revealResults();
+      };
+
+      const revealTimer = window.setTimeout(tryReveal, MIN_LOADING_MS);
       const clearRevealTimer = () => window.clearTimeout(revealTimer);
       abort.signal.addEventListener('abort', clearRevealTimer, { once: true });
 
@@ -448,6 +456,8 @@ export function SimpleSearch({
             if (revealed) {
               onResults([...accumulated], searchInfo);
               setShowEmpty(false);
+            } else {
+              tryReveal();
             }
           }
           if (ev.type === 'done') {
@@ -456,6 +466,8 @@ export function SimpleSearch({
         },
         { signal: abort.signal },
       );
+
+      streamFinished = true;
 
       if (streamError) {
         clearRevealTimer();
