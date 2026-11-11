@@ -16,6 +16,7 @@ import {
   isFeaturedToday,
   itineraryBadgeLabel,
   itineraryOccasionEmoji,
+  PARCOURS_CITY_OPTIONS_FR,
   type Itinerary,
   type ItineraryOccasion,
 } from '@flightwatcher/shared'
@@ -32,6 +33,7 @@ import {
 } from '../lib/parcoursCache'
 import { scheduleActivitiesWarmup } from '../lib/activitiesWarmup'
 import { useAuth } from '../context/AuthContext'
+import { CountryFlag } from '../components/CountryFlag'
 import { FwKicker } from '../components/FwKicker'
 import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
@@ -40,7 +42,7 @@ import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, shadow, spacing } from '../theme'
 
 const CITY_LS = 'fw_parcours_city'
-const CITIES = ['paris', 'marseille', 'lyon', 'lisbon', 'porto', 'barcelona', 'rome'] as const
+const CITIES = PARCOURS_CITY_OPTIONS_FR
 
 type Props = {
   headerExtra?: React.ReactNode
@@ -87,7 +89,9 @@ export function ParcoursCatalogScreen({
 
   useEffect(() => {
     void AsyncStorage.getItem(CITY_LS).then((v) => {
-      if (v) setCity(v)
+      if (!v) return
+      const hit = CITIES.find((c) => c.slug === v)
+      setCity(hit?.slug || 'paris')
     })
   }, [])
 
@@ -216,7 +220,11 @@ export function ParcoursCatalogScreen({
     })
   }
 
-  const cityLabel = citySlugDisplayNameFr(city) || city
+  const selectedCity =
+    CITIES.find((c) => c.slug === city) || CITIES[0] || null
+  const cityLabel =
+    selectedCity?.label || citySlugDisplayNameFr(city) || city
+  const cityIso = selectedCity?.iso || 'FR'
   const showSkeleton = loading && items.length === 0
 
   return (
@@ -252,27 +260,41 @@ export function ParcoursCatalogScreen({
           onPress={() => setCityOpen((v) => !v)}
           style={[styles.cityChip, embedded && { marginTop: 12 }]}
         >
+          <CountryFlag iso={cityIso} size={{ width: 18, height: 12 }} />
           <Text style={styles.cityChipText}>
-            Près de toi · {cityLabel} ▾
+            {cityLabel} ▾
           </Text>
         </Pressable>
         {cityOpen ? (
-          <View style={styles.cityMenu}>
+          <ScrollView
+            style={styles.cityMenu}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
             {CITIES.map((c) => (
               <Pressable
-                key={c}
+                key={c.slug}
                 onPress={() => {
-                  setCity(c)
+                  setCity(c.slug)
                   setCityOpen(false)
                 }}
-                style={styles.cityItem}
+                style={[
+                  styles.cityItem,
+                  c.slug === city && styles.cityItemOn,
+                ]}
               >
-                <Text style={styles.cityItemText}>
-                  {citySlugDisplayNameFr(c) || c}
+                <CountryFlag iso={c.iso} size={{ width: 18, height: 12 }} />
+                <Text
+                  style={[
+                    styles.cityItemText,
+                    c.slug === city && styles.cityItemTextOn,
+                  ]}
+                >
+                  {c.label}
                 </Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
 
         {occasion ? (
@@ -393,6 +415,9 @@ const styles = StyleSheet.create({
   },
   cityChip: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#fff',
     borderRadius: 999,
     paddingHorizontal: 14,
@@ -407,14 +432,25 @@ const styles = StyleSheet.create({
   },
   cityMenu: {
     marginTop: 8,
+    maxHeight: 320,
     backgroundColor: '#fff',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.line,
     overflow: 'hidden',
   },
-  cityItem: { paddingHorizontal: 14, paddingVertical: 12 },
+  cityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  cityItemOn: {
+    backgroundColor: colors.primarySoft,
+  },
   cityItemText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
+  cityItemTextOn: { fontFamily: fonts.bold },
   backLink: {
     fontFamily: fonts.bold,
     fontSize: 14,

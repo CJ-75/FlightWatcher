@@ -6,6 +6,7 @@ import {
   isFeaturedToday,
   itineraryOccasionEmoji,
   loadOnboardingPrefs,
+  PARCOURS_CITY_OPTIONS_FR,
   setDepartureCity,
   type Itinerary,
   type ItineraryOccasion,
@@ -18,22 +19,12 @@ import {
   prefetchParcoursDetails,
   setParcoursCatalogMemory,
 } from '../../utils/parcoursCache'
+import { CountryFlag } from '../CountryFlag'
 import { FwKicker } from '../ui/FwKicker'
 import { ItineraryCard } from './ItineraryCard'
 import { CityBanner } from '../onboarding/CityBanner'
 
-const CITY_CHOICES = [
-  'paris',
-  'marseille',
-  'lyon',
-  'nice',
-  'bordeaux',
-  'lisbon',
-  'porto',
-  'barcelona',
-  'rome',
-  'madrid',
-]
+const CITY_CHOICES = PARCOURS_CITY_OPTIONS_FR
 
 const CITY_LS = 'fw_parcours_city'
 
@@ -47,7 +38,8 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
   const navigate = useNavigate()
   const [city, setCity] = useState(() => {
     try {
-      return localStorage.getItem(CITY_LS) || 'paris'
+      const raw = localStorage.getItem(CITY_LS) || 'paris'
+      return CITY_CHOICES.some((c) => c.slug === raw) ? raw : 'paris'
     } catch {
       return 'paris'
     }
@@ -67,13 +59,13 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
 
   useEffect(() => {
     void loadOnboardingPrefs().then((p) => {
-      if (p.departureCitySlug) {
-        setCity(p.departureCitySlug)
-        try {
-          localStorage.setItem(CITY_LS, p.departureCitySlug)
-        } catch {
-          /* ignore */
-        }
+      const slug = p.departureCitySlug
+      if (!slug || !CITY_CHOICES.some((c) => c.slug === slug)) return
+      setCity(slug)
+      try {
+        localStorage.setItem(CITY_LS, slug)
+      } catch {
+        /* ignore */
       }
     })
   }, [])
@@ -160,7 +152,10 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
     }
   }
 
-  const cityLabel = citySlugDisplayNameFr(city) || city
+  const selectedCity =
+    CITY_CHOICES.find((c) => c.slug === city) || CITY_CHOICES[0] || null
+  const cityLabel =
+    selectedCity?.label || citySlugDisplayNameFr(city) || city
 
   return (
     <div className="w-full">
@@ -183,12 +178,11 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
       >
         <CityBanner
           onCityChange={(_codes, label) => {
-            const slug =
+            const hit =
               CITY_CHOICES.find(
-                (c) =>
-                  (citySlugDisplayNameFr(c) || c).toLowerCase() ===
-                  label.toLowerCase(),
-              ) || city
+                (c) => c.label.toLowerCase() === label.toLowerCase(),
+              ) || CITY_CHOICES.find((c) => c.slug === city)
+            const slug = hit?.slug || city
             setCity(slug)
             try {
               localStorage.setItem(CITY_LS, slug)
@@ -197,7 +191,7 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
             }
             void setDepartureCity({
               slug,
-              label,
+              label: hit?.label || label,
               airportCodes: _codes,
             })
           }}
@@ -206,27 +200,29 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
         <button
           type="button"
           onClick={() => setCityOpen((v) => !v)}
-          className="rounded-full border border-line bg-white px-3.5 py-2 lg:px-4 lg:py-2.5 text-sm lg:text-[15px] font-bold text-ink shadow-sm"
+          className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 lg:px-4 lg:py-2.5 text-sm lg:text-[15px] font-bold text-ink shadow-sm"
         >
-          Parcours · {cityLabel} ▾
+          <CountryFlag iso={selectedCity?.iso || 'FR'} className="w-[18px] h-3" />
+          {cityLabel} ▾
         </button>
         {cityOpen ? (
-          <div className="absolute left-0 z-20 mt-2 max-h-64 w-56 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg">
+          <div className="absolute left-0 z-20 mt-2 max-h-72 w-60 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg">
             {CITY_CHOICES.map((c) => (
               <button
-                key={c}
+                key={c.slug}
                 type="button"
                 onClick={() => {
-                  setCity(c)
+                  setCity(c.slug)
                   setCityOpen(false)
                 }}
-                className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold ${
-                  c === city
+                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                  c.slug === city
                     ? 'bg-[color:var(--fw-accent-soft)] text-ink'
                     : 'text-muted hover:bg-canvas'
                 }`}
               >
-                {citySlugDisplayNameFr(c) || c}
+                <CountryFlag iso={c.iso} className="w-[18px] h-3" />
+                {c.label}
               </button>
             ))}
           </div>
