@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -69,10 +70,37 @@ export function CreateParcoursScreen({ navigation }: Props) {
     if (!titleTouched) setTitle(suggestTitle(label))
   }
 
-  const discardAndClose = useCallback(() => {
-    clearParcoursCreateSession()
+  const closeKeepDraft = useCallback(() => {
+    // Brouillon cache conservé — slot unique tant que non publié / abandonné
+    const t = title.trim()
+    if (t && citySlug.trim()) {
+      startParcoursCreateSession({
+        title: t,
+        city_slug: citySlug,
+        cover_image: cover,
+      })
+    }
     if (navigation.canGoBack()) navigation.goBack()
     else navigation.navigate('Main')
+  }, [navigation, title, citySlug, cover])
+
+  const abandonDraft = useCallback(() => {
+    Alert.alert(
+      'Abandonner ce brouillon ?',
+      'Tu pourras ensuite en créer un nouveau. Rien n’a été publié.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Abandonner',
+          style: 'destructive',
+          onPress: () => {
+            clearParcoursCreateSession()
+            if (navigation.canGoBack()) navigation.goBack()
+            else navigation.navigate('Main')
+          },
+        },
+      ],
+    )
   }, [navigation])
 
   const continueToSteps = useCallback(() => {
@@ -86,7 +114,7 @@ export function CreateParcoursScreen({ navigation }: Props) {
       return
     }
     setError(null)
-    // Mémoire seule — rien en base tant que non publié
+    // Cache local — rien en base tant que non publié
     startParcoursCreateSession({
       title: t,
       city_slug: citySlug,
@@ -100,6 +128,7 @@ export function CreateParcoursScreen({ navigation }: Props) {
   if (!allowed) return null
 
   const canContinue = !!title.trim() && !!citySlug
+  const isResume = !!existing
 
   return (
     <View style={styles.root}>
@@ -109,15 +138,21 @@ export function CreateParcoursScreen({ navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={{ paddingTop: insets.top + 8 }}>
-          <Pressable
-            onPress={discardAndClose}
-            hitSlop={14}
-            style={styles.closeHit}
-            accessibilityRole="button"
-            accessibilityLabel="Fermer"
-          >
-            <Text style={styles.close}>Fermer</Text>
-          </Pressable>
+          <View style={styles.topRow}>
+            <Pressable
+              onPress={closeKeepDraft}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+            >
+              <Text style={styles.close}>Fermer</Text>
+            </Pressable>
+            {isResume || !!title.trim() ? (
+              <Pressable onPress={abandonDraft} hitSlop={14}>
+                <Text style={styles.abandon}>Abandonner</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <CreateFlowProgress step={1} />
         </View>
 
@@ -129,10 +164,16 @@ export function CreateParcoursScreen({ navigation }: Props) {
             paddingBottom: insets.bottom + 130,
           }}
         >
-          <Text style={styles.kicker}>CRÉER UN PARCOURS</Text>
-          <Text style={styles.heading}>Nouveau parcours</Text>
+          <Text style={styles.kicker}>
+            {isResume ? 'BROUILLON' : 'CRÉER UN PARCOURS'}
+          </Text>
+          <Text style={styles.heading}>
+            {isResume ? 'Reprendre' : 'Nouveau parcours'}
+          </Text>
           <Text style={styles.lead}>
-            Un titre pour le retrouver, une ville pour le situer.
+            {isResume
+              ? 'Un seul brouillon à la fois — publie ou abandonne pour en créer un autre.'
+              : 'Un titre pour le retrouver, une ville pour le situer.'}
           </Text>
 
           <View style={[styles.card, shadow.soft]}>
@@ -193,15 +234,23 @@ export function CreateParcoursScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  closeHit: {
-    alignSelf: 'flex-start',
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 6,
     paddingHorizontal: spacing.xl,
+    minHeight: 36,
   },
   close: {
     fontFamily: fonts.semibold,
     fontSize: 14,
     color: colors.muted,
+  },
+  abandon: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.danger,
   },
   kicker: {
     fontFamily: fonts.bold,

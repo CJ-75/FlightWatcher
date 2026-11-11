@@ -16,7 +16,6 @@ import {
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { getApi } from '../../lib/client'
 import { colors, fonts, radius, shadow, spacing } from '../../theme'
 
 export type DraftStep = {
@@ -33,7 +32,7 @@ export type DraftStep = {
   lng: number | null
   /** € for this step — 0 = gratuit, null = non renseigné */
   budget_eur: number | null
-  /** Descriptif enrichi (Maps / Wikipedia) — stocké dans meta */
+  /** Conservé pour compat — plus enrichi via Google */
   description: string
 }
 
@@ -43,12 +42,6 @@ type Props = {
   onClose: () => void
   onSave: (step: DraftStep) => void
 }
-
-const MOMENTS: { id: NonNullable<DraftStep['moment']>; label: string }[] = [
-  { id: 'morning', label: 'Matin' },
-  { id: 'afternoon', label: 'Après-midi' },
-  { id: 'evening', label: 'Soir' },
-]
 
 const BUDGET_CHIPS: { label: string; value: number }[] = [
   { label: 'Gratuit', value: 0 },
@@ -83,11 +76,8 @@ export function AddParcoursStepSheet({
 }: Props) {
   const insets = useSafeAreaInsets()
   const [step, setStep] = useState<DraftStep>(emptyStep)
-  const [mapsInput, setMapsInput] = useState('')
-  const [parsing, setParsing] = useState(false)
   const [picking, setPicking] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
-  const [whenOpen, setWhenOpen] = useState(false)
   const [budgetCustom, setBudgetCustom] = useState('')
 
   useEffect(() => {
@@ -102,9 +92,7 @@ export function AddParcoursStepSheet({
         }
       : emptyStep()
     setStep(base)
-    setMapsInput(base.maps_url || '')
     setHint(null)
-    setWhenOpen(!!initial)
     const preset = BUDGET_CHIPS.some((c) => c.value === base.budget_eur)
     setBudgetCustom(
       typeof base.budget_eur === 'number' && !preset && base.budget_eur > 0
@@ -116,47 +104,6 @@ export function AddParcoursStepSheet({
   const patch = useCallback((p: Partial<DraftStep>) => {
     setStep((s) => ({ ...s, ...p }))
   }, [])
-
-  const parseMaps = async (rawUrl?: string) => {
-    const url = (rawUrl ?? mapsInput).trim()
-    if (!url || !/^https?:\/\//i.test(url)) return
-    setParsing(true)
-    setHint(null)
-    try {
-      const res = await getApi().adminParseMapsUrl(url)
-      if (!res.ok) throw new Error('Lien Maps non reconnu')
-      const p = res.parsed || {}
-      const name = String(p.name || '').trim()
-      const description = String(p.description || '').trim()
-      const note = String(p.note || '').trim()
-      // Toujours appliquer l’enrich sur les champs vides (évite closure stale)
-      setStep((s) => ({
-        ...s,
-        maps_url: String(p.url_clean || url),
-        lat: typeof p.lat === 'number' ? p.lat : s.lat,
-        lng: typeof p.lng === 'number' ? p.lng : s.lng,
-        title: s.title.trim() ? s.title : name || s.title,
-        description: s.description.trim() ? s.description : description,
-        note: s.note.trim() ? s.note : note || s.note,
-        kind: 'free',
-      }))
-      if (name && description) {
-        setHint(
-          `${name} — ${description.slice(0, 120)}${description.length > 120 ? '…' : ''}`,
-        )
-      } else if (name) {
-        setHint(`Lieu trouvé : ${name}`)
-      } else if (note) {
-        setHint('Infos préremplies')
-      } else {
-        setHint('Lien enregistré — complète le nom si besoin')
-      }
-    } catch (e) {
-      setHint(e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setParsing(false)
-    }
-  }
 
   const pickPhotos = async () => {
     if (step.photos.length >= 5) {
@@ -193,16 +140,31 @@ export function AddParcoursStepSheet({
 
   const submit = () => {
     const title = step.title.trim()
+    const maps = step.maps_url.trim()
     if (!title) {
-      setHint('Donne un nom à ce lieu')
+      setHint('Indique le nom du lieu')
       return
     }
+    if (step.budget_eur == null || !Number.isFinite(step.budget_eur) || step.budget_eur < 0) {
+      setHint('Choisis un budget')
+      return
+    }
+    if (!maps || !/^https?:\/\//i.test(maps)) {
+      setHint('Colle un lien Maps')
+      return
+    }
+    if (!step.photos.length) {
+      setHint('Ajoute au moins une photo')
+      return
+    }
+    setHint(null)
     onSave({
       ...step,
       title,
-      maps_url: mapsInput.trim() || step.maps_url,
+      maps_url: maps,
       note: step.note.trim(),
       photo: step.photos[0] || step.photo,
+      budget_eur: step.budget_eur,
     })
   }
 
@@ -223,7 +185,11 @@ export function AddParcoursStepSheet({
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Pressable style={styles.backdrop} onPress={dismiss} accessibilityLabel="Fermer" />
+        <Pressable
+          style={styles.backdrop}
+          onPress={dismiss}
+          accessibilityLabel="Fermer"
+        />
         <View
           style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
           onStartShouldSetResponder={() => true}
@@ -252,47 +218,6 @@ export function AddParcoursStepSheet({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.form}
           >
-            {/* 1. Maps first — magical entry */}
-            <View style={[styles.block, shadow.soft]}>
-              <Text style={styles.blockTitle}>Colle le lien Google Maps</Text>
-              <Text style={styles.blockHint}>
-                Pour remplir le nom et la position.
-              </Text>
-              <TextInput
-                value={mapsInput}
-                onChangeText={(v) => {
-                  setMapsInput(v)
-                  const t = v.trim()
-                  if (
-                    /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl|www\.google\.[a-z.]+\/maps)\S+/i.test(
-                      t,
-                    )
-                  ) {
-                    void parseMaps(t)
-                  }
-                }}
-                onEndEditing={() => void parseMaps()}
-                placeholder="https://maps.app.goo.gl/…"
-                placeholderTextColor={colors.faint}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.mapsInput}
-              />
-              <Pressable
-                onPress={() => void parseMaps()}
-                disabled={parsing || !mapsInput.trim()}
-                style={styles.parseLink}
-              >
-                {parsing ? (
-                  <ActivityIndicator color={colors.primary} size="small" />
-                ) : (
-                  <Text style={styles.parseLinkText}>Lire le lien</Text>
-                )}
-              </Pressable>
-              {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-            </View>
-
-            {/* 2. Identity */}
             <View style={[styles.block, shadow.soft]}>
               <Text style={styles.fieldLabel}>Nom du lieu</Text>
               <TextInput
@@ -302,23 +227,18 @@ export function AddParcoursStepSheet({
                 placeholderTextColor={colors.faint}
                 style={styles.titleInput}
               />
-              {step.description ? (
-                <>
-                  <View style={styles.line} />
-                  <Text style={styles.fieldLabel}>Descriptif</Text>
-                  <Text style={styles.descriptionText}>{step.description}</Text>
-                </>
-              ) : null}
+
               <View style={styles.line} />
-              <Text style={styles.fieldLabel}>Note</Text>
+              <Text style={styles.fieldLabel}>Notes</Text>
               <TextInput
                 value={step.note}
                 onChangeText={(t) => patch({ note: t })}
-                placeholder="Info utile (horaires, conseil…)"
+                placeholder="Optionnel — horaires, conseil…"
                 placeholderTextColor={colors.faint}
                 multiline
                 style={styles.noteInput}
               />
+
               <View style={styles.line} />
               <Text style={styles.fieldLabel}>Budget</Text>
               <View style={styles.budgetChips}>
@@ -361,10 +281,21 @@ export function AddParcoursStepSheet({
                   style={styles.budgetCustomInput}
                 />
               </View>
+
+              <View style={styles.line} />
+              <Text style={styles.fieldLabel}>Lien Maps</Text>
+              <TextInput
+                value={step.maps_url}
+                onChangeText={(v) => patch({ maps_url: v })}
+                placeholder="https://maps.app.goo.gl/…"
+                placeholderTextColor={colors.faint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.mapsInput}
+              />
             </View>
 
-            {/* 3. Photos */}
-            <Text style={styles.section}>Photos du lieu</Text>
+            <Text style={styles.section}>Photos</Text>
             <Pressable
               onPress={() => void pickPhotos()}
               disabled={picking}
@@ -407,51 +338,7 @@ export function AddParcoursStepSheet({
               </ScrollView>
             ) : null}
 
-            {/* 4. When — progressive */}
-            <Pressable
-              onPress={() => setWhenOpen((v) => !v)}
-              style={styles.whenToggle}
-            >
-              <Text style={styles.whenToggleText}>
-                {whenOpen ? 'Masquer le moment' : 'Placer dans le parcours (jour / moment)'}
-              </Text>
-            </Pressable>
-            {whenOpen ? (
-              <>
-                <View style={styles.segRow}>
-                  {[0, 1, 2].map((d) => {
-                    const on = step.day_offset === d
-                    return (
-                      <Pressable
-                        key={d}
-                        onPress={() => patch({ day_offset: d })}
-                        style={[styles.seg, on && styles.segOn]}
-                      >
-                        <Text style={[styles.segText, on && styles.segTextOn]}>
-                          Jour {d + 1}
-                        </Text>
-                      </Pressable>
-                    )
-                  })}
-                </View>
-                <View style={styles.segRow}>
-                  {MOMENTS.map((m) => {
-                    const on = step.moment === m.id
-                    return (
-                      <Pressable
-                        key={m.id}
-                        onPress={() => patch({ moment: m.id })}
-                        style={[styles.seg, on && styles.segOn]}
-                      >
-                        <Text style={[styles.segText, on && styles.segTextOn]}>
-                          {m.label}
-                        </Text>
-                      </Pressable>
-                    )
-                  })}
-                </View>
-              </>
-            ) : null}
+            {hint ? <Text style={styles.hint}>{hint}</Text> : null}
           </ScrollView>
 
           <Pressable
@@ -529,42 +416,6 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
-  blockTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.ink,
-  },
-  blockHint: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 3,
-    marginBottom: 10,
-    lineHeight: 17,
-  },
-  mapsInput: {
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: colors.ink,
-    backgroundColor: colors.canvas,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  parseLink: { alignSelf: 'flex-start', marginTop: 10, minHeight: 22 },
-  parseLinkText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: colors.primary,
-  },
-  hint: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.primaryDeep,
-    marginTop: 8,
-  },
   fieldLabel: {
     fontFamily: fonts.semibold,
     fontSize: 11,
@@ -577,13 +428,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     color: colors.ink,
     paddingVertical: 6,
-  },
-  descriptionText: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    lineHeight: 18,
-    color: colors.inkSoft,
-    paddingVertical: 4,
   },
   line: {
     height: StyleSheet.hairlineWidth,
@@ -634,6 +478,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  mapsInput: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.ink,
+    backgroundColor: colors.canvas,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
   section: {
     fontFamily: fonts.semibold,
     fontSize: 12,
@@ -679,25 +534,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  thumbXText: { color: '#fff', fontSize: 13, fontFamily: fonts.bold, marginTop: -1 },
-  whenToggle: { marginTop: 14, marginBottom: 8 },
-  whenToggleText: {
-    fontFamily: fonts.semibold,
+  thumbXText: {
+    color: '#fff',
     fontSize: 13,
-    color: colors.primaryDeep,
+    fontFamily: fonts.bold,
+    marginTop: -1,
   },
-  segRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 8 },
-  seg: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.full,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: colors.line,
+  hint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: 12,
   },
-  segOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  segText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.ink },
-  segTextOn: { color: '#FFF8F3' },
   cta: {
     backgroundColor: colors.primary,
     borderRadius: 18,

@@ -22,10 +22,7 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
-import {
-  clearParcoursCreateSession,
-  getParcoursCreateSession,
-} from '../lib/parcoursCreateSession'
+import { getParcoursCreateSession } from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 import { sumStepBudgets } from './CreateParcoursStepsScreen'
@@ -125,8 +122,8 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         ? `~${itin.budget_estimate_eur} €`
         : null
 
-  const discardAndClose = () => {
-    clearParcoursCreateSession()
+  const closeKeepDraft = () => {
+    // Brouillon cache conservé
     navigation.navigate('Main')
   }
 
@@ -157,9 +154,9 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           ].filter(Boolean) as string[]}
           phaseLabel="Aperçu"
           onBack={() => navigation.navigate('CreateParcoursSteps')}
-          stickyLeft="Non enregistré"
+          stickyLeft="Brouillon en cache"
           stickyCta="Fermer"
-          onStickyCta={discardAndClose}
+          onStickyCta={closeKeepDraft}
         >
           <View style={styles.previewBanner}>
             <CreateFlowProgress
@@ -167,7 +164,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
               style={{ marginHorizontal: 0, marginTop: 0 }}
             />
             <Text style={styles.previewHint}>
-              Aperçu local — rien n’est enregistré tant que tu ne publies pas.
+              Brouillon en cache — rien en base tant que tu ne publies pas.
             </Text>
             <Pressable onPress={() => setMode('card')} style={styles.switchMode}>
               <Text style={styles.switchModeText}>Voir la carte</Text>
@@ -228,7 +225,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         >
           <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Pressable onPress={discardAndClose} hitSlop={12}>
+        <Pressable onPress={closeKeepDraft} hitSlop={12}>
           <Text style={styles.navCta}>Fermer</Text>
         </Pressable>
       </View>
@@ -244,7 +241,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         <Text style={styles.kicker}>LE RENDU</Text>
         <Text style={styles.heading}>Aperçu</Text>
         <Text style={[styles.lead, { marginBottom: 18 }]}>
-          Comme dans la liste Parcours — pas encore en base.
+          Brouillon en cache — pas encore en base.
         </Text>
 
         <ItineraryCard

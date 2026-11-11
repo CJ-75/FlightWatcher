@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -7,14 +7,12 @@ import {
   ScrollView,
   Image,
   Alert,
-  Platform,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   canPublish,
   citySlugDisplayNameFr,
-  groupItemsByDay,
   type Itinerary,
   type ItineraryItem,
 } from '@flightwatcher/shared'
@@ -37,14 +35,6 @@ import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateParcoursSteps'>
-
-const MOMENT_FR: Record<string, string> = {
-  morning: 'Matin',
-  afternoon: 'Après-midi',
-  evening: 'Soir',
-}
-
-const FAB = 48
 
 export function sumStepBudgets(steps: DraftStep[]): number {
   return steps.reduce((acc, s) => {
@@ -126,23 +116,6 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     setSheetOpen(true)
   }, [steps.length])
 
-  const byDay = useMemo(() => {
-    const fake = steps.map(
-      (s, i) =>
-        ({
-          id: s.localId,
-          itinerary_id: 'local',
-          kind: s.kind,
-          position: i,
-          title: s.title,
-          day_offset: s.day_offset,
-          moment: s.moment,
-          photo: s.photo,
-        }) as ItineraryItem,
-    )
-    return groupItemsByDay(fake)
-  }, [steps])
-
   const persistLocal = (nextSteps: DraftStep[]) => {
     setSteps(nextSteps)
     patchParcoursCreateSession({
@@ -175,9 +148,14 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     ])
   }
 
-  const goPreview = () => {
-    persistLocal(steps)
-    navigation.navigate('CreateParcoursPreview')
+  const moveStep = (localId: string, dir: -1 | 1) => {
+    const idx = steps.findIndex((s) => s.localId === localId)
+    const nextIdx = idx + dir
+    if (idx < 0 || nextIdx < 0 || nextIdx >= steps.length) return
+    const next = [...steps]
+    const [item] = next.splice(idx, 1)
+    next.splice(nextIdx, 0, item)
+    persistLocal(next)
   }
 
   const tryPublish = async () => {
@@ -276,8 +254,14 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
         >
           <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Pressable onPress={goPreview} hitSlop={12}>
-          <Text style={styles.navCta}>Aperçu</Text>
+        <Pressable
+          onPress={() => {
+            persistLocal(steps)
+            navigation.navigate('Main')
+          }}
+          hitSlop={12}
+        >
+          <Text style={styles.navMuted}>Fermer</Text>
         </Pressable>
       </View>
       <CreateFlowProgress step={2} />
@@ -285,7 +269,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
       <ScrollView
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
-            paddingBottom: insets.bottom + 120,
+            paddingBottom: insets.bottom + 40,
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -322,52 +306,51 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
               <View style={styles.emptyDot} />
               <Text style={styles.emptyTitle}>Aucun lieu</Text>
               <Text style={styles.emptyBody}>
-                Ajoute les étapes du parcours (Maps, photos, budget).
+                Nom, notes, budget, lien Maps et photos.
               </Text>
               <Text style={styles.emptyCta}>Ajouter un lieu →</Text>
             </Pressable>
           ) : (
-            byDay.map((day) => (
-              <View key={day.dayOffset} style={styles.dayBlock}>
-                <View style={styles.dayHead}>
-                  <View style={styles.dayDot} />
-                  <Text style={styles.dayLabel}>{day.label}</Text>
-                </View>
-                {day.items.map((it) => {
-                  const draft = steps.find((s) => s.localId === it.id)
-                  if (!draft) return null
-                  const budgetLabel =
-                    draft.budget_eur === 0
-                      ? 'Gratuit'
-                      : draft.budget_eur != null
-                        ? `${draft.budget_eur} €`
-                        : null
-                  const meta = [
-                    draft.moment ? MOMENT_FR[draft.moment] : null,
-                    budgetLabel,
-                    draft.maps_url ? 'Maps' : null,
-                    draft.photos.length
-                      ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')
-                  return (
+            <>
+              {steps.map((draft, index) => {
+                const budgetLabel =
+                  draft.budget_eur === 0
+                    ? 'Gratuit'
+                    : draft.budget_eur != null
+                      ? `${draft.budget_eur} €`
+                      : null
+                const meta = [
+                  budgetLabel,
+                  draft.maps_url ? 'Maps' : null,
+                  draft.photos.length
+                    ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+                const canUp = index > 0
+                const canDown = index < steps.length - 1
+                return (
+                  <View
+                    key={draft.localId}
+                    style={[styles.card, shadow.soft]}
+                  >
                     <Pressable
-                      key={draft.localId}
                       onPress={() => {
                         setEditing(draft)
                         setSheetOpen(true)
                       }}
                       onLongPress={() => removeStep(draft.localId)}
                       style={({ pressed }) => [
-                        styles.card,
-                        shadow.soft,
+                        styles.cardMain,
                         pressed && { opacity: 0.92 },
                       ]}
                     >
                       {draft.photo ? (
-                        <Image source={{ uri: draft.photo }} style={styles.thumb} />
+                        <Image
+                          source={{ uri: draft.photo }}
+                          style={styles.thumb}
+                        />
                       ) : (
                         <View style={[styles.thumb, styles.thumbEmpty]}>
                           <Text style={styles.thumbMark}>+</Text>
@@ -382,41 +365,72 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
                             {draft.note}
                           </Text>
                         ) : null}
-                        {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
+                        {meta ? (
+                          <Text style={styles.cardMeta}>{meta}</Text>
+                        ) : null}
                       </View>
                     </Pressable>
-                  )
-                })}
-              </View>
-            ))
-          )}
+                    <View style={styles.reorder}>
+                      <Pressable
+                        onPress={() => moveStep(draft.localId, -1)}
+                        disabled={!canUp}
+                        hitSlop={8}
+                        accessibilityLabel="Monter"
+                        style={[
+                          styles.reorderBtn,
+                          !canUp && styles.reorderBtnOff,
+                        ]}
+                      >
+                        <Text style={styles.reorderArrow}>↑</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => moveStep(draft.localId, 1)}
+                        disabled={!canDown}
+                        hitSlop={8}
+                        accessibilityLabel="Descendre"
+                        style={[
+                          styles.reorderBtn,
+                          !canDown && styles.reorderBtnOff,
+                        ]}
+                      >
+                        <Text style={styles.reorderArrow}>↓</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )
+              })}
 
-          {steps.length > 0 ? (
-            <Pressable
-              onPress={() => void tryPublish()}
-              disabled={saving}
-              style={styles.publish}
-            >
-              <Text style={styles.publishText}>{saving ? '…' : 'Publier'}</Text>
-            </Pressable>
-          ) : null}
+              <Pressable
+                onPress={() => {
+                  setEditing(null)
+                  setSheetOpen(true)
+                }}
+                style={({ pressed }) => [
+                  styles.addStep,
+                  pressed && { opacity: 0.88 },
+                ]}
+              >
+                <Text style={styles.addStepText}>Ajouter une étape</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => void tryPublish()}
+                disabled={saving}
+                style={({ pressed }) => [
+                  styles.publish,
+                  shadow.lift,
+                  saving && { opacity: 0.6 },
+                  pressed && !saving && { transform: [{ scale: 0.985 }] },
+                ]}
+              >
+                <Text style={styles.publishText}>
+                  {saving ? 'Publication…' : 'Publier'}
+                </Text>
+              </Pressable>
+            </>
+          )}
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
-
-      <Pressable
-        onPress={() => {
-          setEditing(null)
-          setSheetOpen(true)
-        }}
-        accessibilityLabel="Ajouter une étape"
-        style={({ pressed }) => [
-          styles.fab,
-          { bottom: insets.bottom + 22 },
-          pressed && { transform: [{ scale: 0.96 }] },
-        ]}
-      >
-        <Text style={styles.fabPlus}>+</Text>
-      </Pressable>
 
       <AddParcoursStepSheet
         visible={sheetOpen}
@@ -463,7 +477,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   navMuted: { fontFamily: fonts.semibold, fontSize: 14, color: colors.muted },
-  navCta: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
   budgetTotal: {
     fontFamily: fonts.semibold,
     fontSize: 13,
@@ -507,32 +520,23 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: 12,
   },
-  dayBlock: { marginBottom: 16 },
-  dayHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  dayDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.primary,
-  },
-  dayLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.muted,
-  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: radius.lg,
-    padding: 11,
+    paddingVertical: 8,
+    paddingLeft: 11,
+    paddingRight: 6,
     marginBottom: 8,
+  },
+  cardMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+    paddingVertical: 3,
   },
   thumb: {
     width: 50,
@@ -565,40 +569,52 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 3,
   },
-  publish: { marginTop: 18, alignSelf: 'center', paddingVertical: 8 },
-  publishText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.muted,
-  },
-  fab: {
-    position: 'absolute',
-    right: spacing.xl,
-    width: FAB,
-    height: FAB,
-    borderRadius: FAB / 2,
-    backgroundColor: colors.primary,
+  reorder: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.primaryDeep,
-        shadowOpacity: 0.32,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 8 },
-      },
-      android: { elevation: 8 },
-      default: {},
-    }),
+    gap: 2,
+    marginLeft: 4,
   },
-  fabPlus: {
+  reorderBtn: {
+    width: 32,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  reorderBtnOff: { opacity: 0.22 },
+  reorderArrow: {
     fontFamily: fonts.bold,
-    fontSize: 28,
-    lineHeight: 30,
+    fontSize: 16,
+    lineHeight: 18,
+    color: colors.ink,
+  },
+  addStep: {
+    marginTop: 4,
+    marginBottom: 8,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    alignItems: 'center',
+  },
+  addStepText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.primary,
+  },
+  publish: {
+    marginTop: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  publishText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
     color: '#fff',
-    includeFontPadding: false,
-    textAlign: 'center',
-    marginTop: Platform.OS === 'ios' ? -1 : -2,
   },
 })

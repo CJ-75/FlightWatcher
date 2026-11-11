@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -12,11 +12,18 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DealsScreen } from './DealsScreen'
 import { ParcoursCatalogScreen } from './ParcoursCatalogScreen'
+import { FabPlusMark } from '../components/FabPlusMark'
 import { TabScreenHeader } from '../components/TabScreenHeader'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { FLOATING_TAB_MARGIN } from '../components/FloatingTabBar'
 import { useAuth } from '../context/AuthContext'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
+import {
+  hasParcoursCreateDraft,
+  hydrateParcoursCreateSession,
+  resumeParcoursCreateRoute,
+  subscribeParcoursCreateSession,
+} from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, spacing } from '../theme'
 
@@ -31,12 +38,20 @@ type Segment = 'parcours' | 'sejours'
 /** Titre fixe + tabs TikTok sous le titre — même header que Planner / Activités. */
 export function ParcoursHubScreen() {
   const [segment, setSegment] = useState<Segment>('parcours')
+  const [, setDraftTick] = useState(0)
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const { user } = useAuth()
   const canCreate = canCreateParcoursOnDevice(user?.email)
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+
+  useEffect(() => {
+    void hydrateParcoursCreateSession()
+    return subscribeParcoursCreateSession(() => setDraftTick((n) => n + 1))
+  }, [])
+
+  const hasDraft = hasParcoursCreateDraft()
 
   const fabPos = useMemo(() => {
     // Tab scene already pads above the dock (tabClearance) — do NOT add dock height again.
@@ -50,6 +65,15 @@ export function ParcoursHubScreen() {
       right: Math.max(12, windowWidth - favoritesCenterX - FAB_SIZE / 2),
     }
   }, [windowWidth])
+
+  const openCreateOrResume = () => {
+    const route = resumeParcoursCreateRoute()
+    if (route === 'CreateParcoursSteps') {
+      navigation.navigate('CreateParcoursSteps')
+    } else {
+      navigation.navigate('CreateParcours')
+    }
+  }
 
   const header = (
     <View style={{ paddingTop: insets.top + 12 }}>
@@ -72,7 +96,9 @@ export function ParcoursHubScreen() {
                 onPress={() => setSegment(s.id)}
                 style={styles.tab}
               >
-                <Text style={[styles.tabText, on && styles.tabTextOn]}>{s.label}</Text>
+                <Text style={[styles.tabText, on && styles.tabTextOn]}>
+                  {s.label}
+                </Text>
                 {on ? <View style={styles.tabUnderline} /> : null}
               </Pressable>
             )
@@ -107,18 +133,18 @@ export function ParcoursHubScreen() {
       </View>
       {canCreate && segment === 'parcours' ? (
         <Pressable
-          onPress={() => navigation.navigate('CreateParcours')}
+          onPress={openCreateOrResume}
           accessibilityRole="button"
-          accessibilityLabel="Créer un parcours"
+          accessibilityLabel={
+            hasDraft ? 'Reprendre le brouillon' : 'Créer un parcours'
+          }
           style={({ pressed }) => [
             styles.fab,
             fabPos,
             pressed && styles.fabPressed,
           ]}
         >
-          <Text style={styles.fabPlus} pointerEvents="none">
-            +
-          </Text>
+          <FabPlusMark size={17} thickness={2.5} />
         </Pressable>
       ) : null}
     </View>
@@ -155,42 +181,25 @@ const styles = StyleSheet.create({
     opacity: 0.88,
     transform: [{ scale: 0.96 }],
   },
-  fabPlus: {
-    fontFamily: fonts.bold,
-    fontSize: 28,
-    lineHeight: 30,
-    color: '#fff',
-    includeFontPadding: false,
-    textAlign: 'center',
-    marginTop: Platform.OS === 'ios' ? -1 : -2,
-  },
   tabs: {
     flexDirection: 'row',
     gap: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
-    marginTop: 14,
-    marginBottom: 4,
+    marginTop: 10,
   },
-  tab: {
-    paddingBottom: 12,
-    position: 'relative',
-  },
+  tab: { paddingBottom: 8 },
   tabText: {
-    fontFamily: fonts.bold,
+    fontFamily: fonts.semibold,
     fontSize: 14,
     color: colors.muted,
   },
-  tabTextOn: {
-    color: colors.ink,
-  },
+  tabTextOn: { color: colors.ink },
   tabUnderline: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: colors.ink,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.primary,
   },
 })
