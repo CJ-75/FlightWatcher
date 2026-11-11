@@ -69,6 +69,18 @@ function mergeCityOpt(
   }
 }
 
+function isFranceCity(c: CityOpt): boolean {
+  if (c.iso === 'FR') return true
+  return (c.country || '').trim().toLowerCase() === 'france'
+}
+
+function compareCityFrFirst(a: CityOpt, b: CityOpt): number {
+  const af = isFranceCity(a) ? 0 : 1
+  const bf = isFranceCity(b) ? 0 : 1
+  if (af !== bf) return af - bf
+  return a.label.localeCompare(b.label, 'fr')
+}
+
 function seedFallbackCities(): CityOpt[] {
   const bySlug = new Map(
     groupAirportsByCity(SEED)
@@ -164,9 +176,7 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
         bySlug.set(opt.slug, mergeCityOpt(bySlug.get(opt.slug), opt))
       }
     }
-    return [...bySlug.values()].sort((a, b) =>
-      a.label.localeCompare(b.label, 'fr'),
-    )
+    return [...bySlug.values()].sort(compareCityFrFirst)
   }, [groups, catalogReady])
 
   // Curated destinations (incl. Dubaï / long-haul) — always shown when query empty
@@ -191,6 +201,8 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
               iso: prev.iso || opt.iso,
             })
           }
+        } else if (isFranceCity(opt)) {
+          bySlug.set(opt.slug, opt)
         }
       }
       for (const g of pickPopularCityGroups(groups, 24)) {
@@ -199,7 +211,19 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
         bySlug.set(opt.slug, opt)
       }
     }
-    return [...bySlug.values()]
+    const list = [...bySlug.values()]
+    const pinned = curated.map((c) => c.slug).filter(Boolean)
+    const pinIdx = new Map(pinned.map((s, i) => [s, i]))
+    return list.sort((a, b) => {
+      const ai = pinIdx.has(a.slug) ? pinIdx.get(a.slug)! : 999
+      const bi = pinIdx.has(b.slug) ? pinIdx.get(b.slug)! : 999
+      if (ai !== bi && (ai < 999 || bi < 999)) {
+        if (ai < 999 && bi < 999) return ai - bi
+        if (ai < 999) return -1
+        if (bi < 999) return 1
+      }
+      return compareCityFrFirst(a, b)
+    })
   }, [groups, catalogReady, curated])
 
   const selected = useMemo(() => {
@@ -228,6 +252,7 @@ export function ActivityCitySelect({ valueSlug, valueLabel, onChange }: Props) {
           countrySlug.includes(q)
         )
       })
+      .sort(compareCityFrFirst)
       .slice(0, 40)
   }, [query, allCities, popular])
 

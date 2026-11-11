@@ -1,42 +1,46 @@
 import React from 'react'
-import { View, Text, StyleSheet } from 'react-native'
-import { colors, fonts } from '../../theme'
+import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
+import { colors, fonts, radius, spacing } from '../../theme'
 
-const LABELS = ['Ville', 'Étapes', 'Aperçu'] as const
+const LABELS = ['L’idée', 'Les lieux', 'Le rendu'] as const
 
 type Props = {
   step: 1 | 2 | 3
+  style?: StyleProp<ViewStyle>
 }
 
-export function CreateFlowProgress({ step }: Props) {
+export function CreateFlowProgress({ step, style }: Props) {
   return (
-    <View style={styles.wrap} accessibilityRole="progressbar">
+    <View
+      style={[styles.wrap, style]}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 1, max: 3, now: step }}
+    >
       {LABELS.map((label, i) => {
         const n = (i + 1) as 1 | 2 | 3
         const done = n < step
         const active = n === step
         return (
-          <View key={label} style={styles.item}>
-            <View
-              style={[
-                styles.dot,
-                done && styles.dotDone,
-                active && styles.dotActive,
-              ]}
-            >
-              {done ? <View style={styles.check} /> : null}
-            </View>
+          <View key={label} style={styles.cell}>
             <Text
               style={[
                 styles.label,
-                (done || active) && styles.labelOn,
+                done && styles.labelDone,
+                active && styles.labelActive,
               ]}
+              numberOfLines={1}
             >
               {label}
             </Text>
-            {i < LABELS.length - 1 ? (
-              <View style={[styles.rail, done && styles.railDone]} />
-            ) : null}
+            <View style={styles.track}>
+              <View
+                style={[
+                  styles.fill,
+                  done && styles.fillDone,
+                  active && styles.fillActive,
+                ]}
+              />
+            </View>
           </View>
         )
       })}
@@ -47,56 +51,55 @@ export function CreateFlowProgress({ step }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 22,
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 14,
+    marginHorizontal: spacing.xl,
+    paddingTop: 12,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.lineStrong,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dotActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
-  },
-  dotDone: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  check: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.primary,
+  cell: {
+    flex: 1,
+    minWidth: 0,
   },
   label: {
-    fontFamily: fonts.semibold,
+    fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.faint,
-    marginLeft: 6,
-    marginRight: 8,
+    marginBottom: 7,
+    textAlign: 'center',
   },
-  labelOn: {
+  labelDone: {
+    fontFamily: fonts.semibold,
+    color: colors.primaryInk,
+  },
+  labelActive: {
+    fontFamily: fonts.bold,
     color: colors.ink,
   },
-  rail: {
-    width: 18,
-    height: 2,
-    borderRadius: 1,
+  track: {
+    height: 3,
+    borderRadius: 2,
     backgroundColor: colors.line,
-    marginRight: 8,
+    overflow: 'hidden',
   },
-  railDone: {
+  fill: {
+    height: '100%',
+    width: 0,
+    borderRadius: 2,
+  },
+  fillDone: {
+    width: '100%',
     backgroundColor: colors.primaryMuted,
+  },
+  fillActive: {
+    width: '100%',
+    backgroundColor: colors.primary,
   },
 })

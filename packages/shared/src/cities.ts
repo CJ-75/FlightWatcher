@@ -1,5 +1,6 @@
 import type { Airport } from './types'
 import { bundledAirports } from './airportsBundle'
+import { parcoursCityLabelFr } from './itineraries/parcoursCities'
 import {
   CITY_IMAGES,
   FALLBACK_CITY_IMAGE,
@@ -548,13 +549,15 @@ const CITY_EN_TO_FR: Record<string, string> = {
   casablanca: 'Casablanca',
 }
 
-function stripAirportNoise(label: string): string {
-  return label
+/** Retire « aéroport / aéroport de / airport » pour n’afficher que la ville. */
+export function stripAirportNoise(label: string): string {
+  return String(label || '')
     .replace(
-      /\b(international|intl|airport|aéroport|aeroport|a[ée]rodrome|aerodrome|airfield|heliport|seaplane|hydravion|terminal)\b/gi,
+      /\b(international|intl\.?|airport|a[ée]roports?|aeroports?|a[ée]rodromes?|aerodromes?|airfield|heliport|seaplane|hydravion|terminal)\b/gi,
       ' ',
     )
-    .replace(/^(de|du|des|d'|of|the)\s+/i, '')
+    // Reste « de X », « d'X », « of X » après suppression du mot aéroport
+    .replace(/^\s*(de|du|des|d['’]|of|the)\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -624,7 +627,7 @@ function cityFromAirportBundle(iata: string): string | null {
       const code = String(a.code || '')
         .trim()
         .toUpperCase()
-      const city = String(a.city || '').trim()
+      const city = stripAirportNoise(String(a.city || a.name || '').trim())
       if (
         code.length === 3 &&
         city &&
@@ -651,6 +654,26 @@ const CITY_SLUG_FR: Record<string, string> = {
   lille: 'Lille',
   strasbourg: 'Strasbourg',
   montpellier: 'Montpellier',
+  rennes: 'Rennes',
+  reims: 'Reims',
+  toulon: 'Toulon',
+  grenoble: 'Grenoble',
+  dijon: 'Dijon',
+  angers: 'Angers',
+  nimes: 'Nîmes',
+  'saint-etienne': 'Saint-Étienne',
+  'le-havre': 'Le Havre',
+  'clermont-ferrand': 'Clermont-Ferrand',
+  'aix-en-provence': 'Aix-en-Provence',
+  brest: 'Brest',
+  tours: 'Tours',
+  amiens: 'Amiens',
+  limoges: 'Limoges',
+  annecy: 'Annecy',
+  perpignan: 'Perpignan',
+  orleans: 'Orléans',
+  rouen: 'Rouen',
+  avignon: 'Avignon',
   lisbon: 'Lisbonne',
   lisbonne: 'Lisbonne',
   porto: 'Porto',
@@ -676,6 +699,8 @@ export function citySlugDisplayNameFr(slug?: string | null): string {
     .toLowerCase()
   if (!key) return ''
   if (CITY_SLUG_FR[key]) return CITY_SLUG_FR[key]
+  const fromParcours = parcoursCityLabelFr(key)
+  if (fromParcours) return fromParcours
   const fromEn = CITY_EN_TO_FR[key]
   if (fromEn) return fromEn
   return key.charAt(0).toUpperCase() + key.slice(1)
@@ -690,7 +715,7 @@ export function cityDisplayNameFr(
   const iata = (parsed[0] || (code || '').trim().toUpperCase())
   if (iata && CITY_FR_BY_IATA[iata]) return CITY_FR_BY_IATA[iata]
   const fromBundle = iata ? cityFromAirportBundle(iata) : null
-  if (fromBundle) return fromBundle
+  if (fromBundle) return stripAirportNoise(fromBundle)
 
   const raw = (label || '').trim()
   if (!raw) {
@@ -700,11 +725,11 @@ export function cityDisplayNameFr(
 
   // city_slug passed as label (e.g. "paris") → référentiel capitalisé
   if (!raw.includes(',')) {
-    const slugKey = normalizeCityKey(raw)
+    const slugKey = normalizeCityKey(stripAirportNoise(raw))
     if (CITY_SLUG_FR[slugKey]) return CITY_SLUG_FR[slugKey]
   }
 
-  // destinationFull is often "Airport, Country"
+  // destinationFull is often "Airport, Country" / « aéroport de X »
   const beforeComma = stripAirportNoise(raw.split(',')[0]?.trim() || raw)
   const candidates = [
     beforeComma,
@@ -996,10 +1021,12 @@ export function resolveTripImageUrl(opts: {
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
   const map = new Map<string, CityAirportGroup>()
   for (const a of filterSearchAirports(airports)) {
-    const city = cityDisplayNameFr(a.code, a.city || a.name)
+    const city = stripAirportNoise(cityDisplayNameFr(a.code, a.city || a.name))
     const country = (a.country || '').trim()
     // Skip unresolved labels that would show as "CDG" / "VKO" in the picker.
     if (!city || looksLikeIataTrigram(city)) continue
+    // Skip leftover airport-only labels (« aéroport », empty after strip)
+    if (/^(a[ée]roport|aeroport|airport)\b/i.test(city)) continue
     const key = `${normalizeCityKey(city)}|${normalizeCityKey(country)}`
     const existing = map.get(key)
     if (existing) {

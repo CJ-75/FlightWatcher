@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ImageBackground,
+  Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -18,12 +18,10 @@ import {
   canCreateParcours,
   cityImageUrl,
   citySlugDisplayNameFr,
-  type ItineraryBudgetBasis,
 } from '@flightwatcher/shared'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../navigation/types'
@@ -38,10 +36,9 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
   const allowed = canCreateParcours({ email: user?.email })
 
   const [title, setTitle] = useState('')
+  const [titleTouched, setTitleTouched] = useState(false)
   const [citySlug, setCitySlug] = useState('paris')
   const [cityLabel, setCityLabel] = useState('Paris')
-  const [budgetEur, setBudgetEur] = useState('')
-  const [budgetBasis, setBudgetBasis] = useState<ItineraryBudgetBasis>('for_two')
   const [loading, setLoading] = useState(!!itineraryId)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +47,12 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     () => cityImageUrl(cityLabel || citySlugDisplayNameFr(citySlug) || citySlug),
     [cityLabel, citySlug],
   )
+
+  const suggestTitle = useCallback((label: string) => {
+    const name = (label || '').trim()
+    if (!name) return ''
+    return `Week-end à ${name}`
+  }, [])
 
   useEffect(() => {
     if (!allowed) navigation.goBack()
@@ -65,18 +68,12 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
         if (!res.ok || !res.itinerary) throw new Error('Parcours introuvable')
         if (cancelled) return
         const it = res.itinerary as Record<string, unknown>
-        setTitle(String(it.title || ''))
+        const loadedTitle = String(it.title || '')
+        setTitle(loadedTitle)
+        setTitleTouched(!!loadedTitle)
         const slug = String(it.city_slug || 'paris')
         setCitySlug(slug)
         setCityLabel(citySlugDisplayNameFr(slug) || slug)
-        const bud = it.budget_estimate_eur
-        setBudgetEur(
-          typeof bud === 'number' && Number.isFinite(bud) ? String(bud) : '',
-        )
-        const basis = it.budget_basis
-        if (basis === 'for_two' || basis === 'per_person') {
-          setBudgetBasis(basis)
-        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur')
       } finally {
@@ -88,14 +85,22 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     }
   }, [itineraryId])
 
+  const onCityChange = (city: { slug?: string; label?: string }) => {
+    const slug = city.slug || 'paris'
+    const label = city.label || city.slug || 'Paris'
+    setCitySlug(slug)
+    setCityLabel(label)
+    if (!titleTouched) setTitle(suggestTitle(label))
+  }
+
   const continueToSteps = useCallback(async () => {
-    if (!citySlug.trim()) {
-      setError('Choisis une ville')
-      return
-    }
     const t = title.trim()
     if (!t) {
-      setError('Ajoute un titre')
+      setError('Donne un titre à ton parcours')
+      return
+    }
+    if (!citySlug.trim()) {
+      setError('Choisis une ville')
       return
     }
     setSaving(true)
@@ -113,23 +118,10 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
         }
         id = String(created.itinerary.id)
       }
-      const budgetNum = budgetEur.trim()
-        ? Number(budgetEur.replace(',', '.'))
-        : null
-      if (
-        budgetEur.trim() &&
-        (budgetNum == null || !Number.isFinite(budgetNum) || budgetNum < 0)
-      ) {
-        setError('Budget invalide')
-        setSaving(false)
-        return
-      }
       const patch = await getApi().adminUpdateParcours(id, {
         title: t,
         city_slug: citySlug,
         cover_image: cover,
-        budget_estimate_eur: budgetNum,
-        budget_basis: budgetNum != null ? budgetBasis : null,
       })
       if (!patch.ok) throw new Error(patch.error || 'Enregistrement impossible')
       navigation.replace('CreateParcoursSteps', { itineraryId: id })
@@ -138,116 +130,82 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false)
     }
-  }, [title, cover, itineraryId, citySlug, budgetEur, budgetBasis, navigation])
+  }, [title, cover, itineraryId, citySlug, navigation])
 
   if (!allowed) return null
+
+  const canContinue = !!title.trim() && !!citySlug
 
   return (
     <View style={styles.root}>
       <ScreenBackground />
-
-      {/* Soft atmosphere — not a dominant hero */}
-      <ImageBackground source={{ uri: cover }} style={styles.ambient} imageStyle={styles.ambientImg}>
-        <LinearGradient
-          colors={['rgba(255,236,224,0.15)', 'rgba(255,249,245,0.92)', colors.canvas]}
-          locations={[0, 0.55, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={{ paddingTop: insets.top + 8, paddingHorizontal: spacing.xl }}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={14}>
-            <Text style={styles.close}>Fermer</Text>
-          </Pressable>
-        </View>
-      </ImageBackground>
-
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <View style={{ paddingTop: insets.top + 8 }}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={14}
+            style={styles.closeHit}
+          >
+            <Text style={styles.close}>Fermer</Text>
+          </Pressable>
+          <CreateFlowProgress step={1} />
+        </View>
+
         <ScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
-            paddingBottom: insets.bottom + 120,
-            marginTop: -28,
+            paddingBottom: insets.bottom + 130,
           }}
         >
-          <CreateFlowProgress step={1} />
-          <Text style={tabScreenHeaderStyles.kicker}>PARCOURS</Text>
-          <Text style={tabScreenHeaderStyles.title}>
-            {itineraryId ? 'Modifier' : 'Nouveau parcours'}
-          </Text>
-          <Text style={[tabScreenHeaderStyles.subtitle, styles.lead]}>
-            Ville, titre et budget sur place.
+          <Text style={styles.kicker}>CRÉER UN PARCOURS</Text>
+          <Text style={styles.heading}>Nouveau parcours</Text>
+          <Text style={styles.lead}>
+            Un titre pour le retrouver, une ville pour le situer.
           </Text>
 
           {loading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
           ) : (
-            <View style={[styles.panel, shadow.soft]}>
-              <Text style={styles.label}>Ville</Text>
-              <ActivityCityPicker
-                valueSlug={citySlug}
-                valueLabel={cityLabel}
-                onChange={(city) => {
-                  setCitySlug(city.slug || 'paris')
-                  setCityLabel(city.label || city.slug || 'Paris')
-                }}
-              />
-
-              <View style={styles.sep} />
-
-              <Text style={styles.label}>Titre</Text>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Ex. Week-end à Lyon"
-                placeholderTextColor={colors.faint}
-                style={styles.titleInput}
-              />
-
-              <View style={styles.sep} />
-
-              <Text style={styles.label}>Budget sur place</Text>
-              <View style={styles.budgetRow}>
-                <View style={styles.budgetInputWrap}>
-                  <TextInput
-                    value={budgetEur}
-                    onChangeText={setBudgetEur}
-                    placeholder="120"
-                    placeholderTextColor={colors.faint}
-                    keyboardType="decimal-pad"
-                    style={styles.budgetInput}
-                  />
-                  <Text style={styles.budgetSuffix}>€</Text>
-                </View>
-                <View style={styles.basisRow}>
-                  {(
-                    [
-                      { id: 'for_two' as const, label: 'Pour 2' },
-                      { id: 'per_person' as const, label: 'Par pers.' },
-                    ] as const
-                  ).map((b) => {
-                    const on = budgetBasis === b.id
-                    return (
-                      <Pressable
-                        key={b.id}
-                        onPress={() => setBudgetBasis(b.id)}
-                        style={[styles.basisChip, on && styles.basisChipOn]}
-                      >
-                        <Text
-                          style={[styles.basisText, on && styles.basisTextOn]}
-                        >
-                          {b.label}
-                        </Text>
-                      </Pressable>
-                    )
-                  })}
-                </View>
+            <>
+              <View style={[styles.card, shadow.soft]}>
+                <Text style={styles.q}>Titre</Text>
+                <TextInput
+                  value={title}
+                  onChangeText={(v) => {
+                    setTitle(v)
+                    setTitleTouched(true)
+                  }}
+                  placeholder="Ex. Week-end à Lyon"
+                  placeholderTextColor={colors.faint}
+                  style={styles.titleInput}
+                />
               </View>
-              <Text style={styles.budgetHint}>Optionnel — affiché sur la fiche</Text>
-            </View>
+
+              <View style={[styles.card, shadow.soft]}>
+                <View style={styles.coverWrap}>
+                  <Image source={{ uri: cover }} style={styles.cover} />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(18,10,6,0.72)']}
+                    style={styles.coverGrad}
+                  />
+                  <Text style={styles.coverLabel} numberOfLines={1}>
+                    {cityLabel}
+                  </Text>
+                </View>
+                <Text style={styles.q}>Ville</Text>
+                <ActivityCityPicker
+                  valueSlug={citySlug}
+                  valueLabel={cityLabel}
+                  onChange={onCityChange}
+                  includeParcoursFrCities
+                />
+              </View>
+            </>
           )}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -256,18 +214,18 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
         <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
           <Pressable
             onPress={() => void continueToSteps()}
-            disabled={saving || loading}
+            disabled={saving || loading || !canContinue}
             style={({ pressed }) => [
               styles.cta,
               shadow.lift,
-              (saving || loading) && { opacity: 0.7 },
-              pressed && { transform: [{ scale: 0.985 }] },
+              (!canContinue || saving || loading) && { opacity: 0.55 },
+              pressed && canContinue && { transform: [{ scale: 0.985 }] },
             ]}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.ctaText}>Continuer → étapes</Text>
+              <Text style={styles.ctaText}>Ajouter les lieux</Text>
             )}
           </Pressable>
         </View>
@@ -278,100 +236,87 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  ambient: {
-    height: 148,
-    width: '100%',
+  closeHit: {
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+    paddingHorizontal: spacing.xl,
   },
-  ambientImg: { resizeMode: 'cover' },
   close: {
     fontFamily: fonts.semibold,
-    fontSize: 15,
+    fontSize: 14,
+    color: colors.muted,
+  },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  heading: {
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    letterSpacing: -0.6,
+    lineHeight: 30,
     color: colors.ink,
   },
-  lead: { marginBottom: 20 },
-  panel: {
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderRadius: radius.xl,
-    padding: 18,
-  },
-  label: {
-    fontFamily: fonts.semibold,
-    fontSize: 12,
+  lead: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.muted,
-    marginBottom: 10,
-    letterSpacing: 0.2,
+    marginTop: 4,
+    marginBottom: 16,
   },
-  sep: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.line,
-    marginVertical: 18,
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    borderRadius: radius.xl,
+    padding: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  coverWrap: {
+    height: 132,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    marginBottom: 14,
+    backgroundColor: colors.primaryMuted,
+  },
+  cover: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  coverGrad: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  coverLabel: {
+    position: 'absolute',
+    left: 14,
+    bottom: 12,
+    right: 14,
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    letterSpacing: -0.4,
+    color: '#fff',
+  },
+  q: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+    marginBottom: 10,
   },
   titleInput: {
     fontFamily: fonts.extrabold,
-    fontSize: 22,
-    letterSpacing: -0.5,
-    color: colors.ink,
-    paddingVertical: 4,
-  },
-  budgetRow: {
-    gap: 12,
-  },
-  budgetInputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.canvas,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
-  budgetInput: {
-    flex: 1,
-    fontFamily: fonts.extrabold,
-    fontSize: 24,
-    letterSpacing: -0.5,
-    color: colors.ink,
-    paddingVertical: 10,
-  },
-  budgetSuffix: {
-    fontFamily: fonts.bold,
     fontSize: 18,
-    color: colors.muted,
-  },
-  basisRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  basisChip: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.canvas,
-    alignItems: 'center',
-  },
-  basisChipOn: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-  },
-  basisText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
+    letterSpacing: -0.3,
     color: colors.ink,
-  },
-  basisTextOn: { color: '#FFF8F3' },
-  budgetHint: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.faint,
-    marginTop: 10,
+    paddingVertical: 2,
   },
   error: {
-    marginTop: 16,
+    marginTop: 8,
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.danger,
   },
   footer: {
@@ -380,13 +325,13 @@ const styles = StyleSheet.create({
   },
   cta: {
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingVertical: 17,
+    borderRadius: 18,
+    paddingVertical: 15,
     alignItems: 'center',
   },
   ctaText: {
     fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 15,
     color: '#fff',
   },
 })

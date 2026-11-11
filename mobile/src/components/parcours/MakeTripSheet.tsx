@@ -16,6 +16,7 @@ import {
   citySlugDisplayNameFr,
   encodeAirportCodes,
   generateDatesFromPreset,
+  isParcoursCityWithoutFlightHub,
   parseAirportCodes,
   partyModeDefaultPassengers,
   suggestedParcoursDates,
@@ -76,6 +77,7 @@ export function MakeTripSheet({
     citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
+  const noFlightHub = isParcoursCityWithoutFlightHub(itinerary.city_slug)
 
   const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
@@ -86,7 +88,10 @@ export function MakeTripSheet({
     setSaving(true)
     try {
       const api = getApi()
-      const arrival = arrivalCodesForCitySlug(itinerary.city_slug)
+      // Ville Parcours sans hub : ne pas inventer d’IATA (arrivée manuelle plus tard).
+      const arrival = noFlightHub
+        ? null
+        : arrivalCodesForCitySlug(itinerary.city_slug)
       const trip = await api.createPlannedTrip({
         name: itinerary.title || `Week-end ${cityLabel}`,
         departure_airport: dep,
@@ -161,6 +166,12 @@ export function MakeTripSheet({
             {itinerary.title}
             {cityLabel ? ` · ${cityLabel}` : ''}
           </Text>
+          {noFlightHub ? (
+            <Text style={styles.hubHint}>
+              Pas d’aéroport direct pour {cityLabel} — le voyage est créé sans
+              arrivée ; tu pourras la renseigner ensuite.
+            </Text>
+          ) : null}
 
           <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
             <Text style={styles.label}>Qui voyage ?</Text>
@@ -282,6 +293,13 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: fonts.extrabold, fontSize: 20, color: colors.ink },
   sub: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted, marginBottom: 8 },
+  hubHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.primaryInk,
+    lineHeight: 17,
+    marginBottom: 10,
+  },
   label: {
     marginTop: 10,
     fontFamily: fonts.bold,

@@ -22,7 +22,6 @@ import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
 import { getApi } from '../lib/client'
@@ -138,12 +137,15 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
           onStickyCta={done}
         >
           <View style={styles.previewBanner}>
-            <CreateFlowProgress step={3} />
+            <CreateFlowProgress
+              step={3}
+              style={{ marginHorizontal: 0, marginTop: 0 }}
+            />
             <Text style={styles.previewHint}>
-              Voici le rendu fiche — comme dans Parcours.
+              Aperçu du parcours tel qu’il sera affiché.
             </Text>
             <Pressable onPress={() => setMode('card')} style={styles.switchMode}>
-              <Text style={styles.switchModeText}>Voir la carte catalogue</Text>
+              <Text style={styles.switchModeText}>Voir la carte</Text>
             </Pressable>
           </View>
 
@@ -210,6 +212,7 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
           <Text style={styles.navCta}>Terminer</Text>
         </Pressable>
       </View>
+      <CreateFlowProgress step={3} />
 
       <ScrollView
         contentContainerStyle={{
@@ -218,11 +221,10 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <CreateFlowProgress step={3} />
-        <Text style={tabScreenHeaderStyles.kicker}>APERÇU</Text>
-        <Text style={tabScreenHeaderStyles.title}>Comme au catalogue</Text>
-        <Text style={[tabScreenHeaderStyles.subtitle, { marginBottom: 20 }]}>
-          La carte que les voyageurs verront.
+        <Text style={styles.kicker}>LE RENDU</Text>
+        <Text style={styles.heading}>Aperçu</Text>
+        <Text style={[styles.lead, { marginBottom: 18 }]}>
+          Comme dans la liste Parcours.
         </Text>
 
         <ItineraryCard
@@ -255,88 +257,111 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    marginBottom: 8,
+    marginBottom: 2,
+    minHeight: 36,
   },
-  navMuted: { fontFamily: fonts.semibold, fontSize: 15, color: colors.muted },
-  navCta: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  heading: {
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    letterSpacing: -0.6,
+    lineHeight: 30,
+    color: colors.ink,
+  },
+  lead: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.muted,
+    marginTop: 4,
+  },
+  navMuted: { fontFamily: fonts.semibold, fontSize: 14, color: colors.muted },
+  navCta: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
   previewBanner: {
     marginBottom: 8,
   },
   previewHint: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
     marginBottom: 8,
   },
-  switchMode: { alignSelf: 'flex-start', marginBottom: 18 },
+  switchMode: { alignSelf: 'flex-start', marginBottom: 16 },
   switchModeText: {
     fontFamily: fonts.semibold,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.primary,
   },
   emptySteps: {
     fontFamily: fonts.medium,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.muted,
   },
-  dayBlock: { marginBottom: 22 },
+  dayBlock: { marginBottom: 18 },
   dayLabel: {
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   stepCard: {
     backgroundColor: 'rgba(255,255,255,0.96)',
     borderRadius: radius.lg,
-    padding: 14,
-    marginBottom: 10,
+    padding: 12,
+    marginBottom: 8,
   },
-  gallery: { marginBottom: 10 },
+  gallery: { marginBottom: 8 },
   galleryImg: {
-    width: 88,
-    height: 88,
-    borderRadius: 14,
+    width: 80,
+    height: 80,
+    borderRadius: 12,
     marginRight: 8,
     backgroundColor: colors.primaryMuted,
   },
   stepTitle: {
     fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
   },
   stepMeta: {
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
-    marginTop: 4,
+    marginTop: 3,
   },
   stepNote: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.inkSoft,
-    marginTop: 8,
-    lineHeight: 20,
+    marginTop: 6,
+    lineHeight: 18,
   },
   stepMaps: {
     fontFamily: fonts.semibold,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.primaryDeep,
-    marginTop: 10,
+    marginTop: 8,
   },
   cta: {
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingVertical: 17,
+    borderRadius: 18,
+    paddingVertical: 15,
     alignItems: 'center',
   },
-  ctaText: { fontFamily: fonts.bold, fontSize: 16, color: '#fff' },
+  ctaText: { fontFamily: fonts.bold, fontSize: 15, color: '#fff' },
   error: {
     fontFamily: fonts.medium,
-    fontSize: 15,
+    fontSize: 13,
     color: colors.danger,
     marginBottom: 12,
   },
-  link: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
+  link: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
 })

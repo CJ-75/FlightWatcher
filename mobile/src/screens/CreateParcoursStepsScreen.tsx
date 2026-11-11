@@ -25,7 +25,6 @@ import {
 } from '../components/parcours/AddParcoursStepSheet'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
-import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../navigation/types'
@@ -48,6 +47,11 @@ function itemToDraft(it: ItineraryItem, index: number): DraftStep {
     : it.photo
       ? [String(it.photo)]
       : []
+  const budgetRaw = meta.budget_eur
+  const budget_eur =
+    typeof budgetRaw === 'number' && Number.isFinite(budgetRaw)
+      ? budgetRaw
+      : 0
   return {
     localId: it.id || `srv-${index}`,
     kind: it.kind === 'place' ? 'place' : 'free',
@@ -60,7 +64,15 @@ function itemToDraft(it: ItineraryItem, index: number): DraftStep {
     maps_url: String(meta.maps_url || ''),
     lat: typeof meta.lat === 'number' ? meta.lat : null,
     lng: typeof meta.lng === 'number' ? meta.lng : null,
+    budget_eur,
   }
+}
+
+function sumStepBudgets(steps: DraftStep[]): number {
+  return steps.reduce((acc, s) => {
+    const n = typeof s.budget_eur === 'number' ? s.budget_eur : 0
+    return acc + (Number.isFinite(n) && n >= 0 ? n : 0)
+  }, 0)
 }
 
 function draftToPayload(steps: DraftStep[]) {
@@ -71,6 +83,10 @@ function draftToPayload(steps: DraftStep[]) {
     if (s.lat != null) meta.lat = s.lat
     if (s.lng != null) meta.lng = s.lng
     if (photos.length) meta.photos = photos
+    meta.budget_eur =
+      typeof s.budget_eur === 'number' && Number.isFinite(s.budget_eur)
+        ? s.budget_eur
+        : 0
     return {
       kind: 'free' as const,
       title: s.title,
@@ -122,6 +138,17 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     void load()
   }, [load])
 
+  // First visit with no steps → open the add sheet (Maps-first).
+  useEffect(() => {
+    if (loading || error) return
+    if (steps.length > 0) return
+    const t = setTimeout(() => {
+      setEditing(null)
+      setSheetOpen(true)
+    }, 450)
+    return () => clearTimeout(t)
+  }, [loading, error, steps.length])
+
   const byDay = useMemo(() => {
     const fake = steps.map(
       (s, i) =>
@@ -143,8 +170,11 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     setSaving(true)
     setError(null)
     try {
+      const total = sumStepBudgets(nextSteps)
       const res = await getApi().adminUpdateParcours(itineraryId, {
         items: draftToPayload(nextSteps),
+        budget_estimate_eur: total,
+        budget_basis: 'for_two',
       })
       if (!res.ok) throw new Error(res.error || 'Enregistrement impossible')
       if (res.itinerary) setItin(res.itinerary as unknown as Itinerary)
@@ -234,7 +264,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   if (!allowed) return null
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 4 }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
       <ScreenBackground />
       <View style={styles.topBar}>
         <Pressable
@@ -247,6 +277,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
           <Text style={styles.navCta}>{saving ? '…' : 'Aperçu'}</Text>
         </Pressable>
       </View>
+      <CreateFlowProgress step={2} />
 
       {loading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 48 }} />
@@ -258,25 +289,45 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
           }}
           showsVerticalScrollIndicator={false}
         >
-          <CreateFlowProgress step={2} />
-          <Text style={tabScreenHeaderStyles.kicker}>ÉTAPES</Text>
-          <Text style={tabScreenHeaderStyles.title} numberOfLines={2}>
+          <Text style={styles.kicker}>LES LIEUX</Text>
+          <Text style={styles.heading} numberOfLines={2}>
             {itin?.title || 'Parcours'}
           </Text>
-          <Text style={[tabScreenHeaderStyles.subtitle, { marginBottom: 22 }]}>
-            Maps, photos et une courte description par lieu.
+          <Text
+            style={[
+              styles.lead,
+              { marginBottom: steps.length > 0 ? 6 : 22 },
+            ]}
+          >
+            Les endroits à faire, dans l’ordre.
           </Text>
+          {steps.length > 0 ? (
+            <Text style={styles.budgetTotal}>
+              Budget total ·{' '}
+              {(() => {
+                const total = sumStepBudgets(steps)
+                return total === 0 ? 'Gratuit' : `${total} €`
+              })()}
+            </Text>
+          ) : null}
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           {steps.length === 0 ? (
-            <View style={[styles.empty, shadow.soft]}>
+            <Pressable
+              onPress={() => {
+                setEditing(null)
+                setSheetOpen(true)
+              }}
+              style={[styles.empty, shadow.soft]}
+            >
               <View style={styles.emptyDot} />
-              <Text style={styles.emptyTitle}>Ajoute une première étape</Text>
+              <Text style={styles.emptyTitle}>Aucun lieu</Text>
               <Text style={styles.emptyBody}>
-                Lien Google Maps, photos, et une petite description.
+                Ajoute les étapes du parcours (Maps, photos, budget).
               </Text>
-            </View>
+              <Text style={styles.emptyCta}>Ajouter un lieu →</Text>
+            </Pressable>
           ) : (
             byDay.map((day) => (
               <View key={day.dayOffset} style={styles.dayBlock}>
@@ -287,8 +338,15 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
                 {day.items.map((it) => {
                   const draft = steps.find((s) => s.localId === it.id)
                   if (!draft) return null
+                  const budgetLabel =
+                    draft.budget_eur === 0
+                      ? 'Gratuit'
+                      : draft.budget_eur != null
+                        ? `${draft.budget_eur} €`
+                        : null
                   const meta = [
                     draft.moment ? MOMENT_FR[draft.moment] : null,
+                    budgetLabel,
                     draft.maps_url ? 'Maps' : null,
                     draft.photos.length
                       ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
@@ -340,13 +398,13 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
               onPress={() => void goPreview()}
               style={[styles.previewCta, shadow.lift]}
             >
-              <Text style={styles.previewCtaText}>Voir le rendu</Text>
+              <Text style={styles.previewCtaText}>Aperçu</Text>
             </Pressable>
           ) : null}
 
           {steps.length > 0 ? (
             <Pressable onPress={() => void tryPublish()} style={styles.publish}>
-              <Text style={styles.publishText}>Publier (optionnel)</Text>
+              <Text style={styles.publishText}>Publier</Text>
             </Pressable>
           ) : null}
         </ScrollView>
@@ -390,67 +448,106 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    marginBottom: 10,
+    marginBottom: 2,
+    minHeight: 36,
   },
-  navMuted: { fontFamily: fonts.semibold, fontSize: 15, color: colors.muted },
-  navCta: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
-  error: { color: colors.danger, fontFamily: fonts.medium, marginBottom: 12 },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  heading: {
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    letterSpacing: -0.6,
+    lineHeight: 30,
+    color: colors.ink,
+  },
+  lead: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.muted,
+    marginTop: 4,
+  },
+  navMuted: { fontFamily: fonts.semibold, fontSize: 14, color: colors.muted },
+  navCta: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
+  budgetTotal: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.ink,
+    marginBottom: 20,
+  },
+  error: {
+    color: colors.danger,
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    marginBottom: 12,
+  },
   empty: {
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: radius.xl,
-    padding: 22,
+    padding: 18,
     alignItems: 'flex-start',
   },
   emptyDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: colors.primary,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   emptyTitle: {
     fontFamily: fonts.bold,
-    fontSize: 17,
+    fontSize: 15,
     color: colors.ink,
   },
   emptyBody: {
     fontFamily: fonts.medium,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
-    marginTop: 6,
-    lineHeight: 20,
+    marginTop: 4,
+    lineHeight: 18,
   },
-  dayBlock: { marginBottom: 18 },
+  emptyCta: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.primary,
+    marginTop: 12,
+  },
+  dayBlock: { marginBottom: 16 },
   dayHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   dayDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
     backgroundColor: colors.primary,
   },
   dayLabel: {
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: radius.lg,
-    padding: 12,
-    marginBottom: 10,
+    padding: 11,
+    marginBottom: 8,
   },
   thumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     backgroundColor: colors.primaryMuted,
   },
   thumbEmpty: {
@@ -459,41 +556,41 @@ const styles = StyleSheet.create({
   },
   thumbMark: {
     fontFamily: fonts.bold,
-    fontSize: 20,
+    fontSize: 17,
     color: colors.primaryInk,
     opacity: 0.45,
   },
   cardBody: { flex: 1, minWidth: 0 },
-  cardTitle: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
+  cardTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.ink },
   cardNote: {
     fontFamily: fonts.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.inkSoft,
-    marginTop: 3,
-    lineHeight: 18,
+    marginTop: 2,
+    lineHeight: 17,
   },
   cardMeta: {
     fontFamily: fonts.medium,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.muted,
-    marginTop: 4,
+    marginTop: 3,
   },
   previewCta: {
-    marginTop: 20,
+    marginTop: 18,
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingVertical: 16,
+    borderRadius: 18,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   previewCtaText: {
     fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 15,
     color: '#fff',
   },
-  publish: { marginTop: 14, alignSelf: 'center', paddingVertical: 10 },
+  publish: { marginTop: 12, alignSelf: 'center', paddingVertical: 8 },
   publishText: {
     fontFamily: fonts.semibold,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.muted,
   },
   fab: {

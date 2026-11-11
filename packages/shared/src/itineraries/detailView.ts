@@ -4,6 +4,11 @@ import {
   ITINERARY_OCCASION_LABELS,
   formatDurationMinutes,
 } from './labels'
+import {
+  arrivalCodesForParcoursCitySlug,
+  isParcoursCityWithoutFlightHub,
+  parcoursCityLabelFr,
+} from './parcoursCities'
 
 export type ItineraryMarkerTile = {
   id: string
@@ -108,6 +113,7 @@ export function itineraryInfoChips(it: Itinerary): string[] {
 
 export function itineraryBudgetLabel(it: Itinerary): string | null {
   if (it.budget_estimate_eur == null) return null
+  if (it.budget_estimate_eur === 0) return 'Gratuit'
   const basis =
     it.budget_basis === 'for_two'
       ? 'pour deux'
@@ -214,13 +220,8 @@ export function stepKindLabel(kind: string): string {
   return 'À pied'
 }
 
-/** Rough city_slug → arrival airport codes for Planner create. */
+/** Rough city_slug → arrival airport codes for Planner create (EU hubs + FR). */
 export const PARCOURS_CITY_ARRIVAL: Record<string, string> = {
-  paris: 'CDG,ORY',
-  marseille: 'MRS',
-  lyon: 'LYS',
-  nice: 'NCE',
-  bordeaux: 'BOD',
   lisbon: 'LIS',
   lisbonne: 'LIS',
   porto: 'OPO',
@@ -228,12 +229,39 @@ export const PARCOURS_CITY_ARRIVAL: Record<string, string> = {
   barcelone: 'BCN',
   rome: 'FCO,CIA',
   madrid: 'MAD',
+  milan: 'MXP,LIN',
+  amsterdam: 'AMS',
+  berlin: 'BER',
+  bruxelles: 'BRU',
+  brussels: 'BRU',
+  londres: 'STN,LTN,LGW',
+  london: 'STN,LTN,LGW',
 }
 
 export function arrivalCodesForCitySlug(slug?: string | null): string | null {
   if (!slug) return null
   const key = slug.trim().toLowerCase()
+  // Parcours FR (top 30) — peut être null si pas de hub
+  const fromFr = arrivalCodesForParcoursCitySlug(key)
+  if (fromFr) return fromFr
+  if (isParcoursCityWithoutFlightHub(key)) return null
   return PARCOURS_CITY_ARRIVAL[key] || null
+}
+
+/** Affichage city_slug parcours — FR top 30 puis fallback générique. */
+export function resolveParcoursCityDisplayName(
+  slug?: string | null,
+  fallbackFn?: (s: string) => string,
+): string {
+  const key = String(slug || '')
+    .trim()
+    .toLowerCase()
+  if (!key) return ''
+  return (
+    parcoursCityLabelFr(key) ||
+    (fallbackFn ? fallbackFn(key) : '') ||
+    key.charAt(0).toUpperCase() + key.slice(1)
+  )
 }
 
 /** Next weekend ISO dates, or featured window start if present. */

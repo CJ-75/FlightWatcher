@@ -62,17 +62,29 @@ export function resolveActivityCitySlug(opts: {
 
 /**
  * Seed / fallback villes Activités (avant chargement du catalogue vols).
+ * France d’abord, puis hubs EU / long-courrier.
  * L’UI utilise groupAirportsByCity(catalogue) pour la liste complète.
  */
 const ACTIVITY_CITY_LABELS_FR = [
   'Paris',
+  'Lyon',
+  'Marseille',
+  'Nice',
+  'Bordeaux',
+  'Toulouse',
+  'Nantes',
+  'Montpellier',
+  'Strasbourg',
+  'Lille',
+  'Rennes',
+  'Toulon',
+  'Ajaccio',
+  'Bastia',
   ...PREFERRED_CITY_NAMES,
   'Amsterdam',
   'Berlin',
   'Venise',
   'Florence',
-  'Nice',
-  'Lyon',
   'Bruxelles',
   'Athènes',
   'Cracovie',

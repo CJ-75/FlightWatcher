@@ -30,6 +30,8 @@ export type DraftStep = {
   maps_url: string
   lat: number | null
   lng: number | null
+  /** € for this step — 0 = gratuit, null = non renseigné */
+  budget_eur: number | null
 }
 
 type Props = {
@@ -41,8 +43,15 @@ type Props = {
 
 const MOMENTS: { id: NonNullable<DraftStep['moment']>; label: string }[] = [
   { id: 'morning', label: 'Matin' },
-  { id: 'afternoon', label: 'Midi' },
+  { id: 'afternoon', label: 'Après-midi' },
   { id: 'evening', label: 'Soir' },
+]
+
+const BUDGET_CHIPS: { label: string; value: number }[] = [
+  { label: 'Gratuit', value: 0 },
+  { label: '15 €', value: 15 },
+  { label: '30 €', value: 30 },
+  { label: '50 €', value: 50 },
 ]
 
 function emptyStep(): DraftStep {
@@ -58,6 +67,7 @@ function emptyStep(): DraftStep {
     maps_url: '',
     lat: null,
     lng: null,
+    budget_eur: 0,
   }
 }
 
@@ -73,15 +83,29 @@ export function AddParcoursStepSheet({
   const [parsing, setParsing] = useState(false)
   const [picking, setPicking] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
+  const [whenOpen, setWhenOpen] = useState(false)
+  const [budgetCustom, setBudgetCustom] = useState('')
 
   useEffect(() => {
     if (!visible) return
     const base = initial
-      ? { ...initial, photos: [...(initial.photos || [])] }
+      ? {
+          ...initial,
+          photos: [...(initial.photos || [])],
+          budget_eur:
+            typeof initial.budget_eur === 'number' ? initial.budget_eur : 0,
+        }
       : emptyStep()
     setStep(base)
     setMapsInput(base.maps_url || '')
     setHint(null)
+    setWhenOpen(!!initial)
+    const preset = BUDGET_CHIPS.some((c) => c.value === base.budget_eur)
+    setBudgetCustom(
+      typeof base.budget_eur === 'number' && !preset && base.budget_eur > 0
+        ? String(base.budget_eur)
+        : '',
+    )
   }, [visible, initial])
 
   const patch = useCallback((p: Partial<DraftStep>) => {
@@ -105,7 +129,7 @@ export function AddParcoursStepSheet({
         title: step.title.trim() || name || step.title,
         kind: 'free',
       })
-      setHint(name ? `Lieu : ${name}` : 'Lien Maps enregistré')
+      setHint(name ? `Lieu trouvé : ${name}` : 'Lien enregistré')
     } catch (e) {
       setHint(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -115,14 +139,17 @@ export function AddParcoursStepSheet({
 
   const pickPhotos = async () => {
     if (step.photos.length >= 5) {
-      setHint('Max 5 photos')
+      setHint('Maximum 5 photos')
       return
     }
     setPicking(true)
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (!perm.granted) {
-        Alert.alert('Photos', 'Autorise l’accès à la galerie pour ajouter des images.')
+        Alert.alert(
+          'Photos',
+          'Autorise l’accès à la galerie pour illustrer ce lieu.',
+        )
         return
       }
       const remaining = 5 - step.photos.length
@@ -137,7 +164,7 @@ export function AddParcoursStepSheet({
       const photos = [...step.photos, ...uris].slice(0, 5)
       patch({ photos, photo: photos[0] || null })
     } catch (e) {
-      setHint(e instanceof Error ? e.message : 'Impossible d’ouvrir la galerie')
+      setHint(e instanceof Error ? e.message : 'Galerie indisponible')
     } finally {
       setPicking(false)
     }
@@ -146,7 +173,7 @@ export function AddParcoursStepSheet({
   const submit = () => {
     const title = step.title.trim()
     if (!title) {
-      setHint('Ajoute un titre')
+      setHint('Donne un nom à ce lieu')
       return
     }
     onSave({
@@ -168,10 +195,10 @@ export function AddParcoursStepSheet({
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.handle} />
           <View style={styles.head}>
-            <View>
-              <Text style={styles.kicker}>ÉTAPE</Text>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.kicker}>UN LIEU</Text>
               <Text style={styles.title}>
-                {initial ? 'Modifier' : 'Ajouter'}
+                {initial ? 'Retoucher' : 'Ajouter au parcours'}
               </Text>
             </View>
             <Pressable onPress={onClose} hitSlop={12}>
@@ -184,65 +211,118 @@ export function AddParcoursStepSheet({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.form}
           >
-            <View style={[styles.panel, shadow.soft]}>
-              <Text style={styles.fieldLabel}>Titre</Text>
-              <TextInput
-                value={step.title}
-                onChangeText={(t) => patch({ title: t })}
-                placeholder="Café, musée, balade…"
-                placeholderTextColor={colors.faint}
-                style={styles.input}
-              />
-
-              <View style={styles.line} />
-
-              <Text style={styles.fieldLabel}>Petite description</Text>
-              <TextInput
-                value={step.note}
-                onChangeText={(t) => patch({ note: t })}
-                placeholder="Une phrase pour le voyageur"
-                placeholderTextColor={colors.faint}
-                multiline
-                style={[styles.input, styles.desc]}
-              />
-
-              <View style={styles.line} />
-
-              <Text style={styles.fieldLabel}>Google Maps</Text>
+            {/* 1. Maps first — magical entry */}
+            <View style={[styles.block, shadow.soft]}>
+              <Text style={styles.blockTitle}>Colle le lien Google Maps</Text>
+              <Text style={styles.blockHint}>
+                Pour remplir le nom et la position.
+              </Text>
               <TextInput
                 value={mapsInput}
                 onChangeText={setMapsInput}
                 onEndEditing={() => void parseMaps()}
-                placeholder="Colle le lien Maps"
+                placeholder="https://maps.app.goo.gl/…"
                 placeholderTextColor={colors.faint}
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={styles.input}
+                style={styles.mapsInput}
               />
-              {parsing ? (
-                <ActivityIndicator
-                  color={colors.primary}
-                  style={{ marginBottom: 10, alignSelf: 'flex-start' }}
-                />
-              ) : hint ? (
-                <Text style={styles.hint}>{hint}</Text>
-              ) : null}
+              <Pressable
+                onPress={() => void parseMaps()}
+                disabled={parsing || !mapsInput.trim()}
+                style={styles.parseLink}
+              >
+                {parsing ? (
+                  <ActivityIndicator color={colors.primary} size="small" />
+                ) : (
+                  <Text style={styles.parseLinkText}>Lire le lien</Text>
+                )}
+              </Pressable>
+              {hint ? <Text style={styles.hint}>{hint}</Text> : null}
             </View>
 
-            <Text style={styles.section}>Photos</Text>
+            {/* 2. Identity */}
+            <View style={[styles.block, shadow.soft]}>
+              <Text style={styles.fieldLabel}>Nom du lieu</Text>
+              <TextInput
+                value={step.title}
+                onChangeText={(t) => patch({ title: t })}
+                placeholder="Café, musée, belvédère…"
+                placeholderTextColor={colors.faint}
+                style={styles.titleInput}
+              />
+              <View style={styles.line} />
+              <Text style={styles.fieldLabel}>Note</Text>
+              <TextInput
+                value={step.note}
+                onChangeText={(t) => patch({ note: t })}
+                placeholder="Info utile (horaires, conseil…)"
+                placeholderTextColor={colors.faint}
+                multiline
+                style={styles.noteInput}
+              />
+              <View style={styles.line} />
+              <Text style={styles.fieldLabel}>Budget</Text>
+              <View style={styles.budgetChips}>
+                {BUDGET_CHIPS.map((c) => {
+                  const on = step.budget_eur === c.value && !budgetCustom
+                  return (
+                    <Pressable
+                      key={c.label}
+                      onPress={() => {
+                        setBudgetCustom('')
+                        patch({ budget_eur: c.value })
+                      }}
+                      style={[styles.budgetChip, on && styles.budgetChipOn]}
+                    >
+                      <Text
+                        style={[
+                          styles.budgetChipText,
+                          on && styles.budgetChipTextOn,
+                        ]}
+                      >
+                        {c.label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+              <View style={styles.budgetCustomRow}>
+                <TextInput
+                  value={budgetCustom}
+                  onChangeText={(v) => {
+                    setBudgetCustom(v)
+                    const n = Number(v.replace(',', '.'))
+                    if (v.trim() && Number.isFinite(n) && n >= 0) {
+                      patch({ budget_eur: n })
+                    }
+                  }}
+                  placeholder="Autre €"
+                  placeholderTextColor={colors.faint}
+                  keyboardType="decimal-pad"
+                  style={styles.budgetCustomInput}
+                />
+              </View>
+            </View>
+
+            {/* 3. Photos */}
+            <Text style={styles.section}>Photos du lieu</Text>
             <Pressable
               onPress={() => void pickPhotos()}
               disabled={picking}
-              style={[styles.photoBtn, shadow.soft]}
+              style={[styles.photoCta, shadow.soft]}
             >
               {picking ? (
                 <ActivityIndicator color={colors.primary} />
               ) : (
-                <Text style={styles.photoBtnText}>
-                  {step.photos.length
-                    ? `Ajouter des photos (${step.photos.length}/5)`
-                    : 'Ajouter des photos'}
-                </Text>
+                <>
+                  <Text style={styles.photoCtaTitle}>
+                    {step.photos.length
+                      ? `Ajouter encore (${step.photos.length}/5)`
+                      : 'Choisir dans la galerie'}
+                  </Text>
+                  <Text style={styles.photoCtaSub}>Jusqu’à 5 images</Text>
+                </>
               )}
             </Pressable>
             {step.photos.length > 0 ? (
@@ -258,46 +338,62 @@ export function AddParcoursStepSheet({
                       const photos = step.photos.filter((_, j) => j !== i)
                       patch({ photos, photo: photos[0] || null })
                     }}
+                    style={styles.thumbWrap}
                   >
                     <Image source={{ uri }} style={styles.thumb} />
+                    <View style={styles.thumbX}>
+                      <Text style={styles.thumbXText}>×</Text>
+                    </View>
                   </Pressable>
                 ))}
               </ScrollView>
             ) : null}
 
-            <Text style={styles.section}>Quand</Text>
-            <View style={styles.segRow}>
-              {[0, 1, 2].map((d) => {
-                const on = step.day_offset === d
-                return (
-                  <Pressable
-                    key={d}
-                    onPress={() => patch({ day_offset: d })}
-                    style={[styles.seg, on && styles.segOn]}
-                  >
-                    <Text style={[styles.segText, on && styles.segTextOn]}>
-                      Jour {d + 1}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-            <View style={styles.segRow}>
-              {MOMENTS.map((m) => {
-                const on = step.moment === m.id
-                return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => patch({ moment: m.id })}
-                    style={[styles.seg, on && styles.segOn]}
-                  >
-                    <Text style={[styles.segText, on && styles.segTextOn]}>
-                      {m.label}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
+            {/* 4. When — progressive */}
+            <Pressable
+              onPress={() => setWhenOpen((v) => !v)}
+              style={styles.whenToggle}
+            >
+              <Text style={styles.whenToggleText}>
+                {whenOpen ? 'Masquer le moment' : 'Placer dans le parcours (jour / moment)'}
+              </Text>
+            </Pressable>
+            {whenOpen ? (
+              <>
+                <View style={styles.segRow}>
+                  {[0, 1, 2].map((d) => {
+                    const on = step.day_offset === d
+                    return (
+                      <Pressable
+                        key={d}
+                        onPress={() => patch({ day_offset: d })}
+                        style={[styles.seg, on && styles.segOn]}
+                      >
+                        <Text style={[styles.segText, on && styles.segTextOn]}>
+                          Jour {d + 1}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+                <View style={styles.segRow}>
+                  {MOMENTS.map((m) => {
+                    const on = step.moment === m.id
+                    return (
+                      <Pressable
+                        key={m.id}
+                        onPress={() => patch({ moment: m.id })}
+                        style={[styles.seg, on && styles.segOn]}
+                      >
+                        <Text style={[styles.segText, on && styles.segTextOn]}>
+                          {m.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              </>
+            ) : null}
           </ScrollView>
 
           <Pressable
@@ -309,7 +405,7 @@ export function AddParcoursStepSheet({
             ]}
           >
             <Text style={styles.ctaText}>
-              {initial ? 'Enregistrer' : 'Ajouter l’étape'}
+              {initial ? 'Enregistrer' : 'Ajouter au parcours'}
             </Text>
           </Pressable>
         </View>
@@ -322,7 +418,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(26,18,14,0.42)',
+    backgroundColor: 'rgba(26,18,14,0.45)',
   },
   sheet: {
     backgroundColor: colors.canvas,
@@ -330,7 +426,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingHorizontal: spacing.xl,
     paddingTop: 10,
-    maxHeight: '92%',
+    maxHeight: '94%',
   },
   handle: {
     alignSelf: 'center',
@@ -343,114 +439,202 @@ const styles = StyleSheet.create({
   head: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   kicker: {
     fontFamily: fonts.bold,
-    fontSize: 11,
-    letterSpacing: 1.2,
+    fontSize: 10,
+    letterSpacing: 1.1,
     color: colors.primary,
     marginBottom: 2,
   },
   title: {
     fontFamily: fonts.extrabold,
-    fontSize: 28,
-    letterSpacing: -0.8,
+    fontSize: 22,
+    letterSpacing: -0.5,
     color: colors.ink,
   },
   close: {
     fontFamily: fonts.semibold,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.muted,
     marginTop: 6,
   },
-  form: { paddingBottom: 18 },
-  panel: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: radius.lg,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 6,
+  form: { paddingBottom: 16 },
+  block: {
+    backgroundColor: '#fff',
+    borderRadius: radius.xl,
+    padding: 14,
+    marginBottom: 10,
+  },
+  blockTitle: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  blockHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 3,
+    marginBottom: 10,
+    lineHeight: 17,
+  },
+  mapsInput: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.ink,
+    backgroundColor: colors.canvas,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  parseLink: { alignSelf: 'flex-start', marginTop: 10, minHeight: 22 },
+  parseLinkText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  hint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.primaryDeep,
+    marginTop: 8,
   },
   fieldLabel: {
     fontFamily: fonts.semibold,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.muted,
-    marginTop: 6,
+    marginBottom: 4,
   },
-  input: {
-    fontFamily: fonts.medium,
-    fontSize: 16,
+  titleInput: {
+    fontFamily: fonts.extrabold,
+    fontSize: 17,
+    letterSpacing: -0.3,
     color: colors.ink,
-    paddingVertical: 12,
-  },
-  desc: {
-    minHeight: 64,
-    textAlignVertical: 'top',
+    paddingVertical: 6,
   },
   line: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.line,
+    marginVertical: 8,
   },
-  hint: {
+  noteInput: {
     fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.primaryDeep,
-    paddingBottom: 10,
+    fontSize: 14,
+    color: colors.ink,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    paddingVertical: 6,
+  },
+  budgetChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 8,
+  },
+  budgetChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
+  budgetChipOn: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  budgetChipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.ink,
+  },
+  budgetChipTextOn: { color: '#FFF8F3' },
+  budgetCustomRow: { marginTop: 8 },
+  budgetCustomInput: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.ink,
+    backgroundColor: colors.canvas,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   section: {
     fontFamily: fonts.semibold,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
-    marginTop: 18,
-    marginBottom: 10,
+    marginTop: 6,
+    marginBottom: 8,
   },
-  photoBtn: {
+  photoCta: {
     backgroundColor: '#fff',
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     paddingVertical: 16,
-    alignItems: 'center',
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: colors.line,
+    borderStyle: 'dashed',
   },
-  photoBtnText: {
+  photoCtaTitle: {
     fontFamily: fonts.bold,
-    fontSize: 15,
+    fontSize: 14,
     color: colors.ink,
   },
+  photoCtaSub: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  thumbWrap: { marginRight: 10, position: 'relative' },
   thumb: {
-    width: 72,
-    height: 72,
+    width: 68,
+    height: 68,
     borderRadius: 14,
-    marginRight: 8,
     backgroundColor: colors.primaryMuted,
   },
-  segRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  thumbX: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(26,18,14,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbXText: { color: '#fff', fontSize: 13, fontFamily: fonts.bold, marginTop: -1 },
+  whenToggle: { marginTop: 14, marginBottom: 8 },
+  whenToggleText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.primaryDeep,
+  },
+  segRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 8 },
   seg: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: radius.full,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: colors.line,
   },
-  segOn: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-  },
-  segText: {
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.ink,
-  },
+  segOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  segText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.ink },
   segTextOn: { color: '#FFF8F3' },
   cta: {
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    paddingVertical: 16,
+    borderRadius: 18,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
-  ctaText: { fontFamily: fonts.bold, fontSize: 16, color: '#fff' },
+  ctaText: { fontFamily: fonts.bold, fontSize: 15, color: '#fff' },
 })

@@ -22,6 +22,7 @@ import {
   countryIsoFromIata,
   countryToFlagIso,
   groupAirportsByCity,
+  PARCOURS_CITY_OPTIONS_FR,
   resolvePopularCityGroups,
   seedPopularAirports,
   type CityAirportGroup,
@@ -41,6 +42,11 @@ type Props = {
   valueSlug: string
   valueLabel?: string
   onChange: (city: CityOpt) => void
+  /**
+   * Parcours only — injecte le top 30 FR (hors catalogue aéroports).
+   * Ne pas activer pour Activités / Vols.
+   */
+  includeParcoursFrCities?: boolean
 }
 
 const PLACEHOLDER_CITIES = [
@@ -55,6 +61,16 @@ const CURATED_CITY_META: Record<string, { country: string; iso: string }> = {
   lyon: { country: 'France', iso: 'FR' },
   marseille: { country: 'France', iso: 'FR' },
   nice: { country: 'France', iso: 'FR' },
+  bordeaux: { country: 'France', iso: 'FR' },
+  toulouse: { country: 'France', iso: 'FR' },
+  nantes: { country: 'France', iso: 'FR' },
+  montpellier: { country: 'France', iso: 'FR' },
+  strasbourg: { country: 'France', iso: 'FR' },
+  lille: { country: 'France', iso: 'FR' },
+  rennes: { country: 'France', iso: 'FR' },
+  toulon: { country: 'France', iso: 'FR' },
+  ajaccio: { country: 'France', iso: 'FR' },
+  bastia: { country: 'France', iso: 'FR' },
   lisbonne: { country: 'Portugal', iso: 'PT' },
   porto: { country: 'Portugal', iso: 'PT' },
   barcelone: { country: 'Espagne', iso: 'ES' },
@@ -84,6 +100,19 @@ function withCuratedMeta(opt: CityOpt): CityOpt {
     country: opt.country || meta.country,
     iso: opt.iso || meta.iso,
   }
+}
+
+function isFranceCity(c: CityOpt): boolean {
+  if (c.iso === 'FR') return true
+  return (c.country || '').trim().toLowerCase() === 'france'
+}
+
+/** France d’abord, puis A→Z. */
+function compareCityFrFirst(a: CityOpt, b: CityOpt): number {
+  const af = isFranceCity(a) ? 0 : 1
+  const bf = isFranceCity(b) ? 0 : 1
+  if (af !== bf) return af - bf
+  return a.label.localeCompare(b.label, 'fr')
 }
 
 function toOpt(g: CityAirportGroup): CityOpt {
@@ -129,7 +158,12 @@ function seedFallbackCities(): CityOpt[] {
   })
 }
 
-export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
+export function ActivityCityPicker({
+  valueSlug,
+  valueLabel,
+  onChange,
+  includeParcoursFrCities = false,
+}: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -184,8 +218,19 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
 
   const allCities = useMemo(() => {
     const bySlug = new Map<string, CityOpt>()
+    if (includeParcoursFrCities) {
+      for (const c of PARCOURS_CITY_OPTIONS_FR) {
+        if (!c.slug) continue
+        bySlug.set(c.slug, {
+          slug: c.slug,
+          label: c.label,
+          country: c.country,
+          iso: c.iso,
+        })
+      }
+    }
     for (const c of seedFallbackCities()) {
-      if (c.slug) bySlug.set(c.slug, c)
+      if (c.slug) bySlug.set(c.slug, mergeCityOpt(bySlug.get(c.slug), c))
     }
     if (catalogReady) {
       // Prefer EU/seed hubs: sort so groups with known IATA ISO come before orphans,
@@ -196,17 +241,31 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
         bySlug.set(opt.slug, mergeCityOpt(bySlug.get(opt.slug), opt))
       }
     }
-    return [...bySlug.values()].sort((a, b) =>
-      a.label.localeCompare(b.label, 'fr'),
-    )
-  }, [groups, catalogReady])
+    return [...bySlug.values()].sort(compareCityFrFirst)
+  }, [groups, catalogReady, includeParcoursFrCities])
 
-  // Same ordering idea as CityAirportPicker: popular hubs first, then A→Z,
-  // with curated activité destinations always pinned at the top.
+  // Parcours: top 30 FR d’abord. Sinon curated → FR → popular → reste.
   const allOrdered = useMemo(() => {
-    const curated = seedFallbackCities()
     const seen = new Set<string>()
     const merged: CityOpt[] = []
+
+    if (includeParcoursFrCities) {
+      for (const c of PARCOURS_CITY_OPTIONS_FR) {
+        if (!c.slug || seen.has(c.slug)) continue
+        seen.add(c.slug)
+        const hit = allCities.find((x) => x.slug === c.slug)
+        merged.push(
+          withCuratedMeta({
+            slug: c.slug,
+            label: c.label,
+            country: hit?.country || c.country,
+            iso: hit?.iso || c.iso,
+          }),
+        )
+      }
+    }
+
+    const curated = seedFallbackCities().map(withCuratedMeta)
     for (const c of curated) {
       if (!c.slug || seen.has(c.slug)) continue
       seen.add(c.slug)
@@ -222,19 +281,41 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
       )
     }
     if (!catalogReady) return merged
-    const popular = resolvePopularCityGroups(groups, effective)
-      .map(toOpt)
-      .filter((c) => c.slug && !seen.has(c.slug))
-    for (const c of popular) {
+
+    const frenchRest = allCities
+      .filter((c) => c.slug && !seen.has(c.slug) && isFranceCity(c))
+      .slice()
+      .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+    for (const c of frenchRest) {
       seen.add(c.slug)
       merged.push(c)
+    }
+
+    // Hors mode Parcours : garder les hubs EU. En Parcours, rester FR-first
+    // (le top 30 + FR catalogue suffisent ; le reste reste cherchable).
+    if (!includeParcoursFrCities) {
+      const popular = resolvePopularCityGroups(groups, effective)
+        .map(toOpt)
+        .map(withCuratedMeta)
+        .filter((c) => c.slug && !seen.has(c.slug))
+        .sort(compareCityFrFirst)
+      for (const c of popular) {
+        seen.add(c.slug)
+        merged.push(c)
+      }
     }
     const rest = allCities
       .filter((c) => !seen.has(c.slug))
       .slice()
       .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
     return [...merged, ...rest]
-  }, [groups, allCities, catalogReady, effective])
+  }, [
+    groups,
+    allCities,
+    catalogReady,
+    effective,
+    includeParcoursFrCities,
+  ])
 
   const selectedRaw =
     allCities.find((c) => c.slug === valueSlug) ||
@@ -259,17 +340,19 @@ export function ActivityCityPicker({ valueSlug, valueLabel, onChange }: Props) {
     const q = query.trim().toLowerCase()
     if (!q) return allOrdered
     const qSlug = activityCitySlugFromLabel(query)
-    return allCities.filter((c) => {
-      const labelSlug = activityCitySlugFromLabel(c.label)
-      const countrySlug = activityCitySlugFromLabel(c.country || '')
-      return (
-        c.label.toLowerCase().includes(q) ||
-        (c.country || '').toLowerCase().includes(q) ||
-        labelSlug.includes(qSlug) ||
-        c.slug.includes(qSlug) ||
-        countrySlug.includes(qSlug)
-      )
-    })
+    return allCities
+      .filter((c) => {
+        const labelSlug = activityCitySlugFromLabel(c.label)
+        const countrySlug = activityCitySlugFromLabel(c.country || '')
+        return (
+          c.label.toLowerCase().includes(q) ||
+          (c.country || '').toLowerCase().includes(q) ||
+          labelSlug.includes(qSlug) ||
+          c.slug.includes(qSlug) ||
+          countrySlug.includes(qSlug)
+        )
+      })
+      .sort(compareCityFrFirst)
   }, [query, allCities, allOrdered])
 
   const selectCity = useCallback(
