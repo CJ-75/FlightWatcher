@@ -74,11 +74,15 @@ import {
 import {
   getMyTripCached,
   hotelIdFromDraft,
+  hydrateMyTrip,
   peekMyTrip,
   setMyTripMemory,
 } from '../lib/myTripCache'
 import { getHotelGalleryCached } from '../lib/hotelGalleryCache'
-import { listTripItemsCached } from '../lib/tripItemsCache'
+import {
+  hydrateTripItems,
+  listTripItemsCached,
+} from '../lib/tripItemsCache'
 import {
   getAppConfigCached,
   hydrateAppConfig,
@@ -380,47 +384,63 @@ export function TripDetailScreen() {
       }
 
       let galleryHotelId: string | null = null
-      let tripItemsSettled = false
       let galleryKicked = false
-      const kickHotelGalleryOnce = () => {
-        if (galleryKicked || !tripItemsSettled || !galleryHotelId) return
+      let hasHotelSeed = false
+      let tripItemsSettled = false
+      const kickHotelGalleryOnce = (opts?: { afterItems?: boolean }) => {
+        if (galleryKicked || !galleryHotelId) return
+        if (opts?.afterItems && !tripItemsSettled) return
         galleryKicked = true
         void getHotelGalleryCached(galleryHotelId, {
           language: 'fr',
           limit: 3,
         }).catch(() => undefined)
       }
+      const draftHasSeedPhoto = (draft: MyTripDraft) => {
+        const payload = (draft.payload || {}) as Record<string, unknown>
+        const hotel =
+          (draft.hotel as Record<string, unknown> | null | undefined) ||
+          (payload.hotel as Record<string, unknown> | null | undefined) ||
+          null
+        const photo = String(
+          hotel?.photo || hotel?.main_photo || hotel?.image || '',
+        ).trim()
+        return Boolean(photo)
+      }
       const applyDraft = (draft: MyTripDraft, matched: TravelWorkspace | null) => {
         const next = withWorkspaceBooked(draft, matched)
         setMyTripMemory(next)
         setFlightDraft(next)
         galleryHotelId = hotelIdFromDraft(next) || galleryHotelId
-        kickHotelGalleryOnce()
+        hasHotelSeed = hasHotelSeed || draftHasSeedPhoto(next)
+        // Seed paints hero — gallery in parallel. Sans seed: wait trip-items.
+        if (hasHotelSeed && galleryHotelId) kickHotelGalleryOnce()
+        else if (galleryHotelId) kickHotelGalleryOnce({ afterItems: true })
       }
 
-      // 1) trip-items + my-trip first (hero paint), 2) one gallery after items settle.
+      // Heroes first: trip-items + my-trip (join tap prefetch / disk).
       const activitiesWarm = listTripItemsCached({
         planned_trip_id: tripId,
       }).catch(() => undefined)
+      void hydrateTripItems({ planned_trip_id: tripId }).catch(() => undefined)
+      void activitiesWarm.finally(() => {
+        tripItemsSettled = true
+        if (!hasHotelSeed && galleryHotelId) {
+          kickHotelGalleryOnce({ afterItems: true })
+        }
+      })
 
       const earlyToken = String(peekedMatch?.draft_token || '').trim()
       if (earlyToken) {
-        const warmDraft = peekMyTrip(earlyToken)
+        const warmDraft =
+          peekMyTrip(earlyToken) || (await hydrateMyTrip(earlyToken))
         if (warmDraft) applyDraft(warmDraft, peekedMatch)
         void getMyTripCached(earlyToken)
           .then((d) => applyDraft(d, peekedMatch))
           .catch(() => undefined)
       }
 
-      void activitiesWarm.finally(() => {
-        tripItemsSettled = true
-        if (!galleryHotelId && earlyToken) {
-          galleryHotelId = hotelIdFromDraft(peekMyTrip(earlyToken))
-        }
-        kickHotelGalleryOnce()
-      })
-
-      // Instant paint: memory → disk → hub stub, then refresh via singleflight.
+      // Instant paint: memory → disk → hub stub — leave spinner before heavy trip GET.
       let warm = peekPlannedTrip(tripId)
       if (!warm) {
         warm = (await hydratePlannedTrip(tripId)) || null
@@ -428,7 +448,6 @@ export function TripDetailScreen() {
       if (!warm && peekedMatch) {
         warm = stubPlannedTripFromWorkspace(tripId, peekedMatch)
       }
-      // Paint chrome immediately (stub OK) — network fills invite/proposals after.
       if (warm && !silent) {
         setTrip(warm)
         setEditBudget(warm.budget_max || 150)
@@ -439,54 +458,76 @@ export function TripDetailScreen() {
         setLoading(false)
       }
 
+      // Heavy trip (all proposals+members) off the hero critical path.
       const cachedReal = Boolean(peekPlannedTrip(tripId)?.invite_token)
-      const detail = await getPlannedTripCached(
+      void getPlannedTripCached(
         tripId,
         () => getApi().getPlannedTrip(tripId),
-        // Stub/disk-miss → fetch (joins Planner prefetch). Silent focus → refresh.
         { force: silent || !cachedReal },
       )
-      setTrip(detail)
-      setEditBudget(detail.budget_max || 150)
-      setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
-      navigation.setOptions({ title: detail.name || 'Voyage' })
-      setLoading(false)
+        .then((detail) => {
+          setTrip(detail)
+          setEditBudget(detail.budget_max || 150)
+          setWatchInterval(
+            Math.max(900, detail.auto_scan_interval_seconds || 3600),
+          )
+          navigation.setOptions({ title: detail.name || 'Voyage' })
+          setLoading(false)
 
-      const acceptedId =
-        detail.accepted_proposal?.id ||
-        (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
-        null
+          const acceptedId =
+            detail.accepted_proposal?.id ||
+            (detail.proposals || []).find((p) => p.status === 'accepted')
+              ?.id ||
+            null
 
-      void (async () => {
-        try {
-          const workspaces = await listTravelWorkspacesCached({ force: false })
-          const matched =
-            workspaces.find((item) => item.planned_trip_id === tripId) || null
-          setWorkspace(matched)
-          const token = String(matched?.draft_token || earlyToken || '').trim()
-          if (token) {
-            applyDraft(await getMyTripCached(token), matched)
-          } else if (acceptedId) {
+          void (async () => {
             try {
-              const draft = await getApi().getOrCreateExecutionDraft(acceptedId)
-              applyDraft(draft, matched)
+              const workspaces = await listTravelWorkspacesCached({
+                force: false,
+              })
+              const matched =
+                workspaces.find((item) => item.planned_trip_id === tripId) ||
+                null
+              setWorkspace(matched)
+              const token = String(
+                matched?.draft_token || earlyToken || '',
+              ).trim()
+              if (token) {
+                applyDraft(await getMyTripCached(token), matched)
+              } else if (acceptedId) {
+                try {
+                  const draft =
+                    await getApi().getOrCreateExecutionDraft(acceptedId)
+                  applyDraft(draft, matched)
+                } catch {
+                  setFlightDraft((prev) => prev)
+                }
+              } else {
+                setFlightDraft((prev) => {
+                  const booked = Boolean(
+                    prev?.flight_booked_at ||
+                      prev?.flight_booking_status === 'user_confirmed' ||
+                      prev?.flight_booking_status === 'partner_confirmed',
+                  )
+                  return booked ? prev : null
+                })
+              }
+              if (!hasHotelSeed && galleryHotelId) {
+                kickHotelGalleryOnce({ afterItems: true })
+              }
             } catch {
-              setFlightDraft((prev) => prev)
+              // Keep current draft/workspace on transient workspace errors.
             }
-          } else {
-            setFlightDraft((prev) => {
-              const booked = Boolean(
-                prev?.flight_booked_at ||
-                  prev?.flight_booking_status === 'user_confirmed' ||
-                  prev?.flight_booking_status === 'partner_confirmed',
-              )
-              return booked ? prev : null
-            })
+          })()
+        })
+        .catch((e) => {
+          if (!silent && !warm) {
+            setError(e instanceof Error ? e.message : 'Chargement impossible')
+            setTrip(null)
           }
-        } catch {
-          // Keep current draft/workspace on transient workspace errors.
-        }
-      })()
+          setLoading(false)
+        })
+      return
     } catch (e) {
       if (!silent) {
         setError(e instanceof Error ? e.message : 'Chargement impossible')

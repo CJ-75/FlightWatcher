@@ -63,6 +63,12 @@ import {
   prefetchPlannedTrips,
   prepareCreatedPlannerTrip,
 } from '../lib/plannedTripCache'
+import { listTripItemsCached } from '../lib/tripItemsCache'
+import {
+  getMyTripCached,
+  hotelIdFromDraft,
+} from '../lib/myTripCache'
+import { getHotelGalleryCached } from '../lib/hotelGalleryCache'
 import { useAuth } from '../context/AuthContext'
 import { addGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { TabScreenHeader } from '../components/TabScreenHeader'
@@ -320,8 +326,22 @@ export function PlannerScreen() {
   const openWorkspace = (workspace: TravelWorkspace) => {
     if (workspace.planned_trip_id) {
       const tripId = workspace.planned_trip_id
-      // Start fetch before push so TripDetail joins the same inflight.
+      // Hero data before push — TripDetail joins the same inflight/disk.
       void getPlannedTripCached(tripId).catch(() => {})
+      void listTripItemsCached({ planned_trip_id: tripId }).catch(() => {})
+      const token = String(workspace.draft_token || '').trim()
+      if (token) {
+        void getMyTripCached(token)
+          .then((draft) => {
+            const hid = hotelIdFromDraft(draft)
+            if (!hid) return
+            void getHotelGalleryCached(hid, {
+              language: 'fr',
+              limit: 3,
+            }).catch(() => undefined)
+          })
+          .catch(() => undefined)
+      }
       navigation.navigate('TripDetail', { tripId })
       return
     }

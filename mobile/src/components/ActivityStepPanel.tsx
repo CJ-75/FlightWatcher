@@ -36,6 +36,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
 import {
+  hydrateTripItems,
   listTripItemsCached,
   peekTripItems,
   setTripItemsCache,
@@ -319,7 +320,7 @@ export function ActivityStepPanel(props: {
     const silent = Boolean(opts?.silent)
     setError(null)
 
-    // Instant paint from memory (shared with TripDetail prefetch).
+    // Instant paint from memory / disk (shared with TripDetail + tap prefetch).
     const peekOwner = owner.planned_trip_id
       ? { planned_trip_id: owner.planned_trip_id }
       : owner.draft_token || draftFallback
@@ -327,7 +328,10 @@ export function ActivityStepPanel(props: {
         : null
     const peekedRows: ItemRow[] = []
     if (peekOwner) {
-      const hit = peekTripItems(peekOwner)
+      let hit = peekTripItems(peekOwner)
+      if (!hit?.items?.length) {
+        hit = (await hydrateTripItems(peekOwner)) || null
+      }
       for (const raw of hit?.items || []) {
         const it = raw as ItemRow
         if (!isActivityItem(it)) continue
