@@ -10,6 +10,7 @@ import {
   Platform,
   Animated,
   Easing,
+  Image,
   ImageBackground,
   Dimensions,
   PixelRatio,
@@ -21,6 +22,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   TRAVEL_PREFERENCE_CARDS,
   airportSelectionLabel,
+  cityImageUrl,
+  countryIsoFromIata,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -30,6 +33,7 @@ import {
   setDepartureCity,
   setTravelPreference,
   suggestCityFromLocale,
+  upscaleCityHeroUrl,
   type Airport,
   type TravelPreference,
 } from '@flightwatcher/shared'
@@ -55,9 +59,37 @@ const PHOTO_W = Math.min(
 /** Frame 1 — Cinque Terre / week-end méditerranéen. */
 const PROMISE_PHOTO = `https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=${PHOTO_W}&q=90&fm=jpg`
 
-/** Frame 2 — Arc de Triomphe (bastien-nvs / SprV1eqNrqM). */
-const CITY_STEP_PHOTO =
-  'https://images.unsplash.com/photo-1603378995290-8d4ce0495ddd?auto=format&fit=crop&w=2400&q=95&fm=jpg'
+/**
+ * Étape ville — hors France : une seule photo aéroport (pas de landmark ville).
+ * (avion / piste — même famille que le fallback travel partagé)
+ */
+const AIRPORT_STEP_PHOTO = upscaleCityHeroUrl(
+  'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=2400&q=95&fm=jpg',
+  2400,
+)
+
+function isFranceOrigin(
+  country: string | null | undefined,
+  iata?: string | null,
+): boolean {
+  if (/^france$/i.test((country || '').trim())) return true
+  return countryIsoFromIata(iata) === 'fr'
+}
+
+/** Hero dynamique : photo ville FR, sinon aéroport. */
+function cityStepHeroUrl(
+  city: string | null | undefined,
+  country: string | null | undefined,
+  iata?: string | null,
+): string {
+  if (isFranceOrigin(country, iata)) {
+    return cityImageUrl(city, iata)
+  }
+  if ((iata || '').trim() || (city || '').trim()) {
+    return AIRPORT_STEP_PHOTO
+  }
+  return cityImageUrl('Paris', 'CDG')
+}
 
 const PROMISE_FEATURES = [
   {
@@ -322,11 +354,28 @@ export function OnboardingFlowScreen({ onDone }: Props) {
 
   const cityGroups = useMemo(() => groupAirportsByCity(airports), [airports])
   const codes = useMemo(() => parseAirportCodes(airport), [airport])
+  const selectedCityGroup = useMemo(
+    () => findCityGroupByCodes(cityGroups, codes),
+    [cityGroups, codes],
+  )
   const cityLabel = useMemo(() => {
-    const group = findCityGroupByCodes(cityGroups, codes)
-    if (group) return group.city
+    if (selectedCityGroup) return selectedCityGroup.city
     return airportSelectionLabel(airport, cityGroups) || suggested.label
-  }, [airport, cityGroups, codes, suggested.label])
+  }, [airport, cityGroups, selectedCityGroup, suggested.label])
+  const cityHeroUri = useMemo(
+    () =>
+      cityStepHeroUrl(
+        selectedCityGroup?.city || cityLabel,
+        selectedCityGroup?.country,
+        codes[0] || null,
+      ),
+    [selectedCityGroup, cityLabel, codes],
+  )
+
+  useEffect(() => {
+    if (!cityHeroUri) return
+    void Image.prefetch(cityHeroUri).catch(() => {})
+  }, [cityHeroUri])
 
   const finish = async () => {
     await markOnboardingCompleted()
@@ -514,7 +563,8 @@ export function OnboardingFlowScreen({ onDone }: Props) {
             <View style={styles.stepBody}>
               <View style={[styles.cityHero, shadow.soft]}>
                 <ImageBackground
-                  source={{ uri: CITY_STEP_PHOTO }}
+                  key={cityHeroUri}
+                  source={{ uri: cityHeroUri }}
                   style={styles.cityHeroImg}
                   imageStyle={styles.cityHeroBitmap}
                 >
