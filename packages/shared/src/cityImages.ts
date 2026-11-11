@@ -142,7 +142,7 @@ export const CITY_IMAGES: Record<string, string> = {
   "nantes": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3c/Panorama_depuis_Butte_Sainte-Anne.jpg/1280px-Panorama_depuis_Butte_Sainte-Anne.jpg",
   "naples": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/88/Napoli_-_Maschio_Angioino_-_202209302342_3.jpg/1280px-Napoli_-_Maschio_Angioino_-_202209302342_3.jpg",
   "napoli": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/88/Napoli_-_Maschio_Angioino_-_202209302342_3.jpg/1280px-Napoli_-_Maschio_Angioino_-_202209302342_3.jpg",
-  "nice": "https://images.unsplash.com/sm4-fRm9uiM?auto=format&fit=crop&w=1280&q=90&fm=jpg",
+  "nice": "https://images.unsplash.com/photo-1691770128652-ed5bc5647cb1?auto=format&fit=crop&w=1280&q=90&fm=jpg",
   "oslo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9a/Nationaltheatret_evening.jpg/1280px-Nationaltheatret_evening.jpg",
   "palerme": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c7/Sicilia_Palermo5_tango7174.jpg/1280px-Sicilia_Palermo5_tango7174.jpg",
   "palermo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c7/Sicilia_Palermo5_tango7174.jpg/1280px-Sicilia_Palermo5_tango7174.jpg",
