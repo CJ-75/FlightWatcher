@@ -72,6 +72,14 @@ import {
   stubPlannedTripFromWorkspace,
 } from '../lib/plannedTripCache'
 import {
+  getMyTripCached,
+  hotelIdFromDraft,
+  peekMyTrip,
+  setMyTripMemory,
+} from '../lib/myTripCache'
+import { getHotelGalleryCached } from '../lib/hotelGalleryCache'
+import { listTripItemsCached } from '../lib/tripItemsCache'
+import {
   getAppConfigCached,
   hydrateAppConfig,
   peekAppConfig,
@@ -218,8 +226,21 @@ export function TripDetailScreen() {
   const [pathTab, setPathTab] = useState<
     'apercu' | 'programme' | 'voyageurs'
   >('apercu')
-  const [workspace, setWorkspace] = useState<TravelWorkspace | null>(null)
-  const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(null)
+  const [workspace, setWorkspace] = useState<TravelWorkspace | null>(() => {
+    if (!tripId || useGuestPreview) return null
+    return (
+      peekTravelWorkspacesCache()?.find((w) => w.planned_trip_id === tripId) ||
+      null
+    )
+  })
+  const [flightDraft, setFlightDraft] = useState<MyTripDraft | null>(() => {
+    if (!tripId || useGuestPreview) return null
+    const token = String(
+      peekTravelWorkspacesCache()?.find((w) => w.planned_trip_id === tripId)
+        ?.draft_token || '',
+    ).trim()
+    return token ? peekMyTrip(token) : null
+  })
   const [flightBookingBusy, setFlightBookingBusy] = useState(false)
   type ActivityRow = {
     id?: string
@@ -330,6 +351,57 @@ export function TripDetailScreen() {
         peeked?.find((item) => item.planned_trip_id === tripId) || null
       if (peekedMatch) setWorkspace(peekedMatch)
 
+      const withWorkspaceBooked = (
+        draft: MyTripDraft,
+        matched: TravelWorkspace | null,
+      ): MyTripDraft => {
+        if (matched?.pipeline?.flight !== 'booked') return draft
+        const payload = (draft.payload || {}) as Record<string, unknown>
+        if (
+          draft.flight_booked_at ||
+          payload.flight_booked ||
+          draft.flight_booking_status === 'user_confirmed' ||
+          draft.flight_booking_status === 'partner_confirmed'
+        ) {
+          return draft
+        }
+        const now = new Date().toISOString()
+        return {
+          ...draft,
+          flight_booked_at: now,
+          flight_booking_status: 'user_confirmed',
+          payload: {
+            ...payload,
+            flight_booked: true,
+            flight_booked_at: now,
+            flight_booking_status: 'user_confirmed',
+          },
+        }
+      }
+
+      const applyDraft = (draft: MyTripDraft, matched: TravelWorkspace | null) => {
+        const next = withWorkspaceBooked(draft, matched)
+        setMyTripMemory(next)
+        setFlightDraft(next)
+        const hid = hotelIdFromDraft(next)
+        if (hid) {
+          void getHotelGalleryCached(hid, { language: 'fr' }).catch(() => undefined)
+        }
+      }
+
+      // Hotel ASAP: paint draft from memory / kick network before workspaces round-trip.
+      const earlyToken = String(peekedMatch?.draft_token || '').trim()
+      if (earlyToken) {
+        const warmDraft = peekMyTrip(earlyToken)
+        if (warmDraft) applyDraft(warmDraft, peekedMatch)
+        void getMyTripCached(earlyToken)
+          .then((d) => applyDraft(d, peekedMatch))
+          .catch(() => undefined)
+      }
+
+      // Activities ASAP — singleflight shared with ActivityStepPanel.
+      void listTripItemsCached({ planned_trip_id: tripId }).catch(() => undefined)
+
       // Instant paint: memory → disk → hub stub, then refresh via singleflight.
       let warm = peekPlannedTrip(tripId)
       if (!warm) {
@@ -367,51 +439,19 @@ export function TripDetailScreen() {
         (detail.proposals || []).find((p) => p.status === 'accepted')?.id ||
         null
 
-      const withWorkspaceBooked = (
-        draft: MyTripDraft,
-        matched: TravelWorkspace | null,
-      ): MyTripDraft => {
-        if (matched?.pipeline?.flight !== 'booked') return draft
-        const payload = (draft.payload || {}) as Record<string, unknown>
-        if (
-          draft.flight_booked_at ||
-          payload.flight_booked ||
-          draft.flight_booking_status === 'user_confirmed' ||
-          draft.flight_booking_status === 'partner_confirmed'
-        ) {
-          return draft
-        }
-        const now = new Date().toISOString()
-        return {
-          ...draft,
-          flight_booked_at: now,
-          flight_booking_status: 'user_confirmed',
-          payload: {
-            ...payload,
-            flight_booked: true,
-            flight_booked_at: now,
-            flight_booking_status: 'user_confirmed',
-          },
-        }
-      }
-
       void (async () => {
         try {
           const workspaces = await listTravelWorkspacesCached({ force: false })
           const matched =
             workspaces.find((item) => item.planned_trip_id === tripId) || null
           setWorkspace(matched)
-          if (matched?.draft_token) {
-            setFlightDraft(
-              withWorkspaceBooked(
-                await getApi().getMyTrip(matched.draft_token),
-                matched,
-              ),
-            )
+          const token = String(matched?.draft_token || earlyToken || '').trim()
+          if (token) {
+            applyDraft(await getMyTripCached(token), matched)
           } else if (acceptedId) {
             try {
               const draft = await getApi().getOrCreateExecutionDraft(acceptedId)
-              setFlightDraft(withWorkspaceBooked(draft, matched))
+              applyDraft(draft, matched)
             } catch {
               setFlightDraft((prev) => prev)
             }
@@ -463,6 +503,13 @@ export function TripDetailScreen() {
     setPlannedTripMemory(trip)
   }, [trip, useGuestPreview])
 
+  // Prefetch hotel gallery as soon as draft exposes an id (warm reopen).
+  useEffect(() => {
+    const hid = hotelIdFromDraft(flightDraft)
+    if (!hid) return
+    void getHotelGalleryCached(hid, { language: 'fr' }).catch(() => undefined)
+  }, [flightDraft])
+
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token
     if ((!tripId && !token) || !plannerActivitiesEnabled) return
@@ -505,16 +552,16 @@ export function TripDetailScreen() {
         const jobs: Promise<Record<string, unknown>[]>[] = []
         if (tripId) {
           jobs.push(
-            getApi()
-              .listTripItems({ planned_trip_id: tripId })
-              .then((res) => (res.items || []) as Record<string, unknown>[]),
+            listTripItemsCached({ planned_trip_id: tripId }).then(
+              (res) => (res.items || []) as Record<string, unknown>[],
+            ),
           )
         }
         if (token) {
           jobs.push(
-            getApi()
-              .listTripItems({ draft_token: token })
-              .then((res) => (res.items || []) as Record<string, unknown>[]),
+            listTripItemsCached({ draft_token: token }).then(
+              (res) => (res.items || []) as Record<string, unknown>[],
+            ),
           )
         }
         if (!jobs.length) return

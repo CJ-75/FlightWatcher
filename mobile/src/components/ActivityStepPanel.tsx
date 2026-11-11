@@ -37,6 +37,11 @@ import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
 import { getCityActivitiesCached } from '../lib/activitiesCache'
 import { fetchCityActivitiesPublic } from '../lib/activitiesCatalogFetch'
+import {
+  listTripItemsCached,
+  peekTripItems,
+  setTripItemsCache,
+} from '../lib/tripItemsCache'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'
 import type { RootStackParamList } from '../navigation/types'
@@ -322,20 +327,16 @@ export function ActivityStepPanel(props: {
     const jobs: Promise<ItemRow[]>[] = []
     if (planned) {
       jobs.push(
-        getApi()
-          .listTripItems({ planned_trip_id: planned })
-          .then((res) =>
-            ((res.items || []) as ItemRow[]).filter(isActivityItem),
-          ),
+        listTripItemsCached({ planned_trip_id: planned }).then((res) =>
+          ((res.items || []) as ItemRow[]).filter(isActivityItem),
+        ),
       )
     }
     if (draft) {
       jobs.push(
-        getApi()
-          .listTripItems({ draft_token: draft })
-          .then((res) =>
-            ((res.items || []) as ItemRow[]).filter(isActivityItem),
-          ),
+        listTripItemsCached({ draft_token: draft }).then((res) =>
+          ((res.items || []) as ItemRow[]).filter(isActivityItem),
+        ),
       )
     }
     if (!jobs.length) return []
@@ -371,8 +372,38 @@ export function ActivityStepPanel(props: {
     }
     const gen = ++loadGenRef.current
     const silent = Boolean(opts?.silent)
-    if (!silent) setLoading(true)
     setError(null)
+
+    // Instant paint from memory (shared with TripDetail prefetch).
+    const peekOwners = [
+      owner.planned_trip_id
+        ? { planned_trip_id: owner.planned_trip_id }
+        : null,
+      owner.draft_token || draftFallback
+        ? { draft_token: owner.draft_token || draftFallback || undefined }
+        : null,
+    ].filter(Boolean) as { planned_trip_id?: string; draft_token?: string }[]
+    const peekedRows: ItemRow[] = []
+    const seenPeek = new Set<string>()
+    for (const o of peekOwners) {
+      const hit = peekTripItems(o)
+      for (const raw of hit?.items || []) {
+        const it = raw as ItemRow
+        if (!isActivityItem(it)) continue
+        const id = String(it.id || '')
+        if (!id || seenPeek.has(id)) continue
+        seenPeek.add(id)
+        peekedRows.push(it)
+      }
+    }
+    if (peekedRows.length) {
+      setItems(peekedRows)
+      publishParcours(peekedRows)
+      if (!silent) setLoading(false)
+    } else if (!silent) {
+      setLoading(true)
+    }
+
     try {
       const rows = await fetchActivityRows()
       if (gen !== loadGenRef.current) return
@@ -386,6 +417,18 @@ export function ActivityStepPanel(props: {
       if (gen !== loadGenRef.current) return
       setItems(enriched)
       publishParcours(enriched)
+      if (owner.planned_trip_id) {
+        setTripItemsCache(
+          { planned_trip_id: owner.planned_trip_id },
+          enriched as unknown as Record<string, unknown>[],
+        )
+      }
+      if (owner.draft_token || draftFallback) {
+        setTripItemsCache(
+          { draft_token: owner.draft_token || draftFallback || undefined },
+          enriched as unknown as Record<string, unknown>[],
+        )
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
       if (isTripItemsAuthError(msg) && !authRetryRef.current) {
