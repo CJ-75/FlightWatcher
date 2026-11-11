@@ -60,7 +60,7 @@ export function SecurityScreen() {
     if (isGuest) {
       Alert.alert(
         translate('fr', 'auth.security.deleteTitle'),
-        'Connecte-toi pour supprimer un compte.',
+        'Connexion requise pour supprimer un compte.',
       )
       return
     }
@@ -80,7 +80,7 @@ export function SecurityScreen() {
                 await signOut()
                 Alert.alert(
                   translate('fr', 'auth.security.deleteDone'),
-                  'Ton compte a été supprimé.',
+                  'Le compte a été supprimé.',
                 )
               } catch (e) {
                 Alert.alert(
@@ -103,7 +103,7 @@ export function SecurityScreen() {
     if (isGuest) {
       Alert.alert(
         translate('fr', 'auth.security.title'),
-        'Connecte-toi pour gérer ton mot de passe.',
+        'Connexion requise pour gérer le mot de passe.',
       )
       return
     }
