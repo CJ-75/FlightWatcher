@@ -277,7 +277,7 @@ export function ProfileScreen() {
                 glyph="🔒"
                 tone="warm"
                 title={translate('fr', 'auth.security.title')}
-                subtitle="Mot de passe et sécurité"
+                subtitle="Google, Apple et mot de passe"
                 onPress={openSecurity}
               />
             </View>

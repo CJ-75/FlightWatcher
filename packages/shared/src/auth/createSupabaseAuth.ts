@@ -395,12 +395,11 @@ const OAUTH_PROVIDER_LABELS: Record<string, string> = {
   twitter: 'X',
 }
 
-/** Display label for the primary non-email auth provider (Google, Apple, …). */
-export function userOauthProviderLabel(
+/** Primary non-email OAuth provider id (`google`, `apple`, …) or null. */
+export function userOauthProviderId(
   user: User | null | undefined,
-  fallback = 'OAuth',
-): string {
-  if (!user) return fallback
+): string | null {
+  if (!user) return null
   const fromIdentity = (user.identities || [])
     .map((id) => String(id.provider || '').toLowerCase())
     .find((p) => p && p !== 'email')
@@ -415,7 +414,17 @@ export function userOauthProviderLabel(
     fromMeta ||
     String(user.app_metadata?.provider || '').toLowerCase() ||
     ''
-  if (!provider || provider === 'email') return fallback
+  if (!provider || provider === 'email') return null
+  return provider
+}
+
+/** Display label for the primary non-email auth provider (Google, Apple, …). */
+export function userOauthProviderLabel(
+  user: User | null | undefined,
+  fallback = 'OAuth',
+): string {
+  const provider = userOauthProviderId(user)
+  if (!provider) return fallback
   return (
     OAUTH_PROVIDER_LABELS[provider] ||
     provider.charAt(0).toUpperCase() + provider.slice(1)

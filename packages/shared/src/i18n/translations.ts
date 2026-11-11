@@ -362,30 +362,44 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.error.connection': 'Erreur de connexion',
     'auth.error.disconnection': 'Erreur de déconnexion',
     'auth.security.title': 'Sécurité',
-    'auth.security.pageTitle': 'Sécurité du compte',
+    'auth.security.pageTitle': 'Connexion & sécurité',
+    'auth.security.subtitle':
+      'Gère comment tu te connectes à FlightWatcher.',
+    'auth.security.signInSection': 'Connexion',
+    'auth.security.signInWith': 'Tu te connectes avec {provider}',
+    'auth.security.signInEmail': 'Connexion par e-mail',
+    'auth.security.signInHintOauth':
+      'Pas besoin de mot de passe : {provider} te reconnaît à chaque fois.',
+    'auth.security.signInHintEmail':
+      'Tu te connectes avec ton e-mail et ton mot de passe.',
+    'auth.security.signInHintMixed':
+      'Compte lié à {provider}. Tu peux aussi te connecter par e-mail.',
+    'auth.security.active': 'Actif',
     'auth.security.deleteTitle': 'Supprimer mon compte',
     'auth.security.deleteHint':
       'Compte, profil et favoris sont effacés. Les réservations et leurs dates restent en base.',
     'auth.security.deletePopup':
       'On supprime ton compte, ton profil et tes favoris.\n\nOn conserve en base tes réservations (vol / hôtel) et leurs dates.\n\nIrréversible. Continuer ?',
     'auth.security.deleteConfirm': 'Confirme pour supprimer définitivement.',
-    'auth.security.deleteButton': 'Supprimer',
+    'auth.security.deleteButton': 'Supprimer mon compte',
     'auth.security.deleteBusy': 'Suppression…',
     'auth.security.deleteDone': 'Compte supprimé',
     'auth.security.deleteError': 'Suppression impossible. Réessaie.',
+    'auth.security.dangerZone': 'Zone sensible',
     'auth.security.legalPrivacy': 'Confidentialité',
     'auth.security.legalTerms': 'CGU',
     'auth.security.legalMentions': 'Mentions légales',
     'auth.security.changePassword': 'Changer le mot de passe',
-    'auth.security.changePasswordHint': 'Saisis ton mot de passe actuel, puis le nouveau. Un email de confirmation t’est envoyé ensuite.',
-    'auth.security.setPassword': 'Créer un mot de passe',
+    'auth.security.changePasswordHint':
+      'Saisis ton mot de passe actuel, puis le nouveau.',
+    'auth.security.setPassword': 'Ajouter un mot de passe',
     'auth.security.setPasswordHint':
-      'Ajoute un mot de passe pour aussi te connecter par email.',
+      'Optionnel — pour te connecter aussi par e-mail, sans passer par {provider}.',
     'auth.security.currentPassword': 'Mot de passe actuel',
     'auth.security.oauthHint':
       'Compte {provider} : laisse « actuel » vide si tu n’as pas encore de mot de passe.',
     'auth.security.oauthNoPassword':
-      'Compte connecté à {provider}, ajoute un mot de passe.',
+      'Compte {provider} : le mot de passe est optionnel.',
     'auth.security.sendLink': 'Envoyer le lien par email',
     'auth.security.sending': 'Envoi de l’email…',
     'auth.security.saving': 'Enregistrement…',
@@ -398,7 +412,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.newPassword': 'Nouveau mot de passe',
     'auth.security.confirmPassword': 'Confirmer',
     'auth.security.savePassword': 'Enregistrer',
-    'auth.security.passwordUpdated': 'Mot de passe mis à jour. Un email de confirmation a été envoyé.',
+    'auth.security.passwordUpdated': 'Mot de passe mis à jour.',
     'auth.security.passwordTooShort': 'Mot de passe trop court (8 caractères min.)',
     'auth.security.passwordMismatch': 'Les mots de passe ne correspondent pas',
     'auth.security.linkInvalid': 'Lien invalide ou expiré. Redemande un email depuis le menu Sécurité.',
@@ -931,30 +945,44 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.error.connection': 'Connection error',
     'auth.error.disconnection': 'Disconnection error',
     'auth.security.title': 'Security',
-    'auth.security.pageTitle': 'Account security',
+    'auth.security.pageTitle': 'Sign-in & security',
+    'auth.security.subtitle':
+      'Manage how you sign in to FlightWatcher.',
+    'auth.security.signInSection': 'Sign-in',
+    'auth.security.signInWith': 'You sign in with {provider}',
+    'auth.security.signInEmail': 'Email sign-in',
+    'auth.security.signInHintOauth':
+      'No password needed — {provider} recognizes you each time.',
+    'auth.security.signInHintEmail':
+      'You sign in with your email and password.',
+    'auth.security.signInHintMixed':
+      'Account linked to {provider}. You can also sign in with email.',
+    'auth.security.active': 'Active',
     'auth.security.deleteTitle': 'Delete my account',
     'auth.security.deleteHint':
       'Account, profile and favorites are removed. Bookings and their dates stay in the database.',
     'auth.security.deletePopup':
       'We delete your account, profile and favorites.\n\nBookings (flight / hotel) and their dates stay in the database.\n\nThis cannot be undone — continue?',
     'auth.security.deleteConfirm': 'Confirm to permanently delete.',
-    'auth.security.deleteButton': 'Delete',
+    'auth.security.deleteButton': 'Delete my account',
     'auth.security.deleteBusy': 'Deleting…',
     'auth.security.deleteDone': 'Account deleted',
     'auth.security.deleteError': 'Could not delete account — try again',
+    'auth.security.dangerZone': 'Sensitive area',
     'auth.security.legalPrivacy': 'Privacy',
     'auth.security.legalTerms': 'Terms',
     'auth.security.legalMentions': 'Legal notice',
     'auth.security.changePassword': 'Change password',
-    'auth.security.changePasswordHint': 'Enter your current password, then the new one. A confirmation email is sent afterwards.',
-    'auth.security.setPassword': 'Create a password',
+    'auth.security.changePasswordHint':
+      'Enter your current password, then the new one.',
+    'auth.security.setPassword': 'Add a password',
     'auth.security.setPasswordHint':
-      'Add a password so you can also sign in with email.',
+      'Optional — also sign in with email, without {provider}.',
     'auth.security.currentPassword': 'Current password',
     'auth.security.oauthHint':
       '{provider} account: leave “current” empty if you don’t have a password yet.',
     'auth.security.oauthNoPassword':
-      'Account linked to {provider}. Add a password.',
+      '{provider} account: password is optional.',
     'auth.security.sendLink': 'Send email link',
     'auth.security.sending': 'Sending email…',
     'auth.security.saving': 'Saving…',
@@ -967,7 +995,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.newPassword': 'New password',
     'auth.security.confirmPassword': 'Confirm',
     'auth.security.savePassword': 'Save',
-    'auth.security.passwordUpdated': 'Password updated. A confirmation email was sent.',
+    'auth.security.passwordUpdated': 'Password updated.',
     'auth.security.passwordTooShort': 'Password too short (min. 8 characters)',
     'auth.security.passwordMismatch': 'Passwords do not match',
     'auth.security.linkInvalid': 'Invalid or expired link. Request a new email from Security.',
