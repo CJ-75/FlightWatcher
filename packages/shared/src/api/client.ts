@@ -781,6 +781,11 @@ export function createApiClient(options: ApiClientOptions = {}) {
           map_center_lng?: number | null
           google_cid?: string | null
           short_link?: boolean
+          /** Enrichissement backend (Wikipedia / Geoapify) */
+          description?: string | null
+          note?: string | null
+          category?: string | null
+          enrich_source?: string | null
         }
         error?: string
       }>('/api/admin/parcours/parse-maps', {

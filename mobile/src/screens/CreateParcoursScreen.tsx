@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -22,25 +21,29 @@ import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
-import { getApi } from '../lib/client'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
+import {
+  clearParcoursCreateSession,
+  getParcoursCreateSession,
+  startParcoursCreateSession,
+} from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateParcours'>
 
-export function CreateParcoursScreen({ navigation, route }: Props) {
+export function CreateParcoursScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
-  const itineraryId = route.params?.itineraryId
   const allowed = canCreateParcoursOnDevice(user?.email)
+  const existing = getParcoursCreateSession()
 
-  const [title, setTitle] = useState('')
-  const [titleTouched, setTitleTouched] = useState(false)
-  const [citySlug, setCitySlug] = useState('paris')
-  const [cityLabel, setCityLabel] = useState('Paris')
-  const [loading, setLoading] = useState(!!itineraryId)
-  const [saving, setSaving] = useState(false)
+  const [title, setTitle] = useState(existing?.title || '')
+  const [titleTouched, setTitleTouched] = useState(!!existing?.title)
+  const [citySlug, setCitySlug] = useState(existing?.city_slug || 'paris')
+  const [cityLabel, setCityLabel] = useState(
+    citySlugDisplayNameFr(existing?.city_slug || 'paris') || 'Paris',
+  )
   const [error, setError] = useState<string | null>(null)
 
   const cover = useMemo(
@@ -58,33 +61,6 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     if (!allowed) navigation.goBack()
   }, [allowed, navigation])
 
-  useEffect(() => {
-    if (!itineraryId) return
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      try {
-        const res = await getApi().adminGetParcours(itineraryId)
-        if (!res.ok || !res.itinerary) throw new Error('Parcours introuvable')
-        if (cancelled) return
-        const it = res.itinerary as Record<string, unknown>
-        const loadedTitle = String(it.title || '')
-        setTitle(loadedTitle)
-        setTitleTouched(!!loadedTitle)
-        const slug = String(it.city_slug || 'paris')
-        setCitySlug(slug)
-        setCityLabel(citySlugDisplayNameFr(slug) || slug)
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [itineraryId])
-
   const onCityChange = (city: { slug?: string; label?: string }) => {
     const slug = city.slug || 'paris'
     const label = city.label || city.slug || 'Paris'
@@ -93,7 +69,13 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     if (!titleTouched) setTitle(suggestTitle(label))
   }
 
-  const continueToSteps = useCallback(async () => {
+  const discardAndClose = useCallback(() => {
+    clearParcoursCreateSession()
+    if (navigation.canGoBack()) navigation.goBack()
+    else navigation.navigate('Main')
+  }, [navigation])
+
+  const continueToSteps = useCallback(() => {
     const t = title.trim()
     if (!t) {
       setError('Donne un titre à ton parcours')
@@ -103,34 +85,17 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
       setError('Choisis une ville')
       return
     }
-    setSaving(true)
     setError(null)
-    try {
-      let id = itineraryId
-      if (!id) {
-        const created = await getApi().adminCreateParcours({
-          title: t,
-          city_slug: citySlug,
-          cover_image: cover,
-        })
-        if (!created.ok || !created.itinerary?.id) {
-          throw new Error('Création impossible')
-        }
-        id = String(created.itinerary.id)
-      }
-      const patch = await getApi().adminUpdateParcours(id, {
-        title: t,
-        city_slug: citySlug,
-        cover_image: cover,
-      })
-      if (!patch.ok) throw new Error(patch.error || 'Enregistrement impossible')
-      navigation.replace('CreateParcoursSteps', { itineraryId: id })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setSaving(false)
-    }
-  }, [title, cover, itineraryId, citySlug, navigation])
+    // Mémoire seule — rien en base tant que non publié
+    startParcoursCreateSession({
+      title: t,
+      city_slug: citySlug,
+      cover_image: cover,
+    })
+    navigation.replace('CreateParcoursSteps', {
+      seed: { title: t, city_slug: citySlug, cover_image: cover },
+    })
+  }, [title, cover, citySlug, navigation])
 
   if (!allowed) return null
 
@@ -145,9 +110,11 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
       >
         <View style={{ paddingTop: insets.top + 8 }}>
           <Pressable
-            onPress={() => navigation.goBack()}
+            onPress={discardAndClose}
             hitSlop={14}
             style={styles.closeHit}
+            accessibilityRole="button"
+            accessibilityLabel="Fermer"
           >
             <Text style={styles.close}>Fermer</Text>
           </Pressable>
@@ -168,65 +135,55 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
             Un titre pour le retrouver, une ville pour le situer.
           </Text>
 
-          {loading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
-          ) : (
-            <>
-              <View style={[styles.card, shadow.soft]}>
-                <Text style={styles.q}>Titre</Text>
-                <TextInput
-                  value={title}
-                  onChangeText={(v) => {
-                    setTitle(v)
-                    setTitleTouched(true)
-                  }}
-                  placeholder="Ex. Week-end à Lyon"
-                  placeholderTextColor={colors.faint}
-                  style={styles.titleInput}
-                />
-              </View>
+          <View style={[styles.card, shadow.soft]}>
+            <Text style={styles.q}>Titre</Text>
+            <TextInput
+              value={title}
+              onChangeText={(v) => {
+                setTitle(v)
+                setTitleTouched(true)
+              }}
+              placeholder="Ex. Week-end à Lyon"
+              placeholderTextColor={colors.faint}
+              style={styles.titleInput}
+            />
+          </View>
 
-              <View style={[styles.card, shadow.soft]}>
-                <View style={styles.coverWrap}>
-                  <Image source={{ uri: cover }} style={styles.cover} />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(18,10,6,0.72)']}
-                    style={styles.coverGrad}
-                  />
-                  <Text style={styles.coverLabel} numberOfLines={1}>
-                    {cityLabel}
-                  </Text>
-                </View>
-                <Text style={styles.q}>Ville</Text>
-                <ActivityCityPicker
-                  valueSlug={citySlug}
-                  valueLabel={cityLabel}
-                  onChange={onCityChange}
-                  includeParcoursFrCities
-                />
-              </View>
-            </>
-          )}
+          <View style={[styles.card, shadow.soft]}>
+            <View style={styles.coverWrap}>
+              <Image source={{ uri: cover }} style={styles.cover} />
+              <LinearGradient
+                colors={['transparent', 'rgba(18,10,6,0.72)']}
+                style={styles.coverGrad}
+              />
+              <Text style={styles.coverLabel} numberOfLines={1}>
+                {cityLabel}
+              </Text>
+            </View>
+            <Text style={styles.q}>Ville</Text>
+            <ActivityCityPicker
+              valueSlug={citySlug}
+              valueLabel={cityLabel}
+              onChange={onCityChange}
+              includeParcoursFrCities
+            />
+          </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
           <Pressable
-            onPress={() => void continueToSteps()}
-            disabled={saving || loading || !canContinue}
+            onPress={continueToSteps}
+            disabled={!canContinue}
             style={({ pressed }) => [
               styles.cta,
               shadow.lift,
-              (!canContinue || saving || loading) && { opacity: 0.55 },
+              !canContinue && { opacity: 0.55 },
               pressed && canContinue && { transform: [{ scale: 0.985 }] },
             ]}
           >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.ctaText}>Ajouter les lieux</Text>
-            )}
+            <Text style={styles.ctaText}>Ajouter les lieux</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

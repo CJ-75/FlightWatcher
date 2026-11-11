@@ -7,7 +7,7 @@ import {
   StyleSheet,
   RefreshControl,
 } from 'react-native'
-import { useFocusEffect, useNavigation, useScrollToTop } from '@react-navigation/native'
+import { useNavigation, useScrollToTop } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -20,7 +20,6 @@ import {
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
-import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
   getParcoursCached,
   getParcoursCatalogMemory,
@@ -51,7 +50,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { user, isGuest } = useAuth()
-  const canCreate = canCreateParcoursOnDevice(user?.email)
   const scrollRef = useRef<ScrollView>(null)
   useScrollToTop(scrollRef)
   const [city, setCity] = useState('paris')
@@ -65,7 +63,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const [refreshing, setRefreshing] = useState(false)
   const [occasion, setOccasion] = useState<ItineraryOccasion | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [drafts, setDrafts] = useState<Itinerary[]>([])
 
   const kickActivitiesWarm = useCallback(() => {
     const key = user?.id || (isGuest ? 'guest' : '')
@@ -78,20 +75,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       if (v) setCity(v)
     })
   }, [])
-
-  const loadDrafts = useCallback(async () => {
-    if (!canCreate) {
-      setDrafts([])
-      return
-    }
-    try {
-      const res = await getApi().adminListParcours({ status: 'draft', limit: 40 })
-      if (!res.ok) return
-      setDrafts((res.itineraries || []) as unknown as Itinerary[])
-    } catch {
-      /* admin gate / network — ignore for catalogue */
-    }
-  }, [canCreate])
 
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true)
@@ -110,7 +93,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       )
       // Parcours ready → activités next (post-login sequencing).
       kickActivitiesWarm()
-      void loadDrafts()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
       if (!getParcoursCatalogMemory()?.length) setItems([])
@@ -120,7 +102,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       setLoading(false)
       setRefreshing(false)
     }
-  }, [kickActivitiesWarm, loadDrafts])
+  }, [kickActivitiesWarm])
 
   useEffect(() => {
     let cancelled = false
@@ -147,12 +129,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   useEffect(() => {
     void import('./ItineraryDetailScreen')
   }, [])
-
-  useFocusEffect(
-    useCallback(() => {
-      void loadDrafts()
-    }, [loadDrafts]),
-  )
 
   useEffect(() => {
     void AsyncStorage.setItem(CITY_LS, city)
@@ -246,29 +222,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
               Des balades et des week-ends choisis pour toi.
             </Text>
           </>
-        ) : null}
-
-        {canCreate && drafts.length > 0 ? (
-          <View style={styles.draftsBlock}>
-            <Text style={styles.draftsTitle}>Mes brouillons</Text>
-            {drafts.map((d) => (
-              <Pressable
-                key={d.id}
-                onPress={() =>
-                  navigation.navigate('CreateParcours', { itineraryId: d.id })
-                }
-                style={styles.draftRow}
-              >
-                <Text style={styles.draftTitle} numberOfLines={1}>
-                  {d.title || 'Sans titre'}
-                </Text>
-                <Text style={styles.draftMeta}>
-                  {(citySlugDisplayNameFr(d.city_slug || '') || d.city_slug || '—') +
-                    ' · Éditer'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
         ) : null}
 
         <Pressable
@@ -410,40 +363,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  draftsBlock: {
-    marginTop: 16,
-    marginBottom: 4,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
-    overflow: 'hidden',
-  },
-  draftsTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.ink,
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
-  draftRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-  },
-  draftTitle: {
-    fontFamily: fonts.semibold,
-    fontSize: 14,
-    color: colors.ink,
-  },
-  draftMeta: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
   title: {
     ...tabScreenHeaderStyles.title,
   },

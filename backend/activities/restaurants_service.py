@@ -95,6 +95,13 @@ def parse_maps_url(url: str) -> Dict[str, Any]:
     m = re.search(r"/maps/place/([^/]+)", url)
     if m:
         out["name"] = _decode_name(m.group(1))
+    if not out["name"]:
+        q = re.search(r"[?&]q=([^&]+)", url)
+        if q:
+            cand = _decode_name(q.group(1))
+            # Ignore pure coordinates in q=
+            if cand and not re.match(r"^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$", cand):
+                out["name"] = cand
     exact = re.search(r"!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)", url)
     center = re.search(r"@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)", url)
     if exact:

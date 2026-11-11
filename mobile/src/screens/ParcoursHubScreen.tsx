@@ -116,10 +116,9 @@ export function ParcoursHubScreen() {
             pressed && styles.fabPressed,
           ]}
         >
-          <View style={styles.fabGlyph} pointerEvents="none">
-            <View style={styles.fabPlusH} />
-            <View style={styles.fabPlusV} />
-          </View>
+          <Text style={styles.fabPlus} pointerEvents="none">
+            +
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -138,6 +137,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.22)',
     ...Platform.select({
@@ -155,24 +155,14 @@ const styles = StyleSheet.create({
     opacity: 0.88,
     transform: [{ scale: 0.96 }],
   },
-  fabGlyph: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabPlusH: {
-    position: 'absolute',
-    width: 16,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: '#fff',
-  },
-  fabPlusV: {
-    position: 'absolute',
-    width: 2.5,
-    height: 16,
-    borderRadius: 1.5,
-    backgroundColor: '#fff',
+  fabPlus: {
+    fontFamily: fonts.bold,
+    fontSize: 28,
+    lineHeight: 30,
+    color: '#fff',
+    includeFontPadding: false,
+    textAlign: 'center',
+    marginTop: Platform.OS === 'ios' ? -1 : -2,
   },
   tabs: {
     flexDirection: 'row',

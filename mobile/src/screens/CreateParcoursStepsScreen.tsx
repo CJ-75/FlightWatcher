@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   Image,
-  ActivityIndicator,
   Alert,
   Platform,
 } from 'react-native'
@@ -14,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   canPublish,
+  citySlugDisplayNameFr,
   groupItemsByDay,
   type Itinerary,
   type ItineraryItem,
@@ -27,6 +27,12 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
+import {
+  clearParcoursCreateSession,
+  getParcoursCreateSession,
+  patchParcoursCreateSession,
+  startParcoursCreateSession,
+} from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -40,35 +46,7 @@ const MOMENT_FR: Record<string, string> = {
 
 const FAB = 48
 
-function itemToDraft(it: ItineraryItem, index: number): DraftStep {
-  const meta = it.meta || {}
-  const photos = Array.isArray(meta.photos)
-    ? meta.photos.map(String).filter(Boolean)
-    : it.photo
-      ? [String(it.photo)]
-      : []
-  const budgetRaw = meta.budget_eur
-  const budget_eur =
-    typeof budgetRaw === 'number' && Number.isFinite(budgetRaw)
-      ? budgetRaw
-      : 0
-  return {
-    localId: it.id || `srv-${index}`,
-    kind: it.kind === 'place' ? 'place' : 'free',
-    title: String(it.title || ''),
-    note: String(it.note || ''),
-    day_offset: Number(it.day_offset || 0),
-    moment: (it.moment as DraftStep['moment']) || null,
-    photo: it.photo || photos[0] || null,
-    photos,
-    maps_url: String(meta.maps_url || ''),
-    lat: typeof meta.lat === 'number' ? meta.lat : null,
-    lng: typeof meta.lng === 'number' ? meta.lng : null,
-    budget_eur,
-  }
-}
-
-function sumStepBudgets(steps: DraftStep[]): number {
+export function sumStepBudgets(steps: DraftStep[]): number {
   return steps.reduce((acc, s) => {
     const n = typeof s.budget_eur === 'number' ? s.budget_eur : 0
     return acc + (Number.isFinite(n) && n >= 0 ? n : 0)
@@ -83,6 +61,7 @@ function draftToPayload(steps: DraftStep[]) {
     if (s.lat != null) meta.lat = s.lat
     if (s.lng != null) meta.lng = s.lng
     if (photos.length) meta.photos = photos
+    if (s.description.trim()) meta.description = s.description.trim()
     meta.budget_eur =
       typeof s.budget_eur === 'number' && Number.isFinite(s.budget_eur)
         ? s.budget_eur
@@ -103,58 +82,56 @@ function draftToPayload(steps: DraftStep[]) {
 export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
-  const { itineraryId } = route.params
+  const routeSeed = route.params?.seed
   const allowed = canCreateParcoursOnDevice(user?.email)
 
-  const [itin, setItin] = useState<Itinerary | null>(null)
-  const [steps, setSteps] = useState<DraftStep[]>([])
-  const [loading, setLoading] = useState(true)
+  const session0 = getParcoursCreateSession()
+  const [title] = useState(
+    () => session0?.title || routeSeed?.title || 'Parcours',
+  )
+  const [citySlug] = useState(
+    () => session0?.city_slug || routeSeed?.city_slug || 'paris',
+  )
+  const [coverImage] = useState(
+    () => session0?.cover_image || routeSeed?.cover_image || null,
+  )
+  const [steps, setSteps] = useState<DraftStep[]>(() => session0?.steps || [])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(steps.length === 0)
   const [editing, setEditing] = useState<DraftStep | null>(null)
+  const autoOpenedRef = useRef(steps.length === 0)
 
   useEffect(() => {
     if (!allowed) navigation.goBack()
   }, [allowed, navigation])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await getApi().adminGetParcours(itineraryId)
-      if (!res.ok || !res.itinerary) throw new Error('Parcours introuvable')
-      const raw = res.itinerary as unknown as Itinerary
-      setItin(raw)
-      setSteps(((raw.itinerary_items || []) as ItineraryItem[]).map(itemToDraft))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (!getParcoursCreateSession() && routeSeed) {
+      startParcoursCreateSession({
+        title: routeSeed.title || 'Parcours',
+        city_slug: routeSeed.city_slug || 'paris',
+        cover_image: routeSeed.cover_image,
+        steps,
+      })
     }
-  }, [itineraryId])
+  }, [routeSeed, steps])
 
+  // Une seule ouverture auto de la sheet
   useEffect(() => {
-    void load()
-  }, [load])
-
-  // First visit with no steps → open the add sheet (Maps-first).
-  useEffect(() => {
-    if (loading || error) return
+    if (autoOpenedRef.current) return
     if (steps.length > 0) return
-    const t = setTimeout(() => {
-      setEditing(null)
-      setSheetOpen(true)
-    }, 450)
-    return () => clearTimeout(t)
-  }, [loading, error, steps.length])
+    autoOpenedRef.current = true
+    setEditing(null)
+    setSheetOpen(true)
+  }, [steps.length])
 
   const byDay = useMemo(() => {
     const fake = steps.map(
       (s, i) =>
         ({
           id: s.localId,
-          itinerary_id: itineraryId,
+          itinerary_id: 'local',
           kind: s.kind,
           position: i,
           title: s.title,
@@ -164,41 +141,25 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
         }) as ItineraryItem,
     )
     return groupItemsByDay(fake)
-  }, [steps, itineraryId])
+  }, [steps])
 
-  const persist = async (nextSteps: DraftStep[]) => {
-    setSaving(true)
-    setError(null)
-    try {
-      const total = sumStepBudgets(nextSteps)
-      const res = await getApi().adminUpdateParcours(itineraryId, {
-        items: draftToPayload(nextSteps),
-        budget_estimate_eur: total,
-        budget_basis: 'for_two',
-      })
-      if (!res.ok) throw new Error(res.error || 'Enregistrement impossible')
-      if (res.itinerary) setItin(res.itinerary as unknown as Itinerary)
-      const items = ((res.itinerary as { itinerary_items?: ItineraryItem[] })
-        ?.itinerary_items || []) as ItineraryItem[]
-      if (items.length) setSteps(items.map(itemToDraft))
-      else setSteps(nextSteps)
-      return true
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
-      return false
-    } finally {
-      setSaving(false)
-    }
+  const persistLocal = (nextSteps: DraftStep[]) => {
+    setSteps(nextSteps)
+    patchParcoursCreateSession({
+      title,
+      city_slug: citySlug,
+      cover_image: coverImage,
+      steps: nextSteps,
+    })
   }
 
-  const onSaveStep = async (step: DraftStep) => {
+  const onSaveStep = (step: DraftStep) => {
     const idx = steps.findIndex((s) => s.localId === step.localId)
     const next =
       idx >= 0 ? steps.map((s, i) => (i === idx ? step : s)) : [...steps, step]
-    setSteps(next)
+    persistLocal(next)
     setSheetOpen(false)
     setEditing(null)
-    await persist(next)
   }
 
   const removeStep = (localId: string) => {
@@ -208,33 +169,66 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
         text: 'Supprimer',
         style: 'destructive',
         onPress: () => {
-          const next = steps.filter((s) => s.localId !== localId)
-          setSteps(next)
-          void persist(next)
+          persistLocal(steps.filter((s) => s.localId !== localId))
         },
       },
     ])
   }
 
-  const goPreview = async () => {
-    const ok = await persist(steps)
-    if (!ok) return
-    navigation.navigate('CreateParcoursPreview', { itineraryId })
+  const goPreview = () => {
+    persistLocal(steps)
+    navigation.navigate('CreateParcoursPreview')
   }
 
   const tryPublish = async () => {
-    const items = draftToPayload(steps) as unknown as ItineraryItem[]
-    if (!canPublish(itin, items)) {
-      Alert.alert(
-        'Pas encore publiable',
-        'Complète depuis l’admin web (intro, lieux vérifiés…).',
-      )
+    persistLocal(steps)
+    if (steps.length === 0) {
+      Alert.alert('Ajoute au moins un lieu avant de publier.')
       return
     }
+    setSaving(true)
+    setError(null)
+    let createdId: string | null = null
     try {
-      await persist(steps)
-      const res = await getApi().adminPublishParcours(itineraryId)
+      const total = sumStepBudgets(steps)
+      const created = await getApi().adminCreateParcours({
+        title,
+        city_slug: citySlug,
+        cover_image: coverImage || undefined,
+      })
+      if (!created.ok || !created.itinerary?.id) {
+        throw new Error('Création impossible')
+      }
+      const id = String(created.itinerary.id)
+      createdId = id
+      const patch = await getApi().adminUpdateParcours(id, {
+        title,
+        city_slug: citySlug,
+        cover_image: coverImage,
+        items: draftToPayload(steps),
+        budget_estimate_eur: total,
+        budget_basis: 'for_two',
+        intro:
+          (created.itinerary as { intro?: string }).intro ||
+          `Parcours à ${citySlugDisplayNameFr(citySlug) || citySlug}.`,
+      })
+      if (!patch.ok) throw new Error(patch.error || 'Enregistrement impossible')
+
+      const items = draftToPayload(steps) as unknown as ItineraryItem[]
+      const itin = (patch.itinerary || created.itinerary) as unknown as Itinerary
+      if (!canPublish(itin, items)) {
+        await getApi().adminDeleteParcours(id).catch(() => {})
+        createdId = null
+        Alert.alert(
+          'Pas encore publiable',
+          'Il manque des infos (intro, lieux vérifiés…). Rien n’a été enregistré.',
+        )
+        return
+      }
+      const res = await getApi().adminPublishParcours(id)
       if (!res.ok) {
+        await getApi().adminDeleteParcours(id).catch(() => {})
+        createdId = null
         Alert.alert(
           'Publication refusée',
           (res.blockers || []).map((b) => b.message).join('\n') ||
@@ -243,21 +237,27 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
         )
         return
       }
-      const published = (res.itinerary || itin) as Itinerary | null
+      createdId = null
+      clearParcoursCreateSession()
+      const published = (res.itinerary || itin) as Itinerary
       navigation.replace('ItineraryDetail', {
-        itineraryId: published?.slug || itineraryId,
-        preview: published
-          ? {
-              id: published.id,
-              slug: published.slug,
-              title: published.title,
-              cover_image: published.cover_image,
-              city_slug: published.city_slug,
-            }
-          : undefined,
+        itineraryId: published?.slug || id,
+        preview: {
+          id: published.id,
+          slug: published.slug,
+          title: published.title,
+          cover_image: published.cover_image,
+          city_slug: published.city_slug,
+        },
       })
     } catch (e) {
+      if (createdId) {
+        await getApi().adminDeleteParcours(createdId).catch(() => {})
+      }
+      setError(e instanceof Error ? e.message : 'Erreur')
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -268,21 +268,21 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
       <ScreenBackground />
       <View style={styles.topBar}>
         <Pressable
-          onPress={() => navigation.navigate('CreateParcours', { itineraryId })}
+          onPress={() => {
+            persistLocal(steps)
+            navigation.navigate('CreateParcours')
+          }}
           hitSlop={12}
         >
           <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Pressable onPress={() => void goPreview()} disabled={saving} hitSlop={12}>
-          <Text style={styles.navCta}>{saving ? '…' : 'Aperçu'}</Text>
+        <Pressable onPress={goPreview} hitSlop={12}>
+          <Text style={styles.navCta}>Aperçu</Text>
         </Pressable>
       </View>
       <CreateFlowProgress step={2} />
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 48 }} />
-      ) : (
-        <ScrollView
+      <ScrollView
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
             paddingBottom: insets.bottom + 120,
@@ -291,7 +291,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
         >
           <Text style={styles.kicker}>LES LIEUX</Text>
           <Text style={styles.heading} numberOfLines={2}>
-            {itin?.title || 'Parcours'}
+            {title}
           </Text>
           <Text
             style={[
@@ -310,8 +310,6 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
               })()}
             </Text>
           ) : null}
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
 
           {steps.length === 0 ? (
             <Pressable
@@ -395,20 +393,15 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
 
           {steps.length > 0 ? (
             <Pressable
-              onPress={() => void goPreview()}
-              style={[styles.previewCta, shadow.lift]}
+              onPress={() => void tryPublish()}
+              disabled={saving}
+              style={styles.publish}
             >
-              <Text style={styles.previewCtaText}>Aperçu</Text>
+              <Text style={styles.publishText}>{saving ? '…' : 'Publier'}</Text>
             </Pressable>
           ) : null}
-
-          {steps.length > 0 ? (
-            <Pressable onPress={() => void tryPublish()} style={styles.publish}>
-              <Text style={styles.publishText}>Publier</Text>
-            </Pressable>
-          ) : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
-      )}
 
       <Pressable
         onPress={() => {
@@ -422,10 +415,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
           pressed && { transform: [{ scale: 0.96 }] },
         ]}
       >
-        <View style={styles.fabGlyph}>
-          <View style={styles.fabH} />
-          <View style={styles.fabV} />
-        </View>
+        <Text style={styles.fabPlus}>+</Text>
       </Pressable>
 
       <AddParcoursStepSheet
@@ -575,19 +565,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 3,
   },
-  previewCta: {
-    marginTop: 18,
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  previewCtaText: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: '#fff',
-  },
-  publish: { marginTop: 12, alignSelf: 'center', paddingVertical: 8 },
+  publish: { marginTop: 18, alignSelf: 'center', paddingVertical: 8 },
   publishText: {
     fontFamily: fonts.semibold,
     fontSize: 13,
@@ -600,6 +578,9 @@ const styles = StyleSheet.create({
     height: FAB,
     borderRadius: FAB / 2,
     backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: colors.primaryDeep,
@@ -611,23 +592,13 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  fabGlyph: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabH: {
-    position: 'absolute',
-    width: 16,
-    height: 2.5,
-    borderRadius: 1.5,
-    backgroundColor: '#fff',
-  },
-  fabV: {
-    position: 'absolute',
-    width: 2.5,
-    height: 16,
-    borderRadius: 1.5,
-    backgroundColor: '#fff',
+  fabPlus: {
+    fontFamily: fonts.bold,
+    fontSize: 28,
+    lineHeight: 30,
+    color: '#fff',
+    includeFontPadding: false,
+    textAlign: 'center',
+    marginTop: Platform.OS === 'ios' ? -1 : -2,
   },
 })

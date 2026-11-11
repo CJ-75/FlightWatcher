@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -32,6 +33,8 @@ export type DraftStep = {
   lng: number | null
   /** € for this step — 0 = gratuit, null = non renseigné */
   budget_eur: number | null
+  /** Descriptif enrichi (Maps / Wikipedia) — stocké dans meta */
+  description: string
 }
 
 type Props = {
@@ -68,6 +71,7 @@ function emptyStep(): DraftStep {
     lat: null,
     lng: null,
     budget_eur: 0,
+    description: '',
   }
 }
 
@@ -94,6 +98,7 @@ export function AddParcoursStepSheet({
           photos: [...(initial.photos || [])],
           budget_eur:
             typeof initial.budget_eur === 'number' ? initial.budget_eur : 0,
+          description: String(initial.description || ''),
         }
       : emptyStep()
     setStep(base)
@@ -112,24 +117,40 @@ export function AddParcoursStepSheet({
     setStep((s) => ({ ...s, ...p }))
   }, [])
 
-  const parseMaps = async () => {
-    const url = mapsInput.trim()
-    if (!url) return
+  const parseMaps = async (rawUrl?: string) => {
+    const url = (rawUrl ?? mapsInput).trim()
+    if (!url || !/^https?:\/\//i.test(url)) return
     setParsing(true)
     setHint(null)
     try {
       const res = await getApi().adminParseMapsUrl(url)
       if (!res.ok) throw new Error('Lien Maps non reconnu')
       const p = res.parsed || {}
-      const name = (p.name || '').trim()
-      patch({
-        maps_url: p.url_clean || url,
-        lat: typeof p.lat === 'number' ? p.lat : null,
-        lng: typeof p.lng === 'number' ? p.lng : null,
-        title: step.title.trim() || name || step.title,
+      const name = String(p.name || '').trim()
+      const description = String(p.description || '').trim()
+      const note = String(p.note || '').trim()
+      // Toujours appliquer l’enrich sur les champs vides (évite closure stale)
+      setStep((s) => ({
+        ...s,
+        maps_url: String(p.url_clean || url),
+        lat: typeof p.lat === 'number' ? p.lat : s.lat,
+        lng: typeof p.lng === 'number' ? p.lng : s.lng,
+        title: s.title.trim() ? s.title : name || s.title,
+        description: s.description.trim() ? s.description : description,
+        note: s.note.trim() ? s.note : note || s.note,
         kind: 'free',
-      })
-      setHint(name ? `Lieu trouvé : ${name}` : 'Lien enregistré')
+      }))
+      if (name && description) {
+        setHint(
+          `${name} — ${description.slice(0, 120)}${description.length > 120 ? '…' : ''}`,
+        )
+      } else if (name) {
+        setHint(`Lieu trouvé : ${name}`)
+      } else if (note) {
+        setHint('Infos préremplies')
+      } else {
+        setHint('Lien enregistré — complète le nom si besoin')
+      }
     } catch (e) {
       setHint(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -185,14 +206,28 @@ export function AddParcoursStepSheet({
     })
   }
 
+  const dismiss = useCallback(() => {
+    Keyboard.dismiss()
+    onClose()
+  }, [onClose])
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={dismiss}
+      statusBarTranslucent
+    >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <Pressable style={styles.backdrop} onPress={dismiss} accessibilityLabel="Fermer" />
+        <View
+          style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}
+          onStartShouldSetResponder={() => true}
+        >
           <View style={styles.handle} />
           <View style={styles.head}>
             <View style={{ flex: 1, paddingRight: 12 }}>
@@ -201,7 +236,13 @@ export function AddParcoursStepSheet({
                 {initial ? 'Retoucher' : 'Ajouter au parcours'}
               </Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={12}>
+            <Pressable
+              onPress={dismiss}
+              hitSlop={16}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+              style={styles.closeHit}
+            >
               <Text style={styles.close}>Fermer</Text>
             </Pressable>
           </View>
@@ -219,7 +260,17 @@ export function AddParcoursStepSheet({
               </Text>
               <TextInput
                 value={mapsInput}
-                onChangeText={setMapsInput}
+                onChangeText={(v) => {
+                  setMapsInput(v)
+                  const t = v.trim()
+                  if (
+                    /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl|www\.google\.[a-z.]+\/maps)\S+/i.test(
+                      t,
+                    )
+                  ) {
+                    void parseMaps(t)
+                  }
+                }}
                 onEndEditing={() => void parseMaps()}
                 placeholder="https://maps.app.goo.gl/…"
                 placeholderTextColor={colors.faint}
@@ -251,6 +302,13 @@ export function AddParcoursStepSheet({
                 placeholderTextColor={colors.faint}
                 style={styles.titleInput}
               />
+              {step.description ? (
+                <>
+                  <View style={styles.line} />
+                  <Text style={styles.fieldLabel}>Descriptif</Text>
+                  <Text style={styles.descriptionText}>{step.description}</Text>
+                </>
+              ) : null}
               <View style={styles.line} />
               <Text style={styles.fieldLabel}>Note</Text>
               <TextInput
@@ -454,11 +512,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     color: colors.ink,
   },
+  closeHit: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    marginTop: 2,
+  },
   close: {
     fontFamily: fonts.semibold,
     fontSize: 14,
     color: colors.muted,
-    marginTop: 6,
   },
   form: { paddingBottom: 16 },
   block: {
@@ -515,6 +577,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     color: colors.ink,
     paddingVertical: 6,
+  },
+  descriptionText: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.inkSoft,
+    paddingVertical: 4,
   },
   line: {
     height: StyleSheet.hairlineWidth,

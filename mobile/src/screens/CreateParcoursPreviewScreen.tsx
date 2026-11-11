@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -6,14 +6,12 @@ import {
   Pressable,
   ScrollView,
   Image,
-  ActivityIndicator,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   citySlugDisplayNameFr,
   groupItemsByDay,
-  itineraryBudgetLabel,
   type Itinerary,
   type ItineraryItem,
 } from '@flightwatcher/shared'
@@ -23,10 +21,15 @@ import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChr
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
-import { getApi } from '../lib/client'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
+import {
+  clearParcoursCreateSession,
+  getParcoursCreateSession,
+} from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { sumStepBudgets } from './CreateParcoursStepsScreen'
+import type { DraftStep } from '../components/parcours/AddParcoursStepSheet'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateParcoursPreview'>
 
@@ -36,38 +39,65 @@ const MOMENT_FR: Record<string, string> = {
   evening: 'Soir',
 }
 
-export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
+function sessionToItinerary(
+  title: string,
+  citySlug: string,
+  cover: string | null,
+  steps: DraftStep[],
+): Itinerary {
+  const total = sumStepBudgets(steps)
+  return {
+    id: 'local',
+    title,
+    city_slug: citySlug,
+    cover_image: cover,
+    budget_estimate_eur: total,
+    budget_basis: 'for_two',
+    itinerary_items: steps.map(
+      (s, i) =>
+        ({
+          id: s.localId,
+          itinerary_id: 'local',
+          kind: 'free',
+          position: i,
+          title: s.title,
+          note: s.note,
+          day_offset: s.day_offset,
+          moment: s.moment,
+          photo: s.photo || s.photos[0] || null,
+          meta: {
+            maps_url: s.maps_url,
+            lat: s.lat,
+            lng: s.lng,
+            photos: s.photos,
+            budget_eur: s.budget_eur,
+            description: s.description,
+          },
+        }) as ItineraryItem,
+    ),
+  } as Itinerary
+}
+
+export function CreateParcoursPreviewScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
-  const { itineraryId } = route.params
   const allowed = canCreateParcoursOnDevice(user?.email)
-
-  const [itin, setItin] = useState<Itinerary | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const session = getParcoursCreateSession()
   const [mode, setMode] = useState<'card' | 'fiche'>('fiche')
 
   useEffect(() => {
     if (!allowed) navigation.goBack()
   }, [allowed, navigation])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await getApi().adminGetParcours(itineraryId)
-      if (!res.ok || !res.itinerary) throw new Error('Parcours introuvable')
-      setItin(res.itinerary as unknown as Itinerary)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setLoading(false)
-    }
-  }, [itineraryId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const itin = useMemo(() => {
+    if (!session) return null
+    return sessionToItinerary(
+      session.title,
+      session.city_slug,
+      session.cover_image,
+      session.steps,
+    )
+  }, [session])
 
   const items = useMemo(
     () => (itin?.itinerary_items || []) as ItineraryItem[],
@@ -80,7 +110,6 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
       coverUri(itin?.cover_image || '', {
         width: 1400,
         citySlug: itin?.city_slug,
-        slug: itin?.slug,
       }),
     [itin],
   )
@@ -88,30 +117,28 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
   const cityLabel = itin?.city_slug
     ? citySlugDisplayNameFr(itin.city_slug) || itin.city_slug
     : ''
-  const budgetLabel = itin ? itineraryBudgetLabel(itin) : null
 
-  const done = () => {
+  const budgetLabel =
+    itin?.budget_estimate_eur === 0
+      ? 'Gratuit'
+      : itin?.budget_estimate_eur != null
+        ? `~${itin.budget_estimate_eur} €`
+        : null
+
+  const discardAndClose = () => {
+    clearParcoursCreateSession()
     navigation.navigate('Main')
   }
 
   if (!allowed) return null
 
-  if (loading) {
-    return (
-      <View style={[styles.root, styles.center]}>
-        <ScreenBackground />
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    )
-  }
-
-  if (error || !itin) {
+  if (!itin || !session) {
     return (
       <View style={[styles.root, styles.center, { padding: spacing.xl }]}>
         <ScreenBackground />
-        <Text style={styles.error}>{error || 'Introuvable'}</Text>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text style={styles.link}>Retour</Text>
+        <Text style={styles.error}>Parcours non commencé</Text>
+        <Pressable onPress={() => navigation.navigate('Main')}>
+          <Text style={styles.link}>Fermer</Text>
         </Pressable>
       </View>
     )
@@ -121,20 +148,18 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
     return (
       <View style={styles.root}>
         <ItineraryDetailChrome
-          heroUrl={heroUrl}
+          heroUri={heroUrl}
           title={itin.title || 'Parcours'}
           metaChips={[
             cityLabel,
-            budgetLabel ? budgetLabel.replace(' sur place', '').trim() : null,
+            budgetLabel,
             `${items.length} étape${items.length > 1 ? 's' : ''}`,
           ].filter(Boolean) as string[]}
           phaseLabel="Aperçu"
-          onBack={() =>
-            navigation.navigate('CreateParcoursSteps', { itineraryId })
-          }
-          stickyLeft="Brouillon"
-          stickyCta="Terminer"
-          onStickyCta={done}
+          onBack={() => navigation.navigate('CreateParcoursSteps')}
+          stickyLeft="Non enregistré"
+          stickyCta="Fermer"
+          onStickyCta={discardAndClose}
         >
           <View style={styles.previewBanner}>
             <CreateFlowProgress
@@ -142,7 +167,7 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
               style={{ marginHorizontal: 0, marginTop: 0 }}
             />
             <Text style={styles.previewHint}>
-              Aperçu du parcours tel qu’il sera affiché.
+              Aperçu local — rien n’est enregistré tant que tu ne publies pas.
             </Text>
             <Pressable onPress={() => setMode('card')} style={styles.switchMode}>
               <Text style={styles.switchModeText}>Voir la carte</Text>
@@ -182,9 +207,6 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
                       {it.note ? (
                         <Text style={styles.stepNote}>{it.note}</Text>
                       ) : null}
-                      {it.meta?.maps_url ? (
-                        <Text style={styles.stepMaps}>Google Maps lié</Text>
-                      ) : null}
                     </View>
                   )
                 })}
@@ -201,15 +223,13 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
       <ScreenBackground />
       <View style={styles.topBar}>
         <Pressable
-          onPress={() =>
-            navigation.navigate('CreateParcoursSteps', { itineraryId })
-          }
+          onPress={() => navigation.navigate('CreateParcoursSteps')}
           hitSlop={12}
         >
           <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Pressable onPress={done} hitSlop={12}>
-          <Text style={styles.navCta}>Terminer</Text>
+        <Pressable onPress={discardAndClose} hitSlop={12}>
+          <Text style={styles.navCta}>Fermer</Text>
         </Pressable>
       </View>
       <CreateFlowProgress step={3} />
@@ -224,27 +244,18 @@ export function CreateParcoursPreviewScreen({ navigation, route }: Props) {
         <Text style={styles.kicker}>LE RENDU</Text>
         <Text style={styles.heading}>Aperçu</Text>
         <Text style={[styles.lead, { marginBottom: 18 }]}>
-          Comme dans la liste Parcours.
+          Comme dans la liste Parcours — pas encore en base.
         </Text>
 
         <ItineraryCard
           itinerary={itin}
           variant="landscape"
-          badge="Brouillon"
+          badge="Aperçu"
           style={{ alignSelf: 'center', marginBottom: 16 }}
         />
-        <ItineraryCard
-          itinerary={itin}
-          variant="portrait"
-          badge="Brouillon"
-          style={{ alignSelf: 'center' }}
-        />
 
-        <Pressable
-          onPress={() => setMode('fiche')}
-          style={[styles.cta, shadow.lift, { marginTop: 28 }]}
-        >
-          <Text style={styles.ctaText}>Voir la fiche</Text>
+        <Pressable onPress={() => setMode('fiche')} style={styles.switchMode}>
+          <Text style={styles.switchModeText}>Voir la fiche</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -344,19 +355,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 18,
   },
-  stepMaps: {
-    fontFamily: fonts.semibold,
-    fontSize: 11,
-    color: colors.primaryDeep,
-    marginTop: 8,
-  },
-  cta: {
-    backgroundColor: colors.primary,
-    borderRadius: 18,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  ctaText: { fontFamily: fonts.bold, fontSize: 15, color: '#fff' },
   error: {
     fontFamily: fonts.medium,
     fontSize: 13,

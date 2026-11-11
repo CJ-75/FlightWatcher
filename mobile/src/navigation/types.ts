@@ -123,7 +123,16 @@ export type RootStackParamList = {
   }
   /** Admin create / edit parcours infos + hero (gated). */
   CreateParcours: { itineraryId?: string } | undefined
-  CreateParcoursSteps: { itineraryId: string }
-  CreateParcoursPreview: { itineraryId: string }
+  CreateParcoursSteps:
+    | {
+        itineraryId?: string
+        seed?: {
+          title?: string
+          city_slug?: string
+          cover_image?: string | null
+        }
+      }
+    | undefined
+  CreateParcoursPreview: undefined
   NotFound: undefined
 }

@@ -950,14 +950,18 @@ class AdminParseMapsBody(BaseModel):
 @router.post("/api/admin/parcours/parse-maps")
 @require_admin
 async def admin_parse_maps(body: AdminParseMapsBody, request: Request):
-    """Parse a Google Maps URL (expand short links) — no Places API."""
+    """Parse Maps URL + enrich rapide (Wikipedia / Geoapify) → name, description, note."""
     from activities.restaurants_service import parse_maps_url
+    from activities.maps_enrich import enrich_maps_place
+    import asyncio
 
     url = (body.url or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="url_required")
     parsed = parse_maps_url(url)
-    return {"ok": True, "parsed": parsed}
+    # Enrichissement réseau hors event loop (timeouts ~2s)
+    enriched = await asyncio.to_thread(enrich_maps_place, parsed)
+    return {"ok": True, "parsed": enriched}
 
 
 @router.get("/api/admin/parcours")
