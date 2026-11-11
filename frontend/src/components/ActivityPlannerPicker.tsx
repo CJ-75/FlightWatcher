@@ -26,7 +26,10 @@ import {
 } from '@flightwatcher/shared'
 import { getCurrentSession, refreshAccessToken } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
-import { listTravelWorkspacesCached } from '../utils/workspacesCache'
+import {
+  listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
+} from '../utils/workspacesCache'
 import { listRememberedTrips } from '../utils/tripRecovery'
 
 export type ActivityPlannerTarget = {
@@ -157,12 +160,24 @@ export function ActivityPlannerPicker({
       return
     }
     let cancelled = false
-    setLoading(true)
     setError(null)
     setAuthNeeded(false)
     setExpanded(false)
+
+    const paint = (remote: TravelWorkspace[], local: TravelWorkspace[]) => {
+      if (cancelled) return
+      setItems(applyFilter([...remote, ...local]))
+    }
+
     void (async () => {
       const local = listRememberedTrips().map(rememberedAsWorkspace)
+      const mem = peekTravelWorkspacesCache()
+      if (mem?.length || local.length) {
+        paint(mem || [], local)
+        setLoading(false)
+      } else {
+        setLoading(true)
+      }
 
       try {
         let remote: TravelWorkspace[] = []
@@ -186,12 +201,11 @@ export function ActivityPlannerPicker({
                   )
                 } catch {
                   if (cancelled) return
-                  const merged = applyFilter(local)
-                  setItems(merged)
-                  if (!merged.length) {
+                  paint([], local)
+                  if (!local.length && !peekTravelWorkspacesCache()?.length) {
                     setAuthNeeded(true)
                     setError(
-                      'Tu es connecté, impossible de charger tes séjours. Réessaie.',
+                      'Impossible de charger les séjours. Réessayer.',
                     )
                   }
                   return
@@ -203,9 +217,8 @@ export function ActivityPlannerPicker({
                 remote = (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace)
               } catch {
                 if (cancelled) return
-                const merged = applyFilter(local)
-                setItems(merged)
-                if (!merged.length) {
+                paint([], local)
+                if (!local.length) {
                   setAuthNeeded(true)
                   setError(ACTIVITY_SIGN_IN_TO_ADD_FR)
                 }
@@ -217,12 +230,12 @@ export function ActivityPlannerPicker({
           }
         }
         if (cancelled) return
-        setItems(applyFilter([...remote, ...local]))
+        paint(remote, local)
       } catch (e) {
         if (cancelled) return
-        const merged = applyFilter(local)
-        setItems(merged)
-        if (!merged.length) {
+        const hadCache = Boolean(peekTravelWorkspacesCache()?.length || local.length)
+        if (!hadCache) {
+          paint([], local)
           setError(e instanceof Error ? e.message : 'Erreur')
         }
       } finally {
@@ -271,8 +284,13 @@ export function ActivityPlannerPicker({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-2.5">
-          {loading ? (
+          {loading && !items.length ? (
             <p className="text-sm text-muted py-8 text-center">Chargement…</p>
+          ) : null}
+          {loading && items.length ? (
+            <p className="text-xs text-muted text-center pb-1">
+              Mise à jour des séjours…
+            </p>
           ) : null}
           {error && !items.length ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm text-amber-900 space-y-2">

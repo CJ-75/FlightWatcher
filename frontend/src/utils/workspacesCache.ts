@@ -34,12 +34,17 @@ export async function listTravelWorkspacesCached(opts?: {
     return cached.data
   }
   if (!force && inflight) return inflight
+  const stale = cached?.data ?? null
   inflight = getApiClient()
     .listTravelWorkspaces()
     .then((list) => {
       const data = Array.isArray(list) ? list : []
       setMemory(data)
       return data
+    })
+    .catch((err) => {
+      if (stale?.length) return stale
+      throw err
     })
     .finally(() => {
       inflight = null

@@ -36,7 +36,11 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { listGuestTrips } from '../dev/guestPreview'
 import { auth, getApi } from '../lib/client'
-import { listTravelWorkspacesCached } from '../lib/workspacesCache'
+import {
+  hydrateTravelWorkspacesCache,
+  listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
+} from '../lib/workspacesCache'
 import { listRememberedTrips } from '../lib/tripRecovery'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -175,10 +179,15 @@ export function ActivityPlannerPicker({
       return
     }
     let cancelled = false
-    setLoading(true)
     setError(null)
     setAuthNeeded(false)
     setExpanded(false)
+
+    const paint = (remote: TravelWorkspace[], local: TravelWorkspace[]) => {
+      if (cancelled) return
+      setItems(applyFilter([...remote, ...local]))
+    }
+
     void (async () => {
       const local: TravelWorkspace[] = []
       try {
@@ -191,10 +200,26 @@ export function ActivityPlannerPicker({
         /* ignore local */
       }
 
+      // Instant paint from memory / disk — no spinner if we already have rows.
+      const mem = peekTravelWorkspacesCache()
+      if (mem?.length) {
+        paint(mem, local)
+        setLoading(false)
+      } else {
+        const disk = await hydrateTravelWorkspacesCache()
+        if (cancelled) return
+        if (disk?.length || local.length) {
+          paint(disk || [], local)
+          setLoading(false)
+        } else {
+          setLoading(true)
+        }
+      }
+
       try {
         if (__DEV__ && isGuest) {
           if (cancelled) return
-          setItems(applyFilter(local))
+          paint([], local)
           return
         }
         let remote: TravelWorkspace[] = []
@@ -217,12 +242,11 @@ export function ActivityPlannerPicker({
                   )
                 } catch {
                   if (cancelled) return
-                  const merged = applyFilter(local)
-                  setItems(merged)
-                  if (!merged.length) {
+                  paint([], local)
+                  if (!local.length && !peekTravelWorkspacesCache()?.length) {
                     setAuthNeeded(true)
                     setError(
-                      'Tu es connecté, impossible de charger tes séjours. Réessaie.',
+                      'Impossible de charger les séjours. Réessayer.',
                     )
                   }
                   return
@@ -234,9 +258,8 @@ export function ActivityPlannerPicker({
                 remote = (Array.isArray(legacy) ? legacy : []).map(tripAsWorkspace)
               } catch {
                 if (cancelled) return
-                const merged = applyFilter(local)
-                setItems(merged)
-                if (!merged.length) {
+                paint([], local)
+                if (!local.length) {
                   setAuthNeeded(true)
                   setError(ACTIVITY_SIGN_IN_TO_ADD_FR)
                 }
@@ -248,12 +271,12 @@ export function ActivityPlannerPicker({
           }
         }
         if (cancelled) return
-        setItems(applyFilter([...remote, ...local]))
+        paint(remote, local)
       } catch (e) {
         if (cancelled) return
-        const merged = applyFilter(local)
-        setItems(merged)
-        if (!merged.length) {
+        const hadCache = Boolean(peekTravelWorkspacesCache()?.length || local.length)
+        if (!hadCache) {
+          paint([], local)
           const msg = e instanceof Error ? e.message : 'Erreur'
           setError(
             /fetch failed|network request failed|failed to fetch/i.test(msg)
@@ -299,8 +322,12 @@ export function ActivityPlannerPicker({
             <Text style={styles.hint}>{hint}</Text>
           </View>
 
-          {loading ? (
+          {loading && !items.length ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
+          ) : null}
+
+          {loading && items.length ? (
+            <Text style={styles.refreshHint}>Mise à jour des séjours…</Text>
           ) : null}
 
           {error && !items.length ? (
@@ -483,6 +510,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
     lineHeight: 19,
+  },
+  refreshHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: spacing.lg,
   },
   errorBox: {
     marginHorizontal: spacing.lg,

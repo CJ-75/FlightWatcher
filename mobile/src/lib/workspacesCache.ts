@@ -26,6 +26,7 @@ export async function listTravelWorkspacesCached(opts?: {
   }
   if (!force && inflight) return inflight
   const stale = cached?.data ?? null
+  // Kick network refresh; callers that already painted from peek stay instant.
   inflight = getApi()
     .listTravelWorkspaces()
     .then((list) => {
