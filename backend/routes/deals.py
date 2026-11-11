@@ -1407,6 +1407,9 @@ async def get_hotel_gallery(
     hotel_id: str,
     language: Optional[str] = Query("fr"),
     fallback: Optional[str] = Query(None, description="Photo déjà connue (seed)"),
+    limit: Optional[int] = Query(
+        None, ge=1, le=40, description="Cap photos (planner hero = 3)"
+    ),
 ):
     """LiteAPI hotelImages gallery for Deals lightbox (cached 6h)."""
     try:
@@ -1425,6 +1428,7 @@ async def get_hotel_gallery(
             hid,
             language=(language or "fr")[:5],
             fallback_photo=(fallback or "").strip() or None,
+            limit=limit,
         )
     except HTTPException:
         raise

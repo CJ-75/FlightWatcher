@@ -321,41 +321,16 @@ export function ActivityStepPanel(props: {
     const draft = owner.draft_token || draftFallback || undefined
     if (planned && String(planned).startsWith('dev-trip-')) return []
 
-    // Merge planned + draft — activities may live on either side; draft-token
-    // reads can remap to planned server-side, so XOR fallback is not enough.
-    // Never .catch→[] : that hid auth/network errors and wiped the list.
-    const jobs: Promise<ItemRow[]>[] = []
-    if (planned) {
-      jobs.push(
-        listTripItemsCached({ planned_trip_id: planned }).then((res) =>
-          ((res.items || []) as ItemRow[]).filter(isActivityItem),
-        ),
-      )
-    }
-    if (draft) {
-      jobs.push(
-        listTripItemsCached({ draft_token: draft }).then((res) =>
-          ((res.items || []) as ItemRow[]).filter(isActivityItem),
-        ),
-      )
-    }
-    if (!jobs.length) return []
-    const settled = await Promise.allSettled(jobs)
-    const byId = new Map<string, ItemRow>()
-    let firstErr: unknown = null
-    for (const s of settled) {
-      if (s.status === 'fulfilled') {
-        for (const it of s.value) {
-          const id = String(it.id || '')
-          if (!id || byId.has(id)) continue
-          byId.set(id, it)
-        }
-      } else if (!firstErr) {
-        firstErr = s.reason
-      }
-    }
-    if (!byId.size && firstErr) throw firstErr
-    return Array.from(byId.values())
+    // One request only: planned already merges linked drafts server-side.
+    // Dual planned+draft was 2× enrich/list latency for the hero.
+    const query = planned
+      ? { planned_trip_id: planned }
+      : draft
+        ? { draft_token: draft }
+        : null
+    if (!query) return []
+    const res = await listTripItemsCached(query)
+    return ((res.items || []) as ItemRow[]).filter(isActivityItem)
   }, [owner.planned_trip_id, owner.draft_token, draftFallback])
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
@@ -375,24 +350,19 @@ export function ActivityStepPanel(props: {
     setError(null)
 
     // Instant paint from memory (shared with TripDetail prefetch).
-    const peekOwners = [
-      owner.planned_trip_id
-        ? { planned_trip_id: owner.planned_trip_id }
-        : null,
-      owner.draft_token || draftFallback
+    const peekOwner = owner.planned_trip_id
+      ? { planned_trip_id: owner.planned_trip_id }
+      : owner.draft_token || draftFallback
         ? { draft_token: owner.draft_token || draftFallback || undefined }
-        : null,
-    ].filter(Boolean) as { planned_trip_id?: string; draft_token?: string }[]
+        : null
     const peekedRows: ItemRow[] = []
-    const seenPeek = new Set<string>()
-    for (const o of peekOwners) {
-      const hit = peekTripItems(o)
+    if (peekOwner) {
+      const hit = peekTripItems(peekOwner)
       for (const raw of hit?.items || []) {
         const it = raw as ItemRow
         if (!isActivityItem(it)) continue
         const id = String(it.id || '')
-        if (!id || seenPeek.has(id)) continue
-        seenPeek.add(id)
+        if (!id) continue
         peekedRows.push(it)
       }
     }
@@ -413,17 +383,25 @@ export function ActivityStepPanel(props: {
       setLoading(false)
       authRetryRef.current = false
       if (!rows.length) return
-      const enriched = await enrichActivityPhotos(rows, city)
+      // Only backfill missing thumbs — skip city catalog + product waterfall
+      // when meta.photo_url is already present (common after add-to-planner).
+      const needsPhoto = rows.some(
+        (it) => Boolean(it.meta?.product_code) && !photoOf(it),
+      )
+      const enriched = needsPhoto
+        ? await enrichActivityPhotos(rows, city)
+        : rows
       if (gen !== loadGenRef.current) return
-      setItems(enriched)
-      publishParcours(enriched)
+      if (needsPhoto) {
+        setItems(enriched)
+        publishParcours(enriched)
+      }
       if (owner.planned_trip_id) {
         setTripItemsCache(
           { planned_trip_id: owner.planned_trip_id },
           enriched as unknown as Record<string, unknown>[],
         )
-      }
-      if (owner.draft_token || draftFallback) {
+      } else if (owner.draft_token || draftFallback) {
         setTripItemsCache(
           { draft_token: owner.draft_token || draftFallback || undefined },
           enriched as unknown as Record<string, unknown>[],
@@ -443,6 +421,10 @@ export function ActivityStepPanel(props: {
             setLoading(false)
             setError(null)
             if (!rows.length) return
+            const needsPhoto = rows.some(
+              (it) => Boolean(it.meta?.product_code) && !photoOf(it),
+            )
+            if (!needsPhoto) return
             const enriched = await enrichActivityPhotos(rows, city)
             if (gen !== loadGenRef.current) return
             setItems(enriched)

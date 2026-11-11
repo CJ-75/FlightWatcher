@@ -230,13 +230,21 @@ def get_hotel_gallery(
     *,
     language: str = "fr",
     fallback_photo: Optional[str] = None,
+    limit: Optional[int] = None,
 ) -> Dict[str, Any]:
     hid = (hotel_id or "").strip()
     if not hid:
         return {"hotel_id": "", "photos": [], "name": None}
 
     lang = (language or "fr").strip().lower()[:5] or "fr"
-    cache_key = f"{hid}:{lang}:v2"
+    # Planner hero only needs a few frames; full Deal lightbox stays uncapped.
+    photo_limit: Optional[int] = None
+    if limit is not None:
+        try:
+            photo_limit = max(1, min(int(limit), 40))
+        except (TypeError, ValueError):
+            photo_limit = None
+    cache_key = f"{hid}:{lang}:v2" + (f":n{photo_limit}" if photo_limit else "")
 
     now = time.monotonic()
     with _CACHE_LOCK:
@@ -295,6 +303,8 @@ def get_hotel_gallery(
             if u and u not in seen:
                 seen.add(u)
                 unique.append(p)
+                if photo_limit and len(unique) >= photo_limit:
+                    break
         return {
             "hotel_id": hid,
             "name": name,
@@ -362,25 +372,28 @@ def get_hotel_gallery(
     pool_result = _finalize(photos)
     # Fast path: pool/fallback already has photos → paint 1/X immediately.
     # LiteAPI enrich warms cache in background; client may soft-refetch via partial.
+    # Hero (small limit) already has enough frames — skip LiteAPI bg work.
     if pool_result["count"] >= 1:
-        pool_result = {**pool_result, "partial": True}
+        need_more = not photo_limit or pool_result["count"] < photo_limit
+        pool_result = {**pool_result, "partial": bool(need_more)}
         _store(pool_result)
 
-        def _bg_enrich() -> None:
-            try:
-                enriched_photos = _enrich_from_liteapi()
-                enriched = {**_finalize(enriched_photos), "partial": False}
-                if enriched["count"] >= pool_result["count"]:
-                    _store(enriched)
-                else:
+        if need_more:
+            def _bg_enrich() -> None:
+                try:
+                    enriched_photos = _enrich_from_liteapi()
+                    enriched = {**_finalize(enriched_photos), "partial": False}
+                    if enriched["count"] >= pool_result["count"]:
+                        _store(enriched)
+                    else:
+                        _store({**pool_result, "partial": False})
+                except Exception as e:
+                    logger.debug("hotel_gallery bg enrich %s: %s", hid, e)
                     _store({**pool_result, "partial": False})
-            except Exception as e:
-                logger.debug("hotel_gallery bg enrich %s: %s", hid, e)
-                _store({**pool_result, "partial": False})
 
-        threading.Thread(
-            target=_bg_enrich, name=f"hotel-gallery-{hid[:12]}", daemon=True
-        ).start()
+            threading.Thread(
+                target=_bg_enrich, name=f"hotel-gallery-{hid[:12]}", daemon=True
+            ).start()
         return dict(pool_result)
 
     # No pool photos — must wait on LiteAPI for a usable gallery.

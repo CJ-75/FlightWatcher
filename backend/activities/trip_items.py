@@ -265,6 +265,13 @@ def enrich_trip_items_photos(
     return out
 
 
+# Planner / hero only need identity + thumb fields — avoid fat place joins.
+_TRIP_ITEMS_LIST_SELECT = (
+    "id,item_type,status,sort_key,day_offset,moment,notes,title,meta,"
+    "place_id,draft_id,planned_trip_id,places(id,name,meta)"
+)
+
+
 def list_trip_items(
     supabase,
     *,
@@ -274,7 +281,7 @@ def list_trip_items(
     if not supabase:
         return []
     try:
-        q = supabase.table("trip_items").select("*, places(*)")
+        q = supabase.table("trip_items").select(_TRIP_ITEMS_LIST_SELECT)
         if draft_id:
             q = q.eq("draft_id", draft_id)
         elif planned_trip_id:
@@ -285,6 +292,31 @@ def list_trip_items(
         return list(res.data or [])
     except Exception as e:
         logger.warning("list_trip_items: %s", e)
+        return []
+
+
+def list_trip_items_by_draft_ids(
+    supabase,
+    draft_ids: List[str],
+) -> List[Dict[str, Any]]:
+    """Batch-load trip_items for many draft owners (Planner inherit merge)."""
+    if not supabase:
+        return []
+    ids = [str(d).strip() for d in (draft_ids or []) if str(d or "").strip()]
+    if not ids:
+        return []
+    try:
+        res = (
+            supabase.table("trip_items")
+            .select(_TRIP_ITEMS_LIST_SELECT)
+            .in_("draft_id", ids)
+            .order("day_offset")
+            .order("sort_key")
+            .execute()
+        )
+        return list(res.data or [])
+    except Exception as e:
+        logger.warning("list_trip_items_by_draft_ids: %s", e)
         return []
 
 

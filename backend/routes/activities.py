@@ -577,6 +577,7 @@ async def get_trip_items(
         except Exception:
             pass
     # Planner → Draft: ideas on any linked draft must appear on the Planner.
+    # One IN query instead of N list_trip_items round-trips.
     if planned:
         try:
             linked = (
@@ -586,20 +587,29 @@ async def get_trip_items(
                 .limit(20)
                 .execute()
             )
-            for row in linked.data or []:
-                linked_draft_id = row.get("id")
-                if not linked_draft_id:
-                    continue
-                if token_draft_id and str(linked_draft_id) == str(token_draft_id):
-                    continue
+            linked_ids = [
+                str(row.get("id"))
+                for row in (linked.data or [])
+                if row.get("id")
+                and not (
+                    token_draft_id and str(row.get("id")) == str(token_draft_id)
+                )
+            ]
+            if linked_ids:
+                from activities.trip_items import list_trip_items_by_draft_ids
+
                 _merge(
-                    list_trip_items(sb, draft_id=str(linked_draft_id)),
+                    list_trip_items_by_draft_ids(sb, linked_ids),
                     inherited=True,
                     from_draft=True,
                 )
         except Exception:
             pass
-    items = enrich_trip_items_photos(sb, items)
+    # List must stay fast for Planner hero: cache/place photos only —
+    # never block on live Viator product_detail or synchronous meta writes.
+    items = enrich_trip_items_photos(
+        sb, items, allow_live=False, persist=False
+    )
     return {
         "ok": True,
         "items": items,

@@ -385,7 +385,10 @@ export function TripDetailScreen() {
         setFlightDraft(next)
         const hid = hotelIdFromDraft(next)
         if (hid) {
-          void getHotelGalleryCached(hid, { language: 'fr' }).catch(() => undefined)
+          void getHotelGalleryCached(hid, {
+            language: 'fr',
+            limit: 3,
+          }).catch(() => undefined)
         }
       }
 
@@ -507,7 +510,9 @@ export function TripDetailScreen() {
   useEffect(() => {
     const hid = hotelIdFromDraft(flightDraft)
     if (!hid) return
-    void getHotelGalleryCached(hid, { language: 'fr' }).catch(() => undefined)
+    void getHotelGalleryCached(hid, { language: 'fr', limit: 3 }).catch(
+      () => undefined,
+    )
   }, [flightDraft])
 
   useEffect(() => {
@@ -549,35 +554,18 @@ export function TripDetailScreen() {
 
     void (async () => {
       try {
-        const jobs: Promise<Record<string, unknown>[]>[] = []
-        if (tripId) {
-          jobs.push(
-            listTripItemsCached({ planned_trip_id: tripId }).then(
-              (res) => (res.items || []) as Record<string, unknown>[],
-            ),
-          )
-        }
-        if (token) {
-          jobs.push(
-            listTripItemsCached({ draft_token: token }).then(
-              (res) => (res.items || []) as Record<string, unknown>[],
-            ),
-          )
-        }
-        if (!jobs.length) return
-        // allSettled — one side may 401 while the other still has rows.
-        const settled = await Promise.allSettled(jobs)
+        // One owner only — planned merges linked drafts server-side.
+        const query = tripId
+          ? { planned_trip_id: tripId }
+          : token
+            ? { draft_token: token }
+            : null
+        if (!query) return
+        const res = await listTripItemsCached(query)
         if (cancelled) return
-        const byId = new Map<string, Record<string, unknown>>()
-        for (const s of settled) {
-          if (s.status !== 'fulfilled') continue
-          for (const it of s.value) {
-            const id = it.id != null ? String(it.id) : ''
-            if (!id || byId.has(id)) continue
-            byId.set(id, it)
-          }
-        }
-        const rows = asActivityRows(Array.from(byId.values()))
+        const rows = asActivityRows(
+          (res.items || []) as Record<string, unknown>[],
+        )
         if (rows.length === 0) return
         onActivityItemsChange(rows)
       } catch {
@@ -1820,7 +1808,8 @@ export function TripDetailScreen() {
       }
     }
     if (hotelPhoto && !urls.includes(hotelPhoto)) urls.unshift(hotelPhoto)
-    return urls
+    // Hero only needs 3 frames — avoid seeding a huge carousel.
+    return urls.slice(0, 3)
   }, [draftHotel, hotelPhoto])
   // Chosen/booked hotel → scrollable hero even with seed-only photos (parity web dea0887).
   const canFetchHotelGallery =

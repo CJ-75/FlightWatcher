@@ -91,7 +91,15 @@ export function HotelPhotoGallery({
   const [blockHero, setBlockHero] = useState(false)
   const [pageWidth, setPageWidth] = useState(SCREEN_W)
   const isHero = variant === 'hero'
+  /** Planner hotel hero: first frame ASAP, never more than 3 slides. */
+  const heroPhotoCap = 3
   const heroHeight = Math.max(height, 280)
+
+  const capPhotos = useCallback(
+    (rows: HotelGalleryPhoto[]) =>
+      isHero ? rows.filter((p) => p?.url).slice(0, heroPhotoCap) : rows,
+    [isHero],
+  )
 
   const setGestureActive = useCallback(
     (active: boolean) => {
@@ -124,26 +132,68 @@ export function HotelPhotoGallery({
   const seedKey = [...(seedPhotos || []), seedPhoto || ''].join('|')
 
   useEffect(() => {
-    const seeds = toPhotos([...(seedPhotos || []), seedPhoto])
+    const rawSeeds = toPhotos([...(seedPhotos || []), seedPhoto])
+    const seeds = capPhotos(rawSeeds)
     const hid = (hotelId || '').trim()
-    const key = `${hid}|${seedKey}`
+    const key = `${hid}|${seedKey}|${isHero ? heroPhotoCap : 'all'}`
 
     if (loadedKeyRef.current === key) return
 
     // Instant 1/X from seeds (or memory cache) — never blank the counter on fetch.
-    const cached = hid ? peekHotelGallery(hid, 'fr') : null
-    const initial =
+    const cached = hid
+      ? peekHotelGallery(hid, 'fr', isHero ? heroPhotoCap : undefined)
+      : null
+    const initial = capPhotos(
       cached?.photos?.length && cached.photos.length >= seeds.length
         ? cached.photos
         : seeds.length
           ? seeds
-          : cached?.photos || []
+          : cached?.photos || [],
+    )
     setPhotos(initial)
     setIndex(0)
+    // Decode first frame immediately (hero paint).
+    const firstUrl = initial[0]?.url || seeds[0]?.url
+    if (firstUrl) {
+      void Image.prefetch(firstUrl).catch(() => undefined)
+    }
 
     if (!hid || hid === 'primary' || hid === 'seed') {
       loadedKeyRef.current = key
       return
+    }
+
+    // Hero already has its first photo + up to cap from seeds — stop blocking.
+    if (isHero && seeds.length >= 1) {
+      loadedKeyRef.current = key
+      let cancelled = false
+      // Soft fill remaining slots (max 3) without blocking first paint.
+      if (seeds.length < heroPhotoCap) {
+        void getHotelGalleryCached(hid, {
+          language: 'fr',
+          fallback: seedPhoto || seeds[0]?.url,
+          limit: heroPhotoCap,
+        })
+          .then((res) => {
+            if (cancelled) return
+            const next = capPhotos((res.photos || []).filter((p) => p?.url))
+            if (!next.length) return
+            // Keep seed #1 first; append new urls up to cap.
+            const seen = new Set(seeds.map((p) => p.url))
+            const merged = [...seeds]
+            for (const p of next) {
+              if (seen.has(p.url)) continue
+              seen.add(p.url)
+              merged.push(p)
+              if (merged.length >= heroPhotoCap) break
+            }
+            setPhotos(merged)
+          })
+          .catch(() => undefined)
+      }
+      return () => {
+        cancelled = true
+      }
     }
 
     if (cached?.photos?.length && cached.photos.length > seeds.length) {
@@ -159,12 +209,12 @@ export function HotelPhotoGallery({
       partial?: boolean
     }) => {
       if (cancelled) return
-      const next = (res.photos || []).filter((p) => p?.url)
+      const next = capPhotos((res.photos || []).filter((p) => p?.url))
       if (next.length) setPhotos(next)
       else if (seeds.length) setPhotos(seeds)
       loadedKeyRef.current = key
-      // Pool-first response: pick up full LiteAPI set once bg enrich lands.
-      if (res.partial && next.length) {
+      // Non-hero: pool-first response may grow via LiteAPI soft refetch.
+      if (!isHero && res.partial && next.length) {
         softTimer = setTimeout(() => {
           if (cancelled) return
           void getHotelGalleryCached(hid, {
@@ -185,6 +235,7 @@ export function HotelPhotoGallery({
     void getHotelGalleryCached(hid, {
       language: 'fr',
       fallback: seedPhoto || seeds[0]?.url,
+      limit: isHero ? heroPhotoCap : undefined,
     })
       .then(applyGallery)
       .catch(() => {
@@ -196,7 +247,7 @@ export function HotelPhotoGallery({
       cancelled = true
       if (softTimer) clearTimeout(softTimer)
     }
-  }, [hotelId, seedPhoto, seedKey])
+  }, [hotelId, seedPhoto, seedKey, isHero, capPhotos])
 
   useEffect(
     () => () => {

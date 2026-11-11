@@ -17,29 +17,55 @@ export type HotelGalleryPayload = {
 const memory = new Map<string, HotelGalleryPayload>()
 const inflight = new Map<string, Promise<HotelGalleryPayload>>()
 
-function cacheKey(hotelId: string, language: string) {
-  return `${String(hotelId || '').trim()}|${language || 'fr'}`
+function cacheKey(hotelId: string, language: string, limit?: number) {
+  const lim = limit != null && limit > 0 ? String(limit) : 'all'
+  return `${String(hotelId || '').trim()}|${language || 'fr'}|${lim}`
 }
 
 export function peekHotelGallery(
   hotelId: string,
   language = 'fr',
+  limit?: number,
 ): HotelGalleryPayload | null {
-  return memory.get(cacheKey(hotelId, language)) || null
+  const hid = String(hotelId || '').trim()
+  if (!hid) return null
+  const exact = memory.get(cacheKey(hid, language, limit))
+  if (exact) return exact
+  // Hero (limit=3) can seed from a fuller cache already in memory.
+  if (limit != null && limit > 0) {
+    const full = memory.get(cacheKey(hid, language))
+    if (full?.photos?.length) {
+      return {
+        ...full,
+        photos: full.photos.slice(0, limit),
+        count: Math.min(full.count || full.photos.length, limit),
+        partial: false,
+      }
+    }
+  }
+  return null
 }
 
 export function getHotelGalleryCached(
   hotelId: string,
-  opts?: { language?: string; fallback?: string; force?: boolean },
+  opts?: {
+    language?: string
+    fallback?: string
+    force?: boolean
+    /** Planner hero: fetch at most N photos (default uncapped). */
+    limit?: number
+  },
 ): Promise<HotelGalleryPayload> {
   const hid = String(hotelId || '').trim()
   if (!hid) return Promise.reject(new Error('missing_hotel_id'))
   const language = opts?.language || 'fr'
-  const key = cacheKey(hid, language)
+  const limit =
+    opts?.limit != null && opts.limit > 0 ? Math.min(40, opts.limit) : undefined
+  const key = cacheKey(hid, language, limit)
   const force = Boolean(opts?.force)
 
   if (!force) {
-    const hit = memory.get(key)
+    const hit = peekHotelGallery(hid, language, limit)
     // Prefer complete galleries; allow partial only as instant paint seed.
     if (hit?.photos?.length && !hit.partial) return Promise.resolve(hit)
   }
@@ -51,13 +77,18 @@ export function getHotelGalleryCached(
     .getHotelGallery(hid, {
       language,
       fallback: opts?.fallback,
+      limit,
     })
     .then((res) => {
+      let photos = Array.isArray(res.photos)
+        ? res.photos.filter((p) => p?.url)
+        : []
+      if (limit != null) photos = photos.slice(0, limit)
       const payload: HotelGalleryPayload = {
         hotel_id: String(res.hotel_id || hid),
-        photos: Array.isArray(res.photos) ? res.photos.filter((p) => p?.url) : [],
+        photos,
         name: res.name,
-        count: res.count,
+        count: photos.length,
         partial: Boolean((res as { partial?: boolean }).partial),
       }
       const prev = memory.get(key)

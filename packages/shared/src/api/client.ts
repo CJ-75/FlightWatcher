@@ -362,10 +362,14 @@ export function createApiClient(options: ApiClientOptions = {}) {
         body: JSON.stringify(body),
       }),
 
-    getHotelGallery: (hotelId: string, opts?: { language?: string; fallback?: string }) => {
+    getHotelGallery: (
+      hotelId: string,
+      opts?: { language?: string; fallback?: string; limit?: number },
+    ) => {
       const q = new URLSearchParams()
       if (opts?.language) q.set('language', opts.language)
       if (opts?.fallback) q.set('fallback', opts.fallback)
+      if (opts?.limit != null) q.set('limit', String(opts.limit))
       const qs = q.toString()
       return request<HotelGalleryResponse>(
         `/api/deals/hotels/${encodeURIComponent(hotelId)}/gallery${qs ? `?${qs}` : ''}`,
