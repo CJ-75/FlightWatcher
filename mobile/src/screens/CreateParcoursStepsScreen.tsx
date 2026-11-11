@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   Alert,
 } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -29,6 +30,7 @@ import {
   getParcoursCreateSession,
   patchParcoursCreateSession,
   startParcoursCreateSession,
+  subscribeParcoursCreateSession,
 } from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
@@ -63,10 +65,9 @@ export function draftToPayload(steps: DraftStep[]) {
     if (s.lng != null) meta.lng = s.lng
     if (photos.length) meta.photos = photos
     if (s.description.trim()) meta.description = s.description.trim()
-    meta.budget_eur =
-      typeof s.budget_eur === 'number' && Number.isFinite(s.budget_eur)
-        ? s.budget_eur
-        : 0
+    if (typeof s.budget_eur === 'number' && Number.isFinite(s.budget_eur)) {
+      meta.budget_eur = s.budget_eur
+    }
     return {
       kind: 'free' as const,
       title: s.title,
@@ -87,10 +88,10 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const allowed = canCreateParcoursOnDevice(user?.email)
 
   const session0 = getParcoursCreateSession()
-  const [title] = useState(
+  const [title, setTitle] = useState(
     () => session0?.title || routeSeed?.title || 'Parcours',
   )
-  const [citySlug] = useState(
+  const [citySlug, setCitySlug] = useState(
     () => session0?.city_slug || routeSeed?.city_slug || 'paris',
   )
   const [coverImage, setCoverImage] = useState<string | null>(
@@ -104,6 +105,40 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const [sheetOpen, setSheetOpen] = useState(steps.length === 0)
   const [editing, setEditing] = useState<DraftStep | null>(null)
   const autoOpenedRef = useRef(steps.length === 0)
+  const syncedEditKey = useRef<string | null>(null)
+
+  const applySession = useCallback(
+    (force = false) => {
+      const s = getParcoursCreateSession()
+      if (!s) return
+      const key = s.editing_id
+        ? `edit:${s.editing_id}:${s.updated_at}`
+        : `draft:${s.updated_at}`
+      if (!force && syncedEditKey.current === key) return
+      syncedEditKey.current = key
+      setTitle(s.title || routeSeed?.title || 'Parcours')
+      setCitySlug(s.city_slug || routeSeed?.city_slug || 'paris')
+      setCoverImage(s.cover_image ?? routeSeed?.cover_image ?? null)
+      setSteps(s.steps || [])
+      setTag(s.occasions?.[0] || null)
+      setEditing(null)
+      const hasSteps = !!(s.steps && s.steps.length > 0)
+      setSheetOpen(!hasSteps)
+      autoOpenedRef.current = !hasSteps
+    },
+    [routeSeed?.title, routeSeed?.city_slug, routeSeed?.cover_image],
+  )
+
+  /** Reprend la session (édition Mes parcours) même si l’écran était déjà monté. */
+  useFocusEffect(
+    useCallback(() => {
+      applySession()
+    }, [applySession]),
+  )
+
+  useEffect(() => {
+    return subscribeParcoursCreateSession(() => applySession())
+  }, [applySession])
 
   const stepPhotos = useMemo(() => {
     const out: string[] = []
@@ -175,13 +210,19 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     setSteps(nextSteps)
     setCoverImage(nextCover)
     setTag(nextTag)
-    patchParcoursCreateSession({
+    const patched = patchParcoursCreateSession({
       title,
       city_slug: citySlug,
       cover_image: nextCover,
       occasions: nextTag ? [nextTag] : [],
       steps: nextSteps,
     })
+    // Évite un re-apply via subscribe juste après notre propre patch
+    if (patched) {
+      syncedEditKey.current = patched.editing_id
+        ? `edit:${patched.editing_id}:${patched.updated_at}`
+        : `draft:${patched.updated_at}`
+    }
   }
 
   const setHero = (uri: string) => {
@@ -436,7 +477,9 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
               </Pressable>
 
               <View style={styles.tagBlock}>
-                <Text style={styles.heroLabel}>Tag</Text>
+                <Text style={styles.heroLabel}>
+                  Tag <Text style={styles.req}>*</Text>
+                </Text>
                 <Text style={styles.heroHint}>
                   Court — affiché en badge sur la carte parcours.
                 </Text>
@@ -739,6 +782,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.ink,
   },
+  req: { color: colors.primary, fontFamily: fonts.bold },
   heroHint: {
     fontFamily: fonts.medium,
     fontSize: 12,

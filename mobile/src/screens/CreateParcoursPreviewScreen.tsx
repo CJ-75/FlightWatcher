@@ -25,10 +25,12 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
 import { getApi } from '../lib/client'
+import { invalidateParcoursCatalog } from '../lib/parcoursCache'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
   clearParcoursCreateSession,
   getParcoursCreateSession,
+  isEditingParcours,
 } from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
@@ -143,6 +145,9 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
     navigation.navigate('Main')
   }
 
+  const editing = isEditingParcours()
+  const saveLabel = editing ? 'Enregistrer' : 'Publier'
+
   const tryPublish = async () => {
     if (!session || !session.steps.length) {
       Alert.alert('Ajoute au moins un lieu avant de publier.')
@@ -168,6 +173,55 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
 
     setSaving(true)
     try {
+      if (session.editing_id) {
+        const editId = session.editing_id
+        const needPublish = session.editing_status !== 'published'
+        const optimistic = {
+          id: editId,
+          title: session.title,
+          city_slug: session.city_slug,
+          cover_image: session.cover_image,
+          occasions: session.occasions,
+        } as Itinerary
+        // Navigue dès que l’update part — sensation instantanée
+        const patchPromise = getApi().adminUpdateParcours(editId, {
+          title: session.title,
+          city_slug: session.city_slug,
+          cover_image: session.cover_image,
+          intro,
+          budget_estimate_eur: total,
+          budget_basis: 'per_person',
+          occasions: session.occasions || [],
+          items: itemsPayload,
+        })
+        clearParcoursCreateSession()
+        navigation.replace('ItineraryDetail', {
+          itineraryId: editId,
+          preview: optimistic,
+        })
+        const patch = await patchPromise
+        if (!patch.ok) {
+          Alert.alert('Erreur', patch.error || 'Enregistrement impossible')
+          return
+        }
+        if (needPublish) {
+          const pub = await getApi().adminPublishParcours(editId)
+          if (!pub.ok) {
+            Alert.alert(
+              'Publication refusée',
+              (pub.blockers || []).map((b) => b.message).join('\n') ||
+                pub.error ||
+                'Erreur',
+            )
+          } else {
+            invalidateParcoursCatalog()
+          }
+        } else {
+          invalidateParcoursCatalog()
+        }
+        return
+      }
+
       const res = await getApi().adminPublishNewParcours({
         title: session.title,
         city_slug: session.city_slug,
@@ -187,8 +241,9 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         )
         return
       }
-      clearParcoursCreateSession()
       const published = res.itinerary as unknown as Itinerary
+      clearParcoursCreateSession()
+      invalidateParcoursCatalog()
       const id = String(published.id)
       navigation.replace('ItineraryDetail', {
         itineraryId: published?.slug || id,
@@ -238,7 +293,13 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           stickySecondary="Modifier"
           onStickySecondary={() => navigation.navigate('CreateParcoursSteps')}
           stickySecondaryDisabled={saving}
-          stickyCta={saving ? 'Publication…' : 'Publier'}
+          stickyCta={
+            saving
+              ? editing
+                ? 'Enregistrement…'
+                : 'Publication…'
+              : saveLabel
+          }
           stickyCtaDisabled={saving}
           onStickyCta={() => {
             if (!saving) void tryPublish()
@@ -250,7 +311,9 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
               style={{ marginHorizontal: 0, marginTop: 0 }}
             />
             <Text style={styles.previewHint}>
-              Rendu final — publie pour le valider, ou modifie les lieux.
+              {editing
+                ? 'Édition — enregistre pour mettre à jour, ou modifie les lieux.'
+                : 'Rendu final — publie pour le valider, ou modifie les lieux.'}
             </Text>
             <Pressable onPress={() => setMode('card')} style={styles.switchMode}>
               <Text style={styles.switchModeText}>Voir la carte</Text>
@@ -264,19 +327,39 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
               <View key={day.dayOffset} style={styles.dayBlock}>
                 <Text style={styles.dayLabel}>{day.label}</Text>
                 {day.items.map((it) => {
-                  const photos =
+                  const raw =
                     (it.meta?.photos as string[] | undefined) ||
                     (it.photo ? [it.photo] : [])
+                  const photos = raw.filter(Boolean).slice(0, 5)
+                  const single = photos.length === 1 ? photos[0] : null
+                  const gallery = photos.length >= 2 ? photos : []
                   const moment = it.moment ? MOMENT_FR[it.moment] : null
                   return (
                     <View key={it.id} style={[styles.stepCard, shadow.soft]}>
-                      {photos[0] ? (
+                      <View style={styles.stepRow}>
+                        {single ? (
+                          <Image
+                            source={{ uri: single }}
+                            style={styles.stepThumb}
+                          />
+                        ) : null}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.stepTitle}>{it.title}</Text>
+                          {moment ? (
+                            <Text style={styles.stepMeta}>{moment}</Text>
+                          ) : null}
+                          {it.note ? (
+                            <Text style={styles.stepNote}>{it.note}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                      {gallery.length ? (
                         <ScrollView
                           horizontal
                           showsHorizontalScrollIndicator={false}
                           style={styles.gallery}
                         >
-                          {photos.slice(0, 5).map((uri, i) => (
+                          {gallery.map((uri, i) => (
                             <Image
                               key={`${uri}-${i}`}
                               source={{ uri }}
@@ -284,11 +367,6 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
                             />
                           ))}
                         </ScrollView>
-                      ) : null}
-                      <Text style={styles.stepTitle}>{it.title}</Text>
-                      {moment ? <Text style={styles.stepMeta}>{moment}</Text> : null}
-                      {it.note ? (
-                        <Text style={styles.stepNote}>{it.note}</Text>
                       ) : null}
                     </View>
                   )
@@ -370,7 +448,11 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           ]}
         >
           <Text style={styles.publishText}>
-            {saving ? 'Publication…' : 'Publier'}
+            {saving
+              ? editing
+                ? 'Enregistrement…'
+                : 'Publication…'
+              : saveLabel}
           </Text>
         </Pressable>
       </View>
@@ -440,12 +522,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   stepCard: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: colors.white,
     borderRadius: radius.lg,
-    padding: 12,
-    marginBottom: 8,
+    padding: 14,
+    marginBottom: 10,
   },
-  gallery: { marginBottom: 8 },
+  stepRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  stepThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 14,
+    backgroundColor: colors.primaryMuted,
+  },
+  gallery: { marginTop: 10 },
   galleryImg: {
     width: 80,
     height: 80,

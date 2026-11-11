@@ -66,74 +66,100 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
               const title = it.title || it.places?.name || `Étape ${i + 1}`
               const dur = formatDurationMinutes(it.duration_minutes)
               const mapsUrl = buildItineraryStepMapsUrl(it)
+              const photosRaw = it.meta?.photos
+              const photos = (
+                Array.isArray(photosRaw) && photosRaw.length
+                  ? photosRaw.map(String).filter(Boolean)
+                  : it.photo
+                    ? [it.photo]
+                    : []
+              ).slice(0, 5)
               const openStep = () => {
                 if (!mapsUrl) return
                 window.open(mapsUrl, '_blank', 'noopener,noreferrer')
               }
+              const single = photos.length === 1 ? photos[0] : null
+              const gallery = photos.length >= 2 ? photos : []
               const body = (
-                <div className="flex gap-3">
-                  {it.photo ? (
-                    <img
-                      src={it.photo}
-                      alt=""
-                      className="h-[72px] w-[72px] shrink-0 rounded-2xl object-cover"
-                    />
-                  ) : null}
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#A3988C]">
-                      <KindIcon kind={it.kind} />
-                      {stepKindLabel(it.kind)}
-                      {dur ? ` · ${dur}` : ''}
-                    </p>
-                    <p className="mt-0.5 text-[15px] font-bold text-[#1A120E]">
-                      {title}
-                    </p>
-                    {it.note ? (
-                      <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
-                        {it.note}
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex gap-3">
+                    {single ? (
+                      <img
+                        src={single}
+                        alt=""
+                        className="h-[72px] w-[72px] shrink-0 rounded-2xl object-cover"
+                      />
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#A3988C]">
+                        <KindIcon kind={it.kind} />
+                        {stepKindLabel(it.kind)}
+                        {dur ? ` · ${dur}` : ''}
                       </p>
-                    ) : null}
-                    {it.kind === 'activity' && it.viator_product_code ? (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onBookActivity?.(it)
-                          }}
-                          className="text-xs font-bold text-[#FF6B35] hover:underline"
-                        >
-                          Réserver
-                        </button>
-                      </div>
-                    ) : null}
+                      <p className="mt-0.5 text-[15px] font-bold text-[#1A120E]">
+                        {title}
+                      </p>
+                      {it.note ? (
+                        <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
+                          {it.note}
+                        </p>
+                      ) : null}
+                      {it.kind === 'activity' && it.viator_product_code ? (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onBookActivity?.(it)
+                            }}
+                            className="text-xs font-bold text-[#FF6B35] hover:underline"
+                          >
+                            Réserver
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
+                  {gallery.length ? (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {gallery.map((uri, pi) => (
+                        <img
+                          key={`${uri}-${pi}`}
+                          src={uri}
+                          alt=""
+                          className="h-20 w-20 shrink-0 rounded-xl object-cover"
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )
               return (
-                <li key={it.id || `${day.dayOffset}-${i}`} className="relative flex gap-4 pb-6">
+                <li key={it.id || `${day.dayOffset}-${i}`} className="relative pb-3">
                   {!last ? (
                     <span
-                      className="absolute left-[15px] top-8 bottom-0 w-px bg-[#EDE8E1]"
+                      className="absolute left-[15px] top-10 bottom-0 w-px bg-[#EDE8E1]"
                       aria-hidden
                     />
                   ) : null}
-                  <span className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF0E8] text-xs font-bold text-[#FF6B35] ring-1 ring-[#FF6B35]/20">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1 pt-0.5">
-                    {mapsUrl ? (
-                      <button
-                        type="button"
-                        onClick={openStep}
-                        className="w-full rounded-2xl text-left transition-colors hover:bg-[#FFF8F3] active:bg-[#FFF0E8] -m-2 p-2"
-                        aria-label={`Ouvrir ${title} dans Google Maps`}
-                      >
-                        {body}
-                      </button>
-                    ) : (
-                      body
-                    )}
+                  <div className="relative flex gap-3 rounded-2xl bg-white p-3.5 shadow-[0_6px_18px_rgba(92,46,24,0.07)]">
+                    <span className="relative z-[1] flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF0E8] text-xs font-bold text-[#FF6B35] ring-1 ring-[#FF6B35]/20">
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      {mapsUrl ? (
+                        <button
+                          type="button"
+                          onClick={openStep}
+                          className="w-full rounded-xl text-left transition-colors hover:bg-[#FFF8F3] active:bg-[#FFF0E8] -m-1.5 p-1.5"
+                          aria-label={`Ouvrir ${title} dans Google Maps`}
+                        >
+                          {body}
+                        </button>
+                      ) : (
+                        body
+                      )}
+                    </div>
                   </div>
                 </li>
               )

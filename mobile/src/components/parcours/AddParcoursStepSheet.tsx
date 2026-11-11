@@ -69,13 +69,13 @@ function emptyStep(): DraftStep {
     title: '',
     note: '',
     day_offset: 0,
-    moment: 'afternoon',
+    moment: null,
     photo: null,
     photos: [],
     maps_url: '',
     lat: null,
     lng: null,
-    budget_eur: 0,
+    budget_eur: null,
     description: '',
   }
 }
@@ -99,7 +99,11 @@ export function AddParcoursStepSheet({
           ...initial,
           photos: [...(initial.photos || [])],
           budget_eur:
-            typeof initial.budget_eur === 'number' ? initial.budget_eur : 0,
+            typeof initial.budget_eur === 'number' &&
+            Number.isFinite(initial.budget_eur)
+              ? initial.budget_eur
+              : null,
+          moment: initial.moment ?? null,
           description: String(initial.description || ''),
         }
       : emptyStep()
@@ -157,11 +161,19 @@ export function AddParcoursStepSheet({
       setHint('Indique le nom du lieu')
       return
     }
+    if (!Number.isFinite(step.day_offset) || step.day_offset < 0) {
+      setHint('Choisis un jour')
+      return
+    }
     if (step.moment == null) {
       setHint('Choisis un moment (matin, après-midi ou soir)')
       return
     }
-    if (step.budget_eur == null || !Number.isFinite(step.budget_eur) || step.budget_eur < 0) {
+    if (
+      step.budget_eur == null ||
+      !Number.isFinite(step.budget_eur) ||
+      step.budget_eur < 0
+    ) {
       setHint('Choisis un budget')
       return
     }
@@ -237,7 +249,9 @@ export function AddParcoursStepSheet({
             contentContainerStyle={styles.form}
           >
             <View style={[styles.block, shadow.soft]}>
-              <Text style={styles.fieldLabel}>Nom du lieu</Text>
+              <Text style={styles.fieldLabel}>
+                Nom du lieu <Text style={styles.req}>*</Text>
+              </Text>
               <TextInput
                 value={step.title}
                 onChangeText={(t) => patch({ title: t })}
@@ -247,7 +261,9 @@ export function AddParcoursStepSheet({
               />
 
               <View style={styles.line} />
-              <Text style={styles.fieldLabel}>Jour</Text>
+              <Text style={styles.fieldLabel}>
+                Jour <Text style={styles.req}>*</Text>
+              </Text>
               <View style={styles.segRow}>
                 {DAYS.map((d) => {
                   const on = step.day_offset === d.id
@@ -266,7 +282,9 @@ export function AddParcoursStepSheet({
               </View>
 
               <View style={styles.line} />
-              <Text style={styles.fieldLabel}>Moment</Text>
+              <Text style={styles.fieldLabel}>
+                Moment <Text style={styles.req}>*</Text>
+              </Text>
               <View style={styles.segRow}>
                 {MOMENTS.map((m) => {
                   const on = step.moment === m.id
@@ -296,7 +314,9 @@ export function AddParcoursStepSheet({
               />
 
               <View style={styles.line} />
-              <Text style={styles.fieldLabel}>Budget</Text>
+              <Text style={styles.fieldLabel}>
+                Budget <Text style={styles.req}>*</Text>
+              </Text>
               <View style={styles.budgetChips}>
                 {BUDGET_CHIPS.map((c) => {
                   const on = step.budget_eur === c.value && !budgetCustom
@@ -339,7 +359,9 @@ export function AddParcoursStepSheet({
               </View>
 
               <View style={styles.line} />
-              <Text style={styles.fieldLabel}>Lien Maps</Text>
+              <Text style={styles.fieldLabel}>
+                Lien Maps <Text style={styles.req}>*</Text>
+              </Text>
               <TextInput
                 value={step.maps_url}
                 onChangeText={(v) => patch({ maps_url: v })}
@@ -351,7 +373,9 @@ export function AddParcoursStepSheet({
               />
             </View>
 
-            <Text style={styles.section}>Photos</Text>
+            <Text style={styles.section}>
+              Photos <Text style={styles.req}>*</Text>
+            </Text>
             <Pressable
               onPress={() => void pickPhotos()}
               disabled={picking}
@@ -478,6 +502,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 4,
   },
+  req: { color: colors.primary, fontFamily: fonts.bold },
   titleInput: {
     fontFamily: fonts.extrabold,
     fontSize: 17,

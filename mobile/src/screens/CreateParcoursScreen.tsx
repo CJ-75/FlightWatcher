@@ -28,6 +28,7 @@ import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
   clearParcoursCreateSession,
   getParcoursCreateSession,
+  isEditingParcours,
   startParcoursCreateSession,
 } from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
@@ -160,16 +161,19 @@ export function CreateParcoursScreen({ navigation }: Props) {
       title: t,
       city_slug: citySlug,
       cover_image: cover,
+      editing_id: existing?.editing_id ?? null,
     })
     navigation.replace('CreateParcoursSteps', {
+      itineraryId: existing?.editing_id || undefined,
       seed: { title: t, city_slug: citySlug, cover_image: cover },
     })
-  }, [title, cover, citySlug, navigation])
+  }, [title, cover, citySlug, navigation, existing?.editing_id])
 
   if (!allowed) return null
 
   const canContinue = !!title.trim() && !!citySlug
   const isResume = !!existing
+  const isEdit = isEditingParcours()
 
   return (
     <View style={styles.root}>
@@ -206,15 +210,21 @@ export function CreateParcoursScreen({ navigation }: Props) {
           }}
         >
           <Text style={styles.kicker}>
-            {isResume ? 'BROUILLON' : 'CRÉER UN PARCOURS'}
+            {isEdit ? 'ÉDITION' : isResume ? 'BROUILLON' : 'CRÉER UN PARCOURS'}
           </Text>
           <Text style={styles.heading}>
-            {isResume ? 'Reprendre' : 'Nouveau parcours'}
+            {isEdit
+              ? 'Modifier le parcours'
+              : isResume
+                ? 'Reprendre'
+                : 'Nouveau parcours'}
           </Text>
           <Text style={styles.lead}>
-            {isResume
-              ? 'Un seul brouillon à la fois — publie ou abandonne pour en créer un autre.'
-              : 'Un titre pour le retrouver, une ville pour le situer.'}
+            {isEdit
+              ? 'Infos et hero — ensuite les lieux, puis enregistre.'
+              : isResume
+                ? 'Un seul brouillon à la fois — publie ou abandonne pour en créer un autre.'
+                : 'Un titre pour le retrouver, une ville pour le situer.'}
           </Text>
 
           <View style={[styles.card, shadow.soft]}>

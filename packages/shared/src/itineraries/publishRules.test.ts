@@ -25,19 +25,53 @@ function step(
   }
 }
 
+const tagged = { ...base, occasions: ['week_end'] as Itinerary['occasions'] }
+
+function freeReady(
+  partial: Partial<ItineraryItem> = {},
+): ItineraryItem {
+  const { meta: metaPartial, ...rest } = partial
+  return step({
+    kind: 'free',
+    title: 'Tour Eiffel',
+    day_offset: 0,
+    moment: 'afternoon',
+    photo: 'https://example.com/p.jpg',
+    ...rest,
+    meta: {
+      maps_url: 'https://maps.app.goo.gl/x',
+      photos: ['https://example.com/p.jpg'],
+      budget_eur: 0,
+      ...(metaPartial || {}),
+    },
+  })
+}
+
 describe('publishRules steps', () => {
   it('blocks when no steps', () => {
-    const blockers = getPublishBlockers(base, [])
+    const blockers = getPublishBlockers(tagged, [])
     expect(blockers.some((b) => b.code === 'steps_min')).toBe(true)
-    expect(canPublish(base, [])).toBe(false)
+    expect(canPublish(tagged, [])).toBe(false)
   })
 
-  it('allows publish with free steps (no verified place, no notes)', () => {
-    const items = [
-      step({ kind: 'free', title: 'Tour Eiffel', meta: { maps_url: 'https://maps.app.goo.gl/x' } }),
-      step({ kind: 'free', title: 'Café' }),
-    ]
-    expect(canPublish(base, items)).toBe(true)
+  it('blocks when tag missing', () => {
+    const blockers = getPublishBlockers(base, [freeReady()])
+    expect(blockers.some((b) => b.code === 'tag')).toBe(true)
+  })
+
+  it('allows publish with complete free steps', () => {
+    const items = [freeReady(), freeReady({ title: 'Café', id: 'y' })]
+    expect(canPublish(tagged, items)).toBe(true)
+  })
+
+  it('blocks free steps missing maps / photos / moment / budget', () => {
+    const items = [step({ kind: 'free', title: 'Libre' })]
+    const blockers = getPublishBlockers(tagged, items)
+    expect(blockers.some((b) => b.code.startsWith('maps_'))).toBe(true)
+    expect(blockers.some((b) => b.code.startsWith('photos_'))).toBe(true)
+    expect(blockers.some((b) => b.code.startsWith('moment_'))).toBe(true)
+    expect(blockers.some((b) => b.code.startsWith('budget_'))).toBe(true)
+    expect(canPublish(tagged, items)).toBe(false)
   })
 
   it('allows publish with place/activity mix', () => {
@@ -45,13 +79,12 @@ describe('publishRules steps', () => {
       step({ kind: 'place', place_id: 'p1' }),
       step({ kind: 'activity', viator_product_code: 'V123' }),
     ]
-    expect(canPublish(base, items)).toBe(true)
+    expect(canPublish(tagged, items)).toBe(true)
   })
 
-  it('warns free steps without maps (non-blocking)', () => {
-    const items = [step({ kind: 'free', title: 'Libre' })]
-    const w = getPublishWarnings(base, items)
-    expect(w[0]?.code).toMatch(/free_no_maps/)
-    expect(canPublish(base, items)).toBe(true)
+  it('has no soft maps warnings (now blockers)', () => {
+    expect(getPublishWarnings(tagged, [step({ kind: 'free', title: 'Libre' })])).toEqual(
+      [],
+    )
   })
 })

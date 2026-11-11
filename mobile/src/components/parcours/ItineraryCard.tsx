@@ -23,6 +23,8 @@ type Props = {
   itinerary: Partial<Itinerary> & { title?: string }
   variant?: 'portrait' | 'landscape'
   badge?: string | null
+  /** Couleur fond badge (ex. statut admin). */
+  badgeColor?: string
   onPress?: () => void
   /** Start detail fetch on finger-down (before navigate). */
   onPressIn?: () => void
@@ -33,6 +35,7 @@ export function ItineraryCard({
   itinerary,
   variant = 'portrait',
   badge,
+  badgeColor,
   onPress,
   onPressIn,
   style,
@@ -110,7 +113,12 @@ export function ItineraryCard({
         style={styles.scrim}
       />
       {badge ? (
-        <View style={styles.badge}>
+        <View
+          style={[
+            styles.badge,
+            badgeColor ? { backgroundColor: badgeColor } : null,
+          ]}
+        >
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       ) : null}

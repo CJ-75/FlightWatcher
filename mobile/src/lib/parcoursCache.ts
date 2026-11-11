@@ -12,6 +12,8 @@ const detailInflight = new Map<string, Promise<Itinerary>>()
 let likedParcoursIds: Set<string> | null = null
 let likedParcoursIdsInflight: Promise<Set<string>> | null = null
 const catalogReadyListeners = new Set<() => void>()
+/** Publish / unpublish / delete → catalogue doit refetch. */
+const catalogChangeListeners = new Set<() => void>()
 
 function hasSteps(it: Itinerary | null | undefined): boolean {
   return Array.isArray(it?.itinerary_items) && (it!.itinerary_items?.length ?? 0) > 0
@@ -26,6 +28,55 @@ function notifyParcoursCatalogReady() {
       /* listener best-effort */
     }
   }
+}
+
+function notifyParcoursCatalogChange() {
+  for (const fn of catalogChangeListeners) {
+    try {
+      fn()
+    } catch {
+      /* listener best-effort */
+    }
+  }
+}
+
+/** Après publish / unpublish / delete — le catalogue refetch. */
+export function subscribeParcoursCatalogChange(fn: () => void): () => void {
+  catalogChangeListeners.add(fn)
+  return () => {
+    catalogChangeListeners.delete(fn)
+  }
+}
+
+/**
+ * Invalide le cache catalogue (et retire une fiche si id/slug fournis).
+ * Notifie les écrans pour recharger la liste publique.
+ */
+export function invalidateParcoursCatalog(opts?: {
+  removeId?: string | null
+  removeSlug?: string | null
+}) {
+  const removeId = opts?.removeId ? String(opts.removeId) : ''
+  const removeSlug = opts?.removeSlug ? String(opts.removeSlug) : ''
+  if (removeId || removeSlug) {
+    if (catalogMemory) {
+      catalogMemory = catalogMemory.filter(
+        (it) =>
+          (!removeId || it.id !== removeId) &&
+          (!removeSlug || it.slug !== removeSlug),
+      )
+      void AsyncStorage.setItem(
+        CATALOG_KEY,
+        JSON.stringify(catalogMemory),
+      ).catch(() => {})
+    }
+    if (removeId) detailMemory.delete(removeId)
+    if (removeSlug) detailMemory.delete(removeSlug)
+  } else {
+    catalogMemory = null
+    void AsyncStorage.removeItem(CATALOG_KEY).catch(() => {})
+  }
+  notifyParcoursCatalogChange()
 }
 
 /** Fires now if catalogue already loaded, then on each non-empty set/hydrate. */

@@ -734,12 +734,15 @@ export function createApiClient(options: ApiClientOptions = {}) {
       status?: string
       occasion?: string
       limit?: number
+      /** Inclut itinerary_items(*) pour édition instantanée. */
+      include_items?: boolean
     }) => {
       const q = new URLSearchParams()
       if (params?.city) q.set('city', params.city)
       if (params?.status) q.set('status', params.status)
       if (params?.occasion) q.set('occasion', params.occasion)
       if (params?.limit != null) q.set('limit', String(params.limit))
+      if (params?.include_items) q.set('include_items', 'true')
       const qs = q.toString()
       return request<{
         ok: boolean
@@ -748,14 +751,20 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }>(`/api/admin/parcours${qs ? `?${qs}` : ''}`)
     },
 
-    adminGetParcours: (id: string) =>
-      request<{
+    adminGetParcours: (id: string, opts?: { light?: boolean }) => {
+      const q = new URLSearchParams()
+      if (opts?.light === false) q.set('light', '0')
+      const qs = q.toString()
+      return request<{
         ok: boolean
         itinerary: Record<string, unknown>
         blockers?: { code: string; message: string }[]
         warnings?: { code: string; message: string }[]
         error?: string
-      }>(`/api/admin/parcours/${encodeURIComponent(id)}`),
+      }>(
+        `/api/admin/parcours/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`,
+      )
+    },
 
     adminCreateParcours: (body?: {
       title?: string

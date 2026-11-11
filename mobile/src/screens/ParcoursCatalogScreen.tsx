@@ -28,6 +28,7 @@ import {
   prefetchParcoursDetails,
   rememberParcoursPreview,
   setParcoursCatalogMemory,
+  subscribeParcoursCatalogChange,
 } from '../lib/parcoursCache'
 import { scheduleActivitiesWarmup } from '../lib/activitiesWarmup'
 import { useAuth } from '../context/AuthContext'
@@ -125,6 +126,15 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
       cancelled = true
     }
   }, [load, kickActivitiesWarm])
+
+  // Unpublish / delete / publish depuis admin → refetch catalogue
+  useEffect(() => {
+    return subscribeParcoursCatalogChange(() => {
+      const mem = getParcoursCatalogMemory()
+      if (mem) setItems(mem)
+      void load(true)
+    })
+  }, [load])
 
   // Warm Metro chunk before first tap (cold open was ~700–800ms).
   useEffect(() => {

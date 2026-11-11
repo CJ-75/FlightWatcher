@@ -56,6 +56,14 @@ export function getPublishBlockers(
     blockers.push({ code: 'slug', message: 'Slug URL requis.' })
   }
 
+  const occasions = itinerary?.occasions
+  if (!Array.isArray(occasions) || occasions.length === 0) {
+    blockers.push({
+      code: 'tag',
+      message: 'Tag requis (badge du parcours).',
+    })
+  }
+
   const ready = steps.filter((step) => isAnchoredStep(step))
   if (ready.length < 1) {
     blockers.push({
@@ -84,6 +92,52 @@ export function getPublishBlockers(
         message: `Étape ${n} : titre requis.`,
       })
     }
+
+    // Champs create mobile : jour / moment / budget / Maps / photos
+    if (step.kind === 'free' || !step.kind) {
+      const meta = stepMeta(step)
+      if (step.day_offset == null || !Number.isFinite(Number(step.day_offset))) {
+        blockers.push({
+          code: `day_${n}`,
+          message: `Étape ${n} : jour requis.`,
+        })
+      }
+      const moment = String(step.moment || '').trim()
+      if (!moment || !['morning', 'afternoon', 'evening'].includes(moment)) {
+        blockers.push({
+          code: `moment_${n}`,
+          message: `Étape ${n} : moment requis (matin, après-midi ou soir).`,
+        })
+      }
+      const budget = meta.budget_eur
+      if (
+        budget == null ||
+        !Number.isFinite(Number(budget)) ||
+        Number(budget) < 0
+      ) {
+        blockers.push({
+          code: `budget_${n}`,
+          message: `Étape ${n} : budget requis.`,
+        })
+      }
+      const maps = String(meta.maps_url || '').trim()
+      if (!maps || !/^https?:\/\//i.test(maps)) {
+        blockers.push({
+          code: `maps_${n}`,
+          message: `Étape ${n} : lien Maps requis.`,
+        })
+      }
+      const photos = Array.isArray(meta.photos)
+        ? meta.photos.map(String).filter(Boolean)
+        : []
+      const hasPhoto = photos.length > 0 || !!String(step.photo || '').trim()
+      if (!hasPhoto) {
+        blockers.push({
+          code: `photos_${n}`,
+          message: `Étape ${n} : au moins une photo requise.`,
+        })
+      }
+    }
   }
 
   return blockers
@@ -91,23 +145,10 @@ export function getPublishBlockers(
 
 /** Avertissements non bloquants. */
 export function getPublishWarnings(
-  itinerary: Partial<Itinerary> | null | undefined,
-  items?: ItineraryItem[] | null,
+  _itinerary: Partial<Itinerary> | null | undefined,
+  _items?: ItineraryItem[] | null,
 ): PublishWarning[] {
-  const steps = items ?? itinerary?.itinerary_items ?? []
-  const warnings: PublishWarning[] = []
-  for (const [i, step] of steps.entries()) {
-    if (step.kind !== 'free' && step.kind) continue
-    const meta = stepMeta(step)
-    const maps = String(meta.maps_url || '').trim()
-    if (!maps) {
-      warnings.push({
-        code: `free_no_maps_${i + 1}`,
-        message: `Étape ${i + 1} : lien Maps manquant (conseillé).`,
-      })
-    }
-  }
-  return warnings
+  return []
 }
 
 export function canPublish(

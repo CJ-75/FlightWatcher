@@ -983,11 +983,17 @@ async def admin_list_parcours(
     status: Optional[str] = Query(None),
     occasion: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=200),
+    include_items: bool = Query(False),
 ):
     from activities.itineraries_admin import list_admin_itineraries
 
     return list_admin_itineraries(
-        _svc(), city=city, status=status, occasion=occasion, limit=limit
+        _svc(),
+        city=city,
+        status=status,
+        occasion=occasion,
+        limit=limit,
+        include_items=include_items,
     )
 
 
@@ -1033,10 +1039,14 @@ async def admin_publish_new_parcours(
 
 @router.get("/api/admin/parcours/{itinerary_id}")
 @require_admin
-async def admin_get_parcours(itinerary_id: str, request: Request):
+async def admin_get_parcours(
+    itinerary_id: str,
+    request: Request,
+    light: int = Query(1, ge=0, le=1),
+):
     from activities.itineraries_admin import get_admin_itinerary
 
-    out = get_admin_itinerary(_svc(), itinerary_id)
+    out = get_admin_itinerary(_svc(), itinerary_id, light=bool(light))
     if not out.get("ok"):
         code = 404 if out.get("error") == "not_found" else 500
         raise HTTPException(status_code=code, detail=out.get("error") or "error")

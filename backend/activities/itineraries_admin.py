@@ -60,6 +60,9 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
         blockers.append({"code": "city", "message": "Ville requise."})
     if not str(itin.get("slug") or "").strip():
         blockers.append({"code": "slug", "message": "Slug requis."})
+    occasions = itin.get("occasions")
+    if not isinstance(occasions, list) or len(occasions) == 0:
+        blockers.append({"code": "tag", "message": "Tag requis (badge du parcours)."})
     # Étapes libres avec titre comptent (create mobile) — notes / lieux vérifiés non requis
     ready = 0
     for step in items:
@@ -101,21 +104,70 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
                     "message": f"Étape {n} : titre requis.",
                 }
             )
+        if kind == "free":
+            meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+            meta = meta or {}
+            day = step.get("day_offset")
+            try:
+                day_ok = day is not None and float(day) >= 0
+            except (TypeError, ValueError):
+                day_ok = False
+            if not day_ok:
+                blockers.append(
+                    {
+                        "code": f"day_{n}",
+                        "message": f"Étape {n} : jour requis.",
+                    }
+                )
+            moment = str(step.get("moment") or "").strip()
+            if moment not in ("morning", "afternoon", "evening"):
+                blockers.append(
+                    {
+                        "code": f"moment_{n}",
+                        "message": f"Étape {n} : moment requis (matin, après-midi ou soir).",
+                    }
+                )
+            budget = meta.get("budget_eur")
+            try:
+                budget_ok = budget is not None and float(budget) >= 0
+            except (TypeError, ValueError):
+                budget_ok = False
+            if not budget_ok:
+                blockers.append(
+                    {
+                        "code": f"budget_{n}",
+                        "message": f"Étape {n} : budget requis.",
+                    }
+                )
+            maps = str(meta.get("maps_url") or "").strip()
+            if not maps or not (
+                maps.lower().startswith("http://") or maps.lower().startswith("https://")
+            ):
+                blockers.append(
+                    {
+                        "code": f"maps_{n}",
+                        "message": f"Étape {n} : lien Maps requis.",
+                    }
+                )
+            photos_raw = meta.get("photos")
+            photos = (
+                [str(u).strip() for u in photos_raw if str(u).strip()]
+                if isinstance(photos_raw, list)
+                else []
+            )
+            has_photo = bool(photos) or bool(str(step.get("photo") or "").strip())
+            if not has_photo:
+                blockers.append(
+                    {
+                        "code": f"photos_{n}",
+                        "message": f"Étape {n} : au moins une photo requise.",
+                    }
+                )
     return blockers
 
 
 def _place_warnings(supabase, items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     warnings: List[Dict[str, str]] = []
-    for i, step in enumerate(items):
-        if (step.get("kind") or "free") == "free":
-            meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
-            if not str((meta or {}).get("maps_url") or "").strip():
-                warnings.append(
-                    {
-                        "code": f"free_no_maps_{i+1}",
-                        "message": f"Étape {i+1} : lien Maps manquant (conseillé).",
-                    }
-                )
     place_ids = [str(it["place_id"]) for it in items if it.get("place_id")]
     if not place_ids or not supabase:
         return warnings
@@ -158,14 +210,21 @@ def list_admin_itineraries(
     status: Optional[str] = None,
     occasion: Optional[str] = None,
     limit: int = 100,
+    include_items: bool = False,
 ) -> Dict[str, Any]:
     if not supabase:
         return {"ok": False, "itineraries": [], "error": "no_supabase"}
     lim = max(1, min(int(limit or 100), 200))
+    # items(*) sans places(*) — assez pour édition rapide mobile
+    cols = (
+        f"{ADMIN_COLS}, itinerary_items(*)"
+        if include_items
+        else ADMIN_COLS
+    )
     try:
         q = (
             supabase.table("itineraries")
-            .select(ADMIN_COLS)
+            .select(cols)
             .eq("author_kind", "admin")
             .order("updated_at", desc=True)
             .limit(lim)
@@ -183,13 +242,21 @@ def list_admin_itineraries(
         return {"ok": False, "itineraries": [], "error": str(e)}
 
 
-def get_admin_itinerary(supabase, itinerary_id: str) -> Dict[str, Any]:
+def get_admin_itinerary(
+    supabase,
+    itinerary_id: str,
+    *,
+    light: bool = True,
+) -> Dict[str, Any]:
+    """light=True (défaut) : items sans places + pas de place_warnings (édition rapide)."""
     if not supabase:
         return {"ok": False, "error": "no_supabase"}
     try:
+        # places(*) est cher et inutile pour l’éditeur mobile free-steps
+        select_cols = f"{ADMIN_COLS}, itinerary_items(*)"
         res = (
             supabase.table("itineraries")
-            .select(f"{ADMIN_COLS}, itinerary_items(*, places(*))")
+            .select(select_cols)
             .eq("id", itinerary_id)
             .limit(1)
             .execute()
@@ -198,6 +265,13 @@ def get_admin_itinerary(supabase, itinerary_id: str) -> Dict[str, Any]:
             return {"ok": False, "error": "not_found"}
         row = _serialize(res.data[0])
         items = list(row.get("itinerary_items") or [])
+        if light:
+            return {
+                "ok": True,
+                "itinerary": row,
+                "blockers": _publish_blockers(row, items),
+                "warnings": [],
+            }
         return {
             "ok": True,
             "itinerary": row,
@@ -504,14 +578,14 @@ def update_admin_itinerary(
                     else:
                         raise
 
-        return get_admin_itinerary(supabase, itinerary_id)
+        return get_admin_itinerary(supabase, itinerary_id, light=True)
     except Exception as e:
         logger.warning("update_admin_itinerary: %s", e)
         return {"ok": False, "error": str(e)}
 
 
 def publish_admin_itinerary(supabase, itinerary_id: str) -> Dict[str, Any]:
-    got = get_admin_itinerary(supabase, itinerary_id)
+    got = get_admin_itinerary(supabase, itinerary_id, light=True)
     if not got.get("ok"):
         return got
     itin = got["itinerary"]
