@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -22,6 +23,9 @@ import {
   AddParcoursStepSheet,
   type DraftStep,
 } from '../components/parcours/AddParcoursStepSheet'
+import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
+import { ScreenBackground } from '../components/ScreenBackground'
+import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../navigation/types'
@@ -34,6 +38,8 @@ const MOMENT_FR: Record<string, string> = {
   afternoon: 'Après-midi',
   evening: 'Soir',
 }
+
+const FAB = 48
 
 function itemToDraft(it: ItineraryItem, index: number): DraftStep {
   const meta = it.meta || {}
@@ -88,7 +94,6 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const [steps, setSteps] = useState<DraftStep[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [publishing, setPublishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<DraftStep | null>(null)
@@ -105,8 +110,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
       if (!res.ok || !res.itinerary) throw new Error('Parcours introuvable')
       const raw = res.itinerary as unknown as Itinerary
       setItin(raw)
-      const items = (raw.itinerary_items || []) as ItineraryItem[]
-      setSteps(items.map(itemToDraft))
+      setSteps(((raw.itinerary_items || []) as ItineraryItem[]).map(itemToDraft))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -160,9 +164,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const onSaveStep = async (step: DraftStep) => {
     const idx = steps.findIndex((s) => s.localId === step.localId)
     const next =
-      idx >= 0
-        ? steps.map((s, i) => (i === idx ? step : s))
-        : [...steps, step]
+      idx >= 0 ? steps.map((s, i) => (i === idx ? step : s)) : [...steps, step]
     setSteps(next)
     setSheetOpen(false)
     setEditing(null)
@@ -184,35 +186,10 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     ])
   }
 
-  const finish = async () => {
+  const goPreview = async () => {
     const ok = await persist(steps)
     if (!ok) return
-    const status = String(itin?.status || 'draft')
-    if (status === 'published' && itin) {
-      const slugOrId = itin.slug || itineraryId
-      navigation.replace('ItineraryDetail', {
-        itineraryId: slugOrId,
-        preview: {
-          id: itin.id,
-          slug: itin.slug,
-          title: itin.title,
-          subtitle: itin.subtitle,
-          intro: itin.intro,
-          cover_image: itin.cover_image,
-          city_slug: itin.city_slug,
-          duration_kind: itin.duration_kind,
-          occasions: itin.occasions as string[],
-          featured_from: itin.featured_from,
-          featured_to: itin.featured_to,
-          budget_estimate_eur: itin.budget_estimate_eur,
-          budget_basis: itin.budget_basis,
-        },
-      })
-      return
-    }
-    // Draft stays private — Parcours tab shows « Mes brouillons ».
-    if (navigation.canGoBack()) navigation.goBack()
-    else navigation.navigate('Main')
+    navigation.navigate('CreateParcoursPreview', { itineraryId })
   }
 
   const tryPublish = async () => {
@@ -220,96 +197,105 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     if (!canPublish(itin, items)) {
       Alert.alert(
         'Pas encore publiable',
-        'Il manque des champs (intro, cover, ou 3 lieux vérifiés). Tu peux publier depuis l’admin web.',
+        'Complète depuis l’admin web (intro, lieux vérifiés…).',
       )
       return
     }
-    setPublishing(true)
     try {
       await persist(steps)
       const res = await getApi().adminPublishParcours(itineraryId)
       if (!res.ok) {
-        const blockers = (res.blockers || [])
-          .map((b) => b.message)
-          .join('\n')
-        Alert.alert('Publication refusée', blockers || res.error || 'Erreur')
+        Alert.alert(
+          'Publication refusée',
+          (res.blockers || []).map((b) => b.message).join('\n') ||
+            res.error ||
+            'Erreur',
+        )
         return
       }
-      if (res.itinerary) setItin(res.itinerary as unknown as Itinerary)
-      Alert.alert('Publié', 'Le parcours est au catalogue.')
       const published = (res.itinerary || itin) as Itinerary | null
-      const slugOrId = published?.slug || itineraryId
       navigation.replace('ItineraryDetail', {
-        itineraryId: slugOrId,
+        itineraryId: published?.slug || itineraryId,
         preview: published
           ? {
               id: published.id,
               slug: published.slug,
               title: published.title,
-              subtitle: published.subtitle,
-              intro: published.intro,
               cover_image: published.cover_image,
               city_slug: published.city_slug,
-              duration_kind: published.duration_kind,
-              occasions: published.occasions as string[],
             }
           : undefined,
       })
     } catch (e) {
       Alert.alert('Erreur', e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setPublishing(false)
     }
   }
 
   if (!allowed) return null
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 4 }]}>
+      <ScreenBackground />
       <View style={styles.topBar}>
         <Pressable
-          onPress={() =>
-            navigation.navigate('CreateParcours', { itineraryId })
-          }
+          onPress={() => navigation.navigate('CreateParcours', { itineraryId })}
+          hitSlop={12}
         >
-          <Text style={styles.back}>← Infos</Text>
+          <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Text style={styles.topTitle} numberOfLines={1}>
-          {itin?.title || 'Étapes'}
-        </Text>
-        <Pressable onPress={() => void finish()} disabled={saving}>
-          <Text style={styles.saveTop}>{saving ? '…' : 'OK'}</Text>
+        <Pressable onPress={() => void goPreview()} disabled={saving} hitSlop={12}>
+          <Text style={styles.navCta}>{saving ? '…' : 'Aperçu'}</Text>
         </Pressable>
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 48 }} />
       ) : (
         <ScrollView
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
             paddingBottom: insets.bottom + 120,
           }}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.kicker}>ÉTAPES</Text>
-          <Text style={styles.title}>Compose ton parcours</Text>
-          <Text style={styles.sub}>
-            Ajoute des lieux via un lien Maps, des photos, une note.
+          <CreateFlowProgress step={2} />
+          <Text style={tabScreenHeaderStyles.kicker}>ÉTAPES</Text>
+          <Text style={tabScreenHeaderStyles.title} numberOfLines={2}>
+            {itin?.title || 'Parcours'}
+          </Text>
+          <Text style={[tabScreenHeaderStyles.subtitle, { marginBottom: 22 }]}>
+            Maps, photos et une courte description par lieu.
           </Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           {steps.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>Aucune étape pour l’instant.</Text>
+            <View style={[styles.empty, shadow.soft]}>
+              <View style={styles.emptyDot} />
+              <Text style={styles.emptyTitle}>Ajoute une première étape</Text>
+              <Text style={styles.emptyBody}>
+                Lien Google Maps, photos, et une petite description.
+              </Text>
             </View>
           ) : (
             byDay.map((day) => (
               <View key={day.dayOffset} style={styles.dayBlock}>
-                <Text style={styles.dayTitle}>{day.label}</Text>
+                <View style={styles.dayHead}>
+                  <View style={styles.dayDot} />
+                  <Text style={styles.dayLabel}>{day.label}</Text>
+                </View>
                 {day.items.map((it) => {
                   const draft = steps.find((s) => s.localId === it.id)
                   if (!draft) return null
+                  const meta = [
+                    draft.moment ? MOMENT_FR[draft.moment] : null,
+                    draft.maps_url ? 'Maps' : null,
+                    draft.photos.length
+                      ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
                   return (
                     <Pressable
                       key={draft.localId}
@@ -318,31 +304,29 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
                         setSheetOpen(true)
                       }}
                       onLongPress={() => removeStep(draft.localId)}
-                      style={[styles.card, shadow.soft]}
+                      style={({ pressed }) => [
+                        styles.card,
+                        shadow.soft,
+                        pressed && { opacity: 0.92 },
+                      ]}
                     >
                       {draft.photo ? (
-                        <Image
-                          source={{ uri: draft.photo }}
-                          style={styles.cardThumb}
-                        />
+                        <Image source={{ uri: draft.photo }} style={styles.thumb} />
                       ) : (
-                        <View style={[styles.cardThumb, styles.cardThumbEmpty]} />
+                        <View style={[styles.thumb, styles.thumbEmpty]}>
+                          <Text style={styles.thumbMark}>+</Text>
+                        </View>
                       )}
-                      <View style={{ flex: 1 }}>
+                      <View style={styles.cardBody}>
                         <Text style={styles.cardTitle} numberOfLines={2}>
                           {draft.title}
                         </Text>
-                        <Text style={styles.cardMeta}>
-                          {[
-                            draft.moment ? MOMENT_FR[draft.moment] : null,
-                            draft.maps_url ? 'Maps' : null,
-                            draft.photos.length
-                              ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ') || 'Étape libre'}
-                        </Text>
+                        {draft.note ? (
+                          <Text style={styles.cardNote} numberOfLines={2}>
+                            {draft.note}
+                          </Text>
+                        ) : null}
+                        {meta ? <Text style={styles.cardMeta}>{meta}</Text> : null}
                       </View>
                     </Pressable>
                   )
@@ -351,15 +335,20 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
             ))
           )}
 
-          <Pressable
-            onPress={() => void tryPublish()}
-            disabled={publishing || steps.length === 0}
-            style={styles.publishLink}
-          >
-            <Text style={styles.publishText}>
-              {publishing ? 'Publication…' : 'Publier (si règles OK)'}
-            </Text>
-          </Pressable>
+          {steps.length > 0 ? (
+            <Pressable
+              onPress={() => void goPreview()}
+              style={[styles.previewCta, shadow.lift]}
+            >
+              <Text style={styles.previewCtaText}>Voir le rendu</Text>
+            </Pressable>
+          ) : null}
+
+          {steps.length > 0 ? (
+            <Pressable onPress={() => void tryPublish()} style={styles.publish}>
+              <Text style={styles.publishText}>Publier (optionnel)</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       )}
 
@@ -368,9 +357,17 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
           setEditing(null)
           setSheetOpen(true)
         }}
-        style={[styles.fab, { bottom: insets.bottom + 24 }]}
+        accessibilityLabel="Ajouter une étape"
+        style={({ pressed }) => [
+          styles.fab,
+          { bottom: insets.bottom + 22 },
+          pressed && { transform: [{ scale: 0.96 }] },
+        ]}
       >
-        <Text style={styles.fabText}>+ Ajouter</Text>
+        <View style={styles.fabGlyph}>
+          <View style={styles.fabH} />
+          <View style={styles.fabV} />
+        </View>
       </Pressable>
 
       <AddParcoursStepSheet
@@ -390,93 +387,150 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   topBar: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    marginBottom: 8,
-    gap: 12,
+    marginBottom: 10,
   },
-  back: { fontFamily: fonts.semibold, fontSize: 14, color: colors.primary },
-  topTitle: {
-    flex: 1,
+  navMuted: { fontFamily: fonts.semibold, fontSize: 15, color: colors.muted },
+  navCta: { fontFamily: fonts.bold, fontSize: 15, color: colors.primary },
+  error: { color: colors.danger, fontFamily: fonts.medium, marginBottom: 12 },
+  empty: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: radius.xl,
+    padding: 22,
+    alignItems: 'flex-start',
+  },
+  emptyDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    marginBottom: 12,
+  },
+  emptyTitle: {
     fontFamily: fonts.bold,
-    fontSize: 16,
+    fontSize: 17,
     color: colors.ink,
-    textAlign: 'center',
   },
-  saveTop: { fontFamily: fonts.bold, fontSize: 14, color: colors.ink },
-  kicker: {
-    fontFamily: fonts.extrabold,
-    fontSize: 11,
-    letterSpacing: 1,
-    color: colors.muted,
-    marginTop: 8,
-  },
-  title: {
-    fontFamily: fonts.serif,
-    fontSize: 32,
-    color: colors.ink,
-    marginTop: 4,
-  },
-  sub: {
+  emptyBody: {
     fontFamily: fonts.medium,
     fontSize: 14,
     color: colors.muted,
     marginTop: 6,
-    marginBottom: 16,
+    lineHeight: 20,
   },
-  error: { color: colors.danger, fontFamily: fonts.medium, marginBottom: 12 },
-  empty: {
-    padding: 20,
-    backgroundColor: '#fff',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  emptyText: { fontFamily: fonts.medium, color: colors.muted },
-  dayBlock: { marginTop: 18 },
-  dayTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 18,
-    color: colors.ink,
+  dayBlock: { marginBottom: 18 },
+  dayHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 10,
+  },
+  dayDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  dayLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.muted,
   },
   card: {
     flexDirection: 'row',
-    gap: 12,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: radius.lg,
     padding: 12,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.line,
   },
-  cardThumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
+  thumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     backgroundColor: colors.primaryMuted,
   },
-  cardThumbEmpty: { opacity: 0.5 },
+  thumbEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbMark: {
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    color: colors.primaryInk,
+    opacity: 0.45,
+  },
+  cardBody: { flex: 1, minWidth: 0 },
   cardTitle: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
+  cardNote: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: colors.inkSoft,
+    marginTop: 3,
+    lineHeight: 18,
+  },
   cardMeta: {
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.muted,
     marginTop: 4,
   },
-  fab: {
-    position: 'absolute',
-    right: spacing.xl,
-    backgroundColor: colors.ink,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: radius.full,
+  previewCta: {
+    marginTop: 20,
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
   },
-  fabText: { fontFamily: fonts.bold, fontSize: 15, color: '#fff' },
-  publishLink: { marginTop: 28, alignItems: 'center' },
+  previewCtaText: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: '#fff',
+  },
+  publish: { marginTop: 14, alignSelf: 'center', paddingVertical: 10 },
   publishText: {
     fontFamily: fonts.semibold,
     fontSize: 14,
-    color: colors.primaryDeep,
+    color: colors.muted,
+  },
+  fab: {
+    position: 'absolute',
+    right: spacing.xl,
+    width: FAB,
+    height: FAB,
+    borderRadius: FAB / 2,
+    backgroundColor: colors.primary,
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primaryDeep,
+        shadowOpacity: 0.32,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 8 },
+      default: {},
+    }),
+  },
+  fabGlyph: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabH: {
+    position: 'absolute',
+    width: 16,
+    height: 2.5,
+    borderRadius: 1.5,
+    backgroundColor: '#fff',
+  },
+  fabV: {
+    position: 'absolute',
+    width: 2.5,
+    height: 16,
+    borderRadius: 1.5,
+    backgroundColor: '#fff',
   },
 })

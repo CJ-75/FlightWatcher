@@ -166,6 +166,11 @@ const CreateParcoursStepsScreen = lazyScreen(() =>
     default: m.CreateParcoursStepsScreen,
   })),
 )
+const CreateParcoursPreviewScreen = lazyScreen(() =>
+  import('./src/screens/CreateParcoursPreviewScreen').then((m) => ({
+    default: m.CreateParcoursPreviewScreen,
+  })),
+)
 const SecurityScreen = lazyScreen(() =>
   import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
 )
@@ -472,6 +477,11 @@ function RootNavigator() {
           <Stack.Screen
             name="CreateParcoursSteps"
             component={CreateParcoursStepsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="CreateParcoursPreview"
+            component={CreateParcoursPreviewScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

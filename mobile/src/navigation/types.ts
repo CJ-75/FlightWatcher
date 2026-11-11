@@ -124,5 +124,6 @@ export type RootStackParamList = {
   /** Admin create / edit parcours infos + hero (gated). */
   CreateParcours: { itineraryId?: string } | undefined
   CreateParcoursSteps: { itineraryId: string }
+  CreateParcoursPreview: { itineraryId: string }
   NotFound: undefined
 }

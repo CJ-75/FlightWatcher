@@ -5,28 +5,29 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  ImageBackground,
-  ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  ImageBackground,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   canCreateParcours,
   cityImageUrl,
   citySlugDisplayNameFr,
-  ITINERARY_OCCASION_LABELS,
-  ITINERARY_OCCASIONS,
-  type ItineraryOccasion,
+  type ItineraryBudgetBasis,
 } from '@flightwatcher/shared'
+import { ActivityCityPicker } from '../components/ActivityCityPicker'
+import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
+import { ScreenBackground } from '../components/ScreenBackground'
+import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, radius, spacing } from '../theme'
-
-const CITIES = ['paris', 'marseille', 'lyon', 'lisbon', 'porto', 'barcelona', 'rome'] as const
+import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateParcours'>
 
@@ -34,27 +35,24 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const itineraryId = route.params?.itineraryId
-
   const allowed = canCreateParcours({ email: user?.email })
+
   const [title, setTitle] = useState('')
-  const [city, setCity] = useState<string>('paris')
-  const [occasions, setOccasions] = useState<ItineraryOccasion[]>([])
-  const [coverUrl, setCoverUrl] = useState('')
-  const [intro, setIntro] = useState('')
+  const [citySlug, setCitySlug] = useState('paris')
+  const [cityLabel, setCityLabel] = useState('Paris')
+  const [budgetEur, setBudgetEur] = useState('')
+  const [budgetBasis, setBudgetBasis] = useState<ItineraryBudgetBasis>('for_two')
   const [loading, setLoading] = useState(!!itineraryId)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const defaultHero = useMemo(
-    () => cityImageUrl(citySlugDisplayNameFr(city) || city),
-    [city],
+  const cover = useMemo(
+    () => cityImageUrl(cityLabel || citySlugDisplayNameFr(citySlug) || citySlug),
+    [cityLabel, citySlug],
   )
-  const heroUri = coverUrl.trim() || defaultHero
 
   useEffect(() => {
-    if (!allowed) {
-      navigation.goBack()
-    }
+    if (!allowed) navigation.goBack()
   }, [allowed, navigation])
 
   useEffect(() => {
@@ -68,13 +66,17 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
         if (cancelled) return
         const it = res.itinerary as Record<string, unknown>
         setTitle(String(it.title || ''))
-        setCity(String(it.city_slug || 'paris'))
-        setCoverUrl(String(it.cover_image || ''))
-        setIntro(String(it.intro || ''))
-        const occ = Array.isArray(it.occasions)
-          ? (it.occasions as string[]).filter(Boolean)
-          : []
-        setOccasions(occ as ItineraryOccasion[])
+        const slug = String(it.city_slug || 'paris')
+        setCitySlug(slug)
+        setCityLabel(citySlugDisplayNameFr(slug) || slug)
+        const bud = it.budget_estimate_eur
+        setBudgetEur(
+          typeof bud === 'number' && Number.isFinite(bud) ? String(bud) : '',
+        )
+        const basis = it.budget_basis
+        if (basis === 'for_two' || basis === 'per_person') {
+          setBudgetBasis(basis)
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur')
       } finally {
@@ -86,29 +88,24 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     }
   }, [itineraryId])
 
-  const toggleOccasion = (o: ItineraryOccasion) => {
-    setOccasions((prev) =>
-      prev.includes(o) ? prev.filter((x) => x !== o) : [...prev, o],
-    )
-  }
-
-  const useCityPhoto = () => setCoverUrl(defaultHero)
-
   const continueToSteps = useCallback(async () => {
+    if (!citySlug.trim()) {
+      setError('Choisis une ville')
+      return
+    }
     const t = title.trim()
     if (!t) {
-      setError('Donne un titre au parcours')
+      setError('Ajoute un titre')
       return
     }
     setSaving(true)
     setError(null)
     try {
-      const cover = coverUrl.trim() || defaultHero
       let id = itineraryId
       if (!id) {
         const created = await getApi().adminCreateParcours({
           title: t,
-          city_slug: city,
+          city_slug: citySlug,
           cover_image: cover,
         })
         if (!created.ok || !created.itinerary?.id) {
@@ -116,12 +113,23 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
         }
         id = String(created.itinerary.id)
       }
+      const budgetNum = budgetEur.trim()
+        ? Number(budgetEur.replace(',', '.'))
+        : null
+      if (
+        budgetEur.trim() &&
+        (budgetNum == null || !Number.isFinite(budgetNum) || budgetNum < 0)
+      ) {
+        setError('Budget invalide')
+        setSaving(false)
+        return
+      }
       const patch = await getApi().adminUpdateParcours(id, {
         title: t,
-        city_slug: city,
+        city_slug: citySlug,
         cover_image: cover,
-        occasions,
-        intro: intro.trim() || null,
+        budget_estimate_eur: budgetNum,
+        budget_basis: budgetNum != null ? budgetBasis : null,
       })
       if (!patch.ok) throw new Error(patch.error || 'Enregistrement impossible')
       navigation.replace('CreateParcoursSteps', { itineraryId: id })
@@ -130,31 +138,25 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false)
     }
-  }, [
-    title,
-    coverUrl,
-    defaultHero,
-    itineraryId,
-    city,
-    occasions,
-    intro,
-    navigation,
-  ])
+  }, [title, cover, itineraryId, citySlug, budgetEur, budgetBasis, navigation])
 
   if (!allowed) return null
 
   return (
     <View style={styles.root}>
-      <ImageBackground source={{ uri: heroUri }} style={styles.hero} imageStyle={styles.heroImg}>
-        <View style={[styles.heroScrim, { paddingTop: insets.top + 8 }]}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Text style={styles.back}>← Retour</Text>
+      <ScreenBackground />
+
+      {/* Soft atmosphere — not a dominant hero */}
+      <ImageBackground source={{ uri: cover }} style={styles.ambient} imageStyle={styles.ambientImg}>
+        <LinearGradient
+          colors={['rgba(255,236,224,0.15)', 'rgba(255,249,245,0.92)', colors.canvas]}
+          locations={[0, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={{ paddingTop: insets.top + 8, paddingHorizontal: spacing.xl }}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={14}>
+            <Text style={styles.close}>Fermer</Text>
           </Pressable>
-          <Text style={styles.brand}>FlightWatcher</Text>
-          <Text style={styles.heroTitle}>
-            {itineraryId ? 'Modifier le parcours' : 'Nouveau parcours'}
-          </Text>
-          <Text style={styles.heroSub}>Titre, ville, photo — puis les étapes.</Text>
         </View>
       </ImageBackground>
 
@@ -162,99 +164,113 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {loading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
-        ) : (
-          <ScrollView
-            contentContainerStyle={{
-              padding: spacing.xl,
-              paddingBottom: insets.bottom + 40,
-              gap: 14,
-            }}
-            keyboardShouldPersistTaps="handled"
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.xl,
+            paddingBottom: insets.bottom + 120,
+            marginTop: -28,
+          }}
+        >
+          <CreateFlowProgress step={1} />
+          <Text style={tabScreenHeaderStyles.kicker}>PARCOURS</Text>
+          <Text style={tabScreenHeaderStyles.title}>
+            {itineraryId ? 'Modifier' : 'Nouveau parcours'}
+          </Text>
+          <Text style={[tabScreenHeaderStyles.subtitle, styles.lead]}>
+            Ville, titre et budget sur place.
+          </Text>
+
+          {loading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <View style={[styles.panel, shadow.soft]}>
+              <Text style={styles.label}>Ville</Text>
+              <ActivityCityPicker
+                valueSlug={citySlug}
+                valueLabel={cityLabel}
+                onChange={(city) => {
+                  setCitySlug(city.slug || 'paris')
+                  setCityLabel(city.label || city.slug || 'Paris')
+                }}
+              />
+
+              <View style={styles.sep} />
+
+              <Text style={styles.label}>Titre</Text>
+              <TextInput
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Ex. Week-end à Lyon"
+                placeholderTextColor={colors.faint}
+                style={styles.titleInput}
+              />
+
+              <View style={styles.sep} />
+
+              <Text style={styles.label}>Budget sur place</Text>
+              <View style={styles.budgetRow}>
+                <View style={styles.budgetInputWrap}>
+                  <TextInput
+                    value={budgetEur}
+                    onChangeText={setBudgetEur}
+                    placeholder="120"
+                    placeholderTextColor={colors.faint}
+                    keyboardType="decimal-pad"
+                    style={styles.budgetInput}
+                  />
+                  <Text style={styles.budgetSuffix}>€</Text>
+                </View>
+                <View style={styles.basisRow}>
+                  {(
+                    [
+                      { id: 'for_two' as const, label: 'Pour 2' },
+                      { id: 'per_person' as const, label: 'Par pers.' },
+                    ] as const
+                  ).map((b) => {
+                    const on = budgetBasis === b.id
+                    return (
+                      <Pressable
+                        key={b.id}
+                        onPress={() => setBudgetBasis(b.id)}
+                        style={[styles.basisChip, on && styles.basisChipOn]}
+                      >
+                        <Text
+                          style={[styles.basisText, on && styles.basisTextOn]}
+                        >
+                          {b.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              </View>
+              <Text style={styles.budgetHint}>Optionnel — affiché sur la fiche</Text>
+            </View>
+          )}
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 14 }]}>
+          <Pressable
+            onPress={() => void continueToSteps()}
+            disabled={saving || loading}
+            style={({ pressed }) => [
+              styles.cta,
+              shadow.lift,
+              (saving || loading) && { opacity: 0.7 },
+              pressed && { transform: [{ scale: 0.985 }] },
+            ]}
           >
-            <Text style={styles.label}>Titre</Text>
-            <TextInput
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Week-end à Lisbonne…"
-              placeholderTextColor={colors.faint}
-              style={styles.input}
-            />
-
-            <Text style={styles.label}>Ville</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {CITIES.map((c) => (
-                <Pressable
-                  key={c}
-                  onPress={() => setCity(c)}
-                  style={[styles.chip, city === c && styles.chipOn]}
-                >
-                  <Text style={[styles.chipText, city === c && styles.chipTextOn]}>
-                    {citySlugDisplayNameFr(c) || c}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.label}>Occasions</Text>
-            <View style={styles.wrap}>
-              {ITINERARY_OCCASIONS.map((o) => {
-                const on = occasions.includes(o)
-                return (
-                  <Pressable
-                    key={o}
-                    onPress={() => toggleOccasion(o)}
-                    style={[styles.chip, on && styles.chipOn]}
-                  >
-                    <Text style={[styles.chipText, on && styles.chipTextOn]}>
-                      {ITINERARY_OCCASION_LABELS[o]}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-
-            <View style={styles.rowBetween}>
-              <Text style={styles.label}>Photo hero</Text>
-              <Pressable onPress={useCityPhoto}>
-                <Text style={styles.link}>Photo ville</Text>
-              </Pressable>
-            </View>
-            <TextInput
-              value={coverUrl}
-              onChangeText={setCoverUrl}
-              placeholder="URL image (vide = photo ville)"
-              placeholderTextColor={colors.faint}
-              autoCapitalize="none"
-              style={styles.input}
-            />
-
-            <Text style={styles.label}>Intro (optionnel)</Text>
-            <TextInput
-              value={intro}
-              onChangeText={setIntro}
-              placeholder="Deux phrases pour planter le décor…"
-              placeholderTextColor={colors.faint}
-              multiline
-              style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
-            />
-
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <Pressable
-              onPress={() => void continueToSteps()}
-              disabled={saving}
-              style={[styles.cta, saving && { opacity: 0.7 }]}
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.ctaText}>Continuer → étapes</Text>
-              )}
-            </Pressable>
-          </ScrollView>
-        )}
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.ctaText}>Continuer → étapes</Text>
+            )}
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </View>
   )
@@ -262,79 +278,115 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
-  hero: { minHeight: 220 },
-  heroImg: { resizeMode: 'cover' },
-  heroScrim: {
-    flex: 1,
-    backgroundColor: 'rgba(20,12,8,0.42)',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 20,
-    justifyContent: 'flex-end',
+  ambient: {
+    height: 148,
+    width: '100%',
   },
-  back: { fontFamily: fonts.semibold, fontSize: 14, color: '#fff', marginBottom: 8 },
-  brand: {
-    fontFamily: fonts.extrabold,
-    fontSize: 13,
-    letterSpacing: 1.2,
-    color: 'rgba(255,255,255,0.85)',
-    textTransform: 'uppercase',
-    marginBottom: 4,
+  ambientImg: { resizeMode: 'cover' },
+  close: {
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    color: colors.ink,
   },
-  heroTitle: {
-    fontFamily: fonts.serif,
-    fontSize: 34,
-    color: '#fff',
-    lineHeight: 40,
-  },
-  heroSub: {
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.88)',
-    marginTop: 6,
+  lead: { marginBottom: 20 },
+  panel: {
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: radius.xl,
+    padding: 18,
   },
   label: {
     fontFamily: fonts.semibold,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.muted,
+    marginBottom: 10,
+    letterSpacing: 0.2,
   },
-  input: {
-    backgroundColor: '#fff',
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+    marginVertical: 18,
+  },
+  titleInput: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    letterSpacing: -0.5,
+    color: colors.ink,
+    paddingVertical: 4,
+  },
+  budgetRow: {
+    gap: 12,
+  },
+  budgetInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.canvas,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.line,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontFamily: fonts.medium,
-    fontSize: 15,
-    color: colors.ink,
+    paddingVertical: 4,
   },
-  chip: {
-    paddingHorizontal: 14,
+  budgetInput: {
+    flex: 1,
+    fontFamily: fonts.extrabold,
+    fontSize: 24,
+    letterSpacing: -0.5,
+    color: colors.ink,
     paddingVertical: 10,
+  },
+  budgetSuffix: {
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    color: colors.muted,
+  },
+  basisRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  basisChip: {
+    flex: 1,
+    paddingVertical: 12,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: '#fff',
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  chipOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  chipText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.ink },
-  chipTextOn: { color: '#F5EFEA' },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap' },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: colors.canvas,
     alignItems: 'center',
   },
-  link: { fontFamily: fonts.bold, fontSize: 13, color: colors.primary },
-  error: { fontFamily: fonts.medium, color: colors.danger, fontSize: 14 },
+  basisChipOn: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  basisText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  basisTextOn: { color: '#FFF8F3' },
+  budgetHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.faint,
+    marginTop: 10,
+  },
+  error: {
+    marginTop: 16,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    color: colors.danger,
+  },
+  footer: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: 10,
+  },
   cta: {
-    marginTop: 8,
     backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingVertical: 16,
+    borderRadius: 20,
+    paddingVertical: 17,
     alignItems: 'center',
   },
-  ctaText: { fontFamily: fonts.bold, fontSize: 16, color: '#fff' },
+  ctaText: {
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: '#fff',
+  },
 })
