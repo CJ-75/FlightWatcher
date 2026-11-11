@@ -284,14 +284,6 @@ export function ActivityPlannerPicker({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-2.5">
-          {loading && !items.length ? (
-            <p className="text-sm text-muted py-8 text-center">Chargement…</p>
-          ) : null}
-          {loading && items.length ? (
-            <p className="text-xs text-muted text-center pb-1">
-              Mise à jour des séjours…
-            </p>
-          ) : null}
           {error && !items.length ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-sm text-amber-900 space-y-2">
               <p>{error}</p>
@@ -302,7 +294,7 @@ export function ActivityPlannerPicker({
               ) : null}
             </div>
           ) : null}
-          {!loading && !items.length && !error ? (
+          {!items.length && !error && !loading ? (
             <div className="rounded-2xl border border-dashed border-line bg-canvas px-4 py-6 text-sm text-muted space-y-3 text-center">
               <p className="font-semibold text-ink">{ACTIVITY_NO_PLANNER_TO_ADD_FR}</p>
               <Link

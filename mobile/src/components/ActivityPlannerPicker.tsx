@@ -8,7 +8,6 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
   Image,
 } from 'react-native'
@@ -322,14 +321,6 @@ export function ActivityPlannerPicker({
             <Text style={styles.hint}>{hint}</Text>
           </View>
 
-          {loading && !items.length ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
-          ) : null}
-
-          {loading && items.length ? (
-            <Text style={styles.refreshHint}>Mise à jour des séjours…</Text>
-          ) : null}
-
           {error && !items.length ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
@@ -341,7 +332,7 @@ export function ActivityPlannerPicker({
             </View>
           ) : null}
 
-          {!loading && !items.length && !error ? (
+          {!items.length && !error && !loading ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyTitle}>{ACTIVITY_NO_PLANNER_TO_ADD_FR}</Text>
               {onOpenPlanner ? (
@@ -510,14 +501,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.inkSoft,
     lineHeight: 19,
-  },
-  refreshHint: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    textAlign: 'center',
-    marginBottom: 8,
-    paddingHorizontal: spacing.lg,
   },
   errorBox: {
     marginHorizontal: spacing.lg,
