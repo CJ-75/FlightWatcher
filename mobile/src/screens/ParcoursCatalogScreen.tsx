@@ -45,15 +45,28 @@ const CITIES = ['paris', 'marseille', 'lyon', 'lisbon', 'porto', 'barcelona', 'r
 type Props = {
   headerExtra?: React.ReactNode
   embedded?: boolean
+  scrollRef?: React.RefObject<ScrollView | null>
 }
 
-export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) {
+export function ParcoursCatalogScreen({
+  headerExtra,
+  embedded = false,
+  scrollRef: scrollRefProp,
+}: Props) {
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { user, isGuest } = useAuth()
-  const scrollRef = useRef<ScrollView>(null)
-  useScrollToTop(scrollRef)
+  const localScrollRef = useRef<ScrollView>(null)
+  const scrollRef = scrollRefProp ?? localScrollRef
+  useScrollToTop(
+    useRef({
+      scrollToTop: () => {
+        if (embedded) return
+        scrollRef.current?.scrollTo({ y: 0, animated: true })
+      },
+    }),
+  )
   const [city, setCity] = useState('paris')
   const cityRef = useRef(city)
   cityRef.current = city

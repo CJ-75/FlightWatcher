@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -7,8 +7,9 @@ import {
   Platform,
   useWindowDimensions,
   ScrollView,
+  FlatList,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useScrollToTop } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DealsScreen } from './DealsScreen'
@@ -40,6 +41,8 @@ type Segment = 'parcours' | 'mes' | 'sejours'
 /** Titre fixe + tabs TikTok sous le titre — même header que Planner / Activités. */
 export function ParcoursHubScreen() {
   const [segment, setSegment] = useState<Segment>('parcours')
+  const segmentRef = useRef<Segment>(segment)
+  segmentRef.current = segment
   const [, setDraftTick] = useState(0)
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
@@ -47,6 +50,29 @@ export function ParcoursHubScreen() {
   const canCreate = canCreateParcoursOnDevice(user?.email)
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+
+  const catalogScrollRef = useRef<ScrollView>(null)
+  const dealsListRef = useRef<FlatList<unknown>>(null)
+  const mesScrollRef = useRef<ScrollView>(null)
+
+  const scrollActiveToTop = useCallback(() => {
+    const s = segmentRef.current
+    if (s === 'sejours') {
+      dealsListRef.current?.scrollToOffset({ offset: 0, animated: true })
+    } else if (s === 'mes') {
+      mesScrollRef.current?.scrollTo({ y: 0, animated: true })
+    } else {
+      catalogScrollRef.current?.scrollTo({ y: 0, animated: true })
+    }
+  }, [])
+
+  useScrollToTop(
+    useRef({
+      scrollToTop: () => {
+        scrollActiveToTop()
+      },
+    }),
+  )
 
   useEffect(() => {
     void hydrateParcoursCreateSession()
@@ -106,7 +132,13 @@ export function ParcoursHubScreen() {
             return (
               <Pressable
                 key={s.id}
-                onPress={() => setSegment(s.id)}
+                onPress={() => {
+                  if (segment === s.id) {
+                    scrollActiveToTop()
+                    return
+                  }
+                  setSegment(s.id)
+                }}
                 style={styles.tab}
               >
                 <Text style={[styles.tabText, on && styles.tabTextOn]}>
@@ -137,21 +169,31 @@ export function ParcoursHubScreen() {
       >
         {header}
         <View style={styles.flex}>
-          <DealsScreen embedded />
+          <DealsScreen
+            embedded
+            listRef={dealsListRef as React.RefObject<FlatList | null>}
+          />
         </View>
       </View>
       <View
         style={[styles.flex, segment !== 'parcours' && styles.hidden]}
         pointerEvents={segment === 'parcours' ? 'auto' : 'none'}
       >
-        <ParcoursCatalogScreen headerExtra={header} embedded />
+        <ParcoursCatalogScreen
+          headerExtra={header}
+          embedded
+          scrollRef={catalogScrollRef}
+        />
       </View>
       {canCreate ? (
         <View
           style={[styles.flex, segment !== 'mes' && styles.hidden]}
           pointerEvents={segment === 'mes' ? 'auto' : 'none'}
         >
-          <MesParcoursScreen headerExtra={header} />
+          <MesParcoursScreen
+            headerExtra={header}
+            scrollRef={mesScrollRef}
+          />
         </View>
       ) : null}
       {showFab ? (

@@ -40,6 +40,7 @@ type StatusFilter = 'published' | 'draft' | 'retired' | 'all'
 
 type Props = {
   headerExtra?: React.ReactNode
+  scrollRef?: React.RefObject<ScrollView | null>
 }
 
 const STATUS_META: Record<
@@ -72,7 +73,7 @@ function statusOf(it: AdminItinerary): string {
   return STATUS_META[s] ? s : 'draft'
 }
 
-export function MesParcoursScreen({ headerExtra }: Props) {
+export function MesParcoursScreen({ headerExtra, scrollRef }: Props) {
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -371,6 +372,7 @@ export function MesParcoursScreen({ headerExtra }: Props) {
   return (
     <View style={styles.root}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{
           paddingBottom: insets.bottom + 100,
         }}

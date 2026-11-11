@@ -98,7 +98,13 @@ export function SearchScreen() {
   const pendingOriginRef = useRef<string | null>(null)
   const autoSearchPendingRef = useRef(false)
   const scrollRef = useRef<ScrollView>(null)
-  useScrollToTop(scrollRef)
+  useScrollToTop(
+    useRef({
+      scrollToTop: () => {
+        scrollRef.current?.scrollTo({ y: 0, animated: true })
+      },
+    }),
+  )
 
   // Lot E / Affiner — prefill origin · pax · dates (+ auto inspire)
   useEffect(() => {

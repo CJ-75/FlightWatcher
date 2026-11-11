@@ -23,6 +23,10 @@ export function ParcoursHub() {
   }, [fromUrl])
 
   const select = (next: Segment) => {
+    if (next === segment) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     setSegment(next)
     const nextParams = new URLSearchParams(params)
     if (next === 'parcours') nextParams.delete('vue')

@@ -98,7 +98,14 @@ function persistOccasionChips(chips: DealOccasionChip[]) {
   )
 }
 
-export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
+export function DealsScreen({
+  embedded = false,
+  listRef: listRefProp,
+}: {
+  embedded?: boolean
+  /** Ref externe (hub Explorer) pour scroll-to-top onglet. */
+  listRef?: React.RefObject<FlatList<DealsListItem> | null>
+}) {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { viewUser, signInWithGoogle } = useAuth()
@@ -135,8 +142,17 @@ export function DealsScreen({ embedded = false }: { embedded?: boolean }) {
   const [originReady, setOriginReady] = useState(false)
   const configLoadedRef = useRef(false)
   const lastFetchAtRef = useRef(0)
-  const listRef = useRef<FlatList<DealsListItem>>(null)
-  useScrollToTop(listRef)
+  const localListRef = useRef<FlatList<DealsListItem>>(null)
+  const listRef = listRefProp ?? localListRef
+  // Hub Explorer gère le scroll-to-top quand embedded
+  useScrollToTop(
+    useRef({
+      scrollToTop: () => {
+        if (embedded) return
+        listRef.current?.scrollToOffset({ offset: 0, animated: true })
+      },
+    }),
+  )
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const originHydratedRef = useRef(false)
   const dealsRef = useRef(deals)
