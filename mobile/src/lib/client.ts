@@ -284,12 +284,11 @@ function mobileFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Resp
     xhr.timeout = timeoutMs
 
     const headers = new Headers(init?.headers)
+    if (!headers.has('X-FW-Client')) {
+      headers.set('X-FW-Client', 'mobile')
+    }
     headers.forEach((value, key) => {
-      if (key.toLowerCase() === 'content-type' || key.toLowerCase() === 'authorization') {
-        xhr.setRequestHeader(key, value)
-      } else {
-        xhr.setRequestHeader(key, value)
-      }
+      xhr.setRequestHeader(key, value)
     })
 
     if (init?.signal) {

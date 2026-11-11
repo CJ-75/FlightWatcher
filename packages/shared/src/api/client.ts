@@ -767,6 +767,27 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify(body || {}) },
       ),
 
+    /** Admin: parse Maps URL (name/lat/lng) without Places API. */
+    adminParseMapsUrl: (url: string) =>
+      request<{
+        ok: boolean
+        parsed: {
+          source?: string
+          url_clean?: string
+          name?: string | null
+          lat?: number | null
+          lng?: number | null
+          map_center_lat?: number | null
+          map_center_lng?: number | null
+          google_cid?: string | null
+          short_link?: boolean
+        }
+        error?: string
+      }>('/api/admin/parcours/parse-maps', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      }),
+
     adminUpdateParcours: (id: string, body: Record<string, unknown>) =>
       request<{
         ok: boolean

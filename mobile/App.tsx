@@ -156,6 +156,16 @@ const ItineraryDetailScreen = lazyScreen(() =>
     default: m.ItineraryDetailScreen,
   })),
 )
+const CreateParcoursScreen = lazyScreen(() =>
+  import('./src/screens/CreateParcoursScreen').then((m) => ({
+    default: m.CreateParcoursScreen,
+  })),
+)
+const CreateParcoursStepsScreen = lazyScreen(() =>
+  import('./src/screens/CreateParcoursStepsScreen').then((m) => ({
+    default: m.CreateParcoursStepsScreen,
+  })),
+)
 const SecurityScreen = lazyScreen(() =>
   import('./src/screens/SecurityScreen').then((m) => ({ default: m.SecurityScreen })),
 )
@@ -452,6 +462,16 @@ function RootNavigator() {
           <Stack.Screen
             name="ItineraryDetail"
             component={ItineraryDetailScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="CreateParcours"
+            component={CreateParcoursScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="CreateParcoursSteps"
+            component={CreateParcoursStepsScreen}
             options={{ headerShown: false }}
           />
           <Stack.Screen

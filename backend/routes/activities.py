@@ -943,6 +943,23 @@ class AdminParcoursStatusBody(BaseModel):
     status: str
 
 
+class AdminParseMapsBody(BaseModel):
+    url: str
+
+
+@router.post("/api/admin/parcours/parse-maps")
+@require_admin
+async def admin_parse_maps(body: AdminParseMapsBody, request: Request):
+    """Parse a Google Maps URL (expand short links) — no Places API."""
+    from activities.restaurants_service import parse_maps_url
+
+    url = (body.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url_required")
+    parsed = parse_maps_url(url)
+    return {"ok": True, "parsed": parsed}
+
+
 @router.get("/api/admin/parcours")
 @require_admin
 async def admin_list_parcours(

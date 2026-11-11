@@ -222,10 +222,15 @@ def require_admin(func):
                 detail="Authentification requise"
             )
         
-        # Vérifier que l'utilisateur est admin (email + mot de passe via cookie)
-        # On passe password="" pour forcer la vérification du cookie
-        is_admin = await verify_admin(user_id, request, password="")
-        
+        # Web: email + cookie password. Mobile/Expo: admin email JWT is enough
+        # (X-FW-Client: mobile|expo) — product create-parcours V1.
+        client = (request.headers.get("X-FW-Client") or "").strip().lower()
+        if client in ("mobile", "expo"):
+            is_admin = await verify_admin(user_id, request, password=None)
+        else:
+            # password="" forces cookie check for browser admin
+            is_admin = await verify_admin(user_id, request, password="")
+
         if not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

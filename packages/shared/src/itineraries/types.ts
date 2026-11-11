@@ -30,6 +30,14 @@ export type ItineraryItem = {
   viator_product_code?: string | null
   day_offset?: number | null
   moment?: string | null
+  /** Step extras: maps_url, lat, lng, photos[] */
+  meta?: {
+    maps_url?: string
+    lat?: number
+    lng?: number
+    photos?: string[]
+    [key: string]: unknown
+  } | null
   places?: {
     id?: string
     name?: string

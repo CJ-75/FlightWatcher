@@ -121,5 +121,8 @@ export type RootStackParamList = {
       itinerary_items?: import('@flightwatcher/shared').ItineraryItem[] | null
     }
   }
+  /** Admin create / edit parcours infos + hero (gated). */
+  CreateParcours: { itineraryId?: string } | undefined
+  CreateParcoursSteps: { itineraryId: string }
   NotFound: undefined
 }

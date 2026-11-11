@@ -259,21 +259,44 @@ def _normalize_item(raw: Dict[str, Any], position: int) -> Dict[str, Any]:
     if moment and str(moment) not in VALID_MOMENT:
         moment = None
     sort_key = f"a{position:02d}"
-    return {
+    photo = raw.get("photo")
+    meta_in = raw.get("meta") if isinstance(raw.get("meta"), dict) else {}
+    meta: Dict[str, Any] = dict(meta_in) if meta_in else {}
+    # Gallery: photo = first; meta.photos = full list (max 5)
+    photos_raw = meta.get("photos") or raw.get("photos")
+    if isinstance(photos_raw, list):
+        photos = [str(u).strip() for u in photos_raw if str(u).strip()][:5]
+        if photos:
+            meta["photos"] = photos
+            if not photo:
+                photo = photos[0]
+        else:
+            meta.pop("photos", None)
+    if meta.get("maps_url"):
+        meta["maps_url"] = str(meta["maps_url"]).strip()[:2000]
+    for coord_key in ("lat", "lng"):
+        if coord_key in meta and meta[coord_key] is not None:
+            try:
+                meta[coord_key] = float(meta[coord_key])
+            except (TypeError, ValueError):
+                meta.pop(coord_key, None)
+    row = {
         "kind": kind,
         "item_type": item_type,
         "position": position,
         "title": (raw.get("title") or None),
         "note": (raw.get("note") or None),
         "duration_minutes": raw.get("duration_minutes"),
-        "photo": raw.get("photo"),
+        "photo": photo,
         "place_id": raw.get("place_id"),
         "viator_product_code": raw.get("viator_product_code"),
         "day_offset": int(raw.get("day_offset") or 0),
         "moment": moment,
         "sort_key": sort_key,
         "notes": raw.get("note"),
+        "meta": meta or {},
     }
+    return row
 
 
 def update_admin_itinerary(
@@ -346,7 +369,16 @@ def update_admin_itinerary(
                 row["itinerary_id"] = itinerary_id
                 rows.append(row)
             if rows:
-                supabase.table("itinerary_items").insert(rows).execute()
+                try:
+                    supabase.table("itinerary_items").insert(rows).execute()
+                except Exception as insert_err:
+                    msg = str(insert_err).lower()
+                    # Before meta migration: retry without meta column
+                    if "meta" in msg:
+                        stripped = [{k: v for k, v in r.items() if k != "meta"} for r in rows]
+                        supabase.table("itinerary_items").insert(stripped).execute()
+                    else:
+                        raise
 
         return get_admin_itinerary(supabase, itinerary_id)
     except Exception as e:

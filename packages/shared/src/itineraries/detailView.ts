@@ -29,8 +29,9 @@ function placeCoords(item: ItineraryItem): { lat: number; lng: number } | null {
       }
     | null
     | undefined
-  const lat = place?.lat ?? place?.meta?.lat
-  const lng = place?.lng ?? place?.meta?.lng
+  const stepMeta = item.meta
+  const lat = place?.lat ?? place?.meta?.lat ?? stepMeta?.lat
+  const lng = place?.lng ?? place?.meta?.lng ?? stepMeta?.lng
   if (
     typeof lat === 'number' &&
     typeof lng === 'number' &&
@@ -49,9 +50,13 @@ function placeQuery(item: ItineraryItem): string | null {
   return name ? String(name) : null
 }
 
-/** Google Maps search for a single place/activity step. */
+/** Google Maps search for a single place/activity step (or pasted maps_url). */
 export function buildItineraryStepMapsUrl(item: ItineraryItem): string | null {
-  if (item.kind !== 'place' && item.kind !== 'activity') return null
+  const pasted = String(item.meta?.maps_url || '').trim()
+  if (pasted) return pasted
+  if (item.kind !== 'place' && item.kind !== 'activity' && item.kind !== 'free') {
+    return null
+  }
   const q = placeQuery(item)
   if (!q) return null
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
