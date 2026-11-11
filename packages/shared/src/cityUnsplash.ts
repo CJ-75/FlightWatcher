@@ -5,10 +5,10 @@
  */
 
 export const CITY_UNSPLASH_IDS: Record<string, string> = {
-  paris: 'photo-1502602898657-3e91760cbb34',
+  paris: 'photo-1603378995290-8d4ce0495ddd',
   marseille: 'photo-1507525428034-b723cf961d3e',
   lyon: 'photo-1523531294919-4ddd7d7296e3',
-  nice: 'photo-1522093007474-d86e9bf7ba6f',
+  nice: 'sm4-fRm9uiM',
   bordeaux: 'photo-1467269204594-9661b134dd2b',
   lisbon: 'photo-1555881400-74d7acaacd8b',
   lisbonne: 'photo-1555881400-74d7acaacd8b',
