@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
-  Image,
   Alert,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -21,6 +20,8 @@ import {
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
+import { ParcoursDayHeader } from '../components/parcours/ParcoursDayHeader'
+import { ParcoursStepBlock } from '../components/parcours/ParcoursStepBlock'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
@@ -33,7 +34,7 @@ import {
   isEditingParcours,
 } from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { colors, fonts, shadow, spacing } from '../theme'
 import {
   draftToPayload,
   sumStepBudgets,
@@ -325,52 +326,15 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           ) : (
             byDay.map((day) => (
               <View key={day.dayOffset} style={styles.dayBlock}>
-                <Text style={styles.dayLabel}>{day.label}</Text>
-                {day.items.map((it) => {
-                  const raw =
-                    (it.meta?.photos as string[] | undefined) ||
-                    (it.photo ? [it.photo] : [])
-                  const photos = raw.filter(Boolean).slice(0, 5)
-                  const single = photos.length === 1 ? photos[0] : null
-                  const gallery = photos.length >= 2 ? photos : []
-                  const moment = it.moment ? MOMENT_FR[it.moment] : null
-                  return (
-                    <View key={it.id} style={[styles.stepCard, shadow.soft]}>
-                      <View style={styles.stepRow}>
-                        {single ? (
-                          <Image
-                            source={{ uri: single }}
-                            style={styles.stepThumb}
-                          />
-                        ) : null}
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.stepTitle}>{it.title}</Text>
-                          {moment ? (
-                            <Text style={styles.stepMeta}>{moment}</Text>
-                          ) : null}
-                          {it.note ? (
-                            <Text style={styles.stepNote}>{it.note}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                      {gallery.length ? (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          style={styles.gallery}
-                        >
-                          {gallery.map((uri, i) => (
-                            <Image
-                              key={`${uri}-${i}`}
-                              source={{ uri }}
-                              style={styles.galleryImg}
-                            />
-                          ))}
-                        </ScrollView>
-                      ) : null}
-                    </View>
-                  )
-                })}
+                <ParcoursDayHeader label={day.label} items={day.items} />
+                {day.items.map((it, i) => (
+                  <ParcoursStepBlock
+                    key={it.id}
+                    item={it}
+                    index={i}
+                    momentLabel={it.moment ? MOMENT_FR[it.moment] : null}
+                  />
+                ))}
               </View>
             ))
           )}
@@ -515,51 +479,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   dayBlock: { marginBottom: 18 },
-  dayLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 8,
-  },
-  stepCard: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    padding: 14,
-    marginBottom: 10,
-  },
-  stepRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  stepThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 14,
-    backgroundColor: colors.primaryMuted,
-  },
-  gallery: { marginTop: 10 },
-  galleryImg: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    marginRight: 8,
-    backgroundColor: colors.primaryMuted,
-  },
-  stepTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: colors.ink,
-  },
-  stepMeta: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 3,
-  },
-  stepNote: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: colors.inkSoft,
-    marginTop: 6,
-    lineHeight: 18,
-  },
   error: {
     fontFamily: fonts.medium,
     fontSize: 13,

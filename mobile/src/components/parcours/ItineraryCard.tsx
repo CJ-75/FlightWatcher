@@ -123,12 +123,15 @@ export function ItineraryCard({
         </View>
       ) : null}
       <View style={styles.bottom} pointerEvents="none">
-        <Text
-          style={[styles.title, landscape && styles.titleLg]}
-          numberOfLines={2}
-        >
-          {itinerary.title || 'Sans titre'}
-        </Text>
+        {/* Slot 2 lignes, titre collé en bas → 1 ligne proche ville ; 2 lignes remplissent vers le haut. */}
+        <View style={[styles.titleSlot, landscape && styles.titleSlotLg]}>
+          <Text
+            style={[styles.title, landscape && styles.titleLg]}
+            numberOfLines={2}
+          >
+            {itinerary.title || 'Sans titre'}
+          </Text>
+        </View>
         {landscape && itinerary.subtitle ? (
           <Text style={styles.subtitle} numberOfLines={1}>
             {itinerary.subtitle}
@@ -188,6 +191,13 @@ const styles = StyleSheet.create({
     left: 14,
     right: 14,
     bottom: 14,
+  },
+  titleSlot: {
+    minHeight: 44, // 2 × lineHeight 22
+    justifyContent: 'flex-end',
+  },
+  titleSlotLg: {
+    minHeight: 52, // 2 × lineHeight 26
   },
   title: {
     fontFamily: fonts.extrabold,

@@ -7,24 +7,19 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
-  Image,
-  ScrollView,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
   buildItineraryMapsUrl,
-  buildItineraryStepMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
   citySlugDisplayNameFr,
   cityImageUrl,
-  formatDurationMinutes,
   groupItemsByDay,
   itineraryDatedLabelFr,
   itineraryInfoChips,
   itineraryOccasionPhaseLabel,
-  stepKindLabel,
   type Itinerary,
   type ItineraryItem,
 } from '@flightwatcher/shared'
@@ -41,21 +36,14 @@ import { useAuth } from '../context/AuthContext'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
+import { ParcoursDayHeader } from '../components/parcours/ParcoursDayHeader'
+import { ParcoursStepBlock } from '../components/parcours/ParcoursStepBlock'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { colors, fonts, radius, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ItineraryDetail'>
 
 const CITY_LS = 'fw_parcours_city'
-
-function stepPhotos(it: ItineraryItem): string[] {
-  const raw = it.meta?.photos
-  const fromMeta = Array.isArray(raw)
-    ? raw.map(String).filter(Boolean)
-    : []
-  if (fromMeta.length) return fromMeta.slice(0, 5)
-  return it.photo ? [it.photo] : []
-}
 
 function initialItinerary(
   itineraryId: string,
@@ -363,83 +351,14 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
           ) : null}
           {days.map((day) => (
             <View key={day.dayOffset} style={{ marginBottom: 16 }}>
-              {days.length > 1 ? (
-                <Text style={styles.dayLabel}>{day.label}</Text>
-              ) : null}
-              {day.items.map((it, i) => {
-                const title = it.title || it.places?.name || `Étape ${i + 1}`
-                const dur = formatDurationMinutes(it.duration_minutes)
-                const mapsUrl = buildItineraryStepMapsUrl(it)
-                const photos = stepPhotos(it)
-                const singlePhoto = photos.length === 1 ? photos[0] : null
-                const galleryPhotos = photos.length >= 2 ? photos : []
-                const row = (
-                  <>
-                    <View style={styles.stepNum}>
-                      <Text style={styles.stepNumText}>{i + 1}</Text>
-                    </View>
-                    {singlePhoto ? (
-                      <Image
-                        source={{ uri: singlePhoto }}
-                        style={styles.stepThumb}
-                      />
-                    ) : null}
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.stepKind}>
-                        {stepKindLabel(it.kind)}
-                        {dur ? ` · ${dur}` : ''}
-                      </Text>
-                      <Text style={styles.stepTitle}>{title}</Text>
-                      {it.note ? (
-                        <Text style={styles.stepNote}>{it.note}</Text>
-                      ) : null}
-                    </View>
-                  </>
-                )
-                const inner = (
-                  <>
-                    {mapsUrl ? (
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.step,
-                          pressed && styles.stepPressed,
-                        ]}
-                        onPress={() => void Linking.openURL(mapsUrl)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Ouvrir ${title} dans Google Maps`}
-                      >
-                        {row}
-                      </Pressable>
-                    ) : (
-                      <View style={styles.step}>{row}</View>
-                    )}
-                    {galleryPhotos.length ? (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.stepGallery}
-                        contentContainerStyle={styles.stepGalleryInner}
-                      >
-                        {galleryPhotos.map((uri, pi) => (
-                          <Image
-                            key={`${uri}-${pi}`}
-                            source={{ uri }}
-                            style={styles.stepGalleryImg}
-                          />
-                        ))}
-                      </ScrollView>
-                    ) : null}
-                  </>
-                )
-                return (
-                  <View
-                    key={it.id || `${day.dayOffset}-${i}`}
-                    style={[styles.stepBlock, shadow.soft]}
-                  >
-                    {inner}
-                  </View>
-                )
-              })}
+              <ParcoursDayHeader label={day.label} items={day.items} />
+              {day.items.map((it, i) => (
+                <ParcoursStepBlock
+                  key={it.id || `${day.dayOffset}-${i}`}
+                  item={it}
+                  index={i}
+                />
+              ))}
             </View>
           ))}
         </View>
@@ -514,26 +433,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#1A120E',
   },
-  dayLabel: {
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: '#1A120E',
-    marginBottom: 10,
-  },
-  stepBlock: {
-    marginBottom: 12,
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    padding: 14,
-  },
-  step: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  stepPressed: { opacity: 0.72 },
-  stepThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-    backgroundColor: '#EDE8E1',
-  },
   stepSkeleton: {
     flexDirection: 'row',
     gap: 12,
@@ -541,36 +440,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: radius.lg,
     padding: 14,
+    overflow: 'hidden',
+  },
+  stepNum: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFF0E8',
   },
   skLine: {
     height: 10,
     borderRadius: 5,
     backgroundColor: '#EDE8E1',
-  },
-  stepNum: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFF0E8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepNumText: {
-    fontFamily: fonts.bold,
-    fontSize: 12,
-    color: '#FF6B35',
-  },
-  stepKind: {
-    fontFamily: fonts.semibold,
-    fontSize: 11,
-    color: '#A3988C',
-    textTransform: 'uppercase',
-  },
-  stepTitle: {
-    marginTop: 2,
-    fontFamily: fonts.bold,
-    fontSize: 15,
-    color: '#1A120E',
   },
   stepNote: {
     marginTop: 4,
@@ -578,14 +459,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B5C50',
     lineHeight: 20,
-  },
-  stepGallery: { marginTop: 12 },
-  stepGalleryInner: { gap: 8, paddingRight: 4 },
-  stepGalleryImg: {
-    width: 96,
-    height: 96,
-    borderRadius: 14,
-    backgroundColor: '#EDE8E1',
   },
   toast: {
     position: 'absolute',

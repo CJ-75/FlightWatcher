@@ -67,4 +67,40 @@ describe('buildParcoursFeed', () => {
       }),
     ).toBe('Mercredi 11 novembre')
   })
+
+  it('places parcours only under primary occasion (not secondary tags)', () => {
+    const amis = sample({
+      id: 'a1',
+      title: 'Soirée amis',
+      city_slug: 'paris',
+      // Badge « Amis » = 1er tag ; saison en second ne doit pas le mettre dans De saison
+      occasions: ['amis', 'saison'],
+      sort_weight: 5,
+    })
+    const saison = sample({
+      id: 's1',
+      title: 'Automne',
+      city_slug: 'paris',
+      occasions: ['saison'],
+      sort_weight: 5,
+    })
+    const rows = buildParcoursFeed([amis, saison], { citySlug: 'paris' })
+    const saisonRow = rows.find(
+      (r) => r.kind === 'occasion' && r.occasion === 'saison',
+    )
+    const amisRow = rows.find(
+      (r) => r.kind === 'occasion' && r.occasion === 'amis',
+    )
+    expect(saisonRow?.items.map((x) => x.id)).toEqual(['s1'])
+    expect(amisRow?.items.map((x) => x.id)).toEqual(['a1'])
+
+    const filtered = buildParcoursFeed([amis, saison], {
+      citySlug: 'paris',
+      occasionFilter: 'saison',
+    })
+    expect(filtered[0]?.kind).toBe('occasion')
+    if (filtered[0]?.kind === 'occasion') {
+      expect(filtered[0].items.map((x) => x.id)).toEqual(['s1'])
+    }
+  })
 })

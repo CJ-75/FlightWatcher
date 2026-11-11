@@ -38,6 +38,24 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+/** Tag principal (1er occasions[]) — une carte = une section Envies. */
+export function primaryOccasion(
+  it: Pick<Itinerary, 'occasions'> | null | undefined,
+): ItineraryOccasion | null {
+  const first = (it?.occasions || []).map(String).filter(Boolean)[0]
+  if (!first) return null
+  return (ITINERARY_OCCASIONS as string[]).includes(first)
+    ? (first as ItineraryOccasion)
+    : null
+}
+
+function matchesPrimaryOccasion(
+  it: Itinerary,
+  occasion: ItineraryOccasion,
+): boolean {
+  return primaryOccasion(it) === occasion
+}
+
 export function isFeaturedToday(it: Itinerary, today = todayIso()): boolean {
   if (!it.featured_from || !it.featured_to) return false
   return it.featured_from <= today && today <= it.featured_to
@@ -134,8 +152,9 @@ export function buildParcoursFeed(
   const city = (opts.citySlug || 'paris').trim().toLowerCase()
   const filter = opts.occasionFilter || null
   const today = opts.today || todayIso()
+  // Filtre chip = tag principal uniquement (évite « Amis » dans « De saison »)
   const pool = filter
-    ? itineraries.filter((it) => (it.occasions || []).includes(filter))
+    ? itineraries.filter((it) => matchesPrimaryOccasion(it, filter))
     : itineraries
 
   if (filter) {
@@ -176,7 +195,7 @@ export function buildParcoursFeed(
 
   const chips = ITINERARY_OCCASIONS.map((occasion) => {
     const count = itineraries.filter((it) =>
-      (it.occasions || []).includes(occasion),
+      matchesPrimaryOccasion(it, occasion),
     ).length
     return {
       occasion,
@@ -208,7 +227,7 @@ export function buildParcoursFeed(
 
   for (const occasion of ITINERARY_OCCASIONS) {
     const items = sortNearFirst(
-      rest.filter((it) => (it.occasions || []).includes(occasion)),
+      rest.filter((it) => matchesPrimaryOccasion(it, occasion)),
       city,
     )
     if (!items.length) continue

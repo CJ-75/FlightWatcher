@@ -115,15 +115,23 @@ export function ItineraryCard({
         {!cover && city ? (
           <FwKicker className="mb-1 text-white/80">{city}</FwKicker>
         ) : null}
-        <h3
-          className={`m-0 line-clamp-2 font-extrabold tracking-tight text-white drop-shadow ${
+        <div
+          className={`flex flex-col justify-end ${
             isLandscape
-              ? 'text-[1.35rem] lg:text-[1.65rem] leading-snug'
-              : 'text-[1.15rem] lg:text-[1.25rem] leading-snug'
+              ? 'min-h-[2.7rem] lg:min-h-[3.3rem]'
+              : 'min-h-[2.3rem] lg:min-h-[2.5rem]'
           }`}
         >
-          {itinerary.title || 'Sans titre'}
-        </h3>
+          <h3
+            className={`m-0 line-clamp-2 font-extrabold tracking-tight text-white drop-shadow ${
+              isLandscape
+                ? 'text-[1.35rem] lg:text-[1.65rem] leading-snug'
+                : 'text-[1.15rem] lg:text-[1.25rem] leading-snug'
+            }`}
+          >
+            {itinerary.title || 'Sans titre'}
+          </h3>
+        </div>
         {isLandscape && itinerary.subtitle ? (
           <p className="mt-1 line-clamp-1 text-[12px] font-medium text-white/92 drop-shadow">
             {itinerary.subtitle}
