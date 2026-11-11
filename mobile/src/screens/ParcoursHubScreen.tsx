@@ -1,17 +1,30 @@
-import React, { useState } from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import React, { useMemo, useState } from 'react'
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Platform,
+  useWindowDimensions,
+} from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { canCreateParcours } from '@flightwatcher/shared'
 import { DealsScreen } from './DealsScreen'
 import { ParcoursCatalogScreen } from './ParcoursCatalogScreen'
-import { AccountAvatarButton } from '../components/AccountAvatarButton'
 import { TabScreenHeader } from '../components/TabScreenHeader'
 import { ScreenBackground } from '../components/ScreenBackground'
+import { FLOATING_TAB_MARGIN } from '../components/FloatingTabBar'
 import { useAuth } from '../context/AuthContext'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, spacing } from '../theme'
+
+const FAB_SIZE = 44
+/** Scene already has tabClearance paddingBottom — only a small inset inside that area. */
+const FAB_BOTTOM_INSET = 8
+/** 5 tabs — Favoris is the last slot. */
+const TAB_COUNT = 5
 
 type Segment = 'parcours' | 'sejours'
 
@@ -19,10 +32,24 @@ type Segment = 'parcours' | 'sejours'
 export function ParcoursHubScreen() {
   const [segment, setSegment] = useState<Segment>('parcours')
   const insets = useSafeAreaInsets()
+  const { width: windowWidth } = useWindowDimensions()
   const { user } = useAuth()
   const canCreate = canCreateParcours({ email: user?.email })
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+
+  const fabPos = useMemo(() => {
+    // Tab scene already pads above the dock (tabClearance) — do NOT add dock height again.
+    // Horizontally align with Favoris (last of 5 equal slots in the centered bar).
+    const barW = Math.min(windowWidth - FLOATING_TAB_MARGIN * 2, 400)
+    const barLeft = (windowWidth - barW) / 2
+    const slotW = barW / TAB_COUNT
+    const favoritesCenterX = barLeft + barW - slotW / 2
+    return {
+      bottom: FAB_BOTTOM_INSET,
+      right: Math.max(12, windowWidth - favoritesCenterX - FAB_SIZE / 2),
+    }
+  }, [windowWidth])
 
   const header = (
     <View style={{ paddingTop: insets.top + 12 }}>
@@ -30,19 +57,6 @@ export function ParcoursHubScreen() {
         kicker="PARCOURS"
         title="Où aller, quoi faire"
         subtitle="Des balades et des week-ends choisis pour toi."
-        right={
-          <View style={styles.headerRight}>
-            {canCreate && segment === 'parcours' ? (
-              <Pressable
-                onPress={() => navigation.navigate('CreateParcours')}
-                style={styles.createBtn}
-              >
-                <Text style={styles.createBtnText}>Créer</Text>
-              </Pressable>
-            ) : null}
-            <AccountAvatarButton />
-          </View>
-        }
       >
         <View style={styles.tabs}>
           {(
@@ -91,6 +105,23 @@ export function ParcoursHubScreen() {
       >
         <ParcoursCatalogScreen headerExtra={header} embedded />
       </View>
+      {canCreate && segment === 'parcours' ? (
+        <Pressable
+          onPress={() => navigation.navigate('CreateParcours')}
+          accessibilityRole="button"
+          accessibilityLabel="Créer un parcours"
+          style={({ pressed }) => [
+            styles.fab,
+            fabPos,
+            pressed && styles.fabPressed,
+          ]}
+        >
+          <View style={styles.fabGlyph} pointerEvents="none">
+            <View style={styles.fabPlusH} />
+            <View style={styles.fabPlusV} />
+          </View>
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -99,21 +130,49 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   hidden: { display: 'none' },
-  headerRight: {
-    flexDirection: 'row',
+  fab: {
+    position: 'absolute',
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+    backgroundColor: colors.primary,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+    ...Platform.select({
+      ios: {
+        shadowColor: colors.primaryDeep,
+        shadowOpacity: 0.35,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 8 },
+      },
+      android: { elevation: 10 },
+      default: {},
+    }),
   },
-  createBtn: {
-    backgroundColor: colors.ink,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
+  fabPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.96 }],
   },
-  createBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    color: '#fff',
+  fabGlyph: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabPlusH: {
+    position: 'absolute',
+    width: 16,
+    height: 2.5,
+    borderRadius: 1.5,
+    backgroundColor: '#fff',
+  },
+  fabPlusV: {
+    position: 'absolute',
+    width: 2.5,
+    height: 16,
+    borderRadius: 1.5,
+    backgroundColor: '#fff',
   },
   tabs: {
     flexDirection: 'row',

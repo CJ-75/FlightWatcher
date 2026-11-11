@@ -36,7 +36,7 @@ import { tabScreenHeaderStyles } from '../components/TabScreenHeader'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ScreenBackground } from '../components/ScreenBackground'
 import type { RootStackParamList } from '../navigation/types'
-import { colors, fonts, radius, shadow, spacing } from '../theme'
+import { colors, fonts, shadow, spacing } from '../theme'
 
 const CITY_LS = 'fw_parcours_city'
 const CITIES = ['paris', 'marseille', 'lyon', 'lisbon', 'porto', 'barcelona', 'rome'] as const
@@ -240,20 +240,8 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
         {headerExtra}
         {!embedded ? (
           <>
-            <View style={styles.headerRow}>
-              <View style={{ flex: 1 }}>
-                <FwKicker>PARCOURS</FwKicker>
-                <Text style={styles.title}>Où aller, quoi faire</Text>
-              </View>
-              {canCreate ? (
-                <Pressable
-                  onPress={() => navigation.navigate('CreateParcours')}
-                  style={styles.createBtn}
-                >
-                  <Text style={styles.createBtnText}>Créer</Text>
-                </Pressable>
-              ) : null}
-            </View>
+            <FwKicker>PARCOURS</FwKicker>
+            <Text style={styles.title}>Où aller, quoi faire</Text>
             <Text style={styles.subtitle}>
               Des balades et des week-ends choisis pour toi.
             </Text>
@@ -422,23 +410,6 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  createBtn: {
-    marginTop: 8,
-    backgroundColor: colors.ink,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radius.full,
-  },
-  createBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: '#fff',
-  },
   draftsBlock: {
     marginTop: 16,
     marginBottom: 4,
