@@ -12,7 +12,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildParcoursFeed,
-  canCreateParcours,
   citySlugDisplayNameFr,
   isFeaturedToday,
   itineraryOccasionEmoji,
@@ -21,6 +20,7 @@ import {
 } from '@flightwatcher/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
+import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
   getParcoursCached,
   getParcoursCatalogMemory,
@@ -51,7 +51,7 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { user, isGuest } = useAuth()
-  const canCreate = canCreateParcours({ email: user?.email })
+  const canCreate = canCreateParcoursOnDevice(user?.email)
   const scrollRef = useRef<ScrollView>(null)
   useScrollToTop(scrollRef)
   const [city, setCity] = useState('paris')

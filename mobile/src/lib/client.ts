@@ -285,7 +285,11 @@ function mobileFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Resp
 
     const headers = new Headers(init?.headers)
     if (!headers.has('X-FW-Client')) {
-      headers.set('X-FW-Client', 'mobile')
+      // Expo Go / Metro: backend may allow admin parcours APIs without admin email
+      const expoDev =
+        Constants.appOwnership === 'expo' ||
+        (typeof __DEV__ !== 'undefined' && __DEV__)
+      headers.set('X-FW-Client', expoDev ? 'expo' : 'mobile')
     }
     headers.forEach((value, key) => {
       xhr.setRequestHeader(key, value)

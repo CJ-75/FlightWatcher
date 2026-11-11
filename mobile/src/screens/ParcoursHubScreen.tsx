@@ -10,13 +10,13 @@ import {
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { canCreateParcours } from '@flightwatcher/shared'
 import { DealsScreen } from './DealsScreen'
 import { ParcoursCatalogScreen } from './ParcoursCatalogScreen'
 import { TabScreenHeader } from '../components/TabScreenHeader'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { FLOATING_TAB_MARGIN } from '../components/FloatingTabBar'
 import { useAuth } from '../context/AuthContext'
+import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, spacing } from '../theme'
 
@@ -34,7 +34,7 @@ export function ParcoursHubScreen() {
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const { user } = useAuth()
-  const canCreate = canCreateParcours({ email: user?.email })
+  const canCreate = canCreateParcoursOnDevice(user?.email)
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
 

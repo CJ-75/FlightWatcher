@@ -16,7 +16,13 @@ function normEmail(email?: string | null): string {
 export function canCreateParcours(opts: {
   email?: string | null
   role?: ParcoursCreateRole | null
+  /**
+   * Expo Go / __DEV__ only — UI bypass for local testing.
+   * Backend must also accept X-FW-Client: expo (ALLOW_EXPO_ADMIN_BYPASS).
+   */
+  expoDevBypass?: boolean
 }): boolean {
+  if (opts.expoDevBypass) return true
   const email = normEmail(opts.email)
   // V1: single admin email only. Later: role admin|agent | featureFlag.
   if (email && PARCOURS_CREATE_ADMIN_EMAILS.some((e) => e === email)) {

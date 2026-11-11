@@ -15,7 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  canCreateParcours,
   cityImageUrl,
   citySlugDisplayNameFr,
 } from '@flightwatcher/shared'
@@ -24,6 +23,7 @@ import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
+import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -33,7 +33,7 @@ export function CreateParcoursScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const itineraryId = route.params?.itineraryId
-  const allowed = canCreateParcours({ email: user?.email })
+  const allowed = canCreateParcoursOnDevice(user?.email)
 
   const [title, setTitle] = useState('')
   const [titleTouched, setTitleTouched] = useState(false)

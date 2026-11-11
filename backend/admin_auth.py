@@ -222,10 +222,19 @@ def require_admin(func):
                 detail="Authentification requise"
             )
         
-        # Web: email + cookie password. Mobile/Expo: admin email JWT is enough
-        # (X-FW-Client: mobile|expo) — product create-parcours V1.
+        # Web: email + cookie password. Mobile: admin email JWT.
+        # Expo / Metro (__DEV__): optional bypass so any signed-in user can test
+        # create-parcours (ALLOW_EXPO_ADMIN_BYPASS, default on).
         client = (request.headers.get("X-FW-Client") or "").strip().lower()
-        if client in ("mobile", "expo"):
+        expo_bypass = os.getenv("ALLOW_EXPO_ADMIN_BYPASS", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if client == "expo" and expo_bypass:
+            print(f"⚠️  Expo admin bypass (parcours test) user_id={user_id}")
+            is_admin = True
+        elif client in ("mobile", "expo"):
             is_admin = await verify_admin(user_id, request, password=None)
         else:
             # password="" forces cookie check for browser admin

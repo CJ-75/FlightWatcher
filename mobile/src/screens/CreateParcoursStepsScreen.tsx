@@ -13,7 +13,6 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  canCreateParcours,
   canPublish,
   groupItemsByDay,
   type Itinerary,
@@ -27,6 +26,7 @@ import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
+import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 
@@ -104,7 +104,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
   const { itineraryId } = route.params
-  const allowed = canCreateParcours({ email: user?.email })
+  const allowed = canCreateParcoursOnDevice(user?.email)
 
   const [itin, setItin] = useState<Itinerary | null>(null)
   const [steps, setSteps] = useState<DraftStep[]>([])
