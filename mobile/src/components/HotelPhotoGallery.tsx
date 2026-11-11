@@ -163,40 +163,39 @@ export function HotelPhotoGallery({
       return
     }
 
-    // Hero: seed #1 paints now; gallery fill waits so activities can load first.
+    // Hero: seed #1 now. TripDetail owns the single gallery HTTP after trip-items;
+    // we only merge from memory when that prefetch lands (no duplicate fetch).
     if (isHero && seeds.length >= 1) {
       loadedKeyRef.current = key
+      if (seeds.length >= heroPhotoCap) return
       let cancelled = false
-      let fillTimer: ReturnType<typeof setTimeout> | null = null
-      if (seeds.length < heroPhotoCap) {
-        fillTimer = setTimeout(() => {
-          if (cancelled) return
-          void getHotelGalleryCached(hid, {
-            language: 'fr',
-            fallback: seedPhoto || seeds[0]?.url,
-            limit: heroPhotoCap,
-          })
-            .then((res) => {
-              if (cancelled) return
-              const next = capPhotos((res.photos || []).filter((p) => p?.url))
-              if (!next.length) return
-              // Keep seed #1 first; append new urls up to cap.
-              const seen = new Set(seeds.map((p) => p.url))
-              const merged = [...seeds]
-              for (const p of next) {
-                if (seen.has(p.url)) continue
-                seen.add(p.url)
-                merged.push(p)
-                if (merged.length >= heroPhotoCap) break
-              }
-              setPhotos(merged)
-            })
-            .catch(() => undefined)
-        }, 550)
+      const mergeFromPeek = () => {
+        if (cancelled) return true
+        const hit = peekHotelGallery(hid, 'fr', heroPhotoCap)
+        const next = capPhotos((hit?.photos || []).filter((p) => p?.url))
+        if (!next.length) return false
+        const seen = new Set(seeds.map((p) => p.url))
+        const merged = [...seeds]
+        for (const p of next) {
+          if (seen.has(p.url)) continue
+          seen.add(p.url)
+          merged.push(p)
+          if (merged.length >= heroPhotoCap) break
+        }
+        if (merged.length > seeds.length) setPhotos(merged)
+        return merged.length >= heroPhotoCap || hit?.partial === false
       }
+      mergeFromPeek()
+      const t1 = setTimeout(() => {
+        if (!mergeFromPeek()) mergeFromPeek()
+      }, 700)
+      const t2 = setTimeout(() => {
+        mergeFromPeek()
+      }, 1600)
       return () => {
         cancelled = true
-        if (fillTimer) clearTimeout(fillTimer)
+        clearTimeout(t1)
+        clearTimeout(t2)
       }
     }
 

@@ -379,28 +379,30 @@ export function TripDetailScreen() {
         }
       }
 
+      let galleryHotelId: string | null = null
+      let tripItemsSettled = false
+      let galleryKicked = false
+      const kickHotelGalleryOnce = () => {
+        if (galleryKicked || !tripItemsSettled || !galleryHotelId) return
+        galleryKicked = true
+        void getHotelGalleryCached(galleryHotelId, {
+          language: 'fr',
+          limit: 3,
+        }).catch(() => undefined)
+      }
       const applyDraft = (draft: MyTripDraft, matched: TravelWorkspace | null) => {
         const next = withWorkspaceBooked(draft, matched)
         setMyTripMemory(next)
         setFlightDraft(next)
-        // Hotel gallery AFTER activities list — don't steal bandwidth from trip-items.
-        const hid = hotelIdFromDraft(next)
-        if (hid) {
-          setTimeout(() => {
-            void getHotelGalleryCached(hid, {
-              language: 'fr',
-              limit: 3,
-            }).catch(() => undefined)
-          }, 500)
-        }
+        galleryHotelId = hotelIdFromDraft(next) || galleryHotelId
+        kickHotelGalleryOnce()
       }
 
-      // Activities first (titles + status), then hotel photos.
+      // 1) trip-items + my-trip first (hero paint), 2) one gallery after items settle.
       const activitiesWarm = listTripItemsCached({
         planned_trip_id: tripId,
       }).catch(() => undefined)
 
-      // Hotel ASAP: paint draft from memory / kick network before workspaces round-trip.
       const earlyToken = String(peekedMatch?.draft_token || '').trim()
       if (earlyToken) {
         const warmDraft = peekMyTrip(earlyToken)
@@ -410,7 +412,13 @@ export function TripDetailScreen() {
           .catch(() => undefined)
       }
 
-      void activitiesWarm
+      void activitiesWarm.finally(() => {
+        tripItemsSettled = true
+        if (!galleryHotelId && earlyToken) {
+          galleryHotelId = hotelIdFromDraft(peekMyTrip(earlyToken))
+        }
+        kickHotelGalleryOnce()
+      })
 
       // Instant paint: memory → disk → hub stub, then refresh via singleflight.
       let warm = peekPlannedTrip(tripId)
@@ -512,18 +520,6 @@ export function TripDetailScreen() {
     if (useGuestPreview || !trip?.id || !trip.invite_token) return
     setPlannedTripMemory(trip)
   }, [trip, useGuestPreview])
-
-  // Prefetch hotel gallery after first paint — seed photo already shows on hero.
-  useEffect(() => {
-    const hid = hotelIdFromDraft(flightDraft)
-    if (!hid) return
-    const t = setTimeout(() => {
-      void getHotelGalleryCached(hid, { language: 'fr', limit: 3 }).catch(
-        () => undefined,
-      )
-    }, 500)
-    return () => clearTimeout(t)
-  }, [flightDraft])
 
   useEffect(() => {
     const token = flightDraft?.draft_token || workspace?.draft_token

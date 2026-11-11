@@ -143,23 +143,29 @@ export function getPlannedTripCached(
   return req
 }
 
-/** Warm upcoming trip details before tap (cap to avoid stampede). */
+/** Warm a few trip details before tap — soft fetch, no force stampede. */
 export function prefetchPlannedTrips(
   ids: Array<string | null | undefined>,
   opts?: { limit?: number },
 ) {
-  const limit = Math.max(1, Math.min(12, opts?.limit ?? 6))
+  const limit = Math.max(1, Math.min(12, opts?.limit ?? 3))
   const seen = new Set<string>()
   let n = 0
   for (const raw of ids) {
     const id = String(raw || '').trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
-    // Skip only real cached trips — hub stubs (no invite_token) must still prefetch.
     if (memory.get(id)?.invite_token) continue
     if (inflight.has(id)) continue
-    void getPlannedTripCached(id, undefined, { force: true }).catch(() => {})
     n += 1
+    // Soft: disk hit skips network; never force:true (saturates open-hero).
+    void hydratePlannedTrip(id)
+      .then((disk) => {
+        if (disk?.invite_token) return
+        if (inflight.has(id)) return
+        return getPlannedTripCached(id)
+      })
+      .catch(() => undefined)
     if (n >= limit) break
   }
 }

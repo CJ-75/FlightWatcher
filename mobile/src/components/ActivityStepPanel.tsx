@@ -35,8 +35,6 @@ import {
 } from './StayBookingCard'
 import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
-import { getCityActivitiesCached } from '../lib/activitiesCache'
-import { fetchCityActivitiesPublic } from '../lib/activitiesCatalogFetch'
 import {
   listTripItemsCached,
   peekTripItems,
@@ -188,46 +186,18 @@ function applyPhotoMap(
   })
 }
 
-async function enrichActivityPhotos(
-  rows: ItemRow[],
-  citySlug: string,
-): Promise<ItemRow[]> {
-  const needsEnrich = rows.some(
-    (it) =>
-      Boolean(it.meta?.product_code) &&
-      (!photoOf(it) || rawPriceOf(it) == null),
-  )
-  if (!needsEnrich) return rows
-  const byCode = new Map<string, string>()
-  const priceByCode = new Map<string, number>()
-  try {
-    const res = await getCityActivitiesCached(citySlug, 2, () =>
-      fetchCityActivitiesPublic(citySlug, 2),
-    )
-    for (const raw of res.items || []) {
-      const row = raw as Record<string, unknown>
-      const code = String(row.product_code || row.productCode || '').trim()
-      const url = photoFromCatalogRow(row)
-      if (code && url) byCode.set(code, url)
-      const pf = priceFromCatalogRow(row)
-      if (code && pf != null) priceByCode.set(code, pf)
-    }
-  } catch {
-    /* product detail fallback below */
-  }
-  let next = applyPhotoMap(rows, byCode, priceByCode)
-  const stillMissing = next
-    .filter(
-      (it) =>
-        Boolean(it.meta?.product_code) &&
-        (!photoOf(it) || rawPriceOf(it) == null),
-    )
+/** Hero thumbs only — never pull GET /cities/{slug} (catalogue is for Activities tab). */
+async function enrichActivityPhotos(rows: ItemRow[]): Promise<ItemRow[]> {
+  const missing = rows
+    .filter((it) => Boolean(it.meta?.product_code) && !photoOf(it))
     .map((it) => String(it.meta?.product_code || '').trim())
     .filter(Boolean)
-    .slice(0, 8)
-  if (!stillMissing.length) return next
+    .slice(0, 4)
+  if (!missing.length) return rows
+  const byCode = new Map<string, string>()
+  const priceByCode = new Map<string, number>()
   await Promise.allSettled(
-    stillMissing.map(async (code) => {
+    missing.map(async (code) => {
       const res = await getApi().getActivityProduct(code)
       const product = (res.product || {}) as Record<string, unknown>
       const url = photoFromCatalogRow(product)
@@ -236,7 +206,7 @@ async function enrichActivityPhotos(
       if (pf != null) priceByCode.set(code, pf)
     }),
   )
-  return applyPhotoMap(next, byCode, priceByCode)
+  return applyPhotoMap(rows, byCode, priceByCode)
 }
 
 export function ActivityStepPanel(props: {
@@ -398,10 +368,10 @@ export function ActivityStepPanel(props: {
         (it) => Boolean(it.meta?.product_code) && !photoOf(it),
       )
       if (!needsPhoto) return
-      // Defer photo backfill so hotel seed + activity cards win the wire.
+      // Defer product-detail thumbs so trip-items + hotel seed win the wire.
       setTimeout(() => {
         if (gen !== loadGenRef.current) return
-        void enrichActivityPhotos(rows, city).then((enriched) => {
+        void enrichActivityPhotos(rows).then((enriched) => {
           if (gen !== loadGenRef.current) return
           setItems(enriched)
           publishParcours(enriched)
@@ -441,7 +411,7 @@ export function ActivityStepPanel(props: {
             if (!needsPhoto) return
             setTimeout(() => {
               if (gen !== loadGenRef.current) return
-              void enrichActivityPhotos(rows, city).then((enriched) => {
+              void enrichActivityPhotos(rows).then((enriched) => {
                 if (gen !== loadGenRef.current) return
                 setItems(enriched)
                 publishParcours(enriched)
@@ -461,7 +431,7 @@ export function ActivityStepPanel(props: {
     } finally {
       setLoading(false)
     }
-  }, [owner, draftFallback, city, publishParcours, fetchActivityRows])
+  }, [owner, draftFallback, publishParcours, fetchActivityRows])
 
   const onResumeSession = async () => {
     setResuming(true)

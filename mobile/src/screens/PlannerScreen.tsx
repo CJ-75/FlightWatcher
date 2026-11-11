@@ -183,10 +183,10 @@ export function PlannerScreen() {
   const applyWorkspaceList = useCallback((list: TravelWorkspace[]) => {
     const next = filterVisibleWorkspaces(list)
     setWorkspaces(next)
-    // Warm trip details so opening a séjour skips the cold spinner.
+    // Soft-warm a few trip details — avoid force stampede vs hero open.
     prefetchPlannedTrips(
       next.map((w) => w.planned_trip_id),
-      { limit: 6 },
+      { limit: 3 },
     )
   }, [])
 
