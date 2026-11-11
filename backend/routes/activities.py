@@ -517,7 +517,7 @@ async def get_trip_items(
     planned_trip_id: Optional[str] = None,
 ):
     from activities.access import draft_id_from_token, resolve_owner_for_write
-    from activities.trip_items import enrich_trip_items_photos, list_trip_items
+    from activities.trip_items import attach_embedded_photos, list_trip_items
 
     sb = _svc()
     # Keep the raw draft before resolve remaps linked séjour → planned.
@@ -605,14 +605,11 @@ async def get_trip_items(
                 )
         except Exception:
             pass
-    # List must stay fast for Planner hero: cache/place photos only —
-    # never block on live Viator product_detail or synchronous meta writes.
-    items = enrich_trip_items_photos(
-        sb, items, allow_live=False, persist=False
-    )
+    # Fast list for Planner hero: titles first, zero photo I/O.
+    # Only promote already-embedded place photos; client fills the rest after paint.
     return {
         "ok": True,
-        "items": items,
+        "items": attach_embedded_photos(items),
     }
 
 

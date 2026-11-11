@@ -163,36 +163,40 @@ export function HotelPhotoGallery({
       return
     }
 
-    // Hero already has its first photo + up to cap from seeds — stop blocking.
+    // Hero: seed #1 paints now; gallery fill waits so activities can load first.
     if (isHero && seeds.length >= 1) {
       loadedKeyRef.current = key
       let cancelled = false
-      // Soft fill remaining slots (max 3) without blocking first paint.
+      let fillTimer: ReturnType<typeof setTimeout> | null = null
       if (seeds.length < heroPhotoCap) {
-        void getHotelGalleryCached(hid, {
-          language: 'fr',
-          fallback: seedPhoto || seeds[0]?.url,
-          limit: heroPhotoCap,
-        })
-          .then((res) => {
-            if (cancelled) return
-            const next = capPhotos((res.photos || []).filter((p) => p?.url))
-            if (!next.length) return
-            // Keep seed #1 first; append new urls up to cap.
-            const seen = new Set(seeds.map((p) => p.url))
-            const merged = [...seeds]
-            for (const p of next) {
-              if (seen.has(p.url)) continue
-              seen.add(p.url)
-              merged.push(p)
-              if (merged.length >= heroPhotoCap) break
-            }
-            setPhotos(merged)
+        fillTimer = setTimeout(() => {
+          if (cancelled) return
+          void getHotelGalleryCached(hid, {
+            language: 'fr',
+            fallback: seedPhoto || seeds[0]?.url,
+            limit: heroPhotoCap,
           })
-          .catch(() => undefined)
+            .then((res) => {
+              if (cancelled) return
+              const next = capPhotos((res.photos || []).filter((p) => p?.url))
+              if (!next.length) return
+              // Keep seed #1 first; append new urls up to cap.
+              const seen = new Set(seeds.map((p) => p.url))
+              const merged = [...seeds]
+              for (const p of next) {
+                if (seen.has(p.url)) continue
+                seen.add(p.url)
+                merged.push(p)
+                if (merged.length >= heroPhotoCap) break
+              }
+              setPhotos(merged)
+            })
+            .catch(() => undefined)
+        }, 550)
       }
       return () => {
         cancelled = true
+        if (fillTimer) clearTimeout(fillTimer)
       }
     }
 

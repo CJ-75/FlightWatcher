@@ -204,6 +204,36 @@ def _persist_place_photo(supabase, place: Dict[str, Any], photo: str) -> Dict[st
     return {**place, "meta": place_meta}
 
 
+def attach_embedded_photos(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Copy place.meta.photo_url onto item.meta when already embedded — no I/O."""
+    if not items:
+        return items
+    out: List[Dict[str, Any]] = []
+    for raw in items:
+        item = dict(raw)
+        meta = (
+            dict(item.get("meta") or {})
+            if isinstance(item.get("meta"), dict)
+            else {}
+        )
+        if str(meta.get("photo_url") or "").strip():
+            out.append(item)
+            continue
+        place = _place_row(item)
+        if not place:
+            out.append(item)
+            continue
+        place_meta = (
+            place.get("meta") if isinstance(place.get("meta"), dict) else {}
+        )
+        photo = str(place_meta.get("photo_url") or "").strip()
+        if photo:
+            meta["photo_url"] = photo
+            item["meta"] = meta
+        out.append(item)
+    return out
+
+
 def enrich_trip_items_photos(
     supabase,
     items: List[Dict[str, Any]],

@@ -383,14 +383,22 @@ export function TripDetailScreen() {
         const next = withWorkspaceBooked(draft, matched)
         setMyTripMemory(next)
         setFlightDraft(next)
+        // Hotel gallery AFTER activities list — don't steal bandwidth from trip-items.
         const hid = hotelIdFromDraft(next)
         if (hid) {
-          void getHotelGalleryCached(hid, {
-            language: 'fr',
-            limit: 3,
-          }).catch(() => undefined)
+          setTimeout(() => {
+            void getHotelGalleryCached(hid, {
+              language: 'fr',
+              limit: 3,
+            }).catch(() => undefined)
+          }, 500)
         }
       }
+
+      // Activities first (titles + status), then hotel photos.
+      const activitiesWarm = listTripItemsCached({
+        planned_trip_id: tripId,
+      }).catch(() => undefined)
 
       // Hotel ASAP: paint draft from memory / kick network before workspaces round-trip.
       const earlyToken = String(peekedMatch?.draft_token || '').trim()
@@ -402,8 +410,7 @@ export function TripDetailScreen() {
           .catch(() => undefined)
       }
 
-      // Activities ASAP — singleflight shared with ActivityStepPanel.
-      void listTripItemsCached({ planned_trip_id: tripId }).catch(() => undefined)
+      void activitiesWarm
 
       // Instant paint: memory → disk → hub stub, then refresh via singleflight.
       let warm = peekPlannedTrip(tripId)
@@ -506,13 +513,16 @@ export function TripDetailScreen() {
     setPlannedTripMemory(trip)
   }, [trip, useGuestPreview])
 
-  // Prefetch hotel gallery as soon as draft exposes an id (warm reopen).
+  // Prefetch hotel gallery after first paint — seed photo already shows on hero.
   useEffect(() => {
     const hid = hotelIdFromDraft(flightDraft)
     if (!hid) return
-    void getHotelGalleryCached(hid, { language: 'fr', limit: 3 }).catch(
-      () => undefined,
-    )
+    const t = setTimeout(() => {
+      void getHotelGalleryCached(hid, { language: 'fr', limit: 3 }).catch(
+        () => undefined,
+      )
+    }, 500)
+    return () => clearTimeout(t)
   }, [flightDraft])
 
   useEffect(() => {

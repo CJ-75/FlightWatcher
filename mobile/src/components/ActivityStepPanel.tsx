@@ -379,34 +379,48 @@ export function ActivityStepPanel(props: {
       if (gen !== loadGenRef.current) return
       setItems(rows)
       publishParcours(rows)
-      // Don't block the block on photo enrich (catalog can be slow).
+      // Titles/status paint now — photos fill in after (don't await).
       setLoading(false)
       authRetryRef.current = false
       if (!rows.length) return
-      // Only backfill missing thumbs — skip city catalog + product waterfall
-      // when meta.photo_url is already present (common after add-to-planner).
-      const needsPhoto = rows.some(
-        (it) => Boolean(it.meta?.product_code) && !photoOf(it),
-      )
-      const enriched = needsPhoto
-        ? await enrichActivityPhotos(rows, city)
-        : rows
-      if (gen !== loadGenRef.current) return
-      if (needsPhoto) {
-        setItems(enriched)
-        publishParcours(enriched)
-      }
       if (owner.planned_trip_id) {
         setTripItemsCache(
           { planned_trip_id: owner.planned_trip_id },
-          enriched as unknown as Record<string, unknown>[],
+          rows as unknown as Record<string, unknown>[],
         )
       } else if (owner.draft_token || draftFallback) {
         setTripItemsCache(
           { draft_token: owner.draft_token || draftFallback || undefined },
-          enriched as unknown as Record<string, unknown>[],
+          rows as unknown as Record<string, unknown>[],
         )
       }
+      const needsPhoto = rows.some(
+        (it) => Boolean(it.meta?.product_code) && !photoOf(it),
+      )
+      if (!needsPhoto) return
+      // Defer photo backfill so hotel seed + activity cards win the wire.
+      setTimeout(() => {
+        if (gen !== loadGenRef.current) return
+        void enrichActivityPhotos(rows, city).then((enriched) => {
+          if (gen !== loadGenRef.current) return
+          setItems(enriched)
+          publishParcours(enriched)
+          if (owner.planned_trip_id) {
+            setTripItemsCache(
+              { planned_trip_id: owner.planned_trip_id },
+              enriched as unknown as Record<string, unknown>[],
+            )
+          } else if (owner.draft_token || draftFallback) {
+            setTripItemsCache(
+              {
+                draft_token:
+                  owner.draft_token || draftFallback || undefined,
+              },
+              enriched as unknown as Record<string, unknown>[],
+            )
+          }
+        })
+      }, 600)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Erreur'
       if (isTripItemsAuthError(msg) && !authRetryRef.current) {
@@ -425,10 +439,14 @@ export function ActivityStepPanel(props: {
               (it) => Boolean(it.meta?.product_code) && !photoOf(it),
             )
             if (!needsPhoto) return
-            const enriched = await enrichActivityPhotos(rows, city)
-            if (gen !== loadGenRef.current) return
-            setItems(enriched)
-            publishParcours(enriched)
+            setTimeout(() => {
+              if (gen !== loadGenRef.current) return
+              void enrichActivityPhotos(rows, city).then((enriched) => {
+                if (gen !== loadGenRef.current) return
+                setItems(enriched)
+                publishParcours(enriched)
+              })
+            }, 600)
             return
           } catch (e2) {
             setError(e2 instanceof Error ? e2.message : msg)
