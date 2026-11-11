@@ -85,7 +85,7 @@ export function ParcoursHubScreen() {
       ...(canCreate
         ? [{ id: 'mes' as const, label: 'Mes parcours' }]
         : []),
-      { id: 'sejours' as const, label: 'Séjours pas chers' },
+      { id: 'sejours' as const, label: 'Séjours' },
     ] as const
   )
 

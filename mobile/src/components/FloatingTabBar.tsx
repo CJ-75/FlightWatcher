@@ -5,13 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, fonts } from '../theme'
 import { DealsTabIcon, TabBarIcon } from './TabIcons'
 
-/** Ordre UI — Parcours au centre. */
+/** Ordre UI — Explorer (hub Parcours/Séjours) au centre. */
 const TAB_ORDER = ['Search', 'Activities', 'Deals', 'Planner', 'Favorites'] as const
 
 const LABELS: Record<string, string> = {
   Search: 'Vols',
   Activities: 'Activités',
-  Deals: 'Parcours',
+  Deals: 'Explorer',
   Planner: 'Planner',
   Favorites: 'Favoris',
 }
@@ -21,7 +21,7 @@ const LABELS: Record<string, string> = {
  * - capsule translucide au-dessus du contenu
  * - 5 slots égaux, icône + label
  * - actif = puits teinté sous l’icône
- * - Parcours = puits toujours présent (home), rempli si focus
+ * - Explorer = puits toujours présent (home), rempli si focus
  */
 export const FLOATING_TAB_HEIGHT = 64
 export const FLOATING_TAB_MARGIN = 18

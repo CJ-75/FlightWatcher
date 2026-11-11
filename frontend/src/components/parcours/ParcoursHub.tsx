@@ -54,7 +54,7 @@ export function ParcoursHub() {
         {(
           [
             { id: 'parcours' as const, label: 'Parcours' },
-            { id: 'sejours' as const, label: 'Séjours pas chers' },
+            { id: 'sejours' as const, label: 'Séjours' },
           ] as const
         ).map((s) => {
           const on = segment === s.id

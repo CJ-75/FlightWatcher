@@ -268,7 +268,7 @@ function MainTabs() {
       <Tab.Screen
         name="Deals"
         component={ParcoursHubScreen}
-        options={{ title: 'Parcours', headerShown: false }}
+        options={{ title: 'Explorer', headerShown: false }}
       />
       <Tab.Screen
         name="Planner"

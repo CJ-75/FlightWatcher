@@ -1387,7 +1387,7 @@ function Dashboard() {
                 window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-              aria-label="FlightWatcher, retour à Parcours"
+              aria-label="FlightWatcher, retour à Explorer"
             >
               <p className="app-kicker mb-0.5">FlightWatcher</p>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
@@ -1399,7 +1399,7 @@ function Dashboard() {
             </div>
           </header>
 
-          {/* Pill onglets : assez large pour 5 items (search / activités / parcours / planner / saved) */}
+          {/* Pill onglets : assez large pour 5 items (search / activités / explorer / planner / saved) */}
           <nav className="app-tabnav flex justify-center" aria-label="Navigation principale">
             <div className="app-tabbar w-full max-w-lg sm:max-w-2xl lg:max-w-3xl xl:max-w-4xl">
               {(

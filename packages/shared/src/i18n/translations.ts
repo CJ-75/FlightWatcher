@@ -10,7 +10,7 @@ export const translations: Record<Language, Record<string, string>> = {
     
     // Navigation
     'nav.search': 'Vols',
-    'nav.deals': 'Parcours',
+    'nav.deals': 'Explorer',
     'nav.planner': 'Planner',
     'nav.alerts': 'Alertes',
     'nav.saved': 'Favoris',
@@ -155,7 +155,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'favorites.activitiesEmptyTitle': 'Aucune activité likée',
     'favorites.activitiesEmpty': 'Like une activité depuis l’onglet Activités.',
     'favorites.parcoursEmptyTitle': 'Aucun parcours liké',
-    'favorites.parcoursEmpty': 'Like un parcours depuis l’onglet Parcours.',
+    'favorites.parcoursEmpty': 'Like un parcours depuis l’onglet Explorer.',
     'favorites.addressesEmptyTitle': 'Aucune adresse',
     'favorites.addressesEmpty':
       'Colle un lien Maps ou Instagram depuis l’étape Adresses d’un voyage.',
@@ -597,7 +597,7 @@ export const translations: Record<Language, Record<string, string>> = {
     
     // Navigation
     'nav.search': 'Flights',
-    'nav.deals': 'Paths',
+    'nav.deals': 'Explore',
     'nav.planner': 'Trips',
     'nav.alerts': 'Alerts',
     'nav.saved': 'Favorites',
