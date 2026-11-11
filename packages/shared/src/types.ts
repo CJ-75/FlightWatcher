@@ -692,7 +692,7 @@ export interface DealsListParams {
   max_pp?: number
   /** Occasion slug filter (occasion_tags contains) */
   occasion?: string
-  /** weekend | short | week — weekend = Fri/Sat/Sun depart */
+  /** weekend | short | week — weekend = Fri→Sun */
   duration?: 'weekend' | 'short' | 'week' | string
   /** Wall size (backend default 36, max 48) */
   limit?: number

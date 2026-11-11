@@ -1,38 +1,52 @@
-"""P0 Lot 2 — weekend = Fri/Sat/Sun prefer; wall floor ≥30 with backfill."""
+"""Week-end Séjours = Fri→Sun prefer; wall floor ≥30 with backfill."""
 from deals.community_list import (
     WALL_MIN_DEALS,
     _apply_duration_with_floor,
     _deal_matches_duration,
+    _is_fri_sun_weekend,
     _is_weekend_outbound,
     diversify_wall_min,
 )
 
 
-def test_weekend_outbound_weekdays():
-    assert _is_weekend_outbound("2026-11-27")  # Fri
-    assert _is_weekend_outbound("2026-11-28")  # Sat
-    assert _is_weekend_outbound("2026-11-29")  # Sun
-    assert not _is_weekend_outbound("2026-11-24")  # Tue
-    assert not _is_weekend_outbound("2026-11-26")  # Thu
+def test_fri_sun_weekend_dates():
+    # Fri → Sun
+    assert _is_fri_sun_weekend("2026-11-27", "2026-11-29")
+    # Sat → Sun interdit
+    assert not _is_fri_sun_weekend("2026-11-28", "2026-11-29")
+    # Sun outbound interdit
+    assert not _is_fri_sun_weekend("2026-11-29", "2026-11-30")
+    # Tue interdit
+    assert not _is_fri_sun_weekend("2026-11-24", "2026-11-26")
+    # Thu → Sun interdit
+    assert not _is_fri_sun_weekend("2026-11-26", "2026-11-29")
 
 
-def test_weekend_window_kind():
-    assert _is_weekend_outbound("2026-11-24", "FRI_SUN")
-    assert _is_weekend_outbound("", "SAT_MON")
+def test_fri_sun_window_kind():
+    assert _is_fri_sun_weekend("2026-11-24", None, "FRI_SUN")
+    assert not _is_fri_sun_weekend("", None, "SAT_MON")
+    assert _is_weekend_outbound("2026-11-27")  # Fri alone (compat)
 
 
-def test_deal_matches_duration_weekend_rejects_midweek():
+def test_deal_matches_duration_weekend_rejects_sat_sun():
+    sat_sun = {
+        "nights": 1,
+        "dates": {"outbound": "2026-11-28", "inbound": "2026-11-29"},
+    }
+    assert not _deal_matches_duration(sat_sun, "weekend")
+    fri_sun = {
+        "nights": 2,
+        "dates": {"outbound": "2026-11-27", "inbound": "2026-11-29"},
+    }
+    assert _deal_matches_duration(fri_sun, "weekend")
     midweek = {
         "nights": 2,
         "dates": {"outbound": "2026-11-24", "inbound": "2026-11-26"},
     }
     assert not _deal_matches_duration(midweek, "weekend")
-    fri = {
-        "nights": 2,
-        "dates": {"outbound": "2026-11-27", "inbound": "2026-11-29"},
-    }
-    assert _deal_matches_duration(fri, "weekend")
-    assert _deal_matches_duration({"nights": 4, "dates": {"outbound": "2026-11-24"}}, "short")
+    assert _deal_matches_duration(
+        {"nights": 4, "dates": {"outbound": "2026-11-24"}}, "short"
+    )
 
 
 def test_weekend_floor_backfills_midweek_short_stays():

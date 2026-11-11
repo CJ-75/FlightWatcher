@@ -127,7 +127,7 @@ async def list_deals(
     ),
     duration: Optional[str] = Query(
         None,
-        description="weekend | short | week — weekend = Fri/Sat/Sun depart + 1–3 nights",
+        description="weekend | short | week — weekend = Fri→Sun + 1–3 nights",
     ),
     limit: Optional[int] = Query(
         36,

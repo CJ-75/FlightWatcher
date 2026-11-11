@@ -589,22 +589,48 @@ def _fetch_active_rows(
             return []
 
 
-def _is_weekend_outbound(out_date: str, window_kind: Optional[str] = None) -> bool:
-    """True if departure is Fri/Sat/Sun (or known weekend window_kind)."""
+def _is_fri_sun_weekend(
+    out_date: str,
+    ret_date: Optional[str] = None,
+    window_kind: Optional[str] = None,
+) -> bool:
+    """
+    Week-end Séjours = départ vendredi + retour dimanche (FRI_SUN).
+    Exclut samedi→dimanche / SAT_MON.
+    """
     wk = (window_kind or "").strip().upper()
-    if wk in ("FRI_SUN", "SAT_MON"):
+    if wk == "FRI_SUN":
         return True
-    raw = (out_date or "")[:10]
-    if len(raw) < 10:
+    if wk == "SAT_MON":
+        return False
+    raw_out = (out_date or "")[:10]
+    if len(raw_out) < 10:
         return False
     try:
         from datetime import date as _date
 
-        d = _date.fromisoformat(raw)
+        out = _date.fromisoformat(raw_out)
     except ValueError:
         return False
-    # Mon=0 … Sun=6 — weekend departures: Fri/Sat/Sun
-    return d.weekday() in (4, 5, 6)
+    # Mon=0 … Fri=4, Sun=6
+    if out.weekday() != 4:
+        return False
+    raw_ret = (ret_date or "")[:10]
+    if len(raw_ret) >= 10:
+        try:
+            from datetime import date as _date
+
+            ret = _date.fromisoformat(raw_ret)
+        except ValueError:
+            return False
+        return ret.weekday() == 6
+    # Pas de retour explicite : vendredi suffit (nights déjà borné 1–3)
+    return True
+
+
+def _is_weekend_outbound(out_date: str, window_kind: Optional[str] = None) -> bool:
+    """Compat — alias Fri→Sun (voir _is_fri_sun_weekend)."""
+    return _is_fri_sun_weekend(out_date, None, window_kind)
 
 
 def _deal_matches_duration(
@@ -620,13 +646,18 @@ def _deal_matches_duration(
     nights = int(deal.get("nights") or 0)
     dates = deal.get("dates") or {}
     out = str(dates.get("outbound") or "")[:10]
+    ret = str(dates.get("inbound") or "")[:10]
     wk = deal.get("window_kind")
     if tab == "weekend":
         if not (1 <= nights <= 3):
             return False
         if not strict_weekend:
             return True
-        return _is_weekend_outbound(out, wk if isinstance(wk, str) else None)
+        return _is_fri_sun_weekend(
+            out,
+            ret or None,
+            wk if isinstance(wk, str) else None,
+        )
     if tab == "short":
         return 4 <= nights <= 6
     if tab == "week":
@@ -642,7 +673,7 @@ def _apply_duration_with_floor(
     min_deals: int = WALL_MIN_DEALS,
 ) -> List[Dict[str, Any]]:
     """
-    Prefer true weekend (Fri/Sat/Sun). If pool < min_deals, backfill other
+    Prefer Fri→Sun weekend. If pool < min_deals, backfill other
     1–3 night stays so the wall never looks broken.
     """
     tab = (duration or "").strip().lower() or None
@@ -1426,7 +1457,7 @@ def list_community_deals(
       origin — departure IATA(s)
       destination — arrival city IATA(s), expanded via served_city
       occasion — slug present in occasion_tags (SQL contains + post-filter)
-      duration — weekend | short | week (weekend = Fri/Sat/Sun depart + 1–3 nights)
+      duration — weekend | short | week (weekend = Fri→Sun + 1–3 nights)
     """
     import logging
 
