@@ -14,6 +14,7 @@ import {
   buildParcoursFeed,
   citySlugDisplayNameFr,
   isFeaturedToday,
+  itineraryBadgeLabel,
   itineraryOccasionEmoji,
   type Itinerary,
   type ItineraryOccasion,
@@ -341,11 +342,8 @@ export function ParcoursCatalogScreen({ headerExtra, embedded = false }: Props) 
                     itinerary={it}
                     variant={landscape ? 'landscape' : 'portrait'}
                     badge={
-                      (it.occasions || []).includes('ferie')
-                        ? 'Férié'
-                        : isFeaturedToday(it)
-                          ? 'Nouveau'
-                          : null
+                      itineraryBadgeLabel(it) ||
+                      (isFeaturedToday(it) ? 'Nouveau' : null)
                     }
                     onPress={() => open(it)}
                     onPressIn={() => warm(it)}

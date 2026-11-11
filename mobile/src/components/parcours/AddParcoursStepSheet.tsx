@@ -50,6 +50,18 @@ const BUDGET_CHIPS: { label: string; value: number }[] = [
   { label: '50 €', value: 50 },
 ]
 
+const DAYS = [
+  { id: 0, label: 'Jour 1' },
+  { id: 1, label: 'Jour 2' },
+  { id: 2, label: 'Jour 3' },
+]
+
+const MOMENTS: { id: NonNullable<DraftStep['moment']>; label: string }[] = [
+  { id: 'morning', label: 'Matin' },
+  { id: 'afternoon', label: 'Après-midi' },
+  { id: 'evening', label: 'Soir' },
+]
+
 function emptyStep(): DraftStep {
   return {
     localId: `tmp-${Date.now()}`,
@@ -145,6 +157,10 @@ export function AddParcoursStepSheet({
       setHint('Indique le nom du lieu')
       return
     }
+    if (step.moment == null) {
+      setHint('Choisis un moment (matin, après-midi ou soir)')
+      return
+    }
     if (step.budget_eur == null || !Number.isFinite(step.budget_eur) || step.budget_eur < 0) {
       setHint('Choisis un budget')
       return
@@ -165,6 +181,8 @@ export function AddParcoursStepSheet({
       note: step.note.trim(),
       photo: step.photos[0] || step.photo,
       budget_eur: step.budget_eur,
+      day_offset: Number.isFinite(step.day_offset) ? step.day_offset : 0,
+      moment: step.moment,
     })
   }
 
@@ -227,6 +245,44 @@ export function AddParcoursStepSheet({
                 placeholderTextColor={colors.faint}
                 style={styles.titleInput}
               />
+
+              <View style={styles.line} />
+              <Text style={styles.fieldLabel}>Jour</Text>
+              <View style={styles.segRow}>
+                {DAYS.map((d) => {
+                  const on = step.day_offset === d.id
+                  return (
+                    <Pressable
+                      key={d.id}
+                      onPress={() => patch({ day_offset: d.id })}
+                      style={[styles.seg, on && styles.segOn]}
+                    >
+                      <Text style={[styles.segText, on && styles.segTextOn]}>
+                        {d.label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+
+              <View style={styles.line} />
+              <Text style={styles.fieldLabel}>Moment</Text>
+              <View style={styles.segRow}>
+                {MOMENTS.map((m) => {
+                  const on = step.moment === m.id
+                  return (
+                    <Pressable
+                      key={m.id}
+                      onPress={() => patch({ moment: m.id })}
+                      style={[styles.seg, on && styles.segOn]}
+                    >
+                      <Text style={[styles.segText, on && styles.segTextOn]}>
+                        {m.label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
 
               <View style={styles.line} />
               <Text style={styles.fieldLabel}>Notes</Text>
@@ -489,6 +545,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 11,
   },
+  segRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 6,
+  },
+  seg: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: colors.canvas,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  segOn: { backgroundColor: colors.ink, borderColor: colors.ink },
+  segText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.ink },
+  segTextOn: { color: '#FFF8F3' },
   section: {
     fontFamily: fonts.semibold,
     fontSize: 12,

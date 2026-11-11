@@ -10,8 +10,10 @@ import {
   ScrollView,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import * as ImagePicker from 'expo-image-picker'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
@@ -45,12 +47,23 @@ export function CreateParcoursScreen({ navigation }: Props) {
   const [cityLabel, setCityLabel] = useState(
     citySlugDisplayNameFr(existing?.city_slug || 'paris') || 'Paris',
   )
+  const [customCover, setCustomCover] = useState<string | null>(() => {
+    const c = existing?.cover_image || null
+    if (!c) return null
+    // URI locale / upload = choix user ; sinon on laisse la ville piloter
+    if (c.startsWith('file:') || c.startsWith('content:') || c.startsWith('ph://')) {
+      return c
+    }
+    return c
+  })
+  const [pickingCover, setPickingCover] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cover = useMemo(
+  const cityCover = useMemo(
     () => cityImageUrl(cityLabel || citySlugDisplayNameFr(citySlug) || citySlug),
     [cityLabel, citySlug],
   )
+  const cover = customCover || cityCover
 
   const suggestTitle = useCallback((label: string) => {
     const name = (label || '').trim()
@@ -68,6 +81,34 @@ export function CreateParcoursScreen({ navigation }: Props) {
     setCitySlug(slug)
     setCityLabel(label)
     if (!titleTouched) setTitle(suggestTitle(label))
+  }
+
+  const pickHero = async () => {
+    setPickingCover(true)
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert(
+          'Photos',
+          'Autorise l’accès à la galerie pour choisir la photo hero.',
+        )
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: false,
+        quality: 0.88,
+      })
+      if (result.canceled || !result.assets?.[0]?.uri) return
+      setCustomCover(result.assets[0].uri)
+    } catch (e) {
+      Alert.alert(
+        'Galerie',
+        e instanceof Error ? e.message : 'Galerie indisponible',
+      )
+    } finally {
+      setPickingCover(false)
+    }
   }
 
   const closeKeepDraft = useCallback(() => {
@@ -191,16 +232,46 @@ export function CreateParcoursScreen({ navigation }: Props) {
           </View>
 
           <View style={[styles.card, shadow.soft]}>
-            <View style={styles.coverWrap}>
+            <Text style={styles.q}>Photo hero</Text>
+            <Pressable
+              onPress={() => void pickHero()}
+              disabled={pickingCover}
+              style={styles.coverWrap}
+              accessibilityRole="button"
+              accessibilityLabel="Choisir la photo hero"
+            >
               <Image source={{ uri: cover }} style={styles.cover} />
               <LinearGradient
                 colors={['transparent', 'rgba(18,10,6,0.72)']}
                 style={styles.coverGrad}
               />
-              <Text style={styles.coverLabel} numberOfLines={1}>
-                {cityLabel}
+              <View style={styles.coverActions}>
+                {pickingCover ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.coverCta}>
+                    {customCover ? 'Changer la photo' : 'Choisir une photo'}
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+            {customCover ? (
+              <Pressable
+                onPress={() => setCustomCover(null)}
+                hitSlop={8}
+                style={styles.resetCover}
+              >
+                <Text style={styles.resetCoverText}>
+                  Revenir à la photo ville
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.coverHint}>
+                Par défaut : photo de {cityLabel}. Tu peux en choisir une autre.
               </Text>
-            </View>
+            )}
+
+            <View style={styles.line} />
             <Text style={styles.q}>Ville</Text>
             <ActivityCityPicker
               valueSlug={citySlug}
@@ -282,10 +353,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   coverWrap: {
-    height: 132,
+    height: 148,
     borderRadius: radius.lg,
     overflow: 'hidden',
-    marginBottom: 14,
     backgroundColor: colors.primaryMuted,
   },
   cover: {
@@ -296,15 +366,42 @@ const styles = StyleSheet.create({
   coverGrad: {
     ...StyleSheet.absoluteFillObject,
   },
-  coverLabel: {
+  coverActions: {
     position: 'absolute',
-    left: 14,
-    bottom: 12,
-    right: 14,
-    fontFamily: fonts.extrabold,
-    fontSize: 18,
-    letterSpacing: -0.4,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverCta: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
     color: '#fff',
+    backgroundColor: 'rgba(18,10,6,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  coverHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 8,
+    lineHeight: 17,
+  },
+  resetCover: { marginTop: 8, alignSelf: 'flex-start' },
+  resetCoverText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.primary,
+  },
+  line: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+    marginVertical: 14,
   },
   q: {
     fontFamily: fonts.bold,

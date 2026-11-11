@@ -25,6 +25,23 @@ export type ItineraryStickyView = {
   ctaAction: 'launch_maps' | 'make_trip'
 }
 
+function coordsFromMapsUrl(url: string): { lat: number; lng: number } | null {
+  const u = String(url || '')
+  const at = u.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+  if (at) {
+    const lat = Number(at[1])
+    const lng = Number(at[2])
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng }
+  }
+  const d3 = u.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/)
+  if (d3) {
+    const lat = Number(d3[1])
+    const lng = Number(d3[2])
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng }
+  }
+  return null
+}
+
 function placeCoords(item: ItineraryItem): { lat: number; lng: number } | null {
   const place = item.places as
     | {
@@ -45,6 +62,8 @@ function placeCoords(item: ItineraryItem): { lat: number; lng: number } | null {
   ) {
     return { lat, lng }
   }
+  const pasted = String(stepMeta?.maps_url || '').trim()
+  if (pasted) return coordsFromMapsUrl(pasted)
   return null
 }
 
@@ -53,6 +72,34 @@ function placeQuery(item: ItineraryItem): string | null {
   if (coords) return `${coords.lat},${coords.lng}`
   const name = item.places?.name || item.title
   return name ? String(name) : null
+}
+
+function isMapsStop(item: ItineraryItem): boolean {
+  const kind = item.kind || 'free'
+  if (kind !== 'place' && kind !== 'activity' && kind !== 'free') return false
+  return !!(
+    placeCoords(item) ||
+    item.places?.name ||
+    item.title ||
+    String(item.meta?.maps_url || '').trim()
+  )
+}
+
+const MOMENT_ORDER: Record<string, number> = {
+  morning: 0,
+  afternoon: 1,
+  evening: 2,
+}
+
+function sortStepsForMaps(items: ItineraryItem[]): ItineraryItem[] {
+  return [...items].sort((a, b) => {
+    const d = (a.day_offset ?? 0) - (b.day_offset ?? 0)
+    if (d) return d
+    const ma = MOMENT_ORDER[String(a.moment || '')] ?? 9
+    const mb = MOMENT_ORDER[String(b.moment || '')] ?? 9
+    if (ma !== mb) return ma - mb
+    return (a.position ?? 0) - (b.position ?? 0)
+  })
 }
 
 /** Google Maps search for a single place/activity step (or pasted maps_url). */
@@ -67,23 +114,41 @@ export function buildItineraryStepMapsUrl(item: ItineraryItem): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
 }
 
-/** Google Maps multi-stop directions from place/activity steps. */
+/**
+ * Lien Google Maps du parcours.
+ * 1 étape → lien Maps du lieu (ou recherche).
+ * >1 étapes → itinéraire multi-stops (dir) dans l’ordre jour / moment / position.
+ * Inclut les étapes libres (create mobile) avec maps_url / coords / titre.
+ */
 export function buildItineraryMapsUrl(items: ItineraryItem[]): string | null {
-  const stops = items
-    .filter((it) => it.kind === 'place' || it.kind === 'activity')
+  const stopsItems = sortStepsForMaps(items).filter(isMapsStop)
+  if (!stopsItems.length) return null
+
+  if (stopsItems.length === 1) {
+    const one = stopsItems[0]
+    const pasted = String(one.meta?.maps_url || '').trim()
+    if (pasted) return pasted
+    const q = placeQuery(one)
+    if (!q) return null
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`
+  }
+
+  const stops = stopsItems
     .map(placeQuery)
     .filter((q): q is string => !!q)
-  if (stops.length < 1) {
-    const free = items.map((it) => it.title).filter(Boolean) as string[]
-    if (!free.length) return null
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(free[0])}`
+  if (stops.length < 2) {
+    // Fallback: au moins un stop utilisable
+    if (stops.length === 1) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`
+    }
+    return null
   }
-  if (stops.length === 1) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`
-  }
-  const origin = stops[0]
-  const destination = stops[stops.length - 1]
-  const waypoints = stops.slice(1, -1)
+
+  // Google Maps URL API: origin + destination + waypoints (max ~9)
+  const capped = stops.slice(0, 11)
+  const origin = capped[0]
+  const destination = capped[capped.length - 1]
+  const waypoints = capped.slice(1, -1)
   const q = new URLSearchParams({
     api: '1',
     origin,

@@ -947,6 +947,17 @@ class AdminParseMapsBody(BaseModel):
     url: str
 
 
+class AdminParcoursPublishNewBody(BaseModel):
+    title: Optional[str] = None
+    city_slug: Optional[str] = None
+    cover_image: Optional[str] = None
+    intro: Optional[str] = None
+    budget_estimate_eur: Optional[float] = None
+    budget_basis: Optional[str] = None
+    occasions: Optional[List[str]] = None
+    items: Optional[List[Dict[str, Any]]] = None
+
+
 @router.post("/api/admin/parcours/parse-maps")
 @require_admin
 async def admin_parse_maps(body: AdminParseMapsBody, request: Request):
@@ -993,6 +1004,30 @@ async def admin_create_parcours(body: AdminParcoursCreateBody, request: Request)
     )
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("error") or "create_failed")
+    return out
+
+
+@router.post("/api/admin/parcours/publish-new")
+@require_admin
+async def admin_publish_new_parcours(
+    body: AdminParcoursPublishNewBody, request: Request
+):
+    """Create + étapes + publish en une requête (mobile create)."""
+    from activities.itineraries_admin import create_and_publish_admin_itinerary
+
+    out = create_and_publish_admin_itinerary(
+        _svc(),
+        {
+            "title": body.title,
+            "city_slug": body.city_slug,
+            "cover_image": body.cover_image,
+            "intro": body.intro,
+            "budget_estimate_eur": body.budget_estimate_eur,
+            "budget_basis": body.budget_basis,
+            "occasions": body.occasions or [],
+            "items": body.items or [],
+        },
+    )
     return out
 
 

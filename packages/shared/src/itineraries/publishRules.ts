@@ -10,7 +10,26 @@ export type PublishWarning = {
   message: string
 }
 
-/** §4.3 — blocages avant publication. */
+function stepMeta(step: Partial<ItineraryItem> | null | undefined): Record<string, unknown> {
+  const m = step?.meta
+  return m && typeof m === 'object' ? (m as Record<string, unknown>) : {}
+}
+
+/** Étape utilisable pour publier (lieu / Viator / étape libre avec titre). */
+export function isAnchoredStep(step: Partial<ItineraryItem> | null | undefined): boolean {
+  if (!step) return false
+  if (step.kind === 'place' && step.place_id) return true
+  if (step.kind === 'activity' && String(step.viator_product_code || '').trim()) {
+    return true
+  }
+  // Étapes libres (create mobile) : titre suffit — notes non requises
+  if ((step.kind === 'free' || !step.kind) && String(step.title || '').trim()) {
+    return true
+  }
+  return false
+}
+
+/** §4.3 — blocages avant publication (assoupli : pas de lieux vérifiés obligatoires). */
 export function getPublishBlockers(
   itinerary: Partial<Itinerary> | null | undefined,
   items?: ItineraryItem[] | null,
@@ -19,7 +38,7 @@ export function getPublishBlockers(
   const blockers: PublishBlocker[] = []
 
   if (!String(itinerary?.intro || '').trim()) {
-    blockers.push({ code: 'intro', message: 'Introduction requise (3–4 phrases).' })
+    blockers.push({ code: 'intro', message: 'Introduction requise.' })
   }
   if (!String(itinerary?.cover_image || '').trim()) {
     blockers.push({
@@ -36,11 +55,12 @@ export function getPublishBlockers(
   if (!String(itinerary?.slug || '').trim()) {
     blockers.push({ code: 'slug', message: 'Slug URL requis.' })
   }
-  const anchored = steps.filter((step) => isAnchoredStep(step))
-  if (anchored.length < 3) {
+
+  const ready = steps.filter((step) => isAnchoredStep(step))
+  if (ready.length < 1) {
     blockers.push({
-      code: 'steps_anchored_min',
-      message: `Au moins 3 étapes lieu vérifié ou activité Viator (actuellement ${anchored.length}). Les étapes libres ne comptent pas.`,
+      code: 'steps_min',
+      message: 'Ajoute au moins une étape.',
     })
   }
 
@@ -49,7 +69,7 @@ export function getPublishBlockers(
     if (step.kind === 'place' && !step.place_id) {
       blockers.push({
         code: `place_${n}`,
-        message: `Étape ${n} (lieu) : rattacher un lieu vérifié.`,
+        message: `Étape ${n} (lieu) : rattacher un lieu ou la passer en étape libre.`,
       })
     }
     if (step.kind === 'activity' && !String(step.viator_product_code || '').trim()) {
@@ -58,10 +78,10 @@ export function getPublishBlockers(
         message: `Étape ${n} (activité) : code Viator requis.`,
       })
     }
-    if (step.kind === 'free' && !String(step.title || '').trim()) {
+    if ((step.kind === 'free' || !step.kind) && !String(step.title || '').trim()) {
       blockers.push({
         code: `free_${n}`,
-        message: `Étape ${n} (libre) : titre requis.`,
+        message: `Étape ${n} : titre requis.`,
       })
     }
   }
@@ -69,17 +89,7 @@ export function getPublishBlockers(
   return blockers
 }
 
-/** Lieu vérifié ou activité Viator — compte pour le seuil de publication. */
-export function isAnchoredStep(step: Partial<ItineraryItem> | null | undefined): boolean {
-  if (!step) return false
-  if (step.kind === 'place' && step.place_id) return true
-  if (step.kind === 'activity' && String(step.viator_product_code || '').trim()) {
-    return true
-  }
-  return false
-}
-
-/** Avertissements non bloquants (étapes libres, etc.). */
+/** Avertissements non bloquants. */
 export function getPublishWarnings(
   itinerary: Partial<Itinerary> | null | undefined,
   items?: ItineraryItem[] | null,
@@ -87,11 +97,13 @@ export function getPublishWarnings(
   const steps = items ?? itinerary?.itinerary_items ?? []
   const warnings: PublishWarning[] = []
   for (const [i, step] of steps.entries()) {
-    if (step.kind === 'free') {
+    if (step.kind !== 'free' && step.kind) continue
+    const meta = stepMeta(step)
+    const maps = String(meta.maps_url || '').trim()
+    if (!maps) {
       warnings.push({
-        code: `free_no_place_${i + 1}`,
-        message:
-          'Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.',
+        code: `free_no_maps_${i + 1}`,
+        message: `Étape ${i + 1} : lien Maps manquant (conseillé).`,
       })
     }
   }

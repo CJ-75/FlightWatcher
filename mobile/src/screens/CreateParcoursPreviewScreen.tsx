@@ -6,12 +6,15 @@ import {
   Pressable,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  canPublish,
   citySlugDisplayNameFr,
   groupItemsByDay,
+  itineraryBadgeLabel,
   type Itinerary,
   type ItineraryItem,
 } from '@flightwatcher/shared'
@@ -21,11 +24,18 @@ import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChr
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
+import { getApi } from '../lib/client'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
-import { getParcoursCreateSession } from '../lib/parcoursCreateSession'
+import {
+  clearParcoursCreateSession,
+  getParcoursCreateSession,
+} from '../lib/parcoursCreateSession'
 import type { RootStackParamList } from '../navigation/types'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
-import { sumStepBudgets } from './CreateParcoursStepsScreen'
+import {
+  draftToPayload,
+  sumStepBudgets,
+} from './CreateParcoursStepsScreen'
 import type { DraftStep } from '../components/parcours/AddParcoursStepSheet'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateParcoursPreview'>
@@ -41,6 +51,7 @@ function sessionToItinerary(
   citySlug: string,
   cover: string | null,
   steps: DraftStep[],
+  occasions: string[] = [],
 ): Itinerary {
   const total = sumStepBudgets(steps)
   return {
@@ -49,7 +60,8 @@ function sessionToItinerary(
     city_slug: citySlug,
     cover_image: cover,
     budget_estimate_eur: total,
-    budget_basis: 'for_two',
+    budget_basis: 'per_person',
+    occasions,
     itinerary_items: steps.map(
       (s, i) =>
         ({
@@ -81,6 +93,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
   const allowed = canCreateParcoursOnDevice(user?.email)
   const session = getParcoursCreateSession()
   const [mode, setMode] = useState<'card' | 'fiche'>('fiche')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!allowed) navigation.goBack()
@@ -93,6 +106,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
       session.city_slug,
       session.cover_image,
       session.steps,
+      session.occasions || [],
     )
   }, [session])
 
@@ -122,9 +136,75 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         ? `~${itin.budget_estimate_eur} €`
         : null
 
+  const badge =
+    itineraryBadgeLabel({ occasions: session?.occasions || [] }) || null
+
   const closeKeepDraft = () => {
-    // Brouillon cache conservé
     navigation.navigate('Main')
+  }
+
+  const tryPublish = async () => {
+    if (!session || !session.steps.length) {
+      Alert.alert('Ajoute au moins un lieu avant de publier.')
+      return
+    }
+    const itemsPayload = draftToPayload(session.steps)
+    const total = sumStepBudgets(session.steps)
+    const intro = `Parcours à ${citySlugDisplayNameFr(session.city_slug) || session.city_slug}.`
+    const probe = {
+      title: session.title,
+      city_slug: session.city_slug,
+      cover_image: session.cover_image,
+      intro,
+      slug: 'ok',
+    } as unknown as Itinerary
+    if (!canPublish(probe, itemsPayload as unknown as ItineraryItem[])) {
+      Alert.alert(
+        'Pas encore publiable',
+        'Il manque titre, couverture ou au moins une étape.',
+      )
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await getApi().adminPublishNewParcours({
+        title: session.title,
+        city_slug: session.city_slug,
+        cover_image: session.cover_image,
+        intro,
+        budget_estimate_eur: total,
+        budget_basis: 'per_person',
+        occasions: session.occasions || [],
+        items: itemsPayload as unknown as Record<string, unknown>[],
+      })
+      if (!res.ok || !res.itinerary?.id) {
+        Alert.alert(
+          'Publication refusée',
+          (res.blockers || []).map((b) => b.message).join('\n') ||
+            res.error ||
+            'Erreur',
+        )
+        return
+      }
+      clearParcoursCreateSession()
+      const published = res.itinerary as unknown as Itinerary
+      const id = String(published.id)
+      navigation.replace('ItineraryDetail', {
+        itineraryId: published?.slug || id,
+        preview: {
+          id: published.id,
+          slug: published.slug,
+          title: published.title,
+          cover_image: published.cover_image,
+          city_slug: published.city_slug,
+        },
+      })
+    } catch (e) {
+      Alert.alert('Erreur', e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!allowed) return null
@@ -145,18 +225,24 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
     return (
       <View style={styles.root}>
         <ItineraryDetailChrome
-          heroUri={heroUrl}
+          heroUrl={heroUrl}
           title={itin.title || 'Parcours'}
           metaChips={[
+            badge,
             cityLabel,
             budgetLabel,
             `${items.length} étape${items.length > 1 ? 's' : ''}`,
           ].filter(Boolean) as string[]}
-          phaseLabel="Aperçu"
+          phaseLabel={badge || 'Rendu'}
           onBack={() => navigation.navigate('CreateParcoursSteps')}
-          stickyLeft="Brouillon en cache"
-          stickyCta="Fermer"
-          onStickyCta={closeKeepDraft}
+          stickySecondary="Modifier"
+          onStickySecondary={() => navigation.navigate('CreateParcoursSteps')}
+          stickySecondaryDisabled={saving}
+          stickyCta={saving ? 'Publication…' : 'Publier'}
+          stickyCtaDisabled={saving}
+          onStickyCta={() => {
+            if (!saving) void tryPublish()
+          }}
         >
           <View style={styles.previewBanner}>
             <CreateFlowProgress
@@ -164,7 +250,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
               style={{ marginHorizontal: 0, marginTop: 0 }}
             />
             <Text style={styles.previewHint}>
-              Brouillon en cache — rien en base tant que tu ne publies pas.
+              Rendu final — publie pour le valider, ou modifie les lieux.
             </Text>
             <Pressable onPress={() => setMode('card')} style={styles.switchMode}>
               <Text style={styles.switchModeText}>Voir la carte</Text>
@@ -234,20 +320,20 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: spacing.xl,
-          paddingBottom: insets.bottom + 40,
+          paddingBottom: insets.bottom + 100,
         }}
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.kicker}>LE RENDU</Text>
         <Text style={styles.heading}>Aperçu</Text>
         <Text style={[styles.lead, { marginBottom: 18 }]}>
-          Brouillon en cache — pas encore en base.
+          Comme dans la liste Parcours — publie ou modifie.
         </Text>
 
         <ItineraryCard
           itinerary={itin}
           variant="landscape"
-          badge="Aperçu"
+          badge={badge || 'Aperçu'}
           style={{ alignSelf: 'center', marginBottom: 16 }}
         />
 
@@ -255,6 +341,39 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           <Text style={styles.switchModeText}>Voir la fiche</Text>
         </Pressable>
       </ScrollView>
+
+      <View
+        style={[
+          styles.publishBar,
+          { paddingBottom: Math.max(insets.bottom, 12) + 4 },
+        ]}
+      >
+        <Pressable
+          onPress={() => navigation.navigate('CreateParcoursSteps')}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.modify,
+            saving && { opacity: 0.45 },
+            pressed && !saving && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={styles.modifyText}>Modifier</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => void tryPublish()}
+          disabled={saving}
+          style={({ pressed }) => [
+            styles.publish,
+            shadow.lift,
+            saving && { opacity: 0.6 },
+            pressed && !saving && { transform: [{ scale: 0.985 }] },
+          ]}
+        >
+          <Text style={styles.publishText}>
+            {saving ? 'Publication…' : 'Publier'}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   )
 }
@@ -359,4 +478,39 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   link: { fontFamily: fonts.bold, fontSize: 14, color: colors.primary },
+  publishBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: spacing.xl,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
+  modify: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: '#fff',
+  },
+  modifyText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  publish: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  publishText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: '#fff',
+  },
 })

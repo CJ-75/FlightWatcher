@@ -6,12 +6,14 @@ import {
   StyleSheet,
   Platform,
   useWindowDimensions,
+  ScrollView,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { DealsScreen } from './DealsScreen'
 import { ParcoursCatalogScreen } from './ParcoursCatalogScreen'
+import { MesParcoursScreen } from './MesParcoursScreen'
 import { FabPlusMark } from '../components/FabPlusMark'
 import { TabScreenHeader } from '../components/TabScreenHeader'
 import { ScreenBackground } from '../components/ScreenBackground'
@@ -33,7 +35,7 @@ const FAB_BOTTOM_INSET = 8
 /** 5 tabs — Favoris is the last slot. */
 const TAB_COUNT = 5
 
-type Segment = 'parcours' | 'sejours'
+type Segment = 'parcours' | 'mes' | 'sejours'
 
 /** Titre fixe + tabs TikTok sous le titre — même header que Planner / Activités. */
 export function ParcoursHubScreen() {
@@ -51,11 +53,13 @@ export function ParcoursHubScreen() {
     return subscribeParcoursCreateSession(() => setDraftTick((n) => n + 1))
   }, [])
 
+  useEffect(() => {
+    if (!canCreate && segment === 'mes') setSegment('parcours')
+  }, [canCreate, segment])
+
   const hasDraft = hasParcoursCreateDraft()
 
   const fabPos = useMemo(() => {
-    // Tab scene already pads above the dock (tabClearance) — do NOT add dock height again.
-    // Horizontally align with Favoris (last of 5 equal slots in the centered bar).
     const barW = Math.min(windowWidth - FLOATING_TAB_MARGIN * 2, 400)
     const barLeft = (windowWidth - barW) / 2
     const slotW = barW / TAB_COUNT
@@ -75,6 +79,16 @@ export function ParcoursHubScreen() {
     }
   }
 
+  const tabs = (
+    [
+      { id: 'parcours' as const, label: 'Parcours' },
+      ...(canCreate
+        ? [{ id: 'mes' as const, label: 'Mes parcours' }]
+        : []),
+      { id: 'sejours' as const, label: 'Séjours pas chers' },
+    ] as const
+  )
+
   const header = (
     <View style={{ paddingTop: insets.top + 12 }}>
       <TabScreenHeader
@@ -82,13 +96,12 @@ export function ParcoursHubScreen() {
         title="Où aller, quoi faire"
         subtitle="Des balades et des week-ends choisis pour toi."
       >
-        <View style={styles.tabs}>
-          {(
-            [
-              { id: 'parcours' as const, label: 'Parcours' },
-              { id: 'sejours' as const, label: 'Séjours pas chers' },
-            ] as const
-          ).map((s) => {
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabs}
+        >
+          {tabs.map((s) => {
             const on = segment === s.id
             return (
               <Pressable
@@ -103,15 +116,17 @@ export function ParcoursHubScreen() {
               </Pressable>
             )
           })}
-        </View>
+        </ScrollView>
       </TabScreenHeader>
     </View>
   )
 
+  const showFab =
+    canCreate && (segment === 'parcours' || segment === 'mes')
+
   return (
     <View style={styles.root}>
       <ScreenBackground />
-      {/* Keep both mounted — instant tab switch, no remount loading. */}
       <View
         style={[
           styles.flex,
@@ -131,7 +146,15 @@ export function ParcoursHubScreen() {
       >
         <ParcoursCatalogScreen headerExtra={header} embedded />
       </View>
-      {canCreate && segment === 'parcours' ? (
+      {canCreate ? (
+        <View
+          style={[styles.flex, segment !== 'mes' && styles.hidden]}
+          pointerEvents={segment === 'mes' ? 'auto' : 'none'}
+        >
+          <MesParcoursScreen headerExtra={header} />
+        </View>
+      ) : null}
+      {showFab ? (
         <Pressable
           onPress={openCreateOrResume}
           accessibilityRole="button"
@@ -185,6 +208,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 20,
     marginTop: 10,
+    paddingRight: 8,
   },
   tab: { paddingBottom: 8 },
   tabText: {

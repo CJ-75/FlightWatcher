@@ -60,21 +60,21 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
         blockers.append({"code": "city", "message": "Ville requise."})
     if not str(itin.get("slug") or "").strip():
         blockers.append({"code": "slug", "message": "Slug requis."})
-    anchored = 0
+    # Étapes libres avec titre comptent (create mobile) — notes / lieux vérifiés non requis
+    ready = 0
     for step in items:
         kind = step.get("kind") or "free"
         if kind == "place" and step.get("place_id"):
-            anchored += 1
+            ready += 1
         elif kind == "activity" and str(step.get("viator_product_code") or "").strip():
-            anchored += 1
-    if anchored < 3:
+            ready += 1
+        elif kind == "free" and str(step.get("title") or "").strip():
+            ready += 1
+    if ready < 1:
         blockers.append(
             {
-                "code": "steps_anchored_min",
-                "message": (
-                    f"Au moins 3 étapes lieu vérifié ou activité Viator "
-                    f"(actuellement {anchored}). Les étapes libres ne comptent pas."
-                ),
+                "code": "steps_min",
+                "message": "Ajoute au moins une étape.",
             }
         )
     for i, step in enumerate(items):
@@ -84,7 +84,7 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
             blockers.append(
                 {
                     "code": f"place_{n}",
-                    "message": f"Étape {n} (lieu) : rattacher un lieu vérifié.",
+                    "message": f"Étape {n} (lieu) : rattacher un lieu ou la passer en étape libre.",
                 }
             )
         if kind == "activity" and not str(step.get("viator_product_code") or "").strip():
@@ -98,7 +98,7 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
             blockers.append(
                 {
                     "code": f"free_{n}",
-                    "message": f"Étape {n} (libre) : titre requis.",
+                    "message": f"Étape {n} : titre requis.",
                 }
             )
     return blockers
@@ -108,12 +108,14 @@ def _place_warnings(supabase, items: List[Dict[str, Any]]) -> List[Dict[str, str
     warnings: List[Dict[str, str]] = []
     for i, step in enumerate(items):
         if (step.get("kind") or "free") == "free":
-            warnings.append(
-                {
-                    "code": f"free_no_place_{i+1}",
-                    "message": "Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.",
-                }
-            )
+            meta = step.get("meta") if isinstance(step.get("meta"), dict) else {}
+            if not str((meta or {}).get("maps_url") or "").strip():
+                warnings.append(
+                    {
+                        "code": f"free_no_maps_{i+1}",
+                        "message": f"Étape {i+1} : lien Maps manquant (conseillé).",
+                    }
+                )
     place_ids = [str(it["place_id"]) for it in items if it.get("place_id")]
     if not place_ids or not supabase:
         return warnings
@@ -244,6 +246,128 @@ def create_admin_itinerary(
             logger.warning("create_admin_itinerary: %s", e)
             return {"ok": False, "error": str(e)}
     return {"ok": False, "error": "slug_collision"}
+
+
+def create_and_publish_admin_itinerary(
+    supabase,
+    body: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Create + items + publish in one shot (2–3 writes Supabase).
+    Used by mobile create flow to avoid create → patch → publish round-trips.
+    """
+    if not supabase:
+        return {"ok": False, "error": "no_supabase"}
+
+    title = str((body or {}).get("title") or "Nouveau parcours").strip()[:200]
+    city_slug = str((body or {}).get("city_slug") or "").strip().lower() or None
+    cover_image = (body or {}).get("cover_image")
+    intro = str((body or {}).get("intro") or "").strip()
+    if not intro and city_slug:
+        intro = f"Parcours à {city_slug}."
+    budget = (body or {}).get("budget_estimate_eur")
+    budget_basis = (body or {}).get("budget_basis") or "per_person"
+    if budget_basis not in VALID_BUDGET:
+        budget_basis = "per_person"
+    occasions_raw = (body or {}).get("occasions") or []
+    occasions = []
+    if isinstance(occasions_raw, list):
+        occasions = [
+            str(x).strip().lower()
+            for x in occasions_raw
+            if str(x).strip()
+        ][:3]
+
+    items_in = (body or {}).get("items") or []
+    if not isinstance(items_in, list):
+        return {"ok": False, "error": "invalid_items"}
+    rows: List[Dict[str, Any]] = []
+    for i, raw in enumerate(items_in):
+        if not isinstance(raw, dict):
+            continue
+        rows.append(_normalize_item(raw, i))
+
+    base_slug = _slugify(title)
+    slug = base_slug
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Pré-check blockers (slug temporaire ok)
+    probe = {
+        "title": title,
+        "slug": slug,
+        "intro": intro,
+        "cover_image": cover_image,
+        "city_slug": city_slug,
+    }
+    blockers = _publish_blockers(probe, rows)
+    if blockers:
+        return {
+            "ok": False,
+            "error": "publish_blocked",
+            "blockers": blockers,
+        }
+
+    created: Optional[Dict[str, Any]] = None
+    for attempt in range(20):
+        try:
+            payload = {
+                "title": title,
+                "slug": slug,
+                "city_slug": city_slug,
+                "intro": intro,
+                "cover_image": cover_image,
+                "budget_estimate_eur": budget,
+                "budget_basis": budget_basis,
+                "status": "published",
+                "author_kind": "admin",
+                "visibility": "public",
+                "occasions": occasions,
+                "sort_weight": 0,
+                "is_demo": False,
+                "published_at": now,
+                "updated_at": now,
+            }
+            res = supabase.table("itineraries").insert(payload).execute()
+            if not res.data:
+                return {"ok": False, "error": "insert_failed"}
+            created = _serialize(res.data[0])
+            break
+        except Exception as e:
+            msg = str(e).lower()
+            if "slug" in msg or "unique" in msg or "duplicate" in msg:
+                slug = f"{base_slug}-{attempt + 2}"
+                continue
+            logger.warning("create_and_publish insert: %s", e)
+            return {"ok": False, "error": str(e)}
+    if not created:
+        return {"ok": False, "error": "slug_collision"}
+
+    itinerary_id = str(created["id"])
+    try:
+        if rows:
+            for row in rows:
+                row["itinerary_id"] = itinerary_id
+            try:
+                supabase.table("itinerary_items").insert(rows).execute()
+            except Exception as insert_err:
+                msg = str(insert_err).lower()
+                if "meta" in msg:
+                    stripped = [
+                        {k: v for k, v in r.items() if k != "meta"} for r in rows
+                    ]
+                    supabase.table("itinerary_items").insert(stripped).execute()
+                else:
+                    raise
+        created["itinerary_items"] = rows
+        created["occasions"] = occasions
+        return {"ok": True, "itinerary": created}
+    except Exception as e:
+        logger.warning("create_and_publish items: %s", e)
+        try:
+            supabase.table("itineraries").delete().eq("id", itinerary_id).execute()
+        except Exception:
+            pass
+        return {"ok": False, "error": str(e)}
 
 
 def _normalize_item(raw: Dict[str, Any], position: int) -> Dict[str, Any]:

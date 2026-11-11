@@ -3,6 +3,7 @@
  * Rien en base tant que non publié. Un nouveau parcours exige publier ou abandonner.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import type { ItineraryOccasion } from '@flightwatcher/shared'
 import type { DraftStep } from '../components/parcours/AddParcoursStepSheet'
 
 const DISK_KEY = 'fw_parcours_create_draft_v1'
@@ -11,6 +12,8 @@ export type ParcoursCreateSession = {
   title: string
   city_slug: string
   cover_image: string | null
+  /** Tag court → badge carte (1er occasions[]) */
+  occasions: ItineraryOccasion[]
   steps: DraftStep[]
   updated_at: number
 }
@@ -62,6 +65,9 @@ export async function hydrateParcoursCreateSession(): Promise<ParcoursCreateSess
           title: parsed.title,
           city_slug: parsed.city_slug,
           cover_image: parsed.cover_image ?? null,
+          occasions: Array.isArray(parsed.occasions)
+            ? (parsed.occasions as ItineraryOccasion[])
+            : [],
           steps: Array.isArray(parsed.steps) ? parsed.steps : [],
           updated_at: parsed.updated_at || Date.now(),
         }
@@ -82,12 +88,18 @@ export function startParcoursCreateSession(input: {
   title: string
   city_slug: string
   cover_image?: string | null
+  occasions?: ItineraryOccasion[]
   steps?: DraftStep[]
 }): ParcoursCreateSession {
   session = {
     title: input.title,
     city_slug: input.city_slug,
     cover_image: input.cover_image ?? null,
+    occasions: input.occasions
+      ? [...input.occasions]
+      : session?.occasions
+        ? [...session.occasions]
+        : [],
     steps: input.steps
       ? [...input.steps]
       : session?.steps
@@ -106,6 +118,7 @@ export function patchParcoursCreateSession(
   session = {
     ...session,
     ...patch,
+    occasions: patch.occasions ? [...patch.occasions] : session.occasions,
     steps: patch.steps ? [...patch.steps] : session.steps,
     updated_at: Date.now(),
   }

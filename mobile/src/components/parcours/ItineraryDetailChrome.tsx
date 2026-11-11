@@ -30,6 +30,11 @@ type Props = {
   stickyLeft?: string
   stickyCta?: string
   onStickyCta?: () => void
+  /** Optional secondary action (e.g. Modifier) — replaces left label when set. */
+  stickySecondary?: string
+  onStickySecondary?: () => void
+  stickySecondaryDisabled?: boolean
+  stickyCtaDisabled?: boolean
 }
 
 export function ItineraryDetailChrome({
@@ -46,6 +51,10 @@ export function ItineraryDetailChrome({
   stickyLeft,
   stickyCta,
   onStickyCta,
+  stickySecondary,
+  onStickySecondary,
+  stickySecondaryDisabled,
+  stickyCtaDisabled,
 }: Props) {
   const insets = useSafeAreaInsets()
   const chips = (metaChips || []).filter(Boolean)
@@ -142,12 +151,34 @@ export function ItineraryDetailChrome({
             { paddingBottom: Math.max(insets.bottom, 12) },
           ]}
         >
-          <View style={styles.stickyLeft}>
-            <Text style={styles.stickyLeftText} numberOfLines={2}>
-              {stickyLeft}
-            </Text>
-          </View>
-          <Pressable style={styles.stickyCta} onPress={onStickyCta}>
+          {stickySecondary && onStickySecondary ? (
+            <Pressable
+              onPress={onStickySecondary}
+              disabled={stickySecondaryDisabled}
+              style={({ pressed }) => [
+                styles.stickySecondary,
+                stickySecondaryDisabled && { opacity: 0.45 },
+                pressed && !stickySecondaryDisabled && { opacity: 0.85 },
+              ]}
+            >
+              <Text style={styles.stickySecondaryText}>{stickySecondary}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.stickyLeft}>
+              <Text style={styles.stickyLeftText} numberOfLines={2}>
+                {stickyLeft}
+              </Text>
+            </View>
+          )}
+          <Pressable
+            style={[
+              styles.stickyCta,
+              stickySecondary ? styles.stickyCtaFlex : null,
+              stickyCtaDisabled && { opacity: 0.55 },
+            ]}
+            onPress={onStickyCta}
+            disabled={stickyCtaDisabled}
+          >
             <Text style={styles.stickyCtaText}>{stickyCta}</Text>
           </Pressable>
         </View>
@@ -261,11 +292,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1A120E',
   },
+  stickySecondary: {
+    flex: 1,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EDE8E1',
+    backgroundColor: '#fff',
+  },
+  stickySecondaryText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: '#1A120E',
+  },
   stickyCta: {
     backgroundColor: '#1A120E',
     borderRadius: 999,
     paddingHorizontal: 18,
     paddingVertical: 14,
+  },
+  stickyCtaFlex: {
+    flex: 1,
+    alignItems: 'center',
   },
   stickyCtaText: {
     color: '#fff',

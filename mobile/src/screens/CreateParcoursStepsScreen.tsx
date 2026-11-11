@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -11,10 +11,11 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  canPublish,
-  citySlugDisplayNameFr,
-  type Itinerary,
+  groupItemsByDay,
+  ITINERARY_OCCASION_BADGE_LABELS,
+  ITINERARY_OCCASIONS,
   type ItineraryItem,
+  type ItineraryOccasion,
 } from '@flightwatcher/shared'
 import {
   AddParcoursStepSheet,
@@ -23,10 +24,8 @@ import {
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
-import { getApi } from '../lib/client'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
-  clearParcoursCreateSession,
   getParcoursCreateSession,
   patchParcoursCreateSession,
   startParcoursCreateSession,
@@ -36,6 +35,18 @@ import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateParcoursSteps'>
 
+const MOMENT_FR: Record<string, string> = {
+  morning: 'Matin',
+  afternoon: 'Après-midi',
+  evening: 'Soir',
+}
+
+const MOMENT_ORDER: Record<string, number> = {
+  morning: 0,
+  afternoon: 1,
+  evening: 2,
+}
+
 export function sumStepBudgets(steps: DraftStep[]): number {
   return steps.reduce((acc, s) => {
     const n = typeof s.budget_eur === 'number' ? s.budget_eur : 0
@@ -43,7 +54,7 @@ export function sumStepBudgets(steps: DraftStep[]): number {
   }, 0)
 }
 
-function draftToPayload(steps: DraftStep[]) {
+export function draftToPayload(steps: DraftStep[]) {
   return steps.map((s, i) => {
     const photos = s.photos.filter(Boolean).slice(0, 5)
     const meta: Record<string, unknown> = {}
@@ -82,15 +93,55 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
   const [citySlug] = useState(
     () => session0?.city_slug || routeSeed?.city_slug || 'paris',
   )
-  const [coverImage] = useState(
+  const [coverImage, setCoverImage] = useState<string | null>(
     () => session0?.cover_image || routeSeed?.cover_image || null,
   )
   const [steps, setSteps] = useState<DraftStep[]>(() => session0?.steps || [])
-  const [saving, setSaving] = useState(false)
+  const [tag, setTag] = useState<ItineraryOccasion | null>(
+    () => session0?.occasions?.[0] || null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(steps.length === 0)
   const [editing, setEditing] = useState<DraftStep | null>(null)
   const autoOpenedRef = useRef(steps.length === 0)
+
+  const stepPhotos = useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const s of steps) {
+      for (const uri of s.photos.length ? s.photos : s.photo ? [s.photo] : []) {
+        if (!uri || seen.has(uri)) continue
+        seen.add(uri)
+        out.push(uri)
+      }
+    }
+    return out
+  }, [steps])
+
+  const byDay = useMemo(() => {
+    const fake = steps.map(
+      (s, i) =>
+        ({
+          id: s.localId,
+          itinerary_id: 'local',
+          kind: s.kind,
+          position: i,
+          title: s.title,
+          day_offset: s.day_offset,
+          moment: s.moment,
+          photo: s.photo,
+        }) as ItineraryItem,
+    )
+    return groupItemsByDay(fake).map((day) => ({
+      ...day,
+      items: [...day.items].sort((a, b) => {
+        const ma = MOMENT_ORDER[String(a.moment || '')] ?? 9
+        const mb = MOMENT_ORDER[String(b.moment || '')] ?? 9
+        if (ma !== mb) return ma - mb
+        return (a.position || 0) - (b.position || 0)
+      }),
+    }))
+  }, [steps])
 
   useEffect(() => {
     if (!allowed) navigation.goBack()
@@ -116,21 +167,45 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     setSheetOpen(true)
   }, [steps.length])
 
-  const persistLocal = (nextSteps: DraftStep[]) => {
+  const persistLocal = (
+    nextSteps: DraftStep[],
+    nextCover: string | null = coverImage,
+    nextTag: ItineraryOccasion | null = tag,
+  ) => {
     setSteps(nextSteps)
+    setCoverImage(nextCover)
+    setTag(nextTag)
     patchParcoursCreateSession({
       title,
       city_slug: citySlug,
-      cover_image: coverImage,
+      cover_image: nextCover,
+      occasions: nextTag ? [nextTag] : [],
       steps: nextSteps,
     })
   }
+
+  const setHero = (uri: string) => {
+    persistLocal(steps, uri)
+  }
+
+  const pickTag = (value: ItineraryOccasion) => {
+    const next = tag === value ? null : value
+    persistLocal(steps, coverImage, next)
+  }
+
+  const sortSteps = (list: DraftStep[]) =>
+    [...list].sort((a, b) => {
+      if (a.day_offset !== b.day_offset) return a.day_offset - b.day_offset
+      const ma = MOMENT_ORDER[String(a.moment || '')] ?? 9
+      const mb = MOMENT_ORDER[String(b.moment || '')] ?? 9
+      return ma - mb
+    })
 
   const onSaveStep = (step: DraftStep) => {
     const idx = steps.findIndex((s) => s.localId === step.localId)
     const next =
       idx >= 0 ? steps.map((s, i) => (i === idx ? step : s)) : [...steps, step]
-    persistLocal(next)
+    persistLocal(sortSteps(next))
     setSheetOpen(false)
     setEditing(null)
   }
@@ -158,85 +233,17 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
     persistLocal(next)
   }
 
-  const tryPublish = async () => {
+  const goFinalRender = () => {
     persistLocal(steps)
     if (steps.length === 0) {
-      Alert.alert('Ajoute au moins un lieu avant de publier.')
+      Alert.alert('Ajoute au moins un lieu pour voir le rendu.')
       return
     }
-    setSaving(true)
-    setError(null)
-    let createdId: string | null = null
-    try {
-      const total = sumStepBudgets(steps)
-      const created = await getApi().adminCreateParcours({
-        title,
-        city_slug: citySlug,
-        cover_image: coverImage || undefined,
-      })
-      if (!created.ok || !created.itinerary?.id) {
-        throw new Error('Création impossible')
-      }
-      const id = String(created.itinerary.id)
-      createdId = id
-      const patch = await getApi().adminUpdateParcours(id, {
-        title,
-        city_slug: citySlug,
-        cover_image: coverImage,
-        items: draftToPayload(steps),
-        budget_estimate_eur: total,
-        budget_basis: 'for_two',
-        intro:
-          (created.itinerary as { intro?: string }).intro ||
-          `Parcours à ${citySlugDisplayNameFr(citySlug) || citySlug}.`,
-      })
-      if (!patch.ok) throw new Error(patch.error || 'Enregistrement impossible')
-
-      const items = draftToPayload(steps) as unknown as ItineraryItem[]
-      const itin = (patch.itinerary || created.itinerary) as unknown as Itinerary
-      if (!canPublish(itin, items)) {
-        await getApi().adminDeleteParcours(id).catch(() => {})
-        createdId = null
-        Alert.alert(
-          'Pas encore publiable',
-          'Il manque des infos (intro, lieux vérifiés…). Rien n’a été enregistré.',
-        )
-        return
-      }
-      const res = await getApi().adminPublishParcours(id)
-      if (!res.ok) {
-        await getApi().adminDeleteParcours(id).catch(() => {})
-        createdId = null
-        Alert.alert(
-          'Publication refusée',
-          (res.blockers || []).map((b) => b.message).join('\n') ||
-            res.error ||
-            'Erreur',
-        )
-        return
-      }
-      createdId = null
-      clearParcoursCreateSession()
-      const published = (res.itinerary || itin) as Itinerary
-      navigation.replace('ItineraryDetail', {
-        itineraryId: published?.slug || id,
-        preview: {
-          id: published.id,
-          slug: published.slug,
-          title: published.title,
-          cover_image: published.cover_image,
-          city_slug: published.city_slug,
-        },
-      })
-    } catch (e) {
-      if (createdId) {
-        await getApi().adminDeleteParcours(createdId).catch(() => {})
-      }
-      setError(e instanceof Error ? e.message : 'Erreur')
-      Alert.alert('Erreur', e instanceof Error ? e.message : 'Erreur')
-    } finally {
-      setSaving(false)
+    if (!tag) {
+      Alert.alert('Choisis un tag', 'Le tag court apparaît sur le badge du parcours.')
+      return
     }
+    navigation.navigate('CreateParcoursPreview')
   }
 
   if (!allowed) return null
@@ -267,9 +274,10 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
       <CreateFlowProgress step={2} />
 
       <ScrollView
+          style={styles.scroll}
           contentContainerStyle={{
             paddingHorizontal: spacing.xl,
-            paddingBottom: insets.bottom + 40,
+            paddingBottom: steps.length > 0 ? 24 : insets.bottom + 40,
           }}
           showsVerticalScrollIndicator={false}
         >
@@ -287,10 +295,10 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
           </Text>
           {steps.length > 0 ? (
             <Text style={styles.budgetTotal}>
-              Budget total ·{' '}
+              Budget ·{' '}
               {(() => {
                 const total = sumStepBudgets(steps)
-                return total === 0 ? 'Gratuit' : `${total} €`
+                return total === 0 ? 'Gratuit' : `${total} € / pers.`
               })()}
             </Text>
           ) : null}
@@ -312,93 +320,107 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
             </Pressable>
           ) : (
             <>
-              {steps.map((draft, index) => {
-                const budgetLabel =
-                  draft.budget_eur === 0
-                    ? 'Gratuit'
-                    : draft.budget_eur != null
-                      ? `${draft.budget_eur} €`
-                      : null
-                const meta = [
-                  budgetLabel,
-                  draft.maps_url ? 'Maps' : null,
-                  draft.photos.length
-                    ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')
-                const canUp = index > 0
-                const canDown = index < steps.length - 1
-                return (
-                  <View
-                    key={draft.localId}
-                    style={[styles.card, shadow.soft]}
-                  >
-                    <Pressable
-                      onPress={() => {
-                        setEditing(draft)
-                        setSheetOpen(true)
-                      }}
-                      onLongPress={() => removeStep(draft.localId)}
-                      style={({ pressed }) => [
-                        styles.cardMain,
-                        pressed && { opacity: 0.92 },
-                      ]}
-                    >
-                      {draft.photo ? (
-                        <Image
-                          source={{ uri: draft.photo }}
-                          style={styles.thumb}
-                        />
-                      ) : (
-                        <View style={[styles.thumb, styles.thumbEmpty]}>
-                          <Text style={styles.thumbMark}>+</Text>
-                        </View>
-                      )}
-                      <View style={styles.cardBody}>
-                        <Text style={styles.cardTitle} numberOfLines={2}>
-                          {draft.title}
-                        </Text>
-                        {draft.note ? (
-                          <Text style={styles.cardNote} numberOfLines={2}>
-                            {draft.note}
-                          </Text>
-                        ) : null}
-                        {meta ? (
-                          <Text style={styles.cardMeta}>{meta}</Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                    <View style={styles.reorder}>
-                      <Pressable
-                        onPress={() => moveStep(draft.localId, -1)}
-                        disabled={!canUp}
-                        hitSlop={8}
-                        accessibilityLabel="Monter"
-                        style={[
-                          styles.reorderBtn,
-                          !canUp && styles.reorderBtnOff,
-                        ]}
-                      >
-                        <Text style={styles.reorderArrow}>↑</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => moveStep(draft.localId, 1)}
-                        disabled={!canDown}
-                        hitSlop={8}
-                        accessibilityLabel="Descendre"
-                        style={[
-                          styles.reorderBtn,
-                          !canDown && styles.reorderBtnOff,
-                        ]}
-                      >
-                        <Text style={styles.reorderArrow}>↓</Text>
-                      </Pressable>
-                    </View>
+              {byDay.map((day) => (
+                <View key={day.dayOffset} style={styles.dayBlock}>
+                  <View style={styles.dayHead}>
+                    <View style={styles.dayDot} />
+                    <Text style={styles.dayLabel}>{day.label}</Text>
                   </View>
-                )
-              })}
+                  {day.items.map((it) => {
+                    const draft = steps.find((s) => s.localId === it.id)
+                    if (!draft) return null
+                    const index = steps.findIndex(
+                      (s) => s.localId === draft.localId,
+                    )
+                    const budgetLabel =
+                      draft.budget_eur === 0
+                        ? 'Gratuit'
+                        : draft.budget_eur != null
+                          ? `${draft.budget_eur} €`
+                          : null
+                    const meta = [
+                      draft.moment ? MOMENT_FR[draft.moment] : null,
+                      budgetLabel,
+                      draft.maps_url ? 'Maps' : null,
+                      draft.photos.length
+                        ? `${draft.photos.length} photo${draft.photos.length > 1 ? 's' : ''}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                    const canUp = index > 0
+                    const canDown = index < steps.length - 1
+                    return (
+                      <View
+                        key={draft.localId}
+                        style={[styles.card, shadow.soft]}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setEditing(draft)
+                            setSheetOpen(true)
+                          }}
+                          onLongPress={() => removeStep(draft.localId)}
+                          style={({ pressed }) => [
+                            styles.cardMain,
+                            pressed && { opacity: 0.92 },
+                          ]}
+                        >
+                          {draft.photo ? (
+                            <Image
+                              source={{ uri: draft.photo }}
+                              style={styles.thumb}
+                            />
+                          ) : (
+                            <View style={[styles.thumb, styles.thumbEmpty]}>
+                              <Text style={styles.thumbMark}>+</Text>
+                            </View>
+                          )}
+                          <View style={styles.cardBody}>
+                            <Text style={styles.cardTitle} numberOfLines={2}>
+                              {draft.title}
+                            </Text>
+                            {draft.note ? (
+                              <Text style={styles.cardNote} numberOfLines={2}>
+                                {draft.note}
+                              </Text>
+                            ) : null}
+                            {meta ? (
+                              <Text style={styles.cardMeta}>{meta}</Text>
+                            ) : null}
+                          </View>
+                        </Pressable>
+                        <View style={styles.reorder}>
+                          <Pressable
+                            onPress={() => moveStep(draft.localId, -1)}
+                            disabled={!canUp}
+                            hitSlop={8}
+                            accessibilityLabel="Monter"
+                            style={[
+                              styles.reorderBtn,
+                              !canUp && styles.reorderBtnOff,
+                            ]}
+                          >
+                            <Text style={styles.reorderArrow}>↑</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => moveStep(draft.localId, 1)}
+                            disabled={!canDown}
+                            hitSlop={8}
+                            accessibilityLabel="Descendre"
+                            style={[
+                              styles.reorderBtn,
+                              !canDown && styles.reorderBtnOff,
+                            ]}
+                          >
+                            <Text style={styles.reorderArrow}>↓</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    )
+                  })}
+                </View>
+              ))}
 
               <Pressable
                 onPress={() => {
@@ -413,24 +435,81 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
                 <Text style={styles.addStepText}>Ajouter une étape</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => void tryPublish()}
-                disabled={saving}
-                style={({ pressed }) => [
-                  styles.publish,
-                  shadow.lift,
-                  saving && { opacity: 0.6 },
-                  pressed && !saving && { transform: [{ scale: 0.985 }] },
-                ]}
-              >
-                <Text style={styles.publishText}>
-                  {saving ? 'Publication…' : 'Publier'}
+              <View style={styles.tagBlock}>
+                <Text style={styles.heroLabel}>Tag</Text>
+                <Text style={styles.heroHint}>
+                  Court — affiché en badge sur la carte parcours.
                 </Text>
-              </Pressable>
+                <View style={styles.tagRow}>
+                  {ITINERARY_OCCASIONS.map((id) => {
+                    const on = tag === id
+                    return (
+                      <Pressable
+                        key={id}
+                        onPress={() => pickTag(id)}
+                        style={[styles.tagChip, on && styles.tagChipOn]}
+                      >
+                        <Text
+                          style={[styles.tagChipText, on && styles.tagChipTextOn]}
+                        >
+                          {ITINERARY_OCCASION_BADGE_LABELS[id]}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              </View>
+
+              {stepPhotos.length > 0 ? (
+                <View style={styles.heroBlock}>
+                  <Text style={styles.heroLabel}>Photo hero</Text>
+                  <Text style={styles.heroHint}>
+                    Choisis l’image de couverture du parcours.
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.heroRow}
+                  >
+                    {stepPhotos.map((uri) => {
+                      const on = coverImage === uri
+                      return (
+                        <Pressable
+                          key={uri}
+                          onPress={() => setHero(uri)}
+                          style={[styles.heroThumbWrap, on && styles.heroThumbOn]}
+                        >
+                          <Image source={{ uri }} style={styles.heroThumb} />
+                        </Pressable>
+                      )
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
             </>
           )}
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>
+
+      {steps.length > 0 ? (
+        <View
+          style={[
+            styles.publishBar,
+            { paddingBottom: Math.max(insets.bottom, 12) + 4 },
+          ]}
+        >
+          <Pressable
+            onPress={goFinalRender}
+            style={({ pressed }) => [
+              styles.publish,
+              shadow.lift,
+              pressed && { transform: [{ scale: 0.985 }] },
+            ]}
+          >
+            <Text style={styles.publishText}>Voir le rendu final</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <AddParcoursStepSheet
         visible={sheetOpen}
@@ -447,6 +526,7 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  scroll: { flex: 1 },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -519,6 +599,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
     marginTop: 12,
+  },
+  dayBlock: { marginBottom: 16 },
+  dayHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  dayDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+  },
+  dayLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    color: colors.muted,
   },
   card: {
     flexDirection: 'row',
@@ -605,8 +703,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
   },
+  tagBlock: {
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  tagChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  tagChipOn: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  tagChipText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.ink,
+  },
+  tagChipTextOn: { color: '#FFF8F3' },
+  heroBlock: {
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  heroLabel: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  heroHint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  heroRow: { gap: 8, paddingRight: 8 },
+  heroThumbWrap: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  heroThumbOn: { borderColor: colors.primary },
+  heroThumb: {
+    width: 72,
+    height: 72,
+    backgroundColor: colors.primaryMuted,
+  },
+  publishBar: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    backgroundColor: colors.canvas,
+  },
   publish: {
-    marginTop: 8,
     backgroundColor: colors.primary,
     borderRadius: 18,
     paddingVertical: 15,

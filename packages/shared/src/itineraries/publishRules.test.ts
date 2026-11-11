@@ -25,31 +25,33 @@ function step(
   }
 }
 
-describe('publishRules anchored steps', () => {
-  it('blocks when fewer than 3 place/activity steps', () => {
-    const items = [
-      step({ kind: 'place', place_id: 'p1' }),
-      step({ kind: 'place', place_id: 'p2' }),
-      step({ kind: 'free', title: 'Pause' }),
-    ]
-    const blockers = getPublishBlockers(base, items)
-    expect(blockers.some((b) => b.code === 'steps_anchored_min')).toBe(true)
-    expect(canPublish(base, items)).toBe(false)
+describe('publishRules steps', () => {
+  it('blocks when no steps', () => {
+    const blockers = getPublishBlockers(base, [])
+    expect(blockers.some((b) => b.code === 'steps_min')).toBe(true)
+    expect(canPublish(base, [])).toBe(false)
   })
 
-  it('allows publish with 3 anchored + free extras', () => {
+  it('allows publish with free steps (no verified place, no notes)', () => {
     const items = [
-      step({ kind: 'place', place_id: 'p1' }),
-      step({ kind: 'place', place_id: 'p2' }),
-      step({ kind: 'activity', viator_product_code: 'V123' }),
-      step({ kind: 'free', title: 'Pause' }),
+      step({ kind: 'free', title: 'Tour Eiffel', meta: { maps_url: 'https://maps.app.goo.gl/x' } }),
+      step({ kind: 'free', title: 'Café' }),
     ]
     expect(canPublish(base, items)).toBe(true)
   })
 
-  it('warns free steps', () => {
+  it('allows publish with place/activity mix', () => {
+    const items = [
+      step({ kind: 'place', place_id: 'p1' }),
+      step({ kind: 'activity', viator_product_code: 'V123' }),
+    ]
+    expect(canPublish(base, items)).toBe(true)
+  })
+
+  it('warns free steps without maps (non-blocking)', () => {
     const items = [step({ kind: 'free', title: 'Libre' })]
     const w = getPublishWarnings(base, items)
-    expect(w[0]?.message).toMatch(/n’apparaîtra pas dans l’itinéraire/)
+    expect(w[0]?.code).toMatch(/free_no_maps/)
+    expect(canPublish(base, items)).toBe(true)
   })
 })

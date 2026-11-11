@@ -767,6 +767,27 @@ export function createApiClient(options: ApiClientOptions = {}) {
         { method: 'POST', body: JSON.stringify(body || {}) },
       ),
 
+    /** Create + items + publish in one request (mobile create flow). */
+    adminPublishNewParcours: (body: {
+      title: string
+      city_slug: string
+      cover_image?: string | null
+      intro?: string
+      budget_estimate_eur?: number
+      budget_basis?: string
+      occasions?: string[]
+      items: Record<string, unknown>[]
+    }) =>
+      request<{
+        ok: boolean
+        itinerary?: Record<string, unknown>
+        blockers?: { code: string; message: string }[]
+        error?: string
+      }>('/api/admin/parcours/publish-new', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
     /** Admin: parse Maps URL (name/lat/lng) without Places API. */
     adminParseMapsUrl: (url: string) =>
       request<{

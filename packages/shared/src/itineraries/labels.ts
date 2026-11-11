@@ -12,6 +12,31 @@ export const ITINERARY_OCCASION_LABELS: Record<ItineraryOccasion, string> = {
   saison: 'De saison',
 }
 
+/** Tags courts pour badge carte parcours. */
+export const ITINERARY_OCCASION_BADGE_LABELS: Record<ItineraryOccasion, string> =
+  {
+    romantique: 'Romantique',
+    ferie: 'Férié',
+    soleil: 'Soleil',
+    pluie: 'Pluie',
+    amis: 'Amis',
+    petit_budget: 'Budget',
+    famille: 'Famille',
+    nuit: 'Soir',
+    saison: 'Saison',
+  }
+
+export function itineraryBadgeLabel(
+  it: { occasions?: Array<ItineraryOccasion | string> | null } | null | undefined,
+): string | null {
+  const first = (it?.occasions || [])[0]
+  if (!first) return null
+  return (
+    ITINERARY_OCCASION_BADGE_LABELS[first as ItineraryOccasion] ||
+    String(first)
+  )
+}
+
 /** Emojis chips Envies — alignés look Séjours. */
 export const ITINERARY_OCCASION_EMOJIS: Record<ItineraryOccasion, string> = {
   romantique: '💕',
