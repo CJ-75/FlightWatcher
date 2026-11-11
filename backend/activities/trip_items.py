@@ -266,8 +266,9 @@ def enrich_trip_items_photos(
 
 
 # Planner / hero only need identity + thumb fields — avoid fat place joins.
+# (no `title` column on trip_items — name lives on places / meta)
 _TRIP_ITEMS_LIST_SELECT = (
-    "id,item_type,status,sort_key,day_offset,moment,notes,title,meta,"
+    "id,item_type,status,sort_key,day_offset,moment,notes,meta,"
     "place_id,draft_id,planned_trip_id,places(id,name,meta)"
 )
 
