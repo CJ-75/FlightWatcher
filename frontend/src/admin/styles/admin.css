@@ -1,33 +1,43 @@
-/* FlightWatcher Admin — product tokens (no blocking webfont import) */
+/* FlightWatcher Admin — slate / teal ops */
 .fw-admin {
-  --fw-bg: #fff8f3;
-  --fw-bg-2: #ffe8d6;
-  --fw-surface: #ffffff;
-  --fw-ink: #1c1917;
-  --fw-muted: #78716c;
-  --fw-border: #f0e4d8;
-  --fw-accent: #ff6b35;
-  --fw-accent-soft: #ffe0d1;
-  --fw-ok: #15803d;
+  --fw-bg: #eef1f6;
+  --fw-ink: #0b1220;
+  --fw-muted: #64748b;
+  --fw-line: rgba(15, 23, 42, 0.08);
+  --fw-surface: rgba(255, 255, 255, 0.78);
+  --fw-surface-solid: #ffffff;
+  --fw-accent: #0f766e;
+  --fw-accent-2: #115e59;
+  --fw-accent-soft: rgba(15, 118, 110, 0.1);
+  --fw-ok: #047857;
   --fw-warn: #b45309;
-  --fw-bad: #b91c1c;
-  --fw-sidebar: #1c1917;
-  --fw-sidebar-text: #fafaf9;
-  --fw-sidebar-muted: #a8a29e;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --fw-bad: #be123c;
+  --fw-sidebar: #0b1220;
+  --fw-sidebar-text: #f1f5f9;
+  --fw-sidebar-muted: #94a3b8;
+  --fw-radius: 16px;
+  --fw-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), 0 12px 32px rgba(15, 23, 42, 0.06);
+  --fw-font-display: 'Syne', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --fw-font-body: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--fw-font-body);
   color: var(--fw-ink);
-  background:
-    radial-gradient(1200px 600px at 10% -10%, #ffd7c2 0%, transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, #ffe8d6 0%, transparent 50%),
-    var(--fw-bg);
+  background-color: var(--fw-bg);
+  background-image:
+    radial-gradient(900px 480px at 0% -10%, rgba(45, 212, 191, 0.18), transparent 55%),
+    radial-gradient(700px 420px at 100% 0%, rgba(56, 189, 248, 0.12), transparent 50%),
+    linear-gradient(180deg, #f8fafc 0%, #eef1f6 100%);
+  background-attachment: fixed;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
 .fw-admin h1,
 .fw-admin h2,
 .fw-admin h3,
-.fw-admin .fw-display {
-  font-family: Georgia, 'Segoe UI', system-ui, sans-serif;
+.fw-admin .fw-display,
+.fw-admin-brand {
+  font-family: var(--fw-font-display);
+  letter-spacing: -0.03em;
 }
 
 .fw-admin-shell {
@@ -36,54 +46,69 @@
 }
 
 .fw-admin-sidebar {
-  width: 260px;
+  width: 248px;
   flex-shrink: 0;
-  background: var(--fw-sidebar);
+  background: linear-gradient(165deg, #121a2b 0%, #0b1220 48%, #07101c 100%);
   color: var(--fw-sidebar-text);
-  padding: 1.25rem 0.85rem;
+  padding: 1.35rem 0.9rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .fw-admin-brand {
-  font-family: Georgia, 'Segoe UI', system-ui, sans-serif;
-  font-weight: 700;
-  font-size: 1.15rem;
-  letter-spacing: -0.02em;
-  padding: 0.35rem 0.75rem 1rem;
+  font-weight: 750;
+  font-size: 1.2rem;
+  padding: 0.2rem 0.7rem 1.15rem;
+  line-height: 1.15;
 }
 
 .fw-admin-brand span {
-  color: var(--fw-accent);
+  color: #5eead4;
+}
+
+.fw-admin-brand-sub {
+  display: block;
+  margin-top: 0.35rem;
+  font-family: var(--fw-font-body);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fw-sidebar-muted);
 }
 
 .fw-nav-group {
-  margin-top: 0.65rem;
-  padding: 0 0.75rem;
-  font-size: 0.68rem;
+  margin-top: 0.85rem;
+  padding: 0 0.7rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--fw-sidebar-muted);
 }
 
 .fw-nav-link {
   display: block;
-  padding: 0.45rem 0.75rem;
-  border-radius: 8px;
-  color: #e7e5e4;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  color: #cbd5e1;
   text-decoration: none;
-  font-size: 0.9rem;
-  transition: background 0.15s ease, color 0.15s ease;
+  font-size: 0.92rem;
+  font-weight: 500;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .fw-nav-link:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
 }
 
 .fw-nav-link.active {
-  background: var(--fw-accent);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.22), rgba(45, 212, 191, 0.06));
   color: #fff;
+  box-shadow: inset 3px 0 0 #2dd4bf;
   font-weight: 600;
 }
 
@@ -99,52 +124,144 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.85rem 1.25rem;
-  border-bottom: 1px solid var(--fw-border);
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(8px);
+  padding: 0.95rem 1.5rem;
+  border-bottom: 1px solid var(--fw-line);
+  background: rgba(248, 250, 252, 0.72);
+  backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
   z-index: 20;
 }
 
 .fw-admin-content {
-  padding: 1.25rem;
+  padding: 1.5rem 1.5rem 2.5rem;
+  animation: fw-fade-up 0.35s ease both;
+}
+
+@keyframes fw-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fw-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .fw-card {
-  background: var(--fw-surface);
-  border: 1px solid var(--fw-border);
-  border-radius: 14px;
-  padding: 1rem 1.1rem;
+  background: var(--fw-surface-solid);
+  border: 1px solid var(--fw-line);
+  border-radius: var(--fw-radius);
+  padding: 1.1rem 1.2rem;
+  box-shadow: var(--fw-shadow);
 }
 
 .fw-kpi {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  padding: 1.15rem 1.2rem;
+  background: var(--fw-surface-solid);
+  border: 1px solid var(--fw-line);
+  border-radius: var(--fw-radius);
+  box-shadow: var(--fw-shadow);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.fw-kpi:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 118, 110, 0.25);
 }
 
 .fw-kpi .label {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   color: var(--fw-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .fw-kpi .value {
-  font-family: Georgia, 'Segoe UI', system-ui, sans-serif;
-  font-size: 1.65rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-family: var(--fw-font-display);
+  font-size: 2rem;
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: var(--fw-ink);
+}
+
+.fw-kpi .hint {
+  font-size: 0.8rem;
+  color: var(--fw-muted);
+}
+
+.fw-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.35rem;
+}
+
+.fw-page-head h1 {
+  margin: 0;
+  font-size: clamp(1.55rem, 2.4vw, 1.9rem);
+  font-weight: 750;
+}
+
+.fw-page-head p {
+  margin: 0.35rem 0 0;
+  color: var(--fw-muted);
+  font-size: 0.95rem;
+  max-width: 36rem;
+}
+
+.fw-hero-accueil {
+  margin-bottom: 1.35rem;
+  padding: 1.5rem 1.55rem 1.4rem;
+  border-radius: calc(var(--fw-radius) + 4px);
+  background:
+    linear-gradient(125deg, rgba(15, 118, 110, 0.12), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid var(--fw-line);
+  box-shadow: var(--fw-shadow);
+}
+
+.fw-hero-accueil .eyebrow {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fw-accent);
+  margin: 0 0 0.45rem;
+}
+
+.fw-hero-accueil h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 3vw, 2.15rem);
+  font-weight: 780;
+}
+
+.fw-hero-accueil .lede {
+  margin: 0.5rem 0 0;
+  color: var(--fw-muted);
+  font-size: 0.98rem;
+  max-width: 32rem;
 }
 
 .fw-grid {
   display: grid;
-  gap: 0.85rem;
-}
-
-.fw-grid-4 {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.95rem;
 }
 
 .fw-grid-3 {
@@ -155,20 +272,61 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.fw-btn {
-  appearance: none;
-  border: 1px solid var(--fw-border);
-  background: #fff;
-  color: var(--fw-ink);
-  border-radius: 10px;
-  padding: 0.45rem 0.85rem;
-  font-size: 0.875rem;
-  font-weight: 560;
-  cursor: pointer;
+.fw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin-bottom: 0.95rem;
+  padding: 0.75rem;
+  background: var(--fw-surface-solid);
+  border: 1px solid var(--fw-line);
+  border-radius: var(--fw-radius);
+  box-shadow: var(--fw-shadow);
 }
 
-.fw-btn:hover {
-  border-color: #e7cbb8;
+.fw-input,
+.fw-select {
+  appearance: none;
+  border: 1px solid var(--fw-line);
+  background: #f8fafc;
+  color: var(--fw-ink);
+  border-radius: 12px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fw-input:focus,
+.fw-select:focus {
+  border-color: rgba(15, 118, 110, 0.45);
+  box-shadow: 0 0 0 3px var(--fw-accent-soft);
+  background: #fff;
+}
+
+.fw-btn {
+  appearance: none;
+  border: 1px solid var(--fw-line);
+  background: #fff;
+  color: var(--fw-ink);
+  border-radius: 12px;
+  padding: 0.52rem 0.95rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.fw-btn:hover:not(:disabled) {
+  border-color: rgba(15, 23, 42, 0.18);
+  background: #f8fafc;
+}
+
+.fw-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .fw-btn-primary {
@@ -177,42 +335,50 @@
   color: #fff;
 }
 
-.fw-btn-danger {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: var(--fw-bad);
+.fw-btn-primary:hover:not(:disabled) {
+  background: var(--fw-accent-2);
+  border-color: var(--fw-accent-2);
+  color: #fff;
 }
 
 .fw-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .fw-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
   border-radius: 999px;
-  padding: 0.15rem 0.55rem;
+  padding: 0.2rem 0.6rem;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 650;
   background: var(--fw-accent-soft);
-  color: #9a3412;
+  color: var(--fw-accent-2);
 }
 
 .fw-badge.ok {
-  background: #dcfce7;
+  background: rgba(4, 120, 87, 0.12);
   color: var(--fw-ok);
 }
 
 .fw-badge.warn {
-  background: #ffedd5;
+  background: rgba(180, 83, 9, 0.12);
   color: var(--fw-warn);
 }
 
 .fw-badge.bad {
-  background: #fee2e2;
+  background: rgba(190, 18, 60, 0.1);
   color: var(--fw-bad);
+}
+
+.fw-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--fw-radius);
+  border: 1px solid var(--fw-line);
+  background: var(--fw-surface-solid);
+  box-shadow: var(--fw-shadow);
 }
 
 .fw-table {
@@ -224,21 +390,50 @@
 .fw-table th,
 .fw-table td {
   text-align: left;
-  padding: 0.55rem 0.4rem;
-  border-bottom: 1px solid var(--fw-border);
-  vertical-align: top;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--fw-line);
+  vertical-align: middle;
 }
 
 .fw-table th {
   color: var(--fw-muted);
-  font-weight: 560;
-  font-size: 0.75rem;
+  font-weight: 650;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  background: #f8fafc;
+}
+
+.fw-table tbody tr {
+  transition: background 0.12s ease;
+}
+
+.fw-table tbody tr:hover {
+  background: rgba(15, 118, 110, 0.04);
+}
+
+.fw-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .fw-muted {
   color: var(--fw-muted);
+}
+
+.fw-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 1.15rem;
+}
+
+.fw-skeleton {
+  height: 4.5rem;
+  border-radius: var(--fw-radius);
+  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 45%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: fw-shimmer 1.1s linear infinite;
 }
 
 .fw-drawer-backdrop {
@@ -248,15 +443,104 @@
 .fw-menu-btn {
   display: none;
   appearance: none;
-  border: 1px solid var(--fw-border);
+  border: 1px solid var(--fw-line);
   background: #fff;
   border-radius: 10px;
-  padding: 0.4rem 0.65rem;
+  padding: 0.4rem 0.7rem;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 
+.fw-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  font-family: var(--fw-font-body);
+  background:
+    radial-gradient(800px 500px at 15% 10%, rgba(45, 212, 191, 0.22), transparent 55%),
+    radial-gradient(700px 480px at 90% 80%, rgba(56, 189, 248, 0.16), transparent 50%),
+    linear-gradient(160deg, #0b1220 0%, #111827 45%, #0f766e33 100%);
+}
+
+.fw-login-card {
+  width: min(420px, 100%);
+  padding: 2rem 1.75rem 1.75rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  animation: fw-fade-up 0.4s ease both;
+}
+
+.fw-login-card .brand {
+  font-family: var(--fw-font-display);
+  font-weight: 780;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.25rem;
+  color: var(--fw-ink);
+}
+
+.fw-login-card .brand span {
+  color: var(--fw-accent);
+}
+
+.fw-login-card .sub {
+  margin: 0 0 1.35rem;
+  color: var(--fw-muted);
+  font-size: 0.92rem;
+}
+
+.fw-login-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 1rem;
+  background: linear-gradient(145deg, #0f766e, #0d9488);
+  color: #fff;
+  font-family: var(--fw-font-display);
+  font-weight: 750;
+  font-size: 1.25rem;
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.35);
+}
+
+.fw-login-error {
+  background: rgba(190, 18, 60, 0.08);
+  border: 1px solid rgba(190, 18, 60, 0.2);
+  color: var(--fw-bad);
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.88rem;
+  margin-bottom: 0.9rem;
+}
+
+.fw-login-card label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: #334155;
+}
+
+.fw-login-card .fw-input {
+  width: 100%;
+  margin-bottom: 0.95rem;
+  box-sizing: border-box;
+}
+
+.fw-login-card .fw-btn-primary {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  font-size: 0.95rem;
+}
+
 @media (max-width: 960px) {
-  .fw-grid-4,
   .fw-grid-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -270,8 +554,8 @@
     inset: 0 auto 0 0;
     z-index: 40;
     transform: translateX(-105%);
-    transition: transform 0.2s ease;
-    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.2);
+    transition: transform 0.22s ease;
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.35);
   }
 
   .fw-admin-sidebar.open {
@@ -282,19 +566,23 @@
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(28, 25, 23, 0.45);
+    background: rgba(11, 18, 32, 0.5);
     z-index: 35;
+    backdrop-filter: blur(2px);
   }
 }
 
 @media (max-width: 640px) {
-  .fw-grid-4,
   .fw-grid-3,
   .fw-grid-2 {
     grid-template-columns: 1fr;
   }
 
   .fw-admin-content {
-    padding: 0.85rem;
+    padding: 1rem;
+  }
+
+  .fw-kpi .value {
+    font-size: 1.65rem;
   }
 }

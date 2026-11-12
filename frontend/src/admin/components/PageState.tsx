@@ -1,36 +1,46 @@
 export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div style={{ marginBottom: '1rem' }}>
-      <h1 className="fw-display" style={{ margin: 0, fontSize: '1.45rem', letterSpacing: '-0.03em' }}>
-        {title}
-      </h1>
-      {subtitle ? (
-        <p className="fw-muted" style={{ margin: '0.25rem 0 0', fontSize: '0.9rem' }}>
-          {subtitle}
-        </p>
-      ) : null}
+    <div className="fw-page-head">
+      <div>
+        <h1 className="fw-display">{title}</h1>
+        {subtitle ? <p>{subtitle}</p> : null}
+      </div>
     </div>
   )
 }
 
 export function LoadingBlock({ label = 'Chargement…' }: { label?: string }) {
-  return <div className="fw-card fw-muted">{label}</div>
+  return (
+    <div className="fw-grid fw-grid-3" aria-busy="true" aria-label={label}>
+      <div className="fw-skeleton" />
+      <div className="fw-skeleton" />
+      <div className="fw-skeleton" />
+    </div>
+  )
 }
 
 export function ErrorBlock({ error }: { error: string }) {
   return (
-    <div className="fw-card" style={{ borderColor: '#fecaca', color: 'var(--fw-bad)' }}>
+    <div className="fw-card" style={{ borderColor: 'rgba(190,18,60,0.25)', color: 'var(--fw-bad)' }}>
       {error}
     </div>
   )
 }
 
-export function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+export function Kpi({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: string | number
+  hint?: string
+}) {
   return (
-    <div className="fw-card fw-kpi">
+    <div className="fw-kpi">
       <div className="label">{label}</div>
       <div className="value">{value}</div>
-      {hint ? <div className="fw-muted" style={{ fontSize: '0.78rem' }}>{hint}</div> : null}
+      {hint ? <div className="hint">{hint}</div> : null}
     </div>
   )
 }

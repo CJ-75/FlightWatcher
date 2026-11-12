@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi } from '../api/adminApi'
-import { ErrorBlock, LoadingBlock, PageTitle } from '../components/PageState'
+import { ErrorBlock, LoadingBlock } from '../components/PageState'
 
 type OnboardingFilter = 'all' | 'done' | 'pending'
 
@@ -22,7 +22,12 @@ function formatDate(iso?: string | null) {
 export function UsersCsmPage() {
   const [users, setUsers] = useState<any[]>([])
   const [total, setTotal] = useState(0)
-  const [stats, setStats] = useState({ onboarded: 0, pending: 0, onboarded_pct: 0, inscrits_total: 0 })
+  const [stats, setStats] = useState({
+    onboarded: 0,
+    pending: 0,
+    onboarded_pct: 0,
+    inscrits_total: 0,
+  })
   const [page, setPage] = useState(1)
   const [q, setQ] = useState('')
   const [qDraft, setQDraft] = useState('')
@@ -63,24 +68,20 @@ export function UsersCsmPage() {
 
   return (
     <div>
-      <PageTitle
-        title="Utilisateurs"
-        subtitle={`${stats.inscrits_total} inscrits · ${stats.onboarded} onboardés (${stats.onboarded_pct}%)`}
-      />
+      <div className="fw-page-head">
+        <div>
+          <h1 className="fw-display">Utilisateurs</h1>
+          <p>
+            {stats.inscrits_total} inscrits · {stats.onboarded} onboardés ({stats.onboarded_pct}
+            %) · {stats.pending} en attente
+          </p>
+        </div>
+      </div>
 
-      <div
-        className="fw-card"
-        style={{
-          marginBottom: '0.85rem',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '0.5rem',
-          alignItems: 'center',
-        }}
-      >
+      <div className="fw-toolbar">
         <input
-          className="fw-btn"
-          style={{ flex: '1 1 180px', textAlign: 'left' }}
+          className="fw-input"
+          style={{ flex: '1 1 200px' }}
           placeholder="Rechercher email ou nom…"
           value={qDraft}
           onChange={(e) => setQDraft(e.target.value)}
@@ -102,7 +103,7 @@ export function UsersCsmPage() {
           Chercher
         </button>
         <select
-          className="fw-btn"
+          className="fw-select"
           value={onboarding}
           onChange={(e) => {
             setPage(1)
@@ -115,53 +116,61 @@ export function UsersCsmPage() {
         </select>
       </div>
 
-      {error ? <div style={{ marginBottom: '0.75rem' }}><ErrorBlock error={error} /></div> : null}
+      {error ? (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <ErrorBlock error={error} />
+        </div>
+      ) : null}
+
       {loading ? <LoadingBlock label="Chargement des inscrits…" /> : null}
 
       {!loading && (
-        <div className="fw-card" style={{ overflowX: 'auto' }}>
-          <table className="fw-table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Nom</th>
-                <th>Inscrit le</th>
-                <th>Onboarding</th>
-                <th>Onboarding le</th>
-                <th>Ville / aéroport</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.email || '—'}</td>
-                  <td>{u.nom || '—'}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(u.inscrit_le)}</td>
-                  <td>
-                    <span className={`fw-badge ${u.onboarding_fait ? 'ok' : 'warn'}`}>
-                      {u.onboarding_fait ? 'Oui' : 'Non'}
-                    </span>
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(u.onboarding_le)}</td>
-                  <td>
-                    {[u.ville, u.aeroport].filter(Boolean).join(' · ') || '—'}
-                  </td>
+        <>
+          <div className="fw-table-wrap">
+            <table className="fw-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Nom</th>
+                  <th>Inscrit le</th>
+                  <th>Onboarding</th>
+                  <th>Onboarding le</th>
+                  <th>Ville / aéroport</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {!users.length ? (
-            <p className="fw-muted" style={{ marginTop: '0.75rem' }}>
-              Aucun inscrit pour ces filtres.
-            </p>
-          ) : null}
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 560 }}>{u.email || '—'}</td>
+                    <td>{u.nom || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(u.inscrit_le)}</td>
+                    <td>
+                      <span className={`fw-badge ${u.onboarding_fait ? 'ok' : 'warn'}`}>
+                        {u.onboarding_fait ? 'Oui' : 'Non'}
+                      </span>
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(u.onboarding_le)}</td>
+                    <td className="fw-muted">
+                      {[u.ville, u.aeroport].filter(Boolean).join(' · ') || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!users.length ? (
+              <p className="fw-muted" style={{ padding: '1rem 1.1rem', margin: 0 }}>
+                Aucun inscrit pour ces filtres.
+              </p>
+            ) : null}
+          </div>
 
           <div
             style={{
               display: 'flex',
-              gap: '0.5rem',
+              gap: '0.55rem',
               alignItems: 'center',
-              marginTop: '0.85rem',
+              marginTop: '0.95rem',
+              flexWrap: 'wrap',
             }}
           >
             <button
@@ -184,7 +193,7 @@ export function UsersCsmPage() {
               Suivant
             </button>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

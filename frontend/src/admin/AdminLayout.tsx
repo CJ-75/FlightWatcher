@@ -1,15 +1,36 @@
 /**
- * Admin shell — product light theme, responsive drawer (no test/mocks).
+ * Shell admin — slate/teal, drawer mobile.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { AdminSidebar } from './components/AdminSidebar'
 import { AdminHeader } from './components/AdminHeader'
 import { ImpersonationBanner } from './components/ImpersonationBanner'
 import './styles/admin.css'
 
+function useAdminFonts() {
+  useEffect(() => {
+    const id = 'fw-admin-fonts'
+    if (document.getElementById(id)) return
+    const preconnect1 = document.createElement('link')
+    preconnect1.rel = 'preconnect'
+    preconnect1.href = 'https://fonts.googleapis.com'
+    const preconnect2 = document.createElement('link')
+    preconnect2.rel = 'preconnect'
+    preconnect2.href = 'https://fonts.gstatic.com'
+    preconnect2.crossOrigin = 'anonymous'
+    const link = document.createElement('link')
+    link.id = id
+    link.rel = 'stylesheet'
+    link.href =
+      'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap'
+    document.head.append(preconnect1, preconnect2, link)
+  }, [])
+}
+
 export function AdminLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  useAdminFonts()
 
   return (
     <div className="fw-admin">

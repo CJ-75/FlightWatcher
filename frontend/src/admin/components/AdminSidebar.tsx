@@ -28,6 +28,7 @@ export function AdminSidebar({ open, onNavigate }: Props) {
     <aside className={`fw-admin-sidebar${open ? ' open' : ''}`}>
       <div className="fw-admin-brand">
         Flight<span>Watcher</span>
+        <span className="fw-admin-brand-sub">Console admin</span>
       </div>
       <nav style={{ overflowY: 'auto', flex: 1 }}>
         {GROUPS.map((g) => (
