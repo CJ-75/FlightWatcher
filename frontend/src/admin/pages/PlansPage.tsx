@@ -3,7 +3,6 @@
  */
 import { useState } from 'react'
 import { useAdminData } from '../hooks/useAdminData'
-import { useTestMode } from '../context/TestModeContext'
 import { StatsCard } from '../components/StatsCard'
 import { DataTable } from '../components/DataTable'
 import { PieChart } from '../components/Charts/PieChart'
@@ -12,7 +11,6 @@ import { apiUrl } from '../../utils/apiBase'
 import { toast } from 'react-hot-toast'
 
 export function PlansPage() {
-  const { isTestMode } = useTestMode()
   const { data, loading, refetch } = useAdminData<{ plans: any[] }>({
     endpoint: '/api/admin/plans',
     autoFetch: true
@@ -27,13 +25,6 @@ export function PlansPage() {
   ]
 
   const handleToggleActive = async (plan: any) => {
-    if (isTestMode) {
-      // En mode test, simuler l'action
-      toast.success(`[TEST] Plan ${plan.active ? 'désactivé' : 'activé'} (simulé)`)
-      refetch()
-      return
-    }
-
     try {
       const token = await getAccessToken()
       const response = await fetch(apiUrl(`/api/admin/plans/${plan.id}`), {

@@ -1,0 +1,300 @@
+/* FlightWatcher Admin — product tokens (no blocking webfont import) */
+.fw-admin {
+  --fw-bg: #fff8f3;
+  --fw-bg-2: #ffe8d6;
+  --fw-surface: #ffffff;
+  --fw-ink: #1c1917;
+  --fw-muted: #78716c;
+  --fw-border: #f0e4d8;
+  --fw-accent: #ff6b35;
+  --fw-accent-soft: #ffe0d1;
+  --fw-ok: #15803d;
+  --fw-warn: #b45309;
+  --fw-bad: #b91c1c;
+  --fw-sidebar: #1c1917;
+  --fw-sidebar-text: #fafaf9;
+  --fw-sidebar-muted: #a8a29e;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: var(--fw-ink);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #ffd7c2 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #ffe8d6 0%, transparent 50%),
+    var(--fw-bg);
+  min-height: 100vh;
+}
+
+.fw-admin h1,
+.fw-admin h2,
+.fw-admin h3,
+.fw-admin .fw-display {
+  font-family: Georgia, 'Segoe UI', system-ui, sans-serif;
+}
+
+.fw-admin-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.fw-admin-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--fw-sidebar);
+  color: var(--fw-sidebar-text);
+  padding: 1.25rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fw-admin-brand {
+  font-family: Georgia, 'Segoe UI', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  padding: 0.35rem 0.75rem 1rem;
+}
+
+.fw-admin-brand span {
+  color: var(--fw-accent);
+}
+
+.fw-nav-group {
+  margin-top: 0.65rem;
+  padding: 0 0.75rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fw-sidebar-muted);
+}
+
+.fw-nav-link {
+  display: block;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  color: #e7e5e4;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fw-nav-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fw-nav-link.active {
+  background: var(--fw-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.fw-admin-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fw-admin-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--fw-border);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.fw-admin-content {
+  padding: 1.25rem;
+}
+
+.fw-card {
+  background: var(--fw-surface);
+  border: 1px solid var(--fw-border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+}
+
+.fw-kpi {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fw-kpi .label {
+  font-size: 0.75rem;
+  color: var(--fw-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fw-kpi .value {
+  font-family: Georgia, 'Segoe UI', system-ui, sans-serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.fw-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.fw-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.fw-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fw-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fw-btn {
+  appearance: none;
+  border: 1px solid var(--fw-border);
+  background: #fff;
+  color: var(--fw-ink);
+  border-radius: 10px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 560;
+  cursor: pointer;
+}
+
+.fw-btn:hover {
+  border-color: #e7cbb8;
+}
+
+.fw-btn-primary {
+  background: var(--fw-accent);
+  border-color: var(--fw-accent);
+  color: #fff;
+}
+
+.fw-btn-danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: var(--fw-bad);
+}
+
+.fw-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fw-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--fw-accent-soft);
+  color: #9a3412;
+}
+
+.fw-badge.ok {
+  background: #dcfce7;
+  color: var(--fw-ok);
+}
+
+.fw-badge.warn {
+  background: #ffedd5;
+  color: var(--fw-warn);
+}
+
+.fw-badge.bad {
+  background: #fee2e2;
+  color: var(--fw-bad);
+}
+
+.fw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.fw-table th,
+.fw-table td {
+  text-align: left;
+  padding: 0.55rem 0.4rem;
+  border-bottom: 1px solid var(--fw-border);
+  vertical-align: top;
+}
+
+.fw-table th {
+  color: var(--fw-muted);
+  font-weight: 560;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fw-muted {
+  color: var(--fw-muted);
+}
+
+.fw-drawer-backdrop {
+  display: none;
+}
+
+.fw-menu-btn {
+  display: none;
+  appearance: none;
+  border: 1px solid var(--fw-border);
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+}
+
+@media (max-width: 960px) {
+  .fw-grid-4,
+  .fw-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fw-menu-btn {
+    display: inline-flex;
+  }
+
+  .fw-admin-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.2);
+  }
+
+  .fw-admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .fw-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(28, 25, 23, 0.45);
+    z-index: 35;
+  }
+}
+
+@media (max-width: 640px) {
+  .fw-grid-4,
+  .fw-grid-3,
+  .fw-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .fw-admin-content {
+    padding: 0.85rem;
+  }
+}

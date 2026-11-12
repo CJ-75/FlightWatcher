@@ -3,13 +3,11 @@
  */
 import { useState, useEffect } from 'react'
 import { useAdminData } from '../hooks/useAdminData'
-import { useTestMode } from '../context/TestModeContext'
 import { getAccessToken } from '../../lib/supabase'
 import { apiUrl } from '../../utils/apiBase'
 import { toast } from 'react-hot-toast'
 
 export function SettingsPage() {
-  const { isTestMode } = useTestMode()
   const { data, loading, refetch } = useAdminData<{ plans: any[], features_by_plan: Record<string, any[]> }>({
     endpoint: '/api/admin/settings',
     autoFetch: true
@@ -42,13 +40,6 @@ export function SettingsPage() {
 
   const handleSave = async () => {
     if (!selectedPlan) return
-
-    if (isTestMode) {
-      // En mode test, simuler la sauvegarde
-      toast.success('[TEST] Configuration sauvegardée (simulé)')
-      refetch()
-      return
-    }
 
     try {
       const token = await getAccessToken()

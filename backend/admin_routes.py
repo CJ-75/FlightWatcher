@@ -51,73 +51,142 @@ class PasswordVerificationRequest(BaseModel):
 
 # ==================== AUTHENTIFICATION ====================
 
-@router.get("/verify")
-async def verify_admin_status(request: Request):
-    """Vérifie que l'utilisateur est administrateur (email uniquement, pas de mot de passe)"""
-    from admin_auth import verify_admin, get_user_email_from_token
-    
-    user_id = get_user_id_from_token(request)
-    if not user_id:
+def _set_admin_cookies(response, *, max_age: int = 86400):
+    import os
+    from admin_auth import ADMIN_SESSION_COOKIE, create_admin_session_token
+
+    token = create_admin_session_token()
+    secure = os.getenv("ADMIN_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+    response.set_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        path="/",
+    )
+    # Legacy cookie (compat step-up / anciens checks)
+    response.set_cookie(
+        key="admin_password_verified",
+        value="true",
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        path="/",
+    )
+    return response
+
+
+@router.post("/login")
+async def admin_password_login(password_data: PasswordVerificationRequest):
+    """Login admin password-only (ADMIN_PASSWORD / ADMIN_PASSWORD_HASH dans .env). Pas de Google."""
+    import json
+    import os
+    from fastapi.responses import Response
+    from admin_auth import verify_admin_password
+
+    if not verify_admin_password(password_data.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentification requise"
+            detail="Mot de passe incorrect",
         )
-    
-    # Debug: récupérer l'email pour le retourner dans la réponse
+    body = json.dumps({"success": True, "is_admin": True, "mode": "password"})
+    response = Response(content=body, media_type="application/json")
+    return _set_admin_cookies(response)
+
+
+@router.post("/logout")
+async def admin_logout():
+    import os
+    from fastapi.responses import JSONResponse
+    from admin_auth import ADMIN_SESSION_COOKIE
+
+    secure = os.getenv("ADMIN_COOKIE_SECURE", "").strip().lower() in ("1", "true", "yes")
+    response = JSONResponse({"success": True})
+    response.delete_cookie(ADMIN_SESSION_COOKIE, path="/")
+    response.delete_cookie("admin_password_verified", path="/")
+    if secure:
+        response.delete_cookie(ADMIN_SESSION_COOKIE, path="/", secure=True)
+    return response
+
+
+@router.get("/verify")
+async def verify_admin_status(request: Request):
+    """Session cookie password-only OU JWT email admin."""
+    import os
+    from admin_auth import has_admin_session, verify_admin, get_user_email_from_token
+
+    if has_admin_session(request):
+        return {
+            "is_admin": True,
+            "is_admin_email": True,
+            "requires_password": False,
+            "mode": "password",
+            "user_id": "admin-env",
+            "email": "admin@env",
+            "message": "Session admin password OK",
+        }
+
+    user_id = get_user_id_from_token(request)
+    if not user_id:
+        return {
+            "is_admin": False,
+            "is_admin_email": False,
+            "requires_password": True,
+            "mode": "password",
+            "message": "Non authentifié — saisir ADMIN_PASSWORD",
+        }
+
     email = get_user_email_from_token(request)
     if not email:
         from admin_auth import get_user_email as get_email_from_db
+
         email = await get_email_from_db(user_id)
-    
-    # Vérifier uniquement l'email (le mot de passe sera vérifié séparément)
+
     is_admin_email = await verify_admin(user_id, request, password=None)
-    
     return {
         "is_admin_email": is_admin_email,
-        "is_admin": is_admin_email,  # Pour compatibilité avec l'ancien code
+        "is_admin": is_admin_email and has_admin_session(request),
         "user_id": user_id,
-        "email": email,  # Retourner l'email pour debug
-        "requires_password": is_admin_email,  # Si email admin, mot de passe requis
-        "message": "Email admin confirmé, mot de passe requis" if is_admin_email else f"Accès refusé pour: {email}"
+        "email": email,
+        "requires_password": is_admin_email,
+        "mode": "oauth+password",
+        "message": "Email admin confirmé, mot de passe requis"
+        if is_admin_email
+        else f"Accès refusé pour: {email}",
     }
 
+
 @router.post("/verify-password")
-async def verify_admin_password_endpoint(request: Request, password_data: PasswordVerificationRequest):
-    """Vérifie le mot de passe admin et crée une session"""
-    from fastapi import Response
-    from admin_auth import verify_admin
-    
+async def verify_admin_password_endpoint(
+    request: Request, password_data: PasswordVerificationRequest
+):
+    """Alias login : mot de passe env → cookie session (avec ou sans JWT)."""
+    import json
+    import os
+    from fastapi.responses import Response
+    from admin_auth import verify_admin_password, verify_admin
+
+    if verify_admin_password(password_data.password):
+        body = json.dumps({"success": True, "message": "Mot de passe admin correct"})
+        response = Response(content=body, media_type="application/json")
+        return _set_admin_cookies(response)
+
+    # Legacy: JWT + password
     user_id = get_user_id_from_token(request)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentification requise"
-        )
-    
-    # Vérifier l'email ET le mot de passe
-    is_admin = await verify_admin(user_id, request, password=password_data.password)
-    
-    if is_admin:
-        # Créer une réponse avec un cookie pour marquer que le mot de passe est vérifié
-        response = Response(content='{"success": true, "message": "Mot de passe admin correct"}', media_type="application/json")
-        # Cookie valide 24h, httpOnly pour la sécurité
-        # Note: path="/" pour que le cookie soit disponible sur tous les chemins
-        # domain=None pour que le cookie soit disponible sur le même domaine (localhost)
-        response.set_cookie(
-            key="admin_password_verified",
-            value="true",
-            max_age=86400,  # 24 heures
-            httponly=True,
-            samesite="lax",
-            secure=False,  # Mettre à True en production avec HTTPS
-            path="/"  # Disponible sur tous les chemins
-        )
-        return response
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Mot de passe incorrect ou email non autorisé"
-        )
+    if user_id:
+        is_admin = await verify_admin(user_id, request, password=password_data.password)
+        if is_admin:
+            body = json.dumps({"success": True, "message": "Mot de passe admin correct"})
+            response = Response(content=body, media_type="application/json")
+            return _set_admin_cookies(response)
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Mot de passe incorrect",
+    )
 
 @router.post("/impersonate/{target_user_id}")
 @require_admin

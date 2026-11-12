@@ -1,28 +1,31 @@
 /**
- * Layout principal du panneau admin - Design Dark Moderne
+ * Admin shell — product light theme, responsive drawer (no test/mocks).
  */
+import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { AdminSidebar } from './components/AdminSidebar'
 import { AdminHeader } from './components/AdminHeader'
 import { ImpersonationBanner } from './components/ImpersonationBanner'
-import { TestModeProvider } from './context/TestModeContext'
+import './styles/admin.css'
 
 export function AdminLayout() {
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   return (
-    <TestModeProvider>
-      <div className="min-h-screen bg-[#1a1d29] text-gray-100">
-        <ImpersonationBanner />
-        <div className="flex">
-          <AdminSidebar />
-          <div className="flex-1 flex flex-col">
-            <AdminHeader />
-            <main className="flex-1 p-6 bg-[#1a1d29]">
-              <Outlet />
-            </main>
-          </div>
+    <div className="fw-admin">
+      <ImpersonationBanner />
+      {drawerOpen ? (
+        <div className="fw-drawer-backdrop" onClick={() => setDrawerOpen(false)} />
+      ) : null}
+      <div className="fw-admin-shell">
+        <AdminSidebar open={drawerOpen} onNavigate={() => setDrawerOpen(false)} />
+        <div className="fw-admin-main">
+          <AdminHeader onMenu={() => setDrawerOpen((v) => !v)} />
+          <main className="fw-admin-content">
+            <Outlet />
+          </main>
         </div>
       </div>
-    </TestModeProvider>
+    </div>
   )
 }
-

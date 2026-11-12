@@ -378,11 +378,20 @@ export function OnboardingFlowScreen({ onDone }: Props) {
   }, [cityHeroUri])
 
   const finish = async () => {
+    const completedAt = new Date().toISOString()
     await markOnboardingCompleted()
     track('onboarding_completed', {
       city: slugifyCity(cityLabel),
       preference: pref,
     })
+    // Persist for admin (inscrits / onboarding) — best-effort if logged in
+    void getApi()
+      .updateProfile({
+        onboarding_completed: true,
+        onboarding_completed_at: completedAt,
+        last_onboarding_step: 'done',
+      })
+      .catch(() => {})
     onDone()
   }
 

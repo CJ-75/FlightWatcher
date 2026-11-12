@@ -48,37 +48,13 @@ const HotelPay = lazy(() => import('./pages/HotelPay'))
 const ItinerariesPage = lazy(() => import('./pages/ItinerariesPage'))
 const ParcoursPublicPage = lazy(() => import('./pages/ParcoursPublicPage'))
 const NotFound = lazy(() => import('./pages/NotFound'))
-const AdminLogin = lazy(() =>
-  import('./admin/AdminLogin').then((m) => ({ default: m.AdminLogin })),
-)
-const AdminLayout = lazy(() =>
-  import('./admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
-)
-const AdminRoute = lazy(() =>
-  import('./admin/AdminApp').then((m) => ({ default: m.AdminRoute })),
-)
-const UsersPage = lazy(() =>
-  import('./admin/pages/UsersPage').then((m) => ({ default: m.UsersPage })),
-)
-const SearchesPage = lazy(() =>
-  import('./admin/pages/SearchesPage').then((m) => ({ default: m.SearchesPage })),
-)
-const ActivatedPage = lazy(() =>
-  import('./admin/pages/ActivatedPage').then((m) => ({ default: m.ActivatedPage })),
-)
-const PlansPage = lazy(() =>
-  import('./admin/pages/PlansPage').then((m) => ({ default: m.PlansPage })),
-)
-const SettingsPage = lazy(() =>
-  import('./admin/pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
-)
-const TestsPage = lazy(() =>
-  import('./admin/pages/TestsPage').then((m) => ({ default: m.TestsPage })),
-)
-const DealsMetricsPage = lazy(() =>
-  import('./admin/pages/DealsMetricsPage').then((m) => ({
-    default: m.DealsMetricsPage,
-  })),
+// Admin shell eager — Accueil / login sans waterfall
+import { AdminLogin } from './admin/AdminLogin'
+import { AdminLayout } from './admin/AdminLayout'
+import { AdminRoute } from './admin/AdminApp'
+import { OverviewPage } from './admin/pages/OverviewPage'
+const UsersCsmPage = lazy(() =>
+  import('./admin/pages/UsersCsmPage').then((m) => ({ default: m.UsersCsmPage })),
 )
 const OccasionsPage = lazy(() =>
   import('./admin/pages/OccasionsPage').then((m) => ({ default: m.OccasionsPage })),
@@ -152,18 +128,14 @@ function App() {
             </AdminRoute>
           }
         >
-          <Route index element={<Navigate to="/admin/users" replace />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="searches" element={<SearchesPage />} />
-          <Route path="activated" element={<ActivatedPage />} />
-          <Route path="plans" element={<PlansPage />} />
-          <Route path="deals" element={<DealsMetricsPage />} />
+          <Route index element={<OverviewPage />} />
+          <Route path="users" element={<UsersCsmPage />} />
           <Route path="occasions" element={<OccasionsPage />} />
           <Route path="activities" element={<ActivitiesAdminPage />} />
           <Route path="parcours" element={<ParcoursAdminPage />} />
           <Route path="parcours/:itineraryId" element={<ParcoursEditorPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="tests" element={<TestsPage />} />
+          {/* Anciennes URLs admin → Accueil */}
+          <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
         
         {/* App shell — onglets = vraies URLs (partage, retour navigateur, SEO) */}

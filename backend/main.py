@@ -150,4 +150,12 @@ if ADMIN_ROUTES_AVAILABLE and admin_router:
     app.include_router(admin_router)
     print("✅ Routes admin incluses dans l'application")
 
+try:
+    from admin_panel.routes import router as admin_panel_router
+
+    app.include_router(admin_panel_router)
+    print("✅ Routes admin panel v2 incluses")
+except Exception as e:
+    print(f"⚠️  Routes admin panel v2 non disponibles: {e}")
+
 include_all_routers(app)

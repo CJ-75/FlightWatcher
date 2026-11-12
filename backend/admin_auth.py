@@ -23,34 +23,95 @@ env_admin_emails = os.getenv("ADMIN_EMAILS")
 if env_admin_emails:
     ADMIN_EMAILS.extend([email.strip() for email in env_admin_emails.split(",") if email.strip()])
 
-# Hash bcrypt du mot de passe admin (chargé depuis .env pour la sécurité)
-# Pour générer un nouveau hash : bcrypt.hashpw(b"votre_mot_de_passe", bcrypt.gensalt(rounds=12)).decode()
-# Valeur par défaut (à remplacer par la variable d'environnement ADMIN_PASSWORD_HASH)
+# Mot de passe admin en clair (préféré) ou hash bcrypt
+# ADMIN_PASSWORD=... dans .env — login panneau sans Google
+ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip()
 ADMIN_PASSWORD_HASH = os.getenv(
     "ADMIN_PASSWORD_HASH",
-    "$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg."  # Fallback pour compatibilité
+    "$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg.",
 )
+ADMIN_SESSION_SECRET = (
+    os.getenv("ADMIN_SESSION_SECRET")
+    or ADMIN_PASSWORD
+    or ADMIN_PASSWORD_HASH
+    or "fw-admin-dev-secret"
+)
+ADMIN_SESSION_COOKIE = "admin_session"
+ADMIN_SESSION_TTL_SEC = int(os.getenv("ADMIN_SESSION_TTL_SEC", "86400"))
 
-if not ADMIN_PASSWORD_HASH or ADMIN_PASSWORD_HASH == "":
-    print("⚠️  ADMIN_PASSWORD_HASH non configuré dans .env. Utilisation du hash par défaut.")
-    ADMIN_PASSWORD_HASH = "$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg."
+if ADMIN_PASSWORD:
+    print("✅ ADMIN_PASSWORD chargé depuis .env (login password-only)")
+elif ADMIN_PASSWORD_HASH:
+    print("✅ ADMIN_PASSWORD_HASH chargé depuis .env")
 else:
-    print("✅ Hash du mot de passe admin chargé depuis .env")
+    print("⚠️  Aucun ADMIN_PASSWORD / ADMIN_PASSWORD_HASH configuré")
+
 
 def verify_admin_password(password: str) -> bool:
-    """
-    Vérifie si le mot de passe fourni correspond au hash admin hardcodé
-    """
+    """Vérifie ADMIN_PASSWORD (clair) ou ADMIN_PASSWORD_HASH (bcrypt)."""
+    if not password:
+        return False
     try:
-        # Encoder le mot de passe en bytes
-        password_bytes = password.encode('utf-8')
-        hash_bytes = ADMIN_PASSWORD_HASH.encode('utf-8')
-        
-        # Vérifier le mot de passe avec bcrypt
-        return bcrypt.checkpw(password_bytes, hash_bytes)
+        import secrets
+
+        if ADMIN_PASSWORD:
+            return secrets.compare_digest(password, ADMIN_PASSWORD)
+        if ADMIN_PASSWORD_HASH:
+            return bcrypt.checkpw(
+                password.encode("utf-8"),
+                ADMIN_PASSWORD_HASH.encode("utf-8"),
+            )
+        return False
     except Exception as e:
         print(f"Erreur vérification mot de passe admin: {e}")
         return False
+
+
+def create_admin_session_token() -> str:
+    """Token signé HMAC pour cookie admin_session (pas de Google)."""
+    import hashlib
+    import hmac
+    import time
+
+    exp = int(time.time()) + ADMIN_SESSION_TTL_SEC
+    payload = f"admin:{exp}"
+    sig = hmac.new(
+        ADMIN_SESSION_SECRET.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def verify_admin_session_token(token: Optional[str]) -> bool:
+    import hashlib
+    import hmac
+    import time
+
+    if not token or "." not in token:
+        return False
+    try:
+        payload, sig = token.rsplit(".", 1)
+        expected = hmac.new(
+            ADMIN_SESSION_SECRET.encode("utf-8"),
+            payload.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        import secrets
+
+        if not secrets.compare_digest(sig, expected):
+            return False
+        _kind, exp_s = payload.split(":", 1)
+        return int(exp_s) >= int(time.time())
+    except Exception:
+        return False
+
+
+def has_admin_session(request: Request) -> bool:
+    """Cookie session signée OU legacy admin_password_verified."""
+    if verify_admin_session_token(request.cookies.get(ADMIN_SESSION_COOKIE)):
+        return True
+    return request.cookies.get("admin_password_verified") == "true"
 
 def get_user_email_from_token(request: Request) -> Optional[str]:
     """
@@ -185,46 +246,46 @@ async def verify_admin(user_id: str, request: Optional[Request] = None, password
 
 def require_admin(func):
     """
-    Décorateur pour protéger les endpoints qui nécessitent des droits administrateur
+    Décorateur admin :
+    1) Cookie session ADMIN_PASSWORD (password-only, pas de Google)
+    2) JWT email ∈ ADMIN_EMAILS + cookie (legacy)
+    3) Expo bypass mobile-only
     """
     from functools import wraps
-    
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        # Trouver le Request dans les arguments
         request = None
-        
-        # Vérifier d'abord dans kwargs
-        if 'request' in kwargs:
-            req_arg = kwargs['request']
-            if isinstance(req_arg, Request) and hasattr(req_arg, 'headers'):
+        if "request" in kwargs:
+            req_arg = kwargs["request"]
+            if isinstance(req_arg, Request) and hasattr(req_arg, "headers"):
                 request = req_arg
-        
-        # Si pas trouvé dans kwargs, chercher dans args
         if not request:
             for arg in args:
-                if isinstance(arg, Request) and hasattr(arg, 'headers'):
+                if isinstance(arg, Request) and hasattr(arg, "headers"):
                     request = arg
                     break
-        
+
         if not request:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Request non trouvé dans les arguments"
+                detail="Request non trouvé dans les arguments",
             )
-        
-        # Extraire le user_id depuis le token
+
+        # Path 1: password-only session cookie
+        if has_admin_session(request):
+            request.state.user_id = "admin-env"
+            request.state.is_admin = True
+            request.state.admin_email = "admin@env"
+            return await func(*args, **kwargs)
+
         user_id = get_user_id_from_token(request)
-        
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentification requise"
+                detail="Authentification requise",
             )
-        
-        # Web: email + cookie password. Mobile: admin email JWT.
-        # Expo / Metro (__DEV__): optional bypass so any signed-in user can test
-        # create-parcours (ALLOW_EXPO_ADMIN_BYPASS, default on).
+
         client = (request.headers.get("X-FW-Client") or "").strip().lower()
         expo_bypass = os.getenv("ALLOW_EXPO_ADMIN_BYPASS", "1").strip().lower() in (
             "1",
@@ -232,25 +293,21 @@ def require_admin(func):
             "yes",
         )
         if client == "expo" and expo_bypass:
-            print(f"⚠️  Expo admin bypass (parcours test) user_id={user_id}")
             is_admin = True
         elif client in ("mobile", "expo"):
             is_admin = await verify_admin(user_id, request, password=None)
         else:
-            # password="" forces cookie check for browser admin
             is_admin = await verify_admin(user_id, request, password="")
 
         if not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Accès refusé : droits administrateur requis. Veuillez vérifier votre mot de passe."
+                detail="Accès refusé : droits administrateur requis.",
             )
-        
-        # Ajouter user_id et is_admin au request state
+
         request.state.user_id = user_id
         request.state.is_admin = True
-        
         return await func(*args, **kwargs)
-    
+
     return wrapper
 

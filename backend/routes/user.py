@@ -65,24 +65,84 @@ async def update_user_profile(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentification requise")
 
+    body: dict = {}
     try:
-        body = await request.json()
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise HTTPException(status_code=400, detail="Body JSON invalide")
+        body = raw
+
+        # Allowlist — évite d'écraser des champs sensibles
+        allowed = {
+            "email",
+            "full_name",
+            "display_name",
+            "first_name",
+            "avatar_url",
+            "home_airport",
+            "home_city_slug",
+            "preferred_airports",
+            "default_budget",
+            "default_limite_allers",
+            "currency",
+            "travel_preference",
+            "onboarding_completed",
+            "onboarding_completed_at",
+            "last_onboarding_step",
+            "referral_code",
+            "metadata",
+        }
+        patch = {k: v for k, v in body.items() if k in allowed}
+        if "referral_code" not in patch:
+            patch["referral_code"] = secrets.token_urlsafe(8).upper()[:8]
+
         supabase = get_supabase_client()
-
-        if not body.get("referral_code"):
-            body["referral_code"] = secrets.token_urlsafe(8).upper()[:8]
-
-        result = supabase.table("user_profiles")\
-            .upsert({
-                "id": user_id,
-                **body,
-                "last_active": datetime.now().isoformat(),
-            })\
+        result = (
+            supabase.table("user_profiles")
+            .upsert(
+                {
+                    "id": user_id,
+                    **patch,
+                    "last_active": datetime.now().isoformat(),
+                }
+            )
             .execute()
+        )
 
         return {"success": True, "profile": result.data[0] if result.data else None}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+        # Si onboarding_completed_at n'existe pas encore → retry sans la colonne
+        msg = str(e)
+        if "onboarding_completed_at" in msg and isinstance(body, dict):
+            try:
+                body2 = {k: v for k, v in body.items() if k != "onboarding_completed_at"}
+                body2["onboarding_completed"] = True
+                body2["last_onboarding_step"] = body2.get("last_onboarding_step") or "done"
+                supabase = get_supabase_client()
+                result = (
+                    supabase.table("user_profiles")
+                    .upsert(
+                        {
+                            "id": user_id,
+                            **{k: v for k, v in body2.items() if k in {
+                                "email", "full_name", "display_name", "first_name",
+                                "avatar_url", "home_airport", "home_city_slug",
+                                "preferred_airports", "default_budget",
+                                "default_limite_allers", "currency", "travel_preference",
+                                "onboarding_completed", "last_onboarding_step",
+                                "referral_code", "metadata",
+                            }},
+                            "last_active": datetime.now().isoformat(),
+                        }
+                    )
+                    .execute()
+                )
+                return {"success": True, "profile": result.data[0] if result.data else None}
+            except Exception as e2:
+                raise HTTPException(status_code=500, detail=f"Erreur: {str(e2)}")
+        raise HTTPException(status_code=500, detail=f"Erreur: {msg}")
 
 
 def _best_effort_detach_then_delete_user(svc, user_id: str) -> None:
