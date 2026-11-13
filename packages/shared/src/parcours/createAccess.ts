@@ -13,6 +13,12 @@ function normEmail(email?: string | null): string {
     .toLowerCase()
 }
 
+/** Compte autorisé à voir le lien Admin (console /admin). */
+export function isAdminAccountEmail(email?: string | null): boolean {
+  const e = normEmail(email)
+  return Boolean(e && PARCOURS_CREATE_ADMIN_EMAILS.some((x) => x === e))
+}
+
 export function canCreateParcours(opts: {
   email?: string | null
   role?: ParcoursCreateRole | null
@@ -23,9 +29,8 @@ export function canCreateParcours(opts: {
   expoDevBypass?: boolean
 }): boolean {
   if (opts.expoDevBypass) return true
-  const email = normEmail(opts.email)
   // V1: single admin email only. Later: role admin|agent | featureFlag.
-  if (email && PARCOURS_CREATE_ADMIN_EMAILS.some((e) => e === email)) {
+  if (isAdminAccountEmail(opts.email)) {
     return true
   }
   void opts.role

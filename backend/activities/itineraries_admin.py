@@ -79,6 +79,16 @@ def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
                 str(it.get("sort_key") or ""),
             ),
         )
+    # Budget vide → 0 (Gratuit) — aligné front obligatoire
+    budget = out.get("budget_estimate_eur")
+    if budget is None or budget == "":
+        out["budget_estimate_eur"] = 0
+    else:
+        try:
+            b = float(budget)
+            out["budget_estimate_eur"] = 0 if (b < 0 or b != b) else b
+        except (TypeError, ValueError):
+            out["budget_estimate_eur"] = 0
     slug = str(out.get("slug") or "").strip().lower()
     city = str(out.get("city_slug") or "").strip().lower()
     cover = str(out.get("cover_image") or "").strip()
@@ -384,7 +394,16 @@ def create_and_publish_admin_itinerary(
     intro = str((body or {}).get("intro") or "").strip()
     if not intro and city_slug:
         intro = f"Parcours à {city_slug}."
-    budget = (body or {}).get("budget_estimate_eur")
+    budget_raw = (body or {}).get("budget_estimate_eur")
+    if budget_raw is None or budget_raw == "":
+        budget = 0
+    else:
+        try:
+            budget = float(budget_raw)
+            if budget < 0 or budget != budget:
+                budget = 0
+        except (TypeError, ValueError):
+            budget = 0
     budget_basis = (body or {}).get("budget_basis") or "per_person"
     if budget_basis not in VALID_BUDGET:
         budget_basis = "per_person"
@@ -583,11 +602,23 @@ def update_admin_itinerary(
             v = _slugify(str(v))
         if k == "occasions":
             v = [str(x).strip().lower() for x in (v or []) if str(x).strip()]
+        if k == "budget_estimate_eur":
+            # Vide / null → 0 (obligatoire front = Gratuit)
+            if v is None or v == "":
+                v = 0
+            else:
+                try:
+                    v = float(v)
+                    if v < 0 or v != v:  # NaN
+                        v = 0
+                except (TypeError, ValueError):
+                    v = 0
         data[k] = v
 
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     try:
+        itin_row: Optional[Dict[str, Any]] = None
         if data:
             res = (
                 supabase.table("itineraries")
@@ -597,7 +628,9 @@ def update_admin_itinerary(
             )
             if not res.data:
                 return {"ok": False, "error": "not_found"}
+            itin_row = dict(res.data[0])
 
+        items_out: Optional[List[Dict[str, Any]]] = None
         if items_in is not None:
             if not isinstance(items_in, list):
                 return {"ok": False, "error": "invalid_items"}
@@ -613,15 +646,19 @@ def update_admin_itinerary(
                 rows.append(row)
             if rows:
                 try:
-                    supabase.table("itinerary_items").insert(rows).execute()
+                    ins = supabase.table("itinerary_items").insert(rows).execute()
+                    items_out = list(ins.data or rows)
                 except Exception as insert_err:
                     msg = str(insert_err).lower()
                     # Before meta migration: retry without meta column
                     if "meta" in msg:
                         stripped = [{k: v for k, v in r.items() if k != "meta"} for r in rows]
-                        supabase.table("itinerary_items").insert(stripped).execute()
+                        ins = supabase.table("itinerary_items").insert(stripped).execute()
+                        items_out = list(ins.data or stripped)
                     else:
                         raise
+            else:
+                items_out = []
 
         try:
             from activities.itineraries_catalog import clear_itineraries_catalog_cache
@@ -629,6 +666,29 @@ def update_admin_itinerary(
             clear_itineraries_catalog_cache()
         except Exception:
             pass
+
+        # Réponse légère : pas de 2e SELECT si on a déjà itin + items
+        if itin_row is not None and items_out is not None:
+            itin_row["itinerary_items"] = items_out
+            row = _serialize(itin_row)
+            items = list(row.get("itinerary_items") or [])
+            return {
+                "ok": True,
+                "itinerary": row,
+                "blockers": _publish_blockers(row, items),
+                "warnings": [],
+            }
+        if itin_row is not None and items_in is None:
+            # Champs seuls — évite re-fetch si pas d'items dans le patch
+            row = _serialize(itin_row)
+            row.setdefault("itinerary_items", [])
+            return {
+                "ok": True,
+                "itinerary": row,
+                "blockers": _publish_blockers(row, []),
+                "warnings": [],
+                "items_unchanged": True,
+            }
         return get_admin_itinerary(supabase, itinerary_id, light=True)
     except Exception as e:
         logger.warning("update_admin_itinerary: %s", e)

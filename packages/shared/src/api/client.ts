@@ -798,7 +798,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
       }),
 
     /** Admin: parse Maps URL (name/lat/lng) without Places API. */
-    adminParseMapsUrl: (url: string) =>
+    adminParseMapsUrl: (url: string, opts?: { light?: boolean }) =>
       request<{
         ok: boolean
         parsed: {
@@ -820,7 +820,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
         error?: string
       }>('/api/admin/parcours/parse-maps', {
         method: 'POST',
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({
+          url,
+          light: opts?.light !== false,
+        }),
       }),
 
     adminUpdateParcours: (id: string, body: Record<string, unknown>) =>

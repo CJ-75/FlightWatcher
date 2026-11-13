@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { User } from '@flightwatcher/shared'
 import {
+  isAdminAccountEmail,
   userHasPasswordLogin,
   userNeedsPasswordSetup,
   userOauthProviderId,
@@ -196,6 +197,23 @@ export default function Security() {
             </div>
           ) : (
             <>
+              {isAdminAccountEmail(email) ? (
+                <section className="app-card space-y-3 border border-[#FFDCC8] bg-gradient-to-br from-[#FFF3EC] to-white p-5 sm:p-6">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#E85A28]">
+                    Administration
+                  </p>
+                  <p className="text-sm text-muted">
+                    Accès console admin (inscrits, parcours, ops).
+                  </p>
+                  <Link
+                    to="/admin/login"
+                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-[#FF6B35] to-[#E85A28] px-4 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(255,107,53,0.28)]"
+                  >
+                    Ouvrir l’admin →
+                  </Link>
+                </section>
+              ) : null}
+
               {/* Connexion */}
               <section className="app-card space-y-3 p-5 sm:p-6">
                 <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#C4A794]">

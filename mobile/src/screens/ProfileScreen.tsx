@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Image,
+  Linking,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
@@ -14,11 +15,11 @@ import {
   useScrollToTop,
 } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { translate } from '@flightwatcher/shared'
+import { isAdminAccountEmail, translate } from '@flightwatcher/shared'
 import { useAuth } from '../context/AuthContext'
 import { useOnboardingGate } from '../context/OnboardingGateContext'
 import { DEV_INVITE_TOKEN } from '../dev/guestPreview'
-import { apiBase } from '../lib/client'
+import { apiBase, getWebOrigin } from '../lib/client'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
@@ -280,6 +281,20 @@ export function ProfileScreen() {
                 subtitle="Google, Apple et mot de passe"
                 onPress={openSecurity}
               />
+              {isAdminAccountEmail(viewUser.email) ? (
+                <>
+                  <View style={styles.menuDivider} />
+                  <MenuRow
+                    glyph="⚙"
+                    tone="warm"
+                    title="Admin"
+                    subtitle="Console web — login mot de passe"
+                    onPress={() => {
+                      void Linking.openURL(`${getWebOrigin()}/admin/login`)
+                    }}
+                  />
+                </>
+              ) : null}
             </View>
           </>
         ) : null}

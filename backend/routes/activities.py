@@ -945,6 +945,7 @@ class AdminParcoursStatusBody(BaseModel):
 
 class AdminParseMapsBody(BaseModel):
     url: str
+    light: bool = True
 
 
 class AdminParcoursPublishNewBody(BaseModel):
@@ -961,7 +962,7 @@ class AdminParcoursPublishNewBody(BaseModel):
 @router.post("/api/admin/parcours/parse-maps")
 @require_admin
 async def admin_parse_maps(body: AdminParseMapsBody, request: Request):
-    """Parse Maps URL + enrich rapide (Wikipedia / Geoapify) → name, description, note."""
+    """Parse Maps URL. light=True (défaut) : pas d'enrich Wikipedia/Geoapify."""
     from activities.restaurants_service import parse_maps_url
     from activities.maps_enrich import enrich_maps_place
     import asyncio
@@ -970,7 +971,8 @@ async def admin_parse_maps(body: AdminParseMapsBody, request: Request):
     if not url:
         raise HTTPException(status_code=400, detail="url_required")
     parsed = parse_maps_url(url)
-    # Enrichissement réseau hors event loop (timeouts ~2s)
+    if body.light:
+        return {"ok": True, "parsed": parsed}
     enriched = await asyncio.to_thread(enrich_maps_place, parsed)
     return {"ok": True, "parsed": enriched}
 

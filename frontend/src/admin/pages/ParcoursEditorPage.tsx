@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ITINERARY_DURATIONS,
@@ -11,6 +11,7 @@ import {
   cityUnsplashUrl,
   getPublishBlockers,
   getPublishWarnings,
+  normalizeItineraryBudgetEur,
   type Itinerary,
   type ItineraryDurationKind,
   type ItineraryItem,
@@ -18,7 +19,6 @@ import {
   type ItineraryOccasion,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../../utils/apiClient'
-import { ItineraryCard } from '../../components/parcours/ItineraryCard'
 import { ParcoursCoverImg } from '../../components/parcours/ParcoursCoverImg'
 
 type DraftItem = {
@@ -121,6 +121,7 @@ export function ParcoursEditorPage() {
     setError(null)
     try {
       const api = getApiClient()
+      // light=true (défaut API) : pas de place_warnings
       const res = await api.adminGetParcours(itineraryId)
       if (!res.ok || !res.itinerary) throw new Error(res.error || 'Introuvable')
       const row = res.itinerary as unknown as Itinerary
@@ -138,6 +139,9 @@ export function ParcoursEditorPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const deferredItin = useDeferredValue(itin)
+  const deferredItems = useDeferredValue(items)
 
   const previewItinerary = useMemo(() => {
     if (!itin) return null
@@ -185,7 +189,7 @@ export function ParcoursEditorPage() {
         occasions: itin.occasions,
         featured_from: itin.featured_from || null,
         featured_to: itin.featured_to || null,
-        budget_estimate_eur: itin.budget_estimate_eur,
+        budget_estimate_eur: normalizeItineraryBudgetEur(itin.budget_estimate_eur),
         budget_basis: itin.budget_basis,
         sort_weight: itin.sort_weight ?? 0,
         is_demo: itin.is_demo ?? false,
@@ -195,8 +199,16 @@ export function ParcoursEditorPage() {
         throw new Error(res.error || 'Sauvegarde impossible')
       }
       const row = res.itinerary as unknown as Itinerary
-      setItin(row)
-      setItems(toDraftItems(row.itinerary_items))
+      // Garde le draft local (évite remount étapes) — merge champs serveur
+      setItin((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...row,
+              itinerary_items: prev.itinerary_items,
+            }
+          : row,
+      )
       setBlockers(res.blockers || [])
       setWarnings(res.warnings || [])
 
@@ -213,8 +225,11 @@ export function ParcoursEditorPage() {
         }
         if (pub.itinerary) {
           const published = pub.itinerary as unknown as Itinerary
-          setItin(published)
-          setItems(toDraftItems(published.itinerary_items))
+          setItin((prev) =>
+            prev
+              ? { ...prev, ...published, itinerary_items: prev.itinerary_items }
+              : published,
+          )
         }
         setInfo('Publié.')
       } else {
@@ -319,35 +334,32 @@ export function ParcoursEditorPage() {
     setError(null)
     try {
       const api = getApiClient()
-      const res = await api.importRestaurantLinks({
-        text: mapsPaste,
-        city_slug: itin.city_slug || undefined,
-      })
-      const ok = (res.results || []).filter((r) => r.place_id)
-      if (!ok.length) {
-        throw new Error('Aucun lieu reconnu — colle un lien Maps valide.')
+      // Parse léger (pas d'import restaurants / Places lourd)
+      const res = await api.adminParseMapsUrl(mapsPaste.trim(), { light: true })
+      if (!res.ok || !res.parsed) {
+        throw new Error(res.error || 'Lien Maps non reconnu.')
       }
+      const p = res.parsed
+      const title = String(p.name || 'Lieu Maps').trim()
+      const note = String(p.description || p.note || '').trim()
       setItems((prev) => [
         ...prev,
-        ...ok.map((r) => {
-          const place = (r.place || {}) as Record<string, unknown>
-          return {
-            localId: newLocalId(),
-            kind: 'place' as const,
-            title: String(place.name || 'Lieu'),
-            note: '',
-            duration_minutes: '45',
-            photo: '',
-            place_id: String(r.place_id),
-            place_name: String(place.name || ''),
-            viator_product_code: '',
-            day_offset: '0',
-            moment: '',
-          }
-        }),
+        {
+          localId: newLocalId(),
+          kind: 'free' as const,
+          title,
+          note,
+          duration_minutes: '45',
+          photo: '',
+          place_id: '',
+          place_name: title,
+          viator_product_code: '',
+          day_offset: '0',
+          moment: '',
+        },
       ])
       setMapsPaste('')
-      setInfo(`${ok.length} lieu(x) ajouté(s).`)
+      setInfo(`Étape ajoutée : ${title}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Résolution Maps impossible')
     } finally {
@@ -550,20 +562,31 @@ export function ParcoursEditorPage() {
                 </select>
               </label>
               <label className="fw-label">
-                Budget (€)
-                <div style={{ display: 'flex', gap: '0.45rem' }}>
+                Budget (€) — vide = 0 = Gratuit
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
                   <input
                     className="fw-input"
                     type="number"
-                    value={itin.budget_estimate_eur ?? ''}
-                    onChange={(e) =>
+                    min={0}
+                    step={1}
+                    value={normalizeItineraryBudgetEur(itin.budget_estimate_eur)}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      // Vide → 0 (obligatoire front) ; "0" reste 0
                       patchField(
                         'budget_estimate_eur',
-                        e.target.value ? Number(e.target.value) : null,
+                        raw === '' ? 0 : normalizeItineraryBudgetEur(raw),
                       )
-                    }
-                    style={{ flex: 1 }}
+                    }}
+                    style={{ flex: 1, minWidth: 100 }}
                   />
+                  <button
+                    type="button"
+                    className={`fw-chip${normalizeItineraryBudgetEur(itin.budget_estimate_eur) === 0 ? ' on' : ''}`}
+                    onClick={() => patchField('budget_estimate_eur', 0)}
+                  >
+                    Gratuit
+                  </button>
                   <select
                     className="fw-select"
                     value={itin.budget_basis || ''}
@@ -898,14 +921,30 @@ export function ParcoursEditorPage() {
               >
                 Parcours
               </p>
-              <ItineraryCard
-                itinerary={itin}
-                variant="landscape"
-                badge={
-                  (itin.occasions || []).includes('ferie') ? 'Férié' : null
-                }
-              />
-              <ItineraryCard itinerary={itin} variant="portrait" />
+              {/* Une seule cover différée — pas 2 ItineraryCard plein écran */}
+              <div
+                style={{
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  height: 140,
+                  background: '#e2e8f0',
+                }}
+              >
+                {deferredItin ? (
+                  <ParcoursCoverImg
+                    coverImage={deferredItin.cover_image}
+                    citySlug={deferredItin.city_slug}
+                    slug={deferredItin.slug}
+                    width={640}
+                    style={{
+                      width: '100%',
+                      height: 140,
+                      objectFit: 'cover',
+                      display: 'block',
+                    }}
+                  />
+                ) : null}
+              </div>
               <div
                 style={{
                   borderRadius: 16,
@@ -925,17 +964,17 @@ export function ParcoursEditorPage() {
                     fontFamily: 'Georgia, serif',
                   }}
                 >
-                  {itin.title}
+                  {deferredItin?.title || itin.title}
                 </h2>
                 <p style={{ margin: 0, fontSize: 13, opacity: 0.7 }}>
-                  {citySlugDisplayNameFr(itin.city_slug)}
-                  {itin.duration_kind
-                    ? ` · ${ITINERARY_DURATION_LABELS[itin.duration_kind as ItineraryDurationKind] || itin.duration_kind}`
+                  {citySlugDisplayNameFr(deferredItin?.city_slug || itin.city_slug)}
+                  {(deferredItin?.duration_kind || itin.duration_kind)
+                    ? ` · ${ITINERARY_DURATION_LABELS[(deferredItin?.duration_kind || itin.duration_kind) as ItineraryDurationKind] || deferredItin?.duration_kind || itin.duration_kind}`
                     : ''}
                 </p>
-                {itin.intro ? (
+                {(deferredItin?.intro || itin.intro) ? (
                   <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, opacity: 0.9 }}>
-                    {itin.intro}
+                    {deferredItin?.intro || itin.intro}
                   </p>
                 ) : (
                   <p style={{ margin: 0, fontSize: 13, opacity: 0.4 }}>
@@ -943,7 +982,7 @@ export function ParcoursEditorPage() {
                   </p>
                 )}
                 <ol style={{ margin: 0, paddingLeft: 16, display: 'grid', gap: 8, fontSize: 13 }}>
-                  {items.map((it, i) => (
+                  {deferredItems.map((it, i) => (
                     <li key={it.localId}>
                       <strong>{it.title || `Étape ${i + 1}`}</strong>
                       {it.note ? (

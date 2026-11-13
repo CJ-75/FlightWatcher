@@ -132,6 +132,16 @@ def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
                 str(it.get("sort_key") or ""),
             ),
         )
+    # Budget vide → 0 (Gratuit) — aligné front obligatoire
+    budget = out.get("budget_estimate_eur")
+    if budget is None or budget == "":
+        out["budget_estimate_eur"] = 0
+    else:
+        try:
+            b = float(budget)
+            out["budget_estimate_eur"] = 0 if (b < 0 or b != b) else b
+        except (TypeError, ValueError):
+            out["budget_estimate_eur"] = 0
     slug = str(out.get("slug") or "").strip().lower()
     city = str(out.get("city_slug") or "").strip().lower()
     cover = str(out.get("cover_image") or "").strip()

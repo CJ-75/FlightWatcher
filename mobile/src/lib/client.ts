@@ -376,6 +376,10 @@ function isLocalApiHost(url: string): boolean {
  * Prefer EXPO_PUBLIC_WEB_ORIGIN. Do NOT use AUTH_CALLBACK_ORIGIN (OAuth tunnel ≠ SPA).
  * When API is the same deployed host (Vercel), reuse that origin.
  */
+function isLanIpHost(host: string): boolean {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) && !host.startsWith('127.')
+}
+
 export function getWebOrigin(): string {
   const fromEnv = env('EXPO_PUBLIC_WEB_ORIGIN')?.replace(/\/$/, '')
   if (fromEnv) return fromEnv
@@ -388,8 +392,9 @@ export function getWebOrigin(): string {
     }
   }
 
+  // Expo --tunnel hostUri is *.expo.app — not the Vite SPA. Prefer LAN IP only.
   const host = metroHost()
-  if (host) return `http://${host}:5173`
+  if (host && isLanIpHost(host)) return `http://${host}:5173`
 
   return 'http://localhost:5173'
 }

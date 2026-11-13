@@ -168,6 +168,10 @@ export function itineraryInfoChips(it: Itinerary): string[] {
       ] || String(it.duration_kind),
     )
   }
+  const budget = itineraryBudgetLabel(it)
+  if (budget) {
+    chips.push(budget.replace(/\s+sur place$/, '').trim())
+  }
   for (const o of it.occasions || []) {
     chips.push(
       ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || String(o),
@@ -176,16 +180,27 @@ export function itineraryInfoChips(it: Itinerary): string[] {
   return chips
 }
 
+/** Budget parcours : vide / null → 0 (obligatoire côté front) = Gratuit. */
+export function normalizeItineraryBudgetEur(
+  value: unknown,
+): number {
+  if (value == null || value === '') return 0
+  const n = Number(value)
+  if (!Number.isFinite(n) || n < 0) return 0
+  return n
+}
+
 export function itineraryBudgetLabel(it: Itinerary): string | null {
-  if (it.budget_estimate_eur == null) return null
-  if (it.budget_estimate_eur === 0) return 'Gratuit'
+  const n = normalizeItineraryBudgetEur(it.budget_estimate_eur)
+  // 0 € (ou vide) = gratuit
+  if (n === 0) return 'Gratuit'
   const basis =
     it.budget_basis === 'for_two'
       ? 'pour deux'
       : it.budget_basis === 'per_person'
         ? 'par personne'
         : ''
-  return `~${it.budget_estimate_eur} €${basis ? ` ${basis}` : ''} sur place`
+  return `~${n} €${basis ? ` ${basis}` : ''} sur place`
 }
 
 export function buildItineraryMarkerTiles(it: Itinerary): ItineraryMarkerTile[] {

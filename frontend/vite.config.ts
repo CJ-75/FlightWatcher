@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true, // LAN (téléphone) + localhost
     port: 5173,
     proxy: {
       '/api': {

@@ -75,7 +75,7 @@ function emptyStep(): DraftStep {
     maps_url: '',
     lat: null,
     lng: null,
-    budget_eur: null,
+    budget_eur: 0,
     description: '',
   }
 }
@@ -100,9 +100,10 @@ export function AddParcoursStepSheet({
           photos: [...(initial.photos || [])],
           budget_eur:
             typeof initial.budget_eur === 'number' &&
-            Number.isFinite(initial.budget_eur)
+            Number.isFinite(initial.budget_eur) &&
+            initial.budget_eur >= 0
               ? initial.budget_eur
-              : null,
+              : 0,
           moment: initial.moment ?? null,
           description: String(initial.description || ''),
         }
@@ -169,14 +170,13 @@ export function AddParcoursStepSheet({
       setHint('Choisis un moment (matin, après-midi ou soir)')
       return
     }
-    if (
+    // Vide / invalide → 0 (Gratuit), toujours présent côté front
+    const budgetEur =
       step.budget_eur == null ||
       !Number.isFinite(step.budget_eur) ||
       step.budget_eur < 0
-    ) {
-      setHint('Choisis un budget')
-      return
-    }
+        ? 0
+        : step.budget_eur
     if (!maps || !/^https?:\/\//i.test(maps)) {
       setHint('Colle un lien Maps')
       return
@@ -192,7 +192,7 @@ export function AddParcoursStepSheet({
       maps_url: maps,
       note: step.note.trim(),
       photo: step.photos[0] || step.photo,
-      budget_eur: step.budget_eur,
+      budget_eur: budgetEur,
       day_offset: Number.isFinite(step.day_offset) ? step.day_offset : 0,
       moment: step.moment,
     })
