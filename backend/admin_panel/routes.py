@@ -21,7 +21,6 @@ from admin_panel.security import (
     get_impersonation,
     mark_step_up,
     require_step_up,
-    start_impersonation,
     stop_impersonation,
 )
 
@@ -67,10 +66,11 @@ def _audit(request: Request, action: str, target: str = None, payload=None, resu
 async def admin_overview(
     request: Request,
     force: bool = Query(False),
-    light: bool = Query(True, description="Ignored — Accueil = KPIs inscrits only"),
+    days: int = Query(30, ge=7, le=90),
+    light: bool = Query(True, description="Ignored — Accueil = dashboard inscrits"),
 ):
-    """Accueil admin simplifié : KPIs inscrits / onboarding uniquement."""
-    return inscrits_mod.stats_inscrits(force=force)
+    """Accueil admin : KPIs légers (counts only)."""
+    return inscrits_mod.dashboard(days=days, force=force)
 
 
 @router.get("/inscrits")
@@ -91,6 +91,58 @@ async def admin_inscrits(
 @require_admin
 async def admin_inscrits_stats(request: Request, force: bool = Query(False)):
     return inscrits_mod.stats_inscrits(force=force)
+
+
+@router.get("/inscrits/dashboard")
+@require_admin
+async def admin_inscrits_dashboard(
+    request: Request,
+    days: int = Query(30, ge=7, le=90),
+    force: bool = Query(False),
+):
+    return inscrits_mod.dashboard(days=days, force=force)
+
+
+class InscritPatchBody(BaseModel):
+    nom: Optional[str] = None
+    full_name: Optional[str] = None
+    display_name: Optional[str] = None
+    ville: Optional[str] = None
+    home_city_slug: Optional[str] = None
+    aeroport: Optional[str] = None
+    home_airport: Optional[str] = None
+    onboarding_completed: Optional[bool] = None
+    last_onboarding_step: Optional[str] = None
+
+
+@router.patch("/inscrits/{user_id}")
+@require_admin
+async def admin_inscrit_patch(request: Request, user_id: str, body: InscritPatchBody):
+    out = inscrits_mod.update_inscrit(user_id, body.model_dump(exclude_unset=True))
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "Update failed")
+    _audit(request, "inscrit_update", target=user_id, payload=body.model_dump(exclude_unset=True))
+    return out
+
+
+class InscritDeleteBody(BaseModel):
+    confirm: str = Field(default="", max_length=32)
+
+
+@router.post("/inscrits/{user_id}/delete")
+@require_admin
+async def admin_inscrit_delete(
+    request: Request, user_id: str, body: InscritDeleteBody = InscritDeleteBody()
+):
+    actor = _actor(request)
+    actor_id = actor.get("user_id") or actor.get("email") or "admin-env"
+    check_rate_limit(f"inscrit_delete:{actor_id}")
+    require_step_up(actor_id, needed=True)
+    out = inscrits_mod.delete_inscrit(user_id, confirm=body.confirm)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "Delete failed")
+    _audit(request, "inscrit_delete", target=user_id, result="ok")
+    return out
 
 
 @router.get("/product-funnel")
@@ -188,7 +240,7 @@ async def admin_step_up(request: Request, body: StepUpBody):
     if not verify_admin_password(body.password):
         raise HTTPException(status_code=401, detail="Invalid password")
     actor = _actor(request)
-    actor_id = actor.get("user_id") or actor.get("email") or "admin"
+    actor_id = actor.get("user_id") or actor.get("email") or "admin-env"
     out = mark_step_up(actor_id)
     _audit(request, "step_up", result="ok")
     return out
@@ -201,11 +253,23 @@ class ImpersonateBody(BaseModel):
 @router.post("/security/impersonate")
 @require_admin
 async def admin_impersonate(request: Request, body: ImpersonateBody):
+    from admin_panel.impersonate import create_log_as_session
+
     actor = _actor(request)
-    actor_id = actor.get("user_id") or actor.get("email") or "admin"
+    actor_id = actor.get("user_id") or actor.get("email") or "admin-env"
+    check_rate_limit(f"impersonate:{actor_id}")
     require_step_up(actor_id, needed=True)
-    out = start_impersonation(actor_id, body.target_user_id)
-    _audit(request, "impersonate_start", target=body.target_user_id)
+    out = create_log_as_session(
+        admin_id=actor_id,
+        target_user_id=body.target_user_id,
+    )
+    _audit(
+        request,
+        "impersonate_start",
+        target=body.target_user_id,
+        payload={"email": out.get("target_user_email")},
+        result="ok",
+    )
     return out
 
 

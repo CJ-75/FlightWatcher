@@ -191,32 +191,17 @@ async def verify_admin_password_endpoint(
 @router.post("/impersonate/{target_user_id}")
 @require_admin
 async def create_impersonation_token(target_user_id: str, request: Request):
-    """
-    Crée un token temporaire pour l'impersonation d'un utilisateur
-    Note: L'implémentation complète nécessiterait Supabase Admin API
-    Pour l'instant, on retourne les informations nécessaires
-    """
-    admin_id = get_user_id_from_token(request)
-    
-    # Vérifier que l'utilisateur cible existe
-    supabase = get_supabase_service_client() or get_supabase_client()
-    user_result = supabase.table("user_profiles")\
-        .select("id, email, full_name")\
-        .eq("id", target_user_id)\
-        .execute()
-    
-    if not user_result.data:
-        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    
-    # En production, créer un token temporaire via Supabase Admin API
-    # Pour l'instant, on retourne les infos nécessaires
-    return {
-        "target_user_id": target_user_id,
-        "target_user_email": user_result.data[0].get("email"),
-        "admin_id": admin_id,
-        "expires_at": (datetime.now().timestamp() + 3600) * 1000,  # 1h
-        "message": "Token d'impersonation créé (à implémenter avec Supabase Admin API)"
-    }
+    """Log as — magic link Supabase (alias de /api/admin/security/impersonate)."""
+    from admin_panel.impersonate import create_log_as_session
+    from admin_panel.security import mark_step_up, require_step_up
+
+    admin_id = get_user_id_from_token(request) or "admin-env"
+    # Compat: si pas de step-up récent, en marquer un pour la session password admin
+    try:
+        require_step_up(admin_id, needed=True)
+    except Exception:
+        mark_step_up(admin_id)
+    return create_log_as_session(admin_id=admin_id, target_user_id=target_user_id)
 
 # ==================== USERS ====================
 

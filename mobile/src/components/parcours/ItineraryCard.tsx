@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -11,12 +11,11 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import {
   citySlugDisplayNameFr,
-  cityImageUrl,
   itineraryMetaLine,
   type Itinerary,
   type ItineraryDurationKind,
 } from '@flightwatcher/shared'
-import { cityCoverApiUrl, coverUri } from '../../lib/coverUri'
+import { coverUriCandidates } from '../../lib/coverUri'
 import { fonts } from '../../theme'
 
 type Props = {
@@ -45,15 +44,17 @@ export function ItineraryCard({
     : ''
   // Retina: portrait ~220pt → ≥1100px ; landscape ~320pt → ≥1280px
   const width = variant === 'landscape' ? 1600 : 1200
-  const rawCover =
-    (itinerary.cover_image || '').trim() ||
-    (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : '')
-  const primary = coverUri(rawCover, {
-    width,
-    citySlug: itinerary.city_slug,
-    slug: itinerary.slug,
-  })
-  const [uri, setUri] = useState<string | null>(primary)
+  const candidates = useMemo(
+    () =>
+      coverUriCandidates(itinerary.cover_image, {
+        width,
+        citySlug: itinerary.city_slug,
+        slug: itinerary.slug,
+      }),
+    [itinerary.cover_image, itinerary.city_slug, itinerary.slug, width],
+  )
+  const [idx, setIdx] = useState(0)
+  const uri = candidates[idx] || null
   const meta = itineraryMetaLine({
     cityLabel: city || null,
     durationKind: itinerary.duration_kind as ItineraryDurationKind | null,
@@ -61,22 +62,11 @@ export function ItineraryCard({
   const landscape = variant === 'landscape'
 
   useEffect(() => {
-    setUri(primary)
-  }, [primary])
+    setIdx(0)
+  }, [candidates.join('|')])
 
   const onImageError = () => {
-    const api = cityCoverApiUrl({
-      city: itinerary.city_slug,
-      slug: itinerary.slug,
-      width,
-    })
-    void fetch(api)
-      .then((r) => r.json())
-      .then((j: { ok?: boolean; url?: string }) => {
-        if (j?.ok && j.url && j.url !== uri) setUri(j.url)
-        else setUri(null)
-      })
-      .catch(() => setUri(null))
+    setIdx((i) => (i + 1 < candidates.length ? i + 1 : i))
   }
 
   return (

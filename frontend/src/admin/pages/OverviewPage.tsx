@@ -1,43 +1,46 @@
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { adminApi } from '../api/adminApi'
 import { ErrorBlock, Kpi, LoadingBlock } from '../components/PageState'
+import { useAdminQuery } from '../hooks/useAdminQuery'
 
 export function OverviewPage() {
-  const [data, setData] = useState<{
-    total: number
-    onboarded: number
-    pending: number
-    onboarded_pct: number
-    cached?: boolean
-  } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { data, error, loading, stale, fromCache, refresh } = useAdminQuery({
+    key: ['dashboard', 30],
+    fetcher: () => adminApi.dashboard(30, false),
+    ttlMs: 60_000,
+    staleMs: 300_000,
+  })
 
-  const load = async (force = false) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const s = await adminApi.inscritsStats(force)
-      setData(s)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur chargement')
-    } finally {
-      setLoading(false)
+  const k = data?.kpis
+  const contenu = data?.contenu
+
+  const insight = useMemo(() => {
+    if (!k) return null
+    const bits: string[] = []
+    if (k.new_7d > 0) bits.push(`${k.new_7d} nouveaux / 7 j`)
+    if (k.pending > 0) bits.push(`${k.pending} onboarding en attente`)
+    if (contenu?.parcours_published != null) {
+      bits.push(`${contenu.parcours_published} parcours publiés`)
     }
-  }
+    return bits.join(' · ') || 'Vue rapide inscrits / onboarding / contenu.'
+  }, [k, contenu])
 
-  useEffect(() => {
-    void load()
-  }, [])
-
-  if (loading && !data) return <LoadingBlock label="Chargement…" />
+  if (loading && !data) return <LoadingBlock label="Chargement accueil…" />
   if (error && !data) return <ErrorBlock error={error} />
+
+  const cacheHint = fromCache
+    ? stale
+      ? ' · cache (rafraîchi…)'
+      : ' · cache'
+    : data?.cached
+      ? ' · cache serveur'
+      : ''
 
   return (
     <div>
       <section className="fw-hero-accueil">
-        <p className="eyebrow">FlightWatcher</p>
+        <p className="eyebrow">Pilotage</p>
         <div
           style={{
             display: 'flex',
@@ -45,19 +48,22 @@ export function OverviewPage() {
             gap: '1rem',
             flexWrap: 'wrap',
             alignItems: 'flex-end',
+            position: 'relative',
+            zIndex: 1,
           }}
         >
           <div>
             <h1 className="fw-display">Accueil</h1>
             <p className="lede">
-              Vue simple des inscrits et de l’onboarding — données fraîches
-              {data?.cached ? ' (cache)' : ''}.
+              {insight}
+              {cacheHint}
+              {typeof data?.elapsed_ms === 'number' ? ` · ${data.elapsed_ms} ms` : ''}
             </p>
           </div>
           <button
             type="button"
             className="fw-btn"
-            onClick={() => load(true)}
+            onClick={() => void refresh()}
             disabled={loading}
           >
             {loading ? '…' : 'Rafraîchir'}
@@ -66,28 +72,44 @@ export function OverviewPage() {
       </section>
 
       <div className="fw-grid fw-grid-3" style={{ marginBottom: '1.15rem' }}>
-        <Kpi label="Inscrits" value={data?.total ?? '—'} />
-        <Kpi label="Onboarding terminé" value={data?.onboarded ?? '—'} />
         <Kpi
-          label="Taux onboarding"
-          value={data != null ? `${data.onboarded_pct}%` : '—'}
-          hint={`${data?.pending ?? 0} encore en attente`}
+          label="Inscrits"
+          value={k?.total ?? '—'}
+          hint={`+${k?.new_24h ?? 0} / 24h · +${k?.new_7d ?? 0} / 7j`}
+        />
+        <Kpi
+          label="Onboarding terminé"
+          value={k?.onboarded ?? '—'}
+          hint={`${k?.onboarded_pct ?? 0}% · ${k?.pending ?? 0} en attente`}
+        />
+        <Kpi
+          label="Parcours publiés"
+          value={contenu?.parcours_published ?? '—'}
+          hint="Catalogue éditorial"
         />
       </div>
 
-      <div className="fw-card">
-        <h2 className="fw-display" style={{ margin: '0 0 0.4rem', fontSize: '1.15rem' }}>
-          Utilisateurs
-        </h2>
-        <p className="fw-muted" style={{ margin: '0 0 1rem', fontSize: '0.92rem' }}>
-          Consulter chaque inscrit et savoir si l’onboarding est fait.
-        </p>
-        <div className="fw-cta-row">
+      <div className="fw-grid fw-grid-2">
+        <div className="fw-card">
+          <h2 className="fw-section-title">Utilisateurs</h2>
+          <p className="fw-muted" style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>
+            Fiches : email, nom, inscription, ville.
+          </p>
           <Link to="/admin/users" className="fw-btn fw-btn-primary" style={{ textDecoration: 'none' }}>
-            Voir les utilisateurs
+            Ouvrir
           </Link>
-          <Link to="/admin/parcours" className="fw-btn" style={{ textDecoration: 'none' }}>
-            Parcours
+        </div>
+        <div className="fw-card">
+          <h2 className="fw-section-title">Onboarding</h2>
+          <p className="fw-muted" style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>
+            Qui a terminé · filtrable terminé / en attente.
+          </p>
+          <Link
+            to="/admin/onboarding"
+            className="fw-btn fw-btn-primary"
+            style={{ textDecoration: 'none' }}
+          >
+            Ouvrir
           </Link>
         </div>
       </div>

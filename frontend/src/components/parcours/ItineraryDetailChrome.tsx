@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ParcoursCoverImg } from './ParcoursCoverImg'
 
 type Props = {
   heroUrl: string
+  coverImage?: string | null
+  citySlug?: string | null
+  slug?: string | null
   title: string
   metaChips?: string[]
   phaseLabel?: string
@@ -67,6 +71,9 @@ const actionBtnClass =
 /** Chrome Path pour détail parcours — hero full-bleed + feuille + barre opaque. */
 export function ItineraryDetailChrome({
   heroUrl,
+  coverImage,
+  citySlug,
+  slug,
   title,
   metaChips,
   phaseLabel = 'Parcours',
@@ -144,13 +151,23 @@ export function ItineraryDetailChrome({
       </div>
 
       <section className="relative isolate min-h-[min(58vh,520px)] overflow-hidden">
-        <img
-          src={heroUrl}
-          alt=""
-          aria-hidden
-          referrerPolicy="no-referrer"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        {coverImage || citySlug || slug ? (
+          <ParcoursCoverImg
+            coverImage={coverImage || heroUrl}
+            citySlug={citySlug}
+            slug={slug}
+            width={1920}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <img
+            src={heroUrl}
+            alt=""
+            aria-hidden
+            referrerPolicy="no-referrer"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
 

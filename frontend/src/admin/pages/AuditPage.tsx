@@ -1,48 +1,98 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../api/adminApi'
-import { ErrorBlock, LoadingBlock, PageTitle } from '../components/PageState'
+import { ErrorBlock, LoadingBlock } from '../components/PageState'
+
+type AuditRow = {
+  id?: string
+  created_at?: string
+  actor_email?: string
+  actor_user_id?: string
+  action?: string
+  target?: string
+  result?: string
+}
+
+function fmtWhen(iso?: string) {
+  if (!iso) return '—'
+  try {
+    return new Date(iso).toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return iso
+  }
+}
 
 export function AuditPage() {
-  const [items, setItems] = useState<any[] | null>(null)
+  const [items, setItems] = useState<AuditRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const r = (await adminApi.audit(50)) as { items?: AuditRow[] }
+      setItems(r.items || [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    adminApi
-      .audit(150)
-      .then((r: any) => setItems(r.items || []))
-      .catch((e) => setError(e.message))
+    void load()
   }, [])
 
-  if (error) return <ErrorBlock error={error} />
-  if (!items) return <LoadingBlock />
+  if (loading && !items) return <LoadingBlock />
+  if (error && !items) return <ErrorBlock error={error} />
 
   return (
     <div>
-      <PageTitle title="Audit" subtitle="Append-only — who / action / target" />
-      <div className="fw-card" style={{ overflowX: 'auto' }}>
+      <div className="fw-page-head">
+        <div>
+          <h1 className="fw-display">Journal</h1>
+          <p>Audit append-only — qui / action / cible.</p>
+        </div>
+        <button type="button" className="fw-btn" onClick={() => void load()} disabled={loading}>
+          {loading ? '…' : 'Rafraîchir'}
+        </button>
+      </div>
+
+      <div className="fw-table-wrap">
         <table className="fw-table">
           <thead>
             <tr>
-              <th>When</th>
-              <th>Actor</th>
+              <th>Quand</th>
+              <th>Acteur</th>
               <th>Action</th>
-              <th>Target</th>
-              <th>Result</th>
+              <th>Cible</th>
+              <th>Résultat</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((row) => (
-              <tr key={row.id || `${row.created_at}-${row.action}`}>
-                <td style={{ whiteSpace: 'nowrap' }}>{row.created_at}</td>
+            {(items || []).map((row, i) => (
+              <tr key={row.id || `${row.created_at}-${row.action}-${i}`}>
+                <td style={{ whiteSpace: 'nowrap' }}>{fmtWhen(row.created_at)}</td>
                 <td>{row.actor_email || row.actor_user_id || '—'}</td>
-                <td>{row.action}</td>
+                <td>
+                  <span className="fw-badge">{row.action || '—'}</span>
+                </td>
                 <td>{row.target || '—'}</td>
                 <td>{row.result || '—'}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!items.length ? <p className="fw-muted">Aucun événement pour l’instant.</p> : null}
+        {!items?.length ? (
+          <p className="fw-muted" style={{ padding: '1rem' }}>
+            Aucun événement pour l’instant.
+          </p>
+        ) : null}
       </div>
     </div>
   )

@@ -1,32 +1,53 @@
 /**
- * Bannière affichée lors de l'impersonation d'un utilisateur
+ * Bannière Log as active.
  */
-import { useImpersonation } from '../hooks/useImpersonation'
+import { useImpersonationContext } from '../context/ImpersonationContext'
 
 export function ImpersonationBanner() {
-  const { isImpersonating, targetUserEmail, stopImpersonation } = useImpersonation()
+  const {
+    isImpersonating,
+    targetUserEmail,
+    stopImpersonation,
+    reopenLink,
+    actionLink,
+  } = useImpersonationContext()
 
-  if (!isImpersonating) {
-    return null
-  }
+  if (!isImpersonating) return null
 
   return (
-    <div className="bg-yellow-600/20 border-b border-yellow-600/30 text-yellow-400 px-4 py-3 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-        </svg>
-        <span className="font-semibold text-sm">
-          Mode impersonation actif : <span className="text-yellow-300">{targetUserEmail}</span>
-        </span>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '0.75rem',
+        flexWrap: 'wrap',
+        padding: '0.7rem 1.25rem',
+        background: 'rgba(180, 83, 9, 0.12)',
+        borderBottom: '1px solid rgba(180, 83, 9, 0.28)',
+        color: '#92400e',
+        fontSize: '0.88rem',
+        fontWeight: 600,
+      }}
+    >
+      <span>
+        Log as actif :{' '}
+        <span style={{ color: 'var(--fw-ink)' }}>{targetUserEmail || 'utilisateur'}</span>
+      </span>
+      <div style={{ display: 'flex', gap: '0.45rem' }}>
+        {actionLink ? (
+          <button type="button" className="fw-btn" onClick={reopenLink}>
+            Rouvrir l’app
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="fw-btn fw-btn-primary"
+          onClick={() => void stopImpersonation()}
+        >
+          Terminer
+        </button>
       </div>
-      <button
-        onClick={stopImpersonation}
-        className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-      >
-        Retour admin
-      </button>
     </div>
   )
 }
-

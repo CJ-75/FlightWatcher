@@ -1,12 +1,12 @@
 import {
   citySlugDisplayNameFr,
-  cityImageUrl,
   itineraryMetaLine,
-  itineraryUnsplashUrl,
   type Itinerary,
   type ItineraryDurationKind,
 } from '@flightwatcher/shared'
 import { FwKicker } from '../ui/FwKicker'
+import { ParcoursCoverImg } from './ParcoursCoverImg'
+import { parcoursWebCoverUrl } from '../../utils/parcoursCover'
 
 type Props = {
   itinerary: Partial<Itinerary> & { title?: string }
@@ -34,14 +34,15 @@ export function ItineraryCard({
     ? citySlugDisplayNameFr(itinerary.city_slug)
     : ''
   const isLandscape = variant === 'landscape'
-  const cover =
-    itineraryUnsplashUrl({
-      slug: itinerary.slug,
+  const width = isLandscape ? 1600 : 1200
+  const hasCover = Boolean(
+    parcoursWebCoverUrl({
+      coverImage: itinerary.cover_image,
       citySlug: itinerary.city_slug,
-      width: isLandscape ? 1600 : 1200,
-    }) ||
-    (itinerary.cover_image || '').trim() ||
-    (itinerary.city_slug ? cityImageUrl(itinerary.city_slug) : null)
+      slug: itinerary.slug,
+      width,
+    }),
+  )
   const meta = itineraryMetaLine({
     cityLabel: city || null,
     durationKind: itinerary.duration_kind as ItineraryDurationKind | null,
@@ -58,11 +59,12 @@ export function ItineraryCard({
       } ${className}`}
       style={{ borderRadius: 'var(--fw-radius-card, 24px)' }}
     >
-      {cover ? (
-        <img
-          src={cover}
-          alt=""
-          referrerPolicy="no-referrer"
+      {hasCover ? (
+        <ParcoursCoverImg
+          coverImage={itinerary.cover_image}
+          citySlug={itinerary.city_slug}
+          slug={itinerary.slug}
+          width={width}
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
@@ -112,7 +114,7 @@ export function ItineraryCard({
       ) : null}
 
       <div className="absolute inset-x-0 bottom-0 p-3.5">
-        {!cover && city ? (
+        {!hasCover && city ? (
           <FwKicker className="mb-1 text-white/80">{city}</FwKicker>
         ) : null}
         <div

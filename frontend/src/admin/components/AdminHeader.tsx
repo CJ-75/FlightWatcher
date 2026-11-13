@@ -13,24 +13,15 @@ export function AdminHeader({ onMenu }: Props) {
           Menu
         </button>
         <div>
-          <div className="fw-display" style={{ fontWeight: 700, fontSize: '1rem' }}>
+          <div className="fw-display" style={{ fontSize: '1.25rem', lineHeight: 1.1 }}>
             Administration
           </div>
-          <div className="fw-muted" style={{ fontSize: '0.78rem' }}>
-            Inscrits · onboarding · contenu
+          <div className="fw-muted" style={{ fontSize: '0.75rem', fontWeight: 500 }}>
+            Pilotage · contenu · ops
           </div>
         </div>
       </div>
-      <div
-        style={{
-          fontSize: '0.82rem',
-          fontWeight: 600,
-          color: 'var(--fw-muted)',
-          padding: '0.35rem 0.7rem',
-          borderRadius: 999,
-          background: 'rgba(15,118,110,0.08)',
-        }}
-      >
+      <div className="fw-pill">
         {user?.email === 'admin@env' ? 'Session admin' : user?.email || 'Admin'}
       </div>
     </header>

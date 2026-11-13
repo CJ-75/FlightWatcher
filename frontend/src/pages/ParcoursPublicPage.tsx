@@ -9,10 +9,11 @@ import {
   itineraryDatedLabelFr,
   itineraryInfoChips,
   itineraryOccasionPhaseLabel,
-  itineraryUnsplashUrl,
+  resolveParcoursCoverUrl,
   type Itinerary,
   type ItineraryItem,
 } from '@flightwatcher/shared'
+import { parcoursWebCoverUrl } from '../utils/parcoursCover'
 import { getApiClient } from '../utils/apiClient'
 import {
   getParcoursCached,
@@ -88,7 +89,12 @@ export default function ParcoursPublicPage() {
         el.setAttribute('content', content)
       }
       const cover =
-        row.cover_image ||
+        resolveParcoursCoverUrl({
+          coverImage: row.cover_image,
+          citySlug: row.city_slug,
+          slug: row.slug,
+          width: 1200,
+        }) ||
         (row.city_slug ? cityImageUrl(row.city_slug) : '')
       setOg('og:title', row.title)
       setOg('og:description', desc.slice(0, 160))
@@ -160,13 +166,12 @@ export default function ParcoursPublicPage() {
   }
 
   const cover =
-    itineraryUnsplashUrl({
-      slug: itin.slug,
+    parcoursWebCoverUrl({
+      coverImage: itin.cover_image,
       citySlug: itin.city_slug,
+      slug: itin.slug,
       width: 1920,
-    }) ||
-    itin.cover_image ||
-    (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris'))
+    }) || cityImageUrl('paris')
   const cityLabel = citySlugDisplayNameFr(itin.city_slug) || itin.city_slug
   const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]
   const phaseLabel = itineraryOccasionPhaseLabel(itin)
@@ -275,6 +280,9 @@ export default function ParcoursPublicPage() {
     <>
       <ItineraryDetailChrome
         heroUrl={cover}
+        coverImage={itin.cover_image}
+        citySlug={itin.city_slug}
+        slug={itin.slug}
         title={itin.title}
         metaChips={chips}
         phaseLabel={phaseLabel}

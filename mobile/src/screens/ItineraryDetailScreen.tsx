@@ -211,15 +211,17 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   }
 
   const cover =
-    coverUri(
-      itin.cover_image ||
-        (itin.city_slug ? cityImageUrl(itin.city_slug) : cityImageUrl('paris')),
-      {
-        width: 1920,
-        citySlug: itin.city_slug,
-        slug: itin.slug,
-      },
-    ) || cityImageUrl('paris')
+    coverUri(itin.cover_image, {
+      width: 1920,
+      citySlug: itin.city_slug,
+      slug: itin.slug,
+    }) ||
+    coverUri(cityImageUrl(itin.city_slug || 'paris'), {
+      width: 1920,
+      citySlug: itin.city_slug || 'paris',
+      slug: itin.slug,
+    }) ||
+    'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1920&q=90&fm=jpg'
   const cityLabel =
     citySlugDisplayNameFr(itin.city_slug) || itin.city_slug || ''
   const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]

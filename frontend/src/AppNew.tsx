@@ -56,6 +56,9 @@ import { OverviewPage } from './admin/pages/OverviewPage'
 const UsersCsmPage = lazy(() =>
   import('./admin/pages/UsersCsmPage').then((m) => ({ default: m.UsersCsmPage })),
 )
+const OnboardingPage = lazy(() =>
+  import('./admin/pages/OnboardingPage').then((m) => ({ default: m.OnboardingPage })),
+)
 const OccasionsPage = lazy(() =>
   import('./admin/pages/OccasionsPage').then((m) => ({ default: m.OccasionsPage })),
 )
@@ -74,10 +77,25 @@ const ParcoursEditorPage = lazy(() =>
     default: m.ParcoursEditorPage,
   })),
 )
+const ActivitePage = lazy(() =>
+  import('./admin/pages/ActivitePage').then((m) => ({ default: m.ActivitePage })),
+)
+const DigestsPage = lazy(() =>
+  import('./admin/pages/DigestsPage').then((m) => ({ default: m.DigestsPage })),
+)
+const StatusPage = lazy(() =>
+  import('./admin/pages/StatusPage').then((m) => ({ default: m.StatusPage })),
+)
+const AuditPage = lazy(() =>
+  import('./admin/pages/AuditPage').then((m) => ({ default: m.AuditPage })),
+)
 
 function RouteFallback() {
   return (
-    <div className="min-h-[40vh] flex items-center justify-center text-slate-500 text-sm font-medium">
+    <div
+      className="min-h-[40vh] flex items-center justify-center text-sm font-medium"
+      style={{ color: '#8a6a58', fontFamily: 'Sora, system-ui, sans-serif' }}
+    >
       Chargement…
     </div>
   )
@@ -129,12 +147,18 @@ function App() {
           }
         >
           <Route index element={<OverviewPage />} />
+          <Route path="accueil" element={<OverviewPage />} />
           <Route path="users" element={<UsersCsmPage />} />
+          <Route path="onboarding" element={<OnboardingPage />} />
+          <Route path="activite" element={<ActivitePage />} />
           <Route path="occasions" element={<OccasionsPage />} />
           <Route path="activities" element={<ActivitiesAdminPage />} />
           <Route path="parcours" element={<ParcoursAdminPage />} />
           <Route path="parcours/:itineraryId" element={<ParcoursEditorPage />} />
-          {/* Anciennes URLs admin → Accueil */}
+          <Route path="digests" element={<DigestsPage />} />
+          <Route path="status" element={<StatusPage />} />
+          <Route path="audit" element={<AuditPage />} />
+          {/* Anciennes URLs admin → Dashboard */}
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
         

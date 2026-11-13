@@ -8,6 +8,7 @@ import {
   canPublish,
   citySlugDisplayNameFr,
   cityImageUrl,
+  cityUnsplashUrl,
   getPublishBlockers,
   getPublishWarnings,
   type Itinerary,
@@ -18,6 +19,7 @@ import {
 } from '@flightwatcher/shared'
 import { getApiClient } from '../../utils/apiClient'
 import { ItineraryCard } from '../../components/parcours/ItineraryCard'
+import { ParcoursCoverImg } from '../../components/parcours/ParcoursCoverImg'
 
 type DraftItem = {
   localId: string
@@ -46,12 +48,18 @@ const CITY_OPTIONS = [
   'madrid',
 ]
 
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Brouillon',
+  published: 'Publié',
+  retired: 'Retiré',
+}
+
 function newLocalId() {
   return `tmp_${Math.random().toString(36).slice(2, 10)}`
 }
 
 function toDraftItems(items?: ItineraryItem[] | null): DraftItem[] {
-  return (items || []).map((it, i) => ({
+  return (items || []).map((it) => ({
     localId: it.id || newLocalId(),
     kind: (it.kind || 'free') as ItineraryItemKind,
     title: it.title || '',
@@ -80,6 +88,12 @@ function itemsPayload(drafts: DraftItem[]) {
     day_offset: Number(d.day_offset || 0),
     moment: d.moment || null,
   }))
+}
+
+function statusBadgeClass(status?: string | null) {
+  if (status === 'published') return 'fw-badge ok'
+  if (status === 'retired') return 'fw-badge bad'
+  return 'fw-badge warn'
 }
 
 export function ParcoursEditorPage() {
@@ -229,7 +243,7 @@ export function ParcoursEditorPage() {
         setItin(row)
         setItems(toDraftItems(row.itinerary_items))
       }
-      setInfo(`Statut → ${status}`)
+      setInfo(`Statut → ${STATUS_LABEL[status] || status}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur')
     } finally {
@@ -343,17 +357,20 @@ export function ParcoursEditorPage() {
 
   const useCityCover = () => {
     if (!itin?.city_slug) return
-    patchField('cover_image', cityImageUrl(itin.city_slug))
+    patchField(
+      'cover_image',
+      cityUnsplashUrl(itin.city_slug) || cityImageUrl(itin.city_slug),
+    )
   }
 
   if (loading) {
-    return <p className="text-gray-400 text-sm">Chargement…</p>
+    return <p className="fw-muted" style={{ fontSize: '0.9rem' }}>Chargement…</p>
   }
   if (!itin) {
     return (
-      <div className="space-y-2">
-        <p className="text-red-400 text-sm">{error || 'Parcours introuvable'}</p>
-        <Link to="/admin/parcours" className="text-blue-300 text-sm">
+      <div style={{ display: 'grid', gap: '0.75rem' }}>
+        <div className="fw-alert bad">{error || 'Parcours introuvable'}</div>
+        <Link to="/admin/parcours" className="fw-btn" style={{ width: 'fit-content' }}>
           ← Retour
         </Link>
       </div>
@@ -361,25 +378,39 @@ export function ParcoursEditorPage() {
   }
 
   const publishReady = canPublish(previewItinerary)
+  const serverOnlyBlockers = blockers.filter(
+    (b) => !localBlockers.some((l) => l.code === b.code),
+  )
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 justify-between">
+    <div style={{ display: 'grid', gap: '1rem' }}>
+      <div className="fw-page-head">
         <div>
-          <Link to="/admin/parcours" className="text-xs text-gray-500 hover:text-gray-300">
+          <Link
+            to="/admin/parcours"
+            className="fw-muted"
+            style={{ fontSize: '0.78rem', textDecoration: 'none', fontWeight: 600 }}
+          >
             ← Parcours
           </Link>
-          <h1 className="text-xl font-bold text-white mt-1">{itin.title}</h1>
-          <p className="text-xs text-gray-500">
-            {itin.status} · /parcours/{itin.slug || '…'}
+          <h1 className="fw-display" style={{ marginTop: 6 }}>
+            {itin.title || 'Sans titre'}
+          </h1>
+          <p style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', alignItems: 'center' }}>
+            <span className={statusBadgeClass(itin.status)}>
+              {STATUS_LABEL[itin.status || ''] || itin.status || '—'}
+            </span>
+            <span className="fw-muted" style={{ fontSize: '0.85rem' }}>
+              /parcours/{itin.slug || '…'}
+            </span>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="fw-cta-row" style={{ marginTop: 0 }}>
           <button
             type="button"
             disabled={saving}
             onClick={() => void save()}
-            className="rounded-lg border border-gray-600 px-3 py-2 text-sm hover:bg-gray-800"
+            className="fw-btn"
           >
             Enregistrer
           </button>
@@ -387,7 +418,7 @@ export function ParcoursEditorPage() {
             type="button"
             disabled={saving || !publishReady}
             onClick={() => void save({ andPublish: true })}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-3 py-2 text-sm font-semibold"
+            className="fw-btn fw-btn-primary"
           >
             Publier
           </button>
@@ -396,7 +427,7 @@ export function ParcoursEditorPage() {
               type="button"
               disabled={saving}
               onClick={() => void setStatus('retired')}
-              className="rounded-lg border border-gray-600 px-3 py-2 text-sm"
+              className="fw-btn"
             >
               Retirer
             </button>
@@ -404,189 +435,208 @@ export function ParcoursEditorPage() {
           <button
             type="button"
             onClick={() => void remove()}
-            className="rounded-lg border border-red-700/60 text-red-300 px-3 py-2 text-sm"
+            className="fw-btn fw-btn-danger"
           >
             Supprimer
           </button>
         </div>
       </div>
 
-      {error ? <p className="text-red-400 text-sm">{error}</p> : null}
-      {info ? <p className="text-emerald-400 text-sm">{info}</p> : null}
+      {error ? <div className="fw-alert bad">{error}</div> : null}
+      {info ? <div className="fw-alert ok">{info}</div> : null}
 
-      {(localBlockers.length > 0 || allWarnings.length > 0) && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm space-y-1">
+      {(localBlockers.length > 0 ||
+        allWarnings.length > 0 ||
+        serverOnlyBlockers.length > 0) && (
+        <div className="fw-alert warn">
           {localBlockers.map((b) => (
-            <p key={b.code} className="text-amber-100">
-              ⛔ {b.message}
-            </p>
+            <p key={b.code}>⛔ {b.message}</p>
+          ))}
+          {serverOnlyBlockers.map((b) => (
+            <p key={`srv-${b.code}`}>⛔ {b.message}</p>
           ))}
           {allWarnings.map((w) => (
-            <p key={w.code} className="text-amber-200/80">
-              ⚠ {w.message}
-            </p>
+            <p key={w.code}>⚠ {w.message}</p>
           ))}
-          {blockers
-            .filter((b) => !localBlockers.some((l) => l.code === b.code))
-            .map((b) => (
-              <p key={`srv-${b.code}`} className="text-amber-100">
-                ⛔ {b.message}
-              </p>
-            ))}
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start">
-        {/* Form */}
-        <div className="space-y-5 rounded-xl border border-gray-700 bg-[#232736] p-4">
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label className="text-xs text-gray-400 space-y-1">
-              Ville
-              <select
-                value={itin.city_slug || ''}
-                onChange={(e) => {
-                  const slug = e.target.value
-                  patchField('city_slug', slug)
-                  if (!itin.cover_image) {
-                    patchField('cover_image', cityImageUrl(slug))
-                  }
-                }}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">—</option>
-                {CITY_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {citySlugDisplayNameFr(c)} ({c})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-gray-400 space-y-1">
-              Slug URL
-              <input
-                value={itin.slug || ''}
-                onChange={(e) => patchField('slug', e.target.value)}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="text-xs text-gray-400 space-y-1 md:col-span-2">
-              Titre
-              <input
-                value={itin.title || ''}
-                onChange={(e) => patchField('title', e.target.value)}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="text-xs text-gray-400 space-y-1 md:col-span-2">
-              Sous-titre
-              <input
-                value={itin.subtitle || ''}
-                onChange={(e) => patchField('subtitle', e.target.value)}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="text-xs text-gray-400 space-y-1 md:col-span-2">
-              Introduction
-              <textarea
-                value={itin.intro || ''}
-                onChange={(e) => patchField('intro', e.target.value)}
-                rows={4}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-          </section>
-
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label className="text-xs text-gray-400 space-y-1">
-              Durée
-              <select
-                value={itin.duration_kind || ''}
-                onChange={(e) =>
-                  patchField(
-                    'duration_kind',
-                    (e.target.value || null) as ItineraryDurationKind | null,
-                  )
-                }
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">—</option>
-                {ITINERARY_DURATIONS.map((d) => (
-                  <option key={d} value={d}>
-                    {ITINERARY_DURATION_LABELS[d]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-gray-400 space-y-1">
-              Budget (€)
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={itin.budget_estimate_eur ?? ''}
-                  onChange={(e) =>
-                    patchField(
-                      'budget_estimate_eur',
-                      e.target.value ? Number(e.target.value) : null,
-                    )
-                  }
-                  className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-                />
+      <div className="fw-editor-layout">
+        <div className="fw-card" style={{ display: 'grid', gap: 0 }}>
+          <section className="fw-editor-block">
+            <h2 className="fw-section-title">Identité</h2>
+            <div className="fw-field-row cols-2">
+              <label className="fw-label">
+                Ville
                 <select
-                  value={itin.budget_basis || ''}
-                  onChange={(e) =>
-                    patchField(
-                      'budget_basis',
-                      (e.target.value || null) as Itinerary['budget_basis'],
-                    )
-                  }
-                  className="bg-[#1a1d29] border border-gray-700 rounded-lg px-2 py-2 text-sm text-white"
+                  className="fw-select"
+                  value={itin.city_slug || ''}
+                  onChange={(e) => {
+                    const slug = e.target.value
+                    patchField('city_slug', slug)
+                    if (!itin.cover_image) {
+                      patchField(
+                        'cover_image',
+                        cityUnsplashUrl(slug) || cityImageUrl(slug),
+                      )
+                    }
+                  }}
                 >
-                  <option value="">Base</option>
-                  <option value="for_two">pour deux</option>
-                  <option value="per_person">par personne</option>
+                  <option value="">—</option>
+                  {CITY_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {citySlugDisplayNameFr(c)} ({c})
+                    </option>
+                  ))}
                 </select>
-              </div>
-            </label>
-            <label className="text-xs text-gray-400 space-y-1">
-              Featured from
-              <input
-                type="date"
-                value={itin.featured_from || ''}
-                onChange={(e) => patchField('featured_from', e.target.value || null)}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="text-xs text-gray-400 space-y-1">
-              Featured to
-              <input
-                type="date"
-                value={itin.featured_to || ''}
-                onChange={(e) => patchField('featured_to', e.target.value || null)}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="text-xs text-gray-400 space-y-1">
-              Poids (ordre)
-              <input
-                type="number"
-                value={itin.sort_weight ?? 0}
-                onChange={(e) => patchField('sort_weight', Number(e.target.value))}
-                className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
-              />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-gray-300 mt-5">
-              <input
-                type="checkbox"
-                checked={!!itin.is_demo}
-                onChange={(e) => patchField('is_demo', e.target.checked)}
-              />
-              Marquer démo (`is_demo`)
-            </label>
+              </label>
+              <label className="fw-label">
+                Slug URL
+                <input
+                  className="fw-input"
+                  value={itin.slug || ''}
+                  onChange={(e) => patchField('slug', e.target.value)}
+                />
+              </label>
+              <label className="fw-label" style={{ gridColumn: '1 / -1' }}>
+                Titre
+                <input
+                  className="fw-input"
+                  value={itin.title || ''}
+                  onChange={(e) => patchField('title', e.target.value)}
+                />
+              </label>
+              <label className="fw-label" style={{ gridColumn: '1 / -1' }}>
+                Sous-titre
+                <input
+                  className="fw-input"
+                  value={itin.subtitle || ''}
+                  onChange={(e) => patchField('subtitle', e.target.value)}
+                />
+              </label>
+              <label className="fw-label" style={{ gridColumn: '1 / -1' }}>
+                Introduction
+                <textarea
+                  className="fw-input"
+                  value={itin.intro || ''}
+                  onChange={(e) => patchField('intro', e.target.value)}
+                  rows={4}
+                />
+              </label>
+            </div>
           </section>
 
-          <section>
-            <p className="text-xs text-gray-400 mb-2">Occasions</p>
-            <div className="flex flex-wrap gap-2">
+          <section className="fw-editor-block">
+            <h2 className="fw-section-title">Paramètres</h2>
+            <div className="fw-field-row cols-2">
+              <label className="fw-label">
+                Durée
+                <select
+                  className="fw-select"
+                  value={itin.duration_kind || ''}
+                  onChange={(e) =>
+                    patchField(
+                      'duration_kind',
+                      (e.target.value || null) as ItineraryDurationKind | null,
+                    )
+                  }
+                >
+                  <option value="">—</option>
+                  {ITINERARY_DURATIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {ITINERARY_DURATION_LABELS[d]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="fw-label">
+                Budget (€)
+                <div style={{ display: 'flex', gap: '0.45rem' }}>
+                  <input
+                    className="fw-input"
+                    type="number"
+                    value={itin.budget_estimate_eur ?? ''}
+                    onChange={(e) =>
+                      patchField(
+                        'budget_estimate_eur',
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
+                    style={{ flex: 1 }}
+                  />
+                  <select
+                    className="fw-select"
+                    value={itin.budget_basis || ''}
+                    onChange={(e) =>
+                      patchField(
+                        'budget_basis',
+                        (e.target.value || null) as Itinerary['budget_basis'],
+                      )
+                    }
+                    style={{ minWidth: 130 }}
+                  >
+                    <option value="">Base</option>
+                    <option value="for_two">pour deux</option>
+                    <option value="per_person">par personne</option>
+                  </select>
+                </div>
+              </label>
+              <label className="fw-label">
+                Featured from
+                <input
+                  className="fw-input"
+                  type="date"
+                  value={itin.featured_from || ''}
+                  onChange={(e) =>
+                    patchField('featured_from', e.target.value || null)
+                  }
+                />
+              </label>
+              <label className="fw-label">
+                Featured to
+                <input
+                  className="fw-input"
+                  type="date"
+                  value={itin.featured_to || ''}
+                  onChange={(e) =>
+                    patchField('featured_to', e.target.value || null)
+                  }
+                />
+              </label>
+              <label className="fw-label">
+                Poids (ordre)
+                <input
+                  className="fw-input"
+                  type="number"
+                  value={itin.sort_weight ?? 0}
+                  onChange={(e) =>
+                    patchField('sort_weight', Number(e.target.value))
+                  }
+                />
+              </label>
+              <label
+                className="fw-label"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: '0.55rem',
+                  marginTop: '1.55rem',
+                  fontWeight: 550,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!itin.is_demo}
+                  onChange={(e) => patchField('is_demo', e.target.checked)}
+                />
+                Marquer démo
+              </label>
+            </div>
+          </section>
+
+          <section className="fw-editor-block">
+            <h2 className="fw-section-title">Occasions</h2>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
               {ITINERARY_OCCASIONS.map((o) => {
                 const on = (itin.occasions || []).includes(o)
                 return (
@@ -599,11 +649,7 @@ export function ParcoursEditorPage() {
                       else cur.add(o)
                       patchField('occasions', [...cur] as ItineraryOccasion[])
                     }}
-                    className={`text-xs px-3 py-1.5 rounded-full border ${
-                      on
-                        ? 'bg-orange-500/20 border-orange-400 text-orange-100'
-                        : 'border-gray-600 text-gray-400'
-                    }`}
+                    className={`fw-chip${on ? ' on' : ''}`}
                   >
                     {ITINERARY_OCCASION_LABELS[o]}
                   </button>
@@ -612,220 +658,243 @@ export function ParcoursEditorPage() {
             </div>
           </section>
 
-          <section className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2 justify-between">
-              <p className="text-sm font-semibold text-gray-200">
-                Couverture
-              </p>
+          <section className="fw-editor-block">
+            <div className="fw-section-head">
+              <h2 className="fw-section-title">Couverture</h2>
               <button
                 type="button"
                 onClick={useCityCover}
-                className="text-xs text-blue-300 hover:underline"
+                className="fw-btn fw-btn-ghost"
               >
                 Utiliser photo ville
               </button>
             </div>
             <input
+              className="fw-input"
               value={itin.cover_image || ''}
               onChange={(e) => patchField('cover_image', e.target.value)}
-              placeholder="URL photo (Viator / Wikimedia / Panoramax / upload)"
-              className="w-full bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+              placeholder="URL photo (Unsplash recommandé — Wikimedia via proxy)"
+              style={{ width: '100%', boxSizing: 'border-box' }}
             />
+            <div
+              style={{
+                marginTop: 10,
+                height: 140,
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: '#e2e8f0',
+              }}
+            >
+              <ParcoursCoverImg
+                coverImage={itin.cover_image}
+                citySlug={itin.city_slug}
+                slug={itin.slug}
+                width={960}
+                style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
+              />
+            </div>
           </section>
 
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2 justify-between">
-              <p className="text-sm font-semibold text-gray-200">
-                Étapes ({items.length})
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={addFree}
-                  className="text-xs rounded-lg border border-gray-600 px-2 py-1"
-                >
+          <section className="fw-editor-block">
+            <div className="fw-section-head">
+              <h2 className="fw-section-title">Étapes ({items.length})</h2>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button type="button" onClick={addFree} className="fw-btn">
                   + Libre
                 </button>
-                <button
-                  type="button"
-                  onClick={addActivity}
-                  className="text-xs rounded-lg border border-gray-600 px-2 py-1"
-                >
+                <button type="button" onClick={addActivity} className="fw-btn">
                   + Activité Viator
                 </button>
               </div>
             </div>
 
-            <div className="rounded-lg border border-dashed border-gray-600 p-3 space-y-2">
-              <p className="text-xs text-gray-400">
-                Coller un lien Google Maps → lieu v8
+            <div className="fw-maps-box" style={{ marginBottom: '0.85rem' }}>
+              <p className="fw-muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+                Coller un lien Google Maps → lieu
               </p>
-              <div className="flex gap-2">
+              <div style={{ display: 'flex', gap: '0.45rem' }}>
                 <input
+                  className="fw-input"
                   value={mapsPaste}
                   onChange={(e) => setMapsPaste(e.target.value)}
                   placeholder="https://maps.app.goo.gl/…"
-                  className="flex-1 bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                  style={{ flex: 1 }}
                 />
                 <button
                   type="button"
                   disabled={resolving || !mapsPaste.trim()}
                   onClick={() => void resolveMaps()}
-                  className="rounded-lg bg-blue-600 disabled:opacity-40 px-3 py-2 text-sm"
+                  className="fw-btn fw-btn-primary"
                 >
                   {resolving ? '…' : 'Ajouter'}
                 </button>
               </div>
             </div>
 
-            {items.map((it, index) => (
-              <div
-                key={it.localId}
-                className="rounded-lg border border-gray-700 bg-[#1a1d29] p-3 space-y-2"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-gray-500 w-6">
-                    {index + 1}
-                  </span>
-                  <select
-                    value={it.kind}
-                    onChange={(e) =>
-                      updateItem(index, {
-                        kind: e.target.value as ItineraryItemKind,
-                      })
-                    }
-                    className="bg-[#232736] border border-gray-700 rounded px-2 py-1 text-xs"
-                  >
-                    <option value="place">Lieu</option>
-                    <option value="activity">Activité</option>
-                    <option value="free">Libre</option>
-                  </select>
-                  <div className="flex-1" />
-                  <button
-                    type="button"
-                    onClick={() => moveItem(index, -1)}
-                    className="text-xs px-2 py-1 border border-gray-700 rounded"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveItem(index, 1)}
-                    className="text-xs px-2 py-1 border border-gray-700 rounded"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setItems((prev) => prev.filter((_, i) => i !== index))
-                    }
-                    className="text-xs px-2 py-1 border border-red-800 text-red-300 rounded"
-                  >
-                    ✕
-                  </button>
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {items.map((it, index) => (
+                <div key={it.localId} className="fw-step">
+                  <div className="fw-step-toolbar">
+                    <span className="fw-step-index">{index + 1}</span>
+                    <select
+                      className="fw-select"
+                      value={it.kind}
+                      onChange={(e) =>
+                        updateItem(index, {
+                          kind: e.target.value as ItineraryItemKind,
+                        })
+                      }
+                      style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem' }}
+                    >
+                      <option value="place">Lieu</option>
+                      <option value="activity">Activité</option>
+                      <option value="free">Libre</option>
+                    </select>
+                    <div style={{ flex: 1 }} />
+                    <button
+                      type="button"
+                      onClick={() => moveItem(index, -1)}
+                      className="fw-btn"
+                      style={{ padding: '0.3rem 0.55rem' }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveItem(index, 1)}
+                      className="fw-btn"
+                      style={{ padding: '0.3rem 0.55rem' }}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setItems((prev) => prev.filter((_, i) => i !== index))
+                      }
+                      className="fw-btn fw-btn-danger"
+                      style={{ padding: '0.3rem 0.55rem' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {it.kind === 'free' ? (
+                    <div className="fw-alert warn" style={{ padding: '0.55rem 0.75rem' }}>
+                      Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.
+                    </div>
+                  ) : null}
+
+                  <input
+                    className="fw-input"
+                    value={it.title}
+                    onChange={(e) => updateItem(index, { title: e.target.value })}
+                    placeholder="Titre"
+                  />
+                  <textarea
+                    className="fw-input"
+                    value={it.note}
+                    onChange={(e) => updateItem(index, { note: e.target.value })}
+                    placeholder="Note"
+                    rows={2}
+                    style={{ minHeight: '3.5rem' }}
+                  />
+
+                  <div className="fw-field-row cols-4">
+                    <input
+                      className="fw-input"
+                      value={it.duration_minutes}
+                      onChange={(e) =>
+                        updateItem(index, { duration_minutes: e.target.value })
+                      }
+                      placeholder="min"
+                    />
+                    <input
+                      className="fw-input"
+                      value={it.day_offset}
+                      onChange={(e) =>
+                        updateItem(index, { day_offset: e.target.value })
+                      }
+                      placeholder="jour (0…)"
+                    />
+                    <select
+                      className="fw-select"
+                      value={it.moment}
+                      onChange={(e) =>
+                        updateItem(index, { moment: e.target.value })
+                      }
+                    >
+                      <option value="">moment</option>
+                      <option value="morning">matin</option>
+                      <option value="afternoon">après-midi</option>
+                      <option value="evening">soir</option>
+                    </select>
+                    <input
+                      className="fw-input"
+                      value={it.photo}
+                      onChange={(e) =>
+                        updateItem(index, { photo: e.target.value })
+                      }
+                      placeholder="photo URL"
+                    />
+                  </div>
+
+                  {it.kind === 'place' ? (
+                    <p className="fw-muted" style={{ margin: 0, fontSize: '0.75rem' }}>
+                      place_id: {it.place_id || '— manquant'}
+                      {it.place_name ? ` · ${it.place_name}` : ''}
+                    </p>
+                  ) : null}
+
+                  {it.kind === 'activity' ? (
+                    <input
+                      className="fw-input"
+                      value={it.viator_product_code}
+                      onChange={(e) =>
+                        updateItem(index, {
+                          viator_product_code: e.target.value,
+                        })
+                      }
+                      placeholder="Code produit Viator"
+                    />
+                  ) : null}
                 </div>
-                {it.kind === 'free' ? (
-                  <p className="text-xs text-amber-300/90 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
-                    Étape sans lieu : elle n’apparaîtra pas dans l’itinéraire.
-                  </p>
-                ) : null}
-                <input
-                  value={it.title}
-                  onChange={(e) => updateItem(index, { title: e.target.value })}
-                  placeholder="Titre"
-                  className="w-full bg-[#232736] border border-gray-700 rounded-lg px-3 py-2 text-sm"
-                />
-                <textarea
-                  value={it.note}
-                  onChange={(e) => updateItem(index, { note: e.target.value })}
-                  placeholder="Note admin"
-                  rows={2}
-                  className="w-full bg-[#232736] border border-gray-700 rounded-lg px-3 py-2 text-sm"
-                />
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <input
-                    value={it.duration_minutes}
-                    onChange={(e) =>
-                      updateItem(index, { duration_minutes: e.target.value })
-                    }
-                    placeholder="min"
-                    className="bg-[#232736] border border-gray-700 rounded-lg px-2 py-1.5 text-xs"
-                  />
-                  <input
-                    value={it.day_offset}
-                    onChange={(e) =>
-                      updateItem(index, { day_offset: e.target.value })
-                    }
-                    placeholder="jour (0…)"
-                    className="bg-[#232736] border border-gray-700 rounded-lg px-2 py-1.5 text-xs"
-                  />
-                  <select
-                    value={it.moment}
-                    onChange={(e) =>
-                      updateItem(index, { moment: e.target.value })
-                    }
-                    className="bg-[#232736] border border-gray-700 rounded-lg px-2 py-1.5 text-xs"
-                  >
-                    <option value="">moment</option>
-                    <option value="morning">matin</option>
-                    <option value="afternoon">après-midi</option>
-                    <option value="evening">soir</option>
-                  </select>
-                  <input
-                    value={it.photo}
-                    onChange={(e) => updateItem(index, { photo: e.target.value })}
-                    placeholder="photo URL"
-                    className="bg-[#232736] border border-gray-700 rounded-lg px-2 py-1.5 text-xs"
-                  />
-                </div>
-                {it.kind === 'place' ? (
-                  <p className="text-[11px] text-gray-500">
-                    place_id: {it.place_id || '— manquant'}
-                    {it.place_name ? ` · ${it.place_name}` : ''}
-                  </p>
-                ) : null}
-                {it.kind === 'activity' ? (
-                  <input
-                    value={it.viator_product_code}
-                    onChange={(e) =>
-                      updateItem(index, {
-                        viator_product_code: e.target.value,
-                      })
-                    }
-                    placeholder="Code produit Viator"
-                    className="w-full bg-[#232736] border border-gray-700 rounded-lg px-3 py-2 text-sm"
-                  />
-                ) : null}
-              </div>
-            ))}
+              ))}
+            </div>
           </section>
         </div>
 
-        {/* Phone preview */}
-        <aside className="xl:sticky xl:top-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-200">Aperçu</p>
+        <aside className="fw-editor-aside">
+          <div className="fw-section-head" style={{ marginBottom: 0 }}>
+            <h2 className="fw-section-title">Aperçu</h2>
             <button
               type="button"
               onClick={() => setPreviewDark((v) => !v)}
-              className="text-xs text-gray-400 hover:text-white"
+              className="fw-btn fw-btn-ghost"
             >
               {previewDark ? 'Clair' : 'Sombre'}
             </button>
           </div>
-          <div
-            className="mx-auto w-[320px] rounded-[36px] border-[8px] border-gray-800 shadow-2xl overflow-hidden"
-            style={{
-              background: previewDark ? '#14110F' : '#FFF9F5',
-              color: previewDark ? '#F5EFEA' : '#1D1B19',
-            }}
-          >
-            <div className="h-7 bg-black/20" />
-            <div className="p-3 space-y-3 max-h-[640px] overflow-y-auto">
+          <div className={`fw-preview-shell${previewDark ? ' dark' : ''}`}>
+            <div style={{ height: 28, background: 'rgba(0,0,0,0.12)' }} />
+            <div
+              style={{
+                padding: 12,
+                display: 'grid',
+                gap: 12,
+                maxHeight: 640,
+                overflowY: 'auto',
+              }}
+            >
               <p
-                className="text-[11px] font-bold uppercase tracking-[0.08em]"
-                style={{ color: previewDark ? '#FF7A4A' : '#FF6B35' }}
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: previewDark ? '#FF7A4A' : '#FF6B35',
+                }}
               >
                 Parcours
               </p>
@@ -838,38 +907,47 @@ export function ParcoursEditorPage() {
               />
               <ItineraryCard itinerary={itin} variant="portrait" />
               <div
-                className="rounded-2xl p-3 space-y-2"
                 style={{
+                  borderRadius: 16,
+                  padding: 12,
+                  display: 'grid',
+                  gap: 8,
                   background: previewDark ? '#1F1A17' : '#fff',
                 }}
               >
                 <h2
-                  className="m-0 text-[22px] italic font-normal leading-tight"
                   style={{
+                    margin: 0,
+                    fontSize: 22,
+                    fontStyle: 'italic',
+                    fontWeight: 400,
+                    lineHeight: 1.2,
                     fontFamily: 'Georgia, serif',
                   }}
                 >
                   {itin.title}
                 </h2>
-                <p className="text-[13px] opacity-70 m-0">
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.7 }}>
                   {citySlugDisplayNameFr(itin.city_slug)}
                   {itin.duration_kind
                     ? ` · ${ITINERARY_DURATION_LABELS[itin.duration_kind as ItineraryDurationKind] || itin.duration_kind}`
                     : ''}
                 </p>
                 {itin.intro ? (
-                  <p className="text-[14px] leading-relaxed m-0 opacity-90">
+                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, opacity: 0.9 }}>
                     {itin.intro}
                   </p>
                 ) : (
-                  <p className="text-[13px] opacity-40 m-0">Introduction…</p>
+                  <p style={{ margin: 0, fontSize: 13, opacity: 0.4 }}>
+                    Introduction…
+                  </p>
                 )}
-                <ol className="m-0 pl-4 space-y-2 text-[13px]">
+                <ol style={{ margin: 0, paddingLeft: 16, display: 'grid', gap: 8, fontSize: 13 }}>
                   {items.map((it, i) => (
                     <li key={it.localId}>
                       <strong>{it.title || `Étape ${i + 1}`}</strong>
                       {it.note ? (
-                        <span className="opacity-70"> — {it.note}</span>
+                        <span style={{ opacity: 0.7 }}> — {it.note}</span>
                       ) : null}
                     </li>
                   ))}

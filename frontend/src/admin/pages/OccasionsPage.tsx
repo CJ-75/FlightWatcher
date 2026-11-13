@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getAccessToken } from '../../lib/supabase'
-import { resolveApiUrl } from '../../utils/apiBase'
-import { StatsCard } from '../components/StatsCard'
+import { Link } from 'react-router-dom'
+import { adminFetch } from '../api/adminApi'
+import { ErrorBlock, Kpi, LoadingBlock } from '../components/PageState'
 
 type VolumeRow = {
   slug: string
@@ -23,7 +23,12 @@ type OccasionsAdmin = {
   tag_volume?: VolumeRow[]
   unverified?: { slug: string; label?: string; kind?: string }[]
   pushable?: string[]
-  recent_sends?: { channel?: string; occasion_slug?: string; sent_at?: string; deal_count?: number }[]
+  recent_sends?: {
+    channel?: string
+    occasion_slug?: string
+    sent_at?: string
+    deal_count?: number
+  }[]
   error?: string
 }
 
@@ -38,12 +43,7 @@ export function OccasionsPage() {
       setLoading(true)
       setError(null)
       try {
-        const token = await getAccessToken()
-        const res = await fetch(resolveApiUrl('/api/admin/deals-occasions'), {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = (await res.json()) as OccasionsAdmin
+        const json = await adminFetch<OccasionsAdmin>('/api/admin/deals-occasions')
         if (!cancelled) setData(json)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur')
@@ -61,115 +61,181 @@ export function OccasionsPage() {
   const unverified = data?.unverified || []
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Occasions</h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Volume tags mur · chips actifs · events non vérifiés
-          {data?.today ? ` · ${data.today}` : ''}
+    <div>
+      <div className="fw-page-head">
+        <div>
+          <h1 className="fw-display">Occasions séjours</h1>
+          <p>
+            Suivi des filtres du mur Séjours (ponts, fêtes, météo…) — pas les tags des parcours.
+            {data?.today ? ` · ${data.today}` : ''}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="fw-card"
+        style={{
+          marginBottom: '1.15rem',
+          background:
+            'linear-gradient(125deg, rgba(15,118,110,0.08), transparent 55%), #fff',
+        }}
+      >
+        <h2 className="fw-section-title">À quoi ça sert ?</h2>
+        <p style={{ margin: '0 0 0.65rem', fontSize: '0.92rem', lineHeight: 1.5 }}>
+          Sur l’app, le mur <strong>Séjours</strong> propose des chips du type « pont de mai »,
+          « Saint-Valentin », « grand soleil ». Cette page montre combien de deals sont taggés
+          pour chaque occasion, lesquels ont assez de volume pour afficher un chip (≥ 3), et
+          lesquels ne sont pas encore vérifiés.
+        </p>
+        <p className="fw-muted" style={{ margin: 0, fontSize: '0.88rem', lineHeight: 1.45 }}>
+          À ne pas confondre avec les occasions d’un <Link to="/admin/parcours">parcours</Link>{' '}
+          (En amoureux, Férié, Au soleil…) : celles-là se choisissent dans l’éditeur de parcours.
         </p>
       </div>
 
-      {loading ? <p className="text-gray-400">Chargement…</p> : null}
-      {error ? <p className="text-red-400 text-sm">{error}</p> : null}
+      {loading ? <LoadingBlock /> : null}
+      {error ? (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <ErrorBlock error={error} />
+        </div>
+      ) : null}
       {data?.error ? (
-        <p className="text-amber-400 text-sm">Snapshot partiel : {data.error}</p>
+        <p className="fw-muted" style={{ marginBottom: '0.75rem' }}>
+          Snapshot partiel : {data.error}
+        </p>
       ) : null}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatsCard title="Mur actif" value={String(data?.wall_active ?? '—')} />
-        <StatsCard title="Chips ≥3" value={String(chips.length)} />
-        <StatsCard
-          title="Météo"
-          value={data?.weather_enabled ? 'ON' : 'OFF'}
-        />
-        <StatsCard title="Pushable" value={String(data?.pushable?.length ?? 0)} />
-      </div>
+      {!loading && (
+        <>
+          <div className="fw-grid fw-grid-3" style={{ marginBottom: '1rem' }}>
+            <Kpi
+              label="Séjours actifs"
+              value={data?.wall_active ?? '—'}
+              hint="Deals sur le mur"
+            />
+            <Kpi
+              label="Chips visibles"
+              value={chips.length}
+              hint="Occasions avec ≥ 3 deals"
+            />
+            <Kpi
+              label="Météo"
+              value={data?.weather_enabled ? 'ON' : 'OFF'}
+              hint={`${data?.pushable?.length ?? 0} prêtes à push`}
+            />
+          </div>
 
-      <section className="bg-[#1e2230] rounded-xl border border-gray-700 p-4">
-        <h2 className="text-sm font-semibold text-gray-200 mb-3">Chips actifs aujourd’hui</h2>
-        {chips.length === 0 ? (
-          <p className="text-xs text-gray-500">Aucun chip avec ≥3 deals (ou tags pas encore matérialisés).</p>
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            {chips.map((c) => (
-              <li
-                key={c.slug}
-                className="text-xs font-bold px-3 py-1.5 rounded-full bg-blue-600/20 text-blue-200 border border-blue-500/30"
+          <div className="fw-card" style={{ marginBottom: '0.95rem' }}>
+            <h2 className="fw-section-title">Chips actifs aujourd’hui</h2>
+            <p className="fw-muted" style={{ margin: '0 0 0.75rem', fontSize: '0.85rem' }}>
+              Filtres que l’utilisateur peut vraiment voir (assez de volume).
+            </p>
+            {chips.length === 0 ? (
+              <p className="fw-muted" style={{ margin: 0, fontSize: '0.88rem' }}>
+                Aucun chip avec ≥ 3 deals pour l’instant.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                {chips.map((c) => (
+                  <span key={c.slug} className="fw-badge">
+                    {c.label || c.slug} · {c.count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="fw-table-wrap" style={{ marginBottom: '0.95rem' }}>
+            <table className="fw-table">
+              <thead>
+                <tr>
+                  <th>Occasion</th>
+                  <th>Deals taggés</th>
+                  <th>Type</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {volume.map((row) => (
+                  <tr key={row.slug}>
+                    <td>
+                      <div style={{ fontWeight: 600 }}>{row.label || row.slug}</div>
+                      <div
+                        className="fw-muted"
+                        style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem' }}
+                      >
+                        {row.slug}
+                      </div>
+                    </td>
+                    <td>{row.count}</td>
+                    <td className="fw-muted">{row.kind || '—'}</td>
+                    <td>
+                      {!row.verified ? (
+                        <span className="fw-badge warn">À vérifier</span>
+                      ) : row.meets_chip_min ? (
+                        <span className="fw-badge ok">Chip OK</span>
+                      ) : (
+                        <span className="fw-muted">Volume &lt; 3</span>
+                      )}
+                      {row.push ? (
+                        <span className="fw-badge" style={{ marginLeft: 6 }}>
+                          push
+                        </span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+                {!volume.length ? (
+                  <tr>
+                    <td colSpan={4} className="fw-muted">
+                      Aucun volume tag pour l’instant.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="fw-card" style={{ marginBottom: '0.95rem' }}>
+            <h2 className="fw-section-title">Events non vérifiés</h2>
+            <p className="fw-muted" style={{ margin: '0 0 0.65rem', fontSize: '0.85rem' }}>
+              Occasions calendrier / météo pas encore validées — elles ne doivent pas pousser
+              de chips foireux.
+            </p>
+            {unverified.length === 0 ? (
+              <p className="fw-muted" style={{ margin: 0 }}>
+                Tout est vérifié.
+              </p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                {unverified.map((u) => (
+                  <li key={u.slug} style={{ marginBottom: 4 }}>
+                    <strong>{u.label || u.slug}</strong>{' '}
+                    <span className="fw-muted">({u.kind || '—'})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {(data?.recent_sends || []).length > 0 ? (
+            <div className="fw-card">
+              <h2 className="fw-section-title">Derniers envois liés</h2>
+              <ul
+                className="fw-muted"
+                style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.85rem' }}
               >
-                {c.label || c.slug} · {c.count}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="bg-[#1e2230] rounded-xl border border-gray-700 p-4 overflow-x-auto">
-        <h2 className="text-sm font-semibold text-gray-200 mb-3">Volume par occasion</h2>
-        <table className="w-full text-sm text-left">
-          <thead className="text-xs text-gray-500 uppercase">
-            <tr>
-              <th className="py-2 pr-3">Slug</th>
-              <th className="py-2 pr-3">Label</th>
-              <th className="py-2 pr-3">Tags</th>
-              <th className="py-2 pr-3">Badge</th>
-              <th className="py-2 pr-3">Kind</th>
-              <th className="py-2 pr-3">OK</th>
-            </tr>
-          </thead>
-          <tbody>
-            {volume.map((row) => (
-              <tr key={row.slug} className="border-t border-gray-800 text-gray-300">
-                <td className="py-2 pr-3 font-mono text-xs">{row.slug}</td>
-                <td className="py-2 pr-3">{row.label}</td>
-                <td className="py-2 pr-3 tabular-nums">{row.count}</td>
-                <td className="py-2 pr-3 tabular-nums">{row.badge_count ?? 0}</td>
-                <td className="py-2 pr-3 text-xs">{row.kind}</td>
-                <td className="py-2 pr-3 text-xs">
-                  {!row.verified ? (
-                    <span className="text-amber-400">unverified</span>
-                  ) : row.meets_chip_min ? (
-                    <span className="text-emerald-400">chip</span>
-                  ) : (
-                    <span className="text-gray-500">&lt;3</span>
-                  )}
-                  {row.push ? ' · push' : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="bg-[#1e2230] rounded-xl border border-gray-700 p-4">
-        <h2 className="text-sm font-semibold text-gray-200 mb-3">Events non vérifiés</h2>
-        {unverified.length === 0 ? (
-          <p className="text-xs text-gray-500">Aucun.</p>
-        ) : (
-          <ul className="space-y-1 text-sm text-gray-400">
-            {unverified.map((u) => (
-              <li key={u.slug}>
-                <span className="font-mono text-xs text-amber-300">{u.slug}</span>
-                {' — '}
-                {u.label} <span className="text-gray-600">({u.kind})</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {(data?.recent_sends || []).length > 0 ? (
-        <section className="bg-[#1e2230] rounded-xl border border-gray-700 p-4">
-          <h2 className="text-sm font-semibold text-gray-200 mb-3">Derniers envois (Lot F)</h2>
-          <ul className="space-y-1 text-xs text-gray-400 font-mono">
-            {(data?.recent_sends || []).slice(0, 12).map((s, i) => (
-              <li key={`${s.sent_at}-${i}`}>
-                {s.sent_at?.slice(0, 16)} · {s.channel} · {s.occasion_slug} · n={s.deal_count}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                {(data?.recent_sends || []).slice(0, 12).map((s, i) => (
+                  <li key={`${s.sent_at}-${i}`}>
+                    {s.sent_at?.slice(0, 16)} · {s.channel} · {s.occasion_slug} ·{' '}
+                    {s.deal_count} deals
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   )
 }

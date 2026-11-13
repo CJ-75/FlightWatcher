@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getApiClient } from '../../utils/apiClient'
+import { ErrorBlock, LoadingBlock } from '../components/PageState'
 
 type FunnelRow = {
   event: string
@@ -11,11 +12,13 @@ type FunnelRow = {
 export function ActivitiesAdminPage() {
   const [migrations, setMigrations] = useState<Record<string, unknown> | null>(null)
   const [funnel, setFunnel] = useState<FunnelRow[]>([])
-  const [platform, setPlatform] = useState<string>('')
+  const [platform, setPlatform] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     void (async () => {
+      setLoading(true)
       try {
         const api = getApiClient()
         const cfg = await api.getConfig()
@@ -39,6 +42,8 @@ export function ActivitiesAdminPage() {
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erreur')
+      } finally {
+        setLoading(false)
       }
     })()
   }, [platform])
@@ -46,30 +51,58 @@ export function ActivitiesAdminPage() {
   const migrationsOk = migrations?.ok ?? migrations?.migrations_ok
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Activités / mesure</h1>
-      {error ? <p className="text-red-400 text-sm">{error}</p> : null}
+    <div>
+      <div className="fw-page-head">
+        <div>
+          <h1 className="fw-display">Activités</h1>
+          <p>Flags, migrations et funnel d’événements.</p>
+        </div>
+      </div>
 
-      {migrationsOk === false ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          Migrations activités manquantes — appliquer{' '}
-          <code className="text-amber-50">apply_activities_lot_a_migration.sql</code>{' '}
-          manuellement (pas de db push).
+      {error ? (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <ErrorBlock error={error} />
         </div>
       ) : null}
 
-      <section className="rounded-xl bg-[#232736] p-4 space-y-2">
-        <h2 className="font-semibold text-gray-200">Flags & migrations</h2>
-        <pre className="text-xs text-gray-400 overflow-auto">
-          {JSON.stringify(migrations, null, 2)}
-        </pre>
-      </section>
+      {migrationsOk === false ? (
+        <div className="fw-card" style={{ marginBottom: '0.95rem', borderColor: 'rgba(180,83,9,0.35)' }}>
+          <span className="fw-badge warn">Attention</span>
+          <p style={{ margin: '0.55rem 0 0', fontSize: '0.9rem' }}>
+            Migrations activités manquantes — appliquer{' '}
+            <code>apply_activities_lot_a_migration.sql</code> manuellement.
+          </p>
+        </div>
+      ) : null}
 
-      <section className="rounded-xl bg-[#232736] p-4 space-y-3">
-        <div className="flex flex-wrap gap-2 items-center">
-          <h2 className="font-semibold text-gray-200 flex-1">Funnel events</h2>
+      {loading && !migrations ? <LoadingBlock /> : null}
+
+      {migrations ? (
+        <div className="fw-card" style={{ marginBottom: '0.95rem' }}>
+          <h2 className="fw-display" style={{ margin: '0 0 0.55rem', fontSize: '1.05rem' }}>
+            Flags & migrations
+          </h2>
+          <pre
+            style={{
+              margin: 0,
+              fontSize: '0.75rem',
+              color: 'var(--fw-muted)',
+              overflow: 'auto',
+              maxHeight: 220,
+            }}
+          >
+            {JSON.stringify(migrations, null, 2)}
+          </pre>
+        </div>
+      ) : null}
+
+      <div className="fw-card">
+        <div className="fw-toolbar" style={{ marginBottom: '0.75rem', boxShadow: 'none', padding: 0, border: 'none' }}>
+          <h2 className="fw-display" style={{ margin: 0, fontSize: '1.05rem', flex: 1 }}>
+            Funnel events
+          </h2>
           <select
-            className="bg-[#1a1d29] border border-gray-700 rounded-lg px-2 py-1 text-sm"
+            className="fw-select"
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
           >
@@ -79,30 +112,34 @@ export function ActivitiesAdminPage() {
             <option value="android">android</option>
           </select>
         </div>
-        <table className="w-full text-sm text-left">
-          <thead className="text-gray-500">
-            <tr>
-              <th className="py-1">event</th>
-              <th>platform</th>
-              <th>surface</th>
-              <th>n</th>
-            </tr>
-          </thead>
-          <tbody>
-            {funnel.map((r, i) => (
-              <tr key={i} className="border-t border-gray-800 text-gray-300">
-                <td className="py-1.5">{r.event}</td>
-                <td>{r.platform || '—'}</td>
-                <td>{r.surface || '—'}</td>
-                <td>{r.n}</td>
+        <div className="fw-table-wrap" style={{ boxShadow: 'none' }}>
+          <table className="fw-table">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Platform</th>
+                <th>Surface</th>
+                <th>N</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {!funnel.length ? (
-          <p className="text-xs text-gray-500">Aucun event (applique la migration Lot A).</p>
-        ) : null}
-      </section>
+            </thead>
+            <tbody>
+              {funnel.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.event}</td>
+                  <td>{r.platform || '—'}</td>
+                  <td>{r.surface || '—'}</td>
+                  <td>{r.n}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!funnel.length ? (
+            <p className="fw-muted" style={{ padding: '0.85rem', margin: 0 }}>
+              Aucun event.
+            </p>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }

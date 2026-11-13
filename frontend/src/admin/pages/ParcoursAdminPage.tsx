@@ -5,11 +5,15 @@ import {
   ITINERARY_OCCASION_LABELS,
   cityDisplayNameFr,
   cityImageUrl,
+  cityUnsplashUrl,
   type Itinerary,
   type ItineraryDurationKind,
   type ItineraryOccasion,
 } from '@flightwatcher/shared'
 import { getApiClient } from '../../utils/apiClient'
+import { ParcoursCoverImg } from '../../components/parcours/ParcoursCoverImg'
+import { ErrorBlock, LoadingBlock } from '../components/PageState'
+import { adminCacheKey, adminSwr, invalidateAdminCache, peekAdminCache } from '../lib/adminCache'
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Brouillon',
@@ -26,16 +30,32 @@ export function ParcoursAdminPage() {
   const [status, setStatus] = useState('')
   const [occasion, setOccasion] = useState('')
   const [creating, setCreating] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (force = false) => {
+    const key = adminCacheKey(['parcours-list', city, status, occasion])
+    const cached = peekAdminCache<{ ok?: boolean; itineraries?: Itinerary[]; error?: string }>(key)
+    if (cached?.itineraries && !force) {
+      setRows(cached.itineraries)
+      setLoading(false)
+    } else if (!cached) {
+      setLoading(true)
+    }
     setError(null)
     try {
-      const api = getApiClient()
-      const res = await api.adminListParcours({
-        city: city || undefined,
-        status: status || undefined,
-        occasion: occasion || undefined,
+      const { data: res } = await adminSwr({
+        key,
+        force,
+        ttlMs: 30_000,
+        staleMs: 120_000,
+        fetcher: async () => {
+          const api = getApiClient()
+          return api.adminListParcours({
+            city: city || undefined,
+            status: status || undefined,
+            occasion: occasion || undefined,
+          })
+        },
       })
       if (!res.ok) throw new Error(res.error || 'Chargement impossible')
       setRows((res.itineraries || []) as unknown as Itinerary[])
@@ -50,6 +70,24 @@ export function ParcoursAdminPage() {
     void load()
   }, [load])
 
+  const onDelete = async (id: string, title?: string) => {
+    if (!window.confirm(`Supprimer le parcours « ${title || id} » ?`)) return
+    setBusyId(id)
+    setError(null)
+    try {
+      const api = getApiClient()
+      const res = await api.adminDeleteParcours(id)
+      if (!res.ok) throw new Error(res.error || 'Suppression impossible')
+      invalidateAdminCache('parcours-list')
+      invalidateAdminCache('dashboard')
+      await load(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur suppression')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const onCreate = async () => {
     setCreating(true)
     try {
@@ -57,11 +95,13 @@ export function ParcoursAdminPage() {
       const res = await api.adminCreateParcours({
         title: 'Nouveau parcours',
         city_slug: 'paris',
-        cover_image: cityImageUrl('paris'),
+        cover_image: cityUnsplashUrl('paris') || cityImageUrl('paris'),
       })
       if (!res.ok || !res.itinerary?.id) {
         throw new Error(res.error || 'Création impossible')
       }
+      invalidateAdminCache('parcours-list')
+      invalidateAdminCache('dashboard')
       navigate(`/admin/parcours/${res.itinerary.id}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur création')
@@ -71,173 +111,183 @@ export function ParcoursAdminPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end gap-3 justify-between">
+    <div>
+      <div className="fw-page-head">
         <div>
-          <h1 className="text-2xl font-bold text-white">Parcours</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Catalogue éditorial — publier un parcours en &lt; 15 min
-          </p>
+          <h1 className="fw-display">Parcours</h1>
+          <p>Catalogue éditorial — publier un parcours rapidement.</p>
         </div>
         <button
           type="button"
+          className="fw-btn fw-btn-primary"
           onClick={() => void onCreate()}
           disabled={creating}
-          className="rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 text-sm font-semibold"
         >
           {creating ? 'Création…' : 'Nouveau parcours'}
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="fw-toolbar">
         <input
+          className="fw-input"
           value={city}
           onChange={(e) => setCity(e.target.value.trim().toLowerCase())}
           placeholder="Ville (slug)"
-          className="bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm w-40"
+          style={{ width: 140 }}
         />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm"
-        >
+        <select className="fw-select" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Tous statuts</option>
           <option value="draft">Brouillon</option>
           <option value="published">Publié</option>
           <option value="retired">Retiré</option>
         </select>
         <select
+          className="fw-select"
           value={occasion}
           onChange={(e) => setOccasion(e.target.value)}
-          className="bg-[#1a1d29] border border-gray-700 rounded-lg px-3 py-2 text-sm"
         >
           <option value="">Toutes occasions</option>
-          {(Object.keys(ITINERARY_OCCASION_LABELS) as ItineraryOccasion[]).map(
-            (k) => (
-              <option key={k} value={k}>
-                {ITINERARY_OCCASION_LABELS[k]}
-              </option>
-            ),
-          )}
+          {(Object.keys(ITINERARY_OCCASION_LABELS) as ItineraryOccasion[]).map((k) => (
+            <option key={k} value={k}>
+              {ITINERARY_OCCASION_LABELS[k]}
+            </option>
+          ))}
         </select>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-lg border border-gray-600 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
-        >
+        <button type="button" className="fw-btn" onClick={() => void load()}>
           Filtrer
         </button>
       </div>
 
-      {error ? <p className="text-red-400 text-sm">{error}</p> : null}
-      {loading ? <p className="text-gray-400 text-sm">Chargement…</p> : null}
+      {error ? (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <ErrorBlock error={error} />
+        </div>
+      ) : null}
+      {loading ? <LoadingBlock /> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-gray-700">
-        <table className="w-full text-sm text-left">
-          <thead className="text-gray-500 bg-[#232736]">
-            <tr>
-              <th className="px-3 py-2"> </th>
-              <th className="px-3 py-2">Titre</th>
-              <th className="px-3 py-2">Ville</th>
-              <th className="px-3 py-2">Durée</th>
-              <th className="px-3 py-2">Occasions</th>
-              <th className="px-3 py-2">Statut</th>
-              <th className="px-3 py-2">Mise en avant</th>
-              <th className="px-3 py-2">Modifié</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const cover =
-                r.cover_image ||
-                (r.city_slug ? cityImageUrl(r.city_slug) : null)
-              const dur = r.duration_kind
-                ? ITINERARY_DURATION_LABELS[
-                    r.duration_kind as ItineraryDurationKind
-                  ] || r.duration_kind
-                : '—'
-              return (
-                <tr
-                  key={r.id}
-                  className="border-t border-gray-800 text-gray-200 hover:bg-[#232736]/60"
-                >
-                  <td className="px-3 py-2">
-                    {cover ? (
-                      <img
-                        src={cover}
-                        alt=""
-                        className="h-10 w-10 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 rounded-lg bg-gray-800" />
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Link
-                      to={`/admin/parcours/${r.id}`}
-                      className="font-medium text-blue-300 hover:underline"
-                    >
-                      {r.title}
-                    </Link>
-                    {r.is_demo ? (
-                      <span className="ml-2 text-[10px] uppercase text-amber-400">
-                        demo
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.city_slug
-                      ? cityDisplayNameFr(null, r.city_slug)
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2">{dur}</td>
-                  <td className="px-3 py-2">
-                    <span className="text-xs text-gray-400">
+      {!loading && (
+        <div className="fw-table-wrap">
+          <table className="fw-table">
+            <thead>
+              <tr>
+                <th> </th>
+                <th>Titre</th>
+                <th>Ville</th>
+                <th>Durée</th>
+                <th>Occasions</th>
+                <th>Statut</th>
+                <th>Mise en avant</th>
+                <th>Modifié</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const dur = r.duration_kind
+                  ? ITINERARY_DURATION_LABELS[r.duration_kind as ItineraryDurationKind] ||
+                    r.duration_kind
+                  : '—'
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <div
+                        style={{
+                          height: 40,
+                          width: 40,
+                          borderRadius: 10,
+                          background: '#e2e8f0',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <ParcoursCoverImg
+                          coverImage={r.cover_image}
+                          citySlug={r.city_slug}
+                          slug={r.slug}
+                          width={160}
+                          style={{
+                            height: 40,
+                            width: 40,
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td>
+                      <Link
+                        to={`/admin/parcours/${r.id}`}
+                        style={{ fontWeight: 600, color: 'var(--fw-accent)', textDecoration: 'none' }}
+                      >
+                        {r.title}
+                      </Link>
+                      {r.is_demo ? (
+                        <span className="fw-badge warn" style={{ marginLeft: 6 }}>
+                          demo
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>{r.city_slug ? cityDisplayNameFr(null, r.city_slug) : '—'}</td>
+                    <td>{dur}</td>
+                    <td className="fw-muted" style={{ fontSize: '0.8rem' }}>
                       {(r.occasions || [])
-                        .map(
-                          (o) =>
-                            ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] ||
-                            o,
-                        )
+                        .map((o) => ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || o)
                         .join(', ') || '—'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        r.status === 'published'
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : r.status === 'retired'
-                            ? 'bg-gray-600/40 text-gray-300'
-                            : 'bg-amber-500/20 text-amber-200'
-                      }`}
-                    >
-                      {STATUS_LABEL[r.status] || r.status}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-400">
-                    {r.featured_from && r.featured_to
-                      ? `${r.featured_from} → ${r.featured_to}`
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-500">
-                    {(r as { updated_at?: string }).updated_at
-                      ? new Date(
-                          (r as { updated_at?: string }).updated_at!,
-                        ).toLocaleString('fr-FR')
-                      : '—'}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        {!loading && rows.length === 0 ? (
-          <p className="p-4 text-xs text-gray-500">
-            Aucun parcours. Applique la migration + seed, ou crée-en un.
-          </p>
-        ) : null}
-      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`fw-badge ${
+                          r.status === 'published' ? 'ok' : r.status === 'retired' ? '' : 'warn'
+                        }`}
+                      >
+                        {STATUS_LABEL[r.status || ''] || r.status}
+                      </span>
+                    </td>
+                    <td className="fw-muted" style={{ fontSize: '0.8rem' }}>
+                      {r.featured_from && r.featured_to
+                        ? `${r.featured_from} → ${r.featured_to}`
+                        : '—'}
+                    </td>
+                    <td className="fw-muted" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                      {(r as { updated_at?: string }).updated_at
+                        ? new Date((r as { updated_at?: string }).updated_at!).toLocaleString('fr-FR')
+                        : '—'}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <Link
+                          to={`/admin/parcours/${r.id}`}
+                          className="fw-btn"
+                          style={{
+                            padding: '0.3rem 0.55rem',
+                            fontSize: '0.75rem',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          Éditer
+                        </Link>
+                        <button
+                          type="button"
+                          className="fw-btn fw-btn-danger"
+                          style={{ padding: '0.3rem 0.55rem', fontSize: '0.75rem' }}
+                          disabled={busyId === r.id}
+                          onClick={() => void onDelete(r.id, r.title)}
+                        >
+                          {busyId === r.id ? '…' : 'Suppr.'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {!rows.length ? (
+            <p className="fw-muted" style={{ padding: '1rem', margin: 0 }}>
+              Aucun parcours. Crée-en un pour commencer.
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }

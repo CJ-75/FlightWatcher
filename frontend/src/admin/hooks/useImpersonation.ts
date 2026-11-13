@@ -1,15 +1,43 @@
 /**
- * Hook pour gérer l'impersonation d'utilisateur
+ * Log as — session admin + ouverture magic link utilisateur.
  */
-import { useState, useEffect } from 'react'
-import { getAccessToken } from '../../lib/supabase'
-import { apiUrl } from '../../utils/apiBase'
+import { useCallback, useEffect, useState } from 'react'
+import { AdminApiError, adminApi } from '../api/adminApi'
+
+const LS_KEY = 'admin_impersonation'
 
 interface ImpersonationState {
   isImpersonating: boolean
   targetUserId: string | null
   targetUserEmail: string | null
-  impersonationToken: string | null
+  actionLink: string | null
+}
+
+function readStored(): ImpersonationState | null {
+  try {
+    const stored = localStorage.getItem(LS_KEY)
+    if (!stored) return null
+    const data = JSON.parse(stored)
+    const expMs =
+      typeof data.expires_at === 'number'
+        ? data.expires_at > 1e12
+          ? data.expires_at
+          : data.expires_at * 1000
+        : 0
+    if (expMs && expMs < Date.now()) {
+      localStorage.removeItem(LS_KEY)
+      return null
+    }
+    return {
+      isImpersonating: true,
+      targetUserId: data.target_user_id || null,
+      targetUserEmail: data.target_user_email || null,
+      actionLink: data.action_link || null,
+    }
+  } catch {
+    localStorage.removeItem(LS_KEY)
+    return null
+  }
 }
 
 export function useImpersonation() {
@@ -17,93 +45,80 @@ export function useImpersonation() {
     isImpersonating: false,
     targetUserId: null,
     targetUserEmail: null,
-    impersonationToken: null
+    actionLink: null,
   })
 
-  // Vérifier s'il y a une impersonation en cours (depuis localStorage)
   useEffect(() => {
-    const stored = localStorage.getItem('admin_impersonation')
-    if (stored) {
-      try {
-        const data = JSON.parse(stored)
-        if (data.expires_at > Date.now()) {
-          setState({
-            isImpersonating: true,
-            targetUserId: data.target_user_id,
-            targetUserEmail: data.target_user_email,
-            impersonationToken: data.token
-          })
-        } else {
-          // Token expiré, nettoyer
-          localStorage.removeItem('admin_impersonation')
-        }
-      } catch (e) {
-        localStorage.removeItem('admin_impersonation')
-      }
-    }
+    const local = readStored()
+    if (local) setState(local)
   }, [])
 
-  const startImpersonation = async (targetUserId: string) => {
+  const startImpersonation = useCallback(async (targetUserId: string) => {
     try {
-      const token = await getAccessToken()
-      if (!token) {
-        throw new Error('Token d\'accès non disponible')
+      const data = await adminApi.impersonate(targetUserId)
+      if (!data.action_link) {
+        throw new Error('Lien de connexion manquant')
       }
+      const expiresAt =
+        typeof data.expires_at === 'number'
+          ? data.expires_at > 1e12
+            ? data.expires_at
+            : data.expires_at * 1000
+          : Date.now() + (data.ttl_sec || 900) * 1000
 
-      const response = await fetch(apiUrl(`/api/admin/impersonate/${targetUserId}`), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        credentials: 'include' // Important pour envoyer les cookies (admin_password_verified)
-      })
-
-      if (!response.ok) {
-        throw new Error('Erreur lors de la création du token d\'impersonation')
-      }
-
-      const data = await response.json()
-      
-      // Stocker les informations d'impersonation
-      const impersonationData = {
+      const payload = {
         target_user_id: data.target_user_id,
         target_user_email: data.target_user_email,
-        token: data.token || token, // Utiliser le token retourné ou le token actuel
-        expires_at: data.expires_at || (Date.now() + 3600000) // 1h par défaut
+        action_link: data.action_link,
+        expires_at: expiresAt,
       }
-
-      localStorage.setItem('admin_impersonation', JSON.stringify(impersonationData))
-
+      localStorage.setItem(LS_KEY, JSON.stringify(payload))
       setState({
         isImpersonating: true,
         targetUserId: data.target_user_id,
-        targetUserEmail: data.target_user_email,
-        impersonationToken: impersonationData.token
+        targetUserEmail: data.target_user_email || null,
+        actionLink: data.action_link,
       })
 
-      return { success: true }
-    } catch (error: any) {
-      console.error('Erreur impersonation:', error)
-      return { success: false, error: error.message }
+      // Ouvre l’app en tant que l’utilisateur (admin reste ouvert)
+      window.open(data.action_link, '_blank', 'noopener,noreferrer')
+      return { success: true as const, email: data.target_user_email }
+    } catch (error) {
+      const message =
+        error instanceof AdminApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Log as impossible'
+      return { success: false as const, error: message, status: error instanceof AdminApiError ? error.status : 0 }
     }
-  }
+  }, [])
 
-  const stopImpersonation = () => {
-    localStorage.removeItem('admin_impersonation')
+  const stopImpersonation = useCallback(async () => {
+    try {
+      await adminApi.stopImpersonate()
+    } catch {
+      /* ignore */
+    }
+    localStorage.removeItem(LS_KEY)
     setState({
       isImpersonating: false,
       targetUserId: null,
       targetUserEmail: null,
-      impersonationToken: null
+      actionLink: null,
     })
-    // Recharger la page pour revenir au compte admin
-    window.location.href = '/admin'
-  }
+  }, [])
+
+  const reopenLink = useCallback(() => {
+    if (state.actionLink) {
+      window.open(state.actionLink, '_blank', 'noopener,noreferrer')
+    }
+  }, [state.actionLink])
 
   return {
     ...state,
     startImpersonation,
-    stopImpersonation
+    stopImpersonation,
+    reopenLink,
   }
 }
-

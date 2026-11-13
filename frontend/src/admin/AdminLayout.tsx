@@ -1,11 +1,12 @@
 /**
- * Shell admin — slate/teal, drawer mobile.
+ * Shell admin — brand site (peach / Sora).
  */
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { AdminSidebar } from './components/AdminSidebar'
 import { AdminHeader } from './components/AdminHeader'
 import { ImpersonationBanner } from './components/ImpersonationBanner'
+import { ImpersonationProvider } from './context/ImpersonationContext'
 import './styles/admin.css'
 
 function useAdminFonts() {
@@ -23,7 +24,7 @@ function useAdminFonts() {
     link.id = id
     link.rel = 'stylesheet'
     link.href =
-      'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap'
+      'https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Sora:wght@400;500;600;700;800&display=swap'
     document.head.append(preconnect1, preconnect2, link)
   }, [])
 }
@@ -33,20 +34,22 @@ export function AdminLayout() {
   useAdminFonts()
 
   return (
-    <div className="fw-admin">
-      <ImpersonationBanner />
-      {drawerOpen ? (
-        <div className="fw-drawer-backdrop" onClick={() => setDrawerOpen(false)} />
-      ) : null}
-      <div className="fw-admin-shell">
-        <AdminSidebar open={drawerOpen} onNavigate={() => setDrawerOpen(false)} />
-        <div className="fw-admin-main">
-          <AdminHeader onMenu={() => setDrawerOpen((v) => !v)} />
-          <main className="fw-admin-content">
-            <Outlet />
-          </main>
+    <ImpersonationProvider>
+      <div className="fw-admin">
+        <ImpersonationBanner />
+        {drawerOpen ? (
+          <div className="fw-drawer-backdrop" onClick={() => setDrawerOpen(false)} />
+        ) : null}
+        <div className="fw-admin-shell">
+          <AdminSidebar open={drawerOpen} onNavigate={() => setDrawerOpen(false)} />
+          <div className="fw-admin-main">
+            <AdminHeader onMenu={() => setDrawerOpen((v) => !v)} />
+            <main className="fw-admin-content">
+              <Outlet />
+            </main>
+          </div>
         </div>
       </div>
-    </div>
+    </ImpersonationProvider>
   )
 }

@@ -11,10 +11,14 @@ export function PageTitle({ title, subtitle }: { title: string; subtitle?: strin
 
 export function LoadingBlock({ label = 'Chargement…' }: { label?: string }) {
   return (
-    <div className="fw-grid fw-grid-3" aria-busy="true" aria-label={label}>
-      <div className="fw-skeleton" />
-      <div className="fw-skeleton" />
-      <div className="fw-skeleton" />
+    <div aria-busy="true" aria-label={label}>
+      <div className="fw-skeleton" style={{ height: 88, marginBottom: 12 }} />
+      <div className="fw-grid fw-grid-3">
+        <div className="fw-skeleton" />
+        <div className="fw-skeleton" />
+        <div className="fw-skeleton" />
+      </div>
+      <div className="fw-skeleton" style={{ height: 220, marginTop: 12 }} />
     </div>
   )
 }

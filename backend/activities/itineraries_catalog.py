@@ -30,9 +30,24 @@ _detail_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _CITY_COVER_FALLBACK = {
     "paris": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=90&fm=jpg",
     "marseille": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "lyon": "https://images.unsplash.com/photo-1523531294919-4ddd7d7296e3?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "nice": "https://images.unsplash.com/photo-1691770128652-ed5bc5647cb1?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "bordeaux": "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&q=90&fm=jpg",
     "lisbon": "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1600&q=90&fm=jpg",
     "lisbonne": "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=1600&q=90&fm=jpg",
     "porto": "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "barcelona": "https://images.unsplash.com/photo-1583422409516-2895a77efded?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "barcelone": "https://images.unsplash.com/photo-1583422409516-2895a77efded?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "rome": "https://images.unsplash.com/photo-1555992828-ca4dbe41d294?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "madrid": "https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "amsterdam": "https://images.unsplash.com/photo-1534351590666-13e1e96fc3c7?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "london": "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "londres": "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "berlin": "https://images.unsplash.com/photo-1560969184-10fe8719e047?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "prague": "https://images.unsplash.com/photo-1541849546-2108b4cea6a3?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "budapest": "https://images.unsplash.com/photo-1541343672885-9be56236302a?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "marrakech": "https://images.unsplash.com/photo-1653323792487-6ecc6217040b?auto=format&fit=crop&w=1600&q=90&fm=jpg",
+    "marrakesh": "https://images.unsplash.com/photo-1653323792487-6ecc6217040b?auto=format&fit=crop&w=1600&q=90&fm=jpg",
 }
 
 _SLUG_COVER_FALLBACK = {
@@ -126,9 +141,8 @@ def _serialize(row: Dict[str, Any]) -> Dict[str, Any]:
         not cover
         or "wikimedia.org" in cover
         or "photo-1499853387-4b3839150cba" in cover
+        or "source.unsplash.com" in cover
     ):
-        out["cover_image"] = curated
-    elif not cover and curated:
         out["cover_image"] = curated
     return out
 

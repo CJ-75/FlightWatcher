@@ -42,7 +42,8 @@ export async function adminFetch<T = unknown>(path: string, opts: FetchOpts = {}
 
   const controller = opts.signal ? null : new AbortController()
   const signal = opts.signal || controller!.signal
-  const timeout = setTimeout(() => controller?.abort(), 60000)
+  // Admin reads should fail fast; heavy routes can override via AbortSignal
+  const timeout = setTimeout(() => controller?.abort(), 20000)
 
   try {
     const res = await fetch(apiUrl(withQuery(path, opts.query)), {
@@ -75,9 +76,53 @@ export async function adminFetch<T = unknown>(path: string, opts: FetchOpts = {}
   }
 }
 
+export type AdminDashboard = {
+  ok: boolean
+  days: number
+  generated_at?: string
+  cached?: boolean
+  stale?: boolean
+  elapsed_ms?: number
+  kpis: {
+    total: number
+    onboarded: number
+    pending: number
+    onboarded_pct: number
+    new_24h: number
+    new_7d: number
+    onboarded_in_window?: number
+    pending_stale_7d: number
+    lag_hours_avg: number | null
+    lag_hours_p50: number | null
+    conversion_7d_pct: number | null
+    signups_7d: number
+    onboarded_7d: number
+  }
+  series: Array<{
+    day: string
+    signups: number
+    onboarded: number
+    signups_cumul: number
+  }>
+  top_cities: Array<{ city: string; n: number }>
+  top_airports: Array<{ airport: string; n: number }>
+  contenu: {
+    parcours_published: number
+    parcours_draft: number
+    parcours_total: number
+  }
+}
+
 export const adminApi = {
-  overview: (force = false) =>
-    adminFetch<Record<string, unknown>>('/api/admin/overview', { query: { force } }),
+  overview: (force = false, days = 30) =>
+    adminFetch<AdminDashboard>('/api/admin/overview', { query: { force, days } }),
+
+  dashboard: async (days = 30, force = false): Promise<AdminDashboard> => {
+    // Un seul endpoint léger (counts HEAD) — pas de chaîne overview/stats
+    return adminFetch<AdminDashboard>('/api/admin/inscrits/dashboard', {
+      query: { days, force },
+    })
+  },
 
   inscritsStats: (force = false) =>
     adminFetch<{
@@ -122,6 +167,29 @@ export const adminApi = {
         onboarding: opts.onboarding ?? 'all',
       },
     }),
+
+  updateInscrit: (
+    userId: string,
+    body: {
+      nom?: string
+      ville?: string
+      aeroport?: string
+      onboarding_completed?: boolean
+      full_name?: string
+      home_city_slug?: string
+      home_airport?: string
+    },
+  ) =>
+    adminFetch<{ ok: boolean; user?: Record<string, unknown>; error?: string }>(
+      `/api/admin/inscrits/${encodeURIComponent(userId)}`,
+      { method: 'PATCH', body },
+    ),
+
+  deleteInscrit: (userId: string, confirm = 'SUPPRIMER') =>
+    adminFetch<{ ok: boolean; deleted?: boolean; error?: string }>(
+      `/api/admin/inscrits/${encodeURIComponent(userId)}/delete`,
+      { method: 'POST', body: { confirm } },
+    ),
   productFunnel: (days = 14) =>
     adminFetch('/api/admin/product-funnel', { query: { days } }),
   parcoursQuality: () => adminFetch('/api/admin/parcours-quality'),
@@ -141,6 +209,31 @@ export const adminApi = {
     }),
   stepUp: (password: string) =>
     adminFetch('/api/admin/security/step-up', { method: 'POST', body: { password } }),
+
+  impersonate: (targetUserId: string) =>
+    adminFetch<{
+      ok: boolean
+      target_user_id: string
+      target_user_email?: string
+      target_user_name?: string
+      action_link: string
+      expires_at?: number
+      ttl_sec?: number
+    }>('/api/admin/security/impersonate', {
+      method: 'POST',
+      body: { target_user_id: targetUserId },
+    }),
+
+  stopImpersonate: () =>
+    adminFetch<{ ok: boolean }>('/api/admin/security/impersonate/stop', {
+      method: 'POST',
+    }),
+
+  getImpersonation: () =>
+    adminFetch<{
+      ok: boolean
+      session?: { target_user_id?: string; expires_at?: number } | null
+    }>('/api/admin/security/impersonate'),
 
   growthKpis: () => adminFetch('/api/admin/growth/kpis'),
   growthCohorts: (days = 28) =>

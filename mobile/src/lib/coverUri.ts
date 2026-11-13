@@ -1,4 +1,8 @@
-import { itineraryUnsplashUrl } from '@flightwatcher/shared'
+import {
+  itineraryUnsplashUrl,
+  parcoursCoverCandidates,
+  shouldReplaceParcoursCover,
+} from '@flightwatcher/shared'
 import { apiBase } from './client'
 
 const WIKIMEDIA_HOST =
@@ -29,9 +33,34 @@ function isWikimedia(url: string): boolean {
   }
 }
 
+function upgradeUnsplash(url: string, width: number): string {
+  try {
+    const u = new URL(url)
+    u.searchParams.set(
+      'w',
+      String(Math.max(640, Math.min(2400, Math.round(width)))),
+    )
+    u.searchParams.set('q', '90')
+    u.searchParams.set('auto', 'format')
+    u.searchParams.set('fit', 'crop')
+    u.searchParams.set('fm', 'jpg')
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
+function toDeviceUri(raw: string, width: number): string {
+  if (/images\.unsplash\.com/i.test(raw)) return upgradeUnsplash(raw, width)
+  if (isWikimedia(raw)) {
+    return `${apiBase}/api/media/proxy?url=${encodeURIComponent(withWikiWidth(raw, width))}`
+  }
+  return raw
+}
+
 /**
  * Resolve a cover for RN Image.
- * Prefer Unsplash (works on device). Wikimedia goes through API proxy.
+ * Curated Unsplash first when DB cover is empty/Wikimedia/dead (device-reliable).
  */
 export function coverUri(
   url: string | null | undefined,
@@ -39,47 +68,65 @@ export function coverUri(
     width?: number
     citySlug?: string | null
     slug?: string | null
-    preferUnsplash?: boolean
   },
 ): string | null {
   const width = opts?.width ?? 1280
-  const raw = (url || '').trim()
   const unsplash = itineraryUnsplashUrl({
     slug: opts?.slug,
     citySlug: opts?.citySlug,
     width,
   })
 
-  // Prefer curated Unsplash (known good) over DB/API covers that may 404.
-  // Always rebuild Unsplash URLs with the requested width (API often ships w=1280
-  // which is fine; card callers pass retina widths).
-  if (opts?.preferUnsplash !== false && unsplash) {
-    if (!raw || isWikimedia(raw) || /images\.unsplash\.com/i.test(raw)) {
-      return unsplash
-    }
+  if (shouldReplaceParcoursCover(url) && unsplash) {
+    return unsplash
   }
 
-  if (!raw) return unsplash
-  if (/images\.unsplash\.com/i.test(raw)) {
-    // Upgrade soft/low-w Unsplash query params to requested size + q=90
-    try {
-      const u = new URL(raw)
-      u.searchParams.set('w', String(Math.max(640, Math.min(2400, Math.round(width)))))
-      u.searchParams.set('q', '90')
-      u.searchParams.set('auto', 'format')
-      u.searchParams.set('fit', 'crop')
-      u.searchParams.set('fm', 'jpg')
-      return u.toString()
-    } catch {
-      return raw
-    }
+  const candidates = parcoursCoverCandidates({
+    coverImage: url,
+    citySlug: opts?.citySlug,
+    slug: opts?.slug,
+    width,
+  })
+
+  for (const raw of candidates) {
+    return toDeviceUri(raw, width)
   }
 
-  const next = withWikiWidth(raw, width)
-  if (isWikimedia(next)) {
-    return `${apiBase}/api/media/proxy?url=${encodeURIComponent(next)}`
+  if (unsplash) return unsplash
+  const fallback = (url || '').trim()
+  if (!fallback) return null
+  return toDeviceUri(fallback, width)
+}
+
+/** Ordered remote URIs for Image onError fallback chain. */
+export function coverUriCandidates(
+  url: string | null | undefined,
+  opts?: {
+    width?: number
+    citySlug?: string | null
+    slug?: string | null
+  },
+): string[] {
+  const width = opts?.width ?? 1280
+  const out: string[] = []
+  const push = (u: string | null | undefined) => {
+    const t = (u || '').trim()
+    if (!t || out.includes(t)) return
+    out.push(t)
   }
-  return next
+
+  push(coverUri(url, { ...opts, width }))
+
+  for (const c of parcoursCoverCandidates({
+    coverImage: url,
+    citySlug: opts?.citySlug,
+    slug: opts?.slug,
+    width,
+  })) {
+    push(toDeviceUri(c, width))
+  }
+
+  return out
 }
 
 /** Backend Unsplash search / curated cover (optional API key). */

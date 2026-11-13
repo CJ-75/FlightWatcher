@@ -25,10 +25,18 @@ if env_admin_emails:
 
 # Mot de passe admin en clair (préféré) ou hash bcrypt
 # ADMIN_PASSWORD=... dans .env — login panneau sans Google
-ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or "").strip()
-ADMIN_PASSWORD_HASH = os.getenv(
-    "ADMIN_PASSWORD_HASH",
-    "$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg.",
+def _admin_password_plain() -> str:
+    return (os.getenv("ADMIN_PASSWORD") or "").strip()
+
+
+def _admin_password_hash() -> str:
+    return (os.getenv("ADMIN_PASSWORD_HASH") or "").strip().strip('"').strip("'")
+
+
+# Snapshot au import (logs) — verify lit toujours os.getenv à chaud
+ADMIN_PASSWORD = _admin_password_plain()
+ADMIN_PASSWORD_HASH = _admin_password_hash() or (
+    "$2a$12$RxGnFWsPFJsrspELGy5X1.pIVbSxqBf2Z86v43bFbjFyCh4AI8dg."
 )
 ADMIN_SESSION_SECRET = (
     os.getenv("ADMIN_SESSION_SECRET")
@@ -54,12 +62,14 @@ def verify_admin_password(password: str) -> bool:
     try:
         import secrets
 
-        if ADMIN_PASSWORD:
-            return secrets.compare_digest(password, ADMIN_PASSWORD)
-        if ADMIN_PASSWORD_HASH:
+        plain = _admin_password_plain()
+        if plain:
+            return secrets.compare_digest(password.strip(), plain)
+        hashed = _admin_password_hash()
+        if hashed:
             return bcrypt.checkpw(
                 password.encode("utf-8"),
-                ADMIN_PASSWORD_HASH.encode("utf-8"),
+                hashed.encode("utf-8"),
             )
         return False
     except Exception as e:
