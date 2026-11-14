@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Alert } from 'react-native'
-import type { TravelDeal } from '@flightwatcher/shared'
-import { translate } from '@flightwatcher/shared'
+import type { TravelDeal } from '@waypop/shared'
+import { translate } from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {

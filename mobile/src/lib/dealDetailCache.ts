@@ -1,7 +1,7 @@
 /**
  * Séjour detail — seed instantané (liste / favoris) + singleflight getDeal.
  */
-import type { TravelDeal } from '@flightwatcher/shared'
+import type { TravelDeal } from '@waypop/shared'
 import { getApi } from './client'
 
 const memory = new Map<string, TravelDeal>()

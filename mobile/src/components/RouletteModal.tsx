@@ -11,7 +11,7 @@ import {
   Easing,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { EnrichedTripResponse } from '@flightwatcher/shared'
+import type { EnrichedTripResponse } from '@waypop/shared'
 import { DestinationCard } from './DestinationCard'
 import { colors, fonts } from '../theme'
 

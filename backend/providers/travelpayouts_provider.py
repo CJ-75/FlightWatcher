@@ -153,7 +153,7 @@ def _fetch_prices_page(
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "FlightWatcher/1.0",
+            "User-Agent": "WayPop/1.0",
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate",
             "X-Access-Token": token,

@@ -1,8 +1,8 @@
-# Brief FlightWatcher — état actuel + ambition Path
+# Brief WayPop — état actuel + ambition Path
 
 **Usage :** coller ce document dans un autre LLM **avec la capture UI Path en pièce jointe**.  
 **Date :** 7 novembre 2026  
-**Repo :** FlightWatcher (monorepo web + mobile + API)  
+**Repo :** WayPop (monorepo web + mobile + API)  
 **Décision produit déjà prise :** Path = **peau visuelle du Planner** (pas un 2ᵉ produit, pas une marketplace).
 
 ---
@@ -11,7 +11,7 @@
 
 ## A1. Identité produit
 
-**FlightWatcher** est une app de voyage low-cost (FR primaire) qui aide à **composer un séjour de bout en bout** :
+**WayPop** est une app de voyage low-cost (FR primaire) qui aide à **composer un séjour de bout en bout** :
 
 1. Trouver un **vol** pas cher (surtout Ryanair, aussi meta-search Travelpayouts)
 2. Trouver / réserver un **hôtel** (LiteAPI, paiement in-app)
@@ -33,11 +33,11 @@
 ## A2. Architecture technique (résumé)
 
 ```
-FlightWatcher/
+WayPop/
   backend/              # FastAPI — API unique
   frontend/             # React 18 + Vite — app web user + /admin
   mobile/               # Expo / RN — iOS/Android
-  packages/shared/      # @flightwatcher/shared — types, client API, i18n, cityImages, pipeline, copy planner
+  packages/shared/      # @waypop/shared — types, client API, i18n, cityImages, pipeline, copy planner
   migrations/ + apply_*.sql   # SQL Supabase manuel (jamais npx supabase db push)
 ```
 
@@ -74,7 +74,7 @@ FlightWatcher/
 
 ### Mobile (bottom tabs)
 **Vols · Séjours · Activités · Voyages (= Planner) · Profil**  
-Favoris accessible depuis Profil. Deep links `flightwatcher://…`.
+Favoris accessible depuis Profil. Deep links `waypop://…`.
 
 ---
 
@@ -128,7 +128,7 @@ Hub « **Tes séjours** » avec filtres **À venir · En cours · Passés**.
 - Draft partageable (`draft_token`) lié au planner.
 - Compose hôtel LiteAPI (liste, photos, Maps, sélection).
 - Prebook → pay → book → **facture PDF hôtel** (seul PDF actuel = booking, pas un guide).
-- Distinction claire : résa vol partenaire ≠ résa hôtel FlightWatcher.
+- Distinction claire : résa vol partenaire ≠ résa hôtel WayPop.
 
 ### 5) Activités
 - Catalogue par ville (Viator), nearby « autour de moi ».
@@ -204,7 +204,7 @@ La capture UI jointe montre une app travel premium type **Path** :
 - landing / discovery / **détail immersif**
 - dans la ref originale : tabs Overview · Itinerary · Inclusions · Reviews + footer prix guide
 
-**Ce qu’on retient pour FlightWatcher :**
+**Ce qu’on retient pour WayPop :**
 - l’**ambiance** et la structure du **détail séjour**
 - **3 onglets seulement :** Aperçu · Programme · Carnet (Path = code interne)
 - Flag `TRIP_DETAIL_V2` / `trip_detail_v2_enabled` (rollback sans redeploy)
@@ -284,7 +284,7 @@ Le funnel conversion (Ryanair → hôtel LiteAPI → invite) **ne change pas**.
 
 ## B7. Phrase de cadrage pour le LLM lecteur
 
-Tu analyses une app existante **FlightWatcher** (builder de séjour low-cost FR, web+mobile) dont le **Planner collaboratif** est aujourd’hui utilitaire (stepper + CTAs). L’ambition est de **reskin le détail séjour** avec une UX type Path (voir image jointe) : immersif, Overview / Itinerary / Reviews, sans marketplace ni map globale. Path est uniquement la **peau** ; le moteur Planner et le modèle data restent.
+Tu analyses une app existante **WayPop** (builder de séjour low-cost FR, web+mobile) dont le **Planner collaboratif** est aujourd’hui utilitaire (stepper + CTAs). L’ambition est de **reskin le détail séjour** avec une UX type Path (voir image jointe) : immersif, Overview / Itinerary / Reviews, sans marketplace ni map globale. Path est uniquement la **peau** ; le moteur Planner et le modèle data restent.
 
 **Questions utiles à poser / trancher ensuite :**
 - Comment ranger chaque CTA actuel (scan, skip vol/hôtel, return-ask, modalités, share) dans le shell Path sans perte ?

@@ -10,8 +10,8 @@ import {
   Keyboard,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport } from '@flightwatcher/shared'
-import { resolvePopularAirports } from '@flightwatcher/shared'
+import type { Airport } from '@waypop/shared'
+import { resolvePopularAirports } from '@waypop/shared'
 import { colors, fonts, shadow } from '../theme'
 
 type Props = {

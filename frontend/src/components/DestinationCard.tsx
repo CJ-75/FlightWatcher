@@ -6,7 +6,7 @@ import {
   formatAirlineLabel,
   primaryAirportCode,
   resolveTripImageUrl,
-} from '@flightwatcher/shared';
+} from '@waypop/shared';
 import { EnrichedTripResponse } from '../types';
 import { useI18n } from '../contexts/I18nContext';
 import { CountryFlag } from './CountryFlag';

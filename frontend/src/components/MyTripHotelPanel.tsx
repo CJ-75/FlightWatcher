@@ -3,7 +3,7 @@ import {
   boardLabelFr,
   hotelMapsSearchUrl,
   type HotelGuestReview,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
 

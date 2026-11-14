@@ -7,7 +7,7 @@ from typing import Iterable, List, Optional
 import httpx
 
 RESEND_API_KEY = (os.getenv("RESEND_API_KEY") or "").strip()
-RESEND_FROM = (os.getenv("RESEND_FROM") or "FlightWatcher <onboarding@resend.dev>").strip()
+RESEND_FROM = (os.getenv("RESEND_FROM") or "WayPop <onboarding@resend.dev>").strip()
 WEB_APP_URL = (os.getenv("WEB_APP_URL") or os.getenv("FRONTEND_URL") or "http://localhost:5173").rstrip(
     "/"
 )
@@ -60,34 +60,34 @@ def send_email(to: List[str], subject: str, html: str) -> bool:
 
 
 def send_password_reset_email(*, email: str, reset_link: str) -> bool:
-    subject = "Changer ton mot de passe — FlightWatcher"
+    subject = "Changer ton mot de passe — WayPop"
     html = f"""
     <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
       <h2 style="margin:0 0 12px;color:#E85A28">Sécurité du compte</h2>
-      <p>Tu as demandé à changer ton mot de passe FlightWatcher.</p>
+      <p>Tu as demandé à changer ton mot de passe WayPop.</p>
       <p>Clique sur le bouton ci-dessous (valide quelques minutes) :</p>
       <p><a href="{reset_link}" style="display:inline-block;background:#FF6B35;color:#fff;
          text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
          Choisir un nouveau mot de passe</a></p>
       <p style="font-size:13px;color:#64748b">Si tu n’es pas à l’origine de cette demande,
          ignore cet email — ton compte reste inchangé.</p>
-      <p style="font-size:12px;color:#94a3b8">FlightWatcher</p>
+      <p style="font-size:12px;color:#94a3b8">WayPop</p>
     </div>
     """
     return send_email([email], subject, html)
 
 
 def send_password_changed_email(*, email: str) -> bool:
-    subject = "Mot de passe modifié — FlightWatcher"
+    subject = "Mot de passe modifié — WayPop"
     html = f"""
     <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
       <h2 style="margin:0 0 12px;color:#E85A28">Mot de passe mis à jour</h2>
-      <p>Le mot de passe de ton compte FlightWatcher vient d’être modifié.</p>
+      <p>Le mot de passe de ton compte WayPop vient d’être modifié.</p>
       <p>Si tu es à l’origine de ce changement, aucune action n’est nécessaire.</p>
       <p style="font-size:13px;color:#64748b">Si tu n’as pas fait cette modification,
          connecte-toi dès que possible et change à nouveau ton mot de passe
          depuis <strong>Sécurité</strong> dans l’app.</p>
-      <p style="font-size:12px;color:#94a3b8">FlightWatcher</p>
+      <p style="font-size:12px;color:#94a3b8">WayPop</p>
     </div>
     """
     return send_email([email], subject, html)
@@ -112,7 +112,7 @@ def notify_trip_under_budget(
       <p><a href="{link}" style="display:inline-block;background:#FF6B35;color:#fff;
          text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
          Voir le voyage</a></p>
-      <p style="font-size:12px;color:#64748b">FlightWatcher — surveillance automatique des prix</p>
+      <p style="font-size:12px;color:#64748b">WayPop — surveillance automatique des prix</p>
     </div>
     """
     return send_email(recipients, subject, html)
@@ -131,7 +131,7 @@ def send_my_trip_link(
     dates = ""
     if out_date and ret_date:
         dates = f"<p>Dates : <strong>{out_date}</strong> → <strong>{ret_date}</strong></p>"
-    subject = f"Ton voyage {city or 'FlightWatcher'} — lien de suivi"
+    subject = f"Ton voyage {city or 'WayPop'} — lien de suivi"
     html = f"""
     <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
       <h2 style="margin:0 0 12px;color:#E85A28">Mon voyage</h2>
@@ -143,7 +143,7 @@ def send_my_trip_link(
          Ouvrir mon voyage</a></p>
       <p style="font-size:13px;color:#64748b">Ce lien est personnel. Ton email n’est utilisé
          que pour t’envoyer ce message.</p>
-      <p style="font-size:12px;color:#94a3b8">FlightWatcher</p>
+      <p style="font-size:12px;color:#94a3b8">WayPop</p>
     </div>
     """
     return send_email([email], subject, html)
@@ -170,7 +170,7 @@ def notify_deal_price_drop(
          text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
          Voir les deals</a></p>
       <p style="font-size:12px;color:#94a3b8">Réf. {deal_key}</p>
-      <p style="font-size:12px;color:#64748b">FlightWatcher — 1 alerte max / 24 h par deal</p>
+      <p style="font-size:12px;color:#64748b">WayPop — 1 alerte max / 24 h par deal</p>
     </div>
     """
     return send_email([email], subject, html)

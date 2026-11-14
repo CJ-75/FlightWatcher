@@ -1,4 +1,4 @@
-import { formatCancelDeadlineLocal } from '@flightwatcher/shared'
+import { formatCancelDeadlineLocal } from '@waypop/shared'
 import { useI18n } from '../contexts/I18nContext'
 
 interface Props {

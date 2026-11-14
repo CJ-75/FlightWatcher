@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import type { StayPipelineStep, StayStepId } from '@flightwatcher/shared'
+import type { StayPipelineStep, StayStepId } from '@waypop/shared'
 
 type Props = {
   steps: StayPipelineStep[]
@@ -133,7 +133,7 @@ function JourneyStepper({
                     window.alert(
                       s.hint === 'Après l’hôtel'
                         ? 'Réserve d’abord ton hôtel pour débloquer les adresses.'
-                        : `${s.label} arrive bientôt sur FlightWatcher.`,
+                        : `${s.label} arrive bientôt sur WayPop.`,
                     )
                     return
                   }
@@ -281,7 +281,7 @@ function ClassicStepper({
                     window.alert(
                       s.hint === 'Après l’hôtel'
                         ? 'Réserve d’abord ton hôtel pour débloquer les adresses.'
-                        : `${s.label} arrive bientôt sur FlightWatcher.`,
+                        : `${s.label} arrive bientôt sur WayPop.`,
                     )
                     return
                   }

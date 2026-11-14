@@ -1,4 +1,4 @@
-import type { TravelWorkspace } from '@flightwatcher/shared'
+import type { TravelWorkspace } from '@waypop/shared'
 import { getApiClient } from './apiClient'
 import {
   migrateSessionToDurable,

@@ -7,7 +7,7 @@ import urllib.request
 from pathlib import Path
 
 PATH = Path(__file__).resolve().parents[1] / "src" / "cityImages.ts"
-UA = "FlightWatcher/1.0 (https://github.com/local; city image healthcheck)"
+UA = "WayPop/1.0 (https://github.com/local; city image healthcheck)"
 
 
 def check(url: str) -> tuple[bool, str]:

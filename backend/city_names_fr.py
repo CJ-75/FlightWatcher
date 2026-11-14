@@ -661,7 +661,7 @@ def _http_json(url: str, timeout: float = 45.0) -> object:
     import urllib.parse
 
     headers = {
-        "User-Agent": "FlightWatcher/1.0",
+        "User-Agent": "WayPop/1.0",
         "Accept": "application/json",
     }
     token = (os.getenv("TRAVELPAYOUTS_API_TOKEN") or "").strip()
@@ -756,7 +756,7 @@ def _load_ryanair_fr() -> None:
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "FlightWatcher/1.0", "Accept": "application/json"},
+            headers={"User-Agent": "WayPop/1.0", "Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))

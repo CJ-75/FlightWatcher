@@ -40,7 +40,7 @@ def _generate_airports_from_api(country_names: dict) -> List[dict]:
         print("Chargement des aeroports actifs Ryanair...")
         req = urllib.request.Request(
             url,
-            headers={'User-Agent': 'FlightWatcher/1.0', 'Accept': 'application/json'},
+            headers={'User-Agent': 'WayPop/1.0', 'Accept': 'application/json'},
         )
         with urllib.request.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode('utf-8'))

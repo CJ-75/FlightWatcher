@@ -36,7 +36,7 @@ import {
   upscaleCityHeroUrl,
   type Airport,
   type TravelPreference,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import {
   peekCachedAirports,
@@ -430,7 +430,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
       <ScreenBackground />
 
       <View style={styles.topMeta}>
-        <Text style={styles.brand}>FlightWatcher</Text>
+        <Text style={styles.brand}>WayPop</Text>
         <View style={styles.progressTrack}>
           <Animated.View style={[styles.progressFill, { width: barWidth }]} />
         </View>

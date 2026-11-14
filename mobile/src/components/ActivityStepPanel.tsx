@@ -28,7 +28,7 @@ import {
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
   type ActivityCardModel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   StayBookingCard,
   stayBookingLinkBtn,

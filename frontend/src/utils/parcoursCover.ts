@@ -1,7 +1,7 @@
 import {
   parcoursCoverCandidates,
   resolveParcoursCoverUrl,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { apiUrl } from './apiBase'
 
 function isWikimedia(url: string): boolean {

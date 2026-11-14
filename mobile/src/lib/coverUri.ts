@@ -2,7 +2,7 @@ import {
   itineraryUnsplashUrl,
   parcoursCoverCandidates,
   shouldReplaceParcoursCover,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { apiBase } from './client'
 
 const WIKIMEDIA_HOST =

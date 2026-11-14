@@ -3,7 +3,7 @@
  * can paint without waiting on the workspaces round-trip.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { MyTripDraft } from '@flightwatcher/shared'
+import type { MyTripDraft } from '@waypop/shared'
 import { getApi } from './client'
 
 const TTL_MS = 60_000

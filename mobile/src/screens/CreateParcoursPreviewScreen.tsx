@@ -16,7 +16,7 @@ import {
   itineraryBadgeLabel,
   type Itinerary,
   type ItineraryItem,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'

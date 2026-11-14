@@ -16,7 +16,7 @@ import type {
   HotelGuestReview,
   TravelDeal,
   TravelDealHotel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   boardLabelFr,
   dealAdults,
@@ -29,7 +29,7 @@ import {
   resolveFlightDurationMinutes,
   reviewExcerpt,
   reviewMetaLine,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi, getWebOrigin } from '../lib/client'
 import {
   getDealCached,

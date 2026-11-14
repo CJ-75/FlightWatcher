@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@flightwatcher/shared': path.resolve(__dirname, '../packages/shared/src/index.ts'),
+      '@waypop/shared': path.resolve(__dirname, '../packages/shared/src/index.ts'),
     },
   },
   server: {

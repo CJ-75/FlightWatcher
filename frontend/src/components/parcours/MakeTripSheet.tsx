@@ -9,13 +9,13 @@ import {
   suggestedParcoursDates,
   type Itinerary,
   type PartyMode,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
 import { CityAirportSelect } from '../CityAirportSelect'
 import { PassengerStepper } from '../PassengerStepper'
 import { getCurrentUser } from '../../lib/supabase'
 import { useAuthSheet } from '../onboarding/AuthSheetHost'
-import { loadOnboardingPrefs } from '@flightwatcher/shared'
+import { loadOnboardingPrefs } from '@waypop/shared'
 
 type Props = {
   itinerary: Itinerary

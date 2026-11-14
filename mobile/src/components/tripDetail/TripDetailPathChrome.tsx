@@ -17,7 +17,7 @@ import {
   TRIP_DETAIL_TABS,
   trackTripTabViewed,
   type TripDetailTabId,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
 

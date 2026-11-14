@@ -3,7 +3,7 @@ export type Language = 'fr' | 'en'
 export const translations: Record<Language, Record<string, string>> = {
   fr: {
     // App général
-    'app.title': 'FlightWatcher',
+    'app.title': 'WayPop',
     'app.subtitle': 'Trouve ton weekend pas cher',
     'app.loading': 'Chargement...',
     'app.error': 'Une erreur est survenue',
@@ -59,7 +59,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.totalForTwo': 'soit {total} € pour 2',
     'deals.taxOnSite': '+ {fees} € de taxe de séjour à régler sur place',
     'deals.priceAge': 'Prix constaté {age}',
-    'deals.twoBookings': 'Deux réservations distinctes : vol via la compagnie / partenaire, hôtel via FlightWatcher.',
+    'deals.twoBookings': 'Deux réservations distinctes : vol via la compagnie / partenaire, hôtel via WayPop.',
     'deals.legal.twoBookingsPay': 'Deux réservations distinctes. L’hôtel reste dû selon ses conditions si le vol est modifié ou annulé.',
     'deals.legal.cgvNote': 'Hôtel réservé via LiteAPI / Nuitee. Vol réservé séparément auprès de la compagnie ou du partenaire. Mentions légales et CGV à consulter avant paiement.',
     'deals.legal.cancelLocal': 'Annulation hôtel (heure locale) : {when}',
@@ -297,7 +297,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.members.title.duo': 'Vous partez à deux',
     'planner.members.title.groupe': 'Vous partez à plusieurs',
     'planner.members.organizer': 'Organisateur',
-    'planner.members.onApp': 'Compte FlightWatcher',
+    'planner.members.onApp': 'Compte WayPop',
     'planner.members.offApp': 'Invité',
     'planner.members.add': 'Ajouter quelqu’un',
     'planner.members.addShort': 'Ajouter',
@@ -364,7 +364,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.title': 'Sécurité',
     'auth.security.pageTitle': 'Connexion & sécurité',
     'auth.security.subtitle':
-      'Gère comment tu te connectes à FlightWatcher.',
+      'Gère comment tu te connectes à WayPop.',
     'auth.security.signInSection': 'Connexion',
     'auth.security.signInWith': 'Tu te connectes avec {provider}',
     'auth.security.signInEmail': 'Connexion par e-mail',
@@ -419,7 +419,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.supabaseMissing': 'Supabase n’est pas configuré',
     
     // Login page
-    'login.title': '✈️ FlightWatcher',
+    'login.title': '✈️ WayPop',
     'login.subtitle': 'Connectez-vous avec Google pour sauvegarder vos recherches et favoris',
     'login.error': '❌ {error}',
     'login.back': '← Retour à l\'application',
@@ -590,7 +590,7 @@ export const translations: Record<Language, Record<string, string>> = {
   },
   en: {
     // General App
-    'app.title': 'FlightWatcher',
+    'app.title': 'WayPop',
     'app.subtitle': 'Find your cheap weekend',
     'app.loading': 'Loading...',
     'app.error': 'An error occurred',
@@ -646,7 +646,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'deals.totalForTwo': '{total} € for 2',
     'deals.taxOnSite': '+ {fees} € city tax payable on site',
     'deals.priceAge': 'Price checked {age}',
-    'deals.twoBookings': 'Two separate bookings: flight via the airline / partner, hotel via FlightWatcher.',
+    'deals.twoBookings': 'Two separate bookings: flight via the airline / partner, hotel via WayPop.',
     'deals.legal.twoBookingsPay': 'Two separate bookings. The hotel remains due under its own terms if the flight is changed or cancelled.',
     'deals.legal.cgvNote': 'Hotel booked via LiteAPI / Nuitee. Flight booked separately with the airline or partner. Review terms before payment.',
     'deals.legal.cancelLocal': 'Hotel cancellation (local time): {when}',
@@ -880,7 +880,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'planner.members.places': 'Seats',
     'planner.members.seats': '{count} / {seats} seats',
     'planner.members.organizer': 'Organizer',
-    'planner.members.onApp': 'FlightWatcher account',
+    'planner.members.onApp': 'WayPop account',
     'planner.members.offApp': 'Invited',
     'planner.members.add': 'Add a traveler',
     'planner.members.addShort': 'Add',
@@ -947,7 +947,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.title': 'Security',
     'auth.security.pageTitle': 'Sign-in & security',
     'auth.security.subtitle':
-      'Manage how you sign in to FlightWatcher.',
+      'Manage how you sign in to WayPop.',
     'auth.security.signInSection': 'Sign-in',
     'auth.security.signInWith': 'You sign in with {provider}',
     'auth.security.signInEmail': 'Email sign-in',
@@ -1002,7 +1002,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.security.supabaseMissing': 'Supabase is not configured',
     
     // Login page
-    'login.title': '✈️ FlightWatcher',
+    'login.title': '✈️ WayPop',
     'login.subtitle': 'Sign in with Google to save your searches and favorites',
     'login.error': '❌ {error}',
     'login.back': '← Back to application',

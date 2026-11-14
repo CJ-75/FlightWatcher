@@ -1,7 +1,7 @@
 /**
  * Parcours catalogue + detail — memory + durable L2 + singleflight (parity mobile).
  */
-import type { Itinerary } from '@flightwatcher/shared'
+import type { Itinerary } from '@waypop/shared'
 import { getApiClient } from './apiClient'
 import {
   migrateSessionToDurable,

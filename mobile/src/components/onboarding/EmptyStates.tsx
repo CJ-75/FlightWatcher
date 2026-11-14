@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native'
 import {
   loadOnboardingPrefs,
   saveOnboardingPrefs,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts } from '../../theme'
 
 type VoyagesEmptyProps = {

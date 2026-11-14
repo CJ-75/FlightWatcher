@@ -43,4 +43,4 @@ export type {
   TripProposalStatus,
   TripMemberStatus,
   TripMemberRole,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'

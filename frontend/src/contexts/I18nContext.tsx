@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { translations, translate, type Language } from '@flightwatcher/shared';
+import { translations, translate, type Language } from '@waypop/shared';
 
 export type { Language };
 

@@ -1,4 +1,4 @@
-# Nouvelles fonctionnalités - FlightWatcher
+# Nouvelles fonctionnalités - WayPop
 
 ## ✅ Fonctionnalités ajoutées
 

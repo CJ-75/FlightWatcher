@@ -16,7 +16,7 @@ import {
 } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport, DealOccasionChip, TravelDeal } from '@flightwatcher/shared'
+import type { Airport, DealOccasionChip, TravelDeal } from '@waypop/shared'
 import {
   airportSelectionLabel,
   applyDealOccasionCountsFromWall,
@@ -30,7 +30,7 @@ import {
   mergeDealOccasionChips,
   parseAirportCodes,
   translate,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { apiBase, getApi } from '../lib/client'

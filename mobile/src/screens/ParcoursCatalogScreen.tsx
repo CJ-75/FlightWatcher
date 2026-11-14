@@ -19,7 +19,7 @@ import {
   PARCOURS_CITY_OPTIONS_FR,
   type Itinerary,
   type ItineraryOccasion,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getApi } from '../lib/client'
 import {

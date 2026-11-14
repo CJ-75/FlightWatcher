@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { translate } from '@flightwatcher/shared'
+import { translate } from '@waypop/shared'
 import { colors, fonts, radius, shadow } from '../theme'
 
 const STATUS_KEYS = [

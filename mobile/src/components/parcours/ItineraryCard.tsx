@@ -14,7 +14,7 @@ import {
   itineraryMetaLine,
   type Itinerary,
   type ItineraryDurationKind,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { coverUriCandidates } from '../../lib/coverUri'
 import { fonts } from '../../theme'
 

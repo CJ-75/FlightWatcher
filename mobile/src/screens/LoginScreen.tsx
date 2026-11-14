@@ -171,7 +171,7 @@ export function LoginScreen() {
             },
           ]}
         >
-          <Text style={styles.brand}>FlightWatcher</Text>
+          <Text style={styles.brand}>WayPop</Text>
           <View style={styles.brandRule} />
 
           <View style={styles.spacer} />

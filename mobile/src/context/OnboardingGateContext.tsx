@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react'
-import { saveOnboardingPrefs } from '@flightwatcher/shared'
+import { saveOnboardingPrefs } from '@waypop/shared'
 
 type Api = {
   /** Force full-screen onboarding (même flux que 1er lancement). */

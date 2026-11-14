@@ -57,7 +57,7 @@ def fetch_served_codes(departure: str) -> Set[str]:
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "FlightWatcher/1.0", "Accept": "application/json"},
+            headers={"User-Agent": "WayPop/1.0", "Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -104,7 +104,7 @@ def fetch_destinations_by_country(departure: str) -> dict:
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "FlightWatcher/1.0", "Accept": "application/json"},
+            headers={"User-Agent": "WayPop/1.0", "Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))

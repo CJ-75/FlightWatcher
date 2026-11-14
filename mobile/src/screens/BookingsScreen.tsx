@@ -19,7 +19,7 @@ import {
   hotelCancelLabel,
   hotelStarsLabel,
   type HotelBooking,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { useAuth } from '../context/AuthContext'
@@ -293,7 +293,7 @@ export function BookingsScreen() {
     const meta = statusMeta(String(b.status))
     const price = bookingPrice(b)
     const message = [
-      `FlightWatcher · ${b.hotel_name || 'Hôtel'}`,
+      `WayPop · ${b.hotel_name || 'Hôtel'}`,
       b.city ? `à ${b.city}` : null,
       b.dates ? formatRange(b.dates.outbound, b.dates.inbound) : null,
       meta.label,

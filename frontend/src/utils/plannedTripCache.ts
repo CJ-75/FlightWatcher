@@ -1,7 +1,7 @@
 /**
  * Planned trip detail — memory + durable L2 + singleflight (parity mobile).
  */
-import type { PlannedTripDetail, TravelWorkspace } from '@flightwatcher/shared'
+import type { PlannedTripDetail, TravelWorkspace } from '@waypop/shared'
 import { getApiClient } from './apiClient'
 import { readDurableJson, writeDurableJson, removeDurable } from './durableStore'
 

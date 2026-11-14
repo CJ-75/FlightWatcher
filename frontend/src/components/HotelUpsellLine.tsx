@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { HotelUpsellResult } from '../types'
 import { getApiClient } from '../utils/apiClient'
-import { dateFromFlightIso, hotelPricePerNightFr } from '@flightwatcher/shared'
+import { dateFromFlightIso, hotelPricePerNightFr } from '@waypop/shared'
 
 interface Props {
   iata?: string | null

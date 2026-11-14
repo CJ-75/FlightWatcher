@@ -15,7 +15,7 @@ import {
   Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import type { AddTripMemberRequest, TripMember } from '@flightwatcher/shared'
+import type { AddTripMemberRequest, TripMember } from '@waypop/shared'
 import {
   PLANNER_SHARE_ACTION_FR,
   PLANNER_SHARE_HINT_FR,
@@ -23,7 +23,7 @@ import {
   partyModeFromCount,
   partyModeKickerFr,
   partyModeTitleFr,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { plannerInviteUrl } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import { colors, fonts, shadow } from '../theme'
@@ -144,7 +144,7 @@ export function TravelersSection({
     try {
       const name = String(tripName || 'voyage').trim() || 'voyage'
       await Share.share({
-        message: `Rejoins mon voyage « ${name} » sur FlightWatcher : ${inviteUrl}`,
+        message: `Rejoins mon voyage « ${name} » sur WayPop : ${inviteUrl}`,
         url: inviteUrl,
       })
     } catch {
@@ -306,7 +306,7 @@ export function TravelersSection({
                       {isOrg
                         ? 'Organisateur'
                         : onApp
-                          ? 'Compte FlightWatcher'
+                          ? 'Compte WayPop'
                           : 'Invité'}
                     </Text>
                   </View>

@@ -5,7 +5,7 @@
 const major = Number(process.versions.node.split('.')[0])
 if (major < 20) {
   console.error(
-    `\n[flightwatcher-mobile] Node ${process.version} is too old for Expo SDK 57.\n` +
+    `\n[waypop-mobile] Node ${process.version} is too old for Expo SDK 57.\n` +
       `Use Node 22 LTS:\n\n` +
       `  fnm env --shell powershell | Out-String | Invoke-Expression\n` +
       `  fnm install 22\n` +

@@ -6,7 +6,7 @@ import type {
   LikedDeal,
   LikedItinerary,
   SavedFavorite,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { readDurableJson, writeDurableJson, removeDurable } from './durableStore'
 
 const KEY = 'fw_favorites_cache_v1'

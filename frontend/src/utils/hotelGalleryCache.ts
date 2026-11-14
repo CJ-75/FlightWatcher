@@ -1,7 +1,7 @@
 /**
  * Hotel gallery — memory singleflight (parity mobile).
  */
-import type { HotelGalleryPhoto, HotelGalleryResponse } from '@flightwatcher/shared'
+import type { HotelGalleryPhoto, HotelGalleryResponse } from '@waypop/shared'
 import { getApiClient } from './apiClient'
 
 export type HotelGalleryPayload = {

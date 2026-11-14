@@ -6,7 +6,7 @@ import {
   evaluateOpening,
   RESTAURANT_ADD_LABEL_FR,
   type OpenChip,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 
 type ResultRow = {

@@ -1,10 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { Airport } from '@flightwatcher/shared'
+import type { Airport } from '@waypop/shared'
 import {
   bundledAirports,
   normalizeAirports,
   seedPopularAirports,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { apiBase } from './client'
 
 /** Instant full catalog (bundled). Network refreshes when LAN backend is reachable. */

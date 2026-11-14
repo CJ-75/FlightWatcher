@@ -3,7 +3,7 @@ import {
   TRIP_DETAIL_TABS,
   trackTripTabViewed,
   type TripDetailTabId,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../../../utils/apiClient'
 import { HotelPhotoGallery } from '../../HotelPhotoGallery'
 

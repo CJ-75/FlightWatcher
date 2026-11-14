@@ -1,4 +1,4 @@
-# Déploiement FlightWatcher — Vercel (Services)
+# Déploiement WayPop — Vercel (Services)
 
 Web + API sur **un seul projet Vercel** (Services beta).
 
@@ -67,7 +67,7 @@ Local all-in-one : `vercel dev` (ou `vercel dev -L`).
   ```
   https://TON-PROJET.vercel.app/**
   https://TON-PROJET.vercel.app/auth/callback
-  flightwatcher://auth/callback
+  waypop://auth/callback
   http://localhost:5173/**
   ```
 
@@ -91,7 +91,7 @@ Local all-in-one : `vercel dev` (ou `vercel dev -L`).
 | `Failed to fetch` API | rewrite `/api` ou mauvais `VITE_API_URL` absolu → retire `VITE_API_URL` et rebuild |
 | Scan timeout | plan / `maxDuration` ; ou API sur Render |
 | 404 refresh SPA | rewrite SPA dans le service `frontend` |
-| Build `@flightwatcher/shared` | `installCommand` monorepo (`cd .. && npm install`) dans `vercel.json` |
+| Build `@waypop/shared` | `installCommand` monorepo (`cd .. && npm install`) dans `vercel.json` |
 
 ---
 
@@ -114,7 +114,7 @@ Env : mêmes `SUPABASE_*`, `ALLOWED_ORIGINS`, `ADMIN_*`.
 Dans ce cas **retire / simplifie** `services` et pointe le build vers le front, avec :
 
 ```
-VITE_API_URL=https://flightwatcher-api.onrender.com
+VITE_API_URL=https://waypop-api.onrender.com
 ```
 
 Et un rewrite SPA classique. Le mode Services actuel assume API + web sur le même domaine Vercel.

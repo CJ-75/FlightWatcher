@@ -15,7 +15,7 @@ import {
   type EnrichedTripResponse,
   type FlightReturnAsk,
   type PriceSourceBooking,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from './client'
 
 export const PENDING_HOTEL_UPSELL_KEY = 'fw_pending_hotel_upsell'

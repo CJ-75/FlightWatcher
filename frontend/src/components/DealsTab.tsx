@@ -13,7 +13,7 @@ import {
   mergeDealOccasionChips,
   parseAirportCodes,
   type Airport,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import type { DealOccasionChip, TravelDeal } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { loadAirportsOnce, peekAirports } from '../hooks/useAirports'

@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { cityDisplayNameFr, type EnrichedTripResponse } from '@flightwatcher/shared'
+import { cityDisplayNameFr, type EnrichedTripResponse } from '@waypop/shared'
 import { BedIcon, PlaneIcon } from './UiIcons'
 import { colors, fonts, radius, spacing } from '../theme'
 
@@ -50,7 +50,7 @@ export function PostBookLightbox({
           <View style={styles.handle} />
           <View style={styles.brandRow}>
             <PlaneIcon size={16} />
-            <Text style={styles.brand}>FlightWatcher</Text>
+            <Text style={styles.brand}>WayPop</Text>
           </View>
           <Text style={styles.title}>
             {automaticConfirmation

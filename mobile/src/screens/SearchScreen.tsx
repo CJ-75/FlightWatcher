@@ -20,7 +20,7 @@ import type {
   DateAvecHoraire,
   Destination,
   EnrichedTripResponse,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   airportSelectionLabel,
   encodeAirportCodes,
@@ -36,7 +36,7 @@ import {
   translate,
   type DatePresetId,
   type FlexibleDates,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import { beginInspireLive, publishInspireLive } from '../lib/inspireLive'
@@ -484,13 +484,13 @@ export function SearchScreen() {
               }}
               style={styles.brandPress}
               accessibilityRole="button"
-              accessibilityLabel="FlightWatcher, haut de page"
+              accessibilityLabel="WayPop, haut de page"
             >
               <View style={[styles.logoMark, compact && { width: 30, height: 30, borderRadius: 9 }]}>
                 <Text style={[styles.logoLetter, compact && { fontSize: 15 }]}>F</Text>
               </View>
               <View style={styles.brandCopy}>
-                <Text style={styles.brandName}>FlightWatcher</Text>
+                <Text style={styles.brandName}>WayPop</Text>
                 {!compact ? <Text style={styles.brandTag}>Vols bas prix</Text> : null}
               </View>
             </Pressable>

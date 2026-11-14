@@ -17,7 +17,7 @@ import {
   ITINERARY_OCCASIONS,
   type ItineraryItem,
   type ItineraryOccasion,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   AddParcoursStepSheet,
   type DraftStep,

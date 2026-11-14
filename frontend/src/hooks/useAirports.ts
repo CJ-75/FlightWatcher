@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Airport } from '../types'
-import { isValidAirportSelection } from '@flightwatcher/shared'
+import { isValidAirportSelection } from '@waypop/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
 
 const LS_KEY = 'fw_airports_v1'

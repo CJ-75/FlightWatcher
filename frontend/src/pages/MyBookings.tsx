@@ -13,7 +13,7 @@ import {
   hotelCancelLabel,
   type HotelBooking,
   type HotelBookingStatus,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentSession } from '../lib/supabase'
 import {
@@ -266,7 +266,7 @@ function BookingCard({
   }
 
   const summaryText = [
-    `FlightWatcher · réservation hôtel`,
+    `WayPop · réservation hôtel`,
     meta.label,
     booking.hotel_name || 'Hôtel',
     booking.city ? `à ${booking.city}` : '',
@@ -277,7 +277,7 @@ function BookingCard({
       ? `Confirmation hôtel : ${booking.confirmation_code}`
       : '',
     booking.liteapi_booking_id
-      ? `Réf. FlightWatcher : ${booking.liteapi_booking_id}`
+      ? `Réf. WayPop : ${booking.liteapi_booking_id}`
       : `Réf. interne : ${booking.id}`,
     price != null ? `Montant hôtel : ${price} €` : '',
   ]
@@ -532,12 +532,12 @@ function BookingCard({
                 <p>
                   Besoin d’aide ?{' '}
                   <a
-                    href={`mailto:hello@flightwatcher.app?subject=${encodeURIComponent(
+                    href={`mailto:hello@waypop.co?subject=${encodeURIComponent(
                       `Réservation ${booking.confirmation_code || booking.id}`,
                     )}`}
                     className="font-semibold text-primary-600 hover:underline"
                   >
-                    hello@flightwatcher.app
+                    hello@waypop.co
                   </a>
                 </p>
               </section>

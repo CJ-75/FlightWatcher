@@ -204,7 +204,7 @@ export default function AuthCallback() {
             href={mobileLink}
             className="inline-block mt-2 px-5 py-3 rounded-xl bg-[#FF6B35] text-white font-semibold"
           >
-            Ouvrir FlightWatcher
+            Ouvrir WayPop
           </a>
         ) : (
           <div className="text-gray-600">Redirection en cours…</div>

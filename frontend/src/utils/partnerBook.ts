@@ -14,7 +14,7 @@ import {
   type FlightReturnAsk,
   type MyTripDraft,
   type PriceSourceBooking,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import type { EnrichedTripResponse } from '../types'
 import { getSessionId } from './session'
 import { getApiClient } from './apiClient'

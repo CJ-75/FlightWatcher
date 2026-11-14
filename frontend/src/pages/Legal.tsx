@@ -18,8 +18,8 @@ const DOCS: Record<
       {
         h: 'Qui sommes-nous',
         p: [
-          'FlightWatcher (« nous ») propose une application et un site pour trouver des week-ends abordables (vols, séjours, organisation de voyage).',
-          'Contact : hello@flightwatcher.app',
+          'WayPop (« nous ») propose une application et un site pour trouver des week-ends abordables (vols, séjours, organisation de voyage).',
+          'Contact : hello@waypop.co',
         ],
       },
       {
@@ -59,7 +59,7 @@ const DOCS: Record<
         h: 'Tes droits',
         p: [
           'Accès, rectification, suppression, opposition, portabilité, selon la réglementation applicable (ex. RGPD).',
-          'Pour exercer un droit : hello@flightwatcher.app, ou suppression de compte dans l’app (Sécurité).',
+          'Pour exercer un droit : hello@waypop.co, ou suppression de compte dans l’app (Sécurité).',
         ],
       },
     ],
@@ -71,14 +71,14 @@ const DOCS: Record<
       {
         h: 'Objet',
         p: [
-          'Les présentes CGU régissent l’accès à FlightWatcher (web et application mobile).',
+          'Les présentes CGU régissent l’accès à WayPop (web et application mobile).',
           'En créant un compte ou en utilisant le service, tu acceptes ces conditions.',
         ],
       },
       {
         h: 'Service',
         p: [
-          'FlightWatcher aide à comparer des offres de voyage et à organiser un séjour. Les prix et disponibilités peuvent changer jusqu’à la confirmation chez le partenaire.',
+          'WayPop aide à comparer des offres de voyage et à organiser un séjour. Les prix et disponibilités peuvent changer jusqu’à la confirmation chez le partenaire.',
           'Les vols sont généralement réservés chez la compagnie ou un partenaire (hors app). Les hôtels peuvent être réservés via LiteAPI dans l’app lorsque le paiement est activé.',
         ],
       },
@@ -93,19 +93,19 @@ const DOCS: Record<
         h: 'Réservations & paiements',
         p: [
           'Vol et hôtel sont des prestations distinctes. Les conditions d’annulation / remboursement de l’hôtel s’appliquent selon la politique affichée au moment de la réservation.',
-          'FlightWatcher n’est pas la compagnie aérienne ; pour un vol, le contrat est conclu avec le partenaire de réservation.',
+          'WayPop n’est pas la compagnie aérienne ; pour un vol, le contrat est conclu avec le partenaire de réservation.',
         ],
       },
       {
         h: 'Limitation',
         p: [
           'Le service est fourni « en l’état ». Nous mettons tout en œuvre pour afficher des infos exactes, sans garantir l’absence d’erreurs de partenaires tiers.',
-          'Dans les limites autorisées par la loi, notre responsabilité est limitée aux dommages directs liés à un manquement prouvé au service FlightWatcher.',
+          'Dans les limites autorisées par la loi, notre responsabilité est limitée aux dommages directs liés à un manquement prouvé au service WayPop.',
         ],
       },
       {
         h: 'Contact',
-        p: ['hello@flightwatcher.app'],
+        p: ['hello@waypop.co'],
       },
     ],
   },
@@ -116,8 +116,8 @@ const DOCS: Record<
       {
         h: 'Éditeur',
         p: [
-          'FlightWatcher : application et site de recherche / organisation de voyages.',
-          'Contact : hello@flightwatcher.app',
+          'WayPop : application et site de recherche / organisation de voyages.',
+          'Contact : hello@waypop.co',
           'Les informations d’éditeur / siège seront complétées dès formalisation de la structure juridique.',
         ],
       },
@@ -130,7 +130,7 @@ const DOCS: Record<
       {
         h: 'Propriété intellectuelle',
         p: [
-          'Marque, interface et contenus FlightWatcher sont protégés. Toute reproduction non autorisée est interdite.',
+          'Marque, interface et contenus WayPop sont protégés. Toute reproduction non autorisée est interdite.',
         ],
       },
     ],
@@ -152,7 +152,7 @@ export default function Legal() {
     <div className="min-h-screen bg-[#FFF9F5]">
       <div className="max-w-2xl mx-auto px-4 py-10 sm:py-14">
         <Link to="/vols" className="text-sm font-bold text-[#E85A28]">
-          ← FlightWatcher
+          ← WayPop
         </Link>
         <p className="app-kicker mt-8 mb-2">Légal</p>
         <h1 className="text-3xl font-extrabold text-ink tracking-tight">{doc.title}</h1>

@@ -1,6 +1,6 @@
 import React from 'react'
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
-import type { ItineraryOccasion } from '@flightwatcher/shared'
+import type { ItineraryOccasion } from '@waypop/shared'
 
 type Props = {
   occasion: ItineraryOccasion | string

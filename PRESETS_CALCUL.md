@@ -1,4 +1,4 @@
-# Calcul des Presets de Dates - FlightWatcher
+# Calcul des Presets de Dates - WayPop
 
 ## Numérotation des jours
 

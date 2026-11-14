@@ -12,7 +12,7 @@ import {
   ACTIVITY_ADDED_BADGE_FR,
   countryIsoForCityLabel,
   type ActivityCardModel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'

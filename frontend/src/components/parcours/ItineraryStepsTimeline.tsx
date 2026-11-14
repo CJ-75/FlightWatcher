@@ -6,7 +6,7 @@ import {
   groupItemsByDay,
   stepKindLabel,
   type ItineraryItem,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 
 type Props = {
   items: ItineraryItem[]

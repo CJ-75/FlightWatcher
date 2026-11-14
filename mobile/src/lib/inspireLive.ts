@@ -1,4 +1,4 @@
-import type { EnrichedTripResponse } from '@flightwatcher/shared'
+import type { EnrichedTripResponse } from '@waypop/shared'
 
 type Listener = (trips: EnrichedTripResponse[]) => void
 

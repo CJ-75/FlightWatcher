@@ -1,7 +1,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import Svg, { Circle, Path } from 'react-native-svg'
-import type { StayStepId, TripDetailStepTile } from '@flightwatcher/shared'
+import type { StayStepId, TripDetailStepTile } from '@waypop/shared'
 import { colors, fonts } from '../../theme'
 
 type Props = {

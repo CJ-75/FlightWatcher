@@ -3,7 +3,7 @@
  * Planner list prefetch + TripDetail open share one HTTP.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { PlannedTripDetail, TravelWorkspace } from '@flightwatcher/shared'
+import type { PlannedTripDetail, TravelWorkspace } from '@waypop/shared'
 import { getApi } from './client'
 
 const DISK_PREFIX = 'fw_planned_trip_v1_'

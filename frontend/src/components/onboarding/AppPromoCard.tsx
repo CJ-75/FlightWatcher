@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import {
   loadOnboardingPrefs,
   saveOnboardingPrefs,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
 import './AppPromoCard.css'
 
@@ -34,7 +34,7 @@ export function AppPromoCard({ deepLinkPath, compact }: Props) {
 
   if (hidden) return null
 
-  const appUrl = `flightwatcher://${deepLinkPath.replace(/^\//, '')}`
+  const appUrl = `waypop://${deepLinkPath.replace(/^\//, '')}`
   const storeUrl =
     /iPhone|iPad|iPod/i.test(navigator.userAgent)
       ? 'https://apps.apple.com'

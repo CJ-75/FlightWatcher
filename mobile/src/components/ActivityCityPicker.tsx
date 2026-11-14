@@ -15,7 +15,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport } from '@flightwatcher/shared'
+import type { Airport } from '@waypop/shared'
 import {
   ACTIVITY_CITY_OPTIONS_FR,
   activityCitySlugFromLabel,
@@ -26,7 +26,7 @@ import {
   resolvePopularCityGroups,
   seedPopularAirports,
   type CityAirportGroup,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   getCachedAirports,
   hasFullAirportsCatalog,

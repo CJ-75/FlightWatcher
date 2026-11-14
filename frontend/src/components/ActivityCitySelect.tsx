@@ -14,7 +14,7 @@ import {
   pickPopularCityGroups,
   seedPopularAirports,
   type CityAirportGroup,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { loadAirportsOnce, peekAirports } from '../hooks/useAirports'
 import { CountryFlag } from './CountryFlag'
 

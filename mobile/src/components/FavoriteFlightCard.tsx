@@ -10,14 +10,14 @@ import {
   StyleSheet,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import type { EnrichedTripResponse, SavedFavorite } from '@flightwatcher/shared'
+import type { EnrichedTripResponse, SavedFavorite } from '@waypop/shared'
 import {
   cityDisplayNameFr,
   countryIsoForAirport,
   formatAirlineLabel,
   primaryAirportCode,
   resolveTripImageUrl,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'
 import { colors, fonts, radius, shadow, spacing } from '../theme'

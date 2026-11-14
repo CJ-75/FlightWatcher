@@ -17,7 +17,7 @@ import {
   userNeedsPasswordSetup,
   userOauthProviderId,
   userOauthProviderLabel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { useAuth } from '../context/AuthContext'
 import { getApi } from '../lib/client'
 import { AppleLogoIcon } from '../components/AppleLogoIcon'

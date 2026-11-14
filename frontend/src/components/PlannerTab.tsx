@@ -99,7 +99,7 @@ import {
   type MyTripDraft,
   type PlannerHubFilter,
   type StayStepId,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { CreateTripModal } from './planner/CreateTripModal'
 import { TripDetailPathChrome } from './planner/detail/TripDetailPathChrome'
 import { ProgrammePanel } from './planner/detail/ProgrammePanel'
@@ -145,7 +145,7 @@ function inviteUrl(token: string) {
 
 async function shareInvite(name: string, token: string) {
   const url = inviteUrl(token)
-  const text = `Rejoins mon voyage « ${name} » sur FlightWatcher : ${url}`
+  const text = `Rejoins mon voyage « ${name} » sur WayPop : ${url}`
   if (navigator.share) {
     try {
       await navigator.share({ title: name, text, url })
@@ -3131,7 +3131,7 @@ function TripDetailView({
                   Déjà réservé ailleurs
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
-                  Tu as sauté l’étape hôtel FlightWatcher pour {destinationName}.
+                  Tu as sauté l’étape hôtel WayPop pour {destinationName}.
                 </p>
               </div>
             )}
@@ -3487,7 +3487,7 @@ function TripDetailView({
                   Déjà réservé ailleurs
                 </p>
                 <p className="text-sm text-ink-soft mt-1 leading-relaxed">
-                  Tu as sauté l’étape hôtel FlightWatcher pour {destinationName}.
+                  Tu as sauté l’étape hôtel WayPop pour {destinationName}.
                 </p>
               </div>
             ) : (

@@ -28,7 +28,7 @@ import {
   partyModeMinPassengers,
   type CityAirportGroup,
   type PartyMode,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import type { DatePreset } from '../DatePresets'
 
 const PRESETS: { id: DatePreset; label: string }[] = [

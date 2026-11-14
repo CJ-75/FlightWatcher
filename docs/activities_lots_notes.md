@@ -105,7 +105,7 @@
 - `ITINERARIES_ENABLED=true` → `/parcours?draft=TOKEN` → create → apply.
 
 ### Comment tester — Expo
-- Deep link `flightwatcher://parcours/:id`.
+- Deep link `waypop://parcours/:id`.
 
 ### Reste
 - Liste parcours utilisateur (endpoint list) si besoin produit.

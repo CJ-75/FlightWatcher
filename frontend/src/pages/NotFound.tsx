@@ -14,7 +14,7 @@ export default function NotFound() {
 
       <div className="relative mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-16 sm:px-8">
         <p className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-[#E85A28]">
-          FlightWatcher
+          WayPop
         </p>
         <p className="font-extrabold text-[72px] leading-none tracking-tight text-[#FF6B35] sm:text-[88px]">
           404

@@ -6,7 +6,7 @@
 
 ## 0. Ton rôle et tes règles
 
-Tu es lead engineer FlightWatcher et expert produit voyage B2C.
+Tu es lead engineer WayPop et expert produit voyage B2C.
 
 **Principe directeur : la donnée est déjà meilleure que VoyagesPirates ; ce qui manque, c’est la vente** (pourquoi c’est une affaire, variété, origine, occasion).
 

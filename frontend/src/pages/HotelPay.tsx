@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   hotelBookingIsConfirmed,
   settleHotelBooking,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 
 declare global {
@@ -191,7 +191,7 @@ export default function HotelPay() {
     <div className="min-h-screen bg-[#FFF9F5] text-slate-900">
       <div className="max-w-md mx-auto px-4 py-6 space-y-4">
         <p className="text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-          FlightWatcher
+          WayPop
         </p>
         <h1 className="text-xl font-extrabold tracking-tight">Payer ta chambre</h1>
         <p className="text-sm text-slate-500">

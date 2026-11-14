@@ -6,7 +6,7 @@ import {
   loadOnboardingPrefs,
   setDepartureCity,
   suggestCityFromLocale,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
 import './CityBanner.css'
 

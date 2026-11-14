@@ -1,4 +1,4 @@
-import type { HotelUpsellOption, TravelDealHotel } from '@flightwatcher/shared'
+import type { HotelUpsellOption, TravelDealHotel } from '@waypop/shared'
 
 /** Normalize deal / my-trip hotel payloads for HotelComposeDetailSheet. */
 export function toUpsellHotel(

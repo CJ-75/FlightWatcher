@@ -8,8 +8,8 @@ import {
   ScrollView,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { DateAvecHoraire } from '@flightwatcher/shared'
-import { formatDateFr, formatDateLocal, type FlexibleDates } from '@flightwatcher/shared'
+import type { DateAvecHoraire } from '@waypop/shared'
+import { formatDateFr, formatDateLocal, type FlexibleDates } from '@waypop/shared'
 import { HoursSheet } from './HoursSheet'
 import { colors, fonts, shadow } from '../theme'
 

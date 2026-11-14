@@ -70,7 +70,7 @@ def expand_short_url(url: str, timeout_s: float = 4.0) -> Optional[str]:
 
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (compatible; FlightWatcherLinkResolve/1.1; +https://flightwatcher.app)"
+            "Mozilla/5.0 (compatible; WayPopLinkResolve/1.1; +https://waypop.co)"
         ),
         "Accept": "text/html,application/xhtml+xml",
     }

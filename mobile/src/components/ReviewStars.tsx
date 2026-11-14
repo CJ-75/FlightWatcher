@@ -1,6 +1,6 @@
 import React from 'react'
 import { Text, StyleSheet } from 'react-native'
-import { ratingToHalfStars5, scoreToHalfStars5 } from '@flightwatcher/shared'
+import { ratingToHalfStars5, scoreToHalfStars5 } from '@waypop/shared'
 import { fonts } from '../theme'
 
 type Props = {

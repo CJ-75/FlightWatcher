@@ -1,7 +1,7 @@
 import React from 'react'
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native'
 import Svg, { Path } from 'react-native-svg'
-import type { StayPipelineStep, StayStepId } from '@flightwatcher/shared'
+import type { StayPipelineStep, StayStepId } from '@waypop/shared'
 import { colors, fonts, shadow } from '../theme'
 
 type Props = {
@@ -104,7 +104,7 @@ export function StayPipelineStepper({ steps, onStepPress }: Props) {
                     s.hint === 'Après l’hôtel' ? 'Adresses' : 'Bientôt',
                     s.hint === 'Après l’hôtel'
                       ? 'Réserve d’abord ton hôtel pour voir les restos autour.'
-                      : `${s.label} arrive bientôt sur FlightWatcher.`,
+                      : `${s.label} arrive bientôt sur WayPop.`,
                   )
                   return
                 }

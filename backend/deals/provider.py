@@ -120,7 +120,7 @@ class MockDealProvider(DealProvider):
                 "description": (
                     "Deux nuits à Lisbonne avec vol depuis Beauvais. "
                     "Idéal pour flâner dans l’Alfama et goûter les pastéis de nata. "
-                    "Deux réservations distinctes : vol via la compagnie, hôtel via FlightWatcher."
+                    "Deux réservations distinctes : vol via la compagnie, hôtel via WayPop."
                 ),
                 "provider": "mock",
                 "booking_url": "https://www.expedia.fr/Lisbon.d178307.Destination-Travel-Guides",

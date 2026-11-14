@@ -11,7 +11,7 @@ import {
   type Itinerary,
   type ItineraryOccasion,
   type ParcoursFeedRow,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
 import {
   getParcoursCatalogMemory,

@@ -4,7 +4,7 @@
     "strict": true,
     "customConditions": ["react-native", "react-native-legacy-deep-imports"],
     "paths": {
-      "@flightwatcher/shared": ["../packages/shared/src/index.ts"]
+      "@waypop/shared": ["../packages/shared/src/index.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"]

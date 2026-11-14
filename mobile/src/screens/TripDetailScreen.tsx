@@ -26,7 +26,7 @@ import type {
   TravelWorkspace,
   TripMember,
   TripProposal,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   resolveActivityCitySlug,
   activityStepProgress,
@@ -53,7 +53,7 @@ import {
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type StayStepId,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
 import { PathStepsTiles } from '../components/tripDetail/PathStepsTiles'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
@@ -2094,7 +2094,7 @@ export function TripDetailScreen() {
               ? () => {
                   const url = plannerInviteUrl(trip.invite_token)
                   void Share.share({
-                    message: `Rejoins mon voyage « ${trip.name} » sur FlightWatcher : ${url}`,
+                    message: `Rejoins mon voyage « ${trip.name} » sur WayPop : ${url}`,
                     url,
                   }).catch(() => undefined)
                 }
@@ -2685,7 +2685,7 @@ export function TripDetailScreen() {
         <View style={[styles.skipFlightCard, shadow.soft]}>
           <Text style={styles.skipFlightTitle}>Vol ailleurs</Text>
           <Text style={styles.skipFlightBody}>
-            Tu continues sur l’hôtel sans passer par FlightWatcher pour le vol.
+            Tu continues sur l’hôtel sans passer par WayPop pour le vol.
           </Text>
           {reservationFlags.externalHotel ? (
             <Text style={styles.skipFlightBody}>Hôtel aussi réservé ailleurs.</Text>
@@ -2806,7 +2806,7 @@ export function TripDetailScreen() {
             <View style={[styles.skipFlightCard, shadow.soft]}>
               <Text style={styles.skipFlightTitle}>Hôtel ailleurs</Text>
               <Text style={styles.skipFlightBody}>
-                Tu as sauté l’étape hôtel FlightWatcher.
+                Tu as sauté l’étape hôtel WayPop.
               </Text>
             </View>
           ) : null}

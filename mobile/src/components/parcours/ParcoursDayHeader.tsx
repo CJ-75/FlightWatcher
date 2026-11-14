@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, Linking } from 'react-native'
 import {
   buildItineraryMapsUrl,
   type ItineraryItem,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts, radius } from '../../theme'
 
 type Props = {

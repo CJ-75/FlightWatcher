@@ -14,7 +14,7 @@ import {
   restaurantStepProgress,
   settleHotelBooking,
   type StayNextAction,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import type {
   DealRevalidateResponse,
   HotelBooking,

@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useState,
 } from 'react'
-import type { AuthTrigger, PendingAction } from '@flightwatcher/shared'
+import type { AuthTrigger, PendingAction } from '@waypop/shared'
 import { AuthSheet } from './AuthSheet'
 
 type OpenOpts = {

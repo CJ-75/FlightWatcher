@@ -1,5 +1,5 @@
 /**
- * Client Supabase pour FlightWatcher
+ * Client Supabase pour WayPop
  * Gère l'authentification et les appels à la base de données
  * Les variables d'environnement sont chargées depuis le backend
  */

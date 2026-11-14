@@ -1,5 +1,5 @@
-import type { OccasionIconId } from '@flightwatcher/shared'
-import { resolveOccasionIconId } from '@flightwatcher/shared'
+import type { OccasionIconId } from '@waypop/shared'
+import { resolveOccasionIconId } from '@waypop/shared'
 
 type Props = {
   icon?: string | null

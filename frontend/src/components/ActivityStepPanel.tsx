@@ -23,7 +23,7 @@ import {
   type ActivityCardModel,
   type AvailabilityState,
   type TripItemStatus,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { StayCardShell } from './StayCardShell'
 import {
   getCurrentSession,

@@ -2,7 +2,7 @@
  * Hotel gallery — memory singleflight so TripDetail / DealCard / compose
  * share one HTTP and paint 1/X from cache on revisit.
  */
-import type { HotelGalleryPhoto } from '@flightwatcher/shared'
+import type { HotelGalleryPhoto } from '@waypop/shared'
 import { getApi } from './client'
 
 export type HotelGalleryPayload = {

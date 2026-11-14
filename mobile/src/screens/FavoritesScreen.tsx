@@ -23,7 +23,7 @@ import type {
   LikedDeal,
   LikedItinerary,
   SavedFavorite,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   ACTIVITY_ADDED_TO_PLANNER_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
@@ -35,7 +35,7 @@ import {
   partitionFavoritesByPast,
   pickTripItemOwner,
   translate,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import {
   prefetchDealDetail,

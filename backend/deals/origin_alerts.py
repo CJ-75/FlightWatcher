@@ -67,7 +67,7 @@ def signup_origin_alert(
     try:
         from email_notify import send_email, WEB_APP_URL
 
-        subject = f"Alerte deals depuis {label} — FlightWatcher"
+        subject = f"Alerte deals depuis {label} — WayPop"
         html = f"""
         <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
           <h2 style="margin:0 0 12px;color:#E85A28">C’est noté</h2>
@@ -76,7 +76,7 @@ def signup_origin_alert(
           <p><a href="{WEB_APP_URL}" style="display:inline-block;background:#FF6B35;color:#fff;
              text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
              Voir les deals</a></p>
-          <p style="font-size:12px;color:#94a3b8">FlightWatcher — prix réels, vérifiés.
+          <p style="font-size:12px;color:#94a3b8">WayPop — prix réels, vérifiés.
              Réponds « stop » pour te désinscrire (bientôt un lien dédié).</p>
         </div>
         """
@@ -202,7 +202,7 @@ def run_origin_alert_digests(
             summary["skipped_empty"] += 1
             continue
 
-        subject = f"Tes deals depuis {label} — FlightWatcher"
+        subject = f"Tes deals depuis {label} — WayPop"
         html = f"""
         <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
           <h2 style="margin:0 0 8px;color:#E85A28">Bonnes affaires depuis {label}</h2>
@@ -213,7 +213,7 @@ def run_origin_alert_digests(
           <p><a href="{WEB_APP_URL}" style="display:inline-block;background:#FF6B35;color:#fff;
              text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
              Voir tous les deals</a></p>
-          <p style="font-size:12px;color:#94a3b8">FlightWatcher — alerte hebdo depuis {label}.</p>
+          <p style="font-size:12px;color:#94a3b8">WayPop — alerte hebdo depuis {label}.</p>
         </div>
         """
         if dry_run:

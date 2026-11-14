@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { Alert } from 'react-native'
-import type { ActivityCardModel } from '@flightwatcher/shared'
+import type { ActivityCardModel } from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { useAuth } from '../context/AuthContext'
 import {

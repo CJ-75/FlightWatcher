@@ -1,4 +1,4 @@
-import type { HotelBooking, HotelBookingStatus } from '@flightwatcher/shared'
+import type { HotelBooking, HotelBookingStatus } from '@waypop/shared'
 import { getApiClient } from './apiClient'
 import { getCurrentSession } from '../lib/supabase'
 

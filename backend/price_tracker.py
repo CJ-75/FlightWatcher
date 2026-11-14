@@ -1,5 +1,5 @@
 """
-Tracking de l'historique des prix pour FlightWatcher
+Tracking de l'historique des prix pour WayPop
 Enregistre les prix dans price_history pour analytics futures
 """
 from typing import List, Dict, Any

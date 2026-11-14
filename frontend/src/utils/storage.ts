@@ -1,5 +1,5 @@
 import { ScanRequest, TripResponse, type SavedSearch, type SavedFavorite, type DateAvecHoraire } from '../types'
-import { STORAGE_KEYS } from '@flightwatcher/shared'
+import { STORAGE_KEYS } from '@waypop/shared'
 import { getSupabaseClient, getCurrentUser } from '../lib/supabase'
 import { getFromCache, setCache, invalidateCache } from './cache'
 
@@ -1210,7 +1210,7 @@ export const exportAllData = async (): Promise<void> => {
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `flightwatcher_backup_${new Date().toISOString().split('T')[0]}_${Date.now()}.json`
+    link.download = `waypop_backup_${new Date().toISOString().split('T')[0]}_${Date.now()}.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

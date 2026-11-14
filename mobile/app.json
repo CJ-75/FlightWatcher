@@ -1,27 +1,27 @@
 {
   "expo": {
-    "name": "FlightWatcher",
-    "slug": "flightwatcher",
+    "name": "WayPop",
+    "slug": "waypop",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "flightwatcher",
+    "scheme": "waypop",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.flightwatcher.app"
+      "bundleIdentifier": "com.waypop.app"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0B1F33"
       },
-      "package": "com.flightwatcher.app",
+      "package": "com.waypop.app",
       "intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": true,
           "data": [
             {
-              "scheme": "flightwatcher",
+              "scheme": "waypop",
               "host": "auth",
               "pathPrefix": "/callback"
             }
@@ -35,7 +35,7 @@
           "action": "VIEW",
           "data": [
             {
-              "scheme": "flightwatcher",
+              "scheme": "waypop",
               "host": "planner",
               "pathPrefix": "/invite"
             }

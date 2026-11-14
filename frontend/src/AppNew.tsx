@@ -7,7 +7,7 @@ import { Toaster } from 'react-hot-toast'
 import { I18nProvider } from './contexts/I18nContext'
 import { prefetchAirports } from './hooks/useAirports'
 import { AuthSheetHost } from './components/onboarding/AuthSheetHost'
-import { configureOnboardingKv } from '@flightwatcher/shared'
+import { configureOnboardingKv } from '@waypop/shared'
 
 configureOnboardingKv({
   getItem: (k) => {

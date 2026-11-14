@@ -12,7 +12,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { EnrichedTripResponse, SavedFavorite, ScanRequest } from '@flightwatcher/shared'
+import type { EnrichedTripResponse, SavedFavorite, ScanRequest } from '@waypop/shared'
 import {
   STORAGE_KEYS,
   cityDisplayNameFr,
@@ -23,7 +23,7 @@ import {
   parseAirportCodes,
   translate,
   tripFavoriteKey,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { RootStackParamList } from '../navigation/types'
 import { getApi } from '../lib/client'

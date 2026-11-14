@@ -1,5 +1,5 @@
-import type { TripDetailStepTile } from '@flightwatcher/shared'
-import type { StayStepId } from '@flightwatcher/shared'
+import type { TripDetailStepTile } from '@waypop/shared'
+import type { StayStepId } from '@waypop/shared'
 
 type Props = {
   steps: TripDetailStepTile[]

@@ -3,7 +3,7 @@ import type {
   DatePresetId,
   EnrichedTripResponse,
   MyTripDraft,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 
 export type SearchInfo = {
   airport: string
@@ -62,7 +62,7 @@ export type RootStackParamList = {
   DealDetail: {
     dealId: string
     /** List/favorites snapshot — paint before getDeal returns. */
-    preview?: import('@flightwatcher/shared').TravelDeal
+    preview?: import('@waypop/shared').TravelDeal
   }
   TripDetail: {
     tripId: string
@@ -118,7 +118,7 @@ export type RootStackParamList = {
       featured_to?: string | null
       budget_estimate_eur?: number | null
       budget_basis?: string | null
-      itinerary_items?: import('@flightwatcher/shared').ItineraryItem[] | null
+      itinerary_items?: import('@waypop/shared').ItineraryItem[] | null
     }
   }
   /** Admin create / edit parcours infos + hero (gated). */

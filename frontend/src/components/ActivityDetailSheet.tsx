@@ -7,7 +7,7 @@ import {
   toActivityDetailModel,
   type ActivityCardModel,
   type ActivityDetailModel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
 import { RatingStars } from './RatingStars'

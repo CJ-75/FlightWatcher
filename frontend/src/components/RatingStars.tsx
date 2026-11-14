@@ -1,4 +1,4 @@
-import { ratingToHalfStars5, scoreToHalfStars5 } from '@flightwatcher/shared'
+import { ratingToHalfStars5, scoreToHalfStars5 } from '@waypop/shared'
 
 type Props = {
   /** Note déjà sur /5 (activités Viator). */

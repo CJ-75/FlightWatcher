@@ -23,7 +23,7 @@ import {
   loadOnboardingPrefs,
   type Itinerary,
   type PartyMode,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../../lib/client'
 import { useAuth } from '../../context/AuthContext'
 import { useAuthSheet } from '../onboarding/AuthSheetHost'

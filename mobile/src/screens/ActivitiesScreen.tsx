@@ -68,7 +68,7 @@ import {
   type ActivityCardModel,
   type PlannedTrip,
   type TravelWorkspace,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { useAuth } from '../context/AuthContext'
 import { getGuestTrip, listGuestTrips } from '../dev/guestPreview'
 import { auth, getApi } from '../lib/client'

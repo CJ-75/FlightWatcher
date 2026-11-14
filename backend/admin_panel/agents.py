@@ -12,7 +12,7 @@ _DEFAULT_AGENTS: List[Dict[str, Any]] = [
         "name": "Wall Health Agent",
         "description": "Diagnose séjour wall freshness and propose refresh/materialize.",
         "default_prompt": (
-            "You are FlightWatcher ops. Inspect wall health / inventory. "
+            "You are WayPop ops. Inspect wall health / inventory. "
             "Propose only safe ops: warm-wall-cache, materialize-wall, refresh-deal-rates. "
             "Never invent jobs outside the whitelist."
         ),

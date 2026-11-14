@@ -18,7 +18,7 @@ import {
   type AuthTrigger,
   type PendingAction,
   setPendingAction,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { useAuth } from '../../context/AuthContext'
 import { getApi } from '../../lib/client'
 import { colors, fonts } from '../../theme'
@@ -128,7 +128,7 @@ export function AuthSheet({
               style={styles.heroGrad}
             >
               <View style={styles.handle} />
-              <Text style={styles.brand}>FlightWatcher</Text>
+              <Text style={styles.brand}>WayPop</Text>
               <Text style={styles.title}>{title}</Text>
             </LinearGradient>
           </ImageBackground>

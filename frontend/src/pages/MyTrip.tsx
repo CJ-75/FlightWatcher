@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import type { MyTripDraft, TravelDeal } from '@flightwatcher/shared'
+import type { MyTripDraft, TravelDeal } from '@waypop/shared'
 import {
   ACTIVITY_TRANSFER_CTA_FR,
   activitiesCityPath,
@@ -30,7 +30,7 @@ import {
   resolveDraftPartyPrice,
   resolveNextStayAction,
   pickTripItemOwner,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { ActivitySurfaceBanner } from '../components/ActivitySurfaceBanner'
 import { StayCardShell } from '../components/StayCardShell'
@@ -1581,7 +1581,7 @@ export default function MyTrip() {
           >
             {backLabel}
           </Link>
-          <span className="text-sm font-extrabold text-ink tracking-tight">FlightWatcher</span>
+          <span className="text-sm font-extrabold text-ink tracking-tight">WayPop</span>
           <span className="shrink-0 min-w-[4.5rem]" aria-hidden />
         </div>
       </header>
@@ -1618,7 +1618,7 @@ export default function MyTrip() {
               <p className="font-bold">Vol ailleurs</p>
               <p className="text-primary-800/80 mt-0.5 text-xs leading-relaxed">
                 Tu peux composer et payer ton hôtel même si le vol n’est pas passé
-                par FlightWatcher.
+                par WayPop.
               </p>
             </div>
           ) : null}
@@ -1806,7 +1806,7 @@ export default function MyTrip() {
                       {hotelBooked
                         ? 'Ta chambre est réservée chez le fournisseur hôtel.'
                         : hotelId
-                          ? 'Il reste à payer la chambre sur FlightWatcher.'
+                          ? 'Il reste à payer la chambre sur WayPop.'
                           : 'Choisis un hôtel pour compléter ton séjour.'}
                       {cancelLabel ? ` · ${cancelLabel}` : ''}
                     </p>

@@ -6,7 +6,7 @@
 
 ## 0. Ton rôle et tes règles
 
-Tu es lead engineer FlightWatcher et expert produit voyage B2C.
+Tu es lead engineer WayPop et expert produit voyage B2C.
 
 **Principe directeur : un deal affiché doit rester affiché pour des raisons stables (photo, dates), et un prix affiché doit rester honnête.** On ne « surveille » pas un mur qui meurt — on coupe les couplages qui le font mourir.
 

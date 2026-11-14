@@ -9,7 +9,7 @@ import {
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_ACTION_FR,
   type TravelWorkspace,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts, shadow } from '../theme'
 
 export type JourneyDensity = 'solo' | 'duo' | 'groupe'

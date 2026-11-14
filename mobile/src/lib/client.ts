@@ -1,4 +1,4 @@
-import { createApiClient, createSupabaseAuth, createAsyncKVStore, type ApiClient } from '@flightwatcher/shared'
+import { createApiClient, createSupabaseAuth, createAsyncKVStore, type ApiClient } from '@waypop/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Linking from 'expo-linking'
 import * as WebBrowser from 'expo-web-browser'
@@ -45,7 +45,7 @@ const LAN_IP_IN_URL = /exp:\/\/\d{1,3}(?:\.\d{1,3}){3}/
 /**
  * OAuth redirectTo
  *
- * Production / dev client (`npx expo run:ios`, EAS): flightwatcher://auth/callback
+ * Production / dev client (`npx expo run:ios`, EAS): waypop://auth/callback
  *   — already in Supabase Redirect URLs. This is the path that works.
  *
  * Expo Go: custom schemes are not delivered; exp:// with LAN IP is rejected by
@@ -53,7 +53,7 @@ const LAN_IP_IN_URL = /exp:\/\/\d{1,3}(?:\.\d{1,3}){3}/
  *   is best-effort only — expect to validate Google login on a real build.
  */
 function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
-  const nativeDeepLink = 'flightwatcher://auth/callback'
+  const nativeDeepLink = 'waypop://auth/callback'
 
   // Standalone / dev client — production path
   if (Constants.appOwnership !== 'expo') {
@@ -68,14 +68,14 @@ function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
     return {
       redirectTo: `${publicOrigin}/auth/mobile-callback?app_redirect=${encodeURIComponent(expoLink)}`,
       warning:
-        'Expo Go + OAuth is unreliable. Prefer a dev/production build with flightwatcher://',
+        'Expo Go + OAuth is unreliable. Prefer a dev/production build with waypop://',
     }
   }
 
   return {
     redirectTo: expoLink,
     warning:
-      'Google login needs a native build (flightwatcher://). Expo Go cannot complete Supabase OAuth reliably.',
+      'Google login needs a native build (waypop://). Expo Go cannot complete Supabase OAuth reliably.',
   }
 }
 
@@ -85,7 +85,7 @@ export function getRedirectTo(): string {
 }
 
 export function getAppDeepLink(): string {
-  if (Constants.appOwnership !== 'expo') return 'flightwatcher://auth/callback'
+  if (Constants.appOwnership !== 'expo') return 'waypop://auth/callback'
   return Linking.createURL('auth/callback')
 }
 
@@ -239,7 +239,7 @@ async function openOAuthSession(
           authWarn(
             'authSession ended:',
             session.type,
-            '— if you saw the orange page, tap « Ouvrir FlightWatcher »',
+            '— if you saw the orange page, tap « Ouvrir WayPop »',
           )
           setTimeout(() => {
             if (!settled) finish(null, `auth-session-${session.type}`)
@@ -403,12 +403,12 @@ export function plannerInviteUrl(token: string): string {
   return `${getWebOrigin()}/planner/invite/${token}`
 }
 
-/** Extract invite token from flightwatcher:// or HTTPS planner invite URLs. */
+/** Extract invite token from waypop:// / flightwatcher:// or HTTPS planner invite URLs. */
 export function parsePlannerInviteToken(url: string): string | null {
   const raw = String(url || '').trim()
   if (!raw) return null
   const m = raw.match(
-    /(?:flightwatcher:\/\/|https?:\/\/[^/]+\/)?planner\/invite\/([^/?#]+)/i,
+    /(?:waypop:\/\/|flightwatcher:\/\/|https?:\/\/[^/]+\/)?planner\/invite\/([^/?#]+)/i,
   )
   return m?.[1] ? decodeURIComponent(m[1]) : null
 }

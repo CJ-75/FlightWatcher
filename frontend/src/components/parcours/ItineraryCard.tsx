@@ -3,7 +3,7 @@ import {
   itineraryMetaLine,
   type Itinerary,
   type ItineraryDurationKind,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { FwKicker } from '../ui/FwKicker'
 import { ParcoursCoverImg } from './ParcoursCoverImg'
 import { parcoursWebCoverUrl } from '../../utils/parcoursCover'

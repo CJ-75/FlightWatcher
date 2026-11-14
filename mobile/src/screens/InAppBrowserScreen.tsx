@@ -26,7 +26,7 @@ export function InAppBrowserScreen({ route, navigation }: Props) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ModalScreenHeader
-        title={title || 'FlightWatcher'}
+        title={title || 'WayPop'}
         onClose={() => navigation.goBack()}
       />
 

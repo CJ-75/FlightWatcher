@@ -29,8 +29,8 @@ _WIKI_STEPS = (20, 40, 60, 120, 250, 330, 500, 960, 1280, 1920, 3840)
 _PX_RE = re.compile(r"(\d+)px-", re.I)
 
 _UA = (
-    "FlightWatcher/1.0 (https://flightwatcher.app; media-proxy; "
-    "contact=support@flightwatcher.app)"
+    "WayPop/1.0 (https://waypop.co; media-proxy; "
+    "contact=support@waypop.co)"
 )
 
 # Curated Unsplash photo ids (no API key) — keep in sync with packages/shared cityUnsplash.ts

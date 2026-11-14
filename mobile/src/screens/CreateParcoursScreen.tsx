@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   cityImageUrl,
   citySlugDisplayNameFr,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'

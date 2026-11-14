@@ -22,7 +22,7 @@ import {
   type HotelGalleryPhoto,
   type HotelGuestReview,
   type HotelUpsellOption,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
 import { ReviewStars } from './ReviewStars'

@@ -1,4 +1,4 @@
-# Admin FlightWatcher (simplifié FR)
+# Admin WayPop (simplifié FR)
 
 Voir le détail à jour : [docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md)
 

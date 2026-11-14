@@ -9,14 +9,14 @@ import {
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { LinearGradient } from 'expo-linear-gradient'
-import type { EnrichedTripResponse } from '@flightwatcher/shared'
+import type { EnrichedTripResponse } from '@waypop/shared'
 import {
   cityDisplayNameFr,
   countryIsoForAirport,
   formatAirlineLabel,
   primaryAirportCode,
   resolveTripImageUrl,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 import { CountryFlag } from './CountryFlag'
 import { HeartIcon } from './HeartIcon'

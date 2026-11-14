@@ -3,14 +3,14 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import type { User } from '@flightwatcher/shared'
+import type { User } from '@waypop/shared'
 import {
   isAdminAccountEmail,
   userHasPasswordLogin,
   userNeedsPasswordSetup,
   userOauthProviderId,
   userOauthProviderLabel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getCurrentUser, signOut } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import { useI18n } from '../contexts/I18nContext'

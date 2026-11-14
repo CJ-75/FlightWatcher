@@ -14,7 +14,7 @@ import type {
   MyTripDraft,
   StayNextAction,
   TravelDeal,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   ACTIVITY_BACK_TO_PLANNER_FR,
   activityStepProgress,
@@ -26,7 +26,7 @@ import {
   resolveNextStayAction,
   restaurantStepProgress,
   settleHotelBooking,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { rememberTrip } from '../lib/tripRecovery'

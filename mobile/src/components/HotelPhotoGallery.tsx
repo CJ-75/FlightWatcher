@@ -15,7 +15,7 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { HotelGalleryPhoto } from '@flightwatcher/shared'
+import type { HotelGalleryPhoto } from '@waypop/shared'
 import {
   getHotelGalleryCached,
   peekHotelGallery,

@@ -88,14 +88,14 @@ async function scanFlights(params) {
 // Endpoint de santé
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'FlightWatcher API', 
+    message: 'WayPop API', 
     status: 'ok',
     supabase: supabase ? 'configure' : 'non configure'
   });
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'flightwatcher-api' });
+  res.json({ status: 'ok', service: 'waypop-api' });
 });
 
 // Endpoint pour obtenir les aéroports

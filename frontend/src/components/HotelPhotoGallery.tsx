@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import type { HotelGalleryPhoto } from '@flightwatcher/shared'
+import type { HotelGalleryPhoto } from '@waypop/shared'
 import {
   getHotelGalleryCached,
   peekHotelGallery,

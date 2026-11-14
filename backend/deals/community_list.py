@@ -166,7 +166,7 @@ def badge_for_baseline(baseline: Dict[str, Any]) -> Dict[str, Any]:
         "discount_pct": pct,
         "scope": "flight",
         "tooltip": (
-            "Par rapport au prix médian observé sur FlightWatcher pour ce trajet "
+            "Par rapport au prix médian observé sur WayPop pour ce trajet "
             "et cette période, sur les 30 derniers jours. Ce n'est pas une promo compagnie."
         ),
     }

@@ -2,7 +2,7 @@
  * Surfaces hors onglet Activités (Lot F) — deal / transfert / occasions.
  */
 import { Link } from 'react-router-dom'
-import { ACTIVITIES_PATH, activitiesCityPath, detectEventPlatform } from '@flightwatcher/shared'
+import { ACTIVITIES_PATH, activitiesCityPath, detectEventPlatform } from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 
 export function ActivitySurfaceBanner(props: {

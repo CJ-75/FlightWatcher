@@ -75,7 +75,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
 }
 
 config.resolver.extraNodeModules = {
-  '@flightwatcher/shared': path.resolve(workspaceRoot, 'packages/shared/src'),
+  '@waypop/shared': path.resolve(workspaceRoot, 'packages/shared/src'),
   react: resolveDep('react'),
   'react-native': resolveDep('react-native'),
   'expo-modules-core': resolveDep('expo-modules-core'),

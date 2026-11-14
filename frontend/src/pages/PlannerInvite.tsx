@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 import type { InvitePreview } from '../types'
 import { getApiClient } from '../utils/apiClient'
 import { getCurrentUser, onAuthStateChange } from '../lib/supabase'
-import { formatTripDateRangeFr } from '@flightwatcher/shared'
+import { formatTripDateRangeFr } from '@waypop/shared'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { AppPromoCard } from '../components/onboarding/AppPromoCard'
 
@@ -158,7 +158,7 @@ function InviteLandingInner() {
           to="/sejours"
           className="inline-flex items-center gap-1 text-sm font-bold text-[#E85A28] hover:text-[#FF6B35]"
         >
-          ← FlightWatcher
+          ← WayPop
         </Link>
 
         {loading ? (

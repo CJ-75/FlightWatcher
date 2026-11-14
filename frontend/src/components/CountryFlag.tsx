@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { countryToFlagIso } from '@flightwatcher/shared'
+import { countryToFlagIso } from '@waypop/shared'
 
 export { countryToFlagIso }
 

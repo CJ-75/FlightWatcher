@@ -9,7 +9,7 @@ import {
   setPendingAction,
   clearPendingAction,
   getPendingAction,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   signInWithApple,
   signInWithGoogle,

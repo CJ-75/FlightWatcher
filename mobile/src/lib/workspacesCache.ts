@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { TravelWorkspace } from '@flightwatcher/shared'
+import type { TravelWorkspace } from '@waypop/shared'
 import { getApi } from './client'
 
 /** Keep hub instant on tab focus; pull-to-refresh / mutations still force. */

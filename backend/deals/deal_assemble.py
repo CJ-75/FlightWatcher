@@ -252,7 +252,7 @@ def assemble_deal(
         f"{nights} nuit{'s' if nights > 1 else ''} à {city} : vol A/R depuis {origin} "
         f"+ hôtel ({board_label or 'chambre'}). "
         "Deux réservations distinctes — vol via la compagnie / partenaire, "
-        "hôtel via FlightWatcher."
+        "hôtel via WayPop."
     )
 
     return {

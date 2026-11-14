@@ -30,7 +30,7 @@ import {
   resolveNextStayAction,
   type HotelGalleryPhoto,
   type MyTripDraft,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import {
   clearFlightReturnAsk,
   markFlightReturnAsk,
@@ -852,7 +852,7 @@ export function TripSummaryScreen({ route, navigation }: Props) {
           <View style={styles.infoBanner}>
             <Text style={styles.infoTitle}>Vol ailleurs</Text>
             <Text style={styles.infoBody}>
-              Tu as un vol hors FlightWatcher — tu peux quand même choisir et
+              Tu as un vol hors WayPop — tu peux quand même choisir et
               payer ton hôtel ici.
             </Text>
           </View>

@@ -36,7 +36,7 @@ export function NotFoundScreen() {
     <View style={[styles.root, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]}>
       <ScreenBackground />
       <View style={styles.inner}>
-        <Text style={styles.kicker}>FlightWatcher</Text>
+        <Text style={styles.kicker}>WayPop</Text>
         <Text style={styles.code}>404</Text>
         <Text style={styles.title}>Page introuvable</Text>
         <Text style={styles.body}>

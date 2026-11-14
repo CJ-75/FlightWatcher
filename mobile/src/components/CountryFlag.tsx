@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Image, StyleSheet, View, type ImageStyle, type StyleProp } from 'react-native'
-import { countryToFlagIso } from '@flightwatcher/shared'
+import { countryToFlagIso } from '@waypop/shared'
 
 export { countryToFlagIso }
 

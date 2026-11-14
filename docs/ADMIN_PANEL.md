@@ -1,4 +1,4 @@
-# Admin FlightWatcher (simplifié FR)
+# Admin WayPop (simplifié FR)
 
 Panneau `/admin` — **inscrits**, **onboarding**, **contenu** (Parcours / Activités / Occasions).
 

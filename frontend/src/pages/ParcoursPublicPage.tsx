@@ -12,7 +12,7 @@ import {
   resolveParcoursCoverUrl,
   type Itinerary,
   type ItineraryItem,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { parcoursWebCoverUrl } from '../utils/parcoursCover'
 import { getApiClient } from '../utils/apiClient'
 import {
@@ -70,7 +70,7 @@ export default function ParcoursPublicPage() {
     const applyRow = (row: Itinerary) => {
       setItin(row)
       setError(null)
-      document.title = `${row.title} · FlightWatcher`
+      document.title = `${row.title} · WayPop`
       const desc = row.subtitle || row.intro || ''
       let meta = document.querySelector('meta[name="description"]')
       if (!meta) {

@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "src" / "_city_thumbs_raw.json"
 OUT = ROOT / "src" / "cityImages.ts"
-UA = "FlightWatcherCityImages/1.0 (local catalog build)"
+UA = "WayPopCityImages/1.0 (local catalog build)"
 
 FALLBACKS = [
     "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=900&q=80&auto=format&fit=crop",

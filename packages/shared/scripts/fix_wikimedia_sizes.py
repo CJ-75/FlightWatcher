@@ -6,7 +6,7 @@ import urllib.request
 from pathlib import Path
 
 PATH = Path(__file__).resolve().parents[1] / "src" / "cityImages.ts"
-UA = "FlightWatcher/1.0 (https://github.com/local; city image fix)"
+UA = "WayPop/1.0 (https://github.com/local; city image fix)"
 
 # Wikimedia now only serves a fixed set of widths; 640 is a common allowed size.
 TARGET = 640

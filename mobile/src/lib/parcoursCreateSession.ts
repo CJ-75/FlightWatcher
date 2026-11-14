@@ -3,7 +3,7 @@
  * Rien en base tant que non publié (create) ou non enregistré (edit).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { Itinerary, ItineraryItem, ItineraryOccasion } from '@flightwatcher/shared'
+import type { Itinerary, ItineraryItem, ItineraryOccasion } from '@waypop/shared'
 import type { DraftStep } from '../components/parcours/AddParcoursStepSheet'
 
 const DISK_KEY = 'fw_parcours_create_draft_v1'

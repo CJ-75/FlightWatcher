@@ -1,5 +1,5 @@
 /**
- * FlightWatcher design tokens — Parcours / Séjours (§8).
+ * WayPop design tokens — Parcours / Séjours (§8).
  * Single source for web CSS vars + Expo theme.
  */
 

@@ -13,7 +13,7 @@ import {
   type HotelGuestReview,
   type HotelUpsellOption,
   type MyTripDraft,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 import { PaymentCardMarks } from './PaymentCardMarks'
 

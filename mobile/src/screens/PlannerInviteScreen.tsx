@@ -9,8 +9,8 @@ import {
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { InvitePreview } from '@flightwatcher/shared'
-import { cityDisplayNameFr, parseAirportCodes } from '@flightwatcher/shared'
+import type { InvitePreview } from '@waypop/shared'
+import { cityDisplayNameFr, parseAirportCodes } from '@waypop/shared'
 import {
   getDevInvitePreview,
   resolveDevInviteTripId,
@@ -236,7 +236,7 @@ export function PlannerInviteScreen({ route, navigation }: Props) {
                   Organisé par {preview.organizer_name}
                 </Text>
               ) : (
-                <Text style={styles.org}>Organisé avec FlightWatcher</Text>
+                <Text style={styles.org}>Organisé avec WayPop</Text>
               )}
               {preview.members_count != null ? (
                 <Text style={styles.meta}>

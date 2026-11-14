@@ -1,10 +1,10 @@
 import { TextStyle, ViewStyle } from 'react-native'
-import { fwColor, fwRadius, fwSpace } from '@flightwatcher/shared'
+import { fwColor, fwRadius, fwSpace } from '@waypop/shared'
 
 const t = fwColor.light
 
 /**
- * FlightWatcher — warm, airy palette (no cool gray).
+ * WayPop — warm, airy palette (no cool gray).
  * Bridged from packages/shared design tokens (§8).
  */
 export const colors = {

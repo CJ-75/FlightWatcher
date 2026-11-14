@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { generateDatesFromPreset } from '@flightwatcher/shared';
+import { generateDatesFromPreset } from '@waypop/shared';
 import { BudgetSlider } from './BudgetSlider';
 import { PassengerStepper } from './PassengerStepper';
 import { DatePresets, DatePreset } from './DatePresets';

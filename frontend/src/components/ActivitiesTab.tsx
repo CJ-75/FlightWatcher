@@ -48,7 +48,7 @@ import {
   toActivityCardModel,
   toggleActivityCategory,
   type ActivityCardModel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getCurrentSession, getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import {

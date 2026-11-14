@@ -1,11 +1,11 @@
-# FlightWatcher
+# WayPop
 
 Scanner de vols Ryanair (aller-retour) — **web** + **mobile Expo** (iOS/Android), admin web-only.
 
 ## Architecture
 
 ```
-FlightWatcher/
+WayPop/
   backend/              # FastAPI (API unique)
   frontend/             # React + Vite (user + admin)
   mobile/               # Expo React Native (user)
@@ -13,7 +13,7 @@ FlightWatcher/
   backend-node/         # DEPRECATED — ne pas utiliser
 ```
 
-Clients → `@flightwatcher/shared` → FastAPI → Ryanair / Supabase.
+Clients → `@waypop/shared` → FastAPI → Ryanair / Supabase.
 
 ## Prérequis
 
@@ -79,7 +79,7 @@ npm run dev:mobile
 
 Sur device physique : `EXPO_PUBLIC_API_URL=http://<IP-LAN>:8000`
 
-Deep link OAuth : `flightwatcher://auth/callback` (voir [backend/MOBILE_AUTH.md](backend/MOBILE_AUTH.md)).
+Deep link OAuth : `waypop://auth/callback` (voir [backend/MOBILE_AUTH.md](backend/MOBILE_AUTH.md)).
 
 ## Déploiement
 

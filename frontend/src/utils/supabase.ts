@@ -1,5 +1,5 @@
 /**
- * Utilitaires Supabase pour FlightWatcher
+ * Utilitaires Supabase pour WayPop
  * 
  * Note: La configuration Supabase est chargée depuis le backend.
  * Configurez SUPABASE_URL et SUPABASE_ANON_KEY dans backend/.env

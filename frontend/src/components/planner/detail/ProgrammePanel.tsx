@@ -3,7 +3,7 @@ import {
   buildProgrammeTimeline,
   type ProgrammeItemKind,
   type ProgrammeSlotItem,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 
 type TripItemRow = {
   id: string

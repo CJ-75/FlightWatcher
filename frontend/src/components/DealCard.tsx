@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   dealAdults,
   dealCornerBadgeParts,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import type { TravelDeal } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { DealCardGallery } from './DealCardGallery'

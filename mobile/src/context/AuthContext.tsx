@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 import * as Linking from 'expo-linking'
-import type { Session, User } from '@flightwatcher/shared'
+import type { Session, User } from '@waypop/shared'
 import { auth, getRedirectTo, authRedirectWarning } from '../lib/client'
 import { clearLikedParcoursIdsLocal } from '../lib/parcoursCache'
 import { DEV_GUEST_USER } from '../dev/guestPreview'

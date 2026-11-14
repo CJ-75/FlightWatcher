@@ -22,8 +22,8 @@ import {
   itineraryOccasionPhaseLabel,
   type Itinerary,
   type ItineraryItem,
-} from '@flightwatcher/shared'
-import { getApi } from '../lib/client'
+} from '@waypop/shared'
+import { getApi, getWebOrigin } from '../lib/client'
 import {
   ensureLikedParcoursIds,
   getParcoursCached,
@@ -230,7 +230,7 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   const markers = buildItineraryMarkerTiles(itin)
   const items = (itin.itinerary_items || []) as ItineraryItem[]
   const days = groupItemsByDay(items)
-  const shareUrl = `https://flightwatcher.app/parcours/${itin.slug || itin.id}`
+  const shareUrl = `${getWebOrigin()}/parcours/${itin.slug || itin.id}`
 
   const onSticky = async () => {
     if (!sticky) return

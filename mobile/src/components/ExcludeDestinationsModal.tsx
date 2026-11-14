@@ -14,7 +14,7 @@ import {
   destinationDisplayNameFr,
   looksLikeIataTrigram,
   type Destination,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts } from '../theme'
 
 type Props = {

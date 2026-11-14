@@ -13,7 +13,7 @@ import {
   formatDurationMinutes,
   stepKindLabel,
   type ItineraryItem,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { colors, fonts, radius, shadow } from '../../theme'
 import { ParcoursPhotoLightbox } from './ParcoursPhotoLightbox'
 

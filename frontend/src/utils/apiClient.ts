@@ -1,4 +1,4 @@
-import { createApiClient, normalizeAirports, normalizeDestinations, destinationsToAirports, type ApiClient } from '@flightwatcher/shared'
+import { createApiClient, normalizeAirports, normalizeDestinations, destinationsToAirports, type ApiClient } from '@waypop/shared'
 import { getApiBaseUrl } from './apiBase'
 import { getAccessToken } from '../lib/supabase'
 

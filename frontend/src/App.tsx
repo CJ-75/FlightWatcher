@@ -38,7 +38,7 @@ import { FavoritesGuestLanding } from './components/FavoritesGuestLanding'
 import { AlertsGuestLanding } from './components/AlertsGuestLanding'
 import { PassengerStepper } from './components/PassengerStepper'
 import type { LikedActivity, LikedDeal, LikedItinerary, TravelDeal } from './types'
-import type { ActivityCardModel, Itinerary } from '@flightwatcher/shared'
+import type { ActivityCardModel, Itinerary } from '@waypop/shared'
 import { ItineraryCard } from './components/parcours/ItineraryCard'
 import { DestinationCard } from './components/DestinationCard'
 import { FavoriteFlightCard } from './components/FavoriteFlightCard'
@@ -74,7 +74,7 @@ import {
   resolveTripPriceSource,
   trackPartnerAnalytics,
 } from './utils/partnerBook'
-import { shouldShowFlightReturnAsk } from '@flightwatcher/shared'
+import { shouldShowFlightReturnAsk } from '@waypop/shared'
 import {
   ACTIVITY_ADDED_TO_PLANNER_FR,
   ACTIVITY_ADD_TO_PLANNER_FR,
@@ -93,7 +93,7 @@ import {
   partitionFavoritesByPast,
   pickTripItemOwner,
   resolvePopularAirports,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { CityAirportSelect } from './components/CityAirportSelect'
 import { CountryFlag } from './components/CountryFlag'
 import {
@@ -1388,9 +1388,9 @@ function Dashboard() {
                 window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-              aria-label="FlightWatcher, retour à Explorer"
+              aria-label="WayPop, retour à Explorer"
             >
-              <p className="app-kicker mb-0.5">FlightWatcher</p>
+              <p className="app-kicker mb-0.5">WayPop</p>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
                 {t('app.title')}
               </h1>

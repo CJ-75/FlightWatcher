@@ -61,7 +61,7 @@ export default function Login() {
         <div className="lg:grid lg:grid-cols-2 lg:gap-14 lg:items-center">
           <div className="hidden lg:block">
             <p className="app-kicker mb-3">
-              {inviteMode ? t('planner.invite.signupKicker') : 'FlightWatcher'}
+              {inviteMode ? t('planner.invite.signupKicker') : 'WayPop'}
             </p>
             <h1 className="text-4xl xl:text-5xl font-extrabold text-ink tracking-tight leading-[1.1]">
               {inviteMode ? t('planner.invite.signupTitle') : t('app.title')}

@@ -15,7 +15,7 @@ import {
   useScrollToTop,
 } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { isAdminAccountEmail, translate } from '@flightwatcher/shared'
+import { isAdminAccountEmail, translate } from '@waypop/shared'
 import { useAuth } from '../context/AuthContext'
 import { useOnboardingGate } from '../context/OnboardingGateContext'
 import { DEV_INVITE_TOKEN } from '../dev/guestPreview'

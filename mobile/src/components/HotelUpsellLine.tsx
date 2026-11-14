@@ -4,7 +4,7 @@ import {
   dateFromFlightIso,
   hotelPricePerNightFr,
   type HotelUpsellResult,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { colors, fonts } from '../theme'
 

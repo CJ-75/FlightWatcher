@@ -17,7 +17,7 @@ import {
   activityTripTimingStatus,
   cityImageUrl,
   type ActivityTripTimingStatus,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 
 const DOT_CLASS: Record<ActivityTripTimingStatus, string> = {
   upcoming: 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.85)]',

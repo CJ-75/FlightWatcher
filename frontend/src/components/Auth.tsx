@@ -1,5 +1,5 @@
 /**
- * Composant d'authentification pour FlightWatcher
+ * Composant d'authentification pour WayPop
  * Gère le login/logout avec Google OAuth
  */
 

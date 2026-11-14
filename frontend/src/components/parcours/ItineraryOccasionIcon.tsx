@@ -1,4 +1,4 @@
-import type { ItineraryOccasion } from '@flightwatcher/shared'
+import type { ItineraryOccasion } from '@waypop/shared'
 
 /** Icônes trait pour occasions parcours (§8 / Lot 6). */
 export function ItineraryOccasionIcon({

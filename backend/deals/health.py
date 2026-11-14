@@ -322,7 +322,7 @@ def maybe_send_health_email(supabase: Any, health: Dict[str, Any]) -> Dict[str, 
         for c in (health.get("invariants") or {}).get("checks") or []
         if not c.get("ok")
     ]
-    body = "FlightWatcher Deals — invariants rouges\n\n" + "\n".join(
+    body = "WayPop Deals — invariants rouges\n\n" + "\n".join(
         f"- {c.get('label')}: {c.get('value')} (seuil {c.get('threshold')})"
         for c in red
     )
@@ -330,7 +330,7 @@ def maybe_send_health_email(supabase: Any, health: Dict[str, Any]) -> Dict[str, 
         logger.warning("health_email would_send to=%s\n%s", to, body)
         return {"sent": False, "reason": "would_send", "body": body, "to": to}
     try:
-        send_simple_email(to=to, subject="[FlightWatcher] Deals mur santé ROUGE", body=body)
+        send_simple_email(to=to, subject="[WayPop] Deals mur santé ROUGE", body=body)
         return {"sent": True, "to": to}
     except Exception as e:
         return {"sent": False, "error": str(e)}

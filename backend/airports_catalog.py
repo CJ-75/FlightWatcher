@@ -80,7 +80,7 @@ def _token() -> str:
 def _http_json(url: str) -> Any:
     token = _token()
     headers = {
-        "User-Agent": "FlightWatcher/1.0",
+        "User-Agent": "WayPop/1.0",
         "Accept": "application/json",
         "Accept-Encoding": "gzip, deflate",
     }

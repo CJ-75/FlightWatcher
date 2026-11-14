@@ -12,8 +12,8 @@ import {
   type ListRenderItemInfo,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { DateAvecHoraire } from '@flightwatcher/shared'
-import { TIME_PRESETS, formatDateFr } from '@flightwatcher/shared'
+import type { DateAvecHoraire } from '@waypop/shared'
+import { TIME_PRESETS, formatDateFr } from '@waypop/shared'
 import { colors, fonts } from '../theme'
 
 type Props = {

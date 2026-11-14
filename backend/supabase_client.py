@@ -1,5 +1,5 @@
 """
-Client Supabase pour FlightWatcher — instances réutilisées (évite create_client à chaque call).
+Client Supabase pour WayPop — instances réutilisées (évite create_client à chaque call).
 """
 from __future__ import annotations
 

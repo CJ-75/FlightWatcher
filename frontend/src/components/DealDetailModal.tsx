@@ -15,8 +15,8 @@ import {
   resolveFlightDurationMinutes,
   reviewExcerpt,
   reviewMetaLine,
-} from '@flightwatcher/shared'
-import type { HotelGuestReview } from '@flightwatcher/shared'
+} from '@waypop/shared'
+import type { HotelGuestReview } from '@waypop/shared'
 import type { TravelDeal, TravelDealHotel, TravelDealRelated } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 import { getCurrentUser } from '../lib/supabase'

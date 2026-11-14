@@ -1,4 +1,4 @@
-import type { ItineraryMarkerTile } from '@flightwatcher/shared'
+import type { ItineraryMarkerTile } from '@waypop/shared'
 
 type Props = {
   tiles: ItineraryMarkerTile[]

@@ -23,14 +23,14 @@ npx expo run:ios
 App uses:
 
 ```
-flightwatcher://auth/callback
+waypop://auth/callback
 ```
 
 ### Supabase → Redirect URLs (keep)
 
 ```
-flightwatcher://auth/callback
-flightwatcher://**
+waypop://auth/callback
+waypop://**
 http://localhost:5173/**
 ```
 
@@ -38,7 +38,7 @@ http://localhost:5173/**
 
 1. App `signInWithOAuth` → Google  
 2. Google → `…supabase.co/auth/v1/callback`  
-3. Supabase → `flightwatcher://auth/callback?code=…` (or hash tokens)  
+3. Supabase → `waypop://auth/callback?code=…` (or hash tokens)  
 4. `openAuthSessionAsync` / Linking → `createSessionFromUrl`
 
 ## Expo Go (unsupported for Google)

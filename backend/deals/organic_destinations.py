@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
-logger = logging.getLogger("flightwatcher.deals.organic")
+logger = logging.getLogger("waypop.deals.organic")
 
 _SEED_IATAS: Optional[Set[str]] = None
 

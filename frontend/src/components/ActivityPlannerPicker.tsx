@@ -23,7 +23,7 @@ import {
   parseAirportCodes,
   type PlannedTrip,
   type TravelWorkspace,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getCurrentSession, refreshAccessToken } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import {

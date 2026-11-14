@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { Destination } from '../types'
-import { parseAirportCodes } from '@flightwatcher/shared'
+import { parseAirportCodes } from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 
 function normalizeDestMap(data: unknown): Record<string, Destination[]> {

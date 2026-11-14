@@ -56,7 +56,7 @@ def check_env_file():
 
 def create_example_env(env_path):
     """Crée un fichier .env exemple"""
-    example_content = """# Configuration Supabase pour FlightWatcher
+    example_content = """# Configuration Supabase pour WayPop
 # Remplacez les valeurs ci-dessous par vos propres clés Supabase
 
 # URL de votre projet Supabase (trouvable dans Settings > API)

@@ -3,7 +3,7 @@
  * (avoids v1 flash → v2 swap).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import type { ApiConfig } from '@flightwatcher/shared'
+import type { ApiConfig } from '@waypop/shared'
 import { getApi } from './client'
 
 const DISK_KEY = 'fw_api_config_v1'

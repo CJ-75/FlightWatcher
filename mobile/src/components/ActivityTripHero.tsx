@@ -21,7 +21,7 @@ import {
   activityTripTimingStatus,
   cityImageUrl,
   type ActivityTripTimingStatus,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import Svg, { Path } from 'react-native-svg'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 

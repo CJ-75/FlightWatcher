@@ -17,7 +17,7 @@ import {
   RESTAURANT_NEEDS_HOTEL_FR,
   RESTAURANT_VALIDATE_LABEL_FR,
   tripItemStatusLabelFr,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { colors, fonts, radius, shadow, spacing } from '../theme'
 

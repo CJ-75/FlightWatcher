@@ -12,7 +12,7 @@ _LOG_FILE = _LOG_DIR / "scan.log"
 
 # Uvicorn / Cursor often miss child-process prints under reload on Windows.
 # Always mirror to this file — open it or: Get-Content -Wait backend/logs/scan.log
-_logger = logging.getLogger("flightwatcher.scan")
+_logger = logging.getLogger("waypop.scan")
 _logger.setLevel(logging.INFO)
 _logger.propagate = True  # let uvicorn root handlers show it when possible
 if not any(isinstance(h, logging.FileHandler) for h in _logger.handlers):

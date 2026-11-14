@@ -11,7 +11,7 @@ import { migrateLocalStorageToSupabase } from '../utils/migration';
 import { useI18n } from '../contexts/I18nContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { prefetchHotelBookings } from '../utils/bookingsCache';
-import { isAdminAccountEmail } from '@flightwatcher/shared';
+import { isAdminAccountEmail } from '@waypop/shared';
 import { useAuthSheet } from './onboarding/AuthSheetHost';
 import type { User } from '@supabase/supabase-js';
 

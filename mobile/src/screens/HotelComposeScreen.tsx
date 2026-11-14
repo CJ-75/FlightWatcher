@@ -17,7 +17,7 @@ import {
   resolveCarrierBooking,
   type HotelUpsellOption,
   type MyTripDraft,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApi } from '../lib/client'
 import { openInAppBrowser } from '../lib/openInApp'
 import { HotelComposeDetailSheet } from '../components/HotelComposeDetailSheet'
@@ -626,7 +626,7 @@ export function HotelComposeScreen({ route, navigation }: Props) {
       ) : emptyKind && !options.length ? (
         <View style={[styles.emptyWrap, { paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyKicker}>FlightWatcher</Text>
+            <Text style={styles.emptyKicker}>WayPop</Text>
             <Text style={styles.emptyTitle}>{empty?.title}</Text>
             <Text style={styles.emptyBody}>{empty?.body}</Text>
 

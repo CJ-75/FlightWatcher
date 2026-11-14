@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { cityDisplayNameFr } from '@flightwatcher/shared'
+import { cityDisplayNameFr } from '@waypop/shared'
 import type { EnrichedTripResponse } from '../types'
 import { useI18n } from '../contexts/I18nContext'
 
@@ -52,7 +52,7 @@ export function PostBookLightbox({
         <div className="p-5 sm:p-6 space-y-4">
           <div className="space-y-1.5">
             <p className="text-xs font-bold uppercase tracking-wider text-primary-600">
-              FlightWatcher
+              WayPop
             </p>
             <h2
               id="post-book-title"

@@ -12,12 +12,12 @@ import {
   Alert,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import type { TravelDeal } from '@flightwatcher/shared'
+import type { TravelDeal } from '@waypop/shared'
 import {
   dealAdults,
   dealCornerBadgeParts,
   hotelStarsLabel,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { HeartIcon } from './HeartIcon'
 import { CountryFlag } from './CountryFlag'
 import { getApi } from '../lib/client'

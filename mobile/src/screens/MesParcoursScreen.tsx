@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   citySlugDisplayNameFr,
   type Itinerary,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { ItineraryCard } from '../components/parcours/ItineraryCard'
 import { getApi } from '../lib/client'
 import {

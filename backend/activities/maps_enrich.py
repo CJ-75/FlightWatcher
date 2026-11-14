@@ -17,7 +17,7 @@ from activities.restaurants_service import classify_bucket, geoapify_reverse_or_
 
 logger = logging.getLogger("activities.maps_enrich")
 
-UA = "FlightWatcher/1.0 (parcours-maps-enrich; contact@flightwatcher.app)"
+UA = "WayPop/1.0 (parcours-maps-enrich; contact@waypop.co)"
 TIMEOUT = 2.2
 
 

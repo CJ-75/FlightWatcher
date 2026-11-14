@@ -28,7 +28,7 @@ def _handoff_page(deep_link: str, mode: str) -> HTMLResponse:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FlightWatcher</title>
+  <title>WayPop</title>
   <style>
     body {{ font-family: system-ui, sans-serif; display:flex; min-height:100vh; align-items:center;
            justify-content:center; margin:0; background:#FFF5F0; color:#1a1a1a; text-align:center; padding:1.25rem; }}
@@ -40,8 +40,8 @@ def _handoff_page(deep_link: str, mode: str) -> HTMLResponse:
 <body>
   <div>
     <h1>Connexion réussie</h1>
-    <p class="muted">Retour vers FlightWatcher… ({html.escape(mode)})</p>
-    <a id="open" href="{deep_attr}">Ouvrir FlightWatcher</a>
+    <p class="muted">Retour vers WayPop… ({html.escape(mode)})</p>
+    <a id="open" href="{deep_attr}">Ouvrir WayPop</a>
   </div>
   <script>
     var url = {deep_js};
@@ -61,7 +61,7 @@ def _handoff_page(deep_link: str, mode: str) -> HTMLResponse:
 def _error_page(title: str, detail: str) -> HTMLResponse:
     body = f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>FlightWatcher</title>
+<title>WayPop</title>
 <style>
 body{{font-family:system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;
 margin:0;background:#FFF5F0;color:#1a1a1a;text-align:center;padding:1rem}}
@@ -78,7 +78,7 @@ _HASH_FALLBACK_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FlightWatcher — connexion</title>
+  <title>WayPop — connexion</title>
   <style>
     body { font-family: system-ui, sans-serif; display:flex; min-height:100vh; align-items:center;
            justify-content:center; margin:0; background:#FFF5F0; color:#1a1a1a; text-align:center; padding:1rem; }
@@ -91,7 +91,7 @@ _HASH_FALLBACK_HTML = """<!DOCTYPE html>
   <div>
     <h1 id="status">Connexion en cours…</h1>
     <p id="hint"></p>
-    <a id="open" style="display:none" href="#">Ouvrir FlightWatcher</a>
+    <a id="open" style="display:none" href="#">Ouvrir WayPop</a>
     <p id="err" class="err"></p>
   </div>
   <script>

@@ -10,7 +10,7 @@ import {
   primaryAirportCode,
   resolveTripImageUrl,
   type SavedFavorite,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { CountryFlag } from './CountryFlag'
 
 const springConfig = {

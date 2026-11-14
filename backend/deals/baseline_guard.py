@@ -53,7 +53,7 @@ def soften_badge_if_stale(
         "discount_pct": None,
         "scope": "flight",
         "tooltip": (
-            "Les prix de référence FlightWatcher n'ont pas été recalculés récemment. "
+            "Les prix de référence WayPop n'ont pas été recalculés récemment. "
             "Le pourcentage est masqué par précaution."
         ),
         "baselines_stale": True,

@@ -31,7 +31,7 @@ import {
 import {
   configureOnboardingKv,
   loadOnboardingPrefs,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 configureOnboardingKv({
@@ -77,7 +77,7 @@ function AppSplash() {
   return (
     <View style={styles.boot}>
       {/* System font — Sora may not be loaded yet */}
-      <Text style={styles.bootBrand}>FlightWatcher</Text>
+      <Text style={styles.bootBrand}>WayPop</Text>
       <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
     </View>
   )
@@ -515,7 +515,7 @@ function RootNavigator() {
 }
 
 const linking = {
-  prefixes: ['flightwatcher://'],
+  prefixes: ['waypop://', 'flightwatcher://'],
   config: {
     screens: {
       PlannerInvite: 'planner/invite/:token',

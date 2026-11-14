@@ -13,7 +13,7 @@ import type {
   TripMember,
   TripProposal,
   User,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 
 /** Token local pour tester l’onboarding invitation en Expo. */
 export const DEV_INVITE_TOKEN = 'dev-invite-preview'

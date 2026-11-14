@@ -12,7 +12,7 @@ import {
   RESTAURANT_NEEDS_HOTEL_FR,
   RESTAURANT_VALIDATE_LABEL_FR,
   tripItemStatusLabelFr,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../utils/apiClient'
 import { listTripItemsCached } from '../utils/tripItemsCache'
 

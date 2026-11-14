@@ -15,7 +15,7 @@
       "root": "frontend",
       "framework": "vite",
       "installCommand": "cd .. && npm install",
-      "buildCommand": "npm run build -w flightwatcher-frontend",
+      "buildCommand": "npm run build -w waypop-frontend",
       "outputDirectory": "dist",
       "rewrites": [
         {

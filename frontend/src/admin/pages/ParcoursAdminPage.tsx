@@ -9,7 +9,7 @@ import {
   type Itinerary,
   type ItineraryDurationKind,
   type ItineraryOccasion,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
 import { ParcoursCoverImg } from '../../components/parcours/ParcoursCoverImg'
 import { ErrorBlock, LoadingBlock } from '../components/PageState'

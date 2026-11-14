@@ -2,7 +2,7 @@
  * Background Viator warm — Paris by default, planner city when known locally.
  * Kick after Parcours is ready; no network trip resolve (too slow).
  */
-import { resolveActivityCitySlug } from '@flightwatcher/shared'
+import { resolveActivityCitySlug } from '@waypop/shared'
 import {
   getCityActivitiesCached,
   peekLastCitySlug,

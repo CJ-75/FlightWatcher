@@ -3343,7 +3343,7 @@ def _draft_response(data: dict, *, reused: bool, **extra: Any) -> dict:
 @router.post("/api/planner/trips/{trip_id}/skip-flight")
 @optional_auth
 async def skip_flight(trip_id: str, request: Request):
-    """Skip FlightWatcher booking — user already has flights elsewhere."""
+    """Skip WayPop booking — user already has flights elsewhere."""
     user_id = _require_user(request)
     supabase = _svc()
     trip = _user_can_access(supabase, trip_id, user_id)
@@ -3411,7 +3411,7 @@ async def skip_flight(trip_id: str, request: Request):
 @router.post("/api/planner/trips/{trip_id}/skip-hotel")
 @optional_auth
 async def skip_hotel(trip_id: str, request: Request):
-    """Skip FlightWatcher hotel — user already has lodging elsewhere."""
+    """Skip WayPop hotel — user already has lodging elsewhere."""
     user_id = _require_user(request)
     supabase = _svc()
     trip = _user_can_access(supabase, trip_id, user_id)
@@ -3509,7 +3509,7 @@ async def skip_hotel(trip_id: str, request: Request):
     ):
         raise HTTPException(
             status_code=409,
-            detail="Hôtel déjà réservé sur FlightWatcher",
+            detail="Hôtel déjà réservé sur WayPop",
         )
 
     # Block if a paid/confirmed hotel booking already exists for this draft.
@@ -3534,7 +3534,7 @@ async def skip_hotel(trip_id: str, request: Request):
         if str(booking.get("status") or "") in _HOTEL_RESERVED_STATUSES:
             raise HTTPException(
                 status_code=409,
-                detail="Hôtel déjà réservé sur FlightWatcher",
+                detail="Hôtel déjà réservé sur WayPop",
             )
 
     if not isinstance(payload, dict):

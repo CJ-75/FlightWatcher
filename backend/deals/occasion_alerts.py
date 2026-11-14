@@ -212,7 +212,7 @@ def run_occasion_digests(
               <p><a href="{deep}" style="display:inline-block;background:#FF6B35;color:#fff;
                  text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
                  Voir les deals</a></p>
-              <p style="font-size:12px;color:#94a3b8">FlightWatcher — 1 alerte / semaine max.</p>
+              <p style="font-size:12px;color:#94a3b8">WayPop — 1 alerte / semaine max.</p>
             </div>
             """
             if dry_run:

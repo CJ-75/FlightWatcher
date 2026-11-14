@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 export function SiteFooter() {
   return (
     <footer className="mt-12 border-t border-line pt-6 pb-10 text-center text-xs text-muted space-y-2">
-      <p className="font-semibold text-ink-soft">FlightWatcher</p>
+      <p className="font-semibold text-ink-soft">WayPop</p>
       <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-1" aria-label="Informations légales">
         <Link to="/vols" className="hover:text-primary-600 underline-offset-2 hover:underline">
           Vols
@@ -13,7 +13,7 @@ export function SiteFooter() {
           Séjours
         </Link>
         <a
-          href="mailto:hello@flightwatcher.app"
+          href="mailto:hello@waypop.co"
           className="hover:text-primary-600 underline-offset-2 hover:underline"
         >
           Contact

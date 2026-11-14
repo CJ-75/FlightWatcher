@@ -21,7 +21,7 @@ import {
 } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Airport, PlannedTrip, TravelWorkspace } from '@flightwatcher/shared'
+import type { Airport, PlannedTrip, TravelWorkspace } from '@waypop/shared'
 import {
   cityDisplayNameFr,
   destinationsToAirports,
@@ -49,7 +49,7 @@ import {
   type FlexibleDates,
   type PartyMode,
   type PlannerHubFilter,
-} from '@flightwatcher/shared'
+} from '@waypop/shared'
 import { peekCachedAirports, subscribeAirports } from '../lib/airportsCache'
 import { getApi } from '../lib/client'
 import {

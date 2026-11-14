@@ -1,6 +1,6 @@
 import React from 'react'
 import { Platform, Text, View } from 'react-native'
-import { resolveOccasionIconId, type OccasionIconId } from '@flightwatcher/shared'
+import { resolveOccasionIconId, type OccasionIconId } from '@waypop/shared'
 import { colors } from '../theme'
 
 type Props = {

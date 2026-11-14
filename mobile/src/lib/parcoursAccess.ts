@@ -1,5 +1,5 @@
 import Constants from 'expo-constants'
-import { canCreateParcours } from '@flightwatcher/shared'
+import { canCreateParcours } from '@waypop/shared'
 
 /** Expo Go or Metro __DEV__ — unlock create parcours for testing. */
 export function isExpoParcoursDevBypass(): boolean {
