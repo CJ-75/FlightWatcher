@@ -1,13 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Sora } from 'next/font/google'
-import dynamic from 'next/dynamic'
+import { PreviewBadge } from '@/components/PreviewBadge'
 import './globals.css'
-
-const PreviewBadge = dynamic(
-  () =>
-    import('@/components/PreviewBadge').then((m) => m.PreviewBadge),
-  { ssr: false },
-)
 
 /** 400 + 700 cover body/UI; 800 for display — skip 600 to cut font bytes */
 const sora = Sora({
@@ -30,7 +24,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#FFF9F5',
+  themeColor: '#F7F3EF',
 }
 
 export default function RootLayout({

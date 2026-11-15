@@ -5,7 +5,7 @@ const PHOTO =
 const PHOTO2 =
   'https://images.unsplash.com/photo-1522093007474-d86e9bf7ba6f?auto=format&fit=crop&w=800&q=80'
 const PHOTO3 =
-  'https://images.unsplash.com/photo-1499853387-4b3839150cba?auto=format&fit=crop&w=800&q=80'
+  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=800&q=80'
 
 function stop(
   partial: NonNullable<PublicItinerary['itinerary_items']>[number],

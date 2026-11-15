@@ -15,8 +15,8 @@ import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
 import { PopImage } from '@/components/pop/PopImage'
 import { ShareButton } from '@/components/pop/ShareButton'
-import { Chip } from '@/components/ui/Chip'
-import { Card } from '@/components/ui/Card'
+import { WpTag } from '@/components/ui/WpTag'
+import { WpRule } from '@/components/ui/WpRule'
 import {
   cityFallbackStyle,
   PACE_LABEL,
@@ -30,7 +30,7 @@ const DayProgramme = dynamic(
     import('@/components/pop/DayProgramme').then((m) => m.DayProgramme),
   {
     loading: () => (
-      <div className="min-h-[16rem] animate-pulse rounded-card bg-white/60" />
+      <div className="min-h-[16rem] animate-pulse rounded-2xl bg-sand/60" />
     ),
   },
 )
@@ -38,7 +38,7 @@ const PriceIsland = dynamic(
   () => import('@/components/pop/PriceIsland').then((m) => m.PriceIsland),
   {
     loading: () => (
-      <div className="min-h-[22rem] rounded-card bg-ink/90 animate-pulse" />
+      <div className="min-h-[21rem] animate-pulse rounded-2xl bg-night/90" />
     ),
   },
 )
@@ -49,7 +49,6 @@ type Props = {
   slug: string
   index: PopIndexResult
   related?: PublicItinerary[]
-  /** Hide live price island (edge/poor fixtures) */
   showPrice?: boolean
 }
 
@@ -92,22 +91,25 @@ export function PopPageView({
       ? (itin.ideal_for as string[])
       : (itin.occasions as string[] | undefined) || []
 
-  const infoCells: { label: string; value: string }[] = []
-  if (durationLabel) infoCells.push({ label: 'Durée', value: durationLabel })
+  const facts: { label: string; value: string }[] = []
+  if (durationLabel) facts.push({ label: 'Durée', value: durationLabel })
   if (itin.budget_estimate_eur && Number(itin.budget_estimate_eur) > 0) {
-    infoCells.push({
-      label: 'Budget sur place',
+    facts.push({
+      label: 'Sur place',
       value: `≈ ${Math.round(Number(itin.budget_estimate_eur))} €`,
     })
   }
-  if (paceLabel) infoCells.push({ label: 'Rythme', value: paceLabel })
+  if (paceLabel) facts.push({ label: 'Rythme', value: paceLabel })
   if (ideal.length) {
-    const labels = ideal
-      .slice(0, 3)
-      .map(
-        (o) => ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || String(o),
-      )
-    infoCells.push({ label: 'Idéal pour', value: labels.join(', ') })
+    facts.push({
+      label: 'Idéal',
+      value: ideal
+        .slice(0, 2)
+        .map(
+          (o) => ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || String(o),
+        )
+        .join(', '),
+    })
   }
 
   const stay = parseStay(itin.stay)
@@ -130,6 +132,14 @@ export function PopPageView({
   const mapsUrl = buildItineraryMapsUrl(items as never)
   const launchHref = `/parcours/${encodeURIComponent(itin.slug || slug)}`
   const transport = (itin.transport_modes as string[] | undefined) || []
+  const metaBits = [
+    durationLabel,
+    `${items.length} stops`,
+    ...transport.slice(0, 1),
+    ...ideal
+      .slice(0, 1)
+      .map((o) => ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || o),
+  ].filter(Boolean)
 
   return (
     <>
@@ -141,84 +151,83 @@ export function PopPageView({
         description={seo.description}
         canonicalPath={canonicalPath}
       />
-      <main className="pb-28 lg:pb-12">
-        <section className="relative">
-          {itin.cover_image ? (
-            <PopImage src={itin.cover_image} alt="" variant="hero" />
-          ) : (
-            <div
-              className="flex h-[42vh] min-h-[220px] max-h-[420px] w-full flex-col items-center justify-center gap-2 px-6 text-center text-white sm:h-[48vh]"
-              style={cityFallbackStyle(
-                itin.color_key as string | undefined,
-                city,
-              )}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">
-                Waypop
-              </p>
-              <p className="text-2xl font-extrabold tracking-tight">{cityLabel}</p>
-            </div>
-          )}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/20 to-transparent" />
 
-          <div className="relative z-10 mx-auto -mt-24 max-w-6xl px-5 lg:-mt-28">
-            <nav className="mb-3 text-sm text-white/85 drop-shadow">
-              <Link
-                href={`/pop/${city}`}
-                className="text-white no-underline hover:underline"
-              >
-                Pops
-              </Link>
-              <span className="mx-1.5">›</span>
-              <Link
-                href={`/pop/${city}`}
-                className="text-white no-underline hover:underline"
-              >
-                {cityLabel}
-              </Link>
-              <span className="mx-1.5">›</span>
-              <span className="font-semibold line-clamp-1">{title}</span>
-            </nav>
-
-            <div className="rounded-card bg-white/95 p-5 shadow-lift backdrop-blur-sm sm:p-7">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary-700">
-                Pop Waypop
-                {verified ? ` · lieux vérifiés le ${verified}` : ''}
-              </p>
-              <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-4xl break-words">
-                {h1}
-              </h1>
-              {h1 !== title ? (
-                <p className="mt-1 text-sm font-semibold text-muted break-words">
-                  {title}
-                </p>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {durationLabel ? <Chip>{durationLabel}</Chip> : null}
-                <Chip>{items.length} stops</Chip>
-                {transport.slice(0, 2).map((t) => (
-                  <Chip key={t}>{t}</Chip>
-                ))}
-                {ideal.slice(0, 2).map((o) => (
-                  <Chip key={o}>
-                    {ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || o}
-                  </Chip>
-                ))}
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <ShareButton title={h1} />
-              </div>
-            </div>
+      {/* Full-bleed hero */}
+      <header className="relative isolate min-h-[min(72vh,560px)] overflow-hidden bg-night">
+        {itin.cover_image ? (
+          <div className="absolute inset-0">
+            <PopImage src={itin.cover_image} alt="" variant="hero" fill />
           </div>
-        </section>
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={cityFallbackStyle(
+              itin.color_key as string | undefined,
+              city,
+            )}
+          />
+        )}
+        <div className="wp-mesh absolute inset-0" />
 
-        <div className="mx-auto mt-8 grid max-w-6xl gap-10 px-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12">
-          <div className="space-y-10 min-w-0">
+        <div className="relative z-10 mx-auto flex min-h-[min(72vh,560px)] max-w-pop flex-col justify-end px-5 pb-10 pt-24 sm:pb-14 sm:pt-28">
+          <nav className="wp-reveal mb-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium text-white/70">
+            <Link
+              href={`/pop/${city}`}
+              className="text-white/80 no-underline hover:text-white hover:underline"
+            >
+              Pops
+            </Link>
+            <span aria-hidden>/</span>
+            <Link
+              href={`/pop/${city}`}
+              className="text-white/80 no-underline hover:text-white hover:underline"
+            >
+              {cityLabel}
+            </Link>
+          </nav>
+
+          <p className="wp-reveal text-[11px] font-semibold uppercase tracking-brand text-white/75">
+            Waypop
+            {verified ? ` · vérifié le ${verified}` : ''}
+          </p>
+          <h1 className="wp-reveal-delay mt-3 max-w-3xl text-[1.85rem] font-extrabold leading-[1.12] tracking-tight text-white sm:text-4xl lg:text-[2.75rem]">
+            {h1}
+          </h1>
+          {h1 !== title ? (
+            <p className="wp-reveal-delay mt-2 max-w-2xl text-sm font-medium text-white/70">
+              {title}
+            </p>
+          ) : null}
+
+          {metaBits.length > 0 ? (
+            <p className="wp-reveal-delay-2 mt-5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] font-semibold text-white/80">
+              {metaBits.map((b, i) => (
+                <span key={`${b}-${i}`} className="inline-flex items-center gap-3">
+                  {i > 0 ? (
+                    <span className="text-white/35" aria-hidden>
+                      ·
+                    </span>
+                  ) : null}
+                  {b}
+                </span>
+              ))}
+            </p>
+          ) : null}
+
+          <div className="wp-reveal-delay-2 mt-7">
+            <ShareButton title={h1} />
+          </div>
+        </div>
+      </header>
+
+      <main className="pb-28 lg:pb-16">
+        <div className="mx-auto grid max-w-pop gap-12 px-5 py-10 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
+          <div className="min-w-0 space-y-12">
             {showPrice ? (
-              <div className="lg:hidden min-h-[22rem]">
+              <div className="lg:hidden min-h-[21rem]">
                 <Suspense
                   fallback={
-                    <div className="min-h-[22rem] rounded-card bg-ink/90 animate-pulse" />
+                    <div className="min-h-[21rem] animate-pulse rounded-2xl bg-night/90" />
                   }
                 >
                   <PriceIsland
@@ -231,33 +240,30 @@ export function PopPageView({
             ) : null}
 
             {intro ? (
-              <section aria-labelledby="intro">
-                <h2 id="intro" className="sr-only">
-                  Introduction
-                </h2>
-                <p className="text-base text-muted leading-relaxed whitespace-pre-line">
+              <section className="max-w-2xl">
+                <h2 className="sr-only">Introduction</h2>
+                <p className="text-[1.05rem] leading-[1.7] text-ink-soft whitespace-pre-line">
                   {intro}
                 </p>
               </section>
             ) : null}
 
-            {infoCells.length > 0 ? (
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {infoCells.slice(0, 4).map((c) => (
-                  <li
-                    key={c.label}
-                    className="rounded-2xl border border-line bg-white px-3 py-3"
-                  >
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                      {c.label}
-                    </p>
-                    <p className="mt-1 text-sm font-extrabold text-ink">
-                      {c.value}
-                    </p>
-                  </li>
+            {facts.length > 0 ? (
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+                {facts.slice(0, 4).map((f) => (
+                  <div key={f.label}>
+                    <dt>
+                      <WpTag>{f.label}</WpTag>
+                    </dt>
+                    <dd className="mt-1.5 text-sm font-bold text-ink">
+                      {f.value}
+                    </dd>
+                  </div>
                 ))}
-              </ul>
+              </dl>
             ) : null}
+
+            <WpRule />
 
             <DayProgramme
               days={days}
@@ -266,40 +272,50 @@ export function PopPageView({
             />
 
             {stay ? (
-              <section className="space-y-3" aria-labelledby="stay">
-                <h2 id="stay" className="text-xl font-extrabold text-ink">
+              <section className="space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
+                  Hébergement
+                </p>
+                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
                   Où dormir
                 </h2>
-                <Card className="p-5 space-y-2">
+                <div className="max-w-2xl border-l-2 border-primary-500/80 pl-5">
                   {stay.area ? (
-                    <p className="font-extrabold text-ink">{stay.area}</p>
+                    <p className="text-lg font-extrabold text-ink">{stay.area}</p>
                   ) : null}
                   {stay.vibe ? (
-                    <p className="text-sm text-primary-700 font-bold">
+                    <p className="mt-1 text-sm font-semibold text-primary-600">
                       {stay.vibe}
                     </p>
                   ) : null}
                   {stay.note ? (
-                    <p className="text-sm text-muted leading-relaxed whitespace-pre-line">
+                    <p className="mt-3 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
                       {sanitizeUserFacingText(stay.note, { multiline: true })}
                     </p>
                   ) : null}
-                </Card>
+                </div>
               </section>
             ) : null}
 
             {tips.length > 0 ? (
-              <section className="space-y-3" aria-labelledby="tips">
-                <h2 id="tips" className="text-xl font-extrabold text-ink">
+              <section className="space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
+                  Conseils
+                </p>
+                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
                   Bon à savoir
                 </h2>
-                <ul className="space-y-2">
+                <ul className="max-w-2xl space-y-3">
                   {tips.map((t, i) => (
                     <li
                       key={i}
-                      className="rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink"
+                      className="flex gap-3 text-[15px] leading-relaxed text-ink-soft"
                     >
-                      {sanitizeUserFacingText(t)}
+                      <span
+                        className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500"
+                        aria-hidden
+                      />
+                      <span>{sanitizeUserFacingText(t)}</span>
                     </li>
                   ))}
                 </ul>
@@ -307,20 +323,28 @@ export function PopPageView({
             ) : null}
 
             {faq.length > 0 ? (
-              <section className="space-y-3" aria-labelledby="faq">
-                <h2 id="faq" className="text-xl font-extrabold text-ink">
+              <section className="space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
+                  Questions
+                </p>
+                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
                   FAQ
                 </h2>
-                <div className="space-y-2">
+                <div className="max-w-2xl divide-y divide-line border-y border-line">
                   {faq.map((item, i) => (
-                    <details
-                      key={i}
-                      className="group rounded-2xl border border-line bg-white px-4 py-3"
-                    >
+                    <details key={i} className="group py-4">
                       <summary className="cursor-pointer list-none font-bold text-ink marker:content-none [&::-webkit-details-marker]:hidden">
-                        {sanitizeUserFacingText(item.q)}
+                        <span className="flex items-center justify-between gap-4">
+                          {sanitizeUserFacingText(item.q)}
+                          <span
+                            className="text-muted transition-transform group-open:rotate-45"
+                            aria-hidden
+                          >
+                            +
+                          </span>
+                        </span>
                       </summary>
-                      <p className="mt-2 text-sm text-muted leading-relaxed whitespace-pre-line">
+                      <p className="mt-3 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
                         {sanitizeUserFacingText(item.a, { multiline: true })}
                       </p>
                     </details>
@@ -330,22 +354,39 @@ export function PopPageView({
             ) : null}
 
             {related.length > 0 ? (
-              <section className="space-y-3" aria-labelledby="more">
-                <h2 id="more" className="text-xl font-extrabold text-ink">
+              <section className="space-y-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
+                  Continuer
+                </p>
+                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
                   D’autres Pops à {cityLabel}
                 </h2>
-                <ul className="grid gap-3 sm:grid-cols-2">
+                <ul className="grid gap-6 sm:grid-cols-2">
                   {related.map((r) => (
                     <li key={r.id}>
                       <Link
                         href={`/pop/${city}/${encodeURIComponent(r.slug || r.id)}`}
-                        className="block rounded-card border border-line bg-white p-4 no-underline hover:border-primary-200"
+                        className="group block no-underline"
                       >
-                        <p className="font-extrabold text-ink line-clamp-2">
+                        {r.cover_image ? (
+                          <div className="overflow-hidden rounded-2xl">
+                            <PopImage
+                              src={r.cover_image}
+                              alt=""
+                              variant="card"
+                              className="transition-transform duration-500 group-hover:scale-[1.03]"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex h-36 items-center justify-center rounded-2xl bg-night text-sm font-bold text-night-fg">
+                            {cityLabel}
+                          </div>
+                        )}
+                        <p className="mt-3 text-base font-extrabold tracking-tight text-ink group-hover:underline">
                           {sanitizeUserFacingText(r.title) || r.title}
                         </p>
                         {r.subtitle ? (
-                          <p className="mt-1 text-sm text-muted line-clamp-2">
+                          <p className="mt-1 line-clamp-2 text-sm text-muted">
                             {sanitizeUserFacingText(r.subtitle)}
                           </p>
                         ) : null}
@@ -358,11 +399,11 @@ export function PopPageView({
           </div>
 
           <aside className="hidden lg:block">
-            <div className="sticky top-6 space-y-4">
+            <div className="sticky top-8 space-y-5">
               {showPrice ? (
                 <Suspense
                   fallback={
-                    <div className="min-h-[22rem] rounded-card bg-ink/90 animate-pulse" />
+                    <div className="min-h-[21rem] animate-pulse rounded-2xl bg-night/90" />
                   }
                 >
                   <PriceIsland
@@ -372,11 +413,9 @@ export function PopPageView({
                   />
                 </Suspense>
               ) : null}
-              <Card className="p-4 space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-wide text-muted">
-                  Sur la carte
-                </p>
-                <p className="text-sm font-bold text-ink">
+              <div className="rounded-2xl border border-line bg-surface px-5 py-4">
+                <WpTag>Sur place</WpTag>
+                <p className="mt-2 text-sm font-bold text-ink">
                   {items.length} stops · {days.length} jour
                   {days.length > 1 ? 's' : ''}
                 </p>
@@ -385,12 +424,12 @@ export function PopPageView({
                     href={mapsUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-bold no-underline hover:underline"
+                    className="mt-3 inline-block text-sm font-bold no-underline hover:underline"
                   >
                     Ouvrir Maps →
                   </a>
                 ) : null}
-              </Card>
+              </div>
               <WhatsAppCard cityLabel={cityLabel} />
             </div>
           </aside>
@@ -398,8 +437,8 @@ export function PopPageView({
       </main>
 
       {showPrice ? (
-        <div className="lg:hidden min-h-[4.25rem]">
-          <Suspense fallback={<div className="min-h-[4.25rem]" />}>
+        <div className="lg:hidden min-h-[4.5rem]">
+          <Suspense fallback={<div className="min-h-[4.5rem]" />}>
             <PriceIsland
               destCity={city}
               cityLabel={cityLabel}
@@ -409,7 +448,7 @@ export function PopPageView({
           </Suspense>
         </div>
       ) : (
-        <div className="lg:hidden min-h-[4.25rem]" aria-hidden />
+        <div className="lg:hidden min-h-[4.5rem]" aria-hidden />
       )}
       <PopFooter />
       {!index.indexable ? (
@@ -424,19 +463,19 @@ function WhatsAppCard({ cityLabel }: { cityLabel: string }) {
     process.env.NEXT_PUBLIC_WHATSAPP_URL ||
     `https://wa.me/?text=${encodeURIComponent(`Pop ${cityLabel} — waypop.co`)}`
   return (
-    <Card className="border-primary-100 bg-primary-50/60 p-4 space-y-2">
+    <div className="rounded-2xl bg-sand/80 px-5 py-4">
       <p className="text-sm font-extrabold text-ink">Une question ?</p>
-      <p className="text-xs text-muted">
-        Écris-nous sur WhatsApp — on répond vite.
+      <p className="mt-1 text-xs leading-relaxed text-muted">
+        Écris-nous sur WhatsApp — réponse rapide.
       </p>
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex text-sm font-bold no-underline hover:underline"
+        className="mt-3 inline-block text-sm font-bold no-underline hover:underline"
       >
         WhatsApp →
       </a>
-    </Card>
+    </div>
   )
 }

@@ -73,12 +73,16 @@ export function cityFallbackStyle(colorKey?: string | null, city?: string): {
 } {
   const key = (colorKey || city || 'default').toLowerCase()
   const map: Record<string, string> = {
-    paris: 'linear-gradient(145deg, #1D1B19 0%, #C2410C 55%, #FF6B35 100%)',
-    lyon: 'linear-gradient(145deg, #1D1B19 0%, #7C2D12 50%, #FF6B35 100%)',
-    marseille: 'linear-gradient(145deg, #0C4A6E 0%, #0369A1 50%, #FF6B35 100%)',
-    nice: 'linear-gradient(145deg, #1E3A5F 0%, #2563EB 45%, #FF6B35 100%)',
-    bordeaux: 'linear-gradient(145deg, #3B0A0A 0%, #7F1D1D 50%, #FF6B35 100%)',
-    default: 'linear-gradient(145deg, #1D1B19 0%, #8B2E0E 45%, #FF6B35 100%)',
+    paris:
+      'linear-gradient(155deg, #161311 0%, #3a1810 42%, #ff5a1f 120%)',
+    lyon: 'linear-gradient(155deg, #161311 0%, #4a2210 50%, #ff5a1f 120%)',
+    marseille:
+      'linear-gradient(155deg, #0c1a24 0%, #1a3a4a 45%, #ff5a1f 120%)',
+    nice: 'linear-gradient(155deg, #0e1c2e 0%, #1e3a5f 45%, #ff5a1f 120%)',
+    bordeaux:
+      'linear-gradient(155deg, #1a0a0a 0%, #4a1515 45%, #ff5a1f 120%)',
+    default:
+      'linear-gradient(155deg, #161311 0%, #2a1810 40%, #ff5a1f 120%)',
   }
   return { background: map[key] || map.default! }
 }

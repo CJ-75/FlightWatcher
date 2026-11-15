@@ -1,49 +1,52 @@
 import type { Config } from 'tailwindcss'
-import { fwColor, fwRadius } from '../../packages/shared/src/design/tokens'
 
-const light = fwColor.light
-
-/** Preset mirrored from frontend/tailwind.config.js + shared tokens — pixel parity target. */
+/** Next-only visual system — does not alter SPA tokens. */
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
         primary: {
-          50: '#FFF3EC',
-          100: '#FFDCC8',
-          200: '#FFDCC8',
-          500: light.accent,
-          600: '#E85A28',
-          700: '#8B2E0E',
-          900: '#8B2E0E',
+          50: '#FFF4EE',
+          100: '#FFE0D1',
+          500: '#FF5A1F',
+          600: '#D63D0A',
+          700: '#A32E08',
         },
-        canvas: light.bgFrom,
+        canvas: '#F7F3EF',
+        sand: '#EFE6DC',
         ink: {
-          DEFAULT: light.ink,
-          soft: '#4A3428',
+          DEFAULT: '#12100E',
+          soft: '#3D3530',
         },
-        muted: light.inkMuted,
+        muted: '#6F655E',
         line: {
-          DEFAULT: light.line,
-          strong: '#E5CBB8',
+          DEFAULT: '#E8DDD4',
+          strong: '#D4C4B6',
         },
-        surface: light.surface,
+        surface: '#FFFCFA',
+        night: {
+          DEFAULT: '#161311',
+          fg: '#F6F0EA',
+        },
       },
       borderRadius: {
-        xl: '1rem',
-        '2xl': '1.375rem',
-        '3xl': '1.75rem',
-        card: `${fwRadius.card}px`,
-        pill: `${fwRadius.pill}px`,
+        xl: '0.875rem',
+        '2xl': '1.125rem',
+        '3xl': '1.5rem',
       },
       boxShadow: {
-        soft: '0 6px 18px rgba(92, 46, 24, 0.07)',
-        lift: '0 12px 24px rgba(92, 46, 24, 0.12)',
-        'glow-orange': '0 8px 20px rgba(255, 107, 53, 0.32)',
+        soft: '0 1px 0 rgba(18,16,14,0.04), 0 12px 32px rgba(18,16,14,0.06)',
+        rail: '0 20px 40px rgba(18,16,14,0.18)',
       },
       fontFamily: {
         sans: ['var(--font-sora)', 'Sora', 'system-ui', 'sans-serif'],
+      },
+      maxWidth: {
+        pop: '72rem',
+      },
+      letterSpacing: {
+        brand: '0.18em',
       },
     },
   },

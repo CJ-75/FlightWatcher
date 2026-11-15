@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { sanitizeUserFacingText } from '@waypop/shared'
-import { Card } from '@/components/ui/Card'
 import { PopImage } from '@/components/pop/PopImage'
+import { WpRule } from '@/components/ui/WpRule'
 
 export type PopStop = {
   id?: string
@@ -75,20 +75,22 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
   }
 
   return (
-    <section className="space-y-5" aria-labelledby={`${baseId}-heading`}>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2
-          id={`${baseId}-heading`}
-          className="text-xl font-extrabold text-ink"
-        >
-          Le programme
-        </h2>
+    <section className="space-y-8" aria-labelledby={`${baseId}-heading`}>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
+            Programme
+          </p>
+          <h2
+            id={`${baseId}-heading`}
+            className="mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-[1.75rem]"
+          >
+            Jour par jour
+          </h2>
+        </div>
         <div className="flex flex-wrap gap-2">
           {launchHref ? (
-            <a
-              href={launchHref}
-              className="app-btn-primary no-underline text-sm py-2.5 px-4"
-            >
+            <a href={launchHref} className="wp-cta text-sm py-2.5">
               Lancer le Pop
             </a>
           ) : null}
@@ -97,9 +99,9 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center justify-center rounded-2xl border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink no-underline hover:bg-primary-50"
+              className="wp-cta-ghost text-sm py-2.5"
             >
-              Voir sur la carte
+              Carte
             </a>
           ) : null}
         </div>
@@ -109,7 +111,7 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
         <div
           role="tablist"
           aria-label="Jours du programme"
-          className="flex gap-2 overflow-x-auto pb-1"
+          className="flex gap-6 overflow-x-auto border-b border-line"
         >
           {days.map((d, i) => {
             const selected = d.day === active
@@ -124,13 +126,14 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setActive(d.day)}
                 onKeyDown={(e) => onKeyNav(e, i)}
-                className={`shrink-0 rounded-pill px-4 py-2 text-sm font-bold transition-colors ${
-                  selected
-                    ? 'bg-ink text-[color:var(--fw-primary-fg)]'
-                    : 'bg-white text-ink border border-line hover:bg-primary-50'
+                className={`relative shrink-0 pb-3 text-sm font-bold transition-colors ${
+                  selected ? 'text-ink' : 'text-muted hover:text-ink'
                 }`}
               >
                 Jour {d.day + 1}
+                {selected ? (
+                  <span className="absolute inset-x-0 -bottom-px h-0.5 bg-primary-500" />
+                ) : null}
               </button>
             )
           })}
@@ -146,61 +149,73 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
             role="tabpanel"
             aria-labelledby={`${baseId}-tab-${d.day}`}
             hidden={!selected}
-            className={selected ? 'space-y-4' : 'hidden'}
+            className={selected ? 'space-y-0' : 'hidden'}
           >
-            <h3 className="text-lg font-bold text-ink">Jour {d.day + 1}</h3>
-            <ol className="relative space-y-4 border-l-2 border-line pl-5">
+            <h3 className="sr-only">Jour {d.day + 1}</h3>
+            <ol>
               {d.items.map((step, i) => {
                 const maps = stopMapsUrl(step)
                 const moment =
                   (step.moment && MOMENT_FR[step.moment]) ||
                   step.moment ||
                   `Stop ${i + 1}`
-                const stopTitle =
-                  step.title || step.places?.name || 'Étape'
+                const stopTitle = step.title || step.places?.name || 'Étape'
+                const isLast = i === d.items.length - 1
                 return (
                   <li key={step.id || `${d.day}-${i}`} className="relative">
-                    <span
-                      className="absolute -left-[1.65rem] top-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary-500 text-[11px] font-extrabold text-white"
-                      aria-hidden
-                    >
-                      {i + 1}
-                    </span>
-                    <Card className="overflow-hidden p-0">
-                      {step.photo ? (
-                        <PopImage
-                          src={step.photo}
-                          alt=""
-                          variant="stop"
-                        />
-                      ) : null}
-                      <div className="space-y-2 p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-primary-700">
-                          {moment}
-                          {step.kind ? ` · ${step.kind}` : ''}
-                        </p>
-                        <p className="font-extrabold text-ink text-lg">
+                    <div className="grid gap-5 sm:grid-cols-[3rem_minmax(0,1fr)] sm:gap-6">
+                      <div className="relative hidden sm:block">
+                        <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-sm font-extrabold text-ink">
+                          {i + 1}
+                        </span>
+                        {!isLast ? (
+                          <span
+                            className="absolute left-5 top-10 h-[calc(100%-0.5rem)] w-px bg-line"
+                            aria-hidden
+                          />
+                        ) : null}
+                      </div>
+
+                      <article className="pb-10">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-600">
+                            <span className="sm:hidden">{i + 1} · </span>
+                            {moment}
+                          </p>
+                          {maps ? (
+                            <a
+                              href={maps}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-bold no-underline hover:underline"
+                            >
+                              Itinéraire
+                            </a>
+                          ) : null}
+                        </div>
+                        <h4 className="mt-2 text-xl font-extrabold tracking-tight text-ink">
                           {stopTitle}
-                        </p>
+                        </h4>
+                        {step.photo ? (
+                          <div className="mt-4 overflow-hidden rounded-2xl">
+                            <PopImage
+                              src={step.photo}
+                              alt=""
+                              variant="stop"
+                              className="h-48 sm:h-56"
+                            />
+                          </div>
+                        ) : null}
                         {step.note ? (
-                          <p className="text-sm text-muted leading-relaxed whitespace-pre-line">
+                          <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
                             {sanitizeUserFacingText(step.note, {
                               multiline: true,
                             })}
                           </p>
                         ) : null}
-                        {maps ? (
-                          <a
-                            href={maps}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block text-sm font-bold no-underline hover:underline"
-                          >
-                            Itinéraire →
-                          </a>
-                        ) : null}
-                      </div>
-                    </Card>
+                        {!isLast ? <WpRule className="mt-8 sm:hidden" /> : null}
+                      </article>
+                    </div>
                   </li>
                 )
               })}

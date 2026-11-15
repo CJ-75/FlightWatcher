@@ -58,13 +58,17 @@ export default async function FixturePopPage({ params }: Props) {
 
   return (
     <div>
-      <div className="bg-ink px-4 py-2 text-center text-xs font-bold text-[color:var(--fw-primary-fg)]">
-        Fixture locale · noindex ·{' '}
-        <Link href="/dev/pop-edge" className="text-primary-100 underline">
+      <div className="border-b border-white/10 bg-night px-4 py-2.5 text-center text-[11px] font-semibold text-night-fg/80">
+        Fixture · noindex ·{' '}
+        <Link
+          href="/dev/pop-edge"
+          className="text-night-fg underline underline-offset-2"
+        >
           tous les cas
         </Link>
         {' · '}
-        indexable={String(index.indexable)} ({index.reasons.join(', ') || 'ok'})
+        indexable={String(index.indexable)}
+        {index.reasons.length ? ` (${index.reasons.slice(0, 3).join(', ')})` : ''}
       </div>
       <PopPageView
         itin={itin}

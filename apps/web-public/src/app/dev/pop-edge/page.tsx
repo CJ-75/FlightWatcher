@@ -8,40 +8,47 @@ export const metadata: Metadata = {
 }
 
 const LABELS: Record<string, string> = {
-  'fixture-riche': 'Riche (Lighthouse + HTML complet)',
+  'fixture-riche': 'Riche',
   'fixture-moyen': 'Moyen',
-  'fixture-seuil': 'Au seuil (noindex attendu)',
-  'fixture-pauvre': 'Pauvre (1 stop, pas de photo)',
-  'fixture-long-title': 'Titre long + 15 stops / 4 jours',
+  'fixture-seuil': 'Au seuil',
+  'fixture-pauvre': 'Pauvre',
+  'fixture-long-title': 'Titre long · 15 stops',
 }
 
-/** Lot 5 — cas extrêmes, preview only. */
 export default function PopEdgeIndexPage() {
   return (
-    <main className="mx-auto max-w-2xl px-5 py-12 space-y-6">
-      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary-700">
-        Dev · Lot 5
-      </p>
-      <h1 className="text-3xl font-extrabold text-ink">Cas extrêmes Pop</h1>
-      <p className="text-sm text-muted">
-        Fixtures locales (`is_demo`), jamais dans le sitemap. Ouvre à 360 px et
-        1280 px : pas de scroll horizontal, barre prix ne cache rien.
-      </p>
-      <ul className="space-y-3">
+    <main className="mx-auto max-w-xl px-5 py-14 space-y-8">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-brand text-primary-600">
+          Dev · Lot 5
+        </p>
+        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-ink">
+          Cas extrêmes
+        </h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          Fixtures locales, jamais indexées. Même UI que la V2 Pop.
+        </p>
+      </div>
+      <ul className="divide-y divide-line border-y border-line">
         {FIXTURE_SLUGS.map((slug) => {
           const it = POP_FIXTURES[slug]!
           return (
             <li key={slug}>
               <Link
                 href={`/dev/pop-fixtures/${slug}`}
-                className="block rounded-card border border-line bg-white p-4 no-underline hover:border-primary-200"
+                className="flex items-baseline justify-between gap-4 py-4 no-underline"
               >
-                <p className="font-extrabold text-ink">
-                  {LABELS[slug] || slug}
-                </p>
-                <p className="mt-1 text-sm text-muted line-clamp-2">
-                  {it.title} · {it.itinerary_items?.length || 0} stops
-                </p>
+                <span>
+                  <span className="block font-extrabold text-ink">
+                    {LABELS[slug] || slug}
+                  </span>
+                  <span className="mt-1 block text-sm text-muted line-clamp-1">
+                    {it.title}
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm font-bold text-primary-600">
+                  →
+                </span>
               </Link>
             </li>
           )

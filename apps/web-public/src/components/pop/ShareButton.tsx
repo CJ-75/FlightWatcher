@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from 'react'
 
-/** Tiny client island — Web Share API with WhatsApp fallback. */
 export function ShareButton({ title, url }: { title: string; url?: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -15,7 +14,7 @@ export function ShareButton({ title, url }: { title: string; url?: string }) {
         return
       }
     } catch {
-      /* user cancel or unsupported */
+      /* cancel */
     }
     try {
       await navigator.clipboard.writeText(href)
@@ -34,7 +33,7 @@ export function ShareButton({ title, url }: { title: string; url?: string }) {
     <button
       type="button"
       onClick={() => void share()}
-      className="inline-flex items-center rounded-2xl border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink hover:bg-primary-50"
+      className="inline-flex items-center rounded-xl border border-white/35 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
     >
       {copied ? 'Lien copié' : 'Partager'}
     </button>

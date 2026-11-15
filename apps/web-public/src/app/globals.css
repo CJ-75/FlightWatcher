@@ -3,39 +3,115 @@
 @tailwind utilities;
 
 :root {
-  --fw-accent: #ff6b35;
-  --fw-accent-soft: #ffe7dc;
-  --fw-bg-from: #fff9f5;
-  --fw-ink: #1d1b19;
-  --fw-ink-muted: #7a6f68;
-  --fw-line: #f0e0d4;
-  --fw-primary: #1d1b19;
-  --fw-primary-fg: #f5efea;
+  --fw-accent: #ff5a1f;
+  --fw-accent-deep: #d63d0a;
+  --fw-ink: #12100e;
+  --fw-ink-soft: #3d3530;
+  --fw-muted: #6f655e;
+  --fw-line: #e8ddd4;
+  --fw-canvas: #f7f3ef;
+  --fw-surface: #fffcfa;
+  --fw-sand: #efe6dc;
+  --fw-night: #161311;
+  --fw-night-fg: #f6f0ea;
+  --fw-focus: #c2410c;
 }
 
 @layer base {
   html {
-    @apply bg-canvas;
+    background-color: var(--fw-canvas);
   }
   body {
-    @apply bg-canvas text-ink antialiased font-sans;
+    @apply antialiased font-sans text-ink;
+    background-color: var(--fw-canvas);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 100% -20%, rgba(255, 90, 31, 0.08), transparent 50%),
+      radial-gradient(ellipse 80% 60% at -10% 40%, rgba(20, 60, 90, 0.05), transparent 45%);
+    color: var(--fw-ink);
+  }
+  ::selection {
+    background: rgba(255, 90, 31, 0.2);
   }
   a {
-    @apply text-[#C2410C] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600;
+    color: var(--fw-focus);
+    text-underline-offset: 3px;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  a:focus-visible,
+  button:focus-visible,
+  summary:focus-visible,
+  input:focus-visible {
+    outline: 2px solid var(--fw-focus);
+    outline-offset: 3px;
   }
 }
 
 @layer components {
-  /* Mirrored from SPA frontend/src/index.css .app-btn-primary */
-  .app-btn-primary {
-    @apply inline-flex items-center justify-center gap-2 bg-gradient-to-br from-primary-500 to-primary-600
-      text-white font-bold px-5 py-3 rounded-2xl shadow-glow-orange
-      hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60;
+  .wp-cta {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold tracking-tight transition-transform duration-200;
+    @apply bg-[color:var(--fw-accent)] text-white;
+    @apply hover:bg-[color:var(--fw-accent-deep)] active:scale-[0.98];
+    text-decoration: none !important;
   }
-  /* Dark pill CTA (maquette — ink on cream text) */
+  .wp-cta-night {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-bold tracking-tight transition-transform duration-200;
+    @apply bg-[color:var(--fw-night)] text-[color:var(--fw-night-fg)];
+    @apply hover:opacity-90 active:scale-[0.98];
+    text-decoration: none !important;
+  }
+  .wp-cta-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold tracking-tight transition-colors duration-200;
+    border-color: var(--fw-line);
+    background: var(--fw-surface);
+    color: var(--fw-ink);
+    text-decoration: none !important;
+  }
+  .wp-cta-ghost:hover {
+    background: var(--fw-sand);
+  }
+  /* Keep legacy class names used in a few spots — restyled for Next */
+  .app-btn-primary {
+    @apply wp-cta;
+  }
   .app-btn-ink {
-    @apply inline-flex items-center justify-center gap-2 bg-ink text-[color:var(--fw-primary-fg)]
-      font-bold px-5 py-3 rounded-pill
-      hover:opacity-90 active:scale-[0.98] transition-transform disabled:opacity-60;
+    @apply wp-cta-night;
+  }
+}
+
+@layer utilities {
+  .wp-reveal {
+    animation: wp-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .wp-reveal-delay {
+    animation: wp-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  }
+  .wp-reveal-delay-2 {
+    animation: wp-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
+  }
+  .wp-mesh {
+    background-image:
+      linear-gradient(180deg, transparent 40%, rgba(18, 16, 14, 0.72) 100%),
+      linear-gradient(90deg, rgba(18, 16, 14, 0.25), transparent 40%);
+  }
+}
+
+@keyframes wp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-reveal,
+  .wp-reveal-delay,
+  .wp-reveal-delay-2 {
+    animation: none;
   }
 }

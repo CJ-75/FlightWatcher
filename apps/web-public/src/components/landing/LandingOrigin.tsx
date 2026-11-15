@@ -4,8 +4,9 @@ import { useState } from 'react'
 
 const ORIGIN_LS = 'fw_pop_origin'
 
-/** Hero CTA — origin → hub Paris (pilot) or /pop/{city} later. */
-export function LandingOrigin() {
+type Props = { dark?: boolean }
+
+export function LandingOrigin({ dark }: Props) {
   const [origin, setOrigin] = useState('LYS')
 
   return (
@@ -23,7 +24,11 @@ export function LandingOrigin() {
       }}
     >
       <label className="block flex-1">
-        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-muted">
+        <span
+          className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${
+            dark ? 'text-night-fg/55' : 'text-muted'
+          }`}
+        >
           Je pars de
         </span>
         <input
@@ -31,13 +36,17 @@ export function LandingOrigin() {
           onChange={(e) =>
             setOrigin(e.target.value.toUpperCase().replace(/[^A-Z,]/g, ''))
           }
-          className="mt-1.5 w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm font-bold text-ink outline-none focus:border-primary-500"
+          className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm font-bold outline-none transition-colors focus:border-primary-500 ${
+            dark
+              ? 'border-white/15 bg-white/10 text-night-fg placeholder:text-night-fg/40'
+              : 'border-line bg-surface text-ink'
+          }`}
           placeholder="LYS"
           maxLength={15}
           aria-label="Aéroport de départ"
         />
       </label>
-      <button type="submit" className="app-btn-primary shrink-0">
+      <button type="submit" className="wp-cta shrink-0">
         Voir les Pops
       </button>
     </form>
