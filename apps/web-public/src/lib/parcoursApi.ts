@@ -31,6 +31,7 @@ export type PublicItinerary = {
   stay?: unknown
   color_key?: string | null
   target_query?: string | null
+  featured?: boolean
   indexable_override?: boolean | null
   canonical_itinerary_id?: string | null
   itinerary_items?: Array<{

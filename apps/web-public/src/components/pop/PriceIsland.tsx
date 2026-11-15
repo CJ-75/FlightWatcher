@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Button } from '@/components/ui/Button'
 
 type PricePayload = {
   ok?: boolean
@@ -17,6 +16,9 @@ type PricePayload = {
 
 const ORIGIN_LS = 'fw_pop_origin'
 const DEFAULT_ORIGIN = 'LYS'
+/** Reserved height ≈ final card — avoids CLS when price loads */
+const CARD_MIN_H = 'min-h-[22rem]'
+const BAR_MIN_H = 'min-h-[4.25rem]'
 
 function apiBase(): string {
   return (
@@ -38,7 +40,6 @@ type Props = {
   destCity: string
   cityLabel: string
   stopCount: number
-  /** Compact bar for mobile sticky */
   variant?: 'card' | 'bar'
   className?: string
 }
@@ -118,8 +119,9 @@ export function PriceIsland({
   if (variant === 'bar') {
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-50 border-t border-line bg-ink/95 px-4 py-3 text-[color:var(--fw-primary-fg)] backdrop-blur-md safe-pb ${className}`}
+        className={`fixed inset-x-0 bottom-0 z-50 border-t border-line bg-ink/95 px-4 py-3 text-[color:var(--fw-primary-fg)] backdrop-blur-md ${BAR_MIN_H} ${className}`}
         style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        aria-busy={loading}
       >
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div className="min-w-0">
@@ -127,17 +129,22 @@ export function PriceIsland({
               Dès · {origin}
             </p>
             <p className="truncate text-lg font-extrabold">
-              {loading
-                ? '…'
-                : data?.price_pp != null
-                  ? formatEuro(data.price_pp)
-                  : 'Prix à venir'}
-              {data?.price_pp != null ? (
-                <span className="text-sm font-semibold opacity-80"> / pers.</span>
-              ) : null}
+              {loading ? (
+                <span className="inline-block h-6 w-24 animate-pulse rounded bg-white/20" />
+              ) : data?.price_pp != null ? (
+                <>
+                  {formatEuro(data.price_pp)}
+                  <span className="text-sm font-semibold opacity-80"> / pers.</span>
+                </>
+              ) : (
+                'Prix à venir'
+              )}
             </p>
           </div>
-          <a href={plannerHref} className="app-btn-primary shrink-0 no-underline text-sm py-2.5 px-4">
+          <a
+            href={plannerHref}
+            className="app-btn-primary shrink-0 no-underline text-sm py-2.5 px-4"
+          >
             Ajouter au Planner
           </a>
         </div>
@@ -147,7 +154,8 @@ export function PriceIsland({
 
   return (
     <aside
-      className={`rounded-card bg-ink p-5 text-[color:var(--fw-primary-fg)] shadow-lift space-y-4 ${className}`}
+      className={`rounded-card bg-ink p-5 text-[color:var(--fw-primary-fg)] shadow-lift space-y-4 ${CARD_MIN_H} ${className}`}
+      aria-busy={loading}
     >
       <div>
         <label className="text-[10px] font-black uppercase tracking-[0.14em] opacity-70">
@@ -159,6 +167,7 @@ export function PriceIsland({
           className="mt-1.5 w-full rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5 text-sm font-bold outline-none focus:border-primary-500"
           aria-label="Aéroport de départ (IATA)"
           maxLength={15}
+          autoComplete="off"
         />
       </div>
 
@@ -167,11 +176,13 @@ export function PriceIsland({
           Week-end à {cityLabel}
         </p>
         <p className="mt-1 text-3xl font-extrabold tracking-tight">
-          {loading
-            ? '…'
-            : data?.price_pp != null
-              ? `dès ${formatEuro(data.price_pp)}`
-              : 'Prix à venir'}
+          {loading ? (
+            <span className="inline-block h-9 w-36 animate-pulse rounded-lg bg-white/20" />
+          ) : data?.price_pp != null ? (
+            `dès ${formatEuro(data.price_pp)}`
+          ) : (
+            'Prix à venir'
+          )}
         </p>
         {data?.price_pp != null ? (
           <p className="mt-1 text-sm opacity-80">par personne · vol + hôtel</p>
@@ -190,19 +201,18 @@ export function PriceIsland({
       </div>
 
       <div className="space-y-2">
-        <a href={plannerHref} className="app-btn-primary w-full no-underline text-center">
+        <a
+          href={plannerHref}
+          className="app-btn-primary w-full no-underline text-center"
+        >
           Ajouter au Planner
         </a>
-        <Button
-          variant="ghost"
-          className="w-full border-white/20 bg-transparent text-[color:var(--fw-primary-fg)] hover:bg-white/10"
-          type="button"
-          onClick={() => {
-            window.location.href = `/alertes?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destCity)}`
-          }}
+        <a
+          href={`/alertes?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destCity)}`}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-transparent px-5 py-3 text-sm font-bold text-[color:var(--fw-primary-fg)] no-underline hover:bg-white/10"
         >
           Me prévenir si le prix baisse
-        </Button>
+        </a>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs opacity-80">

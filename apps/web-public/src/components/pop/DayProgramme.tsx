@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { sanitizeUserFacingText } from '@waypop/shared'
 import { Card } from '@/components/ui/Card'
+import { PopImage } from '@/components/pop/PopImage'
 
 export type PopStop = {
   id?: string
@@ -70,8 +71,7 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
         ? Math.min(index + 1, days.length - 1)
         : Math.max(index - 1, 0)
     setActive(days[next]!.day)
-    const el = document.getElementById(`${baseId}-tab-${days[next]!.day}`)
-    el?.focus()
+    document.getElementById(`${baseId}-tab-${days[next]!.day}`)?.focus()
   }
 
   return (
@@ -85,7 +85,10 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
         </h2>
         <div className="flex flex-wrap gap-2">
           {launchHref ? (
-            <a href={launchHref} className="app-btn-primary no-underline text-sm py-2.5 px-4">
+            <a
+              href={launchHref}
+              className="app-btn-primary no-underline text-sm py-2.5 px-4"
+            >
               Lancer le Pop
             </a>
           ) : null}
@@ -134,7 +137,6 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
         </div>
       ) : null}
 
-      {/* All days in HTML for SEO — tabs only hide/show */}
       {days.map((d) => {
         const selected = d.day === active
         return (
@@ -154,6 +156,8 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                   (step.moment && MOMENT_FR[step.moment]) ||
                   step.moment ||
                   `Stop ${i + 1}`
+                const stopTitle =
+                  step.title || step.places?.name || 'Étape'
                 return (
                   <li key={step.id || `${d.day}-${i}`} className="relative">
                     <span
@@ -164,12 +168,10 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                     </span>
                     <Card className="overflow-hidden p-0">
                       {step.photo ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <PopImage
                           src={step.photo}
                           alt=""
-                          className="h-40 w-full object-cover"
-                          loading="lazy"
+                          variant="stop"
                         />
                       ) : null}
                       <div className="space-y-2 p-4">
@@ -178,7 +180,7 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                           {step.kind ? ` · ${step.kind}` : ''}
                         </p>
                         <p className="font-extrabold text-ink text-lg">
-                          {step.title || step.places?.name || 'Étape'}
+                          {stopTitle}
                         </p>
                         {step.note ? (
                           <p className="text-sm text-muted leading-relaxed whitespace-pre-line">

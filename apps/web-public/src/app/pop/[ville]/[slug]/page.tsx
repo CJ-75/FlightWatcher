@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { notFound, permanentRedirect } from 'next/navigation'
 import type { Metadata } from 'next'
+import dynamic from 'next/dynamic'
 import {
   buildItineraryMapsUrl,
   citySlugDisplayNameFr,
@@ -14,12 +16,32 @@ import {
   fetchSlugRedirect,
 } from '@/lib/parcoursApi'
 import { assessPopIndex, popSeoCopy } from '@/lib/popSeoPage'
-import { DayProgramme } from '@/components/pop/DayProgramme'
 import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
-import { PriceIsland } from '@/components/pop/PriceIsland'
+import { PopImage } from '@/components/pop/PopImage'
+import { ShareButton } from '@/components/pop/ShareButton'
 import { Chip } from '@/components/ui/Chip'
 import { Card } from '@/components/ui/Card'
+
+const DayProgramme = dynamic(
+  () =>
+    import('@/components/pop/DayProgramme').then((m) => m.DayProgramme),
+  {
+    loading: () => (
+      <div className="min-h-[16rem] animate-pulse rounded-card bg-white/60" />
+    ),
+  },
+)
+const PriceIsland = dynamic(
+  () => import('@/components/pop/PriceIsland').then((m) => m.PriceIsland),
+  {
+    loading: () => (
+      <div className="min-h-[22rem] rounded-card bg-ink/90 animate-pulse" />
+    ),
+  },
+)
+
+export const revalidate = 86400
 import {
   cityFallbackStyle,
   PACE_LABEL,
@@ -215,11 +237,10 @@ export default async function PopDetailPage({ params }: Props) {
         {/* Hero */}
         <section className="relative">
           {itin.cover_image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <PopImage
               src={itin.cover_image}
               alt=""
-              className="h-[42vh] min-h-[220px] max-h-[420px] w-full object-cover sm:h-[48vh]"
+              variant="hero"
             />
           ) : (
             <div
@@ -280,7 +301,7 @@ export default async function PopDetailPage({ params }: Props) {
                 ))}
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                <ButtonShare title={title} />
+                <ShareButton title={h1} />
               </div>
             </div>
           </div>
@@ -288,13 +309,19 @@ export default async function PopDetailPage({ params }: Props) {
 
         <div className="mx-auto mt-8 grid max-w-6xl gap-10 px-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12">
           <div className="space-y-10 min-w-0">
-            {/* Mobile price under hero */}
-            <div className="lg:hidden">
-              <PriceIsland
-                destCity={city}
-                cityLabel={cityLabel}
-                stopCount={items.length}
-              />
+            {/* Mobile price under hero — reserved height via island min-h */}
+            <div className="lg:hidden min-h-[22rem]">
+              <Suspense
+                fallback={
+                  <div className="min-h-[22rem] rounded-card bg-ink/90 animate-pulse" />
+                }
+              >
+                <PriceIsland
+                  destCity={city}
+                  cityLabel={cityLabel}
+                  stopCount={items.length}
+                />
+              </Suspense>
             </div>
 
             {intro ? (
@@ -427,11 +454,17 @@ export default async function PopDetailPage({ params }: Props) {
           {/* Desktop sticky column */}
           <aside className="hidden lg:block">
             <div className="sticky top-6 space-y-4">
-              <PriceIsland
-                destCity={city}
-                cityLabel={cityLabel}
-                stopCount={items.length}
-              />
+              <Suspense
+                fallback={
+                  <div className="min-h-[22rem] rounded-card bg-ink/90 animate-pulse" />
+                }
+              >
+                <PriceIsland
+                  destCity={city}
+                  cityLabel={cityLabel}
+                  stopCount={items.length}
+                />
+              </Suspense>
               <Card className="p-4 space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-wide text-muted">
                   Sur la carte
@@ -457,13 +490,16 @@ export default async function PopDetailPage({ params }: Props) {
         </div>
       </main>
 
-      <PriceIsland
-        destCity={city}
-        cityLabel={cityLabel}
-        stopCount={items.length}
-        variant="bar"
-        className="lg:hidden"
-      />
+      <div className="lg:hidden min-h-[4.25rem]">
+        <Suspense fallback={<div className="min-h-[4.25rem]" />}>
+          <PriceIsland
+            destCity={city}
+            cityLabel={cityLabel}
+            stopCount={items.length}
+            variant="bar"
+          />
+        </Suspense>
+      </div>
       <PopFooter />
       {!index.indexable ? (
         <p className="sr-only">
@@ -471,19 +507,6 @@ export default async function PopDetailPage({ params }: Props) {
         </p>
       ) : null}
     </>
-  )
-}
-
-function ButtonShare({ title }: { title: string }) {
-  return (
-    <a
-      href={`https://wa.me/?text=${encodeURIComponent(title + ' — waypop.co')}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center rounded-2xl border border-line bg-white px-4 py-2.5 text-sm font-bold text-ink no-underline hover:bg-primary-50"
-    >
-      Partager
-    </a>
   )
 }
 

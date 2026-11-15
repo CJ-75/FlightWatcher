@@ -8,9 +8,12 @@ import {
 } from '@waypop/shared'
 import { fetchPublishedByCity } from '@/lib/parcoursApi'
 import { PopFooter } from '@/components/pop/PopFooter'
+import { PopImage } from '@/components/pop/PopImage'
 import { PriceIsland } from '@/components/pop/PriceIsland'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
+
+export const revalidate = 86400
 
 type Props = { params: Promise<{ ville: string }> }
 
@@ -102,12 +105,10 @@ export default async function PopCityPage({ params }: Props) {
                   <li key={it.id}>
                     <Card className="overflow-hidden p-0 h-full">
                       {it.cover_image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <PopImage
                           src={it.cover_image}
                           alt=""
-                          className="h-36 w-full object-cover"
-                          loading="lazy"
+                          variant="card"
                         />
                       ) : (
                         <div className="flex h-36 items-center justify-center bg-gradient-to-br from-ink to-primary-600 text-white font-extrabold">
