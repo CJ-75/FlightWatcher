@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import { Sora } from 'next/font/google'
+import { PreviewBadge } from '@/components/PreviewBadge'
 import './globals.css'
 
 const sora = Sora({
   subsets: ['latin'],
-  weight: ['400', '600', '700'],
+  weight: ['400', '600', '700', '800'],
   display: 'swap',
   variable: '--font-sora',
 })
@@ -25,7 +26,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" className={sora.variable}>
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-screen font-sans">
+        {children}
+        <PreviewBadge />
+      </body>
     </html>
   )
 }

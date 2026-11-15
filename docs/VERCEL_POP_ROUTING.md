@@ -40,4 +40,6 @@ SPA : rewrite catch-all existant vers `index.html` pour le reste.
 
 ## Quand `POP_PAGE_V2=on`
 
-Les 301 `/parcours/:slug` → `/pop/{ville}/{slug}` se font **côté SPA ou edge** (à brancher Lot 1 suite) — pas avant flag on.
+Les redirections `/parcours/:slug` → `/pop/{ville}/{slug}` sont côté SPA (`ParcoursPublicPage` → `location.replace`) sauf cookie preview `pop_v=1`. Les liens catalogue passent déjà par `publicPopPath`. Rewrite Vercel `/pop/*` → Next requis pour servir la page.
+
+Env Next utiles : `WAYPOP_API_URL`, `POP_REVALIDATE_SECRET`, `POP_REVALIDATE_URL` (sur l’API = URL absolue de `…/api/revalidate` Next).

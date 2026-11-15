@@ -12,7 +12,10 @@ logger = logging.getLogger("activities.itineraries_catalog")
 PUBLIC_COLS = (
     "id,slug,title,subtitle,intro,cover_image,city_slug,served_city_id,"
     "status,author_kind,duration_kind,occasions,featured_from,featured_to,"
-    "budget_estimate_eur,budget_basis,sort_weight,published_at,is_demo"
+    "budget_estimate_eur,budget_basis,sort_weight,published_at,is_demo,"
+    "photo_source,photo_license,photo_author,verified_at,pace,transport_modes,"
+    "ideal_for,faq,tips,stay,target_query,color_key,featured,"
+    "indexable_override,canonical_itinerary_id"
 )
 
 # Avoid places.geom (heavy geography) on public detail — meta.lat/lng is enough for Maps.

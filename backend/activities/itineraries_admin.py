@@ -13,7 +13,10 @@ ADMIN_COLS = (
     "id,slug,title,subtitle,intro,cover_image,city_slug,served_city_id,"
     "status,author_kind,duration_kind,occasions,featured_from,featured_to,"
     "budget_estimate_eur,budget_basis,sort_weight,published_at,is_demo,"
-    "visibility,updated_at,created_at"
+    "visibility,updated_at,created_at,"
+    "photo_source,photo_license,photo_author,verified_at,pace,transport_modes,"
+    "ideal_for,faq,tips,stay,target_query,color_key,featured,"
+    "indexable_override,canonical_itinerary_id,slug_history"
 )
 
 VALID_STATUS = {"draft", "published", "retired"}
@@ -519,6 +522,21 @@ def create_and_publish_admin_itinerary(
                     raise
         created["itinerary_items"] = rows
         created["occasions"] = occasions
+        try:
+            from activities.itineraries_catalog import clear_itineraries_catalog_cache
+
+            clear_itineraries_catalog_cache()
+        except Exception:
+            pass
+        try:
+            from routes.pop_public import ping_next_revalidate
+
+            ping_next_revalidate(
+                city_slug=str(created.get("city_slug") or ""),
+                slug=str(created.get("slug") or ""),
+            )
+        except Exception:
+            pass
         return {"ok": True, "itinerary": created}
     except Exception as e:
         logger.warning("create_and_publish items: %s", e)
@@ -607,6 +625,21 @@ def update_admin_itinerary(
         "sort_weight",
         "status",
         "is_demo",
+        "photo_source",
+        "photo_license",
+        "photo_author",
+        "verified_at",
+        "pace",
+        "transport_modes",
+        "ideal_for",
+        "faq",
+        "tips",
+        "stay",
+        "target_query",
+        "color_key",
+        "featured",
+        "indexable_override",
+        "canonical_itinerary_id",
     }
     data: Dict[str, Any] = {}
     for k, v in patch.items():
@@ -624,6 +657,12 @@ def update_admin_itinerary(
             v = _slugify(str(v))
         if k == "occasions":
             v = [str(x).strip().lower() for x in (v or []) if str(x).strip()]
+        if k in ("ideal_for", "transport_modes"):
+            v = [str(x).strip().lower() for x in (v or []) if str(x).strip()]
+        if k == "pace" and v is not None and str(v) not in ("slow", "moderate", "packed", ""):
+            return {"ok": False, "error": "invalid_pace"}
+        if k == "pace" and v == "":
+            v = None
         if k == "budget_estimate_eur":
             # Vide / null → 0 (obligatoire front = Gratuit)
             if v is None or v == "":
@@ -693,11 +732,25 @@ def update_admin_itinerary(
         except Exception:
             pass
 
+        def _maybe_revalidate(row: Dict[str, Any]) -> None:
+            if row.get("status") != "published":
+                return
+            try:
+                from routes.pop_public import ping_next_revalidate
+
+                ping_next_revalidate(
+                    city_slug=str(row.get("city_slug") or ""),
+                    slug=str(row.get("slug") or ""),
+                )
+            except Exception:
+                pass
+
         # Réponse légère : pas de 2e SELECT si on a déjà itin + items
         if itin_row is not None and items_out is not None:
             itin_row["itinerary_items"] = items_out
             row = _serialize(itin_row)
             items = list(row.get("itinerary_items") or [])
+            _maybe_revalidate(row)
             return {
                 "ok": True,
                 "itinerary": row,
@@ -708,6 +761,7 @@ def update_admin_itinerary(
             # Champs seuls — évite re-fetch si pas d'items dans le patch
             row = _serialize(itin_row)
             row.setdefault("itinerary_items", [])
+            _maybe_revalidate(row)
             return {
                 "ok": True,
                 "itinerary": row,
@@ -715,7 +769,10 @@ def update_admin_itinerary(
                 "warnings": [],
                 "items_unchanged": True,
             }
-        return get_admin_itinerary(supabase, itinerary_id, light=True)
+        got = get_admin_itinerary(supabase, itinerary_id, light=True)
+        if got.get("ok"):
+            _maybe_revalidate(got["itinerary"])
+        return got
     except Exception as e:
         logger.warning("update_admin_itinerary: %s", e)
         return {"ok": False, "error": str(e)}
@@ -750,6 +807,15 @@ def publish_admin_itinerary(supabase, itinerary_id: str) -> Dict[str, Any]:
             from activities.itineraries_catalog import clear_itineraries_catalog_cache
 
             clear_itineraries_catalog_cache()
+        except Exception:
+            pass
+        try:
+            from routes.pop_public import ping_next_revalidate
+
+            ping_next_revalidate(
+                city_slug=str(itin.get("city_slug") or ""),
+                slug=str(itin.get("slug") or ""),
+            )
         except Exception:
             pass
         return get_admin_itinerary(supabase, itinerary_id)

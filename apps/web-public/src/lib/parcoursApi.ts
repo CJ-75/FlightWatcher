@@ -20,6 +20,16 @@ export type PublicItinerary = {
   is_demo?: boolean
   duration_kind?: string | null
   occasions?: string[]
+  budget_estimate_eur?: number | null
+  photo_license?: string | null
+  verified_at?: string | null
+  pace?: string | null
+  transport_modes?: string[] | null
+  ideal_for?: string[] | null
+  faq?: unknown
+  tips?: unknown
+  stay?: unknown
+  color_key?: string | null
   itinerary_items?: Array<{
     id?: string
     title?: string | null
@@ -28,6 +38,17 @@ export type PublicItinerary = {
     day_offset?: number | null
     moment?: string | null
     kind?: string | null
+    position?: number | null
+    meta?: {
+      maps_url?: string
+      lat?: number
+      lng?: number
+      [key: string]: unknown
+    } | null
+    places?: {
+      name?: string
+      meta?: Record<string, unknown> | null
+    } | null
   }>
   [key: string]: unknown
 }

@@ -28,9 +28,18 @@ import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChr
 import { ItineraryMarkerTiles } from '../components/parcours/ItineraryMarkerTiles'
 import { ItineraryStepsTimeline } from '../components/parcours/ItineraryStepsTimeline'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
+import { peekConfigFlag } from '../lib/configFlags'
 import { publicPopPath } from '../lib/popLinks'
 
 const CITY_LS = 'fw_parcours_city'
+
+function popVPreviewForcedToSpa(): boolean {
+  try {
+    return /(?:^|;\s*)pop_v=1(?:;|$)/.test(document.cookie || '')
+  } catch {
+    return false
+  }
+}
 
 export default function ParcoursPublicPage() {
   const { itineraryId } = useParams<{ itineraryId: string }>()
@@ -160,6 +169,30 @@ export default function ParcoursPublicPage() {
     const t = window.setTimeout(() => setToast(null), 2800)
     return () => window.clearTimeout(t)
   }, [toast])
+
+  // POP_PAGE_V2 on → hard redirect to Next /pop/{ville}/{slug} (301-equivalent client).
+  // Preview cookie pop_v=1 keeps SPA for A/B.
+  useEffect(() => {
+    if (!itin || loading) return
+    if (popVPreviewForcedToSpa()) return
+    let cancelled = false
+    void import('../utils/configCache')
+      .then(({ getAppConfig }) => getAppConfig())
+      .then(() => {
+        if (cancelled) return
+        if (!peekConfigFlag('pop_page_v2_enabled')) return
+        const city = String(itin.city_slug || '').trim().toLowerCase()
+        const slug = String(itin.slug || itineraryId || '').trim().toLowerCase()
+        if (!city || !slug) return
+        const target = `/pop/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`
+        if (window.location.pathname === target) return
+        window.location.replace(target)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [itin, loading, itineraryId])
 
   if (loading) {
     return (

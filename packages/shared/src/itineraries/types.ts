@@ -69,6 +69,21 @@ export type Itinerary = {
   published_at?: string | null
   is_demo?: boolean
   itinerary_items?: ItineraryItem[]
+  photo_source?: string | null
+  photo_license?: string | null
+  photo_author?: string | null
+  verified_at?: string | null
+  pace?: 'slow' | 'moderate' | 'packed' | string | null
+  transport_modes?: string[] | null
+  ideal_for?: string[] | null
+  faq?: unknown
+  tips?: unknown
+  stay?: unknown
+  target_query?: string | null
+  color_key?: string | null
+  featured?: boolean
+  indexable_override?: boolean | null
+  canonical_itinerary_id?: string | null
 }
 
 export type ItineraryListParams = {

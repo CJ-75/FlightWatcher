@@ -53,5 +53,30 @@ export * from './itineraries/coverResolve'
 export * from './itineraries/detailView'
 export * from './itineraries/parcoursCities'
 export * from './parcours/createAccess'
-export * from './media'
+// Avoid clashing with itineraries/coverResolve.isRemoteHttpMediaUrl (stricter)
+export {
+  guessImageContentType,
+  guessImageFileName,
+  isLocalMediaUri,
+  mediaDisplayUrl,
+  supabaseTransformUrl,
+  createMediaStorage,
+  parseMediaProviderId,
+  createApiMediaStorage,
+  createSupabaseMediaStorage,
+  ensureRemoteMediaUrl,
+  ensureRemoteMediaUrls,
+} from './media'
+export type {
+  MediaDisplayOpts,
+  MediaKind,
+  MediaProviderId,
+  MediaStorage,
+  MediaUploadInput,
+  MediaUploadResult,
+  MediaUploadSource,
+  CreateMediaStorageOptions,
+  ApiMediaStorageOptions,
+  SupabaseMediaStorageOptions,
+} from './media'
 export * from './onboarding'

@@ -11,6 +11,7 @@ from routes import (
     meta,
     persistence,
     planner,
+    pop_public,
     ref,
     restaurants,
     scan,
@@ -33,3 +34,4 @@ def include_all_routers(app: FastAPI) -> None:
     app.include_router(activities.router)
     app.include_router(restaurants.router)
     app.include_router(auth_password.router)
+    app.include_router(pop_public.router)
