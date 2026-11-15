@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { formatDurationMinutes, sanitizeUserFacingText } from '@waypop/shared'
 import { StopVisual } from '@/components/pop/StopVisual'
+import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpRule } from '@/components/ui/WpRule'
 import { pickExclusivePhoto } from '@/lib/popPhotos'
@@ -35,7 +36,6 @@ type DayGroup = { day: number; items: PopStop[] }
 
 type Props = {
   days: DayGroup[]
-  mapsUrl?: string | null
   launchHref?: string
   cityLabel: string
   colorKey?: string | null
@@ -66,7 +66,6 @@ function stopMapsUrl(step: PopStop): string | null {
 
 export function DayProgramme({
   days,
-  mapsUrl,
   launchHref,
   cityLabel,
   colorKey,
@@ -119,23 +118,7 @@ export function DayProgramme({
             {h2 || `Programme à ${cityLabel}`}
           </h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {launchHref ? (
-            <a href={launchHref} className="wp-cta-ghost text-sm py-2.5">
-              Lancer le Pop
-            </a>
-          ) : null}
-          {mapsUrl ? (
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="wp-cta-ghost text-sm py-2.5"
-            >
-              Carte
-            </a>
-          ) : null}
-        </div>
+        {launchHref ? <LaunchPopCta href={launchHref} size="sm" /> : null}
       </div>
 
       {days.length > 1 ? (

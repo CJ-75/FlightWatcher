@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { cityImageUrl } from '@waypop/shared'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 
 /** Next-only Pop tile — photo then title (editorial, not overlay). */
@@ -8,27 +9,36 @@ export function WpPopCard({
   subtitle,
   image,
   fallbackLabel,
+  citySlug,
 }: {
   href: string
   title: string
   subtitle?: string | null
   image?: string | null
   fallbackLabel?: string
+  citySlug?: string
   tall?: boolean
 }) {
+  const resolved =
+    (isPublicImageSrc(image) ? image : null) ||
+    (citySlug || fallbackLabel
+      ? cityImageUrl(citySlug || fallbackLabel)
+      : null)
+
   return (
     <Link href={href} className="group block no-underline">
-      {isPublicImageSrc(image) ? (
-        <div className="overflow-hidden rounded-2xl">
+      {resolved ? (
+        <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-sand">
           <PopImage
-            src={image!}
+            src={resolved}
             alt=""
             variant="card"
+            fill
             className="transition-transform duration-500 group-hover:scale-[1.03]"
           />
         </div>
       ) : (
-        <div className="flex h-36 items-center justify-center rounded-2xl bg-night text-sm font-bold text-night-fg sm:h-44">
+        <div className="flex aspect-[16/10] items-center justify-center rounded-2xl bg-accent-soft text-sm font-bold text-ink">
           {fallbackLabel || 'Waypop'}
         </div>
       )}
@@ -36,7 +46,7 @@ export function WpPopCard({
         {title}
       </p>
       {subtitle ? (
-        <p className="mt-1 line-clamp-2 text-sm text-muted">{subtitle}</p>
+        <p className="mt-1 line-clamp-2 text-sm text-ink-muted">{subtitle}</p>
       ) : null}
     </Link>
   )

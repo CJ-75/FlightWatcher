@@ -57,18 +57,14 @@ function cityLabelForCodes(codes: string, opts: CityOpt[]): string {
   return hit?.label || codes
 }
 
-type StopPin = { title: string; lat?: number; lng?: number }
-
 type Props = {
   destCity: string
   cityLabel: string
   stopCount: number
   variant?: 'card' | 'bar'
   className?: string
-  mapsUrl?: string | null
   shareUrl?: string
   shareTitle?: string
-  stops?: StopPin[]
 }
 
 export function PriceIsland({
@@ -77,10 +73,8 @@ export function PriceIsland({
   stopCount,
   variant = 'card',
   className = '',
-  mapsUrl,
   shareUrl,
   shareTitle,
-  stops = [],
 }: Props) {
   const cities = useMemo(() => departureCities(), [])
   const [origin, setOrigin] = useState(DEFAULT_ORIGIN)
@@ -145,6 +139,13 @@ export function PriceIsland({
     }
   }
 
+  const selectValue =
+    cities.find((c) => c.codes === origin)?.codes ||
+    cities.find((c) =>
+      c.codes.split(',').includes(origin.split(',')[0] || ''),
+    )?.codes ||
+    origin
+
   const plannerHref = `/sejours?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destCity)}`
   const alertHref = `/alertes?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destCity)}`
   const waHref = `https://wa.me/?text=${encodeURIComponent(
@@ -154,22 +155,22 @@ export function PriceIsland({
   if (variant === 'bar') {
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-night/95 px-4 py-3 text-night-fg backdrop-blur-md ${BAR_MIN_H} ${className}`}
+        className={`fixed inset-x-0 bottom-0 z-50 border-t border-line bg-cream/95 px-4 py-3 text-ink backdrop-blur-md ${BAR_MIN_H} ${className}`}
         style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
         aria-busy={loading}
       >
         <div className="mx-auto flex max-w-pop items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-night-fg/55">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
               Dès · {originCity}
             </p>
             <p className="truncate text-lg font-bold tracking-tight">
               {loading ? (
-                <span className="inline-block h-5 w-20 animate-pulse rounded bg-white/15" />
+                <span className="inline-block h-5 w-20 animate-pulse rounded bg-sand" />
               ) : hasPrice ? (
                 <>
                   {formatEuro(data!.price_pp!)}
-                  <span className="text-sm font-semibold text-night-fg/65">
+                  <span className="text-sm font-semibold text-ink-muted">
                     {' '}
                     / pers.
                   </span>
@@ -179,7 +180,14 @@ export function PriceIsland({
               )}
             </p>
           </div>
-          <a href={plannerHref} className="wp-cta-ink shrink-0 py-2.5 px-4 text-sm">
+          <a
+            href={plannerHref}
+            className="relative shrink-0 overflow-hidden rounded-2xl bg-ink px-5 py-2.5 text-sm font-bold text-cream no-underline"
+          >
+            <span
+              className="absolute inset-y-0 left-0 w-1 bg-[#FF6B35]"
+              aria-hidden
+            />
             Planner
           </a>
         </div>
@@ -187,159 +195,146 @@ export function PriceIsland({
     )
   }
 
-  const staticMap = buildStaticMapUrl(stops)
-
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div className={`space-y-3 ${className}`}>
       <aside
-        className={`rounded-2xl bg-night p-6 text-night-fg shadow-rail ${CARD_MIN_H}`}
+        className={`overflow-hidden rounded-[1.5rem] border border-[#E8C4B4] bg-[#F3D9CC] shadow-soft ${CARD_MIN_H}`}
         aria-busy={loading}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-night-fg/50">
-          Prix week-end
-        </p>
-
-        <label className="mt-5 block">
-          <span className="text-[11px] font-semibold text-night-fg/55">
-            Je pars de
-          </span>
-          <select
-            value={
-              cities.find((c) => c.codes === origin)?.codes ||
-              cities.find((c) =>
-                c.codes.split(',').includes(origin.split(',')[0] || ''),
-              )?.codes ||
-              origin
-            }
-            onChange={(e) => onOriginChange(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-bold tracking-wide text-night-fg outline-none transition-colors focus:border-primary-500"
-            aria-label="Ville de départ"
-          >
-            {cities.map((c) => (
-              <option key={c.codes} value={c.codes} className="bg-night text-white">
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="mt-6">
-          <p className="text-[11px] text-night-fg/55">à {cityLabel}</p>
-          {loading ? (
-            <p className="mt-1">
-              <span className="inline-block h-9 w-32 animate-pulse rounded-lg bg-white/15" />
-            </p>
-          ) : hasPrice ? (
-            <>
-              <p className="mt-1 text-[2rem] font-extrabold leading-none tracking-tight">
-                {formatEuro(data!.price_pp!)}
-              </p>
-              <p className="mt-2 text-sm text-night-fg/60">
-                par personne · vol + hôtel
-              </p>
-              {(data?.flight_pp != null || data?.hotel_pp != null) && (
-                <p className="mt-2 text-xs text-night-fg/45">
-                  {data.flight_pp != null
-                    ? `Vol ${formatEuro(data.flight_pp)}`
-                    : null}
-                  {data.flight_pp != null && data.hotel_pp != null
-                    ? ' · '
-                    : null}
-                  {data.hotel_pp != null
-                    ? `Hôtel ${formatEuro(data.hotel_pp)}`
-                    : null}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="mt-2 text-sm leading-relaxed text-night-fg/75">
-              On t&apos;affiche le prix dès qu&apos;on trouve un bon plan depuis{' '}
-              {originCity}.
-            </p>
-          )}
+        {/* bandeau haut */}
+        <div className="flex items-center justify-between gap-3 border-b border-[#E8C4B4] bg-[#EBC8B8] px-5 py-3.5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-ink">
+            Prix week-end
+          </p>
+          <p className="text-[11px] font-semibold text-ink/70">
+            {stopCount} stops
+          </p>
         </div>
 
-        <div className="mt-6 space-y-2">
-          <a href={plannerHref} className="wp-cta-ink w-full">
-            Ajouter au Planner
-          </a>
-          <a
-            href={alertHref}
-            className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 px-5 py-3 text-sm font-bold text-night-fg no-underline transition-colors hover:bg-white/5"
-          >
-            {hasPrice
-              ? 'Me prévenir si le prix baisse'
-              : 'Me prévenir dès qu’un prix est dispo'}
-          </a>
-        </div>
-
-        <div className="mt-5 border-t border-white/10 pt-4 text-xs text-night-fg/45">
-          <p>{stopCount} stops sur ce Pop</p>
-          {pricedLabel ? <p className="mt-0.5">Vu le {pricedLabel}</p> : null}
-        </div>
-      </aside>
-
-      {staticMap || mapsUrl ? (
-        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-          {staticMap ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={staticMap}
-              alt={`Carte des stops à ${cityLabel}`}
-              className="h-40 w-full object-cover"
-              loading="lazy"
-            />
-          ) : null}
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <p className="text-xs font-bold text-ink">
-              {stopCount} stops sur la carte
-            </p>
-            {mapsUrl ? (
-              <a
-                href={mapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-bold text-ink no-underline hover:underline"
+        <div className="p-5 sm:p-6">
+          <label className="block">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+              Je pars de
+            </span>
+            <div className="relative mt-2">
+              <select
+                value={selectValue}
+                onChange={(e) => onOriginChange(e.target.value)}
+                className="w-full appearance-none rounded-2xl border border-line bg-white py-3 pl-4 pr-10 text-sm font-extrabold text-ink outline-none transition-colors focus:border-accent"
+                aria-label="Ville de départ"
               >
-                Ouvrir Maps →
-              </a>
-            ) : null}
+                {cities.map((c) => (
+                  <option key={c.codes} value={c.codes}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-muted"
+                aria-hidden
+              >
+                ▾
+              </span>
+            </div>
+          </label>
+
+          <div className="mt-5 rounded-2xl bg-white px-4 py-4 ring-1 ring-line">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+              vers {cityLabel}
+            </p>
+            {loading ? (
+              <div className="mt-3 h-10 w-36 animate-pulse rounded-lg bg-sand" />
+            ) : hasPrice ? (
+              <>
+                <p className="mt-2 text-[2.35rem] font-extrabold leading-none tracking-tight text-ink">
+                  {formatEuro(data!.price_pp!)}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-ink-muted">
+                  par personne · vol + hôtel
+                </p>
+                {(data?.flight_pp != null || data?.hotel_pp != null) && (
+                  <p className="mt-2 text-xs text-ink-muted">
+                    {data.flight_pp != null
+                      ? `Vol ${formatEuro(data.flight_pp)}`
+                      : null}
+                    {data.flight_pp != null && data.hotel_pp != null
+                      ? ' · '
+                      : null}
+                    {data.hotel_pp != null
+                      ? `Hôtel ${formatEuro(data.hotel_pp)}`
+                      : null}
+                  </p>
+                )}
+                {pricedLabel ? (
+                  <p className="mt-2 text-[11px] text-ink-muted">
+                    Vu le {pricedLabel}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="mt-2 text-sm leading-relaxed text-ink">
+                On t&apos;affiche le prix dès qu&apos;on trouve un bon plan
+                depuis{' '}
+                <span className="font-extrabold">{originCity}</span>.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-5 space-y-2.5">
+            <a href={plannerHref} className="wp-cta-planner">
+              <span>Ajouter au Planner</span>
+              <span className="wp-cta-planner-arrow" aria-hidden>
+                →
+              </span>
+            </a>
+            <p className="text-center text-[11px] font-semibold text-ink-muted">
+              {hasPrice
+                ? 'Vol + hôtel, tu valides ensuite'
+                : 'On te prévient quand le prix tombe'}
+            </p>
+            <a
+              href={alertHref}
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-ink/15 bg-white px-5 py-3 text-sm font-bold text-ink no-underline transition-colors hover:border-ink/30 hover:bg-accent-soft/50"
+            >
+              {hasPrice
+                ? 'Me prévenir si le prix baisse'
+                : 'Me prévenir dès qu’un prix est dispo'}
+            </a>
+          </div>
+
+          <div className="mt-5 border-t border-[#E8C4B4] pt-4">
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center gap-3 rounded-2xl bg-[#E8F8EE] px-4 py-3.5 no-underline transition-colors hover:bg-[#DFF5E8]"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#25D366] text-white">
+                <WhatsAppIcon />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-extrabold text-ink">
+                  Envoie au groupe
+                </span>
+                <span className="block text-xs leading-snug text-ink-muted">
+                  Le même programme pour tout le monde
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-bold text-ink" aria-hidden>
+                →
+              </span>
+            </a>
           </div>
         </div>
-      ) : null}
-
-      <div className="rounded-2xl border border-line bg-peach-mist/80 px-5 py-4">
-        <p className="text-sm font-extrabold text-ink">
-          Envoie ce Pop au groupe
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
-          Un lien WhatsApp — tout le monde voit le même programme.
-        </p>
-        <a
-          href={waHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="wp-cta-ink mt-3 inline-flex w-full text-sm"
-        >
-          WhatsApp
-        </a>
-      </div>
+      </aside>
     </div>
   )
 }
 
-function buildStaticMapUrl(stops: StopPin[]): string | null {
-  const pins = stops.filter(
-    (s) => typeof s.lat === 'number' && typeof s.lng === 'number',
+function WhatsAppIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12.04 2c-5.46 0-9.91 4.4-9.91 9.83 0 1.74.46 3.43 1.34 4.92L2 22l5.42-1.4a9.96 9.96 0 0 0 4.62 1.15h.01c5.46 0 9.9-4.4 9.9-9.83S17.5 2 12.04 2zm5.75 13.93c-.24.67-1.4 1.23-1.93 1.31-.5.07-1.13.1-1.82-.11-.42-.13-.96-.31-1.65-.61-2.9-1.26-4.79-4.18-4.93-4.37-.14-.2-1.16-1.54-1.16-2.94 0-1.4.73-2.09 1-2.36.24-.25.53-.32.71-.32h.51c.16 0 .38-.06.59.45.24.58.81 2 .88 2.14.07.14.12.3.02.48-.09.2-.14.31-.27.48-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.28.7 1.15 1.5 1.86 1.03.92 1.9 1.2 2.17 1.34.27.14.43.12.59-.07.17-.2.7-.8.89-1.08.19-.27.38-.23.64-.14.27.1 1.7.8 1.99.95.29.14.48.22.55.34.08.13.08.74-.16 1.41z" />
+    </svg>
   )
-  if (pins.length === 0) return null
-  const lats = pins.map((p) => p.lat!)
-  const lngs = pins.map((p) => p.lng!)
-  const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2
-  const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2
-  const markers = pins
-    .slice(0, 8)
-    .map((p) => `${p.lat},${p.lng},red-pushpin`)
-    .join('|')
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLat},${centerLng}&zoom=13&size=560x220&maptype=mapnik&markers=${encodeURIComponent(markers)}`
 }

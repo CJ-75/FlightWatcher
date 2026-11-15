@@ -2,7 +2,17 @@
 
 import { useCallback, useState } from 'react'
 
-export function ShareButton({ title, url }: { title: string; url?: string }) {
+export function ShareButton({
+  title,
+  url,
+  className = '',
+  variant = 'ghost',
+}: {
+  title: string
+  url?: string
+  className?: string
+  variant?: 'ghost' | 'link'
+}) {
   const [copied, setCopied] = useState(false)
 
   const share = useCallback(async () => {
@@ -29,8 +39,17 @@ export function ShareButton({ title, url }: { title: string; url?: string }) {
     }
   }, [title, url])
 
+  const base =
+    variant === 'link'
+      ? 'border-0 bg-transparent p-0 text-xs font-bold text-ink/70 underline-offset-2 hover:text-ink hover:underline'
+      : 'wp-cta-glass'
+
   return (
-    <button type="button" onClick={() => void share()} className="wp-cta-glass">
+    <button
+      type="button"
+      onClick={() => void share()}
+      className={`${base} ${className}`}
+    >
       {copied ? 'Lien copié' : 'Partager'}
     </button>
   )

@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import {
-  buildItineraryMapsUrl,
   citySlugDisplayNameFr,
   idealLabelFr,
   sanitizeUserFacingText,
@@ -15,7 +14,7 @@ import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { ShareButton } from '@/components/pop/ShareButton'
-import { KeepButton } from '@/components/pop/KeepButton'
+import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpPopCard } from '@/components/ui/WpPopCard'
 import { WpRule } from '@/components/ui/WpRule'
@@ -54,6 +53,8 @@ type Props = {
   index: PopIndexResult
   related?: PublicItinerary[]
   showPrice?: boolean
+  /** Prefixe liens related — fixtures: /dev/pop-fixtures */
+  relatedHrefBase?: string
 }
 
 export function PopPageView({
@@ -63,6 +64,7 @@ export function PopPageView({
   index,
   related = [],
   showPrice = true,
+  relatedHrefBase,
 }: Props) {
   const cityLabel = citySlugDisplayNameFr(city) || city
   const seo = popSeoCopy(itin, cityLabel)
@@ -133,7 +135,6 @@ export function PopPageView({
       }
     })()
 
-  const mapsUrl = buildItineraryMapsUrl(items as never)
   const launchHref = `/parcours/${encodeURIComponent(itin.slug || slug)}`
   const transport = (itin.transport_modes as string[] | undefined) || []
   const metaBits = [
@@ -163,14 +164,6 @@ export function PopPageView({
       ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')}${canonicalPath}`
       : `https://waypop.co${canonicalPath}`
 
-  const stopPins = items.map((it) => ({
-    title: String(it.title || it.places?.name || 'Stop'),
-    lat:
-      typeof it.meta?.lat === 'number' ? (it.meta.lat as number) : undefined,
-    lng:
-      typeof it.meta?.lng === 'number' ? (it.meta.lng as number) : undefined,
-  }))
-
   return (
     <>
       <PopJsonLd
@@ -182,7 +175,7 @@ export function PopPageView({
         canonicalPath={canonicalPath}
       />
 
-      {/* Mobile hero court — H1 + CTA + amorce contenu sans scroll long */}
+      {/* Hero photo plein cadre — CTAs noirs, peu de boutons */}
       <header className="relative isolate overflow-hidden bg-night">
         {isPublicImageSrc(itin.cover_image) ? (
           <div className="absolute inset-0">
@@ -215,7 +208,7 @@ export function PopPageView({
               {cityLabel}
             </Link>
             <span aria-hidden>/</span>
-            <span className="text-white/90 line-clamp-1">{h1}</span>
+            <span className="line-clamp-1 text-white/90">{h1}</span>
           </nav>
 
           <p className="hidden text-[11px] font-semibold uppercase tracking-brand text-white/75 sm:block">
@@ -246,31 +239,25 @@ export function PopPageView({
             </p>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 sm:mt-8 sm:gap-3">
+          <div className="mt-5 flex flex-wrap items-center gap-2.5 sm:mt-8 sm:gap-3">
             <a
               href={`/sejours?dest=${encodeURIComponent(city)}`}
-              className="wp-cta-ink px-4 py-2.5 text-sm sm:px-6 sm:py-3.5"
+              className="wp-cta-ink px-5 py-3 text-sm sm:px-7 sm:py-3.5"
             >
               Ajouter au Planner
             </a>
-            <KeepButton
-              city={city}
-              slug={String(itin.slug || slug)}
+            <LaunchPopCta href={launchHref} variant="hero" />
+            <ShareButton
               title={h1}
-              className="px-4 py-2.5 text-sm"
+              variant="link"
+              className="!text-white/75 hover:!text-white"
             />
-            <a
-              href={launchHref}
-              className="wp-cta-ghost px-4 py-2.5 text-sm sm:px-6 sm:py-3.5"
-            >
-              Lancer le Pop
-            </a>
-            <ShareButton title={h1} />
           </div>
         </div>
       </header>
 
-      <main className="pb-28 lg:pb-16">
+      {/* Zone pêche sous le hero (prix + contenu) */}
+      <main className="bg-gradient-to-b from-[#FFE7DC] via-[#FFF9F5] to-[#FFF9F5] pb-36 lg:pb-16">
         <div className="mx-auto grid max-w-pop gap-12 px-5 py-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
           <div className="min-w-0 space-y-12">
             {showPrice ? (
@@ -284,10 +271,8 @@ export function PopPageView({
                     destCity={city}
                     cityLabel={cityLabel}
                     stopCount={items.length}
-                    mapsUrl={mapsUrl}
                     shareUrl={shareUrl}
                     shareTitle={h1}
-                    stops={stopPins}
                   />
                 </Suspense>
               </div>
@@ -321,7 +306,6 @@ export function PopPageView({
 
             <DayProgramme
               days={days}
-              mapsUrl={mapsUrl}
               launchHref={launchHref}
               cityLabel={cityLabel}
               colorKey={itin.color_key}
@@ -416,7 +400,11 @@ export function PopPageView({
                   {related.map((r) => (
                     <li key={r.id}>
                       <WpPopCard
-                        href={`/pop/${city}/${encodeURIComponent(r.slug || r.id)}`}
+                        href={
+                          relatedHrefBase
+                            ? `${relatedHrefBase.replace(/\/$/, '')}/${encodeURIComponent(String(r.slug || r.id))}`
+                            : `/pop/${city}/${encodeURIComponent(String(r.slug || r.id))}`
+                        }
                         title={sanitizeUserFacingText(r.title) || r.title}
                         subtitle={
                           r.subtitle
@@ -424,6 +412,7 @@ export function PopPageView({
                             : null
                         }
                         image={r.cover_image}
+                        citySlug={String(r.city_slug || city)}
                         fallbackLabel={cityLabel}
                       />
                     </li>
@@ -453,10 +442,8 @@ export function PopPageView({
                     destCity={city}
                     cityLabel={cityLabel}
                     stopCount={items.length}
-                    mapsUrl={mapsUrl}
                     shareUrl={shareUrl}
                     shareTitle={h1}
-                    stops={stopPins}
                   />
                 </Suspense>
               ) : null}

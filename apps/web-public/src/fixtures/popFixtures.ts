@@ -16,7 +16,7 @@ const LUXEMBOURG =
 const MOUFFETARD =
   'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=800&q=80'
 const NOTRE_DAME =
-  'https://images.unsplash.com/photo-1478391679764-b2d8b0ce49a9?auto=format&fit=crop&w=800&q=80'
+  'https://images.unsplash.com/photo-1431274172761-fca41d930114?auto=format&fit=crop&w=800&q=80'
 const SAINTE_CHAPELLE =
   'https://images.unsplash.com/photo-1522093007474-d86e9bf7ba6f?auto=format&fit=crop&w=800&q=80'
 const PONT_ARTS =
@@ -279,6 +279,9 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
     slug: 'fixture-pauvre',
     title: 'Paris stub',
     intro: 'Court.',
+    cover_image: TUILERIES,
+    photo_license: 'Unsplash',
+    photo_source: 'unsplash',
     city_slug: 'paris',
     status: 'published',
     is_demo: true,

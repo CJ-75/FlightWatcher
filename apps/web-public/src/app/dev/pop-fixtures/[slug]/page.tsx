@@ -81,6 +81,7 @@ export default async function FixturePopPage({ params }: Props) {
         slug={slug}
         index={index}
         related={related}
+        relatedHrefBase="/dev/pop-fixtures"
         showPrice={slug !== 'fixture-pauvre'}
       />
     </div>

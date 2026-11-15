@@ -144,6 +144,7 @@ export default async function PopCityPage({ params }: Props) {
                             : null
                         }
                         image={it.cover_image}
+                        citySlug={city}
                         fallbackLabel={label}
                       />
                     </li>

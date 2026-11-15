@@ -47,7 +47,11 @@ export function KeepButton({ city, slug, title, className = '' }: Props) {
     <button
       type="button"
       onClick={toggle}
-      className={`wp-cta-ghost ${className}`}
+      className={
+        className.includes('bg-')
+          ? `inline-flex items-center justify-center gap-2 rounded-2xl border px-6 py-3.5 text-sm font-bold tracking-tight ${className}`
+          : `wp-cta-ghost ${className}`
+      }
       aria-pressed={kept}
     >
       {kept ? 'Gardé ✓' : 'Garder'}

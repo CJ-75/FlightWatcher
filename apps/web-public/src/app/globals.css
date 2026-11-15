@@ -50,6 +50,46 @@
 }
 
 @layer components {
+  /* Planner fill — peach slides in on hover only (no transform flash on mount) */
+  .wp-cta-planner {
+    @apply relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl px-5 py-3.5 text-sm font-bold;
+    background: #1d1b19;
+    color: #fff9f5;
+    box-shadow: 0 14px 32px rgba(29, 27, 25, 0.28);
+    text-decoration: none !important;
+  }
+  .wp-cta-planner > span {
+    position: relative;
+    z-index: 1;
+  }
+  .wp-cta-planner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: #ff6b35;
+    transform: translate3d(-101%, 0, 0);
+    pointer-events: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .wp-cta-planner::before {
+      transition: transform 0.55s ease-out;
+    }
+    .wp-cta-planner:hover::before {
+      transform: translate3d(0, 0, 0);
+    }
+    .wp-cta-planner:hover .wp-cta-planner-arrow {
+      transform: translateX(2px);
+    }
+  }
+  .wp-cta-planner-arrow {
+    display: inline-block;
+    transition: transform 0.55s ease-out;
+  }
+  .wp-cta-planner:active {
+    transform: scale(0.99);
+  }
+
   /* Dominant CTA — dark pill, cream text (AA) */
   .wp-cta-ink {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-bold tracking-tight transition-all duration-200;
@@ -65,16 +105,17 @@
   .wp-cta-ink:active {
     transform: scale(0.98);
   }
-  /* Secondary peach — dark text (AA) */
+  /* Brand accent #FF6B35 + ink (AA) — never white on coral */
   .wp-cta {
     @apply inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-bold tracking-tight transition-all duration-200;
-    background: #ffe7dc;
+    background: #ff6b35;
     color: #1d1b19;
-    box-shadow: 0 10px 24px rgba(255, 107, 53, 0.18);
+    box-shadow: 0 12px 28px rgba(255, 107, 53, 0.35);
     text-decoration: none !important;
   }
   .wp-cta:hover {
-    background: #ffd4c2;
+    background: #e85a28;
+    color: #1d1b19;
     text-decoration: none !important;
   }
   .wp-cta:active {

@@ -24,36 +24,44 @@ export const metadata: Metadata = {
 
 async function loadPopsForCities(cities: string[]) {
   const chunks = await Promise.all(
-    cities.slice(0, 8).map((c) => fetchPublishedByCity(c).catch(() => [])),
+    cities.slice(0, 12).map((c) => fetchPublishedByCity(c).catch(() => [])),
   )
   return chunks.flat()
 }
 
 export default async function LandingPage() {
   const sitemap = await fetchSitemapPayload()
-  const openCities = (
-    sitemap.open_cities || Object.keys(sitemap.cities || {})
-  ).filter(Boolean)
+  const cityMap = sitemap.cities || {}
+  const sitemapCities = Object.keys(cityMap).filter(
+    (c) => (cityMap[c]?.length || 0) > 0,
+  )
+  const openCities = (sitemap.open_cities || sitemapCities).filter(Boolean)
 
-  const all = filterLandingPops(await loadPopsForCities(openCities.length ? openCities : ['paris']))
-  const featured = all.filter((p) => p.featured === true)
-  const pops = (featured.length ? featured : all).slice(0, 3)
-  const momentDeals = all
-    .filter((p) => !pops.some((x) => x.id === p.id))
-    .slice(0, 3)
-
-  /** Cities that actually have at least one published pop */
-  const citiesWithPops = [
-    ...new Set(
-      all.map((p) => String(p.city_slug || '').toLowerCase()).filter(Boolean),
-    ),
+  /** Prefer cities that actually appear in the sitemap with pops */
+  const citiesForFetch = [
+    ...new Set([...(sitemapCities.length ? sitemapCities : openCities), 'paris']),
   ]
-  const displayCities =
-    citiesWithPops.length > 0
-      ? citiesWithPops
-      : openCities.filter((c) =>
-          Object.keys(sitemap.cities || {}).includes(c),
-        )
+
+  const all = filterLandingPops(await loadPopsForCities(citiesForFetch))
+  const featured = all.filter((p) => p.featured === true)
+  const pool = featured.length ? featured : all
+  const pops = pool.slice(0, 6)
+
+  const popCountByCity: Record<string, number> = {}
+  for (const [slug, list] of Object.entries(cityMap)) {
+    popCountByCity[slug] = list?.length || 0
+  }
+  for (const p of all) {
+    const c = String(p.city_slug || '').toLowerCase()
+    if (!c) continue
+    popCountByCity[c] = Math.max(popCountByCity[c] || 0, 1)
+  }
+
+  const displayCities = (
+    sitemapCities.length
+      ? sitemapCities
+      : [...new Set(all.map((p) => String(p.city_slug || '').toLowerCase()).filter(Boolean))]
+  ).slice(0, 8)
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -81,8 +89,8 @@ export default async function LandingPage() {
       />
       <LandingHome
         pops={pops}
-        openCities={displayCities.slice(0, 6)}
-        momentDeals={momentDeals}
+        openCities={displayCities}
+        popCountByCity={popCountByCity}
       />
     </>
   )
