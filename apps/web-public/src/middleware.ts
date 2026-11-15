@@ -66,6 +66,13 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const flags = await readFlags()
 
+  // Dev fixtures / edge cases — always noindex, never gated by POP_PAGE_V2
+  if (pathname.startsWith('/dev/')) {
+    const res = NextResponse.next()
+    res.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    return res
+  }
+
   // Landing
   if (pathname === '/') {
     const prev = previewVersion(req, 'landing_v', 'landing_v')
@@ -185,5 +192,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/pop/:path*'],
+  matcher: ['/', '/pop/:path*', '/dev/:path*'],
 }

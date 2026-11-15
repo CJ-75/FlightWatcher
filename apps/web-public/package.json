@@ -6,7 +6,11 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test scripts/pop-seo.test.mjs",
+    "accept:html": "node scripts/accept-html.mjs",
+    "accept:flags": "node scripts/accept-flags.mjs",
+    "accept": "npm run test:unit && npm run accept:html && npm run accept:flags"
   },
   "dependencies": {
     "@waypop/shared": "*",

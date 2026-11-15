@@ -15,7 +15,8 @@
     "typecheck:all": "npm run typecheck && npm run typecheck -w waypop-mobile --if-present",
     "dev:web": "npm run dev -w waypop-frontend",
     "dev:public": "npm run dev -w waypop-web-public",
-    "dev:mobile": "npm run start -w waypop-mobile --if-present"
+    "dev:mobile": "npm run start -w waypop-mobile --if-present",
+    "accept:pop": "npm run accept -w waypop-web-public"
   },
   "overrides": {
     "ws": "8.22.0"

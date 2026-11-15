@@ -828,6 +828,30 @@ def publish_admin_itinerary(supabase, itinerary_id: str) -> Dict[str, Any]:
     items = list(itin.get("itinerary_items") or [])
     blockers = _publish_blockers(itin, items)
     warnings = got.get("warnings") or []
+    # Lot 5: target_query unique per city among published
+    tq = str(itin.get("target_query") or "").strip()
+    city = str(itin.get("city_slug") or "").strip().lower()
+    if tq and city and supabase:
+        try:
+            dup = (
+                supabase.table("itineraries")
+                .select("id")
+                .eq("city_slug", city)
+                .eq("target_query", tq)
+                .eq("status", "published")
+                .neq("id", itinerary_id)
+                .limit(1)
+                .execute()
+            )
+            if dup.data:
+                blockers.append(
+                    {
+                        "code": "target_query_dup",
+                        "message": "Ce mot-clé SEO (target_query) est déjà pris dans cette ville.",
+                    }
+                )
+        except Exception as e:
+            logger.warning("target_query dup check: %s", e)
     if blockers:
         return {
             "ok": False,
