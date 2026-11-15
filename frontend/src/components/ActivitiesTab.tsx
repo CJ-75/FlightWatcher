@@ -33,6 +33,7 @@ import {
   ACTIVITY_SWITCH_TRIP_HINT_FR,
   activitiesCityPath,
   activityCategoriesSummaryFr,
+  activityStayCityToken,
   canonicalViatorProductUrl,
   cityDisplayNameFr,
   cityImageUrl,
@@ -41,7 +42,9 @@ import {
   activityDestinationLabelFr,
   activityMatchesCategories,
   activityMatchesSearchQuery,
+  filterActivitySwitcherWorkspaces,
   hasTripItemOwner,
+  isActivityTripDatesActive,
   parseAirportCodes,
   pickTripItemOwner,
   savedIdeasTitleFr,
@@ -49,6 +52,10 @@ import {
   toggleActivityCategory,
   type ActivityCardModel,
 } from '@waypop/shared'
+import {
+  listTravelWorkspacesCached,
+  peekTravelWorkspacesCache,
+} from '../utils/workspacesCache'
 import { getCurrentSession, getCurrentUser } from '../lib/supabase'
 import { getApiClient } from '../utils/apiClient'
 import {
@@ -487,6 +494,12 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       },
     ) => {
       if (cancelled) return
+      // Pas de hero « en cours » pour un séjour déjà terminé.
+      if (!isActivityTripDatesActive(opts.outDate, opts.retDate)) {
+        setActiveTrip(null)
+        didAutoCity.current = true
+        return
+      }
       setActiveTrip({
         draftToken: opts.draftToken,
         plannedTripId: opts.plannedTripId,
@@ -525,6 +538,24 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
             .getPlannedTrip(plannedFromUrl)
             .catch(() => null)
           if (cancelled) return
+          const status = String(trip?.status || '')
+          const outDate = trip?.dates_depart?.[0]?.date
+            ? String(trip.dates_depart[0].date).slice(0, 10)
+            : null
+          const retDate = trip?.dates_retour?.length
+            ? String(
+                trip.dates_retour[trip.dates_retour.length - 1]?.date || '',
+              ).slice(0, 10) || null
+            : null
+          if (
+            status === 'completed' ||
+            status === 'archived' ||
+            !isActivityTripDatesActive(outDate, retDate)
+          ) {
+            setActiveTrip(null)
+            didAutoCity.current = true
+            return
+          }
           const arrival = trip
             ? parseAirportCodes(trip.arrival_airport)[0] || ''
             : ''
@@ -538,14 +569,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
           })
           applyTripCity(tripSlug, activityDestinationLabelFr(tripSlug), {
             plannedTripId: plannedFromUrl,
-            outDate: trip?.dates_depart?.[0]?.date
-              ? String(trip.dates_depart[0].date).slice(0, 10)
-              : null,
-            retDate: trip?.dates_retour?.length
-              ? String(
-                  trip.dates_retour[trip.dates_retour.length - 1]?.date || '',
-                ).slice(0, 10) || null
-              : null,
+            outDate,
+            retDate,
           })
         } else if (latest?.draft_token) {
           let cityLabel = String(latest.city || '').trim() || null
@@ -658,7 +683,46 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
             ),
           )
         } else {
-          if (!cancelled) {
+          // Auto-pick: uniquement séjours à venir / en cours.
+          const mem = peekTravelWorkspacesCache() || []
+          let remote = mem
+          try {
+            const rows = await listTravelWorkspacesCached()
+            if (Array.isArray(rows) && rows.length) remote = rows
+          } catch {
+            /* keep cache */
+          }
+          if (cancelled) return
+          const top = filterActivitySwitcherWorkspaces(remote)[0]
+          if (top) {
+            const arrival = parseAirportCodes(top.dest_iata)[0] || ''
+            const cityLabel =
+              activityStayCityToken(top.city) ||
+              cityDisplayNameFr(arrival) ||
+              String(top.title || '').trim() ||
+              citySlug ||
+              null
+            const tripSlug = resolveActivityCitySlug({
+              citySlug: cityLabel,
+              cityLabel,
+              destIata: arrival || null,
+            })
+            const known = ACTIVITY_CITY_OPTIONS_FR.find((c) => c.slug === tripSlug)
+            applyTripCity(
+              tripSlug,
+              String(known?.label || cityLabel || activityDestinationLabelFr(tripSlug)),
+              {
+                draftToken: top.draft_token
+                  ? String(top.draft_token)
+                  : undefined,
+                plannedTripId: top.planned_trip_id
+                  ? String(top.planned_trip_id)
+                  : undefined,
+                outDate: String(top.out_date || '').slice(0, 10) || null,
+                retDate: String(top.ret_date || '').slice(0, 10) || null,
+              },
+            )
+          } else if (!cancelled) {
             setActiveTrip(null)
             didAutoCity.current = true
             setSavedIdeas([])
@@ -751,6 +815,11 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   }
 
   const bindActiveTrip = async (target: ActivityPlannerTarget) => {
+    if (!isActivityTripDatesActive(target.outDate, target.retDate)) {
+      setActiveTrip(null)
+      setPickerOpen(false)
+      return
+    }
     const tripSlug = resolveActivityCitySlug({
       citySlug: target.city || null,
       cityLabel: target.city || target.label,
@@ -872,7 +941,9 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         </div>
       </div>
 
-      {activeTrip && plannerHref ? (
+      {activeTrip &&
+      plannerHref &&
+      isActivityTripDatesActive(activeTrip.outDate, activeTrip.retDate) ? (
         <ActivityTripHero
           mode="active"
           cityLabel={activeTrip.label}

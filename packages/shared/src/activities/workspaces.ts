@@ -8,7 +8,18 @@
  * 3. last opened (updated_at DESC)
  * 4. soonest out_date
  */
+import { isActivityTripDatesActive } from './step'
 import type { TravelWorkspace, TravelWorkspacePhase } from '../types'
+
+/** Map planned_trips.status → hub phase (legacy list fallbacks). */
+export function phaseFromPlannedTripStatus(
+  status?: string | null,
+): TravelWorkspacePhase {
+  const s = String(status || '').toLowerCase()
+  if (s === 'completed' || s === 'archived') return 'past'
+  if (s === 'locked') return 'flight_selected'
+  return 'planning'
+}
 
 export const ACTIVITY_SWITCHER_SOFT_LIMIT = 10
 
@@ -79,13 +90,6 @@ const ACTIVE_PHASES: ReadonlySet<TravelWorkspacePhase> = new Set([
   'booked',
 ])
 
-function todayYmd(now = new Date()): string {
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
 function ymd(raw?: string | null): string | null {
   const s = String(raw || '').slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
@@ -104,8 +108,7 @@ export function isActivityWorkspaceExpired(
   now = new Date(),
 ): boolean {
   if (ws.phase === 'past') return true
-  const end = activityWorkspaceEndDate(ws)
-  if (end && end < todayYmd(now)) return true
+  if (!isActivityTripDatesActive(ws.out_date, ws.ret_date, now)) return true
   return false
 }
 

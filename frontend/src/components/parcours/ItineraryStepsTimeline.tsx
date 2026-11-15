@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import {
   buildItineraryMapsUrl,
   buildItineraryStepMapsUrl,
+  filterRemoteHttpMediaUrls,
   formatDurationMinutes,
   groupItemsByDay,
   stepKindLabel,
   type ItineraryItem,
 } from '@waypop/shared'
+import { webCoverSrc } from '../../utils/parcoursCover'
 
 type Props = {
   items: ItineraryItem[]
@@ -18,8 +20,41 @@ function stepPhotos(it: ItineraryItem): string[] {
   const fromMeta = Array.isArray(raw)
     ? raw.map(String).filter(Boolean)
     : []
-  if (fromMeta.length) return fromMeta.slice(0, 5)
-  return it.photo ? [it.photo] : []
+  const candidates = fromMeta.length
+    ? fromMeta
+    : it.photo
+      ? [String(it.photo)]
+      : []
+  return filterRemoteHttpMediaUrls(candidates)
+    .map((u) => webCoverSrc(u))
+    .filter((u): u is string => Boolean(u))
+    .slice(0, 5)
+}
+
+function StepImg({
+  src,
+  className,
+  alt = '',
+}: {
+  src: string
+  className?: string
+  alt?: string
+}) {
+  const [ok, setOk] = useState(true)
+  if (!ok) {
+    return <span className={`block bg-[#EDE8E1] ${className || ''}`} />
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      referrerPolicy="no-referrer"
+      loading="lazy"
+      decoding="async"
+      onError={() => setOk(false)}
+    />
+  )
 }
 
 function PhotoLightbox({
@@ -77,6 +112,7 @@ function PhotoLightbox({
         <img
           src={photos[index]}
           alt=""
+          referrerPolicy="no-referrer"
           className="max-h-full max-w-full object-contain"
           onClick={(e) => e.stopPropagation()}
         />
@@ -94,7 +130,7 @@ function PhotoLightbox({
                   : 'border-transparent opacity-65'
               }`}
             >
-              <img src={uri} alt="" className="h-full w-full object-cover" />
+              <StepImg src={uri} className="h-full w-full object-cover" />
             </button>
           ))}
         </div>
@@ -177,9 +213,8 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
                       }}
                       className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl border-0 bg-[#EDE8E1] p-0"
                     >
-                      <img
+                      <StepImg
                         src={single}
-                        alt=""
                         className="h-full w-full object-cover"
                       />
                     </button>
@@ -238,9 +273,8 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
                             }
                             className="h-24 w-24 shrink-0 overflow-hidden rounded-[14px] border-0 bg-[#EDE8E1] p-0"
                           >
-                            <img
+                            <StepImg
                               src={uri}
-                              alt=""
                               className="h-full w-full object-cover"
                             />
                           </button>

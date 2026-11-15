@@ -130,11 +130,16 @@ export function getPublishBlockers(
       const photos = Array.isArray(meta.photos)
         ? meta.photos.map(String).filter(Boolean)
         : []
-      const hasPhoto = photos.length > 0 || !!String(step.photo || '').trim()
-      if (!hasPhoto) {
+      const allPhotos = [
+        ...photos,
+        ...(step.photo ? [String(step.photo)] : []),
+      ]
+      // Must be http(s) — local ImagePicker file:// breaks web / other devices.
+      const hasRemotePhoto = allPhotos.some((u) => /^https?:\/\//i.test(u.trim()))
+      if (!hasRemotePhoto) {
         blockers.push({
           code: `photos_${n}`,
-          message: `Étape ${n} : au moins une photo requise.`,
+          message: `Étape ${n} : photo en ligne requise (pas de fichier local).`,
         })
       }
     }

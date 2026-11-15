@@ -97,6 +97,15 @@ export function activityTripTimingStatus(
   return 'ongoing'
 }
 
+/** Activités : uniquement à venir / en cours (pas les séjours terminés). */
+export function isActivityTripDatesActive(
+  outDate?: string | null,
+  retDate?: string | null,
+  now = new Date(),
+): boolean {
+  return activityTripTimingStatus(outDate, retDate, now) !== 'past'
+}
+
 export const ACTIVITY_TRIP_TIMING_KICKER_FR: Record<
   ActivityTripTimingStatus,
   string

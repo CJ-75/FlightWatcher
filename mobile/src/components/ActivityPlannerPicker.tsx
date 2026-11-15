@@ -28,6 +28,7 @@ import {
   cityDisplayNameFr,
   cityImageUrl,
   filterActivitySwitcherWorkspaces,
+  phaseFromPlannedTripStatus,
   parseAirportCodes,
   type PlannedTrip,
   type TravelWorkspace,
@@ -45,12 +46,13 @@ import { colors, fonts, radius, shadow, spacing } from '../theme'
 
 function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
   const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  const phase = phaseFromPlannedTripStatus(trip.status)
   return {
     workspace_id: `planner:${trip.id}`,
     planned_trip_id: trip.id,
     proposal_id: trip.accepted_proposal?.id || null,
     scope: 'collaborative',
-    phase: trip.status === 'locked' ? 'flight_selected' : 'planning',
+    phase,
     title: trip.name,
     city: dest ? cityDisplayNameFr(dest) : 'Destination libre',
     origin_iata: trip.departure_airport,
@@ -59,13 +61,13 @@ function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
     ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
     is_organizer: true,
     capabilities: {
-      can_scan: trip.status !== 'locked',
-      can_choose_flight: trip.status !== 'locked',
-      can_compose_hotel: trip.status === 'locked',
+      can_scan: phase === 'planning',
+      can_choose_flight: phase === 'planning',
+      can_compose_hotel: phase === 'flight_selected',
       can_view_confirmation: false,
     },
     pipeline: {
-      flight: trip.status === 'locked' ? 'selected' : 'none',
+      flight: phase === 'flight_selected' ? 'selected' : 'none',
       hotel: 'none',
     },
     planned_trip: trip,

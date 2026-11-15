@@ -16,6 +16,29 @@ function isDeadOrPlaceholder(url: string): boolean {
   return false
 }
 
+/**
+ * Web / cross-device media only.
+ * Rejects file://, content://, ph://, blob:, relative paths from ImagePicker.
+ */
+export function isRemoteHttpMediaUrl(url?: string | null): boolean {
+  const t = String(url || '').trim()
+  if (!/^https?:\/\//i.test(t)) return false
+  return !isDeadOrPlaceholder(t)
+}
+
+/** Keep http(s) photos; drop local device URIs that break on web. */
+export function filterRemoteHttpMediaUrls(
+  urls: Array<string | null | undefined>,
+): string[] {
+  const out: string[] = []
+  for (const raw of urls) {
+    const t = String(raw || '').trim()
+    if (!isRemoteHttpMediaUrl(t)) continue
+    if (!out.includes(t)) out.push(t)
+  }
+  return out
+}
+
 function isWikimedia(url: string): boolean {
   return /wikimedia\.org/i.test(url)
 }

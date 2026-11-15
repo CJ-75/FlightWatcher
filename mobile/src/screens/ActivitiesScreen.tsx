@@ -56,6 +56,8 @@ import {
   cityDisplayNameFr,
   cityImageUrl,
   filterActivitySwitcherWorkspaces,
+  isActivityTripDatesActive,
+  phaseFromPlannedTripStatus,
   parseAirportCodes,
   resolveActivityCitySlug,
   activityDestinationLabelFr,
@@ -176,12 +178,13 @@ function ActivitiesCatalogSkeleton({
 
 function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
   const dest = parseAirportCodes(trip.arrival_airport)[0] || null
+  const phase = phaseFromPlannedTripStatus(trip.status)
   return {
     workspace_id: `planner:${trip.id}`,
     planned_trip_id: trip.id,
     proposal_id: trip.accepted_proposal?.id || null,
     scope: 'collaborative',
-    phase: trip.status === 'locked' ? 'flight_selected' : 'planning',
+    phase,
     title: trip.name,
     city: dest ? cityDisplayNameFr(dest) : 'Destination libre',
     origin_iata: trip.departure_airport,
@@ -190,13 +193,13 @@ function tripAsWorkspace(trip: PlannedTrip): TravelWorkspace {
     ret_date: trip.dates_retour?.[trip.dates_retour.length - 1]?.date || null,
     is_organizer: true,
     capabilities: {
-      can_scan: trip.status !== 'locked',
-      can_choose_flight: trip.status !== 'locked',
-      can_compose_hotel: trip.status === 'locked',
+      can_scan: phase === 'planning',
+      can_choose_flight: phase === 'planning',
+      can_compose_hotel: phase === 'flight_selected',
       can_view_confirmation: false,
     },
     pipeline: {
-      flight: trip.status === 'locked' ? 'selected' : 'none',
+      flight: phase === 'flight_selected' ? 'selected' : 'none',
       hotel: 'none',
     },
     planned_trip: trip,
@@ -484,11 +487,13 @@ export function ActivitiesScreen() {
             null
           let citySlugHint: string | null = cityLabel
 
+          let plannedStatus: string | null = null
           if (plannedTripId) {
             const cached =
               peekPlannedTrip(plannedTripId) ||
               (await hydratePlannedTrip(plannedTripId))
             if (cached) {
+              plannedStatus = String(cached.status || '') || null
               const arrival = parseAirportCodes(cached.arrival_airport)[0] || ''
               destIata = destIata || arrival || null
               outDate =
@@ -513,6 +518,15 @@ export function ActivitiesScreen() {
             }
           }
 
+          const routeTripPast =
+            wsHit?.phase === 'past' ||
+            plannedStatus === 'completed' ||
+            plannedStatus === 'archived' ||
+            !isActivityTripDatesActive(outDate, retDate)
+
+          if (routeTripPast) {
+            // Séjour terminé : ne pas forcer le hero — bascule sur un séjour actif.
+          } else {
           const earlySlug = resolveActivityCitySlug({
             citySlug: routeCity || citySlugHint || cityLabel,
             cityLabel: cityLabel || routeCity || null,
@@ -677,9 +691,15 @@ export function ActivitiesScreen() {
               : Promise.resolve(),
           ])
           if (cancelled) return
-          setActiveTrip(refined)
-          if (refined.slug) lockCity(refined.slug)
-          return
+          if (!isActivityTripDatesActive(refined.outDate, refined.retDate)) {
+            setActiveTrip(null)
+            // Fall through → prochain séjour actif
+          } else {
+            setActiveTrip(refined)
+            if (refined.slug) lockCity(refined.slug)
+            return
+          }
+          } // end !routeTripPast
         }
 
         // Ouverture libre : reprendre le planner actif + sa ville d’arrivée.
@@ -881,7 +901,11 @@ export function ActivitiesScreen() {
               : Promise.resolve(),
           ])
           if (cancelled) return
-          if (
+          if (!isActivityTripDatesActive(refined.outDate, refined.retDate)) {
+            setActiveTrip(null)
+            setPlannerCount(0)
+            setAddedCodes(new Set())
+          } else if (
             refined.slug !== hero.slug ||
             refined.label !== hero.label ||
             refined.outDate !== hero.outDate ||
@@ -1031,6 +1055,10 @@ export function ActivitiesScreen() {
   }
 
   const bindActiveTrip = async (target: ActivityPlannerTarget) => {
+    if (!isActivityTripDatesActive(target.outDate, target.retDate)) {
+      setActiveTrip(null)
+      return
+    }
     const tripSlug = resolveActivityCitySlug({
       citySlug: target.city || null,
       cityLabel: target.city || target.label,
@@ -1243,7 +1271,9 @@ export function ActivitiesScreen() {
               </Pressable>
             ) : null}
 
-            {activeTrip && !browseMode ? (
+            {activeTrip &&
+            !browseMode &&
+            isActivityTripDatesActive(activeTrip.outDate, activeTrip.retDate) ? (
               <ActivityTripHero
                 mode="active"
                 cityLabel={activeTrip.label}
