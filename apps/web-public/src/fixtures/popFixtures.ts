@@ -1,19 +1,14 @@
 import type { PublicItinerary } from '@/lib/parcoursApi'
 
-/**
- * Place-bound Unsplash photos (place_id + source + license on each stop).
- * One unique identity per page — never a random city stock shot.
- */
+/** Unique Unsplash photos — one identity per page (cover + stops). */
 const COVER =
   'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=80'
 const MONTORGUEIL =
   'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80'
-/** Centre Pompidou, Paris */
 const POMPIDOU =
-  'https://images.unsplash.com/photo-1568515387631-8b650bbabba8?auto=format&fit=crop&w=800&q=80'
-/** Pont Neuf / Seine, Paris */
+  'https://images.unsplash.com/photo-1560969184-10fe8719e047?auto=format&fit=crop&w=800&q=80'
 const PONT_NEUF =
-  'https://images.unsplash.com/photo-1509439581779-6298f75bf6e5?auto=format&fit=crop&w=800&q=80'
+  'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&w=800&q=80'
 const ODEON =
   'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=800&q=80'
 const LUXEMBOURG =
@@ -24,9 +19,8 @@ const NOTRE_DAME =
   'https://images.unsplash.com/photo-1431274172761-fca41d930114?auto=format&fit=crop&w=800&q=80'
 const SAINTE_CHAPELLE =
   'https://images.unsplash.com/photo-1522093007474-d86e9bf7ba6f?auto=format&fit=crop&w=800&q=80'
-/** Pont des Arts / Seine */
 const PONT_ARTS =
-  'https://images.unsplash.com/photo-1473951574080-01fe45ec8643?auto=format&fit=crop&w=800&q=80'
+  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=800&q=80'
 const TUILERIES =
   'https://images.unsplash.com/photo-1508009603885-50cf7c579365?auto=format&fit=crop&w=800&q=80'
 
@@ -102,7 +96,6 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
         photo: POMPIDOU,
         photo_source: 'unsplash',
         photo_license: 'Unsplash',
-        photo_author: 'Unsplash',
         place_id: 'place:pompidou',
         day_offset: 0,
         moment: 'afternoon',
@@ -116,7 +109,6 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
         photo: PONT_NEUF,
         photo_source: 'unsplash',
         photo_license: 'Unsplash',
-        photo_author: 'Unsplash',
         place_id: 'place:pont-neuf',
         day_offset: 0,
         moment: 'evening',
@@ -244,12 +236,12 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
   'fixture-seuil': {
     id: 'fix-seuil',
     slug: 'fixture-seuil',
-    title: 'Paris journée budget',
+    title: 'Paris au bord SEO',
     intro:
       'Intro juste au-dessus de 80 caractères pour tester l’indexation sans valeur ajoutée complète.',
-    cover_image: null,
-    photo_license: null,
-    photo_source: null,
+    cover_image: PONT_ARTS,
+    photo_license: 'Unsplash',
+    photo_source: 'unsplash',
     city_slug: 'paris',
     status: 'published',
     is_demo: true,
@@ -262,7 +254,7 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
         id: 's1',
         title: 'Stop A',
         note: 'Note A pour ratio notes.',
-        photo: null,
+        photo: MONTORGUEIL,
         place_id: 'place:seuil-a',
         day_offset: 0,
         moment: 'morning',
@@ -272,7 +264,7 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
         id: 's2',
         title: 'Stop B',
         note: 'Note B pour ratio notes.',
-        photo: null,
+        photo: ODEON,
         place_id: 'place:seuil-b',
         day_offset: 0,
         moment: 'afternoon',
@@ -285,11 +277,11 @@ export const POP_FIXTURES: Record<string, PublicItinerary> = {
   'fixture-pauvre': {
     id: 'fix-pauvre',
     slug: 'fixture-pauvre',
-    title: 'Paris bref',
+    title: 'Paris stub',
     intro: 'Court.',
-    cover_image: null,
-    photo_license: null,
-    photo_source: null,
+    cover_image: TUILERIES,
+    photo_license: 'Unsplash',
+    photo_source: 'unsplash',
     city_slug: 'paris',
     status: 'published',
     is_demo: true,

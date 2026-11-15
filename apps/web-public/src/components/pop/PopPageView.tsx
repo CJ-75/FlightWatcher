@@ -14,9 +14,7 @@ import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { ShareButton } from '@/components/pop/ShareButton'
-import { KeepButton } from '@/components/pop/KeepButton'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
-import { StopsMap } from '@/components/pop/StopsMap'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpPopCard } from '@/components/ui/WpPopCard'
 import { WpRule } from '@/components/ui/WpRule'
@@ -28,8 +26,7 @@ import {
   parseStay,
   parseTips,
 } from '@/lib/popHelpers'
-import { assertUniquePagePhotos, pickExclusivePhoto } from '@/lib/popPhotos'
-import { isPlaceholderPopTitle } from '@/lib/landingHelpers'
+import { assertUniquePagePhotos } from '@/lib/popPhotos'
 
 const DayProgramme = dynamic(
   () =>
@@ -47,11 +44,6 @@ const PriceIsland = dynamic(
       <div className="min-h-[21rem] animate-pulse rounded-2xl bg-night/90" />
     ),
   },
-)
-const GroupShareLink = dynamic(
-  () =>
-    import('@/components/pop/PriceIsland').then((m) => m.GroupShareLink),
-  { ssr: true },
 )
 
 type Props = {
@@ -171,18 +163,6 @@ export function PopPageView({
     typeof process.env.NEXT_PUBLIC_SITE_URL === 'string'
       ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')}${canonicalPath}`
       : `https://waypop.co${canonicalPath}`
-  const waHref = `https://wa.me/?text=${encodeURIComponent(`${h1}\n${shareUrl}`)}`
-  const mapStops = items.map((it) => ({
-    title: String(it.title || 'Stop'),
-    lat: typeof it.meta?.lat === 'number' ? it.meta.lat : undefined,
-    lng: typeof it.meta?.lng === 'number' ? it.meta.lng : undefined,
-  }))
-  const relatedSafe = related.filter(
-    (r) => !isPlaceholderPopTitle(String(r.title || '')),
-  )
-  const relatedPhotos = new Set<string>()
-  pickExclusivePhoto(itin.cover_image, relatedPhotos)
-  for (const it of items) pickExclusivePhoto(it.photo, relatedPhotos)
 
   return (
     <>
@@ -267,18 +247,17 @@ export function PopPageView({
               Ajouter au Planner
             </a>
             <LaunchPopCta href={launchHref} variant="hero" />
-            <ShareButton title={h1} url={shareUrl} variant="hero" />
-            <KeepButton
-              city={city}
-              slug={String(itin.slug || slug)}
+            <ShareButton
               title={h1}
+              variant="link"
+              className="!text-white/75 hover:!text-white"
             />
           </div>
         </div>
       </header>
 
       {/* Zone pêche sous le hero (prix + contenu) */}
-      <main className="bg-gradient-to-b from-[#FFE7DC] via-[#FFF9F5] to-[#FFF9F5] pb-36 lg:pb-16">
+      <main className="bg-[#FFF9F5] pb-36 lg:pb-16">
         <div className="mx-auto grid max-w-pop gap-12 px-5 py-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
           <div className="min-w-0 space-y-12">
             {showPrice ? (
@@ -416,40 +395,32 @@ export function PopPageView({
               <h2 className="text-2xl font-extrabold tracking-tight text-ink">
                 D’autres Pops à {cityLabel}
               </h2>
-              {relatedSafe.length > 0 ? (
+              {related.length > 0 ? (
                 <ul className="grid gap-6 sm:grid-cols-2">
-                  {relatedSafe.map((r) => {
-                    const exclusive = pickExclusivePhoto(
-                      r.cover_image,
-                      relatedPhotos,
-                    )
-                    return (
-                      <li key={r.id}>
-                        <WpPopCard
-                          href={
-                            relatedHrefBase
-                              ? `${relatedHrefBase.replace(/\/$/, '')}/${encodeURIComponent(String(r.slug || r.id))}`
-                              : `/pop/${city}/${encodeURIComponent(String(r.slug || r.id))}`
-                          }
-                          title={sanitizeUserFacingText(r.title) || r.title}
-                          subtitle={
-                            r.subtitle
-                              ? sanitizeUserFacingText(r.subtitle)
-                              : null
-                          }
-                          image={exclusive}
-                          colorKey={
-                            (r.color_key as string | undefined) || city
-                          }
-                          fallbackLabel={cityLabel}
-                        />
-                      </li>
-                    )
-                  })}
+                  {related.map((r) => (
+                    <li key={r.id}>
+                      <WpPopCard
+                        href={
+                          relatedHrefBase
+                            ? `${relatedHrefBase.replace(/\/$/, '')}/${encodeURIComponent(String(r.slug || r.id))}`
+                            : `/pop/${city}/${encodeURIComponent(String(r.slug || r.id))}`
+                        }
+                        title={sanitizeUserFacingText(r.title) || r.title}
+                        subtitle={
+                          r.subtitle
+                            ? sanitizeUserFacingText(r.subtitle)
+                            : null
+                        }
+                        image={r.cover_image}
+                        citySlug={String(r.city_slug || city)}
+                        fallbackLabel={cityLabel}
+                      />
+                    </li>
+                  ))}
                 </ul>
               ) : (
-                <p className="text-sm text-ink-muted">
-                  D’autres Pops arrivent bientôt. Explore{' '}
+                <p className="text-sm text-muted">
+                  D’autres Pops arrivent bientôt — explore{' '}
                   <Link href={`/pop/${city}`} className="font-bold">
                     {cityLabel}
                   </Link>
@@ -460,7 +431,7 @@ export function PopPageView({
           </div>
 
           <aside className="hidden lg:block">
-            <div className="sticky top-8 max-h-[calc(100vh-3rem)] space-y-5 overflow-y-auto pb-4">
+            <div className="sticky top-8 space-y-5">
               {showPrice ? (
                 <Suspense
                   fallback={
@@ -473,15 +444,9 @@ export function PopPageView({
                     stopCount={items.length}
                     shareUrl={shareUrl}
                     shareTitle={h1}
-                    showGroupShare={false}
                   />
                 </Suspense>
               ) : null}
-              <StopsMap
-                stops={mapStops}
-                cityLabel={cityLabel}
-              />
-              {showPrice ? <GroupShareLink href={waHref} /> : null}
             </div>
           </aside>
         </div>

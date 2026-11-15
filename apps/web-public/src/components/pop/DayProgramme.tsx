@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { formatDurationMinutes, sanitizeUserFacingText } from '@waypop/shared'
-import { StopVisual } from '@/components/pop/StopVisual'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
+import { StopVisual } from '@/components/pop/StopVisual'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpRule } from '@/components/ui/WpRule'
 import { pickExclusivePhoto } from '@/lib/popPhotos'
@@ -36,6 +36,7 @@ type DayGroup = { day: number; items: PopStop[] }
 
 type Props = {
   days: DayGroup[]
+  mapsUrl?: string | null
   launchHref?: string
   cityLabel: string
   colorKey?: string | null
@@ -66,12 +67,12 @@ function stopMapsUrl(step: PopStop): string | null {
 
 export function DayProgramme({
   days,
-  launchHref,
   cityLabel,
   colorKey,
   city,
   coverImage,
   h2,
+  launchHref,
 }: Props) {
   const baseId = useId()
   const [active, setActive] = useState(days[0]?.day ?? 0)

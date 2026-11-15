@@ -1,7 +1,3 @@
-'use client'
-
-import { useState } from 'react'
-
 type StopPin = {
   title: string
   lat?: number
@@ -15,33 +11,7 @@ type Props = {
   className?: string
 }
 
-/** Full walking itinerary on Google Maps (all pins). Client-safe helper. */
-function buildGoogleMapsRouteUrl(stops: StopPin[]): string | null {
-  const pins = stops.filter(
-    (s) => typeof s.lat === 'number' && typeof s.lng === 'number',
-  )
-  if (pins.length === 0) return null
-  if (pins.length === 1) {
-    return `https://www.google.com/maps/dir/?api=1&destination=${pins[0]!.lat},${pins[0]!.lng}&travelmode=walking`
-  }
-  const path = pins.map((p) => `${p.lat},${p.lng}`).join('/')
-  return `https://www.google.com/maps/dir/${path}`
-}
-
-function buildStaticMapUrl(pins: StopPin[]): string | null {
-  if (pins.length === 0) return null
-  const lats = pins.map((p) => p.lat!)
-  const lngs = pins.map((p) => p.lng!)
-  const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2
-  const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2
-  const markers = pins
-    .slice(0, 8)
-    .map((p) => `${p.lat},${p.lng},red-pushpin`)
-    .join('|')
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLat},${centerLng}&zoom=13&size=560x220&maptype=mapnik&markers=${encodeURIComponent(markers)}`
-}
-
-/** OSM static map + Google Maps full route link. SVG fallback if OSM fails. */
+/** Reliable SVG map — OSM staticmap.de is often unreachable. */
 export function StopsMap({
   stops,
   cityLabel,
@@ -51,11 +21,7 @@ export function StopsMap({
   const pins = stops.filter(
     (s) => typeof s.lat === 'number' && typeof s.lng === 'number',
   )
-  const routeUrl = mapsUrl || buildGoogleMapsRouteUrl(pins)
-  if (pins.length === 0 && !routeUrl) return null
-
-  const staticMap = buildStaticMapUrl(pins)
-  const [mapFailed, setMapFailed] = useState(false)
+  if (pins.length === 0 && !mapsUrl) return null
 
   const pad = 0.012
   const lats = pins.map((p) => p.lat!)
@@ -87,16 +53,7 @@ export function StopsMap({
     <div
       className={`overflow-hidden rounded-2xl border border-line bg-surface ${className}`}
     >
-      {staticMap && !mapFailed ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={staticMap}
-          alt={`Carte des stops à ${cityLabel}`}
-          className="h-40 w-full object-cover"
-          loading="lazy"
-          onError={() => setMapFailed(true)}
-        />
-      ) : pins.length > 0 ? (
+      {pins.length > 0 ? (
         <svg
           viewBox={`0 0 ${w} ${h}`}
           className="h-40 w-full"
@@ -111,6 +68,7 @@ export function StopsMap({
             </linearGradient>
           </defs>
           <rect width={w} height={h} fill="url(#mapWash)" />
+          {/* soft grid */}
           {[1, 2, 3, 4].map((i) => (
             <line
               key={`v${i}`}
@@ -173,9 +131,9 @@ export function StopsMap({
         <p className="text-xs font-bold text-ink">
           {pins.length || stops.length} stops sur la carte
         </p>
-        {routeUrl ? (
+        {mapsUrl ? (
           <a
-            href={routeUrl}
+            href={mapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs font-bold text-ink no-underline hover:underline"

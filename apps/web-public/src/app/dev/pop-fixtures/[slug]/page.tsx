@@ -8,7 +8,6 @@ import {
   tipsPerDayOk,
 } from '@waypop/shared'
 import { getFixture, FIXTURE_SLUGS } from '@/fixtures/popFixtures'
-import { isPlaceholderPopTitle } from '@/lib/landingHelpers'
 import { popSeoCopy } from '@/lib/popSeoPage'
 import { PopPageView } from '@/components/pop/PopPageView'
 
@@ -57,15 +56,9 @@ export default async function FixturePopPage({ params }: Props) {
     hasLivePrice: false,
   })
 
-  const related = FIXTURE_SLUGS.filter(
-    (s) =>
-      s !== slug &&
-      s !== 'fixture-seuil' &&
-      s !== 'fixture-pauvre',
-  )
+  const related = FIXTURE_SLUGS.filter((s) => s !== slug)
     .map((s) => getFixture(s))
     .filter((x): x is NonNullable<typeof x> => Boolean(x))
-    .filter((x) => !isPlaceholderPopTitle(String(x.title || '')))
     .slice(0, 4)
 
   return (

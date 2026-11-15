@@ -2,7 +2,7 @@ type Props = {
   href: string
   className?: string
   size?: 'md' | 'sm'
-  /** soft = outline secondaire (body) ; hero = verre sur photo */
+  /** soft = body (pêche douce) ; hero = verre sur photo */
   variant?: 'soft' | 'hero'
 }
 
@@ -18,7 +18,7 @@ export function LaunchPopCta({
   const tone =
     variant === 'hero'
       ? 'border border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/15'
-      : 'border border-ink/20 bg-transparent text-ink hover:border-ink/40 hover:bg-ink/[0.04]'
+      : 'bg-ink text-cream shadow-[0_12px_28px_rgba(29,27,25,0.28)] hover:bg-[#2a2724]'
 
   return (
     <a

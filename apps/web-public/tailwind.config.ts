@@ -15,14 +15,14 @@ const config: Config = {
         },
         ink: {
           DEFAULT: '#1D1B19',
-          muted: '#5C534E',
-          soft: '#5C534E',
+          muted: '#7A6F68',
+          soft: '#7A6F68',
         },
         cream: '#FFF9F5',
         canvas: '#FFF9F5',
         sand: '#FFE9DD',
         surface: '#FFFFFF',
-        muted: '#5C534E',
+        muted: '#7A6F68',
         line: {
           DEFAULT: '#F0E0D4',
           strong: '#E5D5C8',
