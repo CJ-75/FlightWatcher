@@ -43,8 +43,14 @@ export function distanceKmForIata(iata?: string | null): number | null {
 export const CITY_AIRPORT_DEFAULT_MAX_KM = 150
 
 /**
- * Default IATA list when the user picks a city group.
- * Excludes far airports (e.g. Paris → Vatry XCR) so they stay opt-in.
+ * Always opt-in only — never in « Tous » / city default (even if km missing).
+ * Paris → Vatry XCR.
+ */
+export const CITY_AIRPORT_OPT_IN_ONLY = new Set(['XCR'])
+
+/**
+ * Default IATA list when the user picks a city / taps « Tous ».
+ * Paris → CDG, ORY, BVA (XCR stays opt-in).
  */
 export function defaultAirportCodesForCity(codes: string[]): string[] {
   const unique = [
@@ -54,10 +60,36 @@ export function defaultAirportCodesForCity(codes: string[]): string[] {
   ]
   if (!unique.length) return []
   const near = unique.filter((code) => {
+    if (CITY_AIRPORT_OPT_IN_ONLY.has(code)) return false
     const km = distanceKmForIata(code)
     return km == null || km <= CITY_AIRPORT_DEFAULT_MAX_KM
   })
-  return near.length ? near : unique
+  // Never fall back to the full list if that would re-include opt-in fields.
+  const picked = near.length
+    ? near
+    : unique.filter((c) => !CITY_AIRPORT_OPT_IN_ONLY.has(c))
+  const finalCodes = picked.length ? picked : unique
+  // Prefer major hubs when present (Paris: CDG, ORY, BVA)
+  const preferred = [
+    'CDG',
+    'ORY',
+    'BVA',
+    'LHR',
+    'LGW',
+    'STN',
+    'FCO',
+    'CIA',
+    'MXP',
+    'LIN',
+    'BGY',
+  ]
+  const rank = new Map(preferred.map((c, i) => [c, i] as const))
+  return [...finalCodes].sort((a, b) => {
+    const ra = rank.has(a) ? rank.get(a)! : 100
+    const rb = rank.has(b) ? rank.get(b)! : 100
+    if (ra !== rb) return ra - rb
+    return a.localeCompare(b)
+  })
 }
 
 export function distantAirportLine(

@@ -49,6 +49,8 @@ type Props = {
   preferredPlannedTripId?: string | null
   preferredDraftToken?: string | null
   title?: string
+  /** Accent orange after the title (ex. « planner »). */
+  titleAccent?: string | null
   hint?: string
   onClose: () => void
   onPick: (target: ActivityPlannerTarget) => void
@@ -143,6 +145,7 @@ export function ActivityPlannerPicker({
   preferredPlannedTripId,
   preferredDraftToken,
   title = ACTIVITY_PICK_PLANNER_TITLE_FR,
+  titleAccent = null,
   hint = ACTIVITY_PICK_PLANNER_HINT_FR,
   onClose,
   onPick,
@@ -271,14 +274,21 @@ export function ActivityPlannerPicker({
         className="app-dialog-panel app-dialog-md p-0 max-h-[85vh] overflow-hidden flex flex-col"
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={titleAccent ? `${title} ${titleAccent}` : title}
       >
         <div className="relative shrink-0 overflow-hidden px-5 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-orange-100/80 bg-gradient-to-br from-[#FFF8F3] via-white to-[#FFF1E8]">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary-700">
-            {ACTIVITY_PICK_PLANNER_KICKER_FR}
-          </p>
-          <h2 className="mt-1.5 text-xl sm:text-2xl font-black text-ink tracking-tight">
+          {!titleAccent ? (
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-primary-700">
+              {ACTIVITY_PICK_PLANNER_KICKER_FR}
+            </p>
+          ) : null}
+          <h2
+            className={`${titleAccent ? '' : 'mt-1.5 '}text-xl sm:text-2xl font-black text-ink tracking-tight`}
+          >
             {title}
+            {titleAccent ? (
+              <span className="text-primary-600">{` ${titleAccent}`}</span>
+            ) : null}
           </h2>
           <p className="mt-1.5 text-sm text-ink-soft leading-relaxed max-w-md">
             {hint}

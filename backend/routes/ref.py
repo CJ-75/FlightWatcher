@@ -167,10 +167,12 @@ def _enrich_airports_background(base: List[dict]) -> None:
         except Exception as e:
             print(f"travelpayouts airports skip: {e}")
             common = []
+        # Keep CSV/base hubs (CDG, ORY, …) — Ryanair-only lists miss them
+        # (Paris would otherwise collapse to BVA + XCR).
         merged = (
-            merge_airport_lists(ryanair, common)
-            or list(ryanair)
+            merge_airport_lists(base, ryanair, common)
             or list(base)
+            or list(ryanair)
             or list(_FALLBACK_AIRPORTS)
         )
         _AIRPORTS_MERGED_CACHE = (time.time(), merged)

@@ -7,6 +7,7 @@ import {
   DEAL_INSPIRE_SEED,
   dealStartStillUpcoming,
   dedupeDealsByHotelTitle,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -83,14 +84,29 @@ function shortOriginLabel(encoded: string, airports: Airport[]): string {
   return full.split(' · ')[0] || full
 }
 
-/** Prefer city metro (all airports) over a single stored IATA like BVA. */
+/** Prefer city metro hubs (CDG/ORY/BVA) over a single stored IATA like BVA — never XCR. */
 function expandOriginToCity(encoded: string, airports: Airport[]): string {
   const codes = parseAirportCodes(encoded)
-  if (codes.length !== 1 || !airports.length) return encoded
+  if (!codes.length || !airports.length) return encoded
   const groups = groupAirportsByCity(airports)
   const group = findCityGroupByCodes(groups, codes)
   if (!group || group.airports.length <= 1) return encoded
-  return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
+  const defaults = defaultAirportCodesForCity(
+    group.airports.map((a) => a.code),
+  )
+  if (codes.length === 1) {
+    return encodeAirportCodes(defaults) || encoded
+  }
+  // Legacy « tous » incluait XCR — retomber sur CDG/ORY/BVA.
+  const withoutFar = codes.filter((c) => defaults.includes(c) || !defaults.length)
+  const hadFarOnlyExtra =
+    codes.some((c) => !defaults.includes(c)) &&
+    defaults.every((d) => codes.includes(d))
+  if (hadFarOnlyExtra) return encodeAirportCodes(defaults) || encoded
+  if (withoutFar.length && withoutFar.length < codes.length) {
+    return encodeAirportCodes(withoutFar) || encoded
+  }
+  return encoded
 }
 
 const DEALS_PAGE = 36
@@ -171,7 +187,9 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
         const groups = groupAirportsByCity(list)
         const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
         if (!paris) return
-        const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+        const encoded = encodeAirportCodes(
+          defaultAirportCodesForCity(paris.airports.map((a) => a.code)),
+        )
         if (!encoded) return
         originDefaultedRef.current = true
         setOrigin(encoded)

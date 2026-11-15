@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Airport } from '../types'
-import { isValidAirportSelection } from '@waypop/shared'
+import { ensureHubAirports, isValidAirportSelection } from '@waypop/shared'
 import { getApiClient, normalizeAirports } from '../utils/apiClient'
 
-const LS_KEY = 'fw_airports_v1'
+/** v2: invalidate Ryanair-only caches that dropped CDG/ORY. */
+const LS_KEY = 'fw_airports_v2'
 const LS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /** One airports fetch shared across hooks/tabs. */
@@ -37,7 +38,7 @@ function writeLocalAirports(list: Airport[]) {
 if (!airportsCache) {
   const fromLs = readLocalAirports()
   if (fromLs) {
-    airportsCache = fromLs
+    airportsCache = ensureHubAirports(fromLs)
     fromLocalStorage = true
   }
 }
@@ -50,7 +51,9 @@ function fetchAirportsNetwork(): Promise<Airport[]> {
   return getApiClient()
     .getAirports()
     .then((raw) => {
-      airportsCache = normalizeAirports(raw as Airport[] | { airports: Airport[] })
+      airportsCache = ensureHubAirports(
+        normalizeAirports(raw as Airport[] | { airports: Airport[] }),
+      )
       fromLocalStorage = false
       writeLocalAirports(airportsCache)
       return airportsCache

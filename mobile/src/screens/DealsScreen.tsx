@@ -24,6 +24,7 @@ import {
   DEAL_INSPIRE_SEED,
   dealStartStillUpcoming,
   dedupeDealsByHotelTitle,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -216,12 +217,16 @@ export function DealsScreen({
     if (originHydratedRef.current || !airports.length) return
     originHydratedRef.current = true
     const groups = groupAirportsByCity(airports)
+    const encodeCityDefaults = (group: { airports: { code: string }[] }) =>
+      encodeAirportCodes(
+        defaultAirportCodesForCity(group.airports.map((a) => a.code)),
+      )
     const expandToCity = (encoded: string) => {
       const codes = parseAirportCodes(encoded)
       if (!codes.length) return encoded
       const group = findCityGroupByCodes(groups, codes)
       if (!group || group.airports.length <= 1) return encoded
-      return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
+      return encodeCityDefaults(group) || encoded
     }
     void (async () => {
       try {
@@ -241,7 +246,7 @@ export function DealsScreen({
       }
       const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
       if (paris) {
-        const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+        const encoded = encodeCityDefaults(paris)
         if (encoded) {
           setOrigin(encoded)
           setQueryOrigin(encoded)

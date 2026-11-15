@@ -474,6 +474,7 @@ const CITY_EN_TO_FR: Record<string, string> = {
   sevilla: 'Séville',
   valencia: 'Valence',
   venice: 'Venise',
+  venise: 'Venise',
   florence: 'Florence',
   milan: 'Milan',
   rome: 'Rome',
@@ -481,6 +482,7 @@ const CITY_EN_TO_FR: Record<string, string> = {
   cologne: 'Cologne',
   hamburg: 'Hambourg',
   brussels: 'Bruxelles',
+  bruxelles: 'Bruxelles',
   geneva: 'Genève',
   zurich: 'Zurich',
   basel: 'Bâle',
@@ -491,13 +493,16 @@ const CITY_EN_TO_FR: Record<string, string> = {
   'st. petersburg': 'Saint-Pétersbourg',
   petersburg: 'Saint-Pétersbourg',
   barcelona: 'Barcelone',
+  barcelone: 'Barcelone',
   malaga: 'Malaga',
   palermo: 'Palerme',
   catania: 'Catane',
   genoa: 'Gênes',
   bologna: 'Bologne',
   pisa: 'Pise',
-  bergamo: 'Bergame',
+  /** Secondary airport towns → metro city (activities / hero). */
+  bergamo: 'Milan',
+  bergame: 'Milan',
   bucharest: 'Bucarest',
   thessaloniki: 'Thessalonique',
   heraklion: 'Héraklion',
@@ -521,9 +526,19 @@ const CITY_EN_TO_FR: Record<string, string> = {
   'gran canaria': 'Grande Canarie',
   'las palmas': 'Grande Canarie',
   treviso: 'Venise',
+  trevise: 'Venise',
   stansted: 'Londres',
   luton: 'Londres',
   gatwick: 'Londres',
+  heathrow: 'Londres',
+  southend: 'Londres',
+  charleroi: 'Bruxelles',
+  beauvais: 'Paris',
+  orly: 'Paris',
+  fiumicino: 'Rome',
+  ciampino: 'Rome',
+  malpensa: 'Milan',
+  linate: 'Milan',
   prague: 'Prague',
   naples: 'Naples',
   moscow: 'Moscou',
@@ -684,12 +699,21 @@ const CITY_SLUG_FR: Record<string, string> = {
   milan: 'Milan',
   florence: 'Florence',
   venice: 'Venise',
+  venise: 'Venise',
+  'venise-trevise': 'Venise',
+  'venice-treviso': 'Venise',
   berlin: 'Berlin',
   amsterdam: 'Amsterdam',
   brussels: 'Bruxelles',
   bruxelles: 'Bruxelles',
   london: 'Londres',
   londres: 'Londres',
+  'milan-bergame': 'Milan',
+  'milan-bergamo': 'Milan',
+  'londres-stansted': 'Londres',
+  'rome-ciampino': 'Rome',
+  'rome-fiumicino': 'Rome',
+  'bruxelles-charleroi': 'Bruxelles',
 }
 
 /** Display name for a parcours city_slug — always capitalised FR. */
@@ -725,11 +749,12 @@ export function cityDisplayNameFr(
 
   // city_slug passed as label (e.g. "paris") → référentiel capitalisé
   if (!raw.includes(',')) {
-    const slugKey = normalizeCityKey(stripAirportNoise(raw))
+    const slugKey = cityImageKey(stripAirportNoise(raw))
     if (CITY_SLUG_FR[slugKey]) return CITY_SLUG_FR[slugKey]
   }
 
   // destinationFull is often "Airport, Country" / « aéroport de X »
+  // Also "Venise-Trévise" / "Londres-Stansted" → metro city.
   const beforeComma = stripAirportNoise(raw.split(',')[0]?.trim() || raw)
   const candidates = [
     beforeComma,
@@ -743,6 +768,7 @@ export function cityDisplayNameFr(
     rome: 'it',
     naples: 'it',
     venice: 'it',
+    venise: 'it',
     florence: 'it',
     milan: 'it',
     berlin: 'de',
@@ -756,7 +782,8 @@ export function cityDisplayNameFr(
   const iataIso = iata ? countryIsoFromIata(iata) : null
   for (const part of candidates) {
     const key = normalizeCityKey(part)
-    const fr = CITY_EN_TO_FR[key]
+    const slugKey = cityImageKey(part)
+    const fr = CITY_EN_TO_FR[key] || CITY_SLUG_FR[slugKey] || CITY_SLUG_FR[key]
     if (!fr) continue
     const needIso = EN_TO_FR_REQUIRE_ISO[key]
     if (needIso && iataIso && iataIso !== needIso) continue
@@ -1018,9 +1045,25 @@ export function resolveTripImageUrl(opts: {
   return cityImageUrl(opts.city, opts.iata)
 }
 
+/**
+ * Union catalog with hub seeds (CDG, ORY, …).
+ * Ryanair-only API merges can otherwise leave Paris as BVA+XCR only.
+ */
+export function ensureHubAirports(airports: Airport[]): Airport[] {
+  const byCode = new Map<string, Airport>()
+  for (const a of [...SEED_AIRPORTS, ...(airports || [])]) {
+    const code = String(a?.code || '')
+      .trim()
+      .toUpperCase()
+    if (code.length !== 3) continue
+    if (!byCode.has(code)) byCode.set(code, { ...a, code })
+  }
+  return [...byCode.values()]
+}
+
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
   const map = new Map<string, CityAirportGroup>()
-  for (const a of filterSearchAirports(airports)) {
+  for (const a of filterSearchAirports(ensureHubAirports(airports))) {
     const city = stripAirportNoise(cityDisplayNameFr(a.code, a.city || a.name))
     const country = (a.country || '').trim()
     // Skip unresolved labels that would show as "CDG" / "VKO" in the picker.
@@ -1037,7 +1080,34 @@ export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
       map.set(key, { key, city, country, airports: [a] })
     }
   }
+  // Stable order inside a city: hubs first (CDG, ORY, BVA), far fields last (XCR)
+  const hubRank: Record<string, number> = {}
+  POPULAR_AIRPORT_CODES.forEach((c, i) => {
+    hubRank[c] = i
+  })
+  for (const g of map.values()) {
+    g.airports.sort((a, b) => {
+      const ra = hubRank[a.code] ?? 500
+      const rb = hubRank[b.code] ?? 500
+      const da = distanceKmForCitySort(a.code)
+      const db = distanceKmForCitySort(b.code)
+      if (ra !== rb) return ra - rb
+      if (da !== db) return da - db
+      return a.code.localeCompare(b.code)
+    })
+  }
   return [...map.values()].sort((a, b) => a.city.localeCompare(b.city, 'fr'))
+}
+
+function distanceKmForCitySort(code: string): number {
+  // Inline to avoid circular import with airportDistance — mirror seed km.
+  const known: Record<string, number> = {
+    ORY: 18,
+    CDG: 25,
+    BVA: 85,
+    XCR: 165,
+  }
+  return known[code] ?? 80
 }
 
 /**

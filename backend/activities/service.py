@@ -597,6 +597,25 @@ CITY_SLUG_ALIASES: Dict[str, Tuple[str, ...]] = {
     "milano": ("milan",),
     "venise": ("venice",),
     "venice": ("venise",),
+    # Airport compounds / secondary fields → metro city
+    "venise-trevise": ("venise", "venice"),
+    "venice-treviso": ("venise", "venice"),
+    "trevise": ("venise", "venice"),
+    "treviso": ("venise", "venice"),
+    "milan-bergame": ("milan", "milano"),
+    "milan-bergamo": ("milan", "milano"),
+    "bergame": ("milan", "milano"),
+    "bergamo": ("milan", "milano"),
+    "londres-stansted": ("londres", "london"),
+    "londres-luton": ("londres", "london"),
+    "londres-gatwick": ("londres", "london"),
+    "londres-heathrow": ("londres", "london"),
+    "rome-fiumicino": ("rome", "roma"),
+    "rome-ciampino": ("rome", "roma"),
+    "bruxelles-charleroi": ("bruxelles", "brussels"),
+    "paris-beauvais": ("paris",),
+    "milan-malpensa": ("milan", "milano"),
+    "milan-linate": ("milan", "milano"),
     "vienne": ("vienna", "wien"),
     "vienna": ("vienne", "wien"),
     "wien": ("vienne", "vienna"),
@@ -745,6 +764,17 @@ def _slug_candidates(slug: str) -> List[str]:
         a = _city_slugify(alt)
         if a and a not in out:
             out.append(a)
+    # "venise-trevise" → also try "venise" when that metro is known
+    if "-" in key:
+        first = key.split("-", 1)[0]
+        if first and first not in out and (
+            first in FALLBACK_CITY_DESTINATIONS or first in CITY_SLUG_ALIASES
+        ):
+            out.append(first)
+            for alt in CITY_SLUG_ALIASES.get(first, ()):
+                a = _city_slugify(alt)
+                if a and a not in out:
+                    out.append(a)
     return out
 
 

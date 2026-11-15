@@ -39,7 +39,7 @@ export const ACTIVITY_ADD_SHORT_FR = 'Ajouter'
 export const ACTIVITY_PICK_PLANNER_TITLE_FR = 'Où l’ajouter ?'
 export const ACTIVITY_PICK_PLANNER_HINT_FR =
   'Choisis le séjour pour cette activité. Tu pourras en ajouter plusieurs au même voyage.'
-export const ACTIVITY_PICK_PLANNER_KICKER_FR = 'Séjour'
+export const ACTIVITY_PICK_PLANNER_KICKER_FR = 'planner'
 export const ACTIVITY_PICK_PLANNER_CURRENT_FR = 'Actuel'
 export const ACTIVITY_PICK_PLANNER_ADD_FR = 'Sélectionné'
 /** Hint when the picker switches the active séjour (not add-flow). */
@@ -51,7 +51,9 @@ export const ACTIVITY_SIGN_IN_TO_ADD_FR =
   'Connecte-toi pour choisir un séjour et y ajouter l’activité.'
 export const ACTIVITY_TRIP_HERO_KICKER_FR = 'En cours'
 export const ACTIVITY_CHANGE_TRIP_FR = 'Changer'
-export const ACTIVITY_CHOOSE_TRIP_FR = 'Choisir un séjour'
+/** Modal / CTA: pick the planner trip (accent « planner » rendu en orange côté UI). */
+export const ACTIVITY_CHOOSE_TRIP_FR = 'Choisir un voyage'
+export const ACTIVITY_CHOOSE_TRIP_ACCENT_FR = 'planner'
 export const ACTIVITY_TRIP_IN_PROGRESS_FR = (city: string) =>
   `Séjour · ${city}`
 export const ACTIVITY_TRIP_IN_PROGRESS_HINT_FR =

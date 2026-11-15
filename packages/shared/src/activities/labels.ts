@@ -31,36 +31,6 @@ export function activityCitySlugFromLabel(label: string): string {
 }
 
 /**
- * Resolve catalogue city slug from trip draft / planner destination.
- * Prefers city_slug, then city label, then dest IATA → FR city name.
- */
-export function resolveActivityCitySlug(opts: {
-  citySlug?: string | null
-  cityLabel?: string | null
-  destIata?: string | null
-}): string {
-  const rawSlug = String(opts.citySlug || '').trim()
-  if (rawSlug && rawSlug !== '—' && !/^[A-Za-z]{3}$/.test(rawSlug)) {
-    const s = activityCitySlugFromLabel(rawSlug)
-    if (s) return s
-  }
-  const label = String(opts.cityLabel || '').trim()
-  if (label && label !== '—') {
-    const s = activityCitySlugFromLabel(label)
-    if (s) return s
-  }
-  const iata = String(opts.destIata || rawSlug || '')
-    .trim()
-    .toUpperCase()
-  if (/^[A-Z]{3}$/.test(iata)) {
-    const city = cityDisplayNameFr(iata)
-    const s = activityCitySlugFromLabel(city || iata)
-    if (s) return s
-  }
-  return 'paris'
-}
-
-/**
  * Seed / fallback villes Activités (avant chargement du catalogue vols).
  * France d’abord, puis hubs EU / long-courrier.
  * L’UI utilise groupAirportsByCity(catalogue) pour la liste complète.
@@ -102,6 +72,118 @@ export const ACTIVITY_CITY_OPTIONS_FR: ReadonlyArray<{
 })).filter(
   (c, i, arr) => c.slug && arr.findIndex((x) => x.slug === c.slug) === i,
 )
+
+/**
+ * Airport / secondary-field labels → metro city slug for Viator.
+ * e.g. Venise-Trévise, Milan-Bergame, Londres-Stansted.
+ */
+const ACTIVITY_AIRPORT_CITY_SLUG: Record<string, string> = {
+  'venise-trevise': 'venise',
+  'venice-treviso': 'venise',
+  trevise: 'venise',
+  treviso: 'venise',
+  'milan-bergame': 'milan',
+  'milan-bergamo': 'milan',
+  bergame: 'milan',
+  bergamo: 'milan',
+  'londres-stansted': 'londres',
+  'londres-luton': 'londres',
+  'londres-gatwick': 'londres',
+  'londres-heathrow': 'londres',
+  'londres-southend': 'londres',
+  stansted: 'londres',
+  luton: 'londres',
+  gatwick: 'londres',
+  'rome-fiumicino': 'rome',
+  'rome-ciampino': 'rome',
+  fiumicino: 'rome',
+  ciampino: 'rome',
+  'bruxelles-charleroi': 'bruxelles',
+  'bruxelles-zaventem': 'bruxelles',
+  charleroi: 'bruxelles',
+  'paris-beauvais': 'paris',
+  'paris-orly': 'paris',
+  'paris-charles-de-gaulle': 'paris',
+  beauvais: 'paris',
+  orly: 'paris',
+  'milan-malpensa': 'milan',
+  'milan-linate': 'milan',
+  malpensa: 'milan',
+  linate: 'milan',
+}
+
+function isKnownActivityCitySlug(slug: string): boolean {
+  return ACTIVITY_CITY_OPTIONS_FR.some((c) => c.slug === slug)
+}
+
+/**
+ * Collapse airport-compound / secondary-field slugs to a real city.
+ * "venise-trevise" → "venise"; leave unknown multi-part slugs intact.
+ */
+export function canonicalizeActivityCitySlug(slug: string): string {
+  const s = activityCitySlugFromLabel(slug)
+  if (!s) return ''
+  const mapped = ACTIVITY_AIRPORT_CITY_SLUG[s]
+  if (mapped) return mapped
+  if (isKnownActivityCitySlug(s)) return s
+  if (s.includes('-')) {
+    for (const part of s.split('-')) {
+      if (!part) continue
+      const partMapped = ACTIVITY_AIRPORT_CITY_SLUG[part] || part
+      if (isKnownActivityCitySlug(partMapped)) return partMapped
+      const fr = cityDisplayNameFr(null, part)
+      const frSlug = activityCitySlugFromLabel(fr)
+      if (frSlug && isKnownActivityCitySlug(frSlug)) return frSlug
+    }
+  }
+  const fromLabel = cityDisplayNameFr(null, slug.replace(/-/g, ' '))
+  const fromSlug = activityCitySlugFromLabel(fromLabel)
+  if (fromSlug && fromSlug !== s && isKnownActivityCitySlug(fromSlug)) {
+    return fromSlug
+  }
+  return s
+}
+
+/**
+ * Resolve catalogue city slug from trip draft / planner destination.
+ * Prefers dest IATA → FR metro city (TSF→venise), then label/slug —
+ * never keeps airport compounds like "venise-trevise".
+ */
+export function resolveActivityCitySlug(opts: {
+  citySlug?: string | null
+  cityLabel?: string | null
+  destIata?: string | null
+}): string {
+  const rawSlug = String(opts.citySlug || '').trim()
+  const iata = String(opts.destIata || '')
+    .trim()
+    .toUpperCase()
+  // IATA first: airport labels stored as city ("Venise-Trévise") must not win.
+  if (/^[A-Z]{3}$/.test(iata)) {
+    const city = cityDisplayNameFr(iata)
+    const s = canonicalizeActivityCitySlug(city || iata)
+    if (s) return s
+  }
+  if (rawSlug && rawSlug !== '—' && !/^[A-Za-z]{3}$/.test(rawSlug)) {
+    const s = canonicalizeActivityCitySlug(rawSlug)
+    if (s) return s
+  }
+  const label = String(opts.cityLabel || '').trim()
+  if (label && label !== '—') {
+    const city = cityDisplayNameFr(
+      /^[A-Z]{3}$/.test(iata) ? iata : null,
+      label,
+    )
+    const s = canonicalizeActivityCitySlug(city || label)
+    if (s) return s
+  }
+  if (/^[A-Za-z]{3}$/.test(rawSlug)) {
+    const city = cityDisplayNameFr(rawSlug.toUpperCase())
+    const s = canonicalizeActivityCitySlug(city || rawSlug)
+    if (s) return s
+  }
+  return 'paris'
+}
 
 /** @deprecated alias */
 export const ACTIVITY_QUICK_DESTINATIONS_FR = ACTIVITY_CITY_OPTIONS_FR

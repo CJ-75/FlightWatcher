@@ -23,6 +23,7 @@ import type {
 } from '@waypop/shared'
 import {
   airportSelectionLabel,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
   findCityGroupByCodes,
   formatDateFr,
@@ -154,12 +155,16 @@ export function SearchScreen() {
     defaultedOriginRef.current = true
 
     const groups = groupAirportsByCity(airports)
+    const encodeCityDefaults = (group: { airports: { code: string }[] }) =>
+      encodeAirportCodes(
+        defaultAirportCodesForCity(group.airports.map((a) => a.code)),
+      )
     const expandToCity = (encoded: string) => {
       const codes = parseAirportCodes(encoded)
       if (!codes.length) return encoded
       const group = findCityGroupByCodes(groups, codes)
       if (!group || group.airports.length <= 1) return encoded
-      return encodeAirportCodes(group.airports.map((a) => a.code)) || encoded
+      return encodeCityDefaults(group) || encoded
     }
 
     if (pending) {
@@ -170,7 +175,7 @@ export function SearchScreen() {
 
     const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
     if (paris) {
-      const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+      const encoded = encodeCityDefaults(paris)
       if (encoded) {
         setAirport(encoded)
         return
@@ -178,7 +183,7 @@ export function SearchScreen() {
     }
     const fallback = findCityGroupByCodes(groups, ['CDG', 'ORY', 'BVA'])
     if (fallback) {
-      const encoded = encodeAirportCodes(fallback.airports.map((a) => a.code))
+      const encoded = encodeCityDefaults(fallback)
       if (encoded) setAirport(encoded)
     }
   }, [airports, route.params])

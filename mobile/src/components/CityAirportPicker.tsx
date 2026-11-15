@@ -211,10 +211,19 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
 
   const placeholder = PLACEHOLDER_CITIES[placeholderIndex]
 
+  const defaultCodes = useMemo(
+    () =>
+      selectedGroup
+        ? defaultAirportCodesForCity(selectedGroup.airports.map((a) => a.code))
+        : [],
+    [selectedGroup],
+  )
+
+  // « Tous » = hubs par défaut (CDG/ORY/BVA), pas XCR.
   const allSelected =
-    !!selectedGroup &&
-    selectedCodes.length === selectedGroup.airports.length &&
-    selectedCodes.length > 0
+    defaultCodes.length > 0 &&
+    defaultCodes.every((c) => selectedCodes.includes(c)) &&
+    selectedCodes.every((c) => defaultCodes.includes(c))
 
   const triggerSub = (() => {
     if (!selectedCodes.length) return 'Choisis une ville'

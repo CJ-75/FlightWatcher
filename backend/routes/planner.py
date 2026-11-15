@@ -1114,6 +1114,31 @@ def _trip_dest_iatas(trip: dict, accepted: Optional[dict]) -> set:
     )
 
 
+# Secondary airport / field suffixes → keep metro city token only.
+_AIRPORT_CITY_COMPOUND_SUFFIXES = (
+    "-trévisse",
+    "-trevise",
+    "-treviso",
+    "-bergame",
+    "-bergamo",
+    "-stansted",
+    "-luton",
+    "-gatwick",
+    "-heathrow",
+    "-southend",
+    "-charleroi",
+    "-zaventem",
+    "-ciampino",
+    "-fiumicino",
+    "-malpensa",
+    "-linate",
+    "-beauvais",
+    "-orly",
+    " beauvais",
+    " marco polo",
+)
+
+
 def _strip_city_noise(value: str) -> str:
     city = str(value or "").split(",")[0].strip().split("(")[0].strip()
     for prefix in ("Weekend ", "Voyage ", "Séjour à ", "Séjour "):
@@ -1133,6 +1158,11 @@ def _strip_city_noise(value: str) -> str:
             idx = city.lower().find(noise.lower())
             if idx > 0:
                 city = city[:idx].strip(" -–—")
+    low = city.lower()
+    for suffix in _AIRPORT_CITY_COMPOUND_SUFFIXES:
+        if low.endswith(suffix) and len(city) > len(suffix) + 2:
+            city = city[: -len(suffix)].strip(" -–—")
+            break
     return city.strip()
 
 
@@ -1148,6 +1178,15 @@ def _clean_city_label(*candidates) -> Optional[str]:
             iata_fallback = iata_fallback or city
             continue
         return city
+    if iata_fallback:
+        try:
+            from city_names_fr import city_for_code
+
+            resolved = city_for_code(iata_fallback)
+            if resolved:
+                return resolved
+        except Exception:
+            pass
     return iata_fallback
 
 

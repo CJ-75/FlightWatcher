@@ -690,12 +690,22 @@ function TripListCard({
   const codes = arrival.isAny ? [] : arrival.codes.split(' · ').filter(Boolean)
   const cityLabel = (() => {
     const raw = String(workspace.city || '').split(',')[0]?.split('(')[0]?.trim()
-    if (raw && !/^[A-Z]{3}$/.test(raw)) return raw
+    const iata = codes[0] || parseAirportCodes(destIata)[0]
+    if (iata) {
+      return (
+        cityDisplayNameFr(iata, raw || null) ||
+        (!arrival.isAny && arrival.city && arrival.city !== arrival.codes
+          ? arrival.city
+          : null) ||
+        iata
+      )
+    }
+    if (raw && !/^[A-Z]{3}$/.test(raw)) {
+      return cityDisplayNameFr(null, raw) || raw
+    }
     if (!arrival.isAny && arrival.city && arrival.city !== arrival.codes) {
       return arrival.city
     }
-    const iata = codes[0] || parseAirportCodes(destIata)[0]
-    if (iata) return cityDisplayNameFr(iata) || iata
     if (raw) return raw
     return arrival.isAny ? 'Destination libre' : 'Destination'
   })()
@@ -3000,8 +3010,17 @@ function TripDetailView({
       .split(',')[0]
       ?.split('(')[0]
       ?.trim()
-    if (raw && !/^[A-Z]{3}$/.test(raw)) return raw
-    if (destinationCode) return cityDisplayNameFr(destinationCode) || raw || destinationCode
+    // Prefer IATA / canonicalize "Venise-Trévise" → Venise (not airport label).
+    if (destinationCode) {
+      return (
+        cityDisplayNameFr(destinationCode, raw || null) ||
+        raw ||
+        destinationCode
+      )
+    }
+    if (raw && !/^[A-Z]{3}$/.test(raw)) {
+      return cityDisplayNameFr(null, raw) || raw
+    }
     return (
       trip.name.replace(/^(Weekend|Voyage|Séjour)\s+/i, '') ||
       t('destination.fallback')

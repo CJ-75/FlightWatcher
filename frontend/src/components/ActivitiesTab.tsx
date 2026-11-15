@@ -11,6 +11,7 @@ import {
   ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
+  ACTIVITY_CHOOSE_TRIP_ACCENT_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
   ACTIVITY_EMPTY_BODY_FR,
@@ -1296,6 +1297,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         preferredPlannedTripId={activeTrip?.plannedTripId}
         preferredDraftToken={activeTrip?.draftToken}
         title={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_FR}
+        titleAccent={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_ACCENT_FR}
         hint={
           pendingAdd
             ? undefined

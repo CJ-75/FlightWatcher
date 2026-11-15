@@ -116,6 +116,8 @@ type Props = {
   preferredPlannedTripId?: string | null
   preferredDraftToken?: string | null
   title?: string
+  /** Accent orange after the title (ex. « planner »). */
+  titleAccent?: string | null
   hint?: string
   onClose: () => void
   onPick: (target: ActivityPlannerTarget) => void
@@ -156,6 +158,7 @@ export function ActivityPlannerPicker({
   preferredPlannedTripId,
   preferredDraftToken,
   title = ACTIVITY_PICK_PLANNER_TITLE_FR,
+  titleAccent = null,
   hint = ACTIVITY_PICK_PLANNER_HINT_FR,
   onClose,
   onPick,
@@ -318,8 +321,15 @@ export function ActivityPlannerPicker({
           </View>
 
           <View style={styles.header}>
-            <Text style={styles.kicker}>{ACTIVITY_PICK_PLANNER_KICKER_FR}</Text>
-            <Text style={styles.title}>{title}</Text>
+            {!titleAccent ? (
+              <Text style={styles.kicker}>{ACTIVITY_PICK_PLANNER_KICKER_FR}</Text>
+            ) : null}
+            <Text style={styles.title}>
+              {title}
+              {titleAccent ? (
+                <Text style={styles.titleAccent}>{` ${titleAccent}`}</Text>
+              ) : null}
+            </Text>
             <Text style={styles.hint}>{hint}</Text>
           </View>
 
@@ -495,6 +505,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.extrabold,
     fontSize: 22,
     color: colors.ink,
+    letterSpacing: -0.4,
+  },
+  titleAccent: {
+    fontFamily: fonts.extrabold,
+    fontSize: 22,
+    color: colors.primary,
     letterSpacing: -0.4,
   },
   hint: {

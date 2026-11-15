@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Airport } from '@waypop/shared'
 import {
   bundledAirports,
+  ensureHubAirports,
   normalizeAirports,
   seedPopularAirports,
 } from '@waypop/shared'
@@ -12,7 +13,8 @@ const BUNDLE = bundledAirports()
 const SEED = seedPopularAirports()
 const INSTANT = BUNDLE.length >= 80 ? BUNDLE : SEED
 
-const LS_KEY = 'fw_airports_v1'
+/** v2: invalidate Ryanair-only caches that dropped CDG/ORY. */
+const LS_KEY = 'fw_airports_v2'
 const LS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const MIN_FULL_COUNT = 80
 /** ~110KB payload — 4s was too tight under concurrent parcours/deals on LAN. */
@@ -69,14 +71,16 @@ function writeDisk(list: Airport[]) {
 }
 
 function applyFull(list: Airport[], source: 'network' | 'disk' | 'bundle') {
-  cached = list
+  // Always keep CDG/ORY/… hubs even if API returned Ryanair-only (BVA+XCR).
+  const next = ensureHubAirports(list)
+  cached = next
   fromDisk = source === 'disk'
   if (source === 'network') {
     retryAttempt = 0
     lastNetworkOkAt = Date.now()
-    writeDisk(list)
+    writeDisk(next)
   }
-  notify(list)
+  notify(next)
 }
 
 function shouldNetworkRefresh(): boolean {

@@ -32,6 +32,7 @@ import {
   ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_CATEGORY_TAGS_FR,
+  ACTIVITY_CHOOSE_TRIP_ACCENT_FR,
   ACTIVITY_CHOOSE_TRIP_FR,
   ACTIVITY_CITY_OPTIONS_FR,
   ACTIVITY_EMPTY_BODY_FR,
@@ -238,7 +239,12 @@ function cityFromWorkspace(ws: TravelWorkspace): {
   destIata: string | null
 } {
   const destIata = parseAirportCodes(ws.dest_iata)[0] || null
-  const cityLabel = String(ws.city || '').trim() || null
+  const rawCity = String(ws.city || '').trim() || null
+  const cityLabel =
+    (destIata
+      ? cityDisplayNameFr(destIata, rawCity)
+      : cityDisplayNameFr(null, rawCity)) ||
+    rawCity
   const slug = resolveActivityCitySlug({
     citySlug: cityLabel,
     cityLabel,
@@ -1618,6 +1624,7 @@ export function ActivitiesScreen() {
         preferredPlannedTripId={activeTrip?.plannedTripId}
         preferredDraftToken={activeTrip?.draftToken}
         title={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_FR}
+        titleAccent={pendingAdd ? undefined : ACTIVITY_CHOOSE_TRIP_ACCENT_FR}
         hint={
           pendingAdd
             ? undefined

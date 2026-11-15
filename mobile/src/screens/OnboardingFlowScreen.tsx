@@ -24,6 +24,7 @@ import {
   airportSelectionLabel,
   cityImageUrl,
   countryIsoFromIata,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
   findCityGroupByCodes,
   groupAirportsByCity,
@@ -305,9 +306,11 @@ export function OnboardingFlowScreen({ onDone }: Props) {
     }
     defaultedOriginRef.current = true
     const groups = groupAirportsByCity(airports)
+    const encodeDefaults = (codes: string[]) =>
+      encodeAirportCodes(defaultAirportCodesForCity(codes))
     const paris = groups.find((g) => g.city.toLowerCase() === 'paris')
     if (paris) {
-      const encoded = encodeAirportCodes(paris.airports.map((a) => a.code))
+      const encoded = encodeDefaults(paris.airports.map((a) => a.code))
       if (encoded) {
         setAirport(encoded)
         return
@@ -316,13 +319,13 @@ export function OnboardingFlowScreen({ onDone }: Props) {
     const want = suggested.label.toLowerCase()
     const match = groups.find((g) => g.city.toLowerCase() === want)
     if (match) {
-      const encoded = encodeAirportCodes(match.airports.map((a) => a.code))
+      const encoded = encodeDefaults(match.airports.map((a) => a.code))
       if (encoded) setAirport(encoded)
       return
     }
     const fallback = findCityGroupByCodes(groups, ['CDG', 'ORY', 'BVA'])
     if (fallback) {
-      const encoded = encodeAirportCodes(fallback.airports.map((a) => a.code))
+      const encoded = encodeDefaults(fallback.airports.map((a) => a.code))
       if (encoded) setAirport(encoded)
     }
   }, [airports, airport, suggested.label])
